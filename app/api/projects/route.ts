@@ -19,8 +19,7 @@ export async function GET() {
       updatedAt: true,
       encounters: {
         orderBy: { updatedAt: "desc" },
-        take: 1,
-        select: { id: true, name: true }
+        select: { id: true, name: true, updatedAt: true }
       }
     }
   });
@@ -55,7 +54,7 @@ export async function POST(request: Request) {
       }
     },
     include: {
-      encounters: { take: 1, orderBy: { createdAt: "desc" } }
+      encounters: { orderBy: { createdAt: "desc" } }
     }
   });
   return NextResponse.json({ project }, { status: 201 });

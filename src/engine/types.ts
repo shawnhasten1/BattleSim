@@ -92,6 +92,15 @@ export interface MapCanvasSettings {
   heightPx: number;
 }
 
+export interface PlacedTemplate {
+  id: Id;
+  name: string;
+  origin: Point;
+  area: AreaTemplate;
+  affects: "hostile" | "all";
+  color?: string;
+}
+
 export interface BattleMapState {
   id: Id;
   name: string;
@@ -100,6 +109,16 @@ export interface BattleMapState {
   canvas?: MapCanvasSettings;
   walls: WallSegment[];
   terrain: TerrainZone[];
+  templates?: PlacedTemplate[];
+}
+
+export interface TokenVisuals {
+  imageUrl?: string;
+  portraitUrl?: string;
+  scale?: number;
+  tint?: string;
+  borderColor?: string;
+  showNameplate?: boolean;
 }
 
 export const DEFAULT_GRID_VISUALS = {
@@ -368,6 +387,7 @@ export type ActionDefinition =
 export interface WeaponDefinition {
   id: Id;
   name: string;
+  source?: SourceMetadata;
   attackType: "melee" | "ranged";
   ability: Ability;
   range: number;
@@ -382,6 +402,7 @@ export interface WeaponDefinition {
 export interface SpellDefinition {
   id: Id;
   name: string;
+  source?: SourceMetadata;
   level: number;
   school?: string;
   castingTime: "action" | "bonus" | "reaction";
@@ -396,6 +417,7 @@ export interface SpellDefinition {
 export interface FeatureDefinition {
   id: Id;
   name: string;
+  source?: SourceMetadata;
   category: "feature" | "trait";
   description?: string;
   effects?: FeatureEffect[];
@@ -408,23 +430,26 @@ export interface FeatureDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+export interface SourceMetadata {
+  provider: "homebrew" | "open5e";
+  documentKey?: string;
+  documentName?: string;
+  slug?: string;
+  importedAt?: string;
+  url?: string;
+}
+
 export interface CreatureDefinition {
   id: Id;
   name: string;
-  source?: {
-    provider: "homebrew" | "open5e";
-    documentKey?: string;
-    documentName?: string;
-    slug?: string;
-    importedAt?: string;
-    url?: string;
-  };
+  source?: SourceMetadata;
   size: SizeCategory;
   armorClass: number;
   maxHp: number;
   speed: number;
   proficiencyBonus?: number;
   resources?: Record<string, number>;
+  tokenVisuals?: TokenVisuals;
   character?: {
     level?: number;
     classes?: Array<{
@@ -501,6 +526,7 @@ export interface CombatantState {
   deathSaves?: DeathSaveState;
   conditions?: ConditionInstance[];
   resources?: Record<string, number>;
+  tokenVisuals?: TokenVisuals;
   actionEconomy?: ActionEconomyState;
   concentration?: {
     sourceConditionId?: Id;
@@ -603,6 +629,14 @@ export const creatureDefinitionSchema = z.object({
   maxHp: z.number().int().positive(),
   speed: z.number().int().min(0),
   resources: z.record(z.number()).optional(),
+  tokenVisuals: z.object({
+    imageUrl: z.string().optional(),
+    portraitUrl: z.string().optional(),
+    scale: z.number().positive().optional(),
+    tint: z.string().optional(),
+    borderColor: z.string().optional(),
+    showNameplate: z.boolean().optional()
+  }).optional(),
   abilities: z.object({
     str: z.number().int(),
     dex: z.number().int(),
@@ -638,6 +672,14 @@ export const combatantExportSchema = z.object({
     }).optional(),
     conditions: z.array(z.any()).optional(),
     resources: z.record(z.number()).optional(),
+    tokenVisuals: z.object({
+      imageUrl: z.string().optional(),
+      portraitUrl: z.string().optional(),
+      scale: z.number().positive().optional(),
+      tint: z.string().optional(),
+      borderColor: z.string().optional(),
+      showNameplate: z.boolean().optional()
+    }).optional(),
     state: z.union([
       z.literal("active"),
       z.literal("downed"),
@@ -712,7 +754,22 @@ export const encounterSnapshotSchema = z.object({
         movementMultiplier: z.number().positive().optional(),
         tags: z.array(z.string()).optional()
       })
-    )
+    ),
+    templates: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        origin: pointSchema,
+        area: z.object({
+          type: z.union([z.literal("circle"), z.literal("cone"), z.literal("line"), z.literal("square")]),
+          size: z.number().positive(),
+          width: z.number().positive().optional(),
+          direction: z.union([z.literal("north"), z.literal("east"), z.literal("south"), z.literal("west")]).optional()
+        }),
+        affects: z.union([z.literal("hostile"), z.literal("all")]),
+        color: z.string().optional()
+      })
+    ).optional()
   }),
   rules: z.object({
     playerDeathSaves: z.boolean(),
@@ -736,6 +793,14 @@ export const encounterSnapshotSchema = z.object({
       }).optional(),
       conditions: z.array(z.any()).optional(),
       resources: z.record(z.number()).optional(),
+      tokenVisuals: z.object({
+        imageUrl: z.string().optional(),
+        portraitUrl: z.string().optional(),
+        scale: z.number().positive().optional(),
+        tint: z.string().optional(),
+        borderColor: z.string().optional(),
+        showNameplate: z.boolean().optional()
+      }).optional(),
       actionEconomy: z.object({
         action: z.boolean(),
         bonus: z.boolean(),

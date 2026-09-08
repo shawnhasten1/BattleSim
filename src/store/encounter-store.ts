@@ -33,22 +33,32 @@ import {
   type EncounterSnapshot,
   type FeatureEffect,
   type FeatureDefinition,
+  type PlacedTemplate,
   type Point,
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
+  type TokenVisuals,
   type WeaponDefinition,
   type WallSegment
 } from "@/engine";
 
-export type EditorTool = "select" | "wall" | "terrain";
+export type EditorTool = "select" | "move" | "measure" | "sight" | "wall" | "terrain" | "template" | "delete";
 
 export interface ProjectSummary {
   id: string;
   name: string;
   description?: string | null;
   updatedAt: string;
-  encounters?: Array<{ id: string; name: string }>;
+  encounters?: EncounterSummary[];
+}
+
+export interface EncounterSummary {
+  id: string;
+  name: string;
+  updatedAt?: string;
+  projectId?: string;
+  snapshotJson?: EncounterSnapshot;
 }
 
 interface EncounterStore {
@@ -58,6 +68,7 @@ interface EncounterStore {
   batchSummary: BatchSimulationSummary | null;
   selectedCombatantId: string | null;
   mapImageDataUrl: string | null;
+  mapImagesByEncounterId: Record<string, string>;
   currentProjectId: string | null;
   currentEncounterId: string | null;
   projects: ProjectSummary[];
@@ -80,18 +91,31 @@ interface EncounterStore {
   deleteLastWall: () => void;
   deleteLastTerrain: () => void;
   removeWall: (wallId: string) => void;
+  updateWall: (wallId: string, updates: Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState">>) => void;
   moveWallNode: (from: Point, to: Point) => void;
   deleteWallNode: (point: Point) => void;
   cancelWallPlacement: () => void;
   toggleDoorState: (wallId: string) => void;
+  updateTerrain: (terrainId: string, updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
   removeTerrain: (terrainId: string) => void;
+  addTemplate: (template: Omit<PlacedTemplate, "id">) => string;
+  updateTemplate: (templateId: string, updates: Partial<Omit<PlacedTemplate, "id">>) => void;
+  removeTemplate: (templateId: string) => void;
   loadProjects: () => Promise<void>;
   saveProject: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  createEncounter: (name: string) => Promise<void>;
+  saveCurrentEncounter: () => Promise<void>;
+  loadEncounter: (encounterId: string) => Promise<void>;
+  renameEncounter: (encounterId: string, name: string) => Promise<void>;
+  duplicateEncounter: (encounterId?: string) => Promise<void>;
+  deleteEncounter: (encounterId: string) => Promise<void>;
+  updateEncounterMetadata: (updates: { name?: string; mapName?: string }) => void;
   loadDefinitionsLibrary: () => Promise<void>;
   saveSelectedDefinition: () => Promise<void>;
-  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy") => void;
+  saveDefinition: (definitionId: string) => Promise<void>;
+  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => void;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   selectCombatant: (id: string | null) => void;
   setMapImage: (dataUrl: string | null) => void;
@@ -106,17 +130,21 @@ interface EncounterStore {
   applyConditionToCombatant: (combatantId: string, condition: ConditionName) => void;
   clearConditions: (combatantId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
-  addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy") => void;
+  addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
   importCombatantPackage: (input: CombatantExportPackage) => void;
   addCustomPc: (input: { name: string; ac: number; hp: number; speed: number; attackBonus: number; damageDice: string }) => void;
   addCustomToken: (input: { name: string; faction: "party" | "enemy"; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"]; attackName: string; attackType: "melee" | "ranged"; attackAbility: Ability; damageDice: string; damageType: DamageType }) => void;
-  updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile">>) => void;
+  updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
+  updateCombatantVisuals: (combatantId: string, updates: Partial<TokenVisuals>) => void;
+  updateDefinitionVisuals: (definitionId: string, updates: Partial<TokenVisuals>) => void;
   removeCombatant: (combatantId: string) => void;
   updateCreatureDefinition: (definitionId: string, updates: Partial<CreatureDefinition>) => void;
   updateCreatureAbility: (definitionId: string, ability: Ability, value: number) => void;
   addWeapon: (definitionId: string, input: { name: string; attackType: "melee" | "ranged"; ability: Ability; range: number; reach?: number; damageDice: string; damageType: DamageType }) => void;
   addSpell: (definitionId: string, input: { name: string; level: number; castingTime: "action" | "bonus" | "reaction"; ability: Ability; range: number; damageDice: string; damageType: DamageType; resourceId?: string }) => void;
   attachSpellDefinition: (definitionId: string, spell: SpellDefinition) => void;
+  attachWeaponDefinition: (definitionId: string, weapon: WeaponDefinition) => void;
+  attachFeatureDefinition: (definitionId: string, feature: FeatureDefinition) => void;
   addFeatureOrTrait: (definitionId: string, input: { category: "feature" | "trait"; name: string; description?: string; effectPreset?: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" }) => void;
   addStructuredAction: (definitionId: string, input: { kind: "attack" | "save" | "area-save" | "healing"; name: string; actionType: "action" | "bonus"; attackType: "melee" | "ranged" | "spell"; ability: Ability; saveAbility: Ability; dc: number; range: number; areaSize: number; damageDice: string; damageType: DamageType }) => void;
   addMultiattack: (definitionId: string, input: { name: string; actionIds: string[]; count: number }) => void;
@@ -200,6 +228,28 @@ function steppedOutcome(engine: ReturnType<typeof createEngineState>): Simulatio
   };
 }
 
+function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "empty" | "duplicate"): EncounterSnapshot {
+  const snapshot = structuredClone(source);
+  return normalizeEncounterVisuals({
+    ...snapshot,
+    id: `encounter-${crypto.randomUUID()}`,
+    name,
+    seed: `${source.seed}:scene:${crypto.randomUUID()}`,
+    round: 0,
+    turnIndex: 0,
+    definitions: mode === "empty" ? [] : snapshot.definitions,
+    combatants: mode === "empty"
+      ? []
+      : snapshot.combatants.map((combatant) => ({
+        ...combatant,
+        initiative: undefined,
+        actionEconomy: undefined,
+        concentration: undefined,
+        state: combatant.state === "dead" || combatant.state === "defeated" || combatant.state === "fled" ? "active" : combatant.state
+      }))
+  });
+}
+
 export const useEncounterStore = create<EncounterStore>()(
   persist(
     (set, get) => {
@@ -222,6 +272,7 @@ export const useEncounterStore = create<EncounterStore>()(
       batchSummary: null,
       selectedCombatantId: "pc-fighter",
       mapImageDataUrl: null,
+      mapImagesByEncounterId: {},
       currentProjectId: null,
       currentEncounterId: null,
       projects: [],
@@ -280,7 +331,14 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
 
+        if (state.tool === "delete") {
+          return;
+        }
+
         const selectedId = state.selectedCombatantId;
+        if (state.tool !== "move") {
+          return;
+        }
         if (!selectedId) {
           return;
         }
@@ -465,6 +523,16 @@ export const useEncounterStore = create<EncounterStore>()(
           map: { ...encounter.map, walls: encounter.map.walls.filter((wall) => wall.id !== wallId) }
         });
       },
+      updateWall: (wallId, updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            walls: encounter.map.walls.map((wall) => wall.id === wallId ? { ...wall, ...updates } : wall)
+          }
+        });
+      },
       moveWallNode: (from, to) => {
         if (pointsMatch(from, to)) return;
         const encounter = get().encounter;
@@ -523,6 +591,48 @@ export const useEncounterStore = create<EncounterStore>()(
           map: { ...encounter.map, terrain: encounter.map.terrain.filter((terrain) => terrain.id !== terrainId) }
         });
       },
+      updateTerrain: (terrainId, updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            terrain: encounter.map.terrain.map((terrain) => terrain.id === terrainId ? { ...terrain, ...updates } : terrain)
+          }
+        });
+      },
+      addTemplate: (template) => {
+        const encounter = get().encounter;
+        const id = `template-${crypto.randomUUID()}`;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            templates: [...(encounter.map.templates ?? []), { id, ...template }]
+          }
+        });
+        return id;
+      },
+      updateTemplate: (templateId, updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            templates: (encounter.map.templates ?? []).map((template) => template.id === templateId ? { ...template, ...updates } : template)
+          }
+        });
+      },
+      removeTemplate: (templateId) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            templates: (encounter.map.templates ?? []).filter((template) => template.id !== templateId)
+          }
+        });
+      },
       loadProjects: async () => {
         const response = await fetch("/api/projects");
         if (!response.ok) {
@@ -534,12 +644,34 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       saveProject: async () => {
         const state = get();
+        if (state.currentProjectId && state.currentEncounterId) {
+          await get().saveCurrentEncounter();
+          return;
+        }
         const payload = {
           name: state.encounter.name,
           encounter: state.encounter
         };
-        const response = await fetch(state.currentProjectId ? `/api/projects/${state.currentProjectId}` : "/api/projects", {
-          method: state.currentProjectId ? "PUT" : "POST",
+        if (state.currentProjectId) {
+          const response = await fetch("/api/encounters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...payload, projectId: state.currentProjectId })
+          });
+          if (!response.ok) {
+            set({ projectStatus: "Scene save failed" });
+            return;
+          }
+          const data = await response.json() as { encounter: EncounterSummary };
+          set({
+            currentEncounterId: data.encounter.id,
+            projectStatus: "Scene saved"
+          });
+          await get().loadProjects();
+          return;
+        }
+        const response = await fetch("/api/projects", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
@@ -548,9 +680,14 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         const data = await response.json() as { project: ProjectSummary & { encounters?: Array<{ id: string; name: string }> } };
+        const encounterId = data.project.encounters?.[0]?.id ?? get().currentEncounterId;
+        const currentMapImage = get().mapImageDataUrl;
         set({
           currentProjectId: data.project.id,
-          currentEncounterId: data.project.encounters?.[0]?.id ?? get().currentEncounterId,
+          currentEncounterId: encounterId,
+          mapImagesByEncounterId: encounterId && currentMapImage
+            ? { ...get().mapImagesByEncounterId, [encounterId]: currentMapImage }
+            : get().mapImagesByEncounterId,
           projectStatus: "Saved"
         });
         await get().loadProjects();
@@ -573,6 +710,7 @@ export const useEncounterStore = create<EncounterStore>()(
           currentEncounterId: data.project.encounters[0]?.id ?? null,
           encounter: normalizedSnapshot,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
+          mapImageDataUrl: get().mapImagesByEncounterId[data.project.encounters[0]?.id ?? ""] ?? null,
           undoStack: [],
           redoStack: [],
           log: [],
@@ -580,6 +718,7 @@ export const useEncounterStore = create<EncounterStore>()(
           batchSummary: null,
           projectStatus: "Loaded"
         });
+        await get().loadProjects();
       },
       deleteProject: async (projectId) => {
         const response = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
@@ -588,6 +727,207 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ currentProjectId: null, currentEncounterId: null });
         }
         await get().loadProjects();
+      },
+      createEncounter: async (name) => {
+        const trimmedName = name.trim() || "Untitled Encounter";
+        if (!get().currentProjectId) {
+          await get().saveProject();
+        }
+        const projectId = get().currentProjectId;
+        if (!projectId) {
+          set({ projectStatus: "Create scene failed" });
+          return;
+        }
+        const snapshot = createSceneSnapshot(get().encounter, trimmedName, "empty");
+        const response = await fetch("/api/encounters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, name: trimmedName, encounter: snapshot })
+        });
+        if (!response.ok) {
+          set({ projectStatus: "Create scene failed" });
+          return;
+        }
+        const data = await response.json() as { encounter: EncounterSummary };
+        const normalizedSnapshot = normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot);
+        const currentMapImage = get().mapImageDataUrl;
+        set({
+          currentProjectId: projectId,
+          currentEncounterId: data.encounter.id,
+          mapImagesByEncounterId: currentMapImage
+            ? { ...get().mapImagesByEncounterId, [data.encounter.id]: currentMapImage }
+            : get().mapImagesByEncounterId,
+          encounter: normalizedSnapshot,
+          selectedCombatantId: null,
+          undoStack: [],
+          redoStack: [],
+          log: [],
+          outcome: null,
+          batchSummary: null,
+          projectStatus: "Scene created"
+        });
+        await get().loadProjects();
+      },
+      saveCurrentEncounter: async () => {
+        const state = get();
+        if (!state.currentProjectId || !state.currentEncounterId) {
+          await get().saveProject();
+          return;
+        }
+        const response = await fetch(`/api/encounters/${encodeURIComponent(state.currentEncounterId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: state.encounter.name, encounter: state.encounter })
+        });
+        set({
+          projectStatus: response.ok ? "Scene saved" : "Scene save failed",
+          mapImagesByEncounterId: response.ok && state.mapImageDataUrl
+            ? { ...state.mapImagesByEncounterId, [state.currentEncounterId]: state.mapImageDataUrl }
+            : state.mapImagesByEncounterId
+        });
+        if (response.ok) {
+          await get().loadProjects();
+        }
+      },
+      loadEncounter: async (encounterId) => {
+        const response = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`);
+        if (!response.ok) {
+          set({ projectStatus: "Scene load failed" });
+          return;
+        }
+        const data = await response.json() as { encounter: EncounterSummary };
+        const snapshot = data.encounter.snapshotJson;
+        if (!snapshot) {
+          set({ projectStatus: "Scene has no snapshot" });
+          return;
+        }
+        const normalizedSnapshot = normalizeEncounterVisuals(snapshot);
+        set({
+          currentProjectId: data.encounter.projectId ?? get().currentProjectId,
+          currentEncounterId: data.encounter.id,
+          encounter: normalizedSnapshot,
+          mapImageDataUrl: get().mapImagesByEncounterId[data.encounter.id] ?? null,
+          selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
+          undoStack: [],
+          redoStack: [],
+          log: [],
+          outcome: null,
+          batchSummary: null,
+          projectStatus: "Scene loaded"
+        });
+        await get().loadProjects();
+      },
+      renameEncounter: async (encounterId, name) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) {
+          set({ projectStatus: "Scene name required" });
+          return;
+        }
+        const state = get();
+        const encounter = state.currentEncounterId === encounterId
+          ? { ...state.encounter, name: trimmedName }
+          : undefined;
+        const response = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(encounter ? { name: trimmedName, encounter } : { name: trimmedName })
+        });
+        if (!response.ok) {
+          set({ projectStatus: "Scene rename failed" });
+          return;
+        }
+        set({
+          encounter: encounter ? normalizeEncounterVisuals(encounter) : state.encounter,
+          projectStatus: "Scene renamed"
+        });
+        await get().loadProjects();
+      },
+      duplicateEncounter: async (encounterId) => {
+        if (!get().currentProjectId) {
+          await get().saveProject();
+        }
+        const projectId = get().currentProjectId;
+        if (!projectId) {
+          set({ projectStatus: "Duplicate scene failed" });
+          return;
+        }
+        let source = get().encounter;
+        if (encounterId && encounterId !== get().currentEncounterId) {
+          const loadResponse = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`);
+          if (!loadResponse.ok) {
+            set({ projectStatus: "Duplicate scene failed" });
+            return;
+          }
+          const loaded = await loadResponse.json() as { encounter: EncounterSummary };
+          if (loaded.encounter.snapshotJson) {
+            source = loaded.encounter.snapshotJson;
+          }
+        }
+        const snapshot = createSceneSnapshot(source, `${source.name} Copy`, "duplicate");
+        const sourceImage = encounterId && encounterId !== get().currentEncounterId
+          ? get().mapImagesByEncounterId[encounterId]
+          : get().mapImageDataUrl;
+        const response = await fetch("/api/encounters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, name: snapshot.name, encounter: snapshot })
+        });
+        if (!response.ok) {
+          set({ projectStatus: "Duplicate scene failed" });
+          return;
+        }
+        const data = await response.json() as { encounter: EncounterSummary };
+        const normalizedSnapshot = normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot);
+        set({
+          currentProjectId: projectId,
+          currentEncounterId: data.encounter.id,
+          encounter: normalizedSnapshot,
+          mapImageDataUrl: sourceImage ?? null,
+          mapImagesByEncounterId: sourceImage
+            ? { ...get().mapImagesByEncounterId, [data.encounter.id]: sourceImage }
+            : get().mapImagesByEncounterId,
+          selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
+          undoStack: [],
+          redoStack: [],
+          log: [],
+          outcome: null,
+          batchSummary: null,
+          projectStatus: "Scene duplicated"
+        });
+        await get().loadProjects();
+      },
+      deleteEncounter: async (encounterId) => {
+        const response = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`, { method: "DELETE" });
+        if (!response.ok) {
+          set({ projectStatus: "Scene delete failed" });
+          return;
+        }
+        const wasCurrent = get().currentEncounterId === encounterId;
+        set({
+          currentEncounterId: wasCurrent ? null : get().currentEncounterId,
+          mapImageDataUrl: wasCurrent ? null : get().mapImageDataUrl,
+          mapImagesByEncounterId: Object.fromEntries(Object.entries(get().mapImagesByEncounterId).filter(([id]) => id !== encounterId)),
+          projectStatus: "Scene deleted"
+        });
+        await get().loadProjects();
+        if (wasCurrent) {
+          const project = get().projects.find((candidate) => candidate.id === get().currentProjectId);
+          const nextScene = project?.encounters?.find((candidate) => candidate.id !== encounterId);
+          if (nextScene) {
+            await get().loadEncounter(nextScene.id);
+          }
+        }
+      },
+      updateEncounterMetadata: (updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          name: updates.name ?? encounter.name,
+          map: {
+            ...encounter.map,
+            name: updates.mapName ?? encounter.map.name
+          }
+        });
       },
       loadDefinitionsLibrary: async () => {
         const response = await fetch("/api/definitions");
@@ -619,10 +959,28 @@ export const useEncounterStore = create<EncounterStore>()(
           await get().loadDefinitionsLibrary();
         }
       },
-      addLibraryDefinitionToEncounter: (definitionId, faction = "enemy") => {
+      saveDefinition: async (definitionId) => {
+        const state = get();
+        const definition = state.encounter.definitions.find((candidate) => candidate.id === definitionId)
+          ?? state.definitionsLibrary.find((candidate) => candidate.id === definitionId);
+        if (!definition) {
+          set({ definitionStatus: "Definition not found" });
+          return;
+        }
+        const response = await fetch("/api/definitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ definition })
+        });
+        set({ definitionStatus: response.ok ? "Definition saved" : "Definition save failed" });
+        if (response.ok) {
+          await get().loadDefinitionsLibrary();
+        }
+      },
+      addLibraryDefinitionToEncounter: (definitionId, faction = "enemy", position) => {
         const definition = get().definitionsLibrary.find((candidate) => candidate.id === definitionId);
         if (definition) {
-          get().addCreatureDefinition(definition, faction);
+          get().addCreatureDefinition(definition, faction, position);
         }
       },
       deleteLibraryDefinition: async (definitionId) => {
@@ -631,7 +989,17 @@ export const useEncounterStore = create<EncounterStore>()(
         await get().loadDefinitionsLibrary();
       },
       selectCombatant: (id) => set({ selectedCombatantId: id }),
-      setMapImage: (dataUrl) => set({ mapImageDataUrl: dataUrl }),
+      setMapImage: (dataUrl) => {
+        const encounterId = get().currentEncounterId;
+        set({
+          mapImageDataUrl: dataUrl,
+          mapImagesByEncounterId: encounterId && dataUrl
+            ? { ...get().mapImagesByEncounterId, [encounterId]: dataUrl }
+            : encounterId && dataUrl === null
+              ? Object.fromEntries(Object.entries(get().mapImagesByEncounterId).filter(([id]) => id !== encounterId))
+              : get().mapImagesByEncounterId
+        });
+      },
       updateGrid: (updates) => {
         const encounter = get().encounter;
         commitEncounter({
@@ -766,16 +1134,20 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       replaceEncounter: (encounter, mapImageDataUrl = null) => {
         const normalizedEncounter = normalizeEncounterVisuals(encounter);
+        const encounterId = get().currentEncounterId;
         set({
           encounter: normalizedEncounter,
           mapImageDataUrl,
+          mapImagesByEncounterId: encounterId && mapImageDataUrl
+            ? { ...get().mapImagesByEncounterId, [encounterId]: mapImageDataUrl }
+            : get().mapImagesByEncounterId,
           log: [],
           outcome: null,
           batchSummary: null,
           selectedCombatantId: normalizedEncounter.combatants[0]?.id ?? null
         });
       },
-      addCreatureDefinition: (definition, faction = "enemy") => {
+      addCreatureDefinition: (definition, faction = "enemy", position) => {
         if (!definition?.id) {
           return;
         }
@@ -790,7 +1162,7 @@ export const useEncounterStore = create<EncounterStore>()(
           definitionId: definition.id,
           displayName: `${definition.name} ${count}`,
           faction,
-          position: findOpenCell(encounter),
+          position: position ?? findOpenCell(encounter),
           currentHp: definition.maxHp,
           tempHp: 0,
           resources: defaultResourcesForDefinition(definition),
@@ -827,6 +1199,7 @@ export const useEncounterStore = create<EncounterStore>()(
           deathSaves: imported?.deathSaves ? structuredClone(imported.deathSaves) : undefined,
           conditions: imported?.conditions ? structuredClone(imported.conditions) : undefined,
           resources: importedResources ?? defaultResourcesForDefinition(definition),
+          tokenVisuals: imported?.tokenVisuals ? structuredClone(imported.tokenVisuals) : undefined,
           state: imported?.state ?? "active",
           tacticsProfile: imported?.tacticsProfile ?? defaultTacticsForDefinition(definition)
         };
@@ -898,6 +1271,34 @@ export const useEncounterStore = create<EncounterStore>()(
           combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
             ? { ...combatant, ...updates }
             : combatant)
+        });
+      },
+      updateCombatantVisuals: (combatantId, updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => {
+            if (combatant.id !== combatantId) return combatant;
+            const tokenVisuals = { ...(combatant.tokenVisuals ?? {}), ...updates };
+            return {
+              ...combatant,
+              tokenVisuals: Object.fromEntries(Object.entries(tokenVisuals).filter(([, value]) => value !== undefined && value !== "")) as TokenVisuals
+            };
+          })
+        });
+      },
+      updateDefinitionVisuals: (definitionId, updates) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            const tokenVisuals = { ...(definition.tokenVisuals ?? {}), ...updates };
+            return {
+              ...definition,
+              tokenVisuals: Object.fromEntries(Object.entries(tokenVisuals).filter(([, value]) => value !== undefined && value !== "")) as TokenVisuals
+            };
+          })
         });
       },
       removeCombatant: (combatantId) => {
@@ -994,6 +1395,27 @@ export const useEncounterStore = create<EncounterStore>()(
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
             ? { ...definition, spells: [...(definition.spells ?? []).filter((candidate) => candidate.id !== spell.id), spell] }
             : definition)
+        });
+      },
+      attachWeaponDefinition: (definitionId, weapon) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => definition.id === definitionId
+            ? { ...definition, weapons: [...(definition.weapons ?? []).filter((candidate) => candidate.id !== weapon.id), weapon] }
+            : definition)
+        });
+      },
+      attachFeatureDefinition: (definitionId, feature) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            return feature.category === "trait"
+              ? { ...definition, traits: [...(definition.traits ?? []).filter((candidate) => candidate.id !== feature.id), feature] }
+              : { ...definition, features: [...(definition.features ?? []).filter((candidate) => candidate.id !== feature.id), feature] };
+          })
         });
       },
       addFeatureOrTrait: (definitionId, input) => {
@@ -1209,6 +1631,7 @@ export const useEncounterStore = create<EncounterStore>()(
         encounter: state.encounter,
         log: state.log,
         mapImageDataUrl: state.mapImageDataUrl,
+        mapImagesByEncounterId: state.mapImagesByEncounterId,
         selectedCombatantId: state.selectedCombatantId,
         currentProjectId: state.currentProjectId,
         currentEncounterId: state.currentEncounterId

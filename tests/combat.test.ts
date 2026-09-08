@@ -68,6 +68,54 @@ describe("combat engine", () => {
     expect(parsed.map.image).toEqual(DEFAULT_MAP_IMAGE_SETTINGS);
   });
 
+  it("preserves token visual metadata in saved encounter snapshots", () => {
+    const encounter = structuredClone(sampleEncounter);
+    encounter.definitions[0] = {
+      ...encounter.definitions[0],
+      tokenVisuals: {
+        imageUrl: "data:image/png;base64,definition",
+        scale: 1.1,
+        borderColor: "#ffffff"
+      }
+    };
+    encounter.combatants[0] = {
+      ...encounter.combatants[0],
+      tokenVisuals: {
+        imageUrl: "data:image/png;base64,token",
+        showNameplate: true
+      }
+    };
+
+    const parsed = encounterSnapshotSchema.parse(encounter);
+
+    expect(parsed.definitions[0]?.tokenVisuals?.imageUrl).toBe("data:image/png;base64,definition");
+    expect(parsed.combatants[0]?.tokenVisuals?.imageUrl).toBe("data:image/png;base64,token");
+    expect(parsed.combatants[0]?.tokenVisuals?.showNameplate).toBe(true);
+  });
+
+  it("preserves placed area templates in saved encounter snapshots", () => {
+    const encounter = structuredClone(sampleEncounter);
+    encounter.map.templates = [
+      {
+        id: "template-fireball",
+        name: "Fireball",
+        origin: { x: 4, y: 4 },
+        area: { type: "circle", size: 20, direction: "east", width: 5 },
+        affects: "all",
+        color: "#b84536"
+      }
+    ];
+
+    const parsed = encounterSnapshotSchema.parse(encounter);
+
+    expect(parsed.map.templates?.[0]).toMatchObject({
+      id: "template-fireball",
+      name: "Fireball",
+      area: { type: "circle", size: 20 },
+      affects: "all"
+    });
+  });
+
   it("validates exported combatant packages and migrates legacy tactics", () => {
     const definition = structuredClone(sampleEncounter.definitions[0]);
     const combatant = structuredClone(sampleEncounter.combatants[0]) as unknown as Record<string, unknown>;
@@ -76,6 +124,7 @@ describe("combat engine", () => {
     delete combatant.initiative;
     delete combatant.actionEconomy;
     combatant.tacticsProfile = "manual";
+    combatant.tokenVisuals = { imageUrl: "data:image/png;base64,token", showNameplate: true };
 
     const parsed = combatantExportSchema.parse({
       kind: "battle-sim-combatant",
@@ -87,6 +136,7 @@ describe("combat engine", () => {
 
     expect(parsed.definition.name).toBe("Test Fighter");
     expect(parsed.combatant?.tacticsProfile).toBe("basic-melee");
+    expect(parsed.combatant?.tokenVisuals?.imageUrl).toBe("data:image/png;base64,token");
   });
 
   it("normalizes richer combatant templates into executable engine data", () => {

@@ -21,6 +21,10 @@ Local-first, map-aware D&D 5e encounter simulator. The current implementation es
 - `app` contains the Next.js interface.
 - `prisma/schema.prisma` defines Postgres persistence models for projects, maps, encounters, definitions, and simulation runs.
 
+## Planning References
+
+- `FOUNDRY_STYLE_OVERHAUL_PLAN.md` tracks the planned Foundry-style scene, sidebar, drag-and-drop, token image, compendium, sheet, and simulation-report overhaul.
+
 ## Current Acceptance Coverage
 
 - Seeded dice rolls and deterministic initiative.
@@ -30,6 +34,10 @@ Local-first, map-aware D&D 5e encounter simulator. The current implementation es
 - Large creature footprint legality.
 - Attack resolution, critical support, damage adjustments, HP, and defeat/downed state transitions.
 - Basic melee/ranged automated encounters with reproducible logs.
+- Open5e V2 compendium search for creatures, spells, items/weapons, features/rules, and conditions.
+- Drag-and-drop compendium import to the map or selected actor sheet with manual-only fallback for unsupported automation.
+- Foundry-like token/actor sheet tabs separate token instance state from reusable actor definition data.
+- Imported weapons, spells, features, traits, and actions expose source metadata and automation support in a sheet inspector.
 
 ## Player And Enemy JSON
 
@@ -148,7 +156,7 @@ This lighter format is useful for hand-written monsters or PCs. The importer cre
 - `speed`: feet per turn.
 - `abilities`: all six ability scores: `str`, `dex`, `con`, `int`, `wis`, `cha`.
 
-Optional definition fields include `id`, `source`, `type`, `proficiencyBonus`, `character`, `saves`, `damageAdjustments`, `weapons`, `spells`, `features`, `traits`, `actions`, `bonusActions`, and `reactions`.
+Optional definition fields include `id`, `source`, `type`, `proficiencyBonus`, `tokenVisuals`, `character`, `saves`, `damageAdjustments`, `weapons`, `spells`, `features`, `traits`, `actions`, `bonusActions`, and `reactions`.
 
 Use `character` metadata for player classes, subclasses, custom class paths, and other progression context. Executable behavior still belongs in actions, features, traits, and effects.
 
@@ -199,10 +207,26 @@ The optional `combatant` object stores encounter-instance data:
 - `state`: `active`, `downed`, `dead`, `defeated`, or `fled`.
 - `tacticsProfile`: `basic-melee` or `basic-ranged`.
 - `resources`: optional counters such as spell slots or limited uses.
+- `tokenVisuals`: optional per-token visual override.
 - `conditions`: optional active conditions.
 - `deathSaves`: optional player death-save state.
 
 The importer ignores exported `id`, `definitionId`, `initiative`, `actionEconomy`, and `concentration` and recreates encounter-local state.
+
+### Token Visuals
+
+Definitions can set default token art, and combatant instances can override it.
+
+```json
+{
+  "tokenVisuals": {
+    "imageUrl": "data:image/png;base64,...",
+    "scale": 1,
+    "borderColor": "#ffffff",
+    "showNameplate": true
+  }
+}
+```
 
 ### Action Types
 

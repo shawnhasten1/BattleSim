@@ -109,4 +109,15 @@ describe("geometry", () => {
     expect(cells).toContainEqual({ x: 4, y: 3 });
     expect(cells).not.toContainEqual({ x: 8, y: 3 });
   });
+
+  it("identifies cells affected by directional area templates", () => {
+    const cone = cellsInArea(sampleEncounter.map, { x: 3, y: 3 }, { type: "cone", size: 15, direction: "east" });
+    const line = cellsInArea(sampleEncounter.map, { x: 3, y: 3 }, { type: "line", size: 20, width: 5, direction: "south" });
+
+    expect(cone).toContainEqual({ x: 5, y: 3 });
+    expect(cone).toContainEqual({ x: 5, y: 4 });
+    expect(cone).not.toContainEqual({ x: 2, y: 3 });
+    expect(line).toContainEqual({ x: 3, y: 6 });
+    expect(line).not.toContainEqual({ x: 4, y: 6 });
+  });
 });

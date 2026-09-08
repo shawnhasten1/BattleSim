@@ -1,5 +1,5 @@
-import type { CreatureDefinition, DamageType, SizeCategory, SpellDefinition } from "@/engine";
-import type { Open5eImportedPayload } from "./open5e-client";
+import type { ConditionName, CreatureDefinition, DamageType, FeatureDefinition, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { Open5eCompendiumSummary, Open5eImportedPayload } from "./open5e-client";
 
 export function normalizeOpen5eCreature(imported: Open5eImportedPayload): CreatureDefinition {
   const raw = imported.raw;
@@ -55,6 +55,7 @@ export function normalizeOpen5eSpell(imported: Open5eImportedPayload): SpellDefi
   return {
     id: `open5e:${documentKey}:${sourceKey}:spell`,
     name,
+    source: sourceMetadata(imported, raw),
     level: numberField(raw, "level") ?? 0,
     school: stringField(raw, "school") ?? readNestedString(raw, ["school", "name"]),
     castingTime: normalizeCastingTime(stringField(raw, "casting_time") ?? stringField(raw, "castingTime")),
@@ -67,6 +68,81 @@ export function normalizeOpen5eSpell(imported: Open5eImportedPayload): SpellDefi
     ].filter(Boolean).join("\n\n"),
     automationSupport: "manual-only"
   };
+}
+
+export function normalizeOpen5eWeapon(imported: Open5eImportedPayload): WeaponDefinition | undefined {
+  const raw = imported.raw;
+  const weaponRecord = raw.weapon && typeof raw.weapon === "object" ? raw.weapon as Record<string, unknown> : raw;
+  const name = stringField(weaponRecord, "name") ?? stringField(raw, "name") ?? imported.slug;
+  const damageDice = stringField(weaponRecord, "damage_dice") ?? stringField(weaponRecord, "damage");
+  if (!damageDice) {
+    return undefined;
+  }
+
+  const range = numberField(weaponRecord, "range") ?? 0;
+  const longRange = numberField(weaponRecord, "long_range") ?? range;
+  const attackType = range > 5 ? "ranged" : "melee";
+  const id = `open5e:${imported.documentKey ?? readNestedString(raw, ["document", "key"]) ?? "unknown"}:${imported.key ?? imported.slug}:weapon`;
+  return {
+    id,
+    name,
+    attackType,
+    ability: attackType === "ranged" ? "dex" : "str",
+    range: attackType === "ranged" ? range : 5,
+    longRange: attackType === "ranged" && longRange > range ? longRange : undefined,
+    reach: attackType === "melee" ? 5 : undefined,
+    damage: [{
+      dice: damageDice,
+      damageType: normalizeDamageType(weaponRecord),
+      abilityModifier: attackType === "ranged" ? "dex" : "str"
+    }],
+    properties: normalizeProperties(weaponRecord.properties),
+    actionId: `open5e:${imported.documentKey ?? "unknown"}:${imported.key ?? imported.slug}:weapon-action`,
+    source: sourceMetadata(imported, raw)
+  };
+}
+
+export function normalizeOpen5eFeatureReference(input: Open5eImportedPayload | Open5eCompendiumSummary, category: "feature" | "trait" = "feature"): FeatureDefinition {
+  const raw = input.raw;
+  const name = "name" in input
+    ? input.name
+    : stringField(raw, "name") ?? input.slug;
+  const documentKey = "documentKey" in input ? input.documentKey : undefined;
+  const sourceKey = "objectKey" in input ? input.objectKey : input.key ?? input.slug;
+  return {
+    id: `open5e:${documentKey ?? readNestedString(raw, ["document", "key"]) ?? "unknown"}:${sourceKey}:feature`,
+    name,
+    category,
+    description: "text" in input && input.text ? input.text : stringField(raw, "desc") ?? stringField(raw, "description"),
+    automationSupport: "manual-only",
+    source: {
+      provider: "open5e",
+      documentKey: documentKey ?? readNestedString(raw, ["document", "key"]),
+      documentName: "documentTitle" in input ? input.documentTitle : readNestedString(raw, ["document", "name"]) ?? readNestedString(raw, ["document", "display_name"]),
+      slug: sourceKey,
+      importedAt: "importedAt" in input ? input.importedAt : new Date().toISOString()
+    }
+  };
+}
+
+export function normalizeOpen5eConditionName(name: string): ConditionName | undefined {
+  const lowered = name.trim().toLowerCase();
+  const supported: ConditionName[] = [
+    "blinded",
+    "charmed",
+    "deafened",
+    "frightened",
+    "grappled",
+    "incapacitated",
+    "invisible",
+    "paralyzed",
+    "poisoned",
+    "prone",
+    "restrained",
+    "stunned",
+    "unconscious"
+  ];
+  return supported.find((condition) => condition === lowered);
 }
 
 function normalizeActions(raw: Record<string, unknown>, documentKey: string, sourceKey: string): CreatureDefinition["actions"] | undefined {
@@ -129,6 +205,31 @@ function normalizeDamageType(record: Record<string, unknown>): DamageType {
   if (value.includes("slashing")) return "slashing";
   if (value.includes("bludgeoning")) return "bludgeoning";
   return "piercing";
+}
+
+function normalizeProperties(properties: unknown): string[] | undefined {
+  if (!Array.isArray(properties)) {
+    return undefined;
+  }
+  const names = properties.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const record = entry as Record<string, unknown>;
+    const property = record.property && typeof record.property === "object" ? record.property as Record<string, unknown> : record;
+    const name = stringField(property, "name");
+    const detail = stringField(record, "detail");
+    return name ? [`${name}${detail ? ` (${detail})` : ""}`] : [];
+  });
+  return names.length > 0 ? names : undefined;
+}
+
+function sourceMetadata(imported: Open5eImportedPayload, raw: Record<string, unknown>) {
+  return {
+    provider: "open5e" as const,
+    documentKey: imported.documentKey ?? readNestedString(raw, ["document", "key"]),
+    documentName: readNestedString(raw, ["document", "name"]) ?? readNestedString(raw, ["document", "display_name"]),
+    slug: imported.key ?? imported.slug,
+    importedAt: imported.importedAt
+  };
 }
 
 function normalizeSize(size?: string): SizeCategory {
