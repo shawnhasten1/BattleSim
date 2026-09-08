@@ -1,0 +1,353 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T00:00:00.000Z",
+  "definition": {
+    "id": "def-mage",
+    "name": "Mage",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "type": "humanoid",
+    "armorClass": 12,
+    "maxHp": 40,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "abilities": {
+      "str": 9,
+      "dex": 14,
+      "con": 11,
+      "int": 17,
+      "wis": 12,
+      "cha": 11
+    },
+    "saves": {
+      "int": {
+        "proficiency": true
+      },
+      "wis": {
+        "proficiency": true
+      }
+    },
+    "weapons": [
+      {
+        "id": "dagger",
+        "name": "Dagger",
+        "type": "simple-melee",
+        "damage": "1d4",
+        "damageType": "piercing",
+        "properties": [
+          "finesse",
+          "light",
+          "thrown"
+        ],
+        "magicBonus": 0
+      }
+    ],
+    "features": [
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "class-feature",
+        "description": "The mage is a 9th-level spellcaster. Intelligence is its spellcasting ability. Spell save DC 14 and +6 to hit with spell attacks.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "mage-armor",
+        "name": "Mage Armor",
+        "category": "class-feature",
+        "description": "The mage increases its Armor Class from 12 to 15 for 8 hours.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "shield",
+        "name": "Shield",
+        "category": "class-feature",
+        "description": "As a reaction, the mage gains +5 AC until the start of its next turn.",
+        "automationSupport": "full"
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "dagger-attack",
+        "name": "Dagger",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "dex",
+        "attackBonusFormula": {
+          "ability": "dex",
+          "proficiency": true
+        },
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d4",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "attack",
+        "id": "fire-bolt",
+        "name": "Fire Bolt",
+        "actionType": "action",
+        "attackType": "spell",
+        "ability": "int",
+        "attackBonusFormula": {
+          "ability": "int",
+          "proficiency": true
+        },
+        "range": 120,
+        "damage": [
+          {
+            "dice": "2d10",
+            "damageType": "fire"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "area-save",
+        "id": "fireball",
+        "name": "Fireball",
+        "actionType": "action",
+        "saveAbility": "dex",
+        "dc": 14,
+        "range": 150,
+        "area": {
+          "type": "circle",
+          "size": 20
+        },
+        "damage": [
+          {
+            "dice": "8d6",
+            "damageType": "fire"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "area-save",
+        "id": "ice-storm",
+        "name": "Ice Storm",
+        "actionType": "action",
+        "saveAbility": "dex",
+        "dc": 14,
+        "range": 300,
+        "area": {
+          "type": "circle",
+          "size": 20
+        },
+        "damage": [
+          {
+            "dice": "2d8",
+            "damageType": "bludgeoning"
+          },
+          {
+            "dice": "4d6",
+            "damageType": "cold"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "resourceCost": {
+          "resourceId": "slot-4",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "area-save",
+        "id": "cone-of-cold",
+        "name": "Cone of Cold",
+        "actionType": "action",
+        "saveAbility": "con",
+        "dc": 14,
+        "range": 60,
+        "area": {
+          "type": "cone",
+          "size": 60
+        },
+        "damage": [
+          {
+            "dice": "8d8",
+            "damageType": "cold"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "resourceCost": {
+          "resourceId": "slot-5",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "activate-feature",
+        "id": "cast-mage-armor",
+        "name": "Mage Armor",
+        "actionType": "action",
+        "featureId": "mage-armor",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "condition": {
+          "id": "mage-armor-active",
+          "name": "custom",
+          "durationRounds": 4800,
+          "effects": [
+            {
+              "kind": "ac-bonus",
+              "bonus": {
+                "base": 3
+              }
+            }
+          ]
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "unsupported",
+        "id": "magic-missile",
+        "name": "Magic Missile",
+        "actionType": "action",
+        "description": "Creates three darts that automatically hit and each deal 1d4+1 force damage.",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      },
+      {
+        "kind": "unsupported",
+        "id": "suggestion",
+        "name": "Suggestion",
+        "actionType": "action",
+        "description": "The target makes a Wisdom saving throw against DC 14 or is magically influenced.",
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      },
+      {
+        "kind": "unsupported",
+        "id": "fly",
+        "name": "Fly",
+        "actionType": "action",
+        "description": "Grants a creature a flying speed of 60 feet while concentration is maintained.",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      },
+      {
+        "kind": "unsupported",
+        "id": "greater-invisibility",
+        "name": "Greater Invisibility",
+        "actionType": "action",
+        "description": "The target becomes invisible while concentration is maintained.",
+        "resourceCost": {
+          "resourceId": "slot-4",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      },
+      {
+        "kind": "unsupported",
+        "id": "detect-magic",
+        "name": "Detect Magic",
+        "actionType": "action",
+        "description": "The mage senses nearby magic while concentration is maintained.",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      }
+    ],
+    "bonusActions": [
+      {
+        "kind": "unsupported",
+        "id": "misty-step",
+        "name": "Misty Step",
+        "actionType": "bonus",
+        "description": "The mage teleports up to 30 feet to an unoccupied space it can see.",
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      }
+    ],
+    "reactions": [
+      {
+        "kind": "activate-feature",
+        "id": "shield-reaction",
+        "name": "Shield",
+        "actionType": "reaction",
+        "featureId": "shield",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "condition": {
+          "id": "shield-active",
+          "name": "custom",
+          "durationRounds": 1,
+          "effects": [
+            {
+              "kind": "ac-bonus",
+              "bonus": {
+                "base": 5
+              }
+            }
+          ]
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "unsupported",
+        "id": "counterspell",
+        "name": "Counterspell",
+        "actionType": "reaction",
+        "description": "The mage attempts to interrupt another creature's spell.",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Mage",
+    "faction": "enemy",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 40,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-ranged",
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3,
+      "slot-4": 3,
+      "slot-5": 1
+    },
+    "conditions": []
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T13:51:53.036Z",
+  "definition": {
+    "id": "def-2e8af6bf-1724-4b85-8fe1-d85100fd32b0",
+    "name": "Fire Guy",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "armorClass": 13,
+    "maxHp": 110,
+    "speed": 30,
+    "proficiencyBonus": 2,
+    "character": {
+      "level": 1,
+      "classes": [
+        {
+          "name": "Adventurer",
+          "level": 1
+        }
+      ]
+    },
+    "abilities": {
+      "str": 12,
+      "dex": 12,
+      "con": 12,
+      "int": 16,
+      "wis": 10,
+      "cha": 10
+    },
+    "actions": [
+      {
+        "kind": "multiattack",
+        "id": "multiattack-d918a4eb-5a47-4563-9c22-fc366a47de70",
+        "name": "Multiattack",
+        "actionType": "action",
+        "attacks": [
+          {
+            "actionId": "spell-action-spell-0fdba7f7-d810-4550-8142-dd5f4d61e8bc",
+            "count": 2
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ],
+    "spells": [
+      {
+        "id": "spell-0fdba7f7-d810-4550-8142-dd5f4d61e8bc",
+        "name": "Fire Bolt",
+        "level": 0,
+        "castingTime": "action",
+        "range": 120,
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "spell-action-spell-0fdba7f7-d810-4550-8142-dd5f4d61e8bc",
+          "name": "Fire Bolt",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 120,
+          "damage": [
+            {
+              "dice": "1d10",
+              "damageType": "fire"
+            }
+          ],
+          "automationSupport": "full"
+        }
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Fire Guy 1",
+    "faction": "party",
+    "position": {
+      "x": 1,
+      "y": 6
+    },
+    "currentHp": 103,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-ranged",
+    "conditions": []
+  }
+}

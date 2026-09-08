@@ -1,0 +1,57 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T13:46:18.631Z",
+  "definition": {
+    "id": "def-fighter",
+    "name": "Test Fighter",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "armorClass": 16,
+    "maxHp": 32,
+    "speed": 30,
+    "abilities": {
+      "str": 16,
+      "dex": 12,
+      "con": 14,
+      "int": 10,
+      "wis": 10,
+      "cha": 10
+    },
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "longsword",
+        "name": "Longsword",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "str",
+        "attackBonus": 5,
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d8",
+            "damageType": "slashing",
+            "abilityModifier": "str"
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Fighter",
+    "faction": "party",
+    "position": {
+      "x": 1,
+      "y": 1
+    },
+    "currentHp": 32,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-melee"
+  }
+}

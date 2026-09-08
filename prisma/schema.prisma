@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  maps        BattleMap[]
+  encounters  Encounter[]
+}
+
+model BattleMap {
+  id             String      @id @default(cuid())
+  projectId      String
+  name           String
+  imagePath      String?
+  gridSizePx     Float
+  gridOffsetX    Float       @default(0)
+  gridOffsetY    Float       @default(0)
+  distancePerSq  Float       @default(5)
+  widthSquares   Int
+  heightSquares  Int
+  wallsJson      String
+  terrainJson    String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  encounters     Encounter[]
+}
+
+model CreatureDefinition {
+  id             String      @id @default(cuid())
+  name           String
+  sourceKey      String?
+  sourceName     String?
+  sourceSlug     String?
+  importedAt     DateTime?
+  importedJson   String?
+  schemaVersion  Int         @default(1)
+  data           String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Encounter {
+  id             String          @id @default(cuid())
+  projectId      String
+  mapId          String?
+  name           String
+  schemaVersion  Int             @default(1)
+  snapshotJson   String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  map            BattleMap?      @relation(fields: [mapId], references: [id], onDelete: SetNull)
+  simulationRuns SimulationRun[]
+}
+
+model SimulationRun {
+  id            String    @id @default(cuid())
+  encounterId   String
+  seed          String
+  outcome       String
+  rounds        Int
+  snapshotJson  String
+  metricsJson   String
+  eventLogJson  String
+  createdAt     DateTime  @default(now())
+  encounter     Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+}

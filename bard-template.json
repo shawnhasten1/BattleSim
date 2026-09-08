@@ -1,0 +1,337 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T00:00:00.000Z",
+  "definition": {
+    "id": "def-lore-bard-lvl6",
+    "name": "Level 6 Lore Bard",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "armorClass": 15,
+    "maxHp": 45,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "resources": {
+      "bardic-inspiration": 4,
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3
+    },
+    "abilities": {
+      "str": 8,
+      "dex": 16,
+      "con": 14,
+      "int": 10,
+      "wis": 12,
+      "cha": 18
+    },
+    "saves": {
+      "dex": {
+        "proficiency": true
+      },
+      "cha": {
+        "proficiency": true
+      }
+    },
+    "weapons": [
+      {
+        "id": "rapier",
+        "name": "Rapier",
+        "type": "martial-melee",
+        "damage": "1d8",
+        "damageType": "piercing",
+        "properties": [
+          "finesse"
+        ],
+        "magicBonus": 0
+      }
+    ],
+    "features": [
+      {
+        "id": "bardic-inspiration",
+        "name": "Bardic Inspiration",
+        "category": "class-feature",
+        "description": "As a bonus action, the bard grants one creature a d8 Bardic Inspiration die.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "jack-of-all-trades",
+        "name": "Jack of All Trades",
+        "category": "class-feature",
+        "description": "The bard adds half their proficiency bonus to ability checks that do not already include their proficiency bonus.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "song-of-rest",
+        "name": "Song of Rest",
+        "category": "class-feature",
+        "description": "Creatures who regain hit points during a short rest regain an additional 1d6 hit points.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "expertise",
+        "name": "Expertise",
+        "category": "class-feature",
+        "description": "The bard has Expertise in two chosen skill proficiencies.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "font-of-inspiration",
+        "name": "Font of Inspiration",
+        "category": "class-feature",
+        "description": "Bardic Inspiration uses are regained after a short or long rest.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "cutting-words",
+        "name": "Cutting Words",
+        "category": "class-feature",
+        "description": "As a reaction, the bard can expend a Bardic Inspiration die and subtract the roll from an enemy's attack roll, ability check, or damage roll.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "additional-magical-secrets",
+        "name": "Additional Magical Secrets",
+        "category": "class-feature",
+        "description": "The bard learns two additional spells from any class. This bard has learned Fireball and Counterspell.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "plus-one-magic-focus",
+        "name": "+1 Magic Focus",
+        "category": "class-feature",
+        "description": "This magical spellcasting focus grants +1 to spell attack rolls and +1 to spell save DC.",
+        "effects": [
+          {
+            "kind": "attack-bonus",
+            "bonus": {
+              "base": 1
+            },
+            "attackTypes": [
+              "spell"
+            ]
+          },
+          {
+            "kind": "save-dc-bonus",
+            "bonus": {
+              "base": 1
+            },
+            "actionIds": [
+              "vicious-mockery",
+              "dissonant-whispers",
+              "shatter",
+              "fireball"
+            ]
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "rapier-attack",
+        "name": "Rapier",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "dex",
+        "attackBonusFormula": {
+          "ability": "dex",
+          "proficiency": true
+        },
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d8",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "save",
+        "id": "vicious-mockery",
+        "name": "Vicious Mockery",
+        "actionType": "action",
+        "saveAbility": "wis",
+        "dcFormula": {
+          "base": 8,
+          "ability": "cha",
+          "proficiency": true
+        },
+        "range": 60,
+        "damage": [
+          {
+            "dice": "2d4",
+            "damageType": "psychic"
+          }
+        ],
+        "halfDamageOnSuccess": false,
+        "automationSupport": "full"
+      },
+      {
+        "kind": "save",
+        "id": "dissonant-whispers",
+        "name": "Dissonant Whispers",
+        "actionType": "action",
+        "saveAbility": "wis",
+        "dcFormula": {
+          "base": 8,
+          "ability": "cha",
+          "proficiency": true
+        },
+        "range": 60,
+        "damage": [
+          {
+            "dice": "3d6",
+            "damageType": "psychic"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "area-save",
+        "id": "shatter",
+        "name": "Shatter",
+        "actionType": "action",
+        "saveAbility": "con",
+        "dcFormula": {
+          "base": 8,
+          "ability": "cha",
+          "proficiency": true
+        },
+        "range": 60,
+        "area": {
+          "type": "circle",
+          "size": 10
+        },
+        "damage": [
+          {
+            "dice": "3d8",
+            "damageType": "thunder"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "affects": "hostile",
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "area-save",
+        "id": "fireball",
+        "name": "Fireball",
+        "actionType": "action",
+        "saveAbility": "dex",
+        "dcFormula": {
+          "base": 8,
+          "ability": "cha",
+          "proficiency": true
+        },
+        "range": 150,
+        "area": {
+          "type": "circle",
+          "size": 20
+        },
+        "damage": [
+          {
+            "dice": "8d6",
+            "damageType": "fire"
+          }
+        ],
+        "halfDamageOnSuccess": true,
+        "affects": "hostile",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      }
+    ],
+    "bonusActions": [
+      {
+        "kind": "healing",
+        "id": "healing-word",
+        "name": "Healing Word",
+        "actionType": "bonus",
+        "range": 60,
+        "healing": [
+          {
+            "dice": "1d4",
+            "abilityModifier": "cha"
+          }
+        ],
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "feature",
+        "id": "bardic-inspiration-action",
+        "name": "Bardic Inspiration",
+        "actionType": "bonus",
+        "resourceCost": {
+          "resourceId": "bardic-inspiration",
+          "amount": 1
+        },
+        "automationSupport": "partial"
+      }
+    ],
+    "reactions": [
+      {
+        "kind": "feature",
+        "id": "cutting-words-reaction",
+        "name": "Cutting Words",
+        "actionType": "reaction",
+        "resourceCost": {
+          "resourceId": "bardic-inspiration",
+          "amount": 1
+        },
+        "automationSupport": "partial"
+      },
+      {
+        "kind": "feature",
+        "id": "counterspell",
+        "name": "Counterspell",
+        "actionType": "reaction",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Lore Bard",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 45,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-ranged",
+    "resources": {
+      "bardic-inspiration": 4,
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3
+    },
+    "conditions": []
+  }
+}

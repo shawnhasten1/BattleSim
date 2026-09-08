@@ -1,0 +1,238 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T00:00:00.000Z",
+  "definition": {
+    "id": "def-spiritbound-marksman-deadeye-lvl6",
+    "name": "Level 6 Spiritbound Marksman - Deadeye",
+    "source": {
+      "provider": "homebrew",
+      "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
+    },
+    "size": "medium",
+    "armorClass": 16,
+    "maxHp": 45,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "spiritbound-marksman",
+          "name": "Spiritbound Marksman",
+          "level": 6,
+          "subclass": {
+            "id": "path-of-the-deadeye",
+            "name": "Path of the Deadeye"
+          },
+          "source": {
+            "provider": "homebrew",
+            "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
+          }
+        }
+      ]
+    },
+    "abilities": {
+      "str": 8,
+      "dex": 16,
+      "con": 14,
+      "int": 12,
+      "wis": 18,
+      "cha": 10
+    },
+    "saves": {
+      "con": {
+        "proficiency": true
+      },
+      "wis": {
+        "proficiency": true
+      }
+    },
+    "weapons": [
+      {
+        "id": "dagger",
+        "name": "Dagger",
+        "type": "simple-melee",
+        "damage": "1d4",
+        "damageType": "piercing",
+        "properties": [
+          "finesse",
+          "light",
+          "thrown"
+        ],
+        "magicBonus": 0
+      }
+    ],
+    "features": [
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "class-feature",
+        "description": "Wisdom is the Spiritbound Marksman's spellcasting ability. Spell save DC 15 and spell attack bonus +7.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "spiritfire-gun",
+        "name": "Spiritfire Gun",
+        "category": "class-feature",
+        "description": "The marksman channels spiritual energy through a Spiritfire Gun. Attacks use Wisdom and deal 1d10 force damage. At 5th level, two separate shots are fired.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "lesser-echo-marks",
+        "name": "Lesser Echo Marks",
+        "category": "class-feature",
+        "description": "Once per turn when making a Spiritfire Gun attack, the marksman may apply a Lesser Echo Mark.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "agonizing-echo",
+        "name": "Agonizing Echo",
+        "category": "class-feature",
+        "description": "Add the marksman's Wisdom modifier to each Spiritfire Gun shot.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "damage-bonus",
+            "actionIds": [
+              "spiritfire-shot"
+            ],
+            "damage": [
+              {
+                "dice": "0",
+                "damageType": "same-as-attack",
+                "bonusFormula": {
+                  "ability": "wis"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "path-of-the-deadeye",
+        "name": "Path of the Deadeye",
+        "category": "class-feature",
+        "description": "The Spiritfire Gun takes the form of a tactical Six-Shooter with a normal range of 60 feet and a long range of 120 feet.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "deaths-brand",
+        "name": "Death's Brand",
+        "category": "class-feature",
+        "description": "Once per turn, when the marksman hits with a Spiritfire Gun shot, they may mark the target. If the marked creature is hit again before the brand expires, the brand is consumed and deals additional necrotic damage.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "apply-condition-on-hit",
+            "actionIds": [
+              "spiritfire-shot"
+            ],
+            "oncePerTurn": true,
+            "appliedCondition": {
+              "id": "deaths-brand-active",
+              "name": "custom",
+              "durationRounds": 1,
+              "effects": [
+                {
+                  "kind": "incoming-hit-damage",
+                  "damage": [
+                    {
+                      "dice": "2d6",
+                      "damageType": "necrotic"
+                    }
+                  ],
+                  "critical": false,
+                  "consumeCondition": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "mark-of-the-last-breath",
+        "name": "Mark of the Last Breath",
+        "category": "class-feature",
+        "description": "Death's Brand lasts until the end of the marksman's next turn and deals 2d6 necrotic damage when triggered. Once per long rest, the marksman may mark a second creature.",
+        "automationSupport": "partial"
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "spiritfire-shot",
+        "name": "Spiritfire Gun",
+        "actionType": "action",
+        "attackType": "ranged",
+        "ability": "wis",
+        "attackBonusFormula": {
+          "ability": "wis",
+          "proficiency": true
+        },
+        "range": 60,
+        "longRange": 120,
+        "damage": [
+          {
+            "dice": "1d10",
+            "damageType": "force"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "multiattack",
+        "id": "spiritfire-gun-attack",
+        "name": "Spiritfire Gun Attack",
+        "actionType": "action",
+        "attacks": [
+          {
+            "actionId": "spiritfire-shot",
+            "count": 2
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "attack",
+        "id": "dagger-attack",
+        "name": "Dagger",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "dex",
+        "attackBonusFormula": {
+          "ability": "dex",
+          "proficiency": true
+        },
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d4",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Spiritbound Marksman",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 45,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-ranged",
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 2,
+      "second-deaths-brand": 1
+    },
+    "conditions": []
+  }
+}

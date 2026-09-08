@@ -1,0 +1,206 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-07T00:00:00.000Z",
+  "definition": {
+    "id": "def-assassin",
+    "name": "Assassin",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "armorClass": 15,
+    "maxHp": 78,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "abilities": {
+      "str": 11,
+      "dex": 16,
+      "con": 14,
+      "int": 13,
+      "wis": 11,
+      "cha": 10
+    },
+    "saves": {
+      "dex": {
+        "proficiency": true
+      },
+      "int": {
+        "proficiency": true
+      }
+    },
+    "weapons": [
+      {
+        "id": "shortsword",
+        "name": "Shortsword",
+        "type": "martial-melee",
+        "damage": "1d6",
+        "damageType": "piercing",
+        "properties": [
+          "finesse",
+          "light"
+        ],
+        "magicBonus": 0
+      },
+      {
+        "id": "light-crossbow",
+        "name": "Light Crossbow",
+        "type": "simple-ranged",
+        "damage": "1d8",
+        "damageType": "piercing",
+        "properties": [
+          "ammunition",
+          "loading",
+          "two-handed"
+        ],
+        "magicBonus": 0
+      }
+    ],
+    "features": [
+      {
+        "id": "assassinate",
+        "name": "Assassinate",
+        "category": "class-feature",
+        "description": "The assassin has advantage on attack rolls against creatures that have not yet taken a turn in combat. Hits against surprised creatures are critical hits.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "evasion",
+        "name": "Evasion",
+        "category": "class-feature",
+        "description": "When the assassin succeeds on certain Dexterity saving throws for half damage, it takes no damage instead, and only half damage on a failure.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "sneak-attack",
+        "name": "Sneak Attack",
+        "category": "class-feature",
+        "description": "Once per turn, the assassin deals an additional 4d6 damage when it hits with an eligible weapon attack and has advantage, or when an ally is threatening the target.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "damage-bonus",
+            "actionIds": [
+              "shortsword-attack",
+              "light-crossbow-attack"
+            ],
+            "damage": [
+              {
+                "dice": "4d6",
+                "damageType": "piercing"
+              }
+            ],
+            "oncePerTurn": true,
+            "allConditions": [
+              "attack-has-no-disadvantage"
+            ],
+            "anyConditions": [
+              "attack-has-advantage",
+              "ally-adjacent-to-target"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "poisoned-weapons",
+        "name": "Poisoned Weapons",
+        "category": "class-feature",
+        "description": "The assassin's weapon attacks can deal an additional 7d6 poison damage. The target makes a DC 15 Constitution saving throw and takes half of the poison damage on a successful save.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "save-gated-damage",
+            "actionIds": [
+              "shortsword-attack",
+              "light-crossbow-attack"
+            ],
+            "damage": [
+              {
+                "dice": "7d6",
+                "damageType": "poison"
+              }
+            ],
+            "save": {
+              "ability": "con",
+              "dc": 15,
+              "halfDamageOnSuccess": true
+            },
+            "critical": false
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "shortsword-attack",
+        "name": "Shortsword",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "dex",
+        "attackBonusFormula": {
+          "ability": "dex",
+          "proficiency": true
+        },
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d6",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "attack",
+        "id": "light-crossbow-attack",
+        "name": "Light Crossbow",
+        "actionType": "action",
+        "attackType": "ranged",
+        "ability": "dex",
+        "attackBonusFormula": {
+          "ability": "dex",
+          "proficiency": true
+        },
+        "range": 80,
+        "damage": [
+          {
+            "dice": "1d8",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "multiattack",
+        "id": "assassin-multiattack",
+        "name": "Multiattack",
+        "actionType": "action",
+        "attacks": [
+          {
+            "actionId": "shortsword-attack",
+            "count": 2
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Assassin",
+    "faction": "enemy",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 78,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-melee",
+    "resources": {},
+    "conditions": []
+  }
+}
