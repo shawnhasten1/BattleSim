@@ -1106,16 +1106,20 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
 
 function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<CreatureDefinition["weapons"]>[number]): AttackActionDefinition {
   const magicBonus = weapon.magicBonus ?? 0;
+  // "finesse" resolves to whichever of STR / DEX gives the better modifier.
+  const ability = weapon.ability === "finesse"
+    ? (abilityModifier(definition.abilities.dex) >= abilityModifier(definition.abilities.str) ? "dex" : "str")
+    : weapon.ability;
   return {
     kind: "attack",
     id: weapon.actionId ?? `weapon:${weapon.id}`,
     name: weapon.name,
     actionType: "action",
     attackType: weapon.attackType,
-    ability: weapon.ability,
+    ability,
     attackBonusFormula: {
       base: magicBonus,
-      ability: weapon.ability,
+      ability,
       proficiency: true
     },
     range: weapon.range,

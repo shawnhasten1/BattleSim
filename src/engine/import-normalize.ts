@@ -5,12 +5,26 @@ import {
   ENCOUNTER_SCHEMA_VERSION,
   type Ability,
   type ActionDefinition,
+  type ActionRider,
+  type AreaTargeting,
   type CombatantExportPackage,
+  type ConditionInstance,
+  type ConditionName,
   type CreatureDefinition,
   type DamageComponent,
+  type DamageScaling,
   type DamageType,
   type FeatureDefinition,
+  type FeatureEffect,
+  type HealingComponent,
+  type NumericFormula,
+  type ResourceCost,
+  type RiderDuration,
+  type RiderGate,
+  type RiderSave,
   type AreaTemplate,
+  type SpellUpcast,
+  type WeaponCharges,
   type WeaponDefinition
 } from "./types";
 
@@ -73,12 +87,22 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
   const reactions = normalizeActionList(input.reactions, "reaction", actionIdMap, featureIdByName);
   const weapons = normalizeWeapons(input.weapons, actionIdMap, input.abilities);
   const spells = normalizeIdList(input.spells, "spell").map((spell) => {
-    if (!isRecord(spell) || !isRecord(spell.action)) {
+    if (!isRecord(spell)) {
       return spell;
     }
-    const actionType = spell.castingTime === "bonus" || spell.castingTime === "reaction" ? spell.castingTime : "action";
-    const normalizedAction = normalizeAction(spell.action, 0, actionType, new Map(), featureIdByName);
-    return { ...spell, action: normalizedAction };
+    const normalized: Record<string, unknown> = {
+      ...spell,
+      ritual: spell.ritual === true ? true : undefined,
+      concentration: typeof spell.concentration === "boolean" ? spell.concentration : undefined,
+      range: normalizeSpellRange(spell.range),
+      components: normalizeSpellComponents(spell.components),
+      upcast: normalizeSpellUpcast(spell.upcast)
+    };
+    if (isRecord(spell.action)) {
+      const actionType = spell.castingTime === "bonus" || spell.castingTime === "reaction" ? spell.castingTime : "action";
+      normalized.action = normalizeAction(spell.action, 0, actionType, new Map(), featureIdByName);
+    }
+    return normalized;
   });
   const normalized = {
     ...input,
@@ -166,10 +190,17 @@ function normalizeAction(
       longRange: numberField(input, "longRange"),
       reach: numberField(input, "reach") ?? (attackType === "melee" ? 5 : undefined),
       damage: normalizeDamageComponents(input.damage, input.damageType, attackType === "spell" ? undefined : ability),
+      attackDelivery: input.attackDelivery === "beams" ? "beams" : input.attackDelivery === "single" ? "single" : undefined,
+      beamCount: numberField(input, "beamCount"),
+      beamCountByLevel: normalizeBeamCountByLevel(input.beamCountByLevel),
+      autoHit: input.autoHit === true ? true : undefined,
+      riders: normalizeRiders(input.riders, "on-hit"),
+      concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
   if (kind === "save") {
+    const onSuccess = normalizeOnSuccess(input.onSuccess, input.halfDamageOnSuccess);
     return {
       ...input,
       kind,
@@ -179,11 +210,16 @@ function normalizeAction(
       saveAbility: normalizeAbility(input.saveAbility) ?? "dex",
       range: numberField(input, "range") ?? 60,
       damage: normalizeDamageComponents(input.damage, input.damageType),
-      halfDamageOnSuccess: typeof input.halfDamageOnSuccess === "boolean" ? input.halfDamageOnSuccess : true,
+      halfDamageOnSuccess: onSuccess === "half",
+      onSuccess,
+      targeting: normalizeSelfTargeting(input.targeting),
+      riders: normalizeRiders(input.riders, "on-save-fail"),
+      concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
   if (kind === "area-save") {
+    const onSuccess = normalizeOnSuccess(input.onSuccess, input.halfDamageOnSuccess);
     return {
       ...input,
       kind,
@@ -193,9 +229,13 @@ function normalizeAction(
       saveAbility: normalizeAbility(input.saveAbility) ?? "dex",
       range: numberField(input, "range") ?? 60,
       area: normalizeAreaTemplate(input.area),
+      targeting: normalizeAreaTargeting(input.targeting),
       damage: normalizeDamageComponents(input.damage, input.damageType),
-      halfDamageOnSuccess: typeof input.halfDamageOnSuccess === "boolean" ? input.halfDamageOnSuccess : true,
+      halfDamageOnSuccess: onSuccess === "half",
+      onSuccess,
       affects: input.affects === "all" ? "all" : "hostile",
+      riders: normalizeRiders(input.riders, "on-save-fail"),
+      concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
@@ -207,7 +247,9 @@ function normalizeAction(
       name,
       actionType,
       range: numberField(input, "range") ?? 60,
-      healing: Array.isArray(input.healing) ? input.healing : [{ dice: stringField(input, "healing") ?? "1" }],
+      healing: normalizeHealingComponents(Array.isArray(input.healing) ? input.healing : (stringField(input, "healing") ?? "1")),
+      targeting: normalizeSelfTargeting(input.targeting),
+      riders: normalizeRiders(input.riders, "always"),
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
@@ -262,22 +304,56 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
       return item as WeaponDefinition;
     }
     const attackType = normalizeAttackType(item.attackType) ?? normalizeAttackType(item.type) ?? "melee";
-    const ability = normalizeAbility(item.ability) ?? inferWeaponAbility(item, attackType, abilitiesInput);
+    const attackAttackType = attackType === "spell" ? "ranged" : attackType;
+    const ability = normalizeWeaponAbility(item.ability) ?? inferWeaponAbility(item, attackType, abilitiesInput);
+    const damageAbility = ability === "finesse" ? undefined : ability;
     const range = numberField(item, "range") ?? (attackType === "ranged" ? 80 : 5);
     const magicBonus = numberField(item, "magicBonus") ?? numberField(item, "magic_bonus") ?? undefined;
     return {
       ...item,
       name: stringField(item, "name") ?? "Weapon",
-      attackType,
+      category: item.category === "simple" || item.category === "martial" ? item.category : undefined,
+      attackType: attackAttackType,
       ability,
+      proficient: item.proficient === false ? false : undefined,
+      magical: item.magical === true ? true : undefined,
+      toHitBonus: numberField(item, "toHitBonus"),
       range,
       longRange: numberField(item, "longRange"),
-      reach: numberField(item, "reach") ?? (attackType === "melee" ? range : undefined),
-      damage: normalizeDamageComponents(item.damage, item.damageType, ability),
+      reach: numberField(item, "reach") ?? (attackAttackType === "melee" ? range : undefined),
+      damage: normalizeDamageComponents(item.damage, item.damageType, damageAbility),
+      versatileDamage: Array.isArray(item.versatileDamage)
+        ? normalizeDamageComponents(item.versatileDamage, item.damageType, damageAbility)
+        : undefined,
+      charges: normalizeWeaponCharges(item.charges),
+      resourceCost: normalizeResourceCost(item.resourceCost),
+      onHit: normalizeRiders(item.onHit, "on-hit"),
       actionId: stringField(item, "actionId") ?? actionIdMap.get(stringField(item, "name") ?? ""),
       magicBonus
     } as WeaponDefinition;
   });
+}
+
+function normalizeWeaponAbility(input: unknown): Ability | "finesse" | undefined {
+  return input === "finesse" ? "finesse" : normalizeAbility(input);
+}
+
+function normalizeWeaponCharges(input: unknown): WeaponCharges | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const id = stringField(input, "id");
+  const max = numberField(input, "max");
+  if (!id || max === undefined || max <= 0) {
+    return undefined;
+  }
+  let recharge: WeaponCharges["recharge"];
+  if (input.recharge === "dawn" || input.recharge === "short-rest" || input.recharge === "long-rest") {
+    recharge = input.recharge;
+  } else if (isRecord(input.recharge) && typeof input.recharge.dice === "string" && input.recharge.dice.trim()) {
+    recharge = { dice: input.recharge.dice.trim() };
+  }
+  return { id, max: Math.floor(max), recharge };
 }
 
 function inferWeaponAbility(item: Record<string, unknown>, attackType: "melee" | "ranged" | "spell", abilitiesInput: unknown): Ability {
@@ -347,18 +423,88 @@ function normalizeDamageComponent(input: unknown, fallbackDamageType: unknown, a
   const damageType = normalizeDamageType(record.damageType) ?? normalizeDamageType(fallbackDamageType) ?? "slashing";
   return {
     ...record,
-    dice: typeof record.dice === "number" ? String(record.dice) : stringField(record, "dice") ?? "1",
+    ...syncDiceSugar(record),
     damageType,
     abilityModifier: normalizeAbility(record.abilityModifier) ?? abilityModifierValue,
-    bonusFormula: isRecord(record.bonusFormula) ? record.bonusFormula : undefined
+    bonusFormula: isRecord(record.bonusFormula) ? record.bonusFormula : undefined,
+    magical: record.magical === true ? true : undefined,
+    scaling: normalizeDamageScaling(record.scaling)
   } as DamageComponent;
+}
+
+function normalizeHealingComponents(input: unknown): HealingComponent[] {
+  const list = Array.isArray(input) ? input : [input];
+  return list.map((component) => {
+    const record: Record<string, unknown> = isRecord(component) ? component : { dice: component };
+    return {
+      ...record,
+      ...syncDiceSugar(record),
+      abilityModifier: normalizeAbility(record.abilityModifier)
+    } as HealingComponent;
+  });
+}
+
+/**
+ * Keep `dice` (canonical) and `diceCount` / `diceSize` / `flatBonus` (structured)
+ * in step: structured → `dice` when `dice` is absent, `dice` → structured when it
+ * is a clean `NdM(+K)` form. Non-conforming expressions ("6", "2d6+1d4") keep
+ * `dice` and leave the structured mirror unset.
+ */
+function syncDiceSugar(record: Record<string, unknown>): { dice: string; diceCount?: number; diceSize?: number; flatBonus?: number } {
+  let count = numberField(record, "diceCount");
+  let size = numberField(record, "diceSize");
+  let flat = numberField(record, "flatBonus");
+
+  let dice = typeof record.dice === "number"
+    ? String(record.dice)
+    : (typeof record.dice === "string" && record.dice.trim() ? record.dice.trim() : undefined);
+
+  if (!dice && count !== undefined && size !== undefined) {
+    dice = `${count}d${size}${flat ? (flat > 0 ? `+${flat}` : String(flat)) : ""}`;
+  }
+  dice = (dice ?? "1").replace(/\s+/g, "");
+
+  if (count === undefined || size === undefined) {
+    const match = /^(\d+)d(\d+)([+-]\d+)?$/i.exec(dice);
+    if (match) {
+      count = count ?? Number(match[1]);
+      size = size ?? Number(match[2]);
+      if (flat === undefined && match[3]) {
+        flat = Number(match[3]);
+      }
+    }
+  }
+
+  const result: { dice: string; diceCount?: number; diceSize?: number; flatBonus?: number } = { dice };
+  if (count !== undefined) result.diceCount = count;
+  if (size !== undefined) result.diceSize = size;
+  if (flat !== undefined) result.flatBonus = flat;
+  return result;
+}
+
+function normalizeDamageScaling(input: unknown): DamageScaling | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  if (input.mode === "cantrip-by-level" && Array.isArray(input.steps)) {
+    const steps = input.steps
+      .filter(isRecord)
+      .map((step) => ({ atLevel: numberField(step, "atLevel") ?? 1, dice: (stringField(step, "dice") ?? "1").replace(/\s+/g, "") }))
+      .sort((a, b) => a.atLevel - b.atLevel);
+    return steps.length ? { mode: "cantrip-by-level", steps } : undefined;
+  }
+  if (input.mode === "per-slot-above-base") {
+    const dice = stringField(input, "dice");
+    return dice ? { mode: "per-slot-above-base", dice: dice.replace(/\s+/g, "") } : undefined;
+  }
+  return undefined;
 }
 
 function normalizeAreaTemplate(input: unknown): AreaTemplate {
   if (!isRecord(input)) {
     return { type: "circle", size: 10 };
   }
-  const type = input.type === "cone" || input.type === "line" || input.type === "square" ? input.type : "circle";
+  const type = input.type === "cone" || input.type === "line" || input.type === "square" || input.type === "rectangle" ? input.type : "circle";
   const direction = input.direction === "north" || input.direction === "east" || input.direction === "south" || input.direction === "west"
     ? input.direction
     : undefined;
@@ -368,6 +514,212 @@ function normalizeAreaTemplate(input: unknown): AreaTemplate {
     width: numberField(input, "width"),
     direction
   };
+}
+
+const RIDER_GATES: RiderGate[] = ["always", "on-hit", "on-miss", "on-crit", "on-save-fail", "on-save-success"];
+const CONDITION_NAMES: ConditionName[] = [
+  "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated",
+  "invisible", "paralyzed", "poisoned", "prone", "restrained", "stunned", "unconscious", "custom"
+];
+
+function normalizeRiders(input: unknown, defaultGate: RiderGate): ActionRider[] | undefined {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+  const riders = input
+    .map((rider, index) => normalizeRider(rider, defaultGate, index))
+    .filter((rider): rider is ActionRider => rider !== null);
+  return riders.length ? riders : undefined;
+}
+
+function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): ActionRider | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+  const id = stringField(input, "id") ?? `rider-${index + 1}`;
+  const oncePerTurn = input.oncePerTurn === true ? true : undefined;
+
+  if (input.kind === "note") {
+    return { kind: "note", id, oncePerTurn, text: stringField(input, "text") ?? "" };
+  }
+
+  const when = normalizeRiderGate(input.when) ?? defaultGate;
+  const resourceCost = normalizeResourceCost(input.resourceCost);
+  const base = { id, oncePerTurn, when, resourceCost };
+
+  if (input.kind === "damage") {
+    return { ...base, kind: "damage", components: normalizeDamageComponents(input.components, input.damageType) };
+  }
+  if (input.kind === "healing") {
+    return {
+      ...base,
+      kind: "healing",
+      components: normalizeHealingComponents(input.components ?? "1"),
+      target: input.target === "self" ? "self" : input.target === "target" ? "target" : undefined
+    };
+  }
+  if (input.kind === "push") {
+    return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5 };
+  }
+  if (input.kind === "condition") {
+    const condition = isRecord(input.condition) && typeof input.condition.custom === "string"
+      ? { custom: input.condition.custom }
+      : normalizeConditionName(input.condition) ?? "restrained";
+    return {
+      ...base,
+      kind: "condition",
+      condition,
+      duration: normalizeRiderDuration(input.duration),
+      save: normalizeRiderSave(input.save),
+      modifiers: isRecord(input.modifiers) ? input.modifiers as ConditionInstance["modifiers"] : undefined,
+      effects: Array.isArray(input.effects) ? input.effects as FeatureEffect[] : undefined
+    };
+  }
+  return null;
+}
+
+function normalizeRiderGate(input: unknown): RiderGate | undefined {
+  return typeof input === "string" && RIDER_GATES.includes(input as RiderGate) ? input as RiderGate : undefined;
+}
+
+function normalizeConditionName(input: unknown): ConditionName | undefined {
+  return typeof input === "string" && CONDITION_NAMES.includes(input as ConditionName) ? input as ConditionName : undefined;
+}
+
+function normalizeRiderDuration(input: unknown): RiderDuration {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return { kind: "rounds", rounds: Math.max(0, Math.floor(input)) };
+  }
+  if (isRecord(input)) {
+    if (input.kind === "save-ends" || input.untilSaveEnds === true) {
+      return { kind: "save-ends", saveAt: input.saveAt === "turn-start" ? "turn-start" : "turn-end" };
+    }
+    if (input.kind === "concentration" || input.concentration === true) {
+      return { kind: "concentration" };
+    }
+    if (input.kind === "permanent" || input.permanent === true) {
+      return { kind: "permanent" };
+    }
+    const rounds = numberField(input, "rounds") ?? numberField(input, "durationRounds");
+    if (input.kind === "rounds" || rounds !== undefined) {
+      const repeatSaveAt = input.repeatSaveAt === "turn-start" ? "turn-start"
+        : input.repeatSaveAt === "turn-end" ? "turn-end"
+        : undefined;
+      return repeatSaveAt
+        ? { kind: "rounds", rounds: rounds ?? 1, repeatSaveAt }
+        : { kind: "rounds", rounds: rounds ?? 1 };
+    }
+  }
+  return { kind: "rounds", rounds: 1 };
+}
+
+function normalizeRiderSave(input: unknown): RiderSave | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const ability = normalizeAbility(input.ability);
+  if (!ability) {
+    return undefined;
+  }
+  return {
+    ability,
+    dc: numberField(input, "dc"),
+    dcFormula: isRecord(input.dcFormula) ? input.dcFormula as NumericFormula : undefined,
+    onSuccess: input.onSuccess === "ends-early" ? "ends-early" : "negates"
+  };
+}
+
+function normalizeResourceCost(input: unknown): ResourceCost | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const resourceId = stringField(input, "resourceId");
+  if (!resourceId) {
+    return undefined;
+  }
+  const amount = numberField(input, "amount") ?? 1;
+  return { resourceId, amount: Math.max(1, Math.floor(amount)) };
+}
+
+function normalizeOnSuccess(input: unknown, legacyHalfDamage: unknown): "half" | "none" | "negates" {
+  if (input === "half" || input === "none" || input === "negates") {
+    return input;
+  }
+  return legacyHalfDamage === false ? "none" : "half";
+}
+
+function normalizeSelfTargeting(input: unknown): { target: "single" | "self" } | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  return { target: input.target === "self" ? "self" : "single" };
+}
+
+function normalizeAreaTargeting(input: unknown): AreaTargeting | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  return {
+    origin: input.origin === "self" ? "self" : "point",
+    aimedFromSelf: input.aimedFromSelf === true ? true : undefined,
+    range: numberField(input, "range") ?? 0
+  };
+}
+
+function normalizeBeamCountByLevel(input: unknown): Array<{ atLevel: number; count: number }> | undefined {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+  const steps = input
+    .filter(isRecord)
+    .map((step) => ({ atLevel: numberField(step, "atLevel") ?? 1, count: numberField(step, "count") ?? 1 }))
+    .sort((a, b) => a.atLevel - b.atLevel);
+  return steps.length ? steps : undefined;
+}
+
+function normalizeSpellRange(input: unknown): number | "self" | "touch" {
+  if (input === "self" || input === "touch") {
+    return input;
+  }
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return input;
+  }
+  if (typeof input === "string") {
+    const lowered = input.toLowerCase();
+    if (lowered.includes("self")) return "self";
+    if (lowered.includes("touch")) return "touch";
+    const parsed = Number.parseInt(input, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function normalizeSpellComponents(input: unknown): { v?: boolean; s?: boolean; m?: string } | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const components: { v?: boolean; s?: boolean; m?: string } = {};
+  if (input.v === true) components.v = true;
+  if (input.s === true) components.s = true;
+  if (typeof input.m === "string" && input.m.trim()) components.m = input.m.trim();
+  return Object.keys(components).length ? components : undefined;
+}
+
+function normalizeSpellUpcast(input: unknown): SpellUpcast | undefined {
+  if (!isRecord(input) || !isRecord(input.perSlotAboveBase)) {
+    return undefined;
+  }
+  const source = input.perSlotAboveBase;
+  const perSlot: NonNullable<SpellUpcast["perSlotAboveBase"]> = {};
+  const damageDice = stringField(source, "damageDice");
+  if (damageDice) perSlot.damageDice = damageDice.replace(/\s+/g, "");
+  const beams = numberField(source, "beams");
+  if (beams !== undefined) perSlot.beams = beams;
+  const targets = numberField(source, "targets");
+  if (targets !== undefined) perSlot.targets = targets;
+  const areaSize = numberField(source, "areaSize");
+  if (areaSize !== undefined) perSlot.areaSize = areaSize;
+  return Object.keys(perSlot).length ? { perSlotAboveBase: perSlot } : undefined;
 }
 
 function normalizeIdList(input: unknown, prefix: string): unknown[] {

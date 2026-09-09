@@ -46,6 +46,15 @@ export function cellIntersectsArea(
       return Math.hypot(dx, dy) <= sizeSquares;
     case "square":
       return Math.abs(dx) <= sizeSquares / 2 && Math.abs(dy) <= sizeSquares / 2;
+    case "rectangle": {
+      // `size` is the length along `direction`; `width` is the full lateral span.
+      // Aimed rectangles (toward a chosen point) arrive in phase 2c.
+      const direction = template.direction ?? "east";
+      const halfWidth = ((template.width ?? distancePerSquare) / distancePerSquare) / 2;
+      const along = direction === "east" ? dx : direction === "west" ? -dx : direction === "south" ? dy : -dy;
+      const lateral = direction === "east" || direction === "west" ? Math.abs(dy) : Math.abs(dx);
+      return along >= 0 && along <= sizeSquares && lateral <= halfWidth;
+    }
     case "line": {
       const direction = template.direction ?? "east";
       const widthSquares = (template.width ?? distancePerSquare) / distancePerSquare;

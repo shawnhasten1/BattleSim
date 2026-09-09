@@ -176,11 +176,36 @@ export interface NumericFormula {
 }
 
 export interface DamageComponent {
+  /** Canonical dice expression, e.g. "2d6" or "2d6+1". Always populated after normalization. */
   dice: string;
+  /**
+   * Structured mirror of `dice`, kept in sync by `normalizeDamageComponent`:
+   * parsed from `dice` when it is a clean `NdM(+K)` form, or authored directly by
+   * the builder (which then compiles `dice`). Absent for expressions that do not
+   * fit that form (a flat "6", a mixed "2d6+1d4").
+   */
+  diceCount?: number;
+  diceSize?: number;
+  /**
+   * Flat, unconditional addend. Summed with `abilityModifier` and `bonusFormula`
+   * at resolve time — it does not replace them. Mirrors the `+K` tail of `dice`.
+   */
+  flatBonus?: number;
   damageType: DamageTypeReference;
   abilityModifier?: Ability;
   bonusFormula?: NumericFormula;
+  /**
+   * This component's damage counts as magical — it ignores non-magical
+   * resistance / immunity — regardless of any `bonusFormula`.
+   */
+  magical?: boolean;
+  /** Level-driven dice growth (cantrip scaling, per-slot upcast). Resolved by `resolveScaledDamage`. */
+  scaling?: DamageScaling;
 }
+
+export type DamageScaling =
+  | { mode: "cantrip-by-level"; steps: Array<{ atLevel: number; dice: string }> }
+  | { mode: "per-slot-above-base"; dice: string };
 
 export type FeatureCondition =
   | "ally-adjacent-to-target"
@@ -295,15 +320,99 @@ export interface ResourceCost {
 
 export interface HealingComponent {
   dice: string;
+  /** Structured mirror of `dice` — see `DamageComponent`. */
+  diceCount?: number;
+  diceSize?: number;
+  flatBonus?: number;
   abilityModifier?: Ability;
 }
 
 export interface AreaTemplate {
-  type: "circle" | "cone" | "line" | "square";
+  type: "circle" | "cone" | "line" | "rectangle" | "square";
+  /** Circle radius / cone length / line length / rectangle length, in feet. */
   size: number;
+  /** Line & rectangle width (full width, not half), in feet. */
   width?: number;
   direction?: "north" | "east" | "south" | "west";
 }
+
+/** How an area action's template is placed and aimed. */
+export interface AreaTargeting {
+  /** `"self"` centres the template on the caster; `"point"` lets them choose one within `range`. */
+  origin: "self" | "point";
+  /** Cones / lines / rectangles emanate from the caster toward the chosen point. */
+  aimedFromSelf?: boolean;
+  /** How far the chosen point (or the near edge) may be, in feet. */
+  range: number;
+}
+
+/* ─── Action riders ─────────────────────────────────────────────────────────────
+ * A small, composable effect attached to an attack, save, or area action:
+ * "deal this extra damage", "impose this condition on a failed save for N rounds",
+ * "shove the target". Replaces hand-authored `FeatureEffect` wiring for the common
+ * cases. Weapons carry them on `onHit`; save / area-save / healing actions carry
+ * them on `riders`. Consumed by `applyActionRiders` (engine, phase 2a).
+ */
+
+export type RiderGate =
+  | "always"
+  | "on-hit"
+  | "on-miss"
+  | "on-crit"
+  | "on-save-fail"
+  | "on-save-success";
+
+export type RiderDuration =
+  | { kind: "rounds"; rounds: number; repeatSaveAt?: "turn-start" | "turn-end" }
+  | { kind: "save-ends"; saveAt: "turn-start" | "turn-end" }
+  | { kind: "concentration" }
+  | { kind: "permanent" };
+
+export interface RiderSave {
+  ability: Ability;
+  dc?: number;
+  dcFormula?: NumericFormula;
+  /**
+   * What a successful save does. `"negates"` — the effect never lands.
+   * `"ends-early"` — it lands, but a later `repeatSaveAt` / `save-ends` roll can
+   * clear it.
+   */
+  onSuccess: "negates" | "ends-early";
+}
+
+interface ActionRiderCommon {
+  id?: Id;
+  /** Fire at most once per the source creature's turn (Sneak-Attack style). */
+  oncePerTurn?: boolean;
+}
+
+interface TriggeredRider extends ActionRiderCommon {
+  when: RiderGate;
+  /**
+   * Charges this rider spends, on top of the parent action's own `resourceCost`.
+   * If unpayable the rider is skipped and the parent action still resolves.
+   */
+  resourceCost?: ResourceCost;
+}
+
+export type ActionRider =
+  | (TriggeredRider & { kind: "damage"; components: DamageComponent[] })
+  | (TriggeredRider & { kind: "healing"; components: HealingComponent[]; target?: "self" | "target" })
+  | (TriggeredRider & {
+      kind: "condition";
+      condition: ConditionName | { custom: string };
+      duration: RiderDuration;
+      /**
+       * Omit for an automatic effect ("on a hit, frightened"). Present for a
+       * gated one ("on a hit, WIS save or frightened"). Also supplies the roll
+       * for `save-ends` / `repeatSaveAt` durations.
+       */
+      save?: RiderSave;
+      modifiers?: ConditionInstance["modifiers"];
+      effects?: FeatureEffect[];
+    })
+  | (TriggeredRider & { kind: "push"; distance: number })
+  | (ActionRiderCommon & { kind: "note"; text: string });
 
 export interface AttackActionDefinition {
   kind: "attack";
@@ -318,7 +427,19 @@ export interface AttackActionDefinition {
   longRange?: number;
   reach?: number;
   damage: DamageComponent[];
+  /** `"beams"` = several small attacks from one action (Magic Missile, Scorching Ray, Eldritch Blast). Default `"single"`. */
+  attackDelivery?: "single" | "beams";
+  /** Base beam count (default 1) when `attackDelivery === "beams"`. */
+  beamCount?: number;
+  /** Cantrip-style beam growth — the highest `atLevel <= casterLevel` entry overrides `beamCount`. */
+  beamCountByLevel?: Array<{ atLevel: number; count: number }>;
+  /** Skip the attack roll — each beam's damage always lands (Magic Missile). */
+  autoHit?: boolean;
+  /** On-hit effects: extra damage, a save-or-condition, a shove. */
+  riders?: ActionRider[];
   resourceCost?: ResourceCost;
+  /** Using this action sets the actor's concentration (some spell attacks). */
+  concentration?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -332,8 +453,16 @@ export interface SaveActionDefinition {
   dcFormula?: NumericFormula;
   range: number;
   damage: DamageComponent[];
+  /** Legacy flag. Kept in sync with `onSuccess` by normalization (`onSuccess === "half"`). */
   halfDamageOnSuccess: boolean;
+  /** What a successful save does to this action's damage. Generalises `halfDamageOnSuccess`. */
+  onSuccess?: "half" | "none" | "negates";
+  /** `"self"` targets the actor (buffs, self-heals). Default `"single"`. */
+  targeting?: { target: "single" | "self" };
+  /** Effects gated on the save result — usually `on-save-fail` conditions. */
+  riders?: ActionRider[];
   resourceCost?: ResourceCost;
+  concentration?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -347,10 +476,15 @@ export interface AreaSaveActionDefinition {
   dcFormula?: NumericFormula;
   range: number;
   area: AreaTemplate;
+  /** How the template is placed / aimed. Default: `{ origin: "point", range }`. */
+  targeting?: AreaTargeting;
   damage: DamageComponent[];
   halfDamageOnSuccess: boolean;
+  onSuccess?: "half" | "none" | "negates";
   affects: "hostile" | "all";
+  riders?: ActionRider[];
   resourceCost?: ResourceCost;
+  concentration?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -361,6 +495,9 @@ export interface HealingActionDefinition {
   actionType: "action" | "bonus" | "reaction";
   range: number;
   healing: HealingComponent[];
+  /** `"self"` targets the actor. Default `"single"`. */
+  targeting?: { target: "single" | "self" };
+  riders?: ActionRider[];
   resourceCost?: ResourceCost;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
@@ -412,19 +549,58 @@ export type ActionDefinition =
   | ActivateFeatureActionDefinition
   | MultiattackActionDefinition;
 
+/** Limited-use pool backing a weapon's spell-like `onHit` riders. */
+export interface WeaponCharges {
+  /**
+   * Resource id as authored (e.g. `"fear-strike"`). Namespaced to
+   * `<weaponId>:<id>` and seeded into the creature's resources when the weapon
+   * is attached.
+   */
+  id: string;
+  max: number;
+  recharge?: "dawn" | "short-rest" | "long-rest" | { dice: string };
+}
+
 export interface WeaponDefinition {
   id: Id;
   name: string;
   source?: SourceMetadata;
+  category?: "simple" | "martial";
   attackType: "melee" | "ranged";
-  ability: Ability;
+  /** An `Ability`, or `"finesse"` — resolved to the better of STR/DEX at attack time. */
+  ability: Ability | "finesse";
+  /** Default `true`. `false` drops the proficiency bonus from the attack roll. */
+  proficient?: boolean;
+  /** Damage counts as magical (bypasses non-magical resistance) even at +0. */
+  magical?: boolean;
+  /** Flat ± to the attack roll, independent of `magicBonus`. */
+  toHitBonus?: number;
   range: number;
   longRange?: number;
   reach?: number;
   damage: DamageComponent[];
+  /** Used when the weapon is wielded two-handed (Versatile property). */
+  versatileDamage?: DamageComponent[];
   properties?: string[];
+  /** Limited-use pool for `onHit` riders that carry a `resourceCost`. */
+  charges?: WeaponCharges;
+  /** Charges the attack itself spends (rare — most cost sits on an `onHit` rider). */
+  resourceCost?: ResourceCost;
+  /** Spell-like on-hit effects: extra damage, a save-or-condition, a shove. */
+  onHit?: ActionRider[];
   actionId?: Id;
+  /** +1 / +2 / +3 — adds to both the attack roll and every damage component. */
   magicBonus?: number;
+}
+
+/** How a spell grows when cast with a slot above its base level. */
+export interface SpellUpcast {
+  perSlotAboveBase?: {
+    damageDice?: string;
+    beams?: number;
+    targets?: number;
+    areaSize?: number;
+  };
 }
 
 export interface SpellDefinition {
@@ -434,9 +610,13 @@ export interface SpellDefinition {
   level: number;
   school?: string;
   castingTime: "action" | "bonus" | "reaction";
-  range: number;
+  ritual?: boolean;
+  /** Feet, or `"self"` / `"touch"` (resolved to 0 / 5 when compiling to an action). */
+  range: number | "self" | "touch";
   concentration?: boolean;
+  components?: { v?: boolean; s?: boolean; m?: string };
   resourceCost?: ResourceCost;
+  upcast?: SpellUpcast;
   action?: ActionDefinition;
   description?: string;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
@@ -639,6 +819,127 @@ export const coverLevelSchema = z.union([
   z.literal("total")
 ]);
 
+/* ─── Structured sub-schemas for actions / weapons / spells ──────────────────────
+ * `creatureDefinitionSchema` still stores `actions` / `weapons` / `spells` as
+ * `z.array(z.any())` — deep shape enforcement is the normalizer's job. These
+ * exported schemas are the validation contract for the SRD library (phase 2) and
+ * for tests; they are not yet wired into the definition schema.
+ */
+
+const abilitySchema = z.enum(["str", "dex", "con", "int", "wis", "cha"]);
+
+export const numericFormulaSchema = z.object({
+  base: z.number().optional(),
+  ability: abilitySchema.optional(),
+  proficiency: z.boolean().optional(),
+  multiplier: z.number().optional()
+});
+
+export const resourceCostSchema = z.object({
+  resourceId: z.string().min(1),
+  amount: z.number().int()
+});
+
+export const damageScalingSchema = z.union([
+  z.object({
+    mode: z.literal("cantrip-by-level"),
+    steps: z.array(z.object({ atLevel: z.number().int(), dice: z.string().min(1) }))
+  }),
+  z.object({ mode: z.literal("per-slot-above-base"), dice: z.string().min(1) })
+]);
+
+export const damageComponentSchema = z.object({
+  dice: z.string().min(1),
+  diceCount: z.number().int().positive().optional(),
+  diceSize: z.number().int().positive().optional(),
+  flatBonus: z.number().optional(),
+  damageType: z.string().min(1),
+  abilityModifier: abilitySchema.optional(),
+  bonusFormula: numericFormulaSchema.optional(),
+  magical: z.boolean().optional(),
+  scaling: damageScalingSchema.optional()
+}).passthrough();
+
+export const healingComponentSchema = z.object({
+  dice: z.string().min(1),
+  diceCount: z.number().int().positive().optional(),
+  diceSize: z.number().int().positive().optional(),
+  flatBonus: z.number().optional(),
+  abilityModifier: abilitySchema.optional()
+}).passthrough();
+
+export const areaTemplateSchema = z.object({
+  type: z.enum(["circle", "cone", "line", "rectangle", "square"]),
+  size: z.number().positive(),
+  width: z.number().positive().optional(),
+  direction: z.enum(["north", "east", "south", "west"]).optional()
+});
+
+export const areaTargetingSchema = z.object({
+  origin: z.enum(["self", "point"]),
+  aimedFromSelf: z.boolean().optional(),
+  range: z.number().min(0)
+});
+
+export const weaponChargesSchema = z.object({
+  id: z.string().min(1),
+  max: z.number().int().positive(),
+  recharge: z.union([
+    z.enum(["dawn", "short-rest", "long-rest"]),
+    z.object({ dice: z.string().min(1) })
+  ]).optional()
+});
+
+export const riderGateSchema = z.enum([
+  "always", "on-hit", "on-miss", "on-crit", "on-save-fail", "on-save-success"
+]);
+
+export const riderDurationSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("rounds"),
+    rounds: z.number().int().min(0),
+    repeatSaveAt: z.enum(["turn-start", "turn-end"]).optional()
+  }),
+  z.object({ kind: z.literal("save-ends"), saveAt: z.enum(["turn-start", "turn-end"]) }),
+  z.object({ kind: z.literal("concentration") }),
+  z.object({ kind: z.literal("permanent") })
+]);
+
+export const riderSaveSchema = z.object({
+  ability: abilitySchema,
+  dc: z.number().int().optional(),
+  dcFormula: numericFormulaSchema.optional(),
+  onSuccess: z.enum(["negates", "ends-early"])
+});
+
+const triggeredRiderBase = {
+  id: z.string().optional(),
+  oncePerTurn: z.boolean().optional(),
+  when: riderGateSchema,
+  resourceCost: resourceCostSchema.optional()
+};
+
+export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("kind", [
+  z.object({ ...triggeredRiderBase, kind: z.literal("damage"), components: z.array(damageComponentSchema).min(1) }),
+  z.object({
+    ...triggeredRiderBase,
+    kind: z.literal("healing"),
+    components: z.array(healingComponentSchema).min(1),
+    target: z.enum(["self", "target"]).optional()
+  }),
+  z.object({
+    ...triggeredRiderBase,
+    kind: z.literal("condition"),
+    condition: z.union([z.string().min(1), z.object({ custom: z.string().min(1) })]),
+    duration: riderDurationSchema,
+    save: riderSaveSchema.optional(),
+    modifiers: z.any().optional(),
+    effects: z.array(z.any()).optional()
+  }),
+  z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number() }),
+  z.object({ id: z.string().optional(), oncePerTurn: z.boolean().optional(), kind: z.literal("note"), text: z.string() })
+]) as z.ZodType<ActionRider>;
+
 const tacticsProfileSchema = z.preprocess(
   (value) => value === "manual" ? "basic-melee" : value,
   z.union([
@@ -801,7 +1102,7 @@ export const encounterSnapshotSchema = z.object({
         name: z.string(),
         origin: pointSchema,
         area: z.object({
-          type: z.union([z.literal("circle"), z.literal("cone"), z.literal("line"), z.literal("square")]),
+          type: z.union([z.literal("circle"), z.literal("cone"), z.literal("line"), z.literal("rectangle"), z.literal("square")]),
           size: z.number().positive(),
           width: z.number().positive().optional(),
           direction: z.union([z.literal("north"), z.literal("east"), z.literal("south"), z.literal("west")]).optional()
