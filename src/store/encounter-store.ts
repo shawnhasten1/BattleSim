@@ -179,8 +179,6 @@ interface EncounterStore {
   placeCombatant: (combatantId: string, cell: Point) => void;
   updateCreatureDefinition: (definitionId: string, updates: Partial<CreatureDefinition>) => void;
   updateCreatureAbility: (definitionId: string, ability: Ability, value: number) => void;
-  addWeapon: (definitionId: string, input: { name: string; attackType: "melee" | "ranged"; ability: Ability; range: number; reach?: number; damageDice: string; damageType: DamageType }) => void;
-  addSpell: (definitionId: string, input: { name: string; level: number; castingTime: "action" | "bonus" | "reaction"; ability: Ability; range: number; damageDice: string; damageType: DamageType; resourceId?: string }) => void;
   attachSpellDefinition: (definitionId: string, spell: SpellDefinition) => void;
   attachWeaponDefinition: (definitionId: string, weapon: WeaponDefinition) => void;
   /**
@@ -196,7 +194,6 @@ interface EncounterStore {
   attachSrdSpell: (definitionId: string, srdId: string) => string | undefined;
   attachFeatureDefinition: (definitionId: string, feature: FeatureDefinition) => void;
   addFeatureOrTrait: (definitionId: string, input: { category: "feature" | "trait"; name: string; description?: string; effectPreset?: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" }) => void;
-  addStructuredAction: (definitionId: string, input: { kind: "attack" | "save" | "area-save" | "healing"; name: string; actionType: "action" | "bonus"; attackType: "melee" | "ranged" | "spell"; ability: Ability; saveAbility: Ability; dc: number; range: number; areaSize: number; damageDice: string; damageType: DamageType }) => void;
   addMultiattack: (definitionId: string, input: { name: string; actionIds: string[]; count: number }) => void;
   /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
   addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
@@ -211,7 +208,6 @@ interface EncounterStore {
   /** Merge a partial patch into one action (searched across actions / bonusActions / reactions) and re-normalize it. One undo step. */
   updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
   removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
-  mapBasicAttack: (definitionId: string, input?: { attackBonus?: number; damageDice?: string }) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
   duplicateCombatant: (combatantId: string) => void;
   /** Clone whatever combatant is currently selected. Thin wrapper over `duplicateCombatant`. */
@@ -1527,58 +1523,6 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
-      addWeapon: (definitionId, input) => {
-        const encounter = get().encounter;
-        const weaponId = `weapon-${crypto.randomUUID()}`;
-        const weapon: WeaponDefinition = {
-          id: weaponId,
-          name: input.name,
-          attackType: input.attackType,
-          ability: input.ability,
-          range: input.range,
-          reach: input.attackType === "melee" ? input.reach ?? input.range : undefined,
-          damage: [{ dice: input.damageDice, damageType: input.damageType, abilityModifier: input.ability }],
-          actionId: `weapon-action-${weaponId}`
-        };
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? { ...definition, weapons: [...(definition.weapons ?? []), weapon] }
-            : definition)
-        });
-      },
-      addSpell: (definitionId, input) => {
-        const encounter = get().encounter;
-        const spellId = `spell-${crypto.randomUUID()}`;
-        const spell: SpellDefinition = {
-          id: spellId,
-          name: input.name,
-          level: input.level,
-          castingTime: input.castingTime,
-          range: input.range,
-          resourceCost: input.resourceId ? { resourceId: input.resourceId, amount: 1 } : undefined,
-          automationSupport: "full",
-          action: {
-            kind: "attack",
-            id: `spell-action-${spellId}`,
-            name: input.name,
-            actionType: input.castingTime,
-            attackType: "spell",
-            ability: input.ability,
-            attackBonusFormula: { ability: input.ability, proficiency: true },
-            range: input.range,
-            damage: [{ dice: input.damageDice, damageType: input.damageType }],
-            resourceCost: input.resourceId ? { resourceId: input.resourceId, amount: 1 } : undefined,
-            automationSupport: "full"
-          }
-        };
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? { ...definition, spells: [...(definition.spells ?? []), spell] }
-            : definition)
-        });
-      },
       attachSpellDefinition: (definitionId, spell) => {
         const encounter = get().encounter;
         commitEncounter({
@@ -1694,71 +1638,6 @@ export const useEncounterStore = create<EncounterStore>()(
             return input.category === "feature"
               ? { ...definition, features: [...(definition.features ?? []), feature] }
               : { ...definition, traits: [...(definition.traits ?? []), feature] };
-          })
-        });
-      },
-      addStructuredAction: (definitionId, input) => {
-        const encounter = get().encounter;
-        const id = `action-${crypto.randomUUID()}`;
-        const action: ActionDefinition = input.kind === "healing"
-          ? {
-            kind: "healing",
-            id,
-            name: input.name,
-            actionType: input.actionType,
-            range: input.range,
-            healing: [{ dice: input.damageDice, abilityModifier: input.ability }],
-            automationSupport: "full"
-          }
-          : input.kind === "save"
-            ? {
-              kind: "save",
-              id,
-              name: input.name,
-              actionType: input.actionType,
-              saveAbility: input.saveAbility,
-              dc: input.dc,
-              range: input.range,
-              damage: [{ dice: input.damageDice, damageType: input.damageType }],
-              halfDamageOnSuccess: true,
-              automationSupport: "full"
-            }
-            : input.kind === "area-save"
-              ? {
-                kind: "area-save",
-                id,
-                name: input.name,
-                actionType: input.actionType,
-                saveAbility: input.saveAbility,
-                dc: input.dc,
-                range: input.range,
-                area: { type: "circle", size: input.areaSize },
-                damage: [{ dice: input.damageDice, damageType: input.damageType }],
-                halfDamageOnSuccess: true,
-                affects: "hostile",
-                automationSupport: "full"
-              }
-              : {
-                kind: "attack",
-                id,
-                name: input.name,
-                actionType: input.actionType,
-                attackType: input.attackType,
-                ability: input.ability,
-                attackBonusFormula: { ability: input.ability, proficiency: true },
-                range: input.range,
-                reach: input.attackType === "melee" ? input.range : undefined,
-                damage: [{ dice: input.damageDice, damageType: input.damageType, abilityModifier: input.attackType === "spell" ? undefined : input.ability }],
-                automationSupport: "full"
-              };
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            if (input.actionType === "bonus") {
-              return { ...definition, bonusActions: [...(definition.bonusActions ?? []), action] };
-            }
-            return { ...definition, actions: [...definition.actions, action] };
           })
         });
       },
@@ -1938,34 +1817,6 @@ export const useEncounterStore = create<EncounterStore>()(
               actions: scrubbedActions,
               bonusActions: itemType === "bonusAction" ? (definition.bonusActions ?? []).filter((item) => item.id !== itemId) : definition.bonusActions,
               reactions: itemType === "reaction" ? (definition.reactions ?? []).filter((item) => item.id !== itemId) : definition.reactions
-            };
-          })
-        });
-      },
-      mapBasicAttack: (definitionId, input = {}) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            return {
-              ...definition,
-              actions: [
-                ...definition.actions.filter((action) => action.kind !== "unsupported"),
-                {
-                  kind: "attack" as const,
-                  id: `mapped-basic-${definitionId}`,
-                  name: "Mapped Basic Attack",
-                  actionType: "action" as const,
-                  attackType: "melee" as const,
-                  ability: "str" as const,
-                  attackBonus: input.attackBonus ?? 4,
-                  range: 5,
-                  reach: 5,
-                  damage: [{ dice: input.damageDice ?? "1d6", damageType: "slashing" as const, abilityModifier: "str" as const }],
-                  automationSupport: "full" as const
-                }
-              ]
             };
           })
         });

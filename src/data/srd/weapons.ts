@@ -351,5 +351,67 @@ export const SRD_WEAPONS: readonly WeaponDefinition[] = [
       duration: { kind: "rounds", rounds: 10 },
       resourceCost: { resourceId: "fear-strike", amount: 1 }
     }]
+  },
+  // ── Backfill (phase 6) ────────────────────────────────────────────────────
+  {
+    id: "srd:weapon:greatclub", name: "Greatclub", category: "simple", attackType: "melee", ability: "str",
+    range: 5, reach: 5, properties: ["two-handed"],
+    damage: [{ dice: "1d8", damageType: "bludgeoning", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:light-hammer", name: "Light Hammer", category: "simple", attackType: "melee", ability: "str",
+    range: 5, reach: 5, longRange: 60, properties: ["light", "thrown"],
+    damage: [{ dice: "1d4", damageType: "bludgeoning", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:sickle", name: "Sickle", category: "simple", attackType: "melee", ability: "str",
+    range: 5, reach: 5, properties: ["light"],
+    damage: [{ dice: "1d4", damageType: "slashing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:dart", name: "Dart", category: "simple", attackType: "ranged", ability: "dex",
+    range: 20, longRange: 60, properties: ["finesse", "thrown"],
+    damage: [{ dice: "1d4", damageType: "piercing", abilityModifier: "dex" }]
+  },
+  {
+    id: "srd:weapon:morningstar", name: "Morningstar", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 5,
+    damage: [{ dice: "1d8", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:flail", name: "Flail", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 5,
+    damage: [{ dice: "1d8", damageType: "bludgeoning", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:war-pick", name: "War Pick", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 5,
+    damage: [{ dice: "1d8", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:trident", name: "Trident", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 5, longRange: 60, properties: ["thrown", "versatile"],
+    damage: [{ dice: "1d6", damageType: "piercing", abilityModifier: "str" }],
+    versatileDamage: [{ dice: "1d8", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:halberd", name: "Halberd", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 10, properties: ["heavy", "reach", "two-handed"],
+    damage: [{ dice: "1d10", damageType: "slashing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:pike", name: "Pike", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 10, properties: ["heavy", "reach", "two-handed"],
+    damage: [{ dice: "1d10", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:lance", name: "Lance", category: "martial", attackType: "melee", ability: "str",
+    range: 5, reach: 10, properties: ["reach", "special"],
+    damage: [{ dice: "1d12", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
+    id: "srd:weapon:blowgun", name: "Blowgun", category: "martial", attackType: "ranged", ability: "dex",
+    range: 25, longRange: 100, properties: ["ammunition", "loading"],
+    damage: [{ dice: "1", damageType: "piercing", abilityModifier: "dex" }]
   }
 ];

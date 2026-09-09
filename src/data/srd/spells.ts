@@ -453,5 +453,120 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       resourceCost: { resourceId: "slot-5", amount: 1 },
       automationSupport: "full"
     }
+  },
+  // ── Backfill (phase 6) ────────────────────────────────────────────────────
+  {
+    id: "srd:spell:ray-of-frost", name: "Ray of Frost", level: 0, school: "evocation", castingTime: "action", range: 60, automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:ray-of-frost:action", name: "Ray of Frost", actionType: "action", attackType: "spell",
+      ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 60,
+      damage: [{ dice: "1d8", damageType: "cold", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:shocking-grasp", name: "Shocking Grasp", level: 0, school: "evocation", castingTime: "action", range: "touch", automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:shocking-grasp:action", name: "Shocking Grasp", actionType: "action", attackType: "spell",
+      ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 5,
+      damage: [{ dice: "1d8", damageType: "lightning", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:chill-touch", name: "Chill Touch", level: 0, school: "necromancy", castingTime: "action", range: 120, automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:chill-touch:action", name: "Chill Touch", actionType: "action", attackType: "spell",
+      ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 120,
+      damage: [{ dice: "1d8", damageType: "necrotic", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:toll-the-dead", name: "Toll the Dead", level: 0, school: "necromancy", castingTime: "action", range: 60, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:toll-the-dead:action", name: "Toll the Dead", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      damage: [{ dice: "1d8", damageType: "necrotic", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      halfDamageOnSuccess: false, onSuccess: "none", automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:vicious-mockery", name: "Vicious Mockery", level: 0, school: "enchantment", castingTime: "action", range: 60, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:vicious-mockery:action", name: "Vicious Mockery", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "1d4", damageType: "psychic", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d4" }, { atLevel: 11, dice: "3d4" }, { atLevel: 17, dice: "4d4" }] } }],
+      halfDamageOnSuccess: false, onSuccess: "none", automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:guiding-bolt", name: "Guiding Bolt", level: 1, school: "evocation", castingTime: "action", range: 120,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d6" } }, automationSupport: "full",
+    description: "The next attack roll against the target before the end of your next turn has advantage (resolve manually).",
+    action: {
+      kind: "attack", id: "srd:spell:guiding-bolt:action", name: "Guiding Bolt", actionType: "action", attackType: "spell",
+      ability: "wis", attackBonusFormula: { ability: "wis", proficiency: true }, range: 120,
+      damage: [{ dice: "4d6", damageType: "radiant", magical: true }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:faerie-fire", name: "Faerie Fire", level: 1, school: "evocation", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:faerie-fire:action", name: "Faerie Fire", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      area: { type: "square", size: 20 }, targeting: { origin: "point", range: 60 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "note", text: "Outlined targets are lit; attack rolls against them have advantage and they can't benefit from being invisible." }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:spiritual-weapon", name: "Spiritual Weapon", level: 2, school: "evocation", castingTime: "bonus", range: 60,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:spiritual-weapon:action", name: "Spiritual Weapon", actionType: "bonus", attackType: "spell",
+      ability: "wis", attackBonusFormula: { ability: "wis", proficiency: true }, range: 60,
+      damage: [{ dice: "1d8", damageType: "force", magical: true, abilityModifier: "wis" }],
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:spirit-guardians", name: "Spirit Guardians", level: 3, school: "conjuration", castingTime: "action", range: "self", concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:spirit-guardians:action", name: "Spirit Guardians", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 15,
+      area: { type: "circle", size: 15 }, targeting: { origin: "self", range: 0 },
+      damage: [{ dice: "3d8", damageType: "radiant", magical: true }],
+      halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile", concentration: true,
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:hypnotic-pattern", name: "Hypnotic Pattern", level: 3, school: "illusion", castingTime: "action", range: 120, concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:hypnotic-pattern:action", name: "Hypnotic Pattern", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 120,
+      area: { type: "square", size: 30 }, targeting: { origin: "point", range: 120 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, save: { ability: "wis", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:fear", name: "Fear", level: 3, school: "illusion", castingTime: "action", range: "self", concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:fear:action", name: "Fear", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 30,
+      area: { type: "cone", size: 30 }, targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
   }
 ];

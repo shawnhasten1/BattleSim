@@ -1,9 +1,10 @@
 "use client";
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
-import { type CSSProperties, type DragEvent, useMemo } from "react";
+import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
 import { getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
+import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
 import { clamp, pointsMatch } from "@/components/scene/coords";
@@ -54,8 +55,30 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const updateHp = useEncounterStore((state) => state.updateHp);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
+  const attachSrdWeapon = useEncounterStore((state) => state.attachSrdWeapon);
+  const attachSrdSpell = useEncounterStore((state) => state.attachSrdSpell);
+  const [srdDropTokenId, setSrdDropTokenId] = useState<string | null>(null);
   const encounter = useDisplayEncounter();
   const replaying = useIsReplaying();
+
+  function onTokenSrdDragOver(event: DragEvent<HTMLButtonElement>, combatantId: string) {
+    if (replaying || !event.dataTransfer.types.includes(SRD_DRAG_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setSrdDropTokenId(combatantId);
+  }
+
+  function onTokenSrdDrop(event: DragEvent<HTMLButtonElement>, combatant: CombatantState) {
+    const raw = event.dataTransfer.getData(SRD_DRAG_MIME);
+    setSrdDropTokenId(null);
+    if (replaying || !raw) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = parseSrdDragPayload(raw);
+    if (payload?.kind === "weapon") attachSrdWeapon(combatant.definitionId, payload.id);
+    else if (payload?.kind === "spell") attachSrdSpell(combatant.definitionId, payload.id);
+  }
   const { floaties, areaFlashes } = useSceneFeedback(encounter);
 
   const metrics = useMemo(() => deriveSceneMetrics(map), [map]);
@@ -294,7 +317,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""}`}
               style={{
                 left: x,
                 top: y,
@@ -302,6 +325,9 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                 height: size,
                 borderColor: visuals.borderColor ?? undefined
               }}
+              onDragOver={(event) => onTokenSrdDragOver(event, combatant.id)}
+              onDragLeave={() => setSrdDropTokenId((current) => (current === combatant.id ? null : current))}
+              onDrop={(event) => onTokenSrdDrop(event, combatant)}
               onPointerDown={replaying ? undefined : (event) => scene.onTokenPointerDown(event, combatant.id)}
               onClick={(event) => {
                 if (replaying) return;

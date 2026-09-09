@@ -258,7 +258,10 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }));
 
   if (plan.action.kind === "attack") {
-    resolveAttack(state, actor.id, plan.target.id, plan.action.id);
+    const targets = plan.action.attackDelivery === "beams"
+      ? beamTargets(state.snapshot, actor, plan.action, plan.target, plan.range)
+      : plan.target.id;
+    resolveAttack(state, actor.id, targets, plan.action.id);
   } else if (plan.action.kind === "multiattack") {
     resolveMultiattackAction(state, actor.id, plan.target.id, plan.action.id);
   } else if (plan.action.kind === "save") {
@@ -593,6 +596,43 @@ function selectOffensivePlan(
 function isValidTarget(snapshot: EncounterSnapshot, actor: CombatantState, target: CombatantState, range: number): boolean {
   return gridDistance(actor.position, target.position, snapshot.map.grid) <= range
     && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, actor.position, target.position));
+}
+
+/**
+ * Spread a beam attack's beams: focus the primary target until an estimate says
+ * it is dead, then spill the rest onto the next-best hostile in range. Collapses
+ * to "all beams on the primary" when there is only one hostile.
+ */
+function beamTargets(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  action: Extract<ActionDefinition, { kind: "attack" }>,
+  primary: CombatantState,
+  range: number
+): string[] {
+  const definition = getDefinition(snapshot, actor);
+  const beams = resolveBeamCount(action, definition.character?.level ?? 1, undefined);
+  if (beams <= 1) {
+    return [primary.id];
+  }
+  const ranked = snapshot.combatants
+    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
+    .map((c) => ({ combatant: c, value: expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, c)) }))
+    .sort((a, b) => b.value - a.value)
+    .map((entry) => entry.combatant);
+  const ordered = [primary, ...ranked];
+  if (ordered.length === 1) {
+    return Array.from({ length: beams }, () => primary.id);
+  }
+  const perBeam = Math.max(1, expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, primary)) / beams);
+  const assigned: Record<string, number> = {};
+  const result: string[] = [];
+  for (let index = 0; index < beams; index += 1) {
+    const pick = ordered.find((c) => (assigned[c.id] ?? 0) < c.currentHp) ?? ordered[0]!;
+    result.push(pick.id);
+    assigned[pick.id] = (assigned[pick.id] ?? 0) + perBeam;
+  }
+  return result;
 }
 
 function bestDestinationTowardTarget(

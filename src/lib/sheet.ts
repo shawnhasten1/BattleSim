@@ -1,12 +1,31 @@
 import {
+  effectiveAutomationSupport,
   getExecutableActions,
   resolveAttackBonus,
   resolveSaveDc,
   type ActionDefinition,
   type CombatantState,
-  type CreatureDefinition
+  type CreatureDefinition,
+  type SpellDefinition,
+  type WeaponDefinition
 } from "@/engine";
 import { formatBonus } from "@/lib/ui-helpers";
+
+/** Automation level of a weapon once its `onHit` riders are considered. */
+export function weaponAutomation(weapon: WeaponDefinition): "full" | "partial" {
+  return (weapon.onHit ?? []).some((rider) =>
+    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"))
+    ? "partial"
+    : "full";
+}
+
+/** Automation level of a spell once its action + riders are considered. */
+export function spellAutomation(spell: SpellDefinition): "full" | "partial" | "manual-only" | "unsupported" {
+  if (spell.automationSupport !== "full") {
+    return spell.automationSupport;
+  }
+  return spell.action ? effectiveAutomationSupport(spell.action) : "manual-only";
+}
 
 export type SheetItemType = "weapon" | "spell" | "feature" | "trait" | "action" | "bonusAction" | "reaction";
 
@@ -102,7 +121,7 @@ export function buildSheetItems(definition: CreatureDefinition): SheetItems {
       .join(", ")}`,
     type: "weapon",
     source: weapon.source,
-    automationSupport: "full",
+    automationSupport: weaponAutomation(weapon),
     description: weapon.properties?.join(", ")
   }));
 
@@ -112,7 +131,7 @@ export function buildSheetItems(definition: CreatureDefinition): SheetItems {
     detail: `level ${spell.level} · ${spell.castingTime} · ${spell.range} ft`,
     type: "spell",
     source: spell.source,
-    automationSupport: spell.automationSupport,
+    automationSupport: spellAutomation(spell),
     description: spell.description
   }));
 

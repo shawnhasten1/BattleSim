@@ -12,7 +12,7 @@ import {
 } from "@/engine";
 import { SRD_SPELLS, SRD_WEAPONS, searchSrd } from "@/data/srd";
 import { useEncounterStore } from "@/store/encounter-store";
-import { describeAction } from "@/lib/sheet";
+import { describeAction, spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
 import type { Compendium } from "@/hooks/useCompendium";
 import { BuilderForm } from "../builders/BuilderForm";
@@ -329,7 +329,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {weapons.map((weapon) => row(
           weapon.id, weapon.name,
           `${weapon.attackType} ${String(weapon.ability).toUpperCase()} · ${weapon.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}${weapon.magical ? " · magical" : ""}${weapon.charges ? ` · ${weapon.charges.max} charge${weapon.charges.max === 1 ? "" : "s"}` : ""}${weapon.onHit?.length ? ` · on-hit ${weapon.onHit.map((r) => r.kind === "condition" && typeof r.condition === "string" ? r.condition : r.kind).join(", ")}` : ""}`,
-          "full",
+          weaponAutomation(weapon),
           () => editWeapon(weapon), () => removeDefinitionItem(definition.id, "weapon", weapon.id),
           edit?.kind === "weapon" && edit.id === weapon.id, { kind: "weapon", id: weapon.id }
         ))}
@@ -341,7 +341,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {spells.map((spell) => row(
           spell.id, spell.name,
           `level ${spell.level} · ${spell.castingTime} · ${typeof spell.range === "number" ? `${spell.range} ft` : spell.range}${spell.concentration ? " · concentration" : ""}${spell.action ? ` · ${describeAction(spell.action, definition)}` : " · reference only"}`,
-          spell.automationSupport,
+          spellAutomation(spell),
           () => editSpell(spell), () => removeDefinitionItem(definition.id, "spell", spell.id),
           edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
         ))}

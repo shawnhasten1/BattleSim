@@ -112,6 +112,50 @@ describe("AI — beam attacks", () => {
     automationSupport: "full"
   };
 
+  it("spreads beams across enemies once the primary is estimated dead, focuses on one", () => {
+    const spread = baseEncounter("beam-spread");
+    spread.combatants.find((c) => c.id === CASTER)!.position = { x: 1, y: 1 };
+    spread.combatants.find((c) => c.id === CASTER)!.tacticsProfile = "basic-ranged";
+    for (const id of ["enemy-goblin-1", "enemy-goblin-2"]) {
+      const g = spread.combatants.find((c) => c.id === id)!;
+      g.position = { x: id === "enemy-goblin-1" ? 3 : 4, y: 1 };
+      g.currentHp = 3; // one autohit dart (1d4+1) kills it
+    }
+    spread.definitions.find((d) => d.id === CASTER_DEF)!.actions = [{
+      kind: "attack", id: "mm", name: "Magic Missile", actionType: "action", attackType: "spell",
+      ability: "int", range: 120, attackDelivery: "beams", beamCount: 3, autoHit: true,
+      damage: [{ dice: "1d4+1", damageType: "force" }],
+      automationSupport: "full"
+    }];
+    const state = createEngineState(spread);
+    state.rng = scriptedRng({ 4: [3, 3, 3] });
+    takeAutomatedTurn(state, actorOf(state));
+    // both goblins were hit — the beams did not all pile onto one
+    const hit = new Set(state.log.filter((e) => e.type === "AttackRolled").map((e) => e.data?.targetId));
+    expect(hit.has("enemy-goblin-1")).toBe(true);
+    expect(hit.has("enemy-goblin-2")).toBe(true);
+
+    // with a single fat target, all beams focus it
+    const focus = baseEncounter("beam-focus");
+    focus.combatants.find((c) => c.id === CASTER)!.position = { x: 1, y: 1 };
+    focus.combatants.find((c) => c.id === CASTER)!.tacticsProfile = "basic-ranged";
+    focus.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 3, y: 1 };
+    focus.combatants.find((c) => c.id === "enemy-goblin-1")!.currentHp = 200;
+    focus.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    focus.definitions.find((d) => d.id === CASTER_DEF)!.actions = [{
+      kind: "attack", id: "mm", name: "Magic Missile", actionType: "action", attackType: "spell",
+      ability: "int", range: 120, attackDelivery: "beams", beamCount: 3, autoHit: true,
+      damage: [{ dice: "1d4+1", damageType: "force" }],
+      automationSupport: "full"
+    }];
+    const fs = createEngineState(focus);
+    fs.rng = scriptedRng({ 4: [1, 1, 1] });
+    takeAutomatedTurn(fs, actorOf(fs));
+    const focusHits = fs.log.filter((e) => e.type === "AttackRolled");
+    expect(focusHits).toHaveLength(3);
+    expect(focusHits.every((e) => e.data?.targetId === "enemy-goblin-1")).toBe(true);
+  });
+
   it("values a 3-beam attack over an equivalent single bolt", () => {
     const state = runCasterTurn("beam-pick", "basic-ranged", [fireBolt, eldritchBlast], (e) => {
       e.combatants.find((c) => c.id === "enemy-goblin-1")!.currentHp = 200;

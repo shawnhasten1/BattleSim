@@ -150,7 +150,35 @@ export function getExecutableActions(definition: CreatureDefinition): ActionDefi
     ...weaponActions,
     ...spellActions,
     ...grantedActions
-  ]);
+  ]).map(withEffectiveAutomationSupport);
+}
+
+/** Down-grade an action's `automationSupport` when a rider needs a human, keeping object identity otherwise. */
+function withEffectiveAutomationSupport(action: ActionDefinition): ActionDefinition {
+  const effective = effectiveAutomationSupport(action);
+  const authored = "automationSupport" in action ? action.automationSupport : "full";
+  return effective === authored ? action : ({ ...action, automationSupport: effective } as ActionDefinition);
+}
+
+/**
+ * The automation level an action's riders permit. Never *raises* the authored
+ * level; lowers `full` → `partial` when a rider is reference-only (`note`) or
+ * carries a condition the engine cannot apply (`{ custom }`).
+ */
+export function effectiveAutomationSupport(
+  action: ActionDefinition
+): "full" | "partial" | "manual-only" | "unsupported" {
+  const authored = "automationSupport" in action ? action.automationSupport : "full";
+  if (authored !== "full") {
+    return authored;
+  }
+  const riders = "riders" in action ? action.riders ?? [] : [];
+  return ridersNeedHuman(riders) ? "partial" : "full";
+}
+
+function ridersNeedHuman(riders: ActionRider[]): boolean {
+  return riders.some((rider) =>
+    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"));
 }
 
 export function findActionDefinition(definition: CreatureDefinition, actionId: Id): ActionDefinition | undefined {
