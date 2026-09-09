@@ -1,6 +1,7 @@
 import {
   activeFactions,
   applyTimedFeatureEffects,
+  canAct,
   createEngineState,
   event,
   expireConditions,
@@ -165,6 +166,18 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
 
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   const tactics = tacticsSettings(actor.tacticsProfile);
+
+  // Incapacitated / stunned / paralysed (or a `deniesActions` effect): no action
+  // and no bonus action — the creature loses its turn rather than acting at a
+  // penalty.
+  if (!canAct(actor, "action") && !canAct(actor, "bonus")) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} loses its turn`, {
+      combatantId: actor.id,
+      reason: "cannot-act"
+    }));
+    return undefined;
+  }
+
   let movedThisTurn = false;
   const healing = selectHealingAction(state.snapshot, actor);
   if (healing) {
@@ -504,7 +517,7 @@ function selectOffensivePlan(
   const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
   const candidates = getExecutableActions(definition)
-    .filter((action): action is OffensiveAction => action.automationSupport === "full" && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+    .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === "action" && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
     .flatMap((action) => hostiles.map((target) => {
       const targetDefinition = getDefinition(snapshot, target);
       const range = actionRange(action, definition);

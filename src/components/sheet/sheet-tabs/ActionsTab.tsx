@@ -85,7 +85,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const plainActions = nativeActions.filter((a) => a.kind !== "multiattack");
 
   const attackChoices = useMemo(
-    () => getExecutableActions(definition).filter((a) => a.kind === "attack"),
+    () => getExecutableActions(definition).filter((a) => a.kind === "attack" && a.actionType === "action"),
     [definition]
   );
 

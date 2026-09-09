@@ -798,12 +798,14 @@ describe("combat engine", () => {
     expect(result.successes + result.failures).toBeGreaterThanOrEqual(1);
   });
 
+  // A 100-encounter CPU stress test — needs headroom over the 5s default when the
+  // whole suite is spawning workers in parallel (runs in ~2.5s on its own).
   it("runs 100 headless simulations and reports aggregate outcomes", () => {
     const summary = runBatchSimulations(sampleEncounter, 100, { seedPrefix: "regression", maxRounds: 20 });
     expect(summary.runCount).toBe(100);
     expect(summary.rounds.max).toBeGreaterThanOrEqual(summary.rounds.min);
     expect(summary.damageByCombatant).toHaveLength(sampleEncounter.combatants.length);
-  });
+  }, 20000);
 
   it("expires conditions at the configured turn boundary", () => {
     const state = createEngineState(sampleEncounter);
@@ -1175,6 +1177,74 @@ describe("combat engine", () => {
     expect(result.attacks).toHaveLength(2);
     expect(state.snapshot.combatants.find((combatant) => combatant.id === "enemy-goblin-1")?.currentHp).toBe(18);
     expect(state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter")?.actionEconomy?.action).toBe(false);
+  });
+
+  it("splits a multiattack across several targets by targetGroup and spills off a dead one", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "split-multiattack";
+    encounter.map.walls = [];
+    const fighter = encounter.definitions.find((definition) => definition.id === "def-fighter");
+    if (fighter) {
+      fighter.actions = [
+        {
+          kind: "attack", id: "swing", name: "Swing", actionType: "action", attackType: "melee",
+          ability: "str", attackBonus: 100, range: 5, reach: 5,
+          damage: [{ dice: "1", damageType: "slashing" }], automationSupport: "full"
+        },
+        {
+          kind: "multiattack", id: "triple", name: "Triple Swing", actionType: "action",
+          attacks: [
+            { actionId: "swing", count: 1, targetGroup: 0 },
+            { actionId: "swing", count: 1, targetGroup: 1 },
+            { actionId: "swing", count: 1, targetGroup: 2 }
+          ],
+          automationSupport: "full"
+        }
+      ];
+    }
+    const goblin1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1");
+    const goblin2 = encounter.combatants.find((c) => c.id === "enemy-goblin-2");
+    if (goblin1) { goblin1.position = { x: 2, y: 1 }; goblin1.currentHp = 1; }
+    if (goblin2) { goblin2.position = { x: 2, y: 2 }; goblin2.currentHp = 20; }
+
+    const state = createEngineState(encounter);
+    // targetGroup 2 has no id → clamps to the last supplied target (goblin-2)
+    const result = resolveMultiattackAction(state, "pc-fighter", ["enemy-goblin-1", "enemy-goblin-2"], "triple");
+
+    expect(result.attacks).toHaveLength(3);
+    const g1 = state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1");
+    const g2 = state.snapshot.combatants.find((c) => c.id === "enemy-goblin-2");
+    // step 0 drops goblin-1 (1 HP, 1 dmg); steps 1 and 2 both land on goblin-2
+    expect(g1?.currentHp).toBeLessThanOrEqual(0);
+    expect(g2?.currentHp).toBe(18);
+    const resolved = state.log.find((entry) => entry.type === "MultiattackResolved");
+    expect(resolved?.data?.targetIds).toEqual(["enemy-goblin-1", "enemy-goblin-2"]);
+  });
+
+  it("accepts a single target id for multiattack (back-compat)", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "single-multiattack";
+    encounter.map.walls = [];
+    const fighter = encounter.definitions.find((definition) => definition.id === "def-fighter");
+    if (fighter) {
+      fighter.actions = [
+        {
+          kind: "attack", id: "claw", name: "Claw", actionType: "action", attackType: "melee",
+          ability: "str", attackBonus: 100, range: 5, reach: 5,
+          damage: [{ dice: "1", damageType: "slashing" }], automationSupport: "full"
+        },
+        {
+          kind: "multiattack", id: "two-claws", name: "Two Claws", actionType: "action",
+          attacks: [{ actionId: "claw", count: 2 }], automationSupport: "full"
+        }
+      ];
+    }
+    const target = encounter.combatants.find((c) => c.id === "enemy-goblin-1");
+    if (target) { target.position = { x: 2, y: 1 }; target.currentHp = 20; }
+    const state = createEngineState(encounter);
+    const result = resolveMultiattackAction(state, "pc-fighter", "enemy-goblin-1", "two-claws");
+    expect(result.attacks).toHaveLength(2);
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")?.currentHp).toBe(18);
   });
 
   it("applies Pack Tactics as a real attack advantage trait", () => {

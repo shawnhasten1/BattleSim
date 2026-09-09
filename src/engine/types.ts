@@ -4,6 +4,12 @@ export const ENCOUNTER_SCHEMA_VERSION = 1;
 
 export type Id = string;
 export type Faction = "party" | "enemy" | "neutral";
+/**
+ * Which slot an action spends. `"free"` spends none of the action / bonus /
+ * reaction economy (Action Surge's own activation, a Reckless-Attack toggle) —
+ * it still runs the `canAct` state/condition checks and pays any `resourceCost`.
+ */
+export type ActionType = "action" | "bonus" | "reaction" | "free";
 export type Ability = "str" | "dex" | "con" | "int" | "wis" | "cha";
 export type SizeCategory = "tiny" | "small" | "medium" | "large" | "huge" | "gargantuan";
 export type TerrainType = "normal" | "difficult" | "impassable" | "hazard" | "cover" | "elevation" | "custom";
@@ -317,7 +323,15 @@ export type FeatureEffect =
     resourceId: string;
     amount: NumericFormula;
     max?: number;
-  };
+  }
+  | ({
+    /**
+     * Activating the owning feature hands back a spent economy slot (Action
+     * Surge → a second `action`). Applied by `resolveActivateFeatureAction`.
+     */
+    kind: "extra-action";
+    slot: "action" | "bonus";
+  } & FeatureEffectConditions);
 
 export interface ResourceCost {
   resourceId: string;
@@ -372,7 +386,9 @@ export type RiderDuration =
   | { kind: "rounds"; rounds: number; repeatSaveAt?: "turn-start" | "turn-end" }
   | { kind: "save-ends"; saveAt: "turn-start" | "turn-end" }
   | { kind: "concentration" }
-  | { kind: "permanent" };
+  | { kind: "permanent" }
+  /** Clears at the start of the bearer's next turn (Shield, Dodge, Shocking Grasp's reaction lock). */
+  | { kind: "until-start-of-next-turn" };
 
 export interface RiderSave {
   ability: Ability;
@@ -424,9 +440,11 @@ export interface AttackActionDefinition {
   kind: "attack";
   id: Id;
   name: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   attackType: "melee" | "ranged" | "spell";
   ability: Ability;
+  /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
+  grip?: "one-handed" | "two-handed";
   attackBonus?: number;
   attackBonusFormula?: NumericFormula;
   range: number;
@@ -456,7 +474,7 @@ export interface SaveActionDefinition {
   kind: "save";
   id: Id;
   name: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   saveAbility: Ability;
   dc?: number;
   dcFormula?: NumericFormula;
@@ -481,7 +499,7 @@ export interface AreaSaveActionDefinition {
   kind: "area-save";
   id: Id;
   name: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   saveAbility: Ability;
   dc?: number;
   dcFormula?: NumericFormula;
@@ -505,7 +523,7 @@ export interface HealingActionDefinition {
   kind: "healing";
   id: Id;
   name: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   range: number;
   healing: HealingComponent[];
   /** `"self"` targets the actor. Default `"single"`. */
@@ -522,7 +540,7 @@ export interface UnsupportedActionDefinition {
   id: Id;
   name: string;
   description?: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   automationSupport: "unsupported";
 }
 
@@ -530,7 +548,7 @@ export interface ActivateFeatureActionDefinition {
   kind: "activate-feature";
   id: Id;
   name: string;
-  actionType: "action" | "bonus" | "reaction";
+  actionType: ActionType;
   featureId: Id;
   resourceCost?: ResourceCost;
   condition?: {
@@ -547,10 +565,16 @@ export interface MultiattackActionDefinition {
   kind: "multiattack";
   id: Id;
   name: string;
-  actionType: "action";
+  actionType: ActionType;
   attacks: Array<{
     actionId: Id;
     count: number;
+    /**
+     * Advanced: aim this step at the target the caller supplies at this index
+     * (0 = primary). Out-of-range indices clamp; a dead target falls through to
+     * the next live one. Default `0`.
+     */
+    targetGroup?: number;
   }>;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
@@ -606,6 +630,26 @@ export interface WeaponDefinition {
   actionId?: Id;
   /** +1 / +2 / +3 — adds to both the attack roll and every damage component. */
   magicBonus?: number;
+  /**
+   * Which economy slots this weapon's attack may spend. An explicit list makes
+   * `weaponToActions` compile one attack per slot (`:bonus` / `:reaction` id
+   * suffix) — `["action", "bonus"]` adds an off-hand attack, `["reaction"]`
+   * makes it reaction-only. Absent ⇒ a single `"action"` attack; every melee
+   * weapon can still make an opportunity attack via the OA scan (Phase 3 will
+   * treat an absent list on a melee weapon as reaction-capable).
+   */
+  usableAs?: Array<"action" | "bonus" | "reaction">;
+  /**
+   * How the weapon is wielded. `"two-handed"` always uses `versatileDamage`;
+   * `"versatile"` uses it only when the wielder has no drawn off-hand weapon
+   * (a loose heuristic — a real hand model is a non-goal). Default `"one-handed"`.
+   */
+  grip?: "one-handed" | "two-handed" | "versatile";
+  /**
+   * Great Weapon Master / Sharpshooter: also compile a "power" attack variant
+   * at -5 to hit / +10 damage. The AI weighs it against the plain attack.
+   */
+  powerAttack?: boolean;
 }
 
 /** How a spell grows when cast with a slot above its base level. */
@@ -722,6 +766,16 @@ export interface ConditionInstance {
     savingThrows?: Partial<Record<Ability, number>>;
     movementMultiplier?: number;
     damageAdjustments?: DamageAdjustment[];
+    /** The bearer cannot spend that slot (incapacitated / stunned / paralyzed; Shocking Grasp sets `deniesReactions`). */
+    deniesActions?: boolean;
+    deniesBonusActions?: boolean;
+    deniesReactions?: boolean;
+    /**
+     * Modifier applied to attack rolls made *against* the bearer. Positive =
+     * easier to hit (attackers effectively have advantage: stunned / prone);
+     * negative = harder (Dodge). Summed across the bearer's conditions.
+     */
+    incomingAttackRoll?: number;
   };
   effects?: FeatureEffect[];
   /**
@@ -934,7 +988,8 @@ export const riderDurationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("save-ends"), saveAt: z.enum(["turn-start", "turn-end"]) }),
   z.object({ kind: z.literal("concentration") }),
-  z.object({ kind: z.literal("permanent") })
+  z.object({ kind: z.literal("permanent") }),
+  z.object({ kind: z.literal("until-start-of-next-turn") })
 ]);
 
 export const riderSaveSchema = z.object({

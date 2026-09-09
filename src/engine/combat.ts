@@ -135,7 +135,7 @@ export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantS
 }
 
 export function getExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
-  const weaponActions = (definition.weapons ?? []).map((weapon) => weaponToAction(definition, weapon));
+  const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
   const grantedActions = [
@@ -436,22 +436,45 @@ function resolveBeamAttack(
   };
 }
 
+/** A multiattack target is still worth swinging at while active or merely downed. */
+function isLiveTarget(target: CombatantState | undefined): target is CombatantState {
+  return !!target && (target.state === "active" || target.state === "downed");
+}
+
 export function resolveMultiattackAction(
   state: EngineState,
   attackerId: Id,
-  targetId: Id,
+  targetIds: Id | Id[],
   actionId: Id,
   options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number } = {}
 ): MultiattackResult {
+  const ids = (Array.isArray(targetIds) ? targetIds : [targetIds]).filter(Boolean);
+  if (ids.length === 0) {
+    throw new Error("resolveMultiattackAction needs at least one target");
+  }
   const attacker = findCombatant(state.snapshot, attackerId);
-  const target = findCombatant(state.snapshot, targetId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
   const action = findActionDefinition(attackerDefinition, actionId);
   if (!action || action.kind !== "multiattack") {
     throw new Error(`Multiattack action ${actionId} is not available to ${attacker.displayName}`);
   }
   validateAndSpendAction(attacker, action);
-  declareAction(state, attacker, action, { target });
+
+  const targets = ids.map((id) => findCombatant(state.snapshot, id));
+  declareAction(state, attacker, action, { target: targets[0] });
+
+  // A step aims at its `targetGroup` index; if that target is down we spill to
+  // the next live one (mirrors beam spread), scanning forward then wrapping.
+  const pickTarget = (preferred: number): CombatantState | undefined => {
+    const start = Math.min(Math.max(0, preferred), targets.length - 1);
+    for (let offset = 0; offset < targets.length; offset += 1) {
+      const candidate = targets[(start + offset) % targets.length];
+      if (isLiveTarget(candidate)) {
+        return candidate;
+      }
+    }
+    return undefined;
+  };
 
   const attacks: AttackResult[] = [];
   for (const step of action.attacks) {
@@ -460,7 +483,8 @@ export function resolveMultiattackAction(
       throw new Error(`Multiattack child action ${step.actionId} is not an attack`);
     }
     for (let index = 0; index < step.count; index += 1) {
-      if (target.state !== "active" && target.state !== "downed") {
+      const target = pickTarget(step.targetGroup ?? 0);
+      if (!target) {
         break;
       }
       attacks.push(resolveAttackCore(state, attacker, target, attackerDefinition, child, options, false, action));
@@ -469,7 +493,8 @@ export function resolveMultiattackAction(
 
   state.log.push(event(state, "MultiattackResolved", `${attacker.displayName} resolved ${action.name}`, {
     attackerId,
-    targetId,
+    targetId: ids[0],
+    targetIds: ids,
     actionId,
     attacks: attacks.length
   }));
@@ -563,7 +588,8 @@ function resolveAttackCore(
   const d20 = rollD20(state.rng, attackOptions);
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
-  const total = d20.total + attackBonus + conditionAttackModifier(attacker) + featureAttackBonus.total;
+  const total = d20.total + attackBonus + conditionAttackModifier(attacker)
+    + conditionIncomingAttackModifier(target) + featureAttackBonus.total;
   const targetAc = effectiveArmorClass(targetDefinition, target) + cover.acBonus;
   const natural = d20.total;
   const critical = natural === 20;
@@ -1336,14 +1362,62 @@ function conditionAttackModifier(combatant: CombatantState): number {
   return (combatant.conditions ?? []).reduce((sum, condition) => sum + (condition.modifiers?.attackRoll ?? 0), 0);
 }
 
+/** Sum of `incomingAttackRoll` across a target's conditions — added to attack rolls made against it (stunned +, Dodge -). */
+function conditionIncomingAttackModifier(target: CombatantState): number {
+  return (target.conditions ?? []).reduce((sum, condition) => sum + (condition.modifiers?.incomingAttackRoll ?? 0), 0);
+}
+
 function conditionSaveModifier(combatant: CombatantState, ability: keyof CreatureDefinition["abilities"]): number {
   return (combatant.conditions ?? []).reduce((sum, condition) => sum + (condition.modifiers?.savingThrows?.[ability] ?? 0), 0);
 }
 
+/** Condition names that (5e) are or imply *incapacitated* — no action, bonus, or reaction. */
+const INCAPACITATING_CONDITIONS: ReadonlySet<ConditionName> = new Set<ConditionName>([
+  "incapacitated", "stunned", "paralyzed", "unconscious"
+]);
+
+const DENIAL_FLAG: Record<"action" | "bonus" | "reaction", "deniesActions" | "deniesBonusActions" | "deniesReactions"> = {
+  action: "deniesActions",
+  bonus: "deniesBonusActions",
+  reaction: "deniesReactions"
+};
+
+/**
+ * Can this combatant spend the given economy slot right now? One rule for the
+ * whole engine: the slot must be un-spent, the combatant active, and no condition
+ * may deny it — either by an explicit `modifiers.denies*` flag (Shocking Grasp)
+ * or by carrying an incapacitating condition name (which denies all three).
+ */
+export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "reaction"): boolean {
+  if (combatant.state !== "active") {
+    return false;
+  }
+  const economy = combatant.actionEconomy;
+  if (economy && economy[slot] === false) {
+    return false;
+  }
+  const denialFlag = DENIAL_FLAG[slot];
+  for (const condition of combatant.conditions ?? []) {
+    if (condition.modifiers?.[denialFlag]) {
+      return false;
+    }
+    if (INCAPACITATING_CONDITIONS.has(condition.name)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function validateAndSpendAction(combatant: CombatantState, action: ActionDefinition): void {
   combatant.actionEconomy ??= { action: true, bonus: true, reaction: true };
-  if (!combatant.actionEconomy[action.actionType]) {
-    throw new Error(`${combatant.displayName} has already used a ${action.actionType}`);
+  const slot = action.actionType;
+  if (slot !== "free") {
+    if (combatant.actionEconomy[slot] === false) {
+      throw new Error(`${combatant.displayName} has already used a ${slot}`);
+    }
+    if (!canAct(combatant, slot)) {
+      throw new Error(`${combatant.displayName} cannot take a ${slot} right now`);
+    }
   }
   if ("resourceCost" in action && action.resourceCost) {
     const available = combatant.resources?.[action.resourceCost.resourceId] ?? 0;
@@ -1355,10 +1429,44 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
       [action.resourceCost.resourceId]: available - action.resourceCost.amount
     };
   }
-  combatant.actionEconomy[action.actionType] = false;
+  if (slot !== "free") {
+    combatant.actionEconomy[slot] = false;
+  }
 }
 
-function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<CreatureDefinition["weapons"]>[number]): AttackActionDefinition {
+type WeaponInput = NonNullable<CreatureDefinition["weapons"]>[number];
+
+/**
+ * v1 grip heuristic (a real main-/off-hand loadout model is a non-goal): a
+ * `"versatile"` weapon is swung two-handed unless the creature also carries a
+ * weapon it can use as a bonus action (a drawn off-hand weapon).
+ */
+function wieldsTwoHanded(definition: CreatureDefinition, weapon: WeaponInput): boolean {
+  if (weapon.grip === "two-handed") {
+    return true;
+  }
+  if (weapon.grip !== "versatile") {
+    return false;
+  }
+  return !(definition.weapons ?? []).some(
+    (sibling) => sibling.id !== weapon.id && (sibling.usableAs ?? []).includes("bonus")
+  );
+}
+
+/**
+ * Which economy slots a weapon compiles a distinct attack for. Only an explicit
+ * `usableAs` list adds `"bonus"` / `"reaction"` copies; the default is a single
+ * `"action"` attack. Every melee weapon can still make an opportunity attack —
+ * that path (`opportunityAttackAction`) synthesises the reaction from the
+ * `"action"` attack and does not need a compiled copy until the Phase-3 reaction
+ * engine generalises the scan.
+ */
+function weaponUsableSlots(weapon: WeaponInput): Array<"action" | "bonus" | "reaction"> {
+  const slots = weapon.usableAs?.length ? [...new Set(weapon.usableAs)] : [];
+  return slots.includes("action") || slots.length === 0 ? ["action", ...slots.filter((s) => s !== "action")] : slots;
+}
+
+function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition {
   const magicBonus = weapon.magicBonus ?? 0;
   const toHitBonus = weapon.toHitBonus ?? 0;
   // "finesse" resolves to whichever of STR / DEX gives the better modifier.
@@ -1366,6 +1474,8 @@ function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<Crea
     ? (abilityModifier(definition.abilities.dex) >= abilityModifier(definition.abilities.str) ? "dex" : "str")
     : weapon.ability;
   const isMagical = weapon.magical === true;
+  const twoHanded = wieldsTwoHanded(definition, weapon);
+  const damageSource = twoHanded && weapon.versatileDamage?.length ? weapon.versatileDamage : weapon.damage;
   return {
     kind: "attack",
     id: weapon.actionId ?? `weapon:${weapon.id}`,
@@ -1373,6 +1483,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<Crea
     actionType: "action",
     attackType: weapon.attackType,
     ability,
+    grip: twoHanded ? "two-handed" : "one-handed",
     attackBonusFormula: {
       // magicBonus adds to hit AND damage; toHitBonus adds to hit only.
       base: magicBonus + toHitBonus,
@@ -1382,7 +1493,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<Crea
     range: weapon.range,
     longRange: weapon.longRange,
     reach: weapon.reach,
-    damage: weapon.damage.map((component) => ({
+    damage: damageSource.map((component) => ({
       ...component,
       magical: component.magical || isMagical || undefined,
       bonusFormula: magicBonus
@@ -1393,6 +1504,41 @@ function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<Crea
     resourceCost: weapon.resourceCost,
     automationSupport: weaponAutomationSupport(weapon)
   };
+}
+
+/** A -5 to hit / +10 damage "power" copy of a compiled weapon attack (Great Weapon Master / Sharpshooter). */
+function powerAttackVariant(base: AttackActionDefinition): AttackActionDefinition {
+  const damageType = base.damage[0]?.damageType ?? "bludgeoning";
+  return {
+    ...base,
+    id: `${base.id}:power`,
+    name: `${base.name} (Power Attack)`,
+    attackBonusFormula: base.attackBonusFormula
+      ? { ...base.attackBonusFormula, base: (base.attackBonusFormula.base ?? 0) - 5 }
+      : { base: -5, ability: base.ability, proficiency: true },
+    damage: [...base.damage, { dice: "10", damageType }]
+  };
+}
+
+/**
+ * Compile a weapon to one attack per usable economy slot (`weaponUsableSlots`),
+ * plus a power-attack copy of each when `weapon.powerAttack` is set. The
+ * `"action"` slot keeps the plain compiled id; `"bonus"` / `"reaction"` copies
+ * get an `:<slot>` suffix.
+ */
+function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition[] {
+  const base = weaponToAction(definition, weapon);
+  const out: AttackActionDefinition[] = [];
+  for (const slot of weaponUsableSlots(weapon)) {
+    const forSlot: AttackActionDefinition = slot === "action"
+      ? base
+      : { ...base, id: `${base.id}:${slot}`, actionType: slot };
+    out.push(forSlot);
+    if (weapon.powerAttack) {
+      out.push(powerAttackVariant(forSlot));
+    }
+  }
+  return out;
 }
 
 /** A weapon compiles to full automation unless an on-hit rider needs a human (a note or a custom condition). */
@@ -1784,7 +1930,7 @@ function wasRiderUsedThisTurn(state: EngineState, sourceId: Id, key: string): bo
     && entry.data.riderUseKey === key);
 }
 
-function riderDurationToExpiry(state: EngineState, duration: RiderDuration): {
+function riderDurationToExpiry(state: EngineState, duration: RiderDuration, bearerTurnIndex?: number): {
   expiresAt?: ConditionInstance["expiresAt"];
   repeatTiming?: "turn-start" | "turn-end";
   concentration?: boolean;
@@ -1794,6 +1940,19 @@ function riderDurationToExpiry(state: EngineState, duration: RiderDuration): {
       return {};
     case "concentration":
       return { concentration: true };
+    case "until-start-of-next-turn": {
+      // Clears when initiative next reaches the bearer. If the bearer still acts
+      // later this round it's this round; otherwise the next.
+      const bearerIdx = bearerTurnIndex ?? state.snapshot.turnIndex;
+      const laterThisRound = bearerIdx > state.snapshot.turnIndex;
+      return {
+        expiresAt: {
+          round: state.snapshot.round + (laterThisRound ? 0 : 1),
+          turnIndex: bearerIdx,
+          timing: "start"
+        }
+      };
+    }
     case "save-ends":
       // A far cap so it still lapses if the repeat save is somehow never rolled.
       return {
@@ -1841,11 +2000,18 @@ function defaultConditionModifiers(name: ConditionName): ConditionInstance["modi
       return { attackRoll: -2, movementMultiplier: 999 };
     case "grappled":
       return { movementMultiplier: 999 };
-    case "paralyzed":
-    case "stunned":
-    case "unconscious":
     case "incapacitated":
-      return { attackRoll: -20, armorClass: -5, movementMultiplier: 999 };
+      // No actions of any kind. (RAW leaves movement / AC alone; `canAct` + the
+      // AI "loses its turn" pass handle the turn, so no crude `attackRoll: -20`.)
+      return { deniesActions: true, deniesBonusActions: true, deniesReactions: true };
+    case "stunned":
+    case "paralyzed":
+    case "unconscious":
+      // Incapacitated + can't move + attackers effectively have advantage.
+      return {
+        deniesActions: true, deniesBonusActions: true, deniesReactions: true,
+        movementMultiplier: 999, incomingAttackRoll: 5
+      };
     default:
       return undefined;
   }
@@ -1945,7 +2111,8 @@ function applyConditionRider(
 
   const conditionName: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
   const conditionId = `${target.id}:${ctx.actionId}:${rider.id ?? "cond"}`;
-  const expiry = riderDurationToExpiry(state, rider.duration);
+  const bearerTurnIndex = state.snapshot.combatants.findIndex((c) => c.id === target.id);
+  const expiry = riderDurationToExpiry(state, rider.duration, bearerTurnIndex >= 0 ? bearerTurnIndex : undefined);
   const repeatAbility = rider.save?.ability ?? ctx.saveAbility;
   const repeatDc = rider.save ? resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc) : ctx.fallbackDc;
 
@@ -2454,7 +2621,7 @@ function opportunityAttackAction(
   from: Point,
   to: Point
 ): AttackActionDefinition | undefined {
-  if (reactor.actionEconomy?.reaction === false) {
+  if (!canAct(reactor, "reaction")) {
     return undefined;
   }
   const definition = getDefinition(snapshot, reactor);

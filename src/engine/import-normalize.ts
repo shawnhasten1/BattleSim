@@ -6,6 +6,7 @@ import {
   type Ability,
   type ActionDefinition,
   type ActionRider,
+  type ActionType,
   type AreaTargeting,
   type CombatantExportPackage,
   type ConditionInstance,
@@ -243,7 +244,7 @@ function normalizeAction(
       kind,
       id: generatedId,
       name,
-      actionType: "action",
+      actionType,
       attacks: normalizeMultiattackSteps(input.attacks, idMap),
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
@@ -262,7 +263,10 @@ function normalizeAction(
   return unsupportedAction(generatedId, name, actionType, stringField(input, "description") ?? JSON.stringify(input));
 }
 
-function normalizeMultiattackSteps(input: unknown, idMap: Map<string, string>): Array<{ actionId: string; count: number }> {
+function normalizeMultiattackSteps(
+  input: unknown,
+  idMap: Map<string, string>
+): Array<{ actionId: string; count: number; targetGroup?: number }> {
   if (!Array.isArray(input)) {
     return [];
   }
@@ -275,9 +279,11 @@ function normalizeMultiattackSteps(input: unknown, idMap: Map<string, string>): 
       : typeof step.actionName === "string"
         ? idMap.get(step.actionName)
         : undefined;
+    const targetGroup = numberField(step, "targetGroup");
     return {
       actionId: referenced ?? `missing-action-${index + 1}`,
-      count: typeof step.count === "number" ? step.count : 1
+      count: typeof step.count === "number" ? step.count : 1,
+      targetGroup: targetGroup !== undefined && targetGroup > 0 ? Math.floor(targetGroup) : undefined
     };
   });
 }
@@ -313,13 +319,26 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
       resourceCost: normalizeResourceCost(item.resourceCost),
       onHit: normalizeRiders(item.onHit, "on-hit"),
       actionId: stringField(item, "actionId") ?? actionIdMap.get(stringField(item, "name") ?? ""),
-      magicBonus
+      magicBonus,
+      usableAs: normalizeUsableAs(item.usableAs),
+      grip: item.grip === "two-handed" || item.grip === "versatile" || item.grip === "one-handed" ? item.grip : undefined,
+      powerAttack: item.powerAttack === true ? true : undefined
     } as WeaponDefinition;
   });
 }
 
 function normalizeWeaponAbility(input: unknown): Ability | "finesse" | undefined {
   return input === "finesse" ? "finesse" : normalizeAbility(input);
+}
+
+function normalizeUsableAs(input: unknown): Array<"action" | "bonus" | "reaction"> | undefined {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+  const slots = [...new Set(input.filter(
+    (slot): slot is "action" | "bonus" | "reaction" => slot === "action" || slot === "bonus" || slot === "reaction"
+  ))];
+  return slots.length > 0 ? slots : undefined;
 }
 
 /**
@@ -631,6 +650,9 @@ function normalizeRiderDuration(input: unknown): RiderDuration {
     if (input.kind === "permanent" || input.permanent === true) {
       return { kind: "permanent" };
     }
+    if (input.kind === "until-start-of-next-turn" || input.untilStartOfNextTurn === true) {
+      return { kind: "until-start-of-next-turn" };
+    }
     const rounds = numberField(input, "rounds") ?? numberField(input, "durationRounds");
     if (input.kind === "rounds" || rounds !== undefined) {
       const repeatSaveAt = input.repeatSaveAt === "turn-start" ? "turn-start"
@@ -761,7 +783,7 @@ function normalizeIdList(input: unknown, prefix: string): unknown[] {
     : [];
 }
 
-function unsupportedAction(id: string, name: string, actionType: "action" | "bonus" | "reaction", description?: string): ActionDefinition {
+function unsupportedAction(id: string, name: string, actionType: ActionType, description?: string): ActionDefinition {
   return {
     kind: "unsupported",
     id,
@@ -772,8 +794,11 @@ function unsupportedAction(id: string, name: string, actionType: "action" | "bon
   };
 }
 
-function normalizeActionType(input: unknown, fallback: "action" | "bonus" | "reaction"): "action" | "bonus" | "reaction" {
-  return input === "action" || input === "bonus" || input === "reaction" ? input : fallback;
+function normalizeActionType(
+  input: unknown,
+  fallback: "action" | "bonus" | "reaction"
+): "action" | "bonus" | "reaction" | "free" {
+  return input === "action" || input === "bonus" || input === "reaction" || input === "free" ? input : fallback;
 }
 
 function normalizeAttackType(input: unknown): "melee" | "ranged" | "spell" | undefined {
