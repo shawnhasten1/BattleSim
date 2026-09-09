@@ -31,7 +31,8 @@ import type {
   Point,
   RiderDuration,
   RiderGate,
-  SaveActionDefinition
+  SaveActionDefinition,
+  UtilityActionDefinition
 } from "./types";
 
 export interface EngineState {
@@ -143,14 +144,57 @@ export function getExecutableActions(definition: CreatureDefinition): ActionDefi
     ...(definition.traits ?? [])
   ].flatMap((feature) => feature.grantedActions ?? []);
 
-  return dedupeActionsById([
+  const declared = [
     ...definition.actions,
     ...(definition.bonusActions ?? []),
     ...(definition.reactions ?? []),
     ...weaponActions,
     ...spellActions,
     ...grantedActions
+  ];
+
+  return dedupeActionsById([
+    ...declared,
+    ...synthesizeUtilityActions(declared)
   ]).map(withEffectiveAutomationSupport);
+}
+
+/** The standard non-attack actions every creature has, and whether the engine can drive them. */
+const STANDARD_UTILITY_MODES: ReadonlyArray<{
+  mode: UtilityActionDefinition["mode"];
+  name: string;
+  automationSupport: "full" | "partial";
+}> = [
+  { mode: "dash", name: "Dash", automationSupport: "full" },
+  { mode: "disengage", name: "Disengage", automationSupport: "full" },
+  { mode: "dodge", name: "Dodge", automationSupport: "full" },
+  { mode: "hide", name: "Hide", automationSupport: "partial" },
+  { mode: "help", name: "Help", automationSupport: "partial" }
+];
+
+/**
+ * Synthesise the `action`-cost Dash / Disengage / Dodge / Hide / Help for a
+ * creature, skipping any mode it already authors as an `action`-cost utility (or
+ * whose `utility:<mode>` id is already taken). A feature-granted `bonus`-cost
+ * Disengage (Cunning Action) doesn't suppress the full-action one.
+ */
+function synthesizeUtilityActions(declared: ActionDefinition[]): UtilityActionDefinition[] {
+  const declaredIds = new Set(declared.map((action) => action.id));
+  const authoredActionModes = new Set(
+    declared
+      .filter((action): action is UtilityActionDefinition => action.kind === "utility" && action.actionType === "action")
+      .map((action) => action.mode)
+  );
+  return STANDARD_UTILITY_MODES
+    .filter(({ mode }) => !authoredActionModes.has(mode) && !declaredIds.has(`utility:${mode}`))
+    .map(({ mode, name, automationSupport }) => ({
+      kind: "utility",
+      id: `utility:${mode}`,
+      name,
+      actionType: "action",
+      mode,
+      automationSupport
+    }));
 }
 
 /** Down-grade an action's `automationSupport` when a rider needs a human, keeping object identity otherwise. */
@@ -276,13 +320,15 @@ export function moveCombatant(
     occupiedMovementMultiplier: 2
   });
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
-  const movementBudget = definition.speed / state.snapshot.map.grid.distancePerSquare / movementMultiplier;
+  const movementBudget = definition.speed / state.snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
 
   if (!path.reachable || path.cost > movementBudget) {
     throw new Error(`Destination is not reachable with ${definition.speed} ft. of movement`);
   }
 
-  const movedCells = moveAlongPath(state, combatant, path.cells, options.provokeOpportunityAttacks ?? true);
+  const provoke = (options.provokeOpportunityAttacks ?? true)
+    && !moverAvoidsOpportunityAttacks(state.snapshot, combatant);
+  const movedCells = moveAlongPath(state, combatant, path.cells, provoke);
   const actualPath = pointsEqual(combatant.position, destination)
     ? path
     : findPath(state.snapshot.map, start, combatant.position, footprint, occupied, {
@@ -303,7 +349,7 @@ export function moveCombatant(
 
 export function opportunityAttackThreats(snapshot: EncounterSnapshot, moverId: Id, cells: Point[]): OpportunityThreat[] {
   const mover = findCombatant(snapshot, moverId);
-  if (mover.state !== "active" || cells.length < 2) {
+  if (mover.state !== "active" || cells.length < 2 || moverAvoidsOpportunityAttacks(snapshot, mover)) {
     return [];
   }
   const threats: OpportunityThreat[] = [];
@@ -500,6 +546,61 @@ export function resolveMultiattackAction(
   }));
 
   return { attacks };
+}
+
+/**
+ * Take a standard non-attack action. Dash sets the `dashed` turn flag (movement
+ * budget ×2); Disengage sets `disengaged` (movement provokes nothing this turn);
+ * Dodge applies a self-condition that shifts incoming attacks and DEX saves
+ * until the actor's next turn. Hide / Help are logged but not modelled.
+ */
+export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: Id): void {
+  const actor = findCombatant(state.snapshot, actorId);
+  const definition = getDefinition(state.snapshot, actor);
+  const action = findActionDefinition(definition, actionId);
+  if (!action || action.kind !== "utility") {
+    throw new Error(`Utility action ${actionId} is not available to ${actor.displayName}`);
+  }
+  validateAndSpendAction(actor, action);
+  declareAction(state, actor, action);
+
+  actor.turnFlags ??= {};
+  if (action.mode === "dash") {
+    actor.turnFlags.dashed = true;
+  } else if (action.mode === "disengage") {
+    actor.turnFlags.disengaged = true;
+  } else if (action.mode === "dodge") {
+    const bearerIdx = state.snapshot.combatants.findIndex((c) => c.id === actorId);
+    const { expiresAt } = riderDurationToExpiry(
+      state,
+      { kind: "until-start-of-next-turn" },
+      bearerIdx >= 0 ? bearerIdx : undefined
+    );
+    applyCondition(state, actorId, {
+      id: `${actorId}:dodge`,
+      name: "custom",
+      sourceName: "Dodge",
+      sourceCombatantId: actorId,
+      startedRound: state.snapshot.round,
+      expiresAt,
+      // -4 ≈ disadvantage for the sim; the proper "attacker rolls with
+      // disadvantage" model is a later condition-interaction pass.
+      modifiers: { incomingAttackRoll: -4, savingThrows: { dex: 2 } }
+    });
+  } else {
+    state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${action.mode} action is not automated`, {
+      combatantId: actorId, actionId, mode: action.mode
+    }));
+  }
+
+  state.log.push(event(state, "UtilityActionResolved", `${actor.displayName} took the ${action.name} action`, {
+    actorId, actionId, mode: action.mode, actionType: action.actionType
+  }));
+}
+
+/** Movement-budget multiplier from the Dash action (turn flag set by `resolveUtilityAction`). */
+export function dashFactor(combatant: CombatantState): number {
+  return combatant.turnFlags?.dashed ? 2 : 1;
 }
 
 function coverLabel(level: CoverLevel): string {
@@ -932,12 +1033,25 @@ export function resolveActivateFeatureAction(
     }));
   }
 
+  // Action Surge & friends: an `extra-action` effect hands back a spent slot.
+  for (const effect of feature?.effects ?? []) {
+    if (effect.kind === "extra-action" && featureConditionsMetForSelf(actorDefinition, actor, effect)) {
+      actor.actionEconomy ??= { action: true, bonus: true, reaction: true };
+      actor.actionEconomy[effect.slot] = true;
+      state.log.push(event(state, "ActionEconomyRefreshed", `${actor.displayName} regained a ${effect.slot} from ${feature?.name ?? action.name}`, {
+        combatantId: actorId, actionId, featureId: feature?.id, slot: effect.slot
+      }));
+    }
+  }
+
   const conditionId = applyFeatureActivationCondition(state, actor, action);
   return { conditionId };
 }
 
 export function resetActionEconomy(combatant: CombatantState): void {
   combatant.actionEconomy = { action: true, bonus: true, reaction: true };
+  // Dash / Disengage are turn-scoped — clear them at the bearer's turn start.
+  combatant.turnFlags = undefined;
 }
 
 export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSaveResult {
@@ -1383,20 +1497,24 @@ const DENIAL_FLAG: Record<"action" | "bonus" | "reaction", "deniesActions" | "de
 };
 
 /**
- * Can this combatant spend the given economy slot right now? One rule for the
- * whole engine: the slot must be un-spent, the combatant active, and no condition
- * may deny it — either by an explicit `modifiers.denies*` flag (Shocking Grasp)
- * or by carrying an incapacitating condition name (which denies all three).
+ * Can this combatant spend the given slot right now? One rule for the whole
+ * engine: the combatant must be active, the slot un-spent, and no condition may
+ * deny it — either by an explicit `modifiers.denies*` flag (Shocking Grasp) or by
+ * carrying an incapacitating condition name (which denies all three).
+ *
+ * `"free"` (Action Surge's own activation, a Reckless-Attack toggle) spends no
+ * slot, so only the state / incapacitation checks apply — an incapacitated
+ * creature still can't Action-Surge.
  */
-export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "reaction"): boolean {
+export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "reaction" | "free"): boolean {
   if (combatant.state !== "active") {
     return false;
   }
   const economy = combatant.actionEconomy;
-  if (economy && economy[slot] === false) {
+  if (slot !== "free" && economy && economy[slot] === false) {
     return false;
   }
-  const denialFlag = DENIAL_FLAG[slot];
+  const denialFlag = slot === "free" ? "deniesActions" : DENIAL_FLAG[slot];
   for (const condition of combatant.conditions ?? []) {
     if (condition.modifiers?.[denialFlag]) {
       return false;
@@ -1411,7 +1529,11 @@ export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "re
 function validateAndSpendAction(combatant: CombatantState, action: ActionDefinition): void {
   combatant.actionEconomy ??= { action: true, bonus: true, reaction: true };
   const slot = action.actionType;
-  if (slot !== "free") {
+  if (slot === "free") {
+    if (!canAct(combatant, "free")) {
+      throw new Error(`${combatant.displayName} cannot act right now`);
+    }
+  } else {
     if (combatant.actionEconomy[slot] === false) {
       throw new Error(`${combatant.displayName} has already used a ${slot}`);
     }
@@ -2613,6 +2735,18 @@ function resolveOpportunityAttacksForStep(
     }));
     resolveAttackCore(state, reactor, mover, reactorDefinition, reactionAction, {}, true);
   }
+}
+
+/** True when the mover currently ignores opportunity attacks — Disengaged this turn, or a `avoids-opportunity-attacks` feature effect. */
+function moverAvoidsOpportunityAttacks(snapshot: EncounterSnapshot, mover: CombatantState): boolean {
+  if (mover.turnFlags?.disengaged) {
+    return true;
+  }
+  const definition = getDefinition(snapshot, mover);
+  return featureSources(definition, mover).some((source) =>
+    (source.effects ?? []).some((effect) =>
+      effect.kind === "avoids-opportunity-attacks"
+      && featureConditionsMetForSelf(definition, mover, effect)));
 }
 
 function opportunityAttackAction(

@@ -331,6 +331,14 @@ export type FeatureEffect =
      */
     kind: "extra-action";
     slot: "action" | "bonus";
+  } & FeatureEffectConditions)
+  | ({
+    /**
+     * While this effect is active the creature never provokes opportunity
+     * attacks (Mobile, "moves freely"). Checked in `moveCombatant` /
+     * `opportunityAttackThreats`.
+     */
+    kind: "avoids-opportunity-attacks";
   } & FeatureEffectConditions);
 
 export interface ResourceCost {
@@ -561,6 +569,23 @@ export interface ActivateFeatureActionDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/**
+ * A standard non-attack action — Dash / Disengage / Dodge (and reference-only
+ * Hide / Help). `getExecutableActions` synthesises the `action`-cost forms for
+ * every creature; a definition only authors the exceptions (a feature granting a
+ * `bonus`-cost Disengage, a monster overriding Dash). Resolved by
+ * `resolveUtilityAction`.
+ */
+export interface UtilityActionDefinition {
+  kind: "utility";
+  id: Id;
+  name: string;
+  actionType: "action" | "bonus";
+  mode: "dash" | "disengage" | "dodge" | "hide" | "help";
+  resourceCost?: ResourceCost;
+  automationSupport: "full" | "partial";
+}
+
 export interface MultiattackActionDefinition {
   kind: "multiattack";
   id: Id;
@@ -586,7 +611,8 @@ export type ActionDefinition =
   | HealingActionDefinition
   | UnsupportedActionDefinition
   | ActivateFeatureActionDefinition
-  | MultiattackActionDefinition;
+  | MultiattackActionDefinition
+  | UtilityActionDefinition;
 
 /** Limited-use pool backing a weapon's spell-like `onHit` riders. */
 export interface WeaponCharges {
@@ -807,6 +833,18 @@ export interface ActionEconomyState {
   reaction: boolean;
 }
 
+/**
+ * Transient, per-turn flags set by `resolveUtilityAction` and cleared by
+ * `resetActionEconomy` at the start of the bearer's turn. Not meaningfully
+ * persisted — a loaded encounter self-corrects on the bearer's next turn.
+ */
+export interface TurnFlags {
+  /** Dash was taken — movement budget is doubled. */
+  dashed?: boolean;
+  /** Disengage was taken — movement provokes no opportunity attacks this turn. */
+  disengaged?: boolean;
+}
+
 export interface CombatantState {
   id: Id;
   definitionId: Id;
@@ -824,6 +862,7 @@ export interface CombatantState {
     sourceConditionId?: Id;
   };
   initiative?: number;
+  turnFlags?: TurnFlags;
   state: "active" | "downed" | "dead" | "defeated" | "fled";
   tacticsProfile: TacticsProfile;
 }
@@ -882,6 +921,8 @@ export interface CombatLogEvent {
     | "RiderApplied"
     | "BeamsResolved"
     | "OpportunityAttackTriggered"
+    | "UtilityActionResolved"
+    | "ActionEconomyRefreshed"
     | "AiDecision"
     | "CombatantDowned"
     | "CombatantDefeated"
@@ -1238,6 +1279,10 @@ export const encounterSnapshotSchema = z.object({
       }).optional(),
       concentration: z.object({
         sourceConditionId: z.string().optional()
+      }).optional(),
+      turnFlags: z.object({
+        dashed: z.boolean().optional(),
+        disengaged: z.boolean().optional()
       }).optional(),
       initiative: z.number().optional(),
       state: z.union([

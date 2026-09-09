@@ -249,6 +249,22 @@ function normalizeAction(
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
+  if (kind === "utility") {
+    const mode = input.mode === "disengage" || input.mode === "dodge" || input.mode === "hide" || input.mode === "help"
+      ? input.mode
+      : "dash";
+    const automatable = mode !== "hide" && mode !== "help" && input.automationSupport !== "partial";
+    return {
+      ...input,
+      kind,
+      id: generatedId,
+      name,
+      actionType: actionType === "bonus" ? "bonus" : "action",
+      mode,
+      resourceCost: normalizeResourceCost(input.resourceCost),
+      automationSupport: automatable ? "full" : "partial"
+    };
+  }
   if (kind === "activate-feature") {
     return {
       ...input,

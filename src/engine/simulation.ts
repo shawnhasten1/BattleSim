@@ -3,6 +3,7 @@ import {
   applyTimedFeatureEffects,
   canAct,
   createEngineState,
+  dashFactor,
   event,
   expireConditions,
   getDefinition,
@@ -658,7 +659,7 @@ function bestDestinationTowardTarget(
   const definition = getDefinition(snapshot, actor);
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
-  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare;
+  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
   const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
@@ -681,7 +682,7 @@ function bestRepositionAfterAction(
   const definition = getDefinition(snapshot, actor);
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
-  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare;
+  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
   const currentDistance = gridDistance(actor.position, target.position, snapshot.map.grid);
   const currentNearestHostile = nearestHostileDistanceFrom(snapshot, actor, actor.position);
   const currentCover = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
@@ -1065,7 +1066,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDefinition>): number {
-  if (action.kind === "healing" || action.kind === "unsupported" || action.kind === "activate-feature") {
+  if (action.kind === "healing" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
     return 0;
   }
   if (action.kind === "multiattack") {

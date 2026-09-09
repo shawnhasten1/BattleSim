@@ -72,6 +72,7 @@ export function describeAction(action: ActionDefinition, definition: CreatureDef
   }
   if (action.kind === "unsupported") return "mapping required";
   if (action.kind === "activate-feature") return `${action.actionType} activates ${action.featureId}`;
+  if (action.kind === "utility") return `${action.actionType} · ${action.mode}`;
   if (action.kind === "multiattack") return action.attacks.map((step) => `${step.count} x ${step.actionId}`).join(", ");
   const area = action.kind === "area-save"
     ? ` · ${action.area.type} ${action.area.size}ft${action.targeting?.origin === "self" ? " (self)" : ""}`
@@ -145,14 +146,18 @@ export function buildSheetItems(definition: CreatureDefinition): SheetItems {
     description: feature.description
   }));
 
-  const actions: SheetItem[] = executableActions.map((action) => ({
-    id: action.id,
-    name: action.name,
-    detail: describeAction(action, definition),
-    type: action.actionType === "bonus" ? "bonusAction" : action.actionType === "reaction" ? "reaction" : "action",
-    automationSupport: action.automationSupport,
-    description: action.kind === "unsupported" ? action.description : undefined
-  }));
+  const actions: SheetItem[] = executableActions
+    // The synthesised Dash / Disengage / Dodge / Hide / Help get their own
+    // read-only group in the sheet (Phase 5) — keep them out of the row lists.
+    .filter((action) => action.kind !== "utility")
+    .map((action) => ({
+      id: action.id,
+      name: action.name,
+      detail: describeAction(action, definition),
+      type: action.actionType === "bonus" ? "bonusAction" : action.actionType === "reaction" ? "reaction" : "action",
+      automationSupport: action.automationSupport,
+      description: action.kind === "unsupported" ? action.description : undefined
+    }));
 
   const all = [...actions, ...spells, ...features, ...weapons];
   const counts = all.reduce<Record<string, number>>((acc, item) => {
