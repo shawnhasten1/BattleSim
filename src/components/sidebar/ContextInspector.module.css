@@ -1,0 +1,128 @@
+.inspector {
+  display: flex;
+  flex-direction: column;
+}
+
+.block {
+  padding: 10px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.block > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.block h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.danger {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.danger:hover {
+  border-color: var(--ui-hp-red);
+  color: var(--ui-hp-red);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.checks input {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--ui-accent);
+}
+
+.stack > label,
+.grid2 > label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.colorRow {
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inspector input:not([type="checkbox"]):not([type="color"]),
+.inspector select,
+.inspector button:not(.danger) {
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.inspector input[type="number"],
+.inspector input[type="text"],
+.stack > label > input,
+.stack > label > select {
+  width: 100%;
+  min-width: 0;
+}
+
+.inspector input[type="color"] {
+  width: 44px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.inspector button:not(.danger) {
+  cursor: pointer;
+}
+
+.inspector button:not(.danger):hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}

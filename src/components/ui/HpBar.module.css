@@ -1,0 +1,12 @@
+.track {
+  flex-shrink: 0;
+  height: 5px;
+  border-radius: 3px;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+}

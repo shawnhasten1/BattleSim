@@ -1,0 +1,77 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ui-accent-soft);
+  border-radius: var(--ui-radius);
+  background: rgba(217, 138, 61, 0.08);
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.actor {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.stats > div {
+  flex: 1 0 auto;
+  min-width: 60px;
+  padding: 4px 6px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.stats span {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.stats strong {
+  font-size: 12px;
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.reasons li {
+  margin: 1px 0;
+}

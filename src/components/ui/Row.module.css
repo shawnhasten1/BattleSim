@@ -1,0 +1,20 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  background: var(--ui-panel-2);
+}
+
+.selected {
+  background: var(--ui-panel-2);
+  box-shadow: inset 2px 0 0 var(--ui-accent);
+}

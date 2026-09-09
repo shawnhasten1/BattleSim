@@ -1,0 +1,18 @@
+.thumb {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid var(--ui-border);
+  background: linear-gradient(150deg, #2a2f26, #1c201a);
+  color: var(--ui-accent-soft);
+  font-size: 16px;
+  overflow: hidden;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

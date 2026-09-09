@@ -1,0 +1,31 @@
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.full {
+  color: #6fae6f;
+  border-color: #3f6a3f;
+}
+
+.partial {
+  color: var(--ui-accent-soft);
+  border-color: #7a6a1f;
+}
+
+.manual {
+  color: var(--ui-text-dim);
+}
+
+.unsupported {
+  color: var(--ui-hp-red);
+  border-color: #6a2f2f;
+}

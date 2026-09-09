@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import {
   activeFactions,
   createEngineState,
@@ -42,6 +42,10 @@ import {
   type WeaponDefinition,
   type WallSegment
 } from "@/engine";
+import { clampReplayIndex } from "@/lib/replay";
+import { downscaleDataUrl } from "@/lib/imageResize";
+import { createEncounterStorage } from "@/lib/encounterStorage";
+import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 
 export type EditorTool = "select" | "move" | "measure" | "sight" | "wall" | "terrain" | "template" | "delete";
 
@@ -66,9 +70,15 @@ interface EncounterStore {
   log: CombatLogEvent[];
   outcome: SimulationOutcome | null;
   batchSummary: BatchSimulationSummary | null;
+  /** Pre-run board that the replay reducer folds the event log over. Null = not in replay. */
+  replayBase: EncounterSnapshot | null;
+  /** Number of log events currently applied by the replay scrubber. Null = not in replay. */
+  replayIndex: number | null;
+  /** Playback rate for "watch mode" (0.5 / 1 / 2 / 4). Lives here so the scene can tween tokens to match. */
+  replaySpeed: number;
   selectedCombatantId: string | null;
+  /** The *current* scene's background, mirrored from IndexedDB for rendering. Not persisted to localStorage. */
   mapImageDataUrl: string | null;
-  mapImagesByEncounterId: Record<string, string>;
   currentProjectId: string | null;
   currentEncounterId: string | null;
   projects: ProjectSummary[];
@@ -85,6 +95,9 @@ interface EncounterStore {
   advanceTurn: () => void;
   runAuto: () => Promise<void>;
   runBatch: (count: number) => void;
+  setReplayIndex: (index: number) => void;
+  setReplaySpeed: (speed: number) => void;
+  exitReplay: () => void;
   reset: () => void;
   undo: () => void;
   redo: () => void;
@@ -119,6 +132,8 @@ interface EncounterStore {
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   selectCombatant: (id: string | null) => void;
   setMapImage: (dataUrl: string | null) => void;
+  /** Load the current scene's background from IndexedDB into `mapImageDataUrl`. */
+  hydrateMapImage: () => void;
   updateGrid: (updates: Partial<EncounterSnapshot["map"]["grid"]>) => void;
   updateMapImageSettings: (updates: Partial<NonNullable<EncounterSnapshot["map"]["image"]>>) => void;
   updateMapCanvas: (updates: Partial<NonNullable<EncounterSnapshot["map"]["canvas"]>>) => void;
@@ -250,9 +265,38 @@ function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "emp
   });
 }
 
+/**
+ * IndexedDB key for a scene's background image: the saved DB encounter id once
+ * the scene has been saved, otherwise the snapshot's own id while it is a draft.
+ * The save flows migrate the draft key to the DB key.
+ */
+function mapImageKey(state: Pick<EncounterStore, "currentEncounterId" | "encounter">): string {
+  return state.currentEncounterId ?? state.encounter.id;
+}
+
 export const useEncounterStore = create<EncounterStore>()(
   persist(
     (set, get) => {
+      const hydrateMapImage = () => {
+        const key = mapImageKey(get());
+        void getMapImage(key).then((image) => {
+          // Ignore if the user switched scenes while the read was in flight.
+          if (mapImageKey(get()) === key) {
+            set({ mapImageDataUrl: image ?? null });
+          }
+        });
+      };
+
+      /** Move a scene's stored image from one key to another (draft id -> saved DB id). */
+      const migrateMapImageKey = (fromKey: string, toKey: string) => {
+        if (!fromKey || !toKey || fromKey === toKey) return;
+        const image = get().mapImageDataUrl;
+        void (async () => {
+          if (image) await putMapImage(toKey, image);
+          await deleteMapImage(fromKey);
+        })();
+      };
+
       const commitEncounter = (
         encounter: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
@@ -262,6 +306,8 @@ export const useEncounterStore = create<EncounterStore>()(
         redoStack: [],
         outcome: null,
         batchSummary: null,
+        replayBase: null,
+        replayIndex: null,
         ...extras
       });
 
@@ -270,9 +316,11 @@ export const useEncounterStore = create<EncounterStore>()(
       log: [],
       outcome: null,
       batchSummary: null,
+      replayBase: null,
+      replayIndex: null,
+      replaySpeed: 1,
       selectedCombatantId: "pc-fighter",
       mapImageDataUrl: null,
-      mapImagesByEncounterId: {},
       currentProjectId: null,
       currentEncounterId: null,
       projects: [],
@@ -431,13 +479,22 @@ export const useEncounterStore = create<EncounterStore>()(
         });
       },
       runAuto: async () => {
+        // A tuning tool, not a VTT: the run does NOT overwrite the editable
+        // board. Instead we keep the pre-run setup as `replayBase` and drop the
+        // UI into replay/"watch" mode over the fresh event log, starting at the
+        // beginning so the user can watch decisions unfold. Exiting replay (any
+        // edit, or the Exit button) leaves the original setup intact to tweak.
+        const base = structuredClone(get().encounter);
         const result = runAutomatedEncounter(get().encounter, 50);
         const encounterId = get().currentEncounterId;
-        commitEncounter(result.snapshot, {
+        set({
           log: result.log,
           outcome: result.outcome,
           batchSummary: null,
-          selectedCombatantId: result.snapshot.combatants[0]?.id ?? null
+          replayBase: base,
+          replayIndex: 0,
+          tool: "select",
+          pendingWallStart: null
         });
         if (encounterId) {
           await fetch("/api/simulation-runs", {
@@ -459,11 +516,21 @@ export const useEncounterStore = create<EncounterStore>()(
         const summary = runBatchSimulations(get().encounter, count, { seedPrefix: get().encounter.seed, maxRounds: 50 });
         set({ batchSummary: summary });
       },
+      setReplayIndex: (index) => {
+        const state = get();
+        if (state.replayBase == null) return;
+        set({ replayIndex: clampReplayIndex(index, state.log.length) });
+      },
+      setReplaySpeed: (speed) => set({ replaySpeed: speed > 0 ? speed : 1 }),
+      exitReplay: () => set({ replayBase: null, replayIndex: null }),
       reset: () => {
+        void deleteMapImage(mapImageKey(get()));
         commitEncounter(structuredClone(sampleEncounter), {
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           selectedCombatantId: "pc-fighter",
           mapImageDataUrl: null,
           tool: "select",
@@ -477,6 +544,8 @@ export const useEncounterStore = create<EncounterStore>()(
           encounter: previous,
           undoStack: rest,
           redoStack: [structuredClone(get().encounter), ...get().redoStack].slice(0, 50),
+          replayBase: null,
+          replayIndex: null,
           log: [...get().log, {
             id: `undo-${Date.now()}`,
             round: previous.round,
@@ -493,6 +562,8 @@ export const useEncounterStore = create<EncounterStore>()(
           encounter: next,
           redoStack: rest,
           undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
+          replayBase: null,
+          replayIndex: null,
           log: [...get().log, {
             id: `redo-${Date.now()}`,
             round: next.round,
@@ -681,15 +752,13 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         const data = await response.json() as { project: ProjectSummary & { encounters?: Array<{ id: string; name: string }> } };
         const encounterId = data.project.encounters?.[0]?.id ?? get().currentEncounterId;
-        const currentMapImage = get().mapImageDataUrl;
+        const draftKey = mapImageKey(get());
         set({
           currentProjectId: data.project.id,
           currentEncounterId: encounterId,
-          mapImagesByEncounterId: encounterId && currentMapImage
-            ? { ...get().mapImagesByEncounterId, [encounterId]: currentMapImage }
-            : get().mapImagesByEncounterId,
           projectStatus: "Saved"
         });
+        if (encounterId) migrateMapImageKey(draftKey, encounterId);
         await get().loadProjects();
       },
       loadProject: async (projectId) => {
@@ -710,14 +779,17 @@ export const useEncounterStore = create<EncounterStore>()(
           currentEncounterId: data.project.encounters[0]?.id ?? null,
           encounter: normalizedSnapshot,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
-          mapImageDataUrl: get().mapImagesByEncounterId[data.project.encounters[0]?.id ?? ""] ?? null,
+          mapImageDataUrl: null,
           undoStack: [],
           redoStack: [],
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           projectStatus: "Loaded"
         });
+        hydrateMapImage();
         await get().loadProjects();
       },
       deleteProject: async (projectId) => {
@@ -754,9 +826,6 @@ export const useEncounterStore = create<EncounterStore>()(
         set({
           currentProjectId: projectId,
           currentEncounterId: data.encounter.id,
-          mapImagesByEncounterId: currentMapImage
-            ? { ...get().mapImagesByEncounterId, [data.encounter.id]: currentMapImage }
-            : get().mapImagesByEncounterId,
           encounter: normalizedSnapshot,
           selectedCombatantId: null,
           undoStack: [],
@@ -764,8 +833,12 @@ export const useEncounterStore = create<EncounterStore>()(
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           projectStatus: "Scene created"
         });
+        // A new scene keeps the carried-over map layout, so carry its background too.
+        if (currentMapImage) void putMapImage(mapImageKey(get()), currentMapImage);
         await get().loadProjects();
       },
       saveCurrentEncounter: async () => {
@@ -779,12 +852,9 @@ export const useEncounterStore = create<EncounterStore>()(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: state.encounter.name, encounter: state.encounter })
         });
-        set({
-          projectStatus: response.ok ? "Scene saved" : "Scene save failed",
-          mapImagesByEncounterId: response.ok && state.mapImageDataUrl
-            ? { ...state.mapImagesByEncounterId, [state.currentEncounterId]: state.mapImageDataUrl }
-            : state.mapImagesByEncounterId
-        });
+        // The background is already in IndexedDB under this scene's id (written
+        // by `setMapImage`); nothing image-related to do on save.
+        set({ projectStatus: response.ok ? "Scene saved" : "Scene save failed" });
         if (response.ok) {
           await get().loadProjects();
         }
@@ -806,15 +876,18 @@ export const useEncounterStore = create<EncounterStore>()(
           currentProjectId: data.encounter.projectId ?? get().currentProjectId,
           currentEncounterId: data.encounter.id,
           encounter: normalizedSnapshot,
-          mapImageDataUrl: get().mapImagesByEncounterId[data.encounter.id] ?? null,
+          mapImageDataUrl: null,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           projectStatus: "Scene loaded"
         });
+        hydrateMapImage();
         await get().loadProjects();
       },
       renameEncounter: async (encounterId, name) => {
@@ -864,9 +937,9 @@ export const useEncounterStore = create<EncounterStore>()(
           }
         }
         const snapshot = createSceneSnapshot(source, `${source.name} Copy`, "duplicate");
-        const sourceImage = encounterId && encounterId !== get().currentEncounterId
-          ? get().mapImagesByEncounterId[encounterId]
-          : get().mapImageDataUrl;
+        const sourceImageKey = encounterId && encounterId !== get().currentEncounterId
+          ? encounterId
+          : mapImageKey(get());
         const response = await fetch("/api/encounters", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -882,18 +955,18 @@ export const useEncounterStore = create<EncounterStore>()(
           currentProjectId: projectId,
           currentEncounterId: data.encounter.id,
           encounter: normalizedSnapshot,
-          mapImageDataUrl: sourceImage ?? null,
-          mapImagesByEncounterId: sourceImage
-            ? { ...get().mapImagesByEncounterId, [data.encounter.id]: sourceImage }
-            : get().mapImagesByEncounterId,
+          mapImageDataUrl: null,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           projectStatus: "Scene duplicated"
         });
+        void copyMapImage(sourceImageKey, mapImageKey(get())).then(() => hydrateMapImage());
         await get().loadProjects();
       },
       deleteEncounter: async (encounterId) => {
@@ -906,9 +979,9 @@ export const useEncounterStore = create<EncounterStore>()(
         set({
           currentEncounterId: wasCurrent ? null : get().currentEncounterId,
           mapImageDataUrl: wasCurrent ? null : get().mapImageDataUrl,
-          mapImagesByEncounterId: Object.fromEntries(Object.entries(get().mapImagesByEncounterId).filter(([id]) => id !== encounterId)),
           projectStatus: "Scene deleted"
         });
+        void deleteMapImage(encounterId);
         await get().loadProjects();
         if (wasCurrent) {
           const project = get().projects.find((candidate) => candidate.id === get().currentProjectId);
@@ -989,16 +1062,27 @@ export const useEncounterStore = create<EncounterStore>()(
         await get().loadDefinitionsLibrary();
       },
       selectCombatant: (id) => set({ selectedCombatantId: id }),
+      hydrateMapImage,
       setMapImage: (dataUrl) => {
-        const encounterId = get().currentEncounterId;
-        set({
-          mapImageDataUrl: dataUrl,
-          mapImagesByEncounterId: encounterId && dataUrl
-            ? { ...get().mapImagesByEncounterId, [encounterId]: dataUrl }
-            : encounterId && dataUrl === null
-              ? Object.fromEntries(Object.entries(get().mapImagesByEncounterId).filter(([id]) => id !== encounterId))
-              : get().mapImagesByEncounterId
-        });
+        const applyMapImage = (value: string | null) => {
+          const key = mapImageKey(get());
+          set({ mapImageDataUrl: value });
+          // IndexedDB is the source of truth for every scene's background; only
+          // the current one is mirrored into state above (for rendering).
+          if (value) void putMapImage(key, value);
+          else void deleteMapImage(key);
+        };
+
+        // A raw upload/import data URL can be many MB. Shrink it before it is
+        // stored (IndexedDB) or sent anywhere. The decode is async; apply the
+        // result once it's ready.
+        if (dataUrl && dataUrl.startsWith("data:image/")) {
+          void downscaleDataUrl(dataUrl)
+            .then((resized) => applyMapImage(resized))
+            .catch(() => applyMapImage(dataUrl));
+          return;
+        }
+        applyMapImage(dataUrl);
       },
       updateGrid: (updates) => {
         const encounter = get().encounter;
@@ -1134,18 +1218,17 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       replaceEncounter: (encounter, mapImageDataUrl = null) => {
         const normalizedEncounter = normalizeEncounterVisuals(encounter);
-        const encounterId = get().currentEncounterId;
         set({
           encounter: normalizedEncounter,
-          mapImageDataUrl,
-          mapImagesByEncounterId: encounterId && mapImageDataUrl
-            ? { ...get().mapImagesByEncounterId, [encounterId]: mapImageDataUrl }
-            : get().mapImagesByEncounterId,
           log: [],
           outcome: null,
           batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
           selectedCombatantId: normalizedEncounter.combatants[0]?.id ?? null
         });
+        // Routes the (possibly huge) imported image through the same downscale path.
+        get().setMapImage(mapImageDataUrl);
       },
       addCreatureDefinition: (definition, faction = "enemy", position) => {
         if (!definition?.id) {
@@ -1627,22 +1710,41 @@ export const useEncounterStore = create<EncounterStore>()(
     },
     {
       name: "battle-sim-encounter-v1",
+      storage: createJSONStorage(() => createEncounterStorage()),
       partialize: (state) => ({
         encounter: state.encounter,
         log: state.log,
-        mapImageDataUrl: state.mapImageDataUrl,
-        mapImagesByEncounterId: state.mapImagesByEncounterId,
+        // Map backgrounds live in IndexedDB (see mapImageStore), never here.
         selectedCombatantId: state.selectedCombatantId,
         currentProjectId: state.currentProjectId,
         currentEncounterId: state.currentEncounterId
       }),
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<EncounterStore> | undefined;
+        const persisted = (persistedState ?? {}) as Partial<EncounterStore> & {
+          mapImagesByEncounterId?: Record<string, string>;
+        };
+        // One-time migration: earlier versions kept images in this localStorage
+        // blob. Move any we find into IndexedDB, then drop them from state so
+        // they stop being persisted.
+        if (typeof indexedDB !== "undefined") {
+          for (const [key, dataUrl] of Object.entries(persisted.mapImagesByEncounterId ?? {})) {
+            if (typeof dataUrl === "string") void putMapImage(key, dataUrl);
+          }
+          if (typeof persisted.mapImageDataUrl === "string" && persisted.currentEncounterId) {
+            void putMapImage(persisted.currentEncounterId, persisted.mapImageDataUrl);
+          }
+        }
+        delete persisted.mapImagesByEncounterId;
         return {
           ...currentState,
           ...persisted,
-          encounter: normalizeEncounterVisuals(persisted?.encounter ?? currentState.encounter)
+          mapImageDataUrl: null,
+          encounter: normalizeEncounterVisuals(persisted.encounter ?? currentState.encounter)
         };
+      },
+      onRehydrateStorage: () => (state) => {
+        // localStorage is back; now pull this scene's background out of IndexedDB.
+        state?.hydrateMapImage();
       }
     }
   )

@@ -1,0 +1,26 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.chip {
+  padding: 3px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  color: var(--ui-text);
+}
+
+.active {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}

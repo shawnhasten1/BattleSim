@@ -1,0 +1,184 @@
+.root {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  padding: 5px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trigger:hover {
+  border-color: var(--ui-accent);
+}
+
+.trigger svg {
+  flex-shrink: 0;
+  color: var(--ui-text-dim);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--ui-z-topbar);
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-panel);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+.menuHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.menuHead > div {
+  display: flex;
+  gap: 4px;
+}
+
+.menu button {
+  border: none;
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu button:hover {
+  color: var(--ui-text);
+}
+
+.newBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius);
+  color: var(--ui-text) !important;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.newBtn:hover {
+  border-color: var(--ui-accent) !important;
+  color: var(--ui-accent) !important;
+}
+
+.inlineForm {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.inlineForm input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.inlineForm button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius);
+}
+
+.projects {
+  margin-top: 6px;
+}
+
+.project,
+.projectActive {
+  margin-bottom: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+}
+
+.projectActive {
+  border-color: var(--ui-accent-soft);
+}
+
+.projectHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: var(--ui-panel-2);
+}
+
+.projectHead button:first-child {
+  flex: 1;
+  text-align: left;
+  color: var(--ui-text) !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scene,
+.sceneActive {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.sceneActive {
+  background: rgba(217, 138, 61, 0.1);
+}
+
+.sceneMain {
+  flex: 1;
+  text-align: left;
+  color: var(--ui-text) !important;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneMain:hover {
+  color: var(--ui-accent) !important;
+}
+
+.empty,
+.status {
+  margin: 4px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}

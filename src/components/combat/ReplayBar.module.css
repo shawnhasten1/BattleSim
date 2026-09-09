@@ -1,0 +1,199 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ui-text-dim);
+}
+
+.exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 3px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.exit:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.nowShowing {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.nowShowing span {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.nowShowing strong {
+  font-size: 12px;
+}
+
+.scrubber {
+  width: 100%;
+  accent-color: var(--ui-accent);
+  cursor: pointer;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.transport button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  cursor: pointer;
+}
+
+.transport button:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.transport button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.playToggle[data-primary] {
+  width: 40px;
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.speeds {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.speeds button {
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.speeds button:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.speeds button.speedOn {
+  border-color: var(--ui-accent);
+  background: rgba(217, 138, 61, 0.16);
+  color: var(--ui-text);
+}
+
+.logWrap > summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  list-style: none;
+}
+
+.logWrap > summary::-webkit-details-marker {
+  display: none;
+}
+
+.logWrap > summary:hover {
+  color: var(--ui-text);
+}
+
+.logList {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.logList button {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logList button:hover {
+  background: var(--ui-panel-2);
+}
+
+.logList button.logCurrent {
+  border-left-color: var(--ui-accent);
+  background: rgba(217, 138, 61, 0.12);
+}
+
+.logNum {
+  flex-shrink: 0;
+  width: 22px;
+  color: var(--ui-text-dim);
+  text-align: right;
+}
+
+.logMsg {
+  flex: 1;
+}
+
+.logList small {
+  flex-shrink: 0;
+  color: var(--ui-text-dim);
+  font-size: 9.5px;
+}

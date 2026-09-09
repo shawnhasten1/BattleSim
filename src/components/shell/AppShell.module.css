@@ -1,0 +1,48 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 900px;
+  overflow: hidden;
+  background: var(--ui-bg-deep);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  color-scheme: dark;
+}
+
+.topbar {
+  flex-shrink: 0;
+  height: 44px;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rail {
+  flex-shrink: 0;
+  width: 52px;
+}
+
+/* Center slot. Flex so the canvas child fills both axes without needing its
+ * own height (legacy .scene-stage has none of its own). */
+.main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.main > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar {
+  flex-shrink: 0;
+  width: 320px;
+}

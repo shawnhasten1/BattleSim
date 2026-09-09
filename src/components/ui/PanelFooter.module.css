@@ -1,0 +1,35 @@
+.footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.footer > button {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.footer > button:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.footer > button[data-primary] {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.footer > button[data-primary]:hover {
+  filter: brightness(1.08);
+  color: var(--ui-on-accent);
+}

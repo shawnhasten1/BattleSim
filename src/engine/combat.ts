@@ -748,6 +748,11 @@ function declareAction(
     : targetInfo.origin
       ? ` at (${targetInfo.origin.x}, ${targetInfo.origin.y})`
       : "";
+  const resourceCost = "resourceCost" in action && action.resourceCost ? action.resourceCost : undefined;
+  // Area shape + damage type travel with the declaration so consumers (the
+  // replay AoE flash) don't have to re-resolve the action definition.
+  const area = "area" in action ? action.area : undefined;
+  const damageType = "damage" in action ? action.damage?.[0]?.damageType : undefined;
   state.log.push(event(state, "ActionDeclared", `${actor.displayName} uses ${action.name}${targetText}`, {
     actorId: actor.id,
     actionId: action.id,
@@ -755,7 +760,10 @@ function declareAction(
     actionKind: action.kind,
     actionType: action.actionType,
     targetId: targetInfo.target?.id,
-    origin: targetInfo.origin
+    origin: targetInfo.origin,
+    resourceCost,
+    area,
+    damageType
   }));
 }
 

@@ -1,0 +1,30 @@
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: #2b2b2b;
+  cursor: pointer;
+}
+
+.on {
+  background: var(--ui-accent);
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s ease;
+}
+
+.on .knob {
+  left: 18px;
+}

@@ -45,7 +45,39 @@ The overhaul should preserve the engine and migrate the UI into smaller scene/ca
 - Phase 4 - Actor Directory And Token Images: implemented.
 - Phase 5 - SRD / Open5e Compendium Browser: implemented.
 - Phase 6 - Foundry-Like Sheets: implemented.
-- Next recommended phase: Phase 7 - Simulation-Focused Scene Tools.
+- The `UI_OVERHAUL_PLAN.md` shell rebuild (2024/25) re-implemented Phases 1-6 as
+  ~40 focused components + 6 hooks; `page.tsx` 2756 -> 162 lines. That rebuild
+  also delivered most of Phase 7 as a side effect (measure/sight/template/path
+  tools, wall+terrain inspectors). See each phase below for the delta.
+- Phase 7 - Simulation-Focused Scene Tools: ~85% done; remaining = terrain
+  polygon vertex editing + free template rotation.
+- Phase 8 - Reports, Replay, Playback, AI Inspector: **8a-8c implemented.**
+  8a: round-count histogram + surfaced batch warnings + per-combatant resource
+  spend in the Batch report. 8b: `src/lib/replay.ts` pure forward-replay reducer
+  (`replayTo`), store `replayBase`/`replayIndex`/`replaySpeed`, `useDisplayEncounter`
+  + `useReplayPlayback` hooks, `ReplayBar` transport (scrubber / ⏮◀▶▶⏭ / 0.5-4x /
+  click-to-scrub log), REPLAY canvas banner, `--token-move-ms` token tween.
+  `runAuto` now drops into replay over the pre-run board instead of committing
+  the final snapshot (tuning-tool behaviour: the setup stays editable). 8c: the
+  `AiDecisionCard` (chosen action + score + expected damage / distance / range +
+  reason strings) shows beside the scrubber when parked on an `AiDecision`.
+  8d (heatmap overlays) deferred - still a stretch item.
+- Phase 9 - Encounter Variants: not started.
+
+### Scope decisions for 7-9 (locked)
+
+- **Batch-tuning tool, not a VTT.** No manual/assisted turn-by-turn play. Step,
+  Auto Run, and Batch stay the only drivers. (Drops the "action buttons for
+  selected token" / "manual controls" items from Phase 8.)
+- **AI inspector = chosen action + its score + reason strings**, which the
+  `AiDecision` events already carry. No `simulation.ts` change. Full
+  candidate-ranking is a later opt-in.
+- **Variant comparison is session-only first** — hold N batch results in memory,
+  name them, diff any two. DB persistence (`SimulationRun` model exists) is a
+  follow-up once the workflow proves out.
+- **Replay = forward-replay the event log as a reducer** over the initial
+  snapshot (the log already carries move destinations and damage amounts). No
+  re-running the sim to reconstruct intermediate state.
 
 ## Phase 1 - Foundry-Style Application Shell
 
@@ -284,101 +316,252 @@ Each sheet should show:
 
 ## Phase 7 - Simulation-Focused Scene Tools
 
+### Already done (by the shell rebuild)
+
+- Measurement ruler + movement-cost preview (`Measure` tool -> `measuredPath`,
+  "N ft direct / N ft path" readout in `ScenePanel`).
+- Path preview respecting walls / terrain / occupancy / footprint (`previewPath`
+  + `measuredPath` via `findPath`).
+- Line-of-sight / line-of-effect test tool (`Sight` tool, `sightResult`, the
+  `sight-layer` overlay).
+- Area templates for cone / circle / line / square: place, drag, edit size /
+  width / origin / colour, live "affected tokens" list (`ContextInspector`).
+- Wall inspector: blocks movement / sight / projectiles, door state select +
+  toggle, node X/Y edit, canvas node drag, layers list (`ContextInspector`).
+- Terrain inspector: name, type, movement multiplier (`ContextInspector`).
+
+### Remaining
+
+1. **Terrain polygon editing** — the terrain tool creates a fixed rectangular
+   zone; there is no way to move, add, or remove vertices. Add drag handles on
+   each polygon point (mirror the wall-node interaction in `useSceneInteraction`
+   / `SceneOverlays`) and an "add point on edge" affordance. Store: extend
+   `updateTerrain` or add `moveTerrainVertex` / `addTerrainVertex` /
+   `deleteTerrainVertex`.
+2. **Free template rotation** — `AreaTemplate.direction` is N/E/S/W only. Add a
+   numeric-degrees field to the template inspector and (nice-to-have) an
+   on-canvas rotate handle. Cone/line geometry in `src/engine/areas.ts` would
+   need to accept an angle instead of a compass direction — an engine change,
+   so gate it behind a decision if `areas.ts` churn is unwanted; the 4-way
+   version is functional.
+
+### Acceptance
+
+- A drawn terrain zone can be reshaped, not just retyped or deleted.
+- Templates can point any direction (or explicitly stay 4-way if `areas.ts` is
+  left alone).
+
+## Phase 8 - Reports, Replay, Playback, And AI Inspector
+
 ### Goal
 
-Add Foundry-like tools that are especially useful for encounter simulation.
+Turn the simulator's raw output into something you can *watch and inspect*: run
+the sim instantly as today, then play the result back on the board at a
+human-watchable pace, pausing to see what each actor decided. **No manual play**
+— Step / Auto Run / Batch stay the only drivers; playback is post-hoc, so it
+scrubs both directions and replays freely.
+
+### Implemented (8a-8c)
+
+What landed vs. the design below:
+
+- **`src/lib/replay.ts`** — `replayTo(base, log, index)` pure reducer + helpers
+  `clampReplayIndex`, `dwellForEvent`, `describeEvent`. Events carry
+  *post-mutation absolute* values, so the reducer writes them directly:
+  `InitiativeRolled` (re-order per `data.order` + set `initiative`),
+  `CombatantMoved` (`data.destination`), `DamageApplied`
+  (`data.currentHp`/`data.tempHp`), `HealingApplied` (+ mirrors the engine's
+  revive-on-heal), `ConditionApplied`/`ConditionExpired` (by `condition.id`),
+  `CombatantDowned`/`Defeated`/`Died`/`Stabilized`, `DeathSaveRolled`
+  (`data.deathSaves` + `data.state`), `FeatureEffectApplied` (resource regen,
+  absolute `data.next`), `ActionDeclared.resourceCost` (the one delta — floored,
+  cosmetic). Round/turn come from every event's stamp. `tests/replay.test.ts`
+  (8 cases) incl. full-log fidelity vs. `runAutomatedEncounter().snapshot`.
+- **Store** — `replayBase: EncounterSnapshot | null`, `replayIndex: number | null`,
+  `replaySpeed: number`; actions `setReplayIndex` / `setReplaySpeed` /
+  `exitReplay`. NOT persisted (`partialize` untouched). Any edit path
+  (`commitEncounter`, undo/redo, project/scene load) clears replay so a stale
+  base can't render. The playback *timer* lives in `useReplayPlayback`, not the
+  store.
+- **`runAuto` changed** — it no longer `commitEncounter`s the final snapshot.
+  It keeps the pre-run board as `replayBase`, sets `replayIndex: 0`, forces
+  `tool: "select"`, and still POSTs to `/api/simulation-runs`. Exiting replay
+  leaves the original setup intact to tweak and re-run (tuning-tool behaviour).
+- **Hooks** — `useDisplayEncounter()` (replay-folded snapshot for the scene +
+  Combat panel readouts only; every editing surface still reads
+  `state.encounter`), `useIsReplaying()`, `useReplayCursorEvent()`,
+  `useReplayPlayback()` (play/pause + per-event-type dwell ÷ speed, auto-plays
+  when a run enters replay at 0, pauses at end, persists speed via
+  `battlesim:replay-speed`).
+- **`ReplayBar`** (`src/components/combat/`) — replaces the flat `<details>` log
+  while replaying: header + `N / M` counter + Exit, "now showing" line, range
+  scrubber, ⏮ ◀ ▶(play/pause) ▶ ⏭ transport, 0.5/1/2/4x, `AiDecisionCard` when
+  parked on an `AiDecision`, and a click-to-scrub event log. The old JSON log
+  `<details>` stays in `CombatPanel` for non-replay (Step-mode) runs.
+- **`AiDecisionCard`** — `event.message` headline, actor -> target chips, stat
+  tiles (score / expected dmg / distance / in-range / OA risk, whichever the
+  payload has), `reasons[]` bullets. Pure read-out of `AiDecision.data`.
+- **Canvas** — `SceneCanvas` renders `useDisplayEncounter()` combatants (map
+  metrics still off the live encounter), shows a "▶ Replay" banner + accent
+  outline, sets `--token-move-ms` (~90-900ms, faster at higher speed; `0ms`
+  otherwise) consumed by a new `.token { transition: left/top var(--token-move-ms) }`
+  rule, and drops all map pointer handlers. `SceneOverlays` takes a `replaying`
+  prop that hides the editing gizmos (movement preview, target line,
+  measure/sight, wall nodes) while keeping terrain/walls/templates.
+- **8a** — `batch.ts`: `roundDistribution: RoundDistributionBin[]` (exact
+  per-round counts, sorted) and `CombatantMetrics.resourceSpent` (avg of
+  `ActionDeclared.resourceCost.amount`); `ActionDeclared` now carries
+  `data.resourceCost`. `CombatPanel` renders the histogram strip + the
+  `warnings` list + resource spend. `tests/batch.test.ts` (4 cases).
+- **Deferred** — 8d heatmaps; full candidate ranking (needs `simulation.ts`);
+  making the Context inspector follow the replay snapshot (kept on the live
+  setup by design).
+
+### 8a. Report polish (`CombatPanel` "Batch report" section)
+
+- **Round-distribution histogram** — `batch.ts` already has min/max/median/p90;
+  add bucketed counts (`rounds: number[]` -> `distribution: Record<bin, count>`)
+  and render a small bar strip.
+- **Surface `batchSummary.warnings`** — it exists on the summary and is not
+  shown. List them under the metrics with a "manual review" flag.
+- **Resource-usage aggregation** — `batch.ts` `aggregateCombatants` reads
+  `DamageApplied` / `HealingApplied`; add a `resourceSpent` tally from a new or
+  existing event and show per-combatant spend.
+- Keep the existing win / TPK / death / rounds / HP / difficulty tiles.
+
+### 8b. Replay scrubber + timed playback ("watch mode")
+
+The core of the phase. Run the sim instantly (as today), then step through the
+resulting `log` on the board — manually by scrubbing, or automatically at a set
+pace.
+
+**State reconstruction**
+
+- **`src/lib/replay.ts`** — `replayTo(initialSnapshot, log, index): EncounterSnapshot`,
+  a pure reducer that folds each event up to `index` forward from the starting
+  snapshot: `InitiativeRolled` (initiative + turn order), `CombatantMoved`
+  (position — check whether the engine emits `to` only or a `path`; straight
+  positions are enough), `DamageApplied` (`targetId` + `totalApplied` -> hp,
+  tempHp), `HealingApplied`, `ConditionApplied` / `ConditionExpired`,
+  `CombatantDowned` / `Died` / `Defeated` / `Stabilized` (state), `TurnStarted`
+  (round/turnIndex). Deterministic, no engine call.
+- Unit-test: `replayTo(start, result.log, result.log.length)` deep-equals
+  `runAutomatedEncounter(start).snapshot` for the sample encounter.
+
+**Transport UI** (replaces the flat `<details>` log in `CombatPanel`)
+
+- A scrubber row: range slider over `log`, ⏮ ◀ ⏯ ▶ ⏭ buttons, speed selector
+  (0.5× / 1× / 2× / 4×), and the current event's message + type + "R{round}
+  T{turn}".
+- Playback: an interval (cleared on pause / unmount / index-reaches-end) that
+  advances `replayIndex` one event per tick. **Per-type dwell** so it reads as
+  action, not a slideshow: `AiDecision` ~900ms, `CombatantMoved` ~700ms,
+  `AttackRolled` / `SaveRolled` / `DamageApplied` ~600ms, bookkeeping
+  (`TurnStarted`, `ConcentrationChecked`, …) ~150ms — all divided by the speed
+  multiplier. Or advance one *turn* per tick with the events inside it shown as
+  a quick sequence; pick whichever feels right during 8b.
+- "Run" (single Auto Run) can drop straight into playback at index 0 instead of
+  showing the final board — a `watchOnRun` setting, default on.
+
+**Canvas during replay**
+
+- `SceneCanvas` reads `replaySnapshot ?? encounter` for tokens + conditions;
+  everything else (map, walls, terrain) comes from the live encounter. A
+  "REPLAY · event N / M" banner with an exit control; scene tools are disabled
+  while replaying.
+- **Token motion** — add `transition: left <dwell>ms ease, top <dwell>ms ease`
+  to `.token` *only in replay mode* (a `data-replay` attribute on the stage, or
+  a modifier class), so advancing past a `CombatantMoved` tweens the token to
+  its new cell instead of teleporting. Near-free; keep it off during live
+  editing so drags don't lag.
+- Pulse/outline the acting combatant for the current event; when the event is an
+  `AiDecision`, show the 8c card beside the scrubber.
+
+**Store**
+
+- `replayIndex: number | null`, `replayPlaying: boolean`, `replaySpeed: number`,
+  `setReplayIndex` / `toggleReplayPlay` / `setReplaySpeed`, `exitReplay`.
+  `runAuto` already keeps the full `log`; entering replay is just
+  `setReplayIndex(0)`. The interval lives in a `useReplayPlayback` hook in the
+  Combat panel, not the store, so the store stays timer-free and testable.
+
+### 8c. AI decision inspector
+
+- When the scrubbed event is an `AiDecision`, show a card: actor, chosen action,
+  `score`, `expectedDamage` / `distance` / `reachableNow` where present, and the
+  `reasons[]` as a bullet list — all already in `event.data`.
+- A per-turn summary: for the current round+turn, the sequence of `AiDecision` +
+  `AttackRolled` / `SaveRolled` + `DamageApplied` events, so a whole turn reads
+  as a story.
+- (Later, opt-in) full candidate ranking would need `simulation.ts` to emit the
+  non-chosen candidates behind an `inspect` flag on the engine state.
+
+### 8d. Heatmap overlays (stretch)
+
+- Toggleable SVG overlays computed from the log: cells entered
+  (`CombatantMoved` paths), damage dealt/taken per cell, death locations. Pure
+  aggregation over `log`; renders as a `<rect>` grid in `SceneOverlays` with an
+  opacity ramp.
+
+### Acceptance — met (8a-8c)
+
+- ✓ Batch and single-run output is readable without opening JSON.
+- ✓ After "Run", the encounter plays back on the board at a watchable pace —
+  tokens move, decisions and attacks resolve in sequence — with pause, speed,
+  and scrub-both-ways.
+- ✓ The reducer's final replay state matches the engine's own final snapshot
+  (`tests/replay.test.ts`, board-signature deep-equal).
+- ✓ Pausing on an `AiDecision` shows the actor's chosen action, score, and reasons.
+
+## Phase 9 - Encounter Variants (session-only first)
+
+### Goal
+
+Compare tuning changes side by side without leaving the session.
 
 ### Tasks
 
-- Add measurement ruler with movement cost preview.
-- Add path preview respecting walls, terrain, occupied spaces, and footprint size.
-- Add line-of-sight and line-of-effect test tools.
-- Add area template placement for cones, circles, lines, and squares.
-- Add template drag/rotate/resize controls where useful.
-- Add wall node editing, wall type toggles, and door state controls in a compact inspector.
-- Add terrain polygon editing and terrain type controls.
+- **Variant registry in the store** — `variants: Record<id, { id, name, parentId?,
+  snapshot: EncounterSnapshot, mapImageDataUrl, batch: BatchSimulationSummary |
+  null }>`, plus `activeVariantId`. "Duplicate as variant" clones the current
+  encounter + a name ("Baseline", "More Enemies", …).
+- **Run batch per variant** — `runBatch` writes into
+  `variants[activeVariantId].batch` (keeps the seed via `seedPrefix` as today).
+- **Compare view** — a Reports-tab / `CombatPanel` sub-panel: pick two variants,
+  show Δ win rate, Δ avg rounds, Δ death rate, Δ damage dealt/taken, Δ HP left,
+  with colour-coded up/down and the difficulty label for each.
+- Switching `activeVariantId` swaps the loaded encounter (like loading a scene),
+  so you can edit each variant's map/roster independently.
+- Persistence to the `SimulationRun` DB model is a follow-up, not part of this
+  pass.
 
-### Acceptance Criteria
+### Acceptance
 
-- A user can test movement, range, and targeting directly on the map.
-- Area templates identify affected tokens before resolving actions.
-- Wall and terrain tools support editing, not only creation/deletion.
+- Two variants of an encounter can be built, batch-run, and diffed in one view.
+- The diff makes it obvious which variant is easier / harder / swingier.
 
-## Phase 8 - Combat, Reports, Replay, And AI Inspector
+### Non-goals for this pass
 
-### Goal
-
-Make the simulator outputs feel like first-class Foundry panels, not raw debug data.
-
-### Combat Tab
-
-- Initiative tracker
-- Current turn summary
-- Action buttons for selected/current token
-- HP/resource controls
-- Conditions
-- Manual/assisted/auto controls
-
-### Reports Tab
-
-- Batch run controls
-- Win rate
-- TPK/death/down rates
-- Round distribution
-- Remaining HP
-- Damage dealt/taken
-- Resource usage
-- Unsupported automation warnings
-- Difficulty label with raw metrics visible
-
-### Replay / Inspector Tools
-
-- Event log scrubber.
-- Reconstruct state at selected event or round.
-- AI decision inspector showing candidate actions, movement, scores, and selected action.
-- Optional heatmap overlays for movement, damage, deaths, and common occupied cells.
-
-### Acceptance Criteria
-
-- Single-run and batch-run outputs are readable without opening JSON details.
-- Warnings explain omitted or manual-only content.
-- AI decisions are inspectable enough to tune tactics.
-
-## Phase 9 - Encounter Variants
-
-### Goal
-
-Make encounter tuning fast.
-
-### Tasks
-
-- Add duplicate-as-variant workflow.
-- Add named snapshots such as Baseline, More Enemies, Wider Start, No Chokepoint.
-- Compare two or more batch reports.
-- Show deltas in win rate, rounds, deaths, damage, and resource use.
-- Preserve exact seed and snapshot used for every run.
-
-### Acceptance Criteria
-
-- A user can quickly test map, position, enemy, and tactics changes.
-- Reports make it clear which variant is easier, harder, or more volatile.
+- Cross-session persistence of variants (in-memory only).
+- More than pairwise comparison (two at a time is enough to start).
 
 ## Implementation Order
 
-Use this order unless a blocker forces a smaller prerequisite change:
+Phases 1-6 are done (see `UI_OVERHAUL_PLAN.md`). Remaining order:
 
-1. Componentize the current page.
-2. Build the Foundry-style shell.
-3. Add viewport pan/zoom.
-4. Add scene configuration modal.
-5. Add encounter directory CRUD.
-6. Add token visual fields and rendering.
-7. Add actor dragging to canvas.
-8. Add compendium dragging to canvas/sheets.
-9. Replace edit modal with sheets.
-10. Add advanced measurement/template tools.
-11. Improve reports/replay/AI inspection.
-12. Add encounter variants and report comparison.
+1. ~~**8a - Report polish**~~ — done (round histogram, surfaced warnings,
+   per-combatant resource spend).
+2. ~~**8b - `replay.ts` reducer + scrubber + timed playback + REPLAY canvas
+   mode**~~ — done. Pure reducer unit-tested against the engine's own final
+   snapshot; playback timer in `useReplayPlayback`, not the store.
+3. ~~**8c - AI decision inspector**~~ — done (`AiDecisionCard` reads
+   `AiDecision.data` at the scrubbed event).
+4. **9 - Session-only variant registry + pairwise compare view.** Needs the
+   store to hold multiple batch results; independent of 8b/8c. **Next.**
+5. **7 remainder - terrain polygon editing + template rotation.** Lowest
+   priority; do when the sim-inspection work is settled.
+6. *(later, opt-in)* 8c full candidate ranking (engine change), 8d heatmaps,
+   variant DB persistence, Context inspector following the replay snapshot.
 
 ## Testing Strategy
 

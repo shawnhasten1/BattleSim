@@ -12,6 +12,14 @@ export interface CombatantMetrics {
   died: boolean;
   survived: boolean;
   endingHp: number;
+  /** Average resource points spent per run (sum of `ActionDeclared.resourceCost.amount`). */
+  resourceSpent: number;
+}
+
+/** One bar of the round-count histogram: how many runs ended on exactly `round`. */
+export interface RoundDistributionBin {
+  round: number;
+  count: number;
 }
 
 export interface BatchSimulationSummary {
@@ -28,6 +36,8 @@ export interface BatchSimulationSummary {
     max: number;
     p90: number;
   };
+  /** Sorted ascending by round; only rounds that actually occurred appear. */
+  roundDistribution: RoundDistributionBin[];
   remainingHpByFaction: Record<string, number>;
   damageByCombatant: CombatantMetrics[];
   warnings: string[];
@@ -82,6 +92,7 @@ export function summarizeBatch(baseSnapshot: EncounterSnapshot, runs: Simulation
       max: rounds.at(-1) ?? 0,
       p90: percentile(rounds, 90)
     },
+    roundDistribution: roundDistribution(rounds),
     remainingHpByFaction: remainingHpByFaction(runs),
     damageByCombatant: aggregateCombatants(baseSnapshot, runs),
     warnings,
@@ -121,7 +132,8 @@ function aggregateCombatants(baseSnapshot: EncounterSnapshot, runs: SimulationRu
       timesDowned: 0,
       died: false,
       survived: false,
-      endingHp: 0
+      endingHp: 0,
+      resourceSpent: 0
     };
 
     for (const run of runs) {
@@ -139,6 +151,7 @@ function aggregateCombatants(baseSnapshot: EncounterSnapshot, runs: SimulationRu
     metrics.damageTaken = round(metrics.damageTaken / Math.max(1, runs.length));
     metrics.healingReceived = round(metrics.healingReceived / Math.max(1, runs.length));
     metrics.endingHp = round(metrics.endingHp / Math.max(1, runs.length));
+    metrics.resourceSpent = round(metrics.resourceSpent / Math.max(1, runs.length));
     return metrics;
   });
 }
@@ -162,6 +175,20 @@ function readMetricEvent(entry: CombatLogEvent, combatantId: Id, metrics: Combat
   if (entry.type === "CombatantDied" && entry.data?.combatantId === combatantId) {
     metrics.died = true;
   }
+  if (entry.type === "ActionDeclared" && entry.data?.actorId === combatantId) {
+    const cost = entry.data.resourceCost as { amount?: number } | undefined;
+    metrics.resourceSpent += Number(cost?.amount ?? 0);
+  }
+}
+
+function roundDistribution(sortedRounds: number[]): RoundDistributionBin[] {
+  const counts = new Map<number, number>();
+  for (const value of sortedRounds) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, count]) => ({ round, count }));
 }
 
 function remainingHpByFaction(runs: SimulationRunResult[]): Record<string, number> {
