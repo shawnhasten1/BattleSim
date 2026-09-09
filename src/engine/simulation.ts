@@ -24,6 +24,7 @@ import {
   resolveNumericFormula,
   resolveSaveDc,
   resolveSaveAction,
+  resolveUtilityAction,
   runRepeatedSaves,
   type EngineState
 } from "./combat";
@@ -165,6 +166,147 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
   };
 }
 
+/** Resolve a chosen offensive plan through the right engine call, with beam / multiattack target spread. */
+function executeOffensivePlan(state: EngineState, actor: CombatantState, plan: OffensivePlan): void {
+  const action = plan.action;
+  if (action.kind === "attack") {
+    const targets = action.attackDelivery === "beams"
+      ? beamTargets(state.snapshot, actor, action, plan.target, plan.range)
+      : plan.target.id;
+    resolveAttack(state, actor.id, targets, action.id);
+  } else if (action.kind === "multiattack") {
+    const alloc = multiattackTargetIds(state.snapshot, actor, action, plan.target, plan.range);
+    resolveMultiattackAction(state, actor.id, alloc.targetIds, action.id, { attackTargetIds: alloc.attackTargetIds });
+  } else if (action.kind === "save") {
+    resolveSaveAction(state, actor.id, plan.target.id, action.id);
+  } else if (action.kind === "area-save") {
+    resolveAreaSaveAction(state, actor.id, plan.target.position, action.id);
+  }
+}
+
+/**
+ * Allocate a multiattack's individual attacks across targets: fill the primary
+ * to (estimated) death, then spill onto the next-lowest-HP hostile in reach.
+ * Mirrors `beamTargets`. Returns the ordered `targetIds` (for spill-on-death) and
+ * a flat per-attack list (`attackTargetIds`).
+ */
+function multiattackTargetIds(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  action: Extract<ActionDefinition, { kind: "multiattack" }>,
+  primary: CombatantState,
+  range: number
+): { targetIds: string[]; attackTargetIds: string[] | undefined } {
+  const definition = getDefinition(snapshot, actor);
+  const executables = getExecutableActions(definition);
+  const primaryDefinition = getDefinition(snapshot, primary);
+  const perAttackDamage = action.attacks.flatMap((step) => {
+    const child = executables.find((candidate) => candidate.id === step.actionId);
+    const value = child && child.kind === "attack"
+      ? Math.max(1, expectedDamageAgainst(child, definition, actor, primaryDefinition))
+      : 1;
+    return Array.from({ length: Math.max(0, step.count) }, () => value);
+  });
+  const others = snapshot.combatants
+    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id
+      && isValidTarget(snapshot, actor, c, range))
+    .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id));
+  const targetIds = [primary.id, ...others.map((c) => c.id)];
+  if (others.length === 0) {
+    return { targetIds, attackTargetIds: undefined };
+  }
+  const pool = [primary, ...others];
+  const assigned: Record<string, number> = {};
+  const attackTargetIds: string[] = [];
+  let cursor = 0;
+  for (const damage of perAttackDamage) {
+    while (cursor < pool.length - 1 && (assigned[pool[cursor]!.id] ?? 0) >= pool[cursor]!.currentHp) {
+      cursor += 1;
+    }
+    const pick = pool[cursor]!;
+    attackTargetIds.push(pick.id);
+    assigned[pick.id] = (assigned[pick.id] ?? 0) + damage;
+  }
+  return { targetIds, attackTargetIds };
+}
+
+/** Id of a synthesised / feature-granted `utility` action for `mode` at the given slot, if the actor has one. */
+function utilityActionId(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  mode: "dash" | "disengage" | "dodge",
+  slot: "action" | "bonus"
+): string | undefined {
+  return getExecutableActions(getDefinition(snapshot, actor))
+    .find((candidate) => candidate.kind === "utility" && candidate.mode === mode && candidate.actionType === slot)?.id;
+}
+
+/** A dashed move that would bring `target` into `range` this turn, or `undefined`. Never mutates `actor`. */
+function dashDestinationTowardTarget(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  target: CombatantState,
+  range: number,
+  tactics: TacticsSettings
+): MovementPlan | undefined {
+  const saved = actor.turnFlags;
+  actor.turnFlags = { ...(saved ?? {}), dashed: true };
+  try {
+    const plan = bestDestinationTowardTarget(snapshot, actor, target, range, tactics);
+    return plan && plan.targetDistance <= range ? plan : undefined;
+  } finally {
+    actor.turnFlags = saved;
+  }
+}
+
+/** Spend the Dodge action when the actor is threatened and has nothing better to do. */
+function resolveDodgeIfThreatened(state: EngineState, actor: CombatantState): boolean {
+  if (actor.state !== "active" || !canAct(actor, "action") || !isThreatenedAt(state.snapshot, actor, actor.position)) {
+    return false;
+  }
+  const dodgeId = utilityActionId(state.snapshot, actor, "dodge", "action");
+  if (!dodgeId) {
+    return false;
+  }
+  state.log.push(event(state, "AiDecision", `${actor.displayName} takes the Dodge action`, { combatantId: actor.id }));
+  try {
+    resolveUtilityAction(state, actor.id, dodgeId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * After the main action, spend a still-open bonus action: a bonus-action heal or
+ * the best bonus-action offensive plan (Spiritual Weapon, an off-hand bite,
+ * Healing Word). Only targets already in reach count.
+ */
+function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
+  if (actor.state !== "active" || !canAct(actor, "bonus")) {
+    return;
+  }
+  const heal = selectHealingAction(state.snapshot, actor, "bonus");
+  const offense = selectOffensivePlan(state.snapshot, actor, tactics, "bonus");
+  if (heal && (!offense || heal.score >= offense.score)) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action to heal`, {
+      combatantId: actor.id, actionId: heal.action.id, targetId: heal.target.id, slot: "bonus"
+    }));
+    try {
+      resolveHealingAction(state, actor.id, heal.target.id, heal.action.id);
+    } catch { /* map state moved on */ }
+    return;
+  }
+  if (offense && offense.target.state === "active") {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action (${offense.action.name})`, {
+      combatantId: actor.id, actionId: offense.action.id, targetId: offense.target.id, slot: "bonus"
+    }));
+    try {
+      executeOffensivePlan(state, actor, offense);
+    } catch { /* map state moved on */ }
+  }
+}
+
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   const tactics = tacticsSettings(actor.tacticsProfile);
 
@@ -190,11 +332,14 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       reasons: healing.reasons
     }));
     resolveHealingAction(state, actor.id, healing.target.id, healing.action.id);
+    maybeSpendBonusAction(state, actor, tactics);
     return undefined;
   }
 
   let plan = selectOffensivePlan(state.snapshot, actor, tactics);
   if (!plan) {
+    resolveDodgeIfThreatened(state, actor);
+    maybeSpendBonusAction(state, actor, tactics);
     const warning = `${actor.displayName} has no fully automated action`;
     state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
     return warning;
@@ -214,6 +359,28 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
 
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
     const movement = bestDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics);
+    const normalReaches = movement != null && movement.targetDistance <= plan.range;
+    // A single move can't close the gap; if a doubled (Dash) move would, spend
+    // the action on Dash instead of half-closing and standing idle.
+    const dashMove = !normalReaches && canAct(actor, "action")
+      ? dashDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics)
+      : undefined;
+
+    if (dashMove) {
+      const dashId = utilityActionId(state.snapshot, actor, "dash", "action");
+      if (dashId) {
+        try {
+          resolveUtilityAction(state, actor.id, dashId);
+          moveCombatant(state, actor.id, dashMove.cell);
+          state.log.push(event(state, "AiDecision", `${actor.displayName} dashed toward ${plan.target.displayName}`, {
+            combatantId: actor.id, targetId: plan.target.id, destination: dashMove.cell, remainingDistance: dashMove.targetDistance
+          }));
+        } catch { /* map state moved on */ }
+      }
+      maybeSpendBonusAction(state, actor, tactics);
+      return undefined;
+    }
+
     if (movement) {
       try {
         const previousDistance = gridDistance(actor.position, plan.target.position, state.snapshot.map.grid);
@@ -246,6 +413,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
+    resolveDodgeIfThreatened(state, actor);
+    maybeSpendBonusAction(state, actor, tactics);
     const warning = `${actor.displayName} could not reach a valid target with ${plan.action.name}`;
     state.log.push(event(state, "AutomationWarning", warning, {
       combatantId: actor.id,
@@ -256,6 +425,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   if (plan.target.state !== "active") {
+    maybeSpendBonusAction(state, actor, tactics);
     return undefined;
   }
 
@@ -271,20 +441,22 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     reasons: plan.reasons
   }));
 
-  if (plan.action.kind === "attack") {
-    const targets = plan.action.attackDelivery === "beams"
-      ? beamTargets(state.snapshot, actor, plan.action, plan.target, plan.range)
-      : plan.target.id;
-    resolveAttack(state, actor.id, targets, plan.action.id);
-  } else if (plan.action.kind === "multiattack") {
-    resolveMultiattackAction(state, actor.id, plan.target.id, plan.action.id);
-  } else if (plan.action.kind === "save") {
-    resolveSaveAction(state, actor.id, plan.target.id, plan.action.id);
-  } else if (plan.action.kind === "area-save") {
-    resolveAreaSaveAction(state, actor.id, plan.target.position, plan.action.id);
-  }
+  executeOffensivePlan(state, actor, plan);
+
   if (!movedThisTurn && actor.state === "active" && tactics.reposition) {
-    const reposition = bestRepositionAfterAction(state.snapshot, actor, plan.target, plan.range, tactics);
+    let reposition = bestRepositionAfterAction(state.snapshot, actor, plan.target, plan.range, tactics);
+    // If the only worthwhile reposition would provoke, spend a granted bonus
+    // Disengage (Cunning Action) and recompute — the path is now free.
+    if (reposition && reposition.opportunityThreats > 0 && canAct(actor, "bonus")) {
+      const disengageId = utilityActionId(state.snapshot, actor, "disengage", "bonus");
+      if (disengageId) {
+        try {
+          resolveUtilityAction(state, actor.id, disengageId);
+          state.log.push(event(state, "AiDecision", `${actor.displayName} disengaged (bonus action)`, { combatantId: actor.id }));
+          reposition = bestRepositionAfterAction(state.snapshot, actor, plan.target, plan.range, tactics);
+        } catch { /* map state moved on */ }
+      }
+    }
     if (reposition) {
       try {
         moveCombatant(state, actor.id, reposition.cell);
@@ -304,6 +476,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       }
     }
   }
+
+  maybeSpendBonusAction(state, actor, tactics);
   return undefined;
 }
 
@@ -429,7 +603,11 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
   }
 }
 
-function selectHealingAction(snapshot: EncounterSnapshot, actor: CombatantState): HealingPlan | undefined {
+function selectHealingAction(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  slot: "action" | "bonus" = "action"
+): HealingPlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const woundedAllies = snapshot.combatants
     .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
@@ -438,7 +616,10 @@ function selectHealingAction(snapshot: EncounterSnapshot, actor: CombatantState)
       return combatant.currentHp < allyDefinition.maxHp;
     });
   const healingActions = getExecutableActions(definition)
-    .filter((action): action is HealingAction => action.kind === "healing" && action.automationSupport === "full" && canPayResource(actor, action));
+    .filter((action): action is HealingAction => action.kind === "healing"
+      && action.actionType === slot
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
   const candidates = healingActions.flatMap((action) => woundedAllies.map((target) => {
     const targetDefinition = getDefinition(snapshot, target);
     const missingHp = targetDefinition.maxHp - target.currentHp;
@@ -512,13 +693,14 @@ function hasActiveFeatureCondition(actor: CombatantState, featureId: string): bo
 function selectOffensivePlan(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
-  tactics: TacticsSettings
+  tactics: TacticsSettings,
+  slot: "action" | "bonus" = "action"
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
   const candidates = getExecutableActions(definition)
-    .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === "action" && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+    .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === slot && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
     .flatMap((action) => hostiles.map((target) => {
       const targetDefinition = getDefinition(snapshot, target);
       const range = actionRange(action, definition);
@@ -601,7 +783,10 @@ function selectOffensivePlan(
         if (friendlyRisk > 0) reasons.push("friendly fire risk");
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
-    }));
+    }))
+    // A bonus action is a follow-up: the actor has already moved / acted, so only
+    // targets it can hit from where it stands count.
+    .filter((plan) => slot === "action" || plan.reachableNow);
 
   candidates.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.target.id.localeCompare(b.target.id));
   return candidates[0];

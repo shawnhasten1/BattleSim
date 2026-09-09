@@ -1,5 +1,5 @@
 import { combatantsInArea } from "./areas";
-import { rollDice, abilityModifier, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
+import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
@@ -520,7 +520,17 @@ export function resolveMultiattackAction(
   attackerId: Id,
   targetIds: Id | Id[],
   actionId: Id,
-  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number } = {}
+  options: {
+    advantage?: boolean;
+    disadvantage?: boolean;
+    coverBonus?: number;
+    /**
+     * One target id per individual attack (flattened across every step × count),
+     * consumed in order. Overrides `targetGroup`; falls through to the next live
+     * `targetIds` entry when the assigned target is already down.
+     */
+    attackTargetIds?: Id[];
+  } = {}
 ): MultiattackResult {
   const ids = (Array.isArray(targetIds) ? targetIds : [targetIds]).filter(Boolean);
   if (ids.length === 0) {
@@ -551,6 +561,7 @@ export function resolveMultiattackAction(
   };
 
   const attacks: AttackResult[] = [];
+  let flatIndex = 0;
   for (const step of action.attacks) {
     const child = findActionDefinition(attackerDefinition, step.actionId);
     if (!child || child.kind !== "attack") {
@@ -561,7 +572,12 @@ export function resolveMultiattackAction(
       if (attacker.state !== "active") {
         break;
       }
-      const target = pickTarget(step.targetGroup ?? 0);
+      const explicitId = options.attackTargetIds?.[flatIndex];
+      flatIndex += 1;
+      const explicit = explicitId
+        ? state.snapshot.combatants.find((c) => c.id === explicitId)
+        : undefined;
+      const target = isLiveTarget(explicit) ? explicit : pickTarget(step.targetGroup ?? 0);
       if (!target) {
         break;
       }
@@ -2965,10 +2981,25 @@ function reactionTriggerPasses(
   }
 }
 
-/** Crude value gate for `priority: "worthwhile"` — Phase 4 replaces this with the full EV bar. */
+/** Rough mean of every dice expression in a damage list (used only for AI gating, not resolution). */
+function roughAverageDamage(components: ReadonlyArray<{ dice: string }> | undefined): number {
+  let total = 0;
+  for (const component of components ?? []) {
+    try {
+      const parsed = parseDiceExpression(component.dice);
+      total += parsed.modifier + parsed.terms.reduce((sum, term) => sum + term.sign * term.count * (term.sides + 1) / 2, 0);
+    } catch {
+      // unparseable expression — ignore
+    }
+  }
+  return total;
+}
+
+/** Value gate for `priority: "worthwhile"`: fire only when the reaction is clearly worth the slot. */
 function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, event: ReactionEvent): boolean {
   const { action, meta } = reaction;
   if (meta.trigger.kind === "enemy-casts-spell") {
+    // Counter a real spell; let a cantrip / 1st-level through.
     return (event.spellLevel ?? 0) >= 2;
   }
   if (meta.trigger.kind === "ally-targeted-by-attack") {
@@ -2976,9 +3007,9 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
     const allyDefinition = ally ? getDefinition(state.snapshot, ally) : undefined;
     return !!ally && !!allyDefinition && ally.currentHp * 2 <= allyDefinition.maxHp;
   }
-  // Any reaction that deals damage clears the bar.
+  // A damaging reaction (Hellish Rebuke) is worth it once it averages ~4+.
   return (action.kind === "attack" || action.kind === "save" || action.kind === "area-save")
-    && (action.damage?.length ?? 0) > 0;
+    && roughAverageDamage(action.damage) >= 4;
 }
 
 function eligibleReactionFor(

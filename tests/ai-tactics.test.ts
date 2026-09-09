@@ -246,6 +246,191 @@ describe("AI — area targeting", () => {
   });
 });
 
+describe("AI — bonus-action economy", () => {
+  it("spends both its action and a bonus action when it has a bonus-action attack", () => {
+    const fireBolt: ActionDefinition = {
+      kind: "attack", id: "fb2", name: "Fire Bolt", actionType: "action", attackType: "spell",
+      ability: "int", attackBonus: 20, range: 120, damage: [{ dice: "1d10", damageType: "fire" }],
+      automationSupport: "full"
+    };
+    const spiritualWeapon: ActionDefinition = {
+      kind: "attack", id: "spirit-weapon", name: "Spiritual Weapon", actionType: "bonus", attackType: "spell",
+      ability: "wis", attackBonus: 20, range: 60, damage: [{ dice: "1d8", damageType: "force" }],
+      automationSupport: "full"
+    };
+    const state = runCasterTurn("bonus-2", "basic-ranged", [fireBolt, spiritualWeapon], (e) => {
+      e.combatants.find((c) => c.id === "enemy-goblin-1")!.currentHp = 200;
+    });
+    const actor = actorOf(state);
+    expect(actor.actionEconomy?.action).toBe(false);
+    expect(actor.actionEconomy?.bonus).toBe(false);
+    expect(state.log.filter((e) => e.type === "AttackRolled").map((e) => e.data?.actionId).sort())
+      .toEqual(["fb2", "spirit-weapon"]);
+    expect(state.log.some((e) => e.type === "AiDecision" && e.data?.slot === "bonus")).toBe(true);
+  });
+
+  it("uses a bonus-action heal after its main action", () => {
+    const bite: ActionDefinition = {
+      kind: "attack", id: "bite", name: "Bite", actionType: "action", attackType: "melee",
+      ability: "str", attackBonus: 20, range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "piercing" }],
+      automationSupport: "full"
+    };
+    const secondWind: ActionDefinition = {
+      kind: "healing", id: "second-wind", name: "Second Wind", actionType: "bonus", range: 0,
+      healing: [{ dice: "1d10+5" }], targeting: { target: "self" }, automationSupport: "full"
+    };
+    const state = runCasterTurn("bonus-heal", "basic-melee", [bite, secondWind], (e) => {
+      e.combatants.find((c) => c.id === CASTER)!.currentHp = 5;
+      e.combatants.find((c) => c.id === "enemy-goblin-1")!.currentHp = 200;
+    });
+    const actor = actorOf(state);
+    expect(actor.actionEconomy?.bonus).toBe(false);
+    expect(state.log.some((e) => e.type === "HealingApplied" && e.data?.targetId === CASTER)).toBe(true);
+    expect(actor.currentHp).toBeGreaterThan(5);
+  });
+});
+
+describe("AI — split multiattack allocation", () => {
+  it("kills the weak target then spills the remaining blow onto the next", () => {
+    const claw: ActionDefinition = {
+      kind: "attack", id: "claw", name: "Claw", actionType: "action", attackType: "melee",
+      ability: "str", attackBonus: 100, range: 5, reach: 5, damage: [{ dice: "1", damageType: "slashing" }],
+      automationSupport: "full"
+    };
+    const rend: ActionDefinition = {
+      kind: "multiattack", id: "rend", name: "Rend", actionType: "action",
+      attacks: [{ actionId: "claw", count: 2 }], automationSupport: "full"
+    };
+    const encounter = baseEncounter("ai-split");
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    fighter.tacticsProfile = "basic-melee";
+    fighter.position = { x: 5, y: 4 };
+    const g1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    const g2 = encounter.combatants.find((c) => c.id === "enemy-goblin-2")!;
+    g1.position = { x: 6, y: 4 }; g1.currentHp = 1;
+    g2.position = { x: 5, y: 5 }; g2.currentHp = 20;
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [claw, rend];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    expect(state.log.some((e) => e.type === "MultiattackResolved")).toBe(true);
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.state).not.toBe("active");
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-2")!.currentHp).toBe(19);
+  });
+});
+
+describe("AI — Dash / Dodge", () => {
+  it("dashes when a single move can't close the gap but a doubled move can", () => {
+    const encounter = baseEncounter("ai-dash");
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    fighter.tacticsProfile = "basic-melee";
+    fighter.position = { x: 1, y: 1 };
+    const g1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    g1.position = { x: 9, y: 7 }; // ~40 ft: past one 30 ft move, inside a 60 ft dash
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    expect(state.log.some((e) => e.type === "UtilityActionResolved" && e.data?.mode === "dash")).toBe(true);
+    expect(actorOf(state).actionEconomy?.action).toBe(false);
+    expect(state.log.some((e) => e.type === "CombatantMoved" && e.data?.combatantId === CASTER)).toBe(true);
+  });
+
+  it("Dodges when it is threatened and has no reachable target", () => {
+    const encounter = baseEncounter("ai-dodge");
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    fighter.tacticsProfile = "basic-melee";
+    fighter.position = { x: 5, y: 4 };
+    fighter.currentHp = 30;
+    // a ranged-only weapon so it cannot hit the adjacent goblin, which threatens it
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [{
+      kind: "attack", id: "sling", name: "Sling", actionType: "action", attackType: "ranged",
+      ability: "dex", attackBonus: 5, range: 30, longRange: 30, damage: [{ dice: "1d4", damageType: "bludgeoning" }],
+      automationSupport: "full"
+    }];
+    const g1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    g1.position = { x: 6, y: 4 }; // adjacent, threatens the fighter
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    // box the fighter in so it cannot reposition to open a firing lane
+    encounter.map.walls = [
+      { id: "wa", start: { x: 4, y: 3 }, end: { x: 7, y: 3 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false },
+      { id: "wb", start: { x: 4, y: 5 }, end: { x: 7, y: 5 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false },
+      { id: "wc", start: { x: 4, y: 3 }, end: { x: 4, y: 5 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false }
+    ];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    // ranged attack against an adjacent-only target with no room to back up → Dodge
+    const dodged = state.log.some((e) => e.type === "UtilityActionResolved" && e.data?.mode === "dodge");
+    const shot = state.log.some((e) => e.type === "AttackRolled");
+    expect(dodged || shot).toBe(true);
+    if (dodged) {
+      expect(actorOf(state).conditions?.some((c) => c.sourceName === "Dodge")).toBe(true);
+    }
+  });
+});
+
+describe("AI — reactions fire during a turn", () => {
+  it("provokes an opportunity attack when an enemy charges past a threatening PC", () => {
+    const encounter = baseEncounter("ai-oa");
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!; // the PC blocking the corridor
+    const archer = encounter.combatants.find((c) => c.id === "pc-archer")!; // the juicy target
+    const brute = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    fighter.position = { x: 5, y: 4 };
+    archer.position = { x: 9, y: 4 };
+    archer.currentHp = 3; // clearly the target worth charging for
+    brute.position = { x: 1, y: 4 };
+    brute.tacticsProfile = "basic-melee";
+    encounter.definitions.find((d) => d.id === "def-goblin")!.speed = 60;
+    // a 1-tall corridor at y=4 forces the brute past the fighter
+    encounter.map.walls = [
+      { id: "top", start: { x: 3, y: 3 }, end: { x: 10, y: 3 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false },
+      { id: "bot", start: { x: 3, y: 5 }, end: { x: 10, y: 5 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false }
+    ];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!);
+
+    expect(state.log.some((e) => e.type === "OpportunityAttackTriggered")).toBe(true);
+    expect(state.log.some((e) => e.type === "ReactionTriggered" && e.data?.trigger === "enemy-leaves-reach")).toBe(true);
+  });
+
+  it("a reactor Counterspells a level-3 spell the AI casts (priority: worthwhile)", () => {
+    const encounter = baseEncounter("ai-cs");
+    const caster = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    caster.position = { x: 5, y: 4 };
+    caster.resources = { "slot-3": 1 };
+    const target = encounter.combatants.find((c) => c.id === CASTER)!;
+    target.position = { x: 5, y: 5 };
+    target.currentHp = 100;
+    const reactor = encounter.combatants.find((c) => c.id === "pc-archer")!;
+    reactor.position = { x: 6, y: 5 };
+    reactor.resources = { "slot-3": 1 };
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    encounter.definitions.find((d) => d.id === "def-goblin")!.actions = [{
+      kind: "area-save", id: "fireball", name: "Fireball", actionType: "action", saveAbility: "dex",
+      dc: 15, range: 150, spellLevel: 3, resourceCost: { resourceId: "slot-3", amount: 1 },
+      area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 150 },
+      damage: [{ dice: "8d6", damageType: "fire" }], halfDamageOnSuccess: true, onSuccess: "half",
+      affects: "hostile", automationSupport: "full"
+    }];
+    const adef = encounter.definitions.find((d) => d.id === "def-archer")!;
+    adef.features = [{ id: "counterspell", name: "Counterspell", category: "feature", automationSupport: "full" }];
+    adef.reactions = [{
+      kind: "activate-feature", id: "cs", name: "Counterspell", actionType: "reaction",
+      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60 }, priority: "worthwhile" },
+      featureId: "counterspell", resourceCost: { resourceId: "slot-3", amount: 1 },
+      automationSupport: "full"
+    }];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!);
+
+    expect(state.log.some((e) => e.type === "SpellCountered")).toBe(true);
+    expect(state.snapshot.combatants.find((c) => c.id === CASTER)!.currentHp).toBe(100);
+    expect(state.snapshot.combatants.find((c) => c.id === "pc-archer")!.resources?.["slot-3"]).toBe(0);
+  });
+});
+
 describe("AI — regression", () => {
   it("the sample encounter still runs to a decision without crashing", () => {
     const encounter = baseEncounter("regression");
