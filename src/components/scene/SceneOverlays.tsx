@@ -29,16 +29,21 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
     pendingWallStart,
     selectedCombatant,
     nearestEnemy,
-    selectedWallId,
+    selectedWallIds,
+    selectedWallNodes,
     selectedTerrainId,
     selectedTemplateId,
-    setSelectedWallId,
+    selectWall,
+    clearWallSelection,
     setSelectedTerrainId,
     setSelectedTemplateId,
     selectedTemplate,
     displayWalls,
+    openWallMenu,
+    openNodeMenu,
     wallNodes,
-    activeWallNode,
+    draggingWallNode,
+    wallDragPoint,
     wallCursorPoint,
     templateDraft,
     templatePreviewCells,
@@ -69,7 +74,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           onClick={(event) => {
             event.stopPropagation();
             setSelectedTerrainId(zone.id);
-            setSelectedWallId(null);
+            clearWallSelection();
             setSelectedTemplateId(null);
           }}
         />
@@ -108,7 +113,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
               onClick={(event) => {
                 event.stopPropagation();
                 setSelectedTemplateId(template.id);
-                setSelectedWallId(null);
+                clearWallSelection();
                 setSelectedTerrainId(null);
               }}
               onPointerDown={(event) => onTemplatePointerDown(event, template.id)}
@@ -126,20 +131,32 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
         </g>
       ) : null}
       {displayWalls.map((wall) => (
-        <line
-          key={wall.id}
-          x1={wall.start.x}
-          y1={wall.start.y}
-          x2={wall.end.x}
-          y2={wall.end.y}
-          className={`wall-line cover-${wallCover(wall)} ${wall.id === selectedWallId ? "selected" : ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            setSelectedWallId(wall.id);
-            setSelectedTerrainId(null);
-            setSelectedTemplateId(null);
-          }}
-        />
+        <g key={wall.id}>
+          {/* Invisible fat stroke so thin low/marker walls are actually clickable. */}
+          <line
+            x1={wall.start.x}
+            y1={wall.start.y}
+            x2={wall.end.x}
+            y2={wall.end.y}
+            className="wall-hit"
+            onClick={(event) => {
+              event.stopPropagation();
+              selectWall(wall.id, event.shiftKey);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openWallMenu(wall.id, event.clientX, event.clientY);
+            }}
+          />
+          <line
+            x1={wall.start.x}
+            y1={wall.start.y}
+            x2={wall.end.x}
+            y2={wall.end.y}
+            className={`wall-line cover-${wallCover(wall)} ${selectedWallIds.includes(wall.id) ? "selected" : ""}`}
+          />
+        </g>
       ))}
       {tool === "wall" && pendingWallStart && wallCursorPoint && !pointsMatch(pendingWallStart, wallCursorPoint) ? (
         <line
@@ -152,16 +169,26 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
       ) : null}
       {pendingWallStart ? <circle cx={pendingWallStart.x} cy={pendingWallStart.y} r="0.12" className="wall-start" /> : null}
       {tool === "wall" && wallCursorPoint ? <circle cx={wallCursorPoint.x} cy={wallCursorPoint.y} r="0.09" className="wall-cursor" /> : null}
-      {!replaying && wallNodes.map((node) => (
-        <circle
-          key={`${node.x}-${node.y}`}
-          cx={node.x}
-          cy={node.y}
-          r="0.11"
-          className={`wall-node ${activeWallNode && pointsMatch(activeWallNode, node) ? "selected" : ""}`}
-          onPointerDown={(event) => onWallNodePointerDown(event, node)}
-        />
-      ))}
+      {!replaying && wallNodes.map((node) => {
+        const nodeSelected =
+          selectedWallNodes.some((selected) => pointsMatch(selected, node)) ||
+          (draggingWallNode && wallDragPoint != null && pointsMatch(wallDragPoint, node));
+        return (
+          <circle
+            key={`${node.x}-${node.y}`}
+            cx={node.x}
+            cy={node.y}
+            r="0.11"
+            className={`wall-node ${nodeSelected ? "selected" : ""}`}
+            onPointerDown={(event) => onWallNodePointerDown(event, node)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openNodeMenu(node, event.clientX, event.clientY);
+            }}
+          />
+        );
+      })}
       {!replaying && selectedCombatant && nearestEnemy ? (
         <line
           x1={selectedCombatant.position.x + 0.5}

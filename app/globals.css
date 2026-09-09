@@ -512,8 +512,17 @@ img {
   stroke: #29251f;
   stroke-width: 0.12;
   stroke-linecap: round;
-  cursor: pointer;
+  /* Clicks / right-clicks ride the invisible .wall-hit sibling below. */
+  pointer-events: none;
+}
+
+/* Fat transparent hit target so thin low/marker walls stay clickable. */
+.wall-hit {
+  stroke: transparent;
+  stroke-width: 0.34;
+  stroke-linecap: round;
   pointer-events: stroke;
+  cursor: pointer;
 }
 
 /* Cover level reads by weight: solid full wall → faint dotted marker. */

@@ -57,6 +57,17 @@ describe("cover in combat", () => {
     expect(() => resolveAttack(state, "pc-archer", "enemy-goblin-1", "shortbow")).toThrow();
   });
 
+  it("a low wall with blocksProjectiles on refuses the shot; off allows it", () => {
+    const blocked = baseEncounter();
+    blocked.map.walls = [{ ...vWall("half"), blocksProjectiles: true }];
+    expect(() => resolveAttack(createEngineState(blocked), "pc-archer", "enemy-goblin-1", "shortbow")).toThrow();
+
+    const open = baseEncounter();
+    open.map.walls = [{ ...vWall("half"), blocksProjectiles: false }];
+    const { rolled } = shoot(open);
+    expect(rolled!.data!.cover).toBe("half");
+  });
+
   it("ignores cover when rules.cover is off", () => {
     const e = baseEncounter();
     e.map.walls = [vWall("three-quarters")];

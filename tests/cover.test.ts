@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { coverBetween, wallCover } from "@/engine";
+import { coverBetween, lineOfEffect, normalizeWall, wallCover } from "@/engine";
 import type { BattleMapState, WallSegment } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 
@@ -43,6 +43,42 @@ describe("wallCover", () => {
   it("an open or destroyed door grants no cover", () => {
     expect(wallCover(wall("w", [0, 0], [0, 4], { cover: "total", doorState: "open" }))).toBe("none");
     expect(wallCover(wall("w", [0, 0], [0, 4], { cover: "three-quarters", doorState: "destroyed" }))).toBe("none");
+  });
+});
+
+describe("normalizeWall — the three block flags are independent", () => {
+  it("keeps an explicit blocksProjectiles on a partial-cover wall", () => {
+    const w = normalizeWall(wall("w", [0, 0], [0, 4], { cover: "half", blocksProjectiles: true }));
+    expect(w.cover).toBe("half");
+    expect(w.blocksProjectiles).toBe(true);
+  });
+
+  it("leaves a partial-cover wall's blocksProjectiles alone when it's off", () => {
+    const w = normalizeWall(wall("w", [0, 0], [0, 4], { cover: "three-quarters", blocksProjectiles: false }));
+    expect(w.blocksProjectiles).toBe(false);
+  });
+
+  it("pins blocksProjectiles ON for total cover", () => {
+    const w = normalizeWall(wall("w", [0, 0], [0, 4], { cover: "total", blocksProjectiles: false }));
+    expect(w.blocksProjectiles).toBe(true);
+  });
+
+  it("backfills cover from a legacy blocksProjectiles wall", () => {
+    expect(normalizeWall(wall("w", [0, 0], [0, 4], { blocksProjectiles: true })).cover).toBe("total");
+    expect(normalizeWall(wall("w", [0, 0], [0, 4], { blocksProjectiles: false })).cover).toBe("none");
+  });
+});
+
+describe("blocksProjectiles gates line of effect independently of cover", () => {
+  it("a low wall that blocks projectiles stops the shot but still reads as half cover", () => {
+    const map = mapWith([wall("w", [5, 1], [5, 6], { cover: "half", blocksProjectiles: true })]);
+    expect(lineOfEffect(map, FROM, TO)).toBe(false);
+    expect(coverBetween(map, FROM, 1, TO, 1).level).toBe("half");
+  });
+
+  it("a low wall that does not block projectiles lets the shot through (fire over the wall)", () => {
+    const map = mapWith([wall("w", [5, 1], [5, 6], { cover: "half", blocksProjectiles: false })]);
+    expect(lineOfEffect(map, FROM, TO)).toBe(true);
   });
 });
 

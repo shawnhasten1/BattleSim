@@ -93,7 +93,8 @@ export function lineBlocked(
       ? wall.blocksMovement
       : mode === "sight"
         ? wall.blocksSight
-        : wallCover(wall) === "total";
+        // Line of effect: the wall's own flag, or total cover (which always blocks).
+        : wall.blocksProjectiles || wallCover(wall) === "total";
     return blocks && segmentIntersects(from, to, wall.start, wall.end);
   });
 }

@@ -51,6 +51,8 @@ import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/ma
 
 export type EditorTool = "select" | "move" | "measure" | "sight" | "wall" | "terrain" | "template" | "delete";
 
+export type WallUpdate = Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>;
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -106,12 +108,15 @@ interface EncounterStore {
   deleteLastWall: () => void;
   deleteLastTerrain: () => void;
   removeWall: (wallId: string) => void;
-  updateWall: (wallId: string, updates: Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>) => void;
+  removeWalls: (wallIds: string[]) => void;
+  updateWall: (wallId: string, updates: WallUpdate) => void;
+  updateWalls: (wallIds: string[], updates: WallUpdate) => void;
   /** Cover level applied to the next wall drawn with the wall tool. */
   wallCoverDraft: CoverLevel;
   setWallCoverDraft: (cover: CoverLevel) => void;
   moveWallNode: (from: Point, to: Point) => void;
   deleteWallNode: (point: Point) => void;
+  deleteWallNodes: (points: Point[]) => void;
   cancelWallPlacement: () => void;
   toggleDoorState: (wallId: string) => void;
   updateTerrain: (terrainId: string, updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
@@ -603,21 +608,27 @@ export const useEncounterStore = create<EncounterStore>()(
           map: { ...encounter.map, terrain: encounter.map.terrain.slice(0, -1) }
         });
       },
-      removeWall: (wallId) => {
+      removeWall: (wallId) => get().removeWalls([wallId]),
+      removeWalls: (wallIds) => {
+        if (wallIds.length === 0) return;
+        const ids = new Set(wallIds);
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
-          map: { ...encounter.map, walls: encounter.map.walls.filter((wall) => wall.id !== wallId) }
+          map: { ...encounter.map, walls: encounter.map.walls.filter((wall) => !ids.has(wall.id)) }
         });
       },
-      updateWall: (wallId, updates) => {
+      updateWall: (wallId, updates) => get().updateWalls([wallId], updates),
+      updateWalls: (wallIds, updates) => {
+        if (wallIds.length === 0) return;
+        const ids = new Set(wallIds);
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
           map: {
             ...encounter.map,
             walls: encounter.map.walls.map((wall) => {
-              if (wall.id !== wallId) return wall;
+              if (!ids.has(wall.id)) return wall;
               // Re-levelling via the `cover` select re-applies that level's block preset;
               // the individual checkboxes can then still be tuned (they don't carry `cover`).
               const presets = updates.cover !== undefined && updates.cover !== wall.cover
@@ -649,18 +660,20 @@ export const useEncounterStore = create<EncounterStore>()(
             : get().pendingWallStart
         });
       },
-      deleteWallNode: (point) => {
+      deleteWallNode: (point) => get().deleteWallNodes([point]),
+      deleteWallNodes: (points) => {
+        if (points.length === 0) return;
+        const touches = (p: Point) => points.some((point) => pointsMatch(p, point));
         const encounter = get().encounter;
+        const pending = get().pendingWallStart;
         commitEncounter({
           ...encounter,
           map: {
             ...encounter.map,
-            walls: encounter.map.walls.filter((wall) => !pointsMatch(wall.start, point) && !pointsMatch(wall.end, point))
+            walls: encounter.map.walls.filter((wall) => !touches(wall.start) && !touches(wall.end))
           }
         }, {
-          pendingWallStart: pointsMatch(get().pendingWallStart ?? { x: -1, y: -1 }, point)
-            ? null
-            : get().pendingWallStart
+          pendingWallStart: pending && touches(pending) ? null : pending
         });
       },
       cancelWallPlacement: () => set({ pendingWallStart: null }),

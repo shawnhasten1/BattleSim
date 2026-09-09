@@ -2,17 +2,25 @@
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo } from "react";
-import { getDefinition, sizeFootprint, type CombatantState, type CreatureDefinition } from "@/engine";
+import { getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
-import { clamp } from "@/components/scene/coords";
+import { clamp, pointsMatch } from "@/components/scene/coords";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { SceneOverlays } from "@/components/scene/SceneOverlays";
 import { TokenHealthBar } from "@/components/scene/TokenHealthBar";
 import { SceneFeedbackLayer } from "@/components/scene/SceneFeedbackLayer";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { UseViewportResult } from "@/hooks/useViewport";
+
+const WALL_COVER_ITEMS: Array<{ cover: CoverLevel; label: string }> = [
+  { cover: "total", label: "Solid wall" },
+  { cover: "three-quarters", label: "High wall — ¾ cover" },
+  { cover: "half", label: "Low wall — ½ cover" },
+  { cover: "none", label: "Marker — no cover" }
+];
 
 interface SceneCanvasProps {
   viewport: UseViewportResult;
@@ -40,6 +48,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const mapImageDataUrl = useEncounterStore((state) => state.mapImageDataUrl);
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
   const removeCombatant = useEncounterStore((state) => state.removeCombatant);
+  const updateWalls = useEncounterStore((state) => state.updateWalls);
+  const removeWalls = useEncounterStore((state) => state.removeWalls);
   const encounter = useDisplayEncounter();
   const replaying = useIsReplaying();
   const { floaties, areaFlashes } = useSceneFeedback(encounter);
@@ -70,6 +80,58 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       }),
     [encounter, cellSize]
   );
+
+  function wallMenuItems(): ContextMenuItem[] {
+    // The menu acts on the whole selection: the selected walls plus every wall
+    // touching a selected node.
+    const nodes = scene.selectedWallNodes;
+    const targetIds = Array.from(
+      new Set([
+        ...scene.selectedWallIds,
+        ...map.walls
+          .filter((wall) => nodes.some((node) => pointsMatch(node, wall.start) || pointsMatch(node, wall.end)))
+          .map((wall) => wall.id)
+      ])
+    );
+    const walls = targetIds
+      .map((id) => map.walls.find((wall) => wall.id === id))
+      .filter((wall): wall is WallSegment => Boolean(wall));
+    if (walls.length === 0) return [];
+
+    const n = walls.length;
+    const every = (predicate: (wall: WallSegment) => boolean) => walls.every(predicate);
+    const flag = (key: "blocksMovement" | "blocksSight" | "blocksProjectiles") => ({
+      label: key === "blocksMovement" ? "Movement" : key === "blocksSight" ? "Sight" : "Projectiles",
+      checked: every((wall) => wall[key]),
+      keepOpen: true,
+      disabled: key === "blocksProjectiles" && every((wall) => wallCover(wall) === "total"),
+      onSelect: () => updateWalls(targetIds, { [key]: !every((wall) => wall[key]) })
+    });
+
+    return [
+      { heading: n === 1 ? "Wall type" : `Wall type — ${n} selected` },
+      ...WALL_COVER_ITEMS.map((entry) => ({
+        label: entry.label,
+        checked: every((wall) => wallCover(wall) === entry.cover),
+        onSelect: () => updateWalls(targetIds, { cover: entry.cover })
+      })),
+      { separator: true },
+      { heading: "Blocks" },
+      flag("blocksMovement"),
+      flag("blocksSight"),
+      // Total cover always blocks line of effect, so the flag is pinned there.
+      flag("blocksProjectiles"),
+      { separator: true },
+      {
+        label: n === 1 ? "Delete segment" : `Delete ${n} segments`,
+        danger: true,
+        onSelect: () => {
+          removeWalls(targetIds);
+          scene.clearWallSelection();
+        }
+      }
+    ];
+  }
 
   return (
     <section
@@ -110,6 +172,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           ["--hp-anim-ms" as string]: `${tokenMoveMs}ms`
         } as CSSProperties}
         onClick={replaying ? undefined : scene.onMapClick}
+        onContextMenu={replaying ? undefined : scene.onMapContextMenu}
         onPointerMove={replaying ? undefined : scene.onMapPointerMove}
         onPointerLeave={replaying ? undefined : scene.onMapPointerLeave}
         onPointerUp={replaying ? undefined : scene.onMapPointerUp}
@@ -205,6 +268,15 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
 
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
       </div>
+
+      {scene.wallMenu && !replaying ? (
+        <ContextMenu
+          x={scene.wallMenu.x}
+          y={scene.wallMenu.y}
+          items={wallMenuItems()}
+          onClose={scene.closeWallMenu}
+        />
+      ) : null}
     </section>
   );
 }

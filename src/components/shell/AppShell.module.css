@@ -25,6 +25,8 @@
 .rail {
   flex-shrink: 0;
   width: 52px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Center slot. Flex so the canvas child fills both axes without needing its

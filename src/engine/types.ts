@@ -56,14 +56,17 @@ export interface WallSegment {
   id: Id;
   start: Point;
   end: Point;
+  /** Independent — a creature cannot path through this segment. */
   blocksMovement: boolean;
+  /** Independent — this segment blocks line of sight (vision / the LOS gizmo). */
   blocksSight: boolean;
   /**
-   * @deprecated Kept in sync with `cover === "total"`. Read `cover` (via
-   * `wallCover()`); this remains only as a fallback for pre-cover snapshots.
+   * Independent — this segment blocks line of effect (no shot through it at all).
+   * Always `true` when `cover === "total"` (`normalizeWall` pins it); free to set
+   * on any other level (e.g. a firing port: `half` cover, blocks projectiles off).
    */
   blocksProjectiles: boolean;
-  /** Cover this segment grants a creature tucked behind it. Authoritative for ranged AC / line of effect. */
+  /** How much AC / Dex-save bonus a creature tucked behind this segment gets (½ / ¾ / total). Its own axis. */
   cover?: CoverLevel;
   doorState?: "open" | "closed" | "locked" | "destroyed";
 }
@@ -75,7 +78,14 @@ export interface WallSegment {
  */
 export function normalizeWall(wall: WallSegment): WallSegment {
   const cover: CoverLevel = wall.cover ?? (wall.blocksProjectiles ? "total" : "none");
-  return { ...wall, cover, blocksProjectiles: cover === "total" };
+  return {
+    ...wall,
+    cover,
+    // The three block flags are independent. `cover` is a pure AC / Dex-save
+    // axis — except total cover, which always blocks line of effect (5e), so we
+    // pin the flag on there; every other level leaves it to the wall's own value.
+    blocksProjectiles: cover === "total" ? true : (wall.blocksProjectiles ?? false)
+  };
 }
 
 export interface TerrainZone {

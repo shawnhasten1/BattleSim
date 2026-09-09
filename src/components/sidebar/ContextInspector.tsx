@@ -29,13 +29,14 @@ interface ContextInspectorProps {
  */
 export function ContextInspector({ scene }: ContextInspectorProps) {
   const grid = useEncounterStore((state) => state.encounter.map.grid);
-  const tool = useEncounterStore((state) => state.tool);
-  const wallCoverDraft = useEncounterStore((state) => state.wallCoverDraft);
-  const setWallCoverDraft = useEncounterStore((state) => state.setWallCoverDraft);
+  const walls = useEncounterStore((state) => state.encounter.map.walls);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
   const deleteWallNode = useEncounterStore((state) => state.deleteWallNode);
+  const deleteWallNodes = useEncounterStore((state) => state.deleteWallNodes);
   const updateWall = useEncounterStore((state) => state.updateWall);
+  const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWall = useEncounterStore((state) => state.removeWall);
+  const removeWalls = useEncounterStore((state) => state.removeWalls);
   const toggleDoorState = useEncounterStore((state) => state.toggleDoorState);
   const updateTerrain = useEncounterStore((state) => state.updateTerrain);
   const removeTerrain = useEncounterStore((state) => state.removeTerrain);
@@ -48,6 +49,11 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
     setWallDragPoint,
     setDraggingWallNode,
     selectedWall,
+    selectedWallIds,
+    selectedWallNodes,
+    selectedWallCount,
+    selectedWallNodeCount,
+    clearWallSelection,
     setSelectedWallId,
     selectedTerrain,
     setSelectedTerrainId,
@@ -57,6 +63,12 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
     templateDraft,
     setTemplateDraft
   } = scene;
+
+  const multiWalls = selectedWallCount > 1 ? walls.filter((wall) => selectedWallIds.includes(wall.id)) : [];
+  const commonCover: CoverLevel | "" = multiWalls.length > 0
+    && multiWalls.every((wall) => (wall.cover ?? "none") === (multiWalls[0].cover ?? "none"))
+    ? (multiWalls[0].cover ?? "none")
+    : "";
 
   const patchTemplate = (patch: Partial<Omit<PlacedTemplate, "id">>) => {
     if (selectedTemplate) {
@@ -68,17 +80,51 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
 
   return (
     <div className={styles.inspector}>
-      {tool === "wall" ? (
+      {selectedWallNodeCount > 1 ? (
         <section className={styles.block}>
-          <header><h4>Wall tool</h4></header>
+          <header>
+            <h4>Nodes ({selectedWallNodeCount} selected)</h4>
+            <button
+              type="button"
+              className={styles.danger}
+              title="Delete selected nodes"
+              onClick={() => {
+                deleteWallNodes(selectedWallNodes);
+                clearWallSelection();
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </header>
+          <p className={styles.hint}>Deletes every wall touching a selected node.</p>
+        </section>
+      ) : null}
+
+      {selectedWallCount > 1 ? (
+        <section className={styles.block}>
+          <header>
+            <h4>Walls ({selectedWallCount} selected)</h4>
+            <button
+              type="button"
+              className={styles.danger}
+              title="Delete selected walls"
+              onClick={() => {
+                removeWalls(selectedWallIds);
+                clearWallSelection();
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </header>
           <div className={styles.stack}>
             <label>
-              Cover for new walls
+              Cover
               <select
-                value={wallCoverDraft}
-                aria-label="New wall cover level"
-                onChange={(event) => setWallCoverDraft(event.target.value as CoverLevel)}
+                value={commonCover}
+                aria-label="Cover level for selected walls"
+                onChange={(event) => updateWalls(selectedWallIds, { cover: event.target.value as CoverLevel })}
               >
+                {commonCover === "" ? <option value="" disabled>Mixed</option> : null}
                 {COVER_LEVELS.map((level) => (
                   <option key={level.value} value={level.value}>{level.label}</option>
                 ))}
@@ -88,7 +134,7 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
         </section>
       ) : null}
 
-      {selectedWallNode ? (
+      {selectedWallNodeCount === 1 && selectedWallNode ? (
         <section className={styles.block}>
           <header>
             <h4>Selected node</h4>

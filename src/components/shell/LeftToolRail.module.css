@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  height: 100%;
+  min-height: 100%;
   padding: 10px 0;
   background: var(--ui-panel);
   border-right: 1px solid var(--ui-border);
@@ -19,6 +19,23 @@
   background: transparent;
   color: var(--ui-text-dim);
   cursor: pointer;
+}
+
+.tool.small {
+  width: 28px;
+  height: 28px;
+}
+
+/* Wall-type picker shown under "Draw walls" while the wall tool is active. */
+.subGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 2px 4px;
+  padding: 4px 0;
+  border-radius: 6px;
+  background: rgba(217, 138, 61, 0.09);
 }
 
 .tool:hover {
