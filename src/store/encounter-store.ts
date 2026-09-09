@@ -13,13 +13,13 @@ import {
   expireConditions,
   getDefinition,
   getExecutableActions,
-  moveCombatant,
   resolveDeathSave,
   resetActionEconomy,
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
   sampleEncounter,
+  sizeFootprint,
   takeAutomatedTurn,
   type BatchSimulationSummary,
   type CombatantExportPackage,
@@ -163,6 +163,14 @@ interface EncounterStore {
   updateCombatantVisuals: (combatantId: string, updates: Partial<TokenVisuals>) => void;
   updateDefinitionVisuals: (definitionId: string, updates: Partial<TokenVisuals>) => void;
   removeCombatant: (combatantId: string) => void;
+  /** Remove several combatants in one undo step. Keeps the current selection if it survives. */
+  removeCombatants: (combatantIds: string[]) => void;
+  /**
+   * Move a combatant to any cell — no reachability / opportunity-attack / cost
+   * check. The footprint is clamped onto the grid. One undo step; a no-op (no
+   * undo entry) when the cell is unchanged.
+   */
+  placeCombatant: (combatantId: string, cell: Point) => void;
   updateCreatureDefinition: (definitionId: string, updates: Partial<CreatureDefinition>) => void;
   updateCreatureAbility: (definitionId: string, ability: Ability, value: number) => void;
   addWeapon: (definitionId: string, input: { name: string; attackType: "melee" | "ranged"; ability: Ability; range: number; reach?: number; damageDice: string; damageType: DamageType }) => void;
@@ -175,6 +183,9 @@ interface EncounterStore {
   addMultiattack: (definitionId: string, input: { name: string; actionIds: string[]; count: number }) => void;
   removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
   mapBasicAttack: (definitionId: string, input?: { attackBonus?: number; damageDice?: string }) => void;
+  /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
+  duplicateCombatant: (combatantId: string) => void;
+  /** Clone whatever combatant is currently selected. Thin wrapper over `duplicateCombatant`. */
   duplicateSelected: () => void;
 }
 
@@ -405,28 +416,11 @@ export const useEncounterStore = create<EncounterStore>()(
         }
 
         const selectedId = state.selectedCombatantId;
-        if (state.tool !== "move") {
+        if (state.tool !== "move" || !selectedId) {
           return;
         }
-        if (!selectedId) {
-          return;
-        }
-        const engine = createEngineState(state.encounter);
-        engine.log = [...state.log];
-        try {
-          moveCombatant(engine, selectedId, point, { provokeOpportunityAttacks: state.encounter.round > 0 });
-          commitEncounter(engine.snapshot, { log: engine.log });
-        } catch {
-          set({
-            log: [...state.log, {
-              id: `illegal-move-${Date.now()}`,
-              round: state.encounter.round,
-              turnIndex: state.encounter.turnIndex,
-              type: "AutomationWarning",
-              message: "Destination is not reachable this turn"
-            }]
-          });
-        }
+        // Free placement: drop the token wherever clicked, no range / OA / cost.
+        get().placeCombatant(selectedId, point);
       },
       rollInitiativeNow: () => {
         const state = get();
@@ -1422,13 +1416,44 @@ export const useEncounterStore = create<EncounterStore>()(
         });
       },
       removeCombatant: (combatantId) => {
+        get().removeCombatants([combatantId]);
+      },
+      removeCombatants: (combatantIds) => {
         const encounter = get().encounter;
-        const combatants = encounter.combatants.filter((combatant) => combatant.id !== combatantId);
+        const doomed = new Set(combatantIds);
+        const combatants = encounter.combatants.filter((combatant) => !doomed.has(combatant.id));
+        if (combatants.length === encounter.combatants.length) {
+          return;
+        }
+        const currentSelection = get().selectedCombatantId;
+        const selectionSurvives = currentSelection != null && combatants.some((combatant) => combatant.id === currentSelection);
         commitEncounter({
           ...encounter,
           combatants
         }, {
-          selectedCombatantId: combatants[0]?.id ?? null
+          selectedCombatantId: selectionSurvives ? currentSelection : combatants[0]?.id ?? null
+        });
+      },
+      placeCombatant: (combatantId, cell) => {
+        const encounter = get().encounter;
+        const combatant = encounter.combatants.find((entry) => entry.id === combatantId);
+        if (!combatant) {
+          return;
+        }
+        const footprint = sizeFootprint(getDefinition(encounter, combatant).size);
+        const clampAxis = (value: number, span: number) =>
+          Math.min(Math.max(0, Math.floor(value)), Math.max(0, span - footprint));
+        const position = {
+          x: clampAxis(cell.x, encounter.map.grid.width),
+          y: clampAxis(cell.y, encounter.map.grid.height)
+        };
+        if (position.x === combatant.position.x && position.y === combatant.position.y) {
+          return;
+        }
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((entry) =>
+            entry.id === combatantId ? { ...entry, position } : entry)
         });
       },
       updateCreatureDefinition: (definitionId, updates) => {
@@ -1723,25 +1748,31 @@ export const useEncounterStore = create<EncounterStore>()(
           })
         });
       },
-      duplicateSelected: () => {
+      duplicateCombatant: (combatantId) => {
         const encounter = get().encounter;
-        const selected = encounter.combatants.find((combatant) => combatant.id === get().selectedCombatantId);
-        if (!selected) return;
-        const definition = encounter.definitions.find((candidate) => candidate.id === selected.definitionId);
+        const source = encounter.combatants.find((combatant) => combatant.id === combatantId);
+        if (!source) return;
+        const definition = encounter.definitions.find((candidate) => candidate.id === source.definitionId);
         if (!definition) return;
-        const duplicate = {
-          ...selected,
+        const duplicate: CombatantState = {
+          // Deep clone so nested state (conditions, resources, tokenVisuals) isn't
+          // shared with the source.
+          ...structuredClone(source),
           id: `combatant-${crypto.randomUUID()}`,
           displayName: `${definition.name} ${encounter.combatants.filter((combatant) => combatant.definitionId === definition.id).length + 1}`,
           position: findOpenCell(encounter),
           currentHp: definition.maxHp,
           tempHp: 0,
           initiative: undefined,
-          state: "active" as const
+          state: "active"
         };
         commitEncounter({ ...encounter, combatants: [...encounter.combatants, duplicate] }, {
           selectedCombatantId: duplicate.id
         });
+      },
+      duplicateSelected: () => {
+        const selectedId = get().selectedCombatantId;
+        if (selectedId) get().duplicateCombatant(selectedId);
       }
     });
     },

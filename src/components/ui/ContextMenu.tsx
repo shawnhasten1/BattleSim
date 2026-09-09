@@ -16,7 +16,24 @@ export type ContextMenuItem =
       keepOpen?: boolean;
     }
   | { separator: true }
-  | { heading: string };
+  | { heading: string }
+  | {
+      /**
+       * A horizontal +/- row (e.g. current HP). Renders one button per `steps`
+       * entry — negatives left of the value, positives right — and the buttons
+       * never close the menu, so you can nudge repeatedly.
+       */
+      stepper: {
+        label: string;
+        value: number;
+        /** Dim text after the value, e.g. `/ 30`. */
+        sub?: string;
+        /** Signed deltas, e.g. `[-5, -1, 1, 5]`. */
+        steps: number[];
+        onStep: (delta: number) => void;
+        disabled?: boolean;
+      };
+    };
 
 interface ContextMenuProps {
   /** Anchor point in viewport (client) coordinates — usually the cursor. */
@@ -88,6 +105,36 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           return (
             <div key={index} className={styles.heading} role="presentation">
               {item.heading}
+            </div>
+          );
+        }
+        if ("stepper" in item) {
+          const step = item.stepper;
+          const downs = step.steps.filter((n) => n < 0).sort((a, b) => a - b);
+          const ups = step.steps.filter((n) => n > 0).sort((a, b) => a - b);
+          return (
+            <div key={index} className={styles.stepperRow} role="group" aria-label={step.label}>
+              <div className={styles.stepperTop}>
+                <span className={styles.stepperLabel}>{step.label}</span>
+                <span className={styles.stepperValue}>
+                  {step.value}
+                  {step.sub ? <em>{step.sub}</em> : null}
+                </span>
+              </div>
+              <div className={styles.stepperControls}>
+                {[...downs, ...ups].map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    className={styles.stepBtn}
+                    disabled={step.disabled}
+                    aria-label={`${step.label} ${delta > 0 ? `+${delta}` : delta}`}
+                    onClick={() => step.onStep(delta)}
+                  >
+                    {delta > 0 ? `+${delta}` : delta}
+                  </button>
+                ))}
+              </div>
             </div>
           );
         }

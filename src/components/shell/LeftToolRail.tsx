@@ -21,7 +21,7 @@ interface ToolDef {
 
 const CORE_TOOLS: ToolDef[] = [
   { tool: "select", icon: <MousePointer2 size={18} />, label: "Select" },
-  { tool: "move", icon: <Move size={18} />, label: "Move token" },
+  { tool: "move", icon: <Move size={18} />, label: "Move / place token" },
   { tool: "measure", icon: <Ruler size={18} />, label: "Measure" },
   { tool: "wall", icon: <BrickWall size={18} />, label: "Draw walls" }
 ];

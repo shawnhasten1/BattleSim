@@ -167,6 +167,7 @@ export default function EncounterEditorPage() {
             showHealthBars={showHealthBars}
             onCanvasDragOver={onCanvasDragOver}
             onCanvasDrop={onCanvasDrop}
+            onEditActor={() => setSheetOpen(true)}
           />
         }
         sidebar={

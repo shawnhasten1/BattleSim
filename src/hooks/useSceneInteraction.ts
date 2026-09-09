@@ -25,6 +25,7 @@ import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
   clamp,
   getCellPoint,
+  getLocalPoint,
   getSnappedWallPoint,
   pointsMatch,
   uniqueWallNodes,
@@ -61,6 +62,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const tool = useEncounterStore((state) => state.tool);
   const pendingWallStart = useEncounterStore((state) => state.pendingWallStart);
   const handleMapClick = useEncounterStore((state) => state.handleMapClick);
+  const placeCombatant = useEncounterStore((state) => state.placeCombatant);
   const addTemplate = useEncounterStore((state) => state.addTemplate);
   const updateTemplate = useEncounterStore((state) => state.updateTemplate);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
@@ -85,7 +87,43 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const [sightEnd, setSightEnd] = useState<GridPoint | null>(null);
   const [templateDraft, setTemplateDraft] = useState<Omit<PlacedTemplate, "id">>(DEFAULT_TEMPLATE_DRAFT);
   const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null);
+  // Right-click-a-token menu. Carries the target id so the menu can act on it
+  // even before a future multi-selection model exists.
+  const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
+  // A token being dragged with the Move tool. `pixel` is the live cursor-tracked
+  // top-left (battlemap px) for a 1:1 feel; `cell` is where it will snap. The
+  // move is committed to the store once, on pointer-up.
+  const [draggedToken, setDraggedToken] = useState<
+    { id: string; cell: GridPoint; pixel: { x: number; y: number } | null } | null
+  >(null);
+  // The token that was just dropped — briefly tagged so it eases into its cell
+  // and fades back to full opacity instead of snapping.
+  const [droppingTokenId, setDroppingTokenId] = useState<string | null>(null);
+  // Offset (battlemap px) from the token's top-left to the grab point, so the
+  // token doesn't jump under the cursor when the drag starts.
+  const dragGrabRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dropTimerRef = useRef<number | null>(null);
   const suppressNextMapClickRef = useRef(false);
+
+  // Board multi-selection of tokens. Plain click replaces, Shift+click toggles.
+  // The store keeps a single `selectedCombatantId` (the "primary" — drives the
+  // sheet, sidebar, AI preview); this array is "primary + shift-added extras"
+  // and is what the token outlines and the token context menu act on. It always
+  // contains the primary unless the user has deliberately toggled everything off.
+  const [selectedCombatantIds, setSelectedCombatantIds] = useState<string[]>(
+    () => {
+      const primary = useEncounterStore.getState().selectedCombatantId;
+      return primary ? [primary] : [];
+    }
+  );
+  // The primary we last reconciled against, so the store subscription below can
+  // tell an *external* move of the selection (Combat panel row, turn advance,
+  // duplicate, delete re-point, scene load) from our own push.
+  const reconciledPrimaryRef = useRef<string | null>(useEncounterStore.getState().selectedCombatantId);
+  // Live mirror so the imperative helpers and the once-bound keydown listener
+  // can read the current set without stale closures.
+  const selectedCombatantIdsRef = useRef(selectedCombatantIds);
+  selectedCombatantIdsRef.current = selectedCombatantIds;
 
   const selectWall = useCallback((id: string, additive = false) => {
     setSelectedWallNodes([]);
@@ -110,6 +148,43 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     setSelectedWallNodes([]);
     setWallMenu(null);
   }, []);
+
+  /**
+   * Apply a board selection: keep the ref mirror in sync, push the newest member
+   * to the store's primary selection, and mark it reconciled so the store
+   * subscription treats it as ours (not an external move). `null` primary means
+   * the set was toggled fully empty — the store's primary is left as-is so the
+   * sheet keeps working.
+   */
+  const applyBoardSelection = useCallback((next: string[]) => {
+    selectedCombatantIdsRef.current = next;
+    const primary = next.length ? next[next.length - 1] : null;
+    reconciledPrimaryRef.current = primary;
+    setSelectedCombatantIds(next);
+    if (primary && primary !== useEncounterStore.getState().selectedCombatantId) {
+      useEncounterStore.getState().selectCombatant(primary);
+    }
+  }, []);
+
+  /**
+   * Select a token on the board. `additive` (Shift) toggles it in the set;
+   * otherwise the set is replaced with just this id. The store's primary
+   * selection follows the newest member.
+   */
+  const selectCombatantOnBoard = useCallback((id: string, additive = false) => {
+    const prev = selectedCombatantIdsRef.current;
+    const next = additive
+      ? (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+      : (prev.length === 1 && prev[0] === id ? prev : [id]);
+    if (next === prev) return;
+    applyBoardSelection(next);
+  }, [applyBoardSelection]);
+
+  /** Collapse the board selection back to just the store's primary (drop shift-added extras). */
+  const clearCombatantSelection = useCallback(() => {
+    const primary = useEncounterStore.getState().selectedCombatantId;
+    applyBoardSelection(primary ? [primary] : []);
+  }, [applyBoardSelection]);
 
   // Back-compat single-selection views (ContextInspector node editor, ScenePanel).
   const selectedWallId = selectedWallIds[0] ?? null;
@@ -245,7 +320,17 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       setSightEnd(null);
     }
     setWallMenu(null);
+    setTokenMenu(null);
+    setDraggedToken(null);
+    setDroppingTokenId(null);
   }, [tool]);
+
+  // Clear the drop timer on unmount.
+  useEffect(() => () => {
+    if (dropTimerRef.current !== null) {
+      window.clearTimeout(dropTimerRef.current);
+    }
+  }, []);
 
   // Drop selected walls that no longer exist (deleted from the menu / undone),
   // and close the menu once its target selection is empty.
@@ -260,6 +345,56 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       setWallMenu(null);
     }
   }, [wallMenu, selectedWallIds, selectedWallNodes]);
+
+  // Close the token menu / cancel a drag if the target combatant is gone
+  // (deleted from the menu, undone, scene swap).
+  useEffect(() => {
+    if (tokenMenu && !encounter.combatants.some((combatant) => combatant.id === tokenMenu.combatantId)) {
+      setTokenMenu(null);
+    }
+    setDraggedToken((current) =>
+      current && !encounter.combatants.some((combatant) => combatant.id === current.id) ? null : current
+    );
+  }, [encounter.combatants, tokenMenu]);
+
+  // Drop board-selected tokens that no longer exist (deleted / undone / scene swap).
+  useEffect(() => {
+    const prev = selectedCombatantIdsRef.current;
+    const live = prev.filter((id) => encounter.combatants.some((combatant) => combatant.id === id));
+    if (live.length === prev.length) {
+      return;
+    }
+    selectedCombatantIdsRef.current = live;
+    setSelectedCombatantIds(live);
+  }, [encounter.combatants]);
+
+  // Follow *external* moves of the store's primary selection (Combat panel row,
+  // turn advance, duplicate, delete re-point, scene load): collapse the board
+  // selection onto the new primary. Our own pushes set `reconciledPrimaryRef`
+  // first, so they're recognised here and skipped. Subscribing (vs. reading a
+  // selector) keeps this synchronous with the store write and immune to the
+  // stale-value races a bidirectional effect pair would hit.
+  useEffect(() => {
+    return useEncounterStore.subscribe((state, prevState) => {
+      if (state.selectedCombatantId === prevState.selectedCombatantId) {
+        return;
+      }
+      const primary = state.selectedCombatantId;
+      if (primary === reconciledPrimaryRef.current) {
+        return;
+      }
+      reconciledPrimaryRef.current = primary;
+      const prev = selectedCombatantIdsRef.current;
+      const next = !primary
+        ? (prev.length ? [] : prev)
+        : (prev.includes(primary) ? prev : [primary]);
+      if (next === prev) {
+        return;
+      }
+      selectedCombatantIdsRef.current = next;
+      setSelectedCombatantIds(next);
+    });
+  }, []);
 
   // Enter / Escape ends an in-progress wall chain without leaving the tool;
   // Escape with no chain clears the wall/node selection. Bound once; reads live
@@ -281,17 +416,21 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       }
       if (event.key === "Escape") {
         clearWallSelection();
+        if (selectedCombatantIdsRef.current.length > 1) {
+          clearCombatantSelection();
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clearWallSelection]);
+  }, [clearWallSelection, clearCombatantSelection]);
 
   /** Right-click on empty canvas: never show the browser menu; dismiss any open wall menu, else end a wall chain. */
   function onMapContextMenu(event: MouseEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (wallMenu) {
+    if (wallMenu || tokenMenu) {
       setWallMenu(null);
+      setTokenMenu(null);
       return;
     }
     const state = useEncounterStore.getState();
@@ -317,6 +456,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
    */
   function openWallMenu(wallId: string, x: number, y: number) {
     if (finishChainIfDrawing()) return;
+    setTokenMenu(null);
     if (!selectedWallIds.includes(wallId)) {
       selectWall(wallId, false);
     }
@@ -326,6 +466,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   /** Right-click a wall node: same replace-unless-selected rule, then open the menu. */
   function openNodeMenu(node: GridPoint, x: number, y: number) {
     if (finishChainIfDrawing()) return;
+    setTokenMenu(null);
     if (!selectedWallNodes.some((n) => pointsMatch(n, node))) {
       selectNode(node, false);
     }
@@ -334,6 +475,26 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
 
   const closeWallMenu = useCallback(() => {
     setWallMenu(null);
+  }, []);
+
+  /**
+   * Right-click a token: finish an in-progress wall chain (parity with the wall
+   * menu). If the token is already in the board selection the menu acts on the
+   * whole set; otherwise the selection is replaced with just this token (Foundry
+   * behaviour).
+   */
+  function openTokenMenu(combatantId: string, x: number, y: number) {
+    if (finishChainIfDrawing()) return;
+    setWallMenu(null);
+    clearWallSelection();
+    if (!selectedCombatantIds.includes(combatantId)) {
+      selectCombatantOnBoard(combatantId, false);
+    }
+    setTokenMenu({ x, y, combatantId });
+  }
+
+  const closeTokenMenu = useCallback(() => {
+    setTokenMenu(null);
   }, []);
 
   function onMapClick(event: MouseEvent<HTMLDivElement>) {
@@ -347,10 +508,16 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (!(event.target instanceof HTMLElement) || event.target.closest(".token")) {
       return;
     }
-    // A plain click on empty canvas (walls / nodes / terrain stop their own
-    // propagation) clears the wall/node selection — except while drawing walls.
-    if (tool !== "wall" && !event.shiftKey && (selectedWallIds.length > 0 || selectedWallNodes.length > 0)) {
-      clearWallSelection();
+    // A plain click on empty canvas (walls / nodes / terrain / tokens stop their
+    // own propagation) drops the wall/node selection and collapses a token
+    // multi-selection back to the primary — except while drawing walls.
+    if (tool !== "wall" && !event.shiftKey) {
+      if (selectedWallIds.length > 0 || selectedWallNodes.length > 0) {
+        clearWallSelection();
+      }
+      if (selectedCombatantIds.length > 1) {
+        clearCombatantSelection();
+      }
     }
     const point =
       tool === "wall"
@@ -404,6 +571,22 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       });
       return;
     }
+    if (draggedToken) {
+      const local = getLocalPoint(event.currentTarget, event.clientX, event.clientY);
+      const grab = dragGrabRef.current;
+      const rawX = local.x - grab.x;
+      const rawY = local.y - grab.y;
+      const pixel = {
+        x: clamp(rawX, 0, (grid.width - 1) * cellSize),
+        y: clamp(rawY, 0, (grid.height - 1) * cellSize)
+      };
+      const cell = {
+        x: clamp(Math.round(rawX / cellSize), 0, grid.width - 1),
+        y: clamp(Math.round(rawY / cellSize), 0, grid.height - 1)
+      };
+      setDraggedToken((current) => (current ? { ...current, pixel, cell } : current));
+      return;
+    }
     if (tool === "measure" && measureStart) {
       const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
       setMeasureEnd({ x: clamp(point.x, 0, grid.width - 1), y: clamp(point.y, 0, grid.height - 1) });
@@ -440,6 +623,32 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }
 
   function onMapPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (draggedToken) {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      // No-op inside the store when the cell is unchanged, so a plain click that
+      // didn't move adds no undo entry.
+      placeCombatant(draggedToken.id, draggedToken.cell);
+      const droppedId = draggedToken.id;
+      const moved = draggedToken.pixel !== null;
+      setDraggedToken(null);
+      if (moved) {
+        // Ease the token into its cell + back to full opacity.
+        setDroppingTokenId(droppedId);
+        if (dropTimerRef.current !== null) {
+          window.clearTimeout(dropTimerRef.current);
+        }
+        dropTimerRef.current = window.setTimeout(() => {
+          setDroppingTokenId(null);
+          dropTimerRef.current = null;
+        }, 180);
+      }
+      window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+      }, 50);
+      return;
+    }
     if (draggingTemplateId) {
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -478,6 +687,38 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     event.currentTarget.ownerSVGElement?.parentElement?.setPointerCapture?.(event.pointerId);
     setDraggingWallNode(true);
     setWallDragPoint(node);
+  }
+
+  /**
+   * Press a token with the Move tool to drag it. Shift+press instead toggles the
+   * token in the board multi-selection (no drag). Under every other tool this is
+   * a no-op and the button's own `onClick` handles select / delete.
+   */
+  function onTokenPointerDown(event: PointerEvent<HTMLButtonElement>, combatantId: string) {
+    if (tool !== "move" || event.button !== 0) {
+      return;
+    }
+    event.stopPropagation();
+    if (event.shiftKey) {
+      selectCombatantOnBoard(combatantId, true);
+      return;
+    }
+    const combatant = encounter.combatants.find((entry) => entry.id === combatantId);
+    if (!combatant) {
+      return;
+    }
+    event.preventDefault();
+    suppressNextMapClickRef.current = true;
+    selectCombatantOnBoard(combatantId, false);
+    const battlemap = event.currentTarget.closest<HTMLElement>(".battlemap");
+    const local = battlemap ? getLocalPoint(battlemap, event.clientX, event.clientY) : null;
+    // Where inside the token the grab landed, so it doesn't jump under the cursor.
+    dragGrabRef.current = local
+      ? { x: local.x - combatant.position.x * cellSize, y: local.y - combatant.position.y * cellSize }
+      : { x: cellSize / 2, y: cellSize / 2 };
+    battlemap?.setPointerCapture?.(event.pointerId);
+    setDroppingTokenId(null);
+    setDraggedToken({ id: combatantId, cell: combatant.position, pixel: null });
   }
 
   function onTemplatePointerDown(event: PointerEvent<SVGRectElement>, templateId: string) {
@@ -533,6 +774,17 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     openNodeMenu,
     closeWallMenu,
 
+    // token selection + context menu + drag
+    selectedCombatantIds,
+    selectedCombatantCount: selectedCombatantIds.length,
+    selectCombatantOnBoard,
+    clearCombatantSelection,
+    tokenMenu,
+    openTokenMenu,
+    closeTokenMenu,
+    draggedToken,
+    droppingTokenId,
+
     // templates
     templateDraft,
     setTemplateDraft,
@@ -560,7 +812,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     onMapPointerLeave,
     onMapPointerUp,
     onWallNodePointerDown,
-    onTemplatePointerDown
+    onTemplatePointerDown,
+    onTokenPointerDown
   };
 }
 

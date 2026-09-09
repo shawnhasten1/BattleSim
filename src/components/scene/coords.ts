@@ -37,6 +37,19 @@ function domScale(element: Pick<HTMLElement, "clientWidth" | "clientHeight" | "g
   };
 }
 
+/** Screen point -> battlemap-local pixels (un-snapped). Zoom/pan-correct. */
+export function getLocalPoint(
+  element: Pick<HTMLElement, "clientWidth" | "clientHeight" | "getBoundingClientRect">,
+  clientX: number,
+  clientY: number
+): { x: number; y: number } {
+  const { rect, scaleX, scaleY } = domScale(element);
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  };
+}
+
 /** Screen point -> integer grid cell (floored). Zoom/pan-correct. */
 export function getCellPoint(
   element: Pick<HTMLElement, "clientWidth" | "clientHeight" | "getBoundingClientRect">,
@@ -44,10 +57,10 @@ export function getCellPoint(
   clientY: number,
   cellSize: number
 ): GridPoint {
-  const { rect, scaleX, scaleY } = domScale(element);
+  const local = getLocalPoint(element, clientX, clientY);
   return {
-    x: Math.floor(((clientX - rect.left) * scaleX) / cellSize),
-    y: Math.floor(((clientY - rect.top) * scaleY) / cellSize)
+    x: Math.floor(local.x / cellSize),
+    y: Math.floor(local.y / cellSize)
   };
 }
 

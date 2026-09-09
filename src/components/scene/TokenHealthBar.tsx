@@ -10,6 +10,8 @@ interface TokenHealthBarProps {
   x: number;
   y: number;
   size: number;
+  /** Just-dropped after a drag — ease into place alongside the token. */
+  dropping?: boolean;
 }
 
 /**
@@ -20,12 +22,12 @@ interface TokenHealthBarProps {
  * Geometry + colour bands live in `app/globals.css` (`.token-hp`). Renders
  * nothing when there's no usable max HP.
  */
-export function TokenHealthBar({ current, max, out = false, x, y, size }: TokenHealthBarProps) {
+export function TokenHealthBar({ current, max, out = false, x, y, size, dropping = false }: TokenHealthBarProps) {
   if (!(max > 0)) return null;
   const ratio = current / max;
   return (
     <span
-      className={`token-hp tone-${hpTone(ratio)} ${out ? "out" : ""}`}
+      className={`token-hp tone-${hpTone(ratio)} ${out ? "out" : ""} ${dropping ? "dropping" : ""}`}
       style={{ left: x + 2, top: y + size + 3, width: Math.max(0, size - 4) }}
     >
       <i style={{ width: `${Math.round(clamp(ratio, 0, 1) * 100)}%` }} />

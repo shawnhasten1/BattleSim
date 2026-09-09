@@ -29,6 +29,8 @@ interface SceneCanvasProps {
   showHealthBars: boolean;
   onCanvasDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onCanvasDrop: (event: DragEvent<HTMLDivElement>) => void;
+  /** Open the floating actor sheet (owned by the page). Invoked from the token context menu. */
+  onEditActor?: () => void;
 }
 
 function tokenVisualsFor(definition: CreatureDefinition, combatant: CombatantState) {
@@ -42,12 +44,14 @@ function tokenVisualsFor(definition: CreatureDefinition, combatant: CombatantSta
  * Interaction state and pointer logic live in `useSceneInteraction` /
  * `useViewport`; this component only wires them to the DOM and renders.
  */
-export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanvasDragOver, onCanvasDrop }: SceneCanvasProps) {
+export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanvasDragOver, onCanvasDrop, onEditActor }: SceneCanvasProps) {
   const map = useEncounterStore((state) => state.encounter.map);
   const replaySpeed = useEncounterStore((state) => state.replaySpeed);
   const mapImageDataUrl = useEncounterStore((state) => state.mapImageDataUrl);
-  const selectCombatant = useEncounterStore((state) => state.selectCombatant);
   const removeCombatant = useEncounterStore((state) => state.removeCombatant);
+  const removeCombatants = useEncounterStore((state) => state.removeCombatants);
+  const duplicateCombatant = useEncounterStore((state) => state.duplicateCombatant);
+  const updateHp = useEncounterStore((state) => state.updateHp);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
   const encounter = useDisplayEncounter();
@@ -63,22 +67,36 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
 
   // One pass over the roster: everything the token, its HP bar, and any future
   // per-token overlay need, so the tokens and the overlay layer stay in sync.
+  // A token being dragged with the Move tool renders at the live cursor pixel
+  // (committed to the store only on drop) — both the token and its HP bar read
+  // `x`/`y` from here, so they move together.
+  const draggedToken = scene.draggedToken;
+  const droppingTokenId = scene.droppingTokenId;
   const tokenLayouts = useMemo(
     () =>
       encounter.combatants.map((combatant) => {
         const definition = getDefinition(encounter, combatant);
         const footprint = sizeFootprint(definition.size);
+        const drag = draggedToken?.id === combatant.id ? draggedToken : null;
+        const px = drag?.pixel
+          ? drag.pixel
+          : {
+              x: (drag ? drag.cell.x : combatant.position.x) * cellSize,
+              y: (drag ? drag.cell.y : combatant.position.y) * cellSize
+            };
         return {
           combatant,
           definition,
           size: footprint * cellSize,
-          x: combatant.position.x * cellSize,
-          y: combatant.position.y * cellSize,
+          x: px.x,
+          y: px.y,
+          dragging: Boolean(drag),
+          dropping: droppingTokenId === combatant.id,
           visuals: tokenVisualsFor(definition, combatant),
           hpOut: combatant.currentHp <= 0 || combatant.state !== "active"
         };
       }),
-    [encounter, cellSize]
+    [encounter, cellSize, draggedToken, droppingTokenId]
   );
 
   function wallMenuItems(): ContextMenuItem[] {
@@ -133,6 +151,62 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
     ];
   }
 
+  function tokenMenuItems(combatantId: string): ContextMenuItem[] {
+    // Right-clicking a member of a 2+ selection acts on the whole set; anything
+    // else acts on just the right-clicked token.
+    const ids = scene.selectedCombatantIds.includes(combatantId)
+      ? scene.selectedCombatantIds
+      : [combatantId];
+
+    if (ids.length >= 2) {
+      const present = ids.filter((id) => encounter.combatants.some((entry) => entry.id === id));
+      return [
+        { heading: `${present.length} tokens` },
+        { label: "Duplicate all", onSelect: () => present.forEach((id) => duplicateCombatant(id)) },
+        {
+          label: "Delete all",
+          danger: true,
+          onSelect: () => {
+            removeCombatants(present);
+            scene.clearCombatantSelection();
+          }
+        }
+      ];
+    }
+
+    const combatant = encounter.combatants.find((entry) => entry.id === ids[0]);
+    if (!combatant) return [];
+    const maxHp = getDefinition(encounter, combatant).maxHp;
+    const hp = combatant.currentHp;
+
+    return [
+      { heading: combatant.displayName },
+      {
+        label: "Edit sheet",
+        onSelect: () => {
+          scene.selectCombatantOnBoard(combatant.id, false);
+          onEditActor?.();
+        }
+      },
+      { separator: true },
+      { heading: "Health" },
+      {
+        stepper: {
+          label: "HP",
+          value: hp,
+          sub: `/ ${maxHp}`,
+          steps: [-5, -1, 1, 5],
+          onStep: (delta) => updateHp(combatant.id, clamp(hp + delta, 0, maxHp))
+        }
+      },
+      { label: "Set to full", disabled: hp >= maxHp, onSelect: () => updateHp(combatant.id, maxHp) },
+      { label: "Down (0 HP)", disabled: hp <= 0, onSelect: () => updateHp(combatant.id, 0) },
+      { separator: true },
+      { label: "Duplicate", onSelect: () => duplicateCombatant(combatant.id) },
+      { label: "Delete", danger: true, onSelect: () => removeCombatant(combatant.id) }
+    ];
+  }
+
   return (
     <section
       ref={viewport.stageRef}
@@ -161,7 +235,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         <button type="button" onClick={viewport.resetViewport} title="Reset viewport"><Crosshair size={16} /></button>
       </div>
       <div
-        className="battlemap scene-canvas"
+        className={`battlemap scene-canvas ${tool === "move" && !replaying ? "tool-move" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
@@ -213,14 +287,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           replaying={replaying}
           areaFlashes={areaFlashes}
         />
-        {tokenLayouts.map(({ combatant, size, x, y, visuals }) => {
+        {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals }) => {
           const tokenImage = visuals.imageUrl;
           const tokenScale = clamp(visuals.scale ?? 1, 0.5, 1.5);
           return (
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${combatant.id === scene.selectedCombatant?.id ? "selected" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""}`}
               style={{
                 left: x,
                 top: y,
@@ -228,7 +302,27 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                 height: size,
                 borderColor: visuals.borderColor ?? undefined
               }}
-              onClick={() => (tool === "delete" && !replaying ? removeCombatant(combatant.id) : selectCombatant(combatant.id))}
+              onPointerDown={replaying ? undefined : (event) => scene.onTokenPointerDown(event, combatant.id)}
+              onClick={(event) => {
+                if (replaying) return;
+                if (tool === "delete") {
+                  removeCombatant(combatant.id);
+                  return;
+                }
+                // The Move tool drives select / drag / place from the pointer
+                // handlers; its trailing click is inert here.
+                if (tool === "move") return;
+                scene.selectCombatantOnBoard(combatant.id, event.shiftKey);
+              }}
+              onContextMenu={
+                replaying
+                  ? undefined
+                  : (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      scene.openTokenMenu(combatant.id, event.clientX, event.clientY);
+                    }
+              }
               title={combatant.displayName}
             >
               {tokenImage ? (
@@ -252,7 +346,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         {/* Above every token so an adjacent token never covers a bar. */}
         {showHealthBars ? (
           <div className="token-overlay-layer" aria-hidden="true">
-            {tokenLayouts.map(({ combatant, definition, size, x, y, hpOut }) => (
+            {tokenLayouts.map(({ combatant, definition, size, x, y, hpOut, dropping }) => (
               <TokenHealthBar
                 key={combatant.id}
                 current={combatant.currentHp}
@@ -261,6 +355,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                 x={x}
                 y={y}
                 size={size}
+                dropping={dropping}
               />
             ))}
           </div>
@@ -275,6 +370,15 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           y={scene.wallMenu.y}
           items={wallMenuItems()}
           onClose={scene.closeWallMenu}
+        />
+      ) : null}
+
+      {scene.tokenMenu && !replaying ? (
+        <ContextMenu
+          x={scene.tokenMenu.x}
+          y={scene.tokenMenu.y}
+          items={tokenMenuItems(scene.tokenMenu.combatantId)}
+          onClose={scene.closeTokenMenu}
         />
       ) : null}
     </section>

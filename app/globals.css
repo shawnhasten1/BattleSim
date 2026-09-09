@@ -266,9 +266,11 @@ img {
   font-size: 13px;
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
-  /* 0ms outside replay (set inline on .battlemap) so editing stays instant;
-     during replay/watch-mode tokens glide between cells. */
-  transition: left var(--token-move-ms, 0ms) ease, top var(--token-move-ms, 0ms) ease;
+  /* Position: 0ms outside replay (set inline on .battlemap) so editing stays
+     instant; glides between cells during replay/watch-mode. Opacity / transform
+     always ease so pick-up and drop read as a gesture. */
+  transition: left var(--token-move-ms, 0ms) ease, top var(--token-move-ms, 0ms) ease,
+    opacity 0.18s ease, transform 0.14s ease, box-shadow 0.14s ease;
 }
 
 .token.image-token {
@@ -341,6 +343,11 @@ img {
   transition: left var(--token-move-ms, 0ms) ease, top var(--token-move-ms, 0ms) ease;
 }
 
+/* Ease into place alongside a just-dropped token. */
+.token-hp.dropping {
+  transition: left 0.16s ease, top 0.16s ease;
+}
+
 .token-hp > i {
   display: block;
   height: 100%;
@@ -383,6 +390,28 @@ img {
 .token.selected {
   outline: 3px solid var(--ui-accent-soft);
   outline-offset: 2px;
+}
+
+/* Move tool: tokens read as draggable, and the one in hand lifts and fades. */
+.tool-move .token {
+  cursor: grab;
+}
+
+.token.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+  transform: scale(1.08);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+  z-index: 5;
+  /* Follow the cursor 1:1 — no position easing while in hand. */
+  transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Just released: slide into the snapped cell and settle back to full opacity. */
+.token.dropping {
+  z-index: 5;
+  transition: left 0.16s ease, top 0.16s ease, opacity 0.2s ease, transform 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 /* ============================================================
