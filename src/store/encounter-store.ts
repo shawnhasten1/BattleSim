@@ -18,6 +18,7 @@ import {
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
+  runRepeatedSaves,
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
@@ -481,6 +482,7 @@ export const useEncounterStore = create<EncounterStore>()(
         if (currentActor && hasOpenActionEconomy(currentActor)) {
           if (currentActor.state === "active") {
             applyTimedFeatureEffects(engine, currentActor.id, "turn-end");
+            runRepeatedSaves(engine, currentActor.id, "turn-end");
           }
           expireConditions(engine, "end");
           closeActionEconomy(currentActor);
@@ -510,9 +512,11 @@ export const useEncounterStore = create<EncounterStore>()(
 
           expireConditions(engine, "start");
           applyTimedFeatureEffects(engine, combatant.id, "turn-start");
+          runRepeatedSaves(engine, combatant.id, "turn-start");
           resetActionEconomy(combatant);
           takeAutomatedTurn(engine, combatant);
           applyTimedFeatureEffects(engine, combatant.id, "turn-end");
+          runRepeatedSaves(engine, combatant.id, "turn-end");
           expireConditions(engine, "end");
           closeActionEconomy(combatant);
         }

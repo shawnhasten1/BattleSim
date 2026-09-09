@@ -166,6 +166,12 @@ export const DEFAULT_MAP_IMAGE_SETTINGS: MapImageSettings = {
 export interface DamageAdjustment {
   type: "resistance" | "immunity" | "vulnerability";
   damageType: DamageType;
+  /**
+   * When true this adjustment only applies to non-magical damage — a
+   * `DamageComponent` marked `magical` bypasses it (5e "resistance to … from
+   * nonmagical attacks"). Absent ⇒ applies to all damage of the type.
+   */
+  nonMagicalOnly?: boolean;
 }
 
 export interface NumericFormula {
@@ -440,6 +446,9 @@ export interface AttackActionDefinition {
   resourceCost?: ResourceCost;
   /** Using this action sets the actor's concentration (some spell attacks). */
   concentration?: boolean;
+  /** Base level of the spell this came from — stamped by `getExecutableActions`. Drives `upcast`. */
+  spellLevel?: number;
+  upcast?: SpellUpcast;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -463,6 +472,8 @@ export interface SaveActionDefinition {
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
   concentration?: boolean;
+  spellLevel?: number;
+  upcast?: SpellUpcast;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -485,6 +496,8 @@ export interface AreaSaveActionDefinition {
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
   concentration?: boolean;
+  spellLevel?: number;
+  upcast?: SpellUpcast;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -499,6 +512,8 @@ export interface HealingActionDefinition {
   targeting?: { target: "single" | "self" };
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
+  spellLevel?: number;
+  upcast?: SpellUpcast;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -709,6 +724,21 @@ export interface ConditionInstance {
     damageAdjustments?: DamageAdjustment[];
   };
   effects?: FeatureEffect[];
+  /**
+   * The bearer re-rolls this save at the given timing on its own turn; a success
+   * ends the condition. Set by `save-ends` / `repeatSaveAt` rider durations; the
+   * `dc` is resolved from the source at application time.
+   */
+  repeatSave?: {
+    ability: Ability;
+    dc: number;
+    timing: "turn-start" | "turn-end";
+  };
+  /**
+   * Sustained by a concentrating caster (`sourceCombatantId`). Breaking that
+   * caster's concentration ends every condition flagged this way.
+   */
+  concentration?: boolean;
 }
 
 export interface DeathSaveState {
@@ -795,6 +825,8 @@ export interface CombatLogEvent {
     | "ConditionApplied"
     | "ConditionExpired"
     | "FeatureEffectApplied"
+    | "RiderApplied"
+    | "BeamsResolved"
     | "OpportunityAttackTriggered"
     | "AiDecision"
     | "CombatantDowned"

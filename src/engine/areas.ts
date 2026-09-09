@@ -1,12 +1,15 @@
 import { footprintCells } from "./geometry";
 import type { AreaTemplate, BattleMapState, CombatantState, CreatureDefinition, Point } from "./types";
 
-export function cellsInArea(map: BattleMapState, origin: Point, template: AreaTemplate): Point[] {
+/** Unit vector the template points along. When omitted the template's cardinal `direction` is used. */
+export type AimVector = { x: number; y: number };
+
+export function cellsInArea(map: BattleMapState, origin: Point, template: AreaTemplate, aimVector?: AimVector): Point[] {
   const cells: Point[] = [];
   for (let y = 0; y < map.grid.height; y += 1) {
     for (let x = 0; x < map.grid.width; x += 1) {
       const cell = { x, y };
-      if (cellIntersectsArea(cell, origin, template, map.grid.distancePerSquare)) {
+      if (cellIntersectsArea(cell, origin, template, map.grid.distancePerSquare, aimVector)) {
         cells.push(cell);
       }
     }
@@ -19,9 +22,10 @@ export function combatantsInArea(
   origin: Point,
   template: AreaTemplate,
   combatants: CombatantState[],
-  definitionsById: Map<string, CreatureDefinition>
+  definitionsById: Map<string, CreatureDefinition>,
+  aimVector?: AimVector
 ): CombatantState[] {
-  const areaCellKeys = new Set(cellsInArea(map, origin, template).map(cellKey));
+  const areaCellKeys = new Set(cellsInArea(map, origin, template, aimVector).map(cellKey));
   return combatants.filter((combatant) => {
     const definition = definitionsById.get(combatant.definitionId);
     if (!definition || combatant.state !== "active") {
@@ -35,7 +39,8 @@ export function cellIntersectsArea(
   cell: Point,
   origin: Point,
   template: AreaTemplate,
-  distancePerSquare: number
+  distancePerSquare: number,
+  aimVector?: AimVector
 ): boolean {
   const dx = (cell.x + 0.5) - (origin.x + 0.5);
   const dy = (cell.y + 0.5) - (origin.y + 0.5);
@@ -47,28 +52,51 @@ export function cellIntersectsArea(
     case "square":
       return Math.abs(dx) <= sizeSquares / 2 && Math.abs(dy) <= sizeSquares / 2;
     case "rectangle": {
-      // `size` is the length along `direction`; `width` is the full lateral span.
-      // Aimed rectangles (toward a chosen point) arrive in phase 2c.
-      const direction = template.direction ?? "east";
+      // `size` is the length along the aim / direction axis; `width` is the full lateral span.
+      const { along, lateral } = projectDirectional(dx, dy, template.direction, aimVector);
       const halfWidth = ((template.width ?? distancePerSquare) / distancePerSquare) / 2;
-      const along = direction === "east" ? dx : direction === "west" ? -dx : direction === "south" ? dy : -dy;
-      const lateral = direction === "east" || direction === "west" ? Math.abs(dy) : Math.abs(dx);
-      return along >= 0 && along <= sizeSquares && lateral <= halfWidth;
+      return along >= 0 && along <= sizeSquares && Math.abs(lateral) <= halfWidth;
     }
     case "line": {
-      const direction = template.direction ?? "east";
+      const { along, lateral } = projectDirectional(dx, dy, template.direction, aimVector);
       const widthSquares = (template.width ?? distancePerSquare) / distancePerSquare;
-      if (direction === "east") return dx >= 0 && dx <= sizeSquares && Math.abs(dy) < widthSquares / 2;
-      if (direction === "west") return dx <= 0 && Math.abs(dx) <= sizeSquares && Math.abs(dy) < widthSquares / 2;
-      if (direction === "south") return dy >= 0 && dy <= sizeSquares && Math.abs(dx) < widthSquares / 2;
-      return dy <= 0 && Math.abs(dy) <= sizeSquares && Math.abs(dx) < widthSquares / 2;
+      return along >= 0 && along <= sizeSquares && Math.abs(lateral) < widthSquares / 2;
     }
     case "cone": {
-      const direction = template.direction ?? "east";
-      const forward = direction === "east" ? dx : direction === "west" ? -dx : direction === "south" ? dy : -dy;
-      const lateral = direction === "east" || direction === "west" ? Math.abs(dy) : Math.abs(dx);
-      return forward >= 0 && forward <= sizeSquares && lateral <= forward;
+      const { along, lateral } = projectDirectional(dx, dy, template.direction, aimVector);
+      // 90° cone: lateral spread never exceeds the forward distance.
+      return along >= 0 && along <= sizeSquares && Math.abs(lateral) <= along;
     }
+  }
+}
+
+/**
+ * Resolve a cell offset into forward ("along" the template) and sideways
+ * ("lateral") components. An `aimVector` rotates the axis toward an arbitrary
+ * point; otherwise the cardinal `direction` (default east) is used.
+ */
+function projectDirectional(
+  dx: number,
+  dy: number,
+  direction: AreaTemplate["direction"],
+  aimVector?: AimVector
+): { along: number; lateral: number } {
+  if (aimVector) {
+    const length = Math.hypot(aimVector.x, aimVector.y) || 1;
+    const ax = aimVector.x / length;
+    const ay = aimVector.y / length;
+    return {
+      along: dx * ax + dy * ay,
+      // perpendicular (rotate the aim axis 90°)
+      lateral: dx * -ay + dy * ax
+    };
+  }
+  switch (direction ?? "east") {
+    case "west": return { along: -dx, lateral: dy };
+    case "north": return { along: -dy, lateral: dx };
+    case "south": return { along: dy, lateral: dx };
+    case "east":
+    default: return { along: dx, lateral: dy };
   }
 }
 

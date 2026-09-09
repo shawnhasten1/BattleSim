@@ -20,6 +20,7 @@ import {
   resolveNumericFormula,
   resolveSaveDc,
   resolveSaveAction,
+  runRepeatedSaves,
   type EngineState
 } from "./combat";
 import { combatantsInArea } from "./areas";
@@ -124,6 +125,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       resetActionEconomy(actor);
       expireConditions(state, "start");
       applyTimedFeatureEffects(state, actor.id, "turn-start");
+      runRepeatedSaves(state, actor.id, "turn-start");
       state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`, { combatantId: actor.id }));
       const warning = takeAutomatedTurn(state, actor);
       if (warning) {
@@ -133,6 +135,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
         break;
       }
       applyTimedFeatureEffects(state, actor.id, "turn-end");
+      runRepeatedSaves(state, actor.id, "turn-end");
       expireConditions(state, "end");
     }
   }

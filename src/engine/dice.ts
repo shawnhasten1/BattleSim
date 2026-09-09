@@ -1,4 +1,5 @@
 import type { RandomSource } from "./rng";
+import type { DamageScaling } from "./types";
 
 export interface DiceTerm {
   count: number;
@@ -78,4 +79,38 @@ export function rollDice(expression: string, rng: RandomSource): DiceRollResult 
 
 export function abilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
+}
+
+/**
+ * Resolve a `DamageComponent`'s effective base dice once level-driven scaling is
+ * applied. `baseDice` is the level-1 / unupcast expression.
+ * - `cantrip-by-level`: pick the highest `step.atLevel <= casterLevel` (steps are
+ *   pre-sorted ascending by the normalizer); below the first step, `baseDice`.
+ * - `per-slot-above-base`: append `slotsAboveBase` copies of `scaling.dice`.
+ */
+export function resolveScaledDamage(
+  baseDice: string,
+  scaling: DamageScaling | undefined,
+  context: { casterLevel?: number; slotsAboveBase?: number } = {}
+): string {
+  if (!scaling) {
+    return baseDice;
+  }
+  if (scaling.mode === "cantrip-by-level") {
+    let dice = baseDice;
+    for (const step of scaling.steps) {
+      if ((context.casterLevel ?? 1) >= step.atLevel) {
+        dice = step.dice;
+      }
+    }
+    return dice;
+  }
+  const steps = Math.max(0, Math.floor(context.slotsAboveBase ?? 0));
+  return steps > 0 ? `${baseDice}+${Array.from({ length: steps }, () => scaling.dice).join("+")}` : baseDice;
+}
+
+/** Repeat a dice expression `times`, joined with `+` (e.g. multiply an upcast bonus). */
+export function repeatDice(dice: string, times: number): string {
+  const count = Math.max(0, Math.floor(times));
+  return count > 0 ? Array.from({ length: count }, () => dice).join("+") : "";
 }

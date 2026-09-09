@@ -1,17 +1,21 @@
 import { combatantsInArea } from "./areas";
-import { rollDice, abilityModifier, type DiceRollResult } from "./dice";
+import { rollDice, abilityModifier, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
+  Ability,
   ActionDefinition,
+  ActionRider,
   ActivateFeatureActionDefinition,
   AreaSaveActionDefinition,
   AttackActionDefinition,
   CombatLogEvent,
   CombatantState,
   ConditionInstance,
+  ConditionName,
   CoverLevel,
   CreatureDefinition,
+  DamageAdjustment,
   DamageComponent,
   DamageType,
   DamageTypeReference,
@@ -20,10 +24,13 @@ import type {
   FeatureEffect,
   FeatureEffectSaveGate,
   HealingActionDefinition,
+  HealingComponent,
   Id,
   MultiattackActionDefinition,
   NumericFormula,
   Point,
+  RiderDuration,
+  RiderGate,
   SaveActionDefinition
 } from "./types";
 
@@ -40,6 +47,8 @@ export interface AttackResult {
   total: number;
   targetAc: number;
   damageApplied: number;
+  /** Present when the action used `attackDelivery: "beams"` — one entry per beam. */
+  beams?: AttackResult[];
 }
 
 export interface MultiattackResult {
@@ -97,6 +106,10 @@ interface DamageApplicationEntry {
   sourceFeatureId?: Id;
   sourceFeatureName?: string;
   sourceEffectKind?: FeatureEffect["kind"];
+  /** Caster level for a component's `cantrip-by-level` scaling. */
+  casterLevel?: number;
+  /** Extra dice appended before crit-doubling (per-slot upcast bonus). */
+  extraDice?: string;
 }
 
 interface FeatureDamageResolution {
@@ -124,8 +137,7 @@ export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantS
 export function getExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
   const weaponActions = (definition.weapons ?? []).map((weapon) => weaponToAction(definition, weapon));
   const spellActions = (definition.spells ?? [])
-    .map((spell) => spell.action)
-    .filter((action): action is ActionDefinition => Boolean(action));
+    .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
   const grantedActions = [
     ...(definition.features ?? []),
     ...(definition.traits ?? [])
@@ -289,18 +301,111 @@ export function opportunityAttackThreats(snapshot: EncounterSnapshot, moverId: I
 export function resolveAttack(
   state: EngineState,
   attackerId: Id,
-  targetId: Id,
+  targetIds: Id | Id[],
   actionId: Id,
-  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number } = {}
+  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; slotLevel?: number } = {}
 ): AttackResult {
   const attacker = findCombatant(state.snapshot, attackerId);
-  const target = findCombatant(state.snapshot, targetId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
   const action = findActionDefinition(attackerDefinition, actionId);
   if (!action || action.kind !== "attack") {
     throw new Error(`Attack action ${actionId} is not available to ${attacker.displayName}`);
   }
+  const ids = Array.isArray(targetIds) ? targetIds : [targetIds];
+  if (ids.length === 0) {
+    throw new Error(`Attack action ${actionId} needs at least one target`);
+  }
+  if (action.attackDelivery === "beams") {
+    return resolveBeamAttack(state, attacker, attackerDefinition, action, ids, options);
+  }
+  const target = findCombatant(state.snapshot, ids[0] as Id);
   return resolveAttackCore(state, attacker, target, attackerDefinition, action, options, true);
+}
+
+function resolveBeamCount(action: AttackActionDefinition, casterLevel: number, slotLevel: number | undefined): number {
+  let count = action.beamCount ?? 1;
+  for (const step of action.beamCountByLevel ?? []) {
+    if (casterLevel >= step.atLevel) {
+      count = step.count;
+    }
+  }
+  if (slotLevel != null && action.spellLevel != null && action.upcast?.perSlotAboveBase?.beams) {
+    count += Math.max(0, slotLevel - action.spellLevel) * action.upcast.perSlotAboveBase.beams;
+  }
+  return Math.max(1, count);
+}
+
+function resolveAutoHitBeam(
+  state: EngineState,
+  attacker: CombatantState,
+  target: CombatantState,
+  attackerDefinition: CreatureDefinition,
+  action: AttackActionDefinition
+): AttackResult {
+  const casterLevel = casterLevelOf(attackerDefinition);
+  const damageApplied = applyDamageEntries(state, target, action.damage.map((component) => ({
+    component, critical: false, triggerDamageType: firstActionDamageType(action), casterLevel
+  })), attackerDefinition);
+  state.log.push(event(state, "AttackRolled", `${attacker.displayName} auto-hit ${target.displayName} with ${action.name}`, {
+    attackerId: attacker.id, targetId: target.id, actionId: action.id, autoHit: true, hit: true, critical: false, damageApplied
+  }));
+  if (action.riders?.length) {
+    applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
+      actionId: action.id, landed: true, saved: null, origin: attacker.position,
+      fallbackDc: 8 + (attackerDefinition.proficiencyBonus ?? proficiencyFromDefinition(attackerDefinition))
+    });
+  }
+  return {
+    hit: true, critical: false,
+    attackRoll: { expression: "auto-hit", rolls: [], modifier: 0, total: 0 },
+    total: 0, targetAc: 0, damageApplied
+  };
+}
+
+function resolveBeamAttack(
+  state: EngineState,
+  attacker: CombatantState,
+  attackerDefinition: CreatureDefinition,
+  action: AttackActionDefinition,
+  targetIds: Id[],
+  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; slotLevel?: number }
+): AttackResult {
+  validateAndSpendAction(attacker, action);
+  if (action.concentration) {
+    breakConcentration(state, attacker.id);
+  }
+  const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel);
+  declareAction(state, attacker, action, { target: findCombatant(state.snapshot, targetIds[0] as Id) });
+
+  const beams: AttackResult[] = [];
+  let totalDamage = 0;
+  for (let index = 0; index < beamCount; index += 1) {
+    const targetId = targetIds[Math.min(index, targetIds.length - 1)] as Id;
+    const target = findCombatant(state.snapshot, targetId);
+    if (target.state !== "active" && target.state !== "downed") {
+      continue;
+    }
+    const beam = action.autoHit
+      ? resolveAutoHitBeam(state, attacker, target, attackerDefinition, action)
+      : resolveAttackCore(state, attacker, target, attackerDefinition, action, { ...options, suppressDeclare: true }, false);
+    beams.push(beam);
+    totalDamage += beam.damageApplied;
+  }
+
+  state.log.push(event(state, "BeamsResolved", `${attacker.displayName} resolved ${action.name} (${beams.length} beams)`, {
+    attackerId: attacker.id, actionId: action.id, beams: beams.length, totalDamage, autoHit: action.autoHit === true
+  }));
+
+  const first = beams[0];
+  return {
+    hit: beams.some((beam) => beam.hit),
+    critical: beams.some((beam) => beam.critical),
+    attackRoll: first?.attackRoll ?? { expression: "beams", rolls: [], modifier: 0, total: 0 },
+    total: first?.total ?? 0,
+    targetAc: first?.targetAc ?? 0,
+    damageApplied: totalDamage,
+    beams
+  };
 }
 
 export function resolveMultiattackAction(
@@ -398,7 +503,7 @@ function resolveAttackCore(
   target: CombatantState,
   attackerDefinition: CreatureDefinition,
   action: AttackActionDefinition,
-  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number },
+  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; suppressDeclare?: boolean },
   spendAction: boolean,
   parentAction?: MultiattackActionDefinition
 ): AttackResult {
@@ -410,7 +515,10 @@ function resolveAttackCore(
   if (spendAction) {
     validateAndSpendAction(attacker, action);
   }
-  if (!parentAction) {
+  if (spendAction && action.concentration) {
+    breakConcentration(state, attacker.id);
+  }
+  if (!parentAction && !options.suppressDeclare) {
     declareAction(state, attacker, action, { target });
   }
 
@@ -438,9 +546,10 @@ function resolveAttackCore(
   const targetHitDamage = hit
     ? targetIncomingHitDamageEntries(state, attacker, target, action, { rollMode, critical })
     : { entries: [], sources: [] };
+  const casterLevel = casterLevelOf(attackerDefinition);
   const damageApplied = hit
     ? applyDamageEntries(state, target, [
-      ...action.damage.map((component) => ({ component, critical, triggerDamageType: firstActionDamageType(action) })),
+      ...action.damage.map((component) => ({ component, critical, triggerDamageType: firstActionDamageType(action), casterLevel })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
     ], attackerDefinition)
@@ -449,6 +558,14 @@ function resolveAttackCore(
   if (hit) {
     consumeTriggeredConditions(state, target, targetHitDamage.consumedConditionIds ?? []);
     appliedConditionEffects = applyOnHitFeatureConditions(state, attacker, target, action, attackerDefinition, { rollMode, critical });
+  }
+  if (action.riders?.length) {
+    const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
+      actionId: action.id, landed: hit, critical, saved: null, origin: attacker.position,
+      fallbackDc: 8 + (attackerDefinition.proficiencyBonus ?? proficiencyFromDefinition(attackerDefinition)),
+      concentrating: action.concentration
+    });
+    appliedConditionEffects = [...appliedConditionEffects, ...riderOutcome.appliedConditions];
   }
 
   const coverNote = cover.level !== "none" ? ` (${target.displayName} had ${coverLabel(cover.level)})` : "";
@@ -483,20 +600,27 @@ export function resolveSaveAction(
   state: EngineState,
   attackerId: Id,
   targetId: Id,
-  actionId: Id
+  actionId: Id,
+  options: { slotLevel?: number } = {}
 ): SaveResult {
   const attacker = findCombatant(state.snapshot, attackerId);
-  const target = findCombatant(state.snapshot, targetId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
-  const targetDefinition = getDefinition(state.snapshot, target);
   const action = findActionDefinition(attackerDefinition, actionId);
   if (!action || action.kind !== "save") {
     throw new Error(`Save action ${actionId} is not available to ${attacker.displayName}`);
   }
-  validateTargeting(state.snapshot, attacker, target, action);
+  const target = findCombatant(state.snapshot, action.targeting?.target === "self" ? attackerId : targetId);
+  const targetDefinition = getDefinition(state.snapshot, target);
+  if (action.targeting?.target !== "self") {
+    validateTargeting(state.snapshot, attacker, target, action);
+  }
   validateAndSpendAction(attacker, action);
+  if (action.concentration) {
+    breakConcentration(state, attackerId);
+  }
   declareAction(state, attacker, action, { target });
 
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
   const saveBonus = (targetDefinition.saves?.[action.saveAbility]
@@ -509,13 +633,26 @@ export function resolveSaveAction(
   });
   const dc = resolveSaveDc(action, attackerDefinition);
   const success = saveRoll.total >= dc;
-  const damageApplied = applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
-    halve: success && action.halfDamageOnSuccess
-  });
+  const onSuccess = resolveOnSuccess(action);
+  const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+  const damageApplied = dealsDamage
+    ? applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
+      halve: success && onSuccess === "half",
+      casterLevel: scaling.casterLevel,
+      extraDiceOnFirst: scaling.upcastDamageDice
+    })
+    : 0;
+
+  if (!(success && onSuccess === "negates")) {
+    applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
+      actionId, landed: true, saved: success, saveAbility: action.saveAbility, fallbackDc: dc,
+      concentrating: action.concentration, origin: attacker.position
+    });
+  }
 
   state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${action.saveAbility.toUpperCase()} save against ${action.name}`, {
     attackerId,
-    targetId,
+    targetId: target.id,
     actionId,
     saveRoll,
     total: saveRoll.total,
@@ -534,8 +671,9 @@ export function resolveSaveAction(
 export function resolveAreaSaveAction(
   state: EngineState,
   attackerId: Id,
-  origin: Point,
-  actionId: Id
+  aim: Point,
+  actionId: Id,
+  options: { slotLevel?: number } = {}
 ): AreaSaveResult {
   const attacker = findCombatant(state.snapshot, attackerId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
@@ -543,10 +681,31 @@ export function resolveAreaSaveAction(
   if (!action || action.kind !== "area-save") {
     throw new Error(`Area save action ${actionId} is not available to ${attacker.displayName}`);
   }
-  validateOriginTargeting(state.snapshot, attacker, origin, action);
+
+  // Resolve where the template sits and which way it points.
+  const footprint = sizeFootprint(attackerDefinition.size);
+  const selfOrigin: Point = {
+    x: Math.floor(attacker.position.x + (footprint - 1) / 2),
+    y: Math.floor(attacker.position.y + (footprint - 1) / 2)
+  };
+  const fromSelf = action.targeting?.origin === "self";
+  const origin = fromSelf ? selfOrigin : aim;
+  const aimVector = action.targeting?.aimedFromSelf
+    ? normalizeVector({ x: aim.x - selfOrigin.x, y: aim.y - selfOrigin.y })
+    : undefined;
+
+  if (!fromSelf) {
+    validateOriginTargeting(state.snapshot, attacker, origin, action);
+  }
   validateAndSpendAction(attacker, action);
+  if (action.concentration) {
+    breakConcentration(state, attackerId);
+  }
   declareAction(state, attacker, action, { origin });
 
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
+  const onSuccess = resolveOnSuccess(action);
+  const dc = resolveSaveDc(action, attackerDefinition);
   const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
   const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
     ? coverBetween(
@@ -558,7 +717,7 @@ export function resolveAreaSaveAction(
       { blockers: coverBlockersFor(state.snapshot, attacker.id, target.id) }
     )
     : null;
-  const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById)
+  const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, aimVector)
     .filter((target) => action.affects === "all" || target.faction !== attacker.faction)
     // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
     .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
@@ -574,11 +733,22 @@ export function resolveAreaSaveAction(
     const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
       advantage: featureSaveAdvantage.applied
     });
-    const dc = resolveSaveDc(action, attackerDefinition);
     const success = saveRoll.total >= dc;
-    const damageApplied = applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
-      halve: success && action.halfDamageOnSuccess
-    });
+    const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+    const damageApplied = dealsDamage
+      ? applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
+        halve: success && onSuccess === "half",
+        casterLevel: scaling.casterLevel,
+        extraDiceOnFirst: scaling.upcastDamageDice
+      })
+      : 0;
+
+    if (!(success && onSuccess === "negates")) {
+      applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
+        actionId, landed: true, saved: success, saveAbility: action.saveAbility, fallbackDc: dc,
+        concentrating: action.concentration, origin
+      });
+    }
 
     state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${action.saveAbility.toUpperCase()} save against ${action.name}`, {
       attackerId,
@@ -602,9 +772,15 @@ export function resolveAreaSaveAction(
     attackerId,
     actionId,
     origin,
+    aim,
     targets
   }));
   return { targets };
+}
+
+function normalizeVector(vector: { x: number; y: number }): { x: number; y: number } {
+  const length = Math.hypot(vector.x, vector.y);
+  return length === 0 ? { x: 1, y: 0 } : { x: vector.x / length, y: vector.y / length };
 }
 
 export function resolveHealingAction(
@@ -614,14 +790,16 @@ export function resolveHealingAction(
   actionId: Id
 ): HealingResult {
   const healer = findCombatant(state.snapshot, healerId);
-  const target = findCombatant(state.snapshot, targetId);
   const healerDefinition = getDefinition(state.snapshot, healer);
-  const targetDefinition = getDefinition(state.snapshot, target);
   const action = findActionDefinition(healerDefinition, actionId);
   if (!action || action.kind !== "healing") {
     throw new Error(`Healing action ${actionId} is not available to ${healer.displayName}`);
   }
-  validateHealingTargeting(state.snapshot, healer, target, action);
+  const target = findCombatant(state.snapshot, action.targeting?.target === "self" ? healerId : targetId);
+  const targetDefinition = getDefinition(state.snapshot, target);
+  if (action.targeting?.target !== "self") {
+    validateHealingTargeting(state.snapshot, healer, target, action);
+  }
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, { target });
 
@@ -641,12 +819,19 @@ export function resolveHealingAction(
 
   state.log.push(event(state, "HealingApplied", `${target.displayName} regained ${healingApplied} HP`, {
     healerId,
-    targetId,
+    targetId: target.id,
     actionId,
     rolls,
     healingApplied,
     currentHp: target.currentHp
   }));
+
+  applyActionRiders(state, healer, target, healerDefinition, action.riders, {
+    actionId, landed: true, saved: null,
+    fallbackDc: 8 + (healerDefinition.proficiencyBonus ?? proficiencyFromDefinition(healerDefinition)),
+    origin: healer.position
+  });
+
   return { healingApplied };
 }
 
@@ -963,12 +1148,18 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean } = {}
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string } = {}
 ): number {
   return applyDamageEntries(
     state,
     target,
-    damage.map((component) => ({ component, critical, halve: options.halve })),
+    damage.map((component, index) => ({
+      component,
+      critical,
+      halve: options.halve,
+      casterLevel: options.casterLevel,
+      extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined
+    })),
     source
   );
 }
@@ -983,13 +1174,21 @@ function applyDamageEntries(
   let totalApplied = 0;
   const components = entries.map((entry) => {
     const component = entry.component;
-    const dice = entry.critical ? doubleDice(component.dice) : component.dice;
+    const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: entry.casterLevel });
+    const withExtra = entry.extraDice ? `${scaledBase}+${entry.extraDice}` : scaledBase;
+    const dice = entry.critical ? doubleDice(withExtra) : withExtra;
     const damageSource = entry.sourceDefinition ?? source;
     const abilityBonus = component.abilityModifier ? abilityModifier(damageSource.abilities[component.abilityModifier]) : 0;
+    // `component.dice` is canonical and already carries any flat "+K" (mirrored by `flatBonus`), so it is not added again here.
     const formulaBonus = resolveNumericFormula(component.bonusFormula, damageSource);
     const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
     const damageType = resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
-    const adjusted = adjustDamage(roll.total + formulaBonus, damageType, damageAdjustmentsFor(targetDefinition, target));
+    const adjusted = adjustDamage(
+      roll.total + formulaBonus,
+      damageType,
+      damageAdjustmentsFor(targetDefinition, target),
+      component.magical === true
+    );
     const finalAmount = entry.halve ? Math.floor(adjusted / 2) : adjusted;
     totalApplied += applyHpDamage(target, finalAmount);
     return {
@@ -1044,14 +1243,21 @@ function updateDefeatState(state: EngineState, target: CombatantState): void {
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id }));
 }
 
-function adjustDamage(amount: number, damageType: DamageType, adjustments: CreatureDefinition["damageAdjustments"]): number {
-  if (adjustments?.some((adjustment) => adjustment.type === "immunity" && adjustment.damageType === damageType)) {
+function adjustDamage(
+  amount: number,
+  damageType: DamageType,
+  adjustments: CreatureDefinition["damageAdjustments"],
+  isMagical = false
+): number {
+  const applies = (adjustment: DamageAdjustment) =>
+    adjustment.damageType === damageType && !(adjustment.nonMagicalOnly && isMagical);
+  if (adjustments?.some((adjustment) => adjustment.type === "immunity" && applies(adjustment))) {
     return 0;
   }
-  if (adjustments?.some((adjustment) => adjustment.type === "resistance" && adjustment.damageType === damageType)) {
+  if (adjustments?.some((adjustment) => adjustment.type === "resistance" && applies(adjustment))) {
     return Math.floor(amount / 2);
   }
-  if (adjustments?.some((adjustment) => adjustment.type === "vulnerability" && adjustment.damageType === damageType)) {
+  if (adjustments?.some((adjustment) => adjustment.type === "vulnerability" && applies(adjustment))) {
     return amount * 2;
   }
   return amount;
@@ -1106,10 +1312,12 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
 
 function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<CreatureDefinition["weapons"]>[number]): AttackActionDefinition {
   const magicBonus = weapon.magicBonus ?? 0;
+  const toHitBonus = weapon.toHitBonus ?? 0;
   // "finesse" resolves to whichever of STR / DEX gives the better modifier.
   const ability = weapon.ability === "finesse"
     ? (abilityModifier(definition.abilities.dex) >= abilityModifier(definition.abilities.str) ? "dex" : "str")
     : weapon.ability;
+  const isMagical = weapon.magical === true;
   return {
     kind: "attack",
     id: weapon.actionId ?? `weapon:${weapon.id}`,
@@ -1118,20 +1326,81 @@ function weaponToAction(definition: CreatureDefinition, weapon: NonNullable<Crea
     attackType: weapon.attackType,
     ability,
     attackBonusFormula: {
-      base: magicBonus,
+      // magicBonus adds to hit AND damage; toHitBonus adds to hit only.
+      base: magicBonus + toHitBonus,
       ability,
-      proficiency: true
+      proficiency: weapon.proficient !== false
     },
     range: weapon.range,
     longRange: weapon.longRange,
     reach: weapon.reach,
     damage: weapon.damage.map((component) => ({
       ...component,
+      magical: component.magical || isMagical || undefined,
       bonusFormula: magicBonus
         ? { ...(component.bonusFormula ?? {}), base: (component.bonusFormula?.base ?? 0) + magicBonus }
         : component.bonusFormula
     })),
-    automationSupport: "full"
+    riders: weapon.onHit,
+    resourceCost: weapon.resourceCost,
+    automationSupport: weaponAutomationSupport(weapon)
+  };
+}
+
+/** A weapon compiles to full automation unless an on-hit rider needs a human (a note or a custom condition). */
+function weaponAutomationSupport(weapon: NonNullable<CreatureDefinition["weapons"]>[number]): "full" | "partial" {
+  const manual = (weapon.onHit ?? []).some((rider) =>
+    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"));
+  return manual ? "partial" : "full";
+}
+
+/** Fold a spell's level / upcast / concentration onto its compiled action so resolvers never need the spell. */
+function stampSpellContext(
+  action: ActionDefinition,
+  spell: NonNullable<CreatureDefinition["spells"]>[number]
+): ActionDefinition {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing") {
+    return action;
+  }
+  const stamped = {
+    ...action,
+    spellLevel: action.spellLevel ?? spell.level,
+    upcast: action.upcast ?? spell.upcast
+  };
+  if (action.kind !== "healing" && spell.concentration && !action.concentration) {
+    return { ...stamped, concentration: true } as ActionDefinition;
+  }
+  return stamped;
+}
+
+function casterLevelOf(definition: CreatureDefinition): number {
+  return definition.character?.level ?? 1;
+}
+
+/** Parse `slot-3` → 3. Anything else → undefined. */
+function spellSlotLevel(resourceId: string | undefined): number | undefined {
+  const match = resourceId ? /^slot-(\d+)$/.exec(resourceId) : null;
+  return match ? Number.parseInt(match[1] as string, 10) : undefined;
+}
+
+interface DamageScalingContext {
+  casterLevel: number;
+  /** Extra dice appended to the first damage component (per-slot upcast bonus). "" when none. */
+  upcastDamageDice: string;
+}
+
+function damageScalingContext(
+  definition: CreatureDefinition,
+  action: AttackActionDefinition | SaveActionDefinition | AreaSaveActionDefinition,
+  slotLevel: number | undefined
+): DamageScalingContext {
+  const slotsAboveBase = slotLevel != null && action.spellLevel != null
+    ? Math.max(0, slotLevel - action.spellLevel)
+    : 0;
+  const perSlotDice = action.upcast?.perSlotAboveBase?.damageDice;
+  return {
+    casterLevel: casterLevelOf(definition),
+    upcastDamageDice: slotsAboveBase > 0 && perSlotDice ? repeatDice(perSlotDice, slotsAboveBase) : ""
   };
 }
 
@@ -1413,6 +1682,374 @@ function applyOnHitFeatureConditions(
   return sources;
 }
 
+/* ─── Action riders (weapon `onHit` / save & area `riders`) ─────────────────────
+ * Consumed by every offensive resolver. Gates on the outcome, spends any per-rider
+ * charge, then applies damage / healing / a condition / a shove.
+ */
+
+interface RiderContext {
+  actionId: Id;
+  /** Attack landed, or (for save / area actions) `true` — the action resolved. */
+  landed: boolean;
+  critical?: boolean;
+  /** Save result for save / area actions; `null` for attacks. */
+  saved: boolean | null;
+  /** The action's save ability, so a rider without its own `save` can still repeat one. */
+  saveAbility?: Ability;
+  /** Baseline DC for a rider whose `save` omits `dc` / `dcFormula`. */
+  fallbackDc: number;
+  /** The action sets the caster's concentration — condition riders link to it. */
+  concentrating?: boolean;
+  /** Origin for push direction (usually the source's position or an area origin). */
+  origin?: Point;
+}
+
+interface RiderOutcome {
+  appliedConditions: string[];
+  extraDamage: number;
+  healing: number;
+  sources: string[];
+}
+
+function riderGatePasses(gate: RiderGate, ctx: RiderContext): boolean {
+  switch (gate) {
+    case "always": return true;
+    case "on-hit": return ctx.landed;
+    case "on-miss": return !ctx.landed;
+    case "on-crit": return ctx.landed && ctx.critical === true;
+    case "on-save-fail": return ctx.saved === false;
+    case "on-save-success": return ctx.saved === true;
+    default: return false;
+  }
+}
+
+function riderUseKey(actionId: Id, rider: ActionRider, index: number): string {
+  const explicit = "id" in rider && typeof rider.id === "string" ? rider.id : String(index);
+  return `${actionId}:${explicit}`;
+}
+
+function wasRiderUsedThisTurn(state: EngineState, sourceId: Id, key: string): boolean {
+  return state.log.some((entry) => entry.type === "RiderApplied"
+    && entry.round === state.snapshot.round
+    && entry.turnIndex === state.snapshot.turnIndex
+    && entry.data?.sourceId === sourceId
+    && entry.data.riderUseKey === key);
+}
+
+function riderDurationToExpiry(state: EngineState, duration: RiderDuration): {
+  expiresAt?: ConditionInstance["expiresAt"];
+  repeatTiming?: "turn-start" | "turn-end";
+  concentration?: boolean;
+} {
+  switch (duration.kind) {
+    case "permanent":
+      return {};
+    case "concentration":
+      return { concentration: true };
+    case "save-ends":
+      // A far cap so it still lapses if the repeat save is somehow never rolled.
+      return {
+        expiresAt: { round: state.snapshot.round + 100, turnIndex: state.snapshot.turnIndex, timing: "end" },
+        repeatTiming: duration.saveAt
+      };
+    case "rounds":
+      return {
+        expiresAt: {
+          round: state.snapshot.round + Math.max(0, duration.rounds),
+          turnIndex: state.snapshot.turnIndex,
+          timing: "end"
+        },
+        repeatTiming: duration.repeatSaveAt
+      };
+    default:
+      return {};
+  }
+}
+
+function resolveRiderSaveDc(
+  save: NonNullable<Extract<ActionRider, { kind: "condition" }>["save"]>,
+  sourceDefinition: CreatureDefinition,
+  fallbackDc: number
+): number {
+  if (save.dc != null) {
+    return save.dc;
+  }
+  if (save.dcFormula) {
+    return resolveNumericFormula(save.dcFormula, sourceDefinition);
+  }
+  return fallbackDc;
+}
+
+/** Crude, engine-consistent mechanical effect of a bare condition name (mirrors the store's `applyConditionToCombatant`). */
+function defaultConditionModifiers(name: ConditionName): ConditionInstance["modifiers"] | undefined {
+  switch (name) {
+    case "poisoned":
+    case "frightened":
+    case "prone":
+      return { attackRoll: -2 };
+    case "blinded":
+      return { attackRoll: -5 };
+    case "restrained":
+      return { attackRoll: -2, movementMultiplier: 999 };
+    case "grappled":
+      return { movementMultiplier: 999 };
+    case "paralyzed":
+    case "stunned":
+    case "unconscious":
+    case "incapacitated":
+      return { attackRoll: -20, armorClass: -5, movementMultiplier: 999 };
+    default:
+      return undefined;
+  }
+}
+
+function clampToGrid(value: number, max: number): number {
+  return Math.min(Math.max(0, Math.round(value)), Math.max(0, max));
+}
+
+/** Straight-line forced movement away from `origin`, stopping at a sight/effect-blocking wall. */
+function pushCombatant(state: EngineState, target: CombatantState, distanceFt: number, origin: Point): void {
+  const grid = state.snapshot.map.grid;
+  const cells = Math.round(distanceFt / grid.distancePerSquare);
+  if (cells <= 0) {
+    return;
+  }
+  const dx = target.position.x - origin.x;
+  const dy = target.position.y - origin.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
+  const footprint = sizeFootprint(getDefinition(state.snapshot, target).size);
+  let position = { ...target.position };
+  for (let step = 0; step < cells; step += 1) {
+    const next = {
+      x: clampToGrid(position.x + ux, grid.width - footprint),
+      y: clampToGrid(position.y + uy, grid.height - footprint)
+    };
+    if (next.x === position.x && next.y === position.y) {
+      break;
+    }
+    if (!lineOfEffect(state.snapshot.map, position, next)) {
+      break;
+    }
+    position = next;
+  }
+  if (position.x !== target.position.x || position.y !== target.position.y) {
+    const from = target.position;
+    target.position = position;
+    state.log.push(event(state, "CombatantMoved", `${target.displayName} was pushed`, {
+      combatantId: target.id, from, to: position, forced: true
+    }));
+  }
+}
+
+function applyRiderHealing(
+  state: EngineState,
+  recipient: CombatantState,
+  sourceDefinition: CreatureDefinition,
+  components: HealingComponent[]
+): number {
+  const recipientDefinition = getDefinition(state.snapshot, recipient);
+  let total = 0;
+  for (const component of components) {
+    const bonus = component.abilityModifier ? abilityModifier(sourceDefinition.abilities[component.abilityModifier]) : 0;
+    total += rollDice(withBonus(component.dice, bonus), state.rng).total;
+  }
+  recipient.currentHp = Math.min(recipientDefinition.maxHp, recipient.currentHp + total);
+  if (recipient.currentHp > 0 && (recipient.state === "downed" || recipient.state === "defeated")) {
+    recipient.state = "active";
+    recipient.deathSaves = { successes: 0, failures: 0, stable: false };
+    recipient.conditions = (recipient.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+  }
+  state.log.push(event(state, "HealingApplied", `${recipient.displayName} regained ${total} HP`, {
+    targetId: recipient.id, healingApplied: total, currentHp: recipient.currentHp, viaRider: true
+  }));
+  return total;
+}
+
+function applyConditionRider(
+  state: EngineState,
+  source: CombatantState,
+  target: CombatantState,
+  sourceDefinition: CreatureDefinition,
+  targetDefinition: CreatureDefinition,
+  rider: Extract<ActionRider, { kind: "condition" }>,
+  ctx: RiderContext
+): string | null {
+  // The rider rolls its own initial save only when the parent action had none
+  // (an attack context). In a save / area context the action's save already
+  // gated the rider via its `when`, so the condition just lands.
+  if (rider.save && ctx.saved === null) {
+    const dc = resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc);
+    const saveBonus = (targetDefinition.saves?.[rider.save.ability]
+      ?? abilityModifier(targetDefinition.abilities[rider.save.ability]))
+      + conditionSaveModifier(target, rider.save.ability);
+    const roll = rollD20WithBonus(state.rng, saveBonus);
+    const success = roll.total >= dc;
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${rider.save.ability.toUpperCase()} save against ${ctx.actionId}`, {
+      attackerId: source.id, targetId: target.id, actionId: ctx.actionId,
+      saveRoll: roll, total: roll.total, dc, success, viaRider: true
+    }));
+    if (success && rider.save.onSuccess === "negates") {
+      return null;
+    }
+  }
+
+  const conditionName: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
+  const conditionId = `${target.id}:${ctx.actionId}:${rider.id ?? "cond"}`;
+  const expiry = riderDurationToExpiry(state, rider.duration);
+  const repeatAbility = rider.save?.ability ?? ctx.saveAbility;
+  const repeatDc = rider.save ? resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc) : ctx.fallbackDc;
+
+  const instance: ConditionInstance = {
+    id: conditionId,
+    name: conditionName,
+    sourceId: ctx.actionId,
+    sourceCombatantId: source.id,
+    startedRound: state.snapshot.round,
+    expiresAt: expiry.expiresAt,
+    modifiers: rider.modifiers ?? defaultConditionModifiers(conditionName),
+    effects: rider.effects,
+    repeatSave: expiry.repeatTiming && repeatAbility
+      ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming }
+      : undefined,
+    concentration: expiry.concentration || ctx.concentrating || undefined
+  };
+  applyCondition(state, target.id, instance);
+
+  if (instance.concentration) {
+    source.concentration = { sourceConditionId: source.concentration?.sourceConditionId ?? conditionId };
+  }
+  return conditionName;
+}
+
+function applyActionRiders(
+  state: EngineState,
+  source: CombatantState,
+  target: CombatantState,
+  sourceDefinition: CreatureDefinition,
+  riders: ActionRider[] | undefined,
+  ctx: RiderContext
+): RiderOutcome {
+  const outcome: RiderOutcome = { appliedConditions: [], extraDamage: 0, healing: 0, sources: [] };
+  if (!riders?.length) {
+    return outcome;
+  }
+  const targetDefinition = getDefinition(state.snapshot, target);
+
+  riders.forEach((rider, index) => {
+    if (rider.kind === "note" || !riderGatePasses(rider.when, ctx)) {
+      return;
+    }
+    const useKey = riderUseKey(ctx.actionId, rider, index);
+    if (rider.oncePerTurn && wasRiderUsedThisTurn(state, source.id, useKey)) {
+      return;
+    }
+    if (rider.resourceCost) {
+      const held = source.resources?.[rider.resourceCost.resourceId] ?? 0;
+      if (held < rider.resourceCost.amount) {
+        state.log.push(event(state, "AutomationWarning",
+          `${source.displayName} has no ${rider.resourceCost.resourceId} left for ${rider.kind} on ${ctx.actionId}`,
+          { sourceId: source.id, actionId: ctx.actionId, riderUseKey: useKey }));
+        return;
+      }
+      source.resources = { ...(source.resources ?? {}), [rider.resourceCost.resourceId]: held - rider.resourceCost.amount };
+    }
+
+    if (rider.kind === "damage") {
+      outcome.extraDamage += applyDamageComponents(state, target, rider.components, sourceDefinition, ctx.critical === true, {
+        casterLevel: casterLevelOf(sourceDefinition)
+      });
+    } else if (rider.kind === "healing") {
+      const recipient = rider.target === "self" ? source : target;
+      outcome.healing += applyRiderHealing(state, recipient, sourceDefinition, rider.components);
+    } else if (rider.kind === "push") {
+      pushCombatant(state, target, rider.distance, ctx.origin ?? source.position);
+    } else if (rider.kind === "condition") {
+      const applied = applyConditionRider(state, source, target, sourceDefinition, targetDefinition, rider, ctx);
+      if (applied) {
+        outcome.appliedConditions.push(applied);
+      }
+    }
+
+    state.log.push(event(state, "RiderApplied", `${source.displayName}: ${rider.kind} rider from ${ctx.actionId}`, {
+      sourceId: source.id, targetId: target.id, actionId: ctx.actionId, riderKind: rider.kind, riderUseKey: useKey
+    }));
+    outcome.sources.push(`${rider.kind} rider`);
+  });
+
+  return outcome;
+}
+
+/**
+ * End `casterId`'s concentration: clear the flag and drop every condition it
+ * sustained — both the ones flagged `concentration` with a matching
+ * `sourceCombatantId` (multi-target spells) and the legacy single
+ * `concentration.sourceConditionId` link. Emits a `ConditionExpired` per drop; a
+ * `ConcentrationChecked` (with the roll) is the caller's job.
+ */
+function breakConcentration(state: EngineState, casterId: Id): void {
+  const caster = state.snapshot.combatants.find((combatant) => combatant.id === casterId);
+  if (!caster?.concentration) {
+    return;
+  }
+  const linkedId = caster.concentration.sourceConditionId;
+  caster.concentration = undefined;
+  for (const combatant of state.snapshot.combatants) {
+    const before = combatant.conditions ?? [];
+    const after = before.filter((condition) =>
+      !((condition.concentration && condition.sourceCombatantId === casterId) || (linkedId && condition.id === linkedId)));
+    if (after.length !== before.length) {
+      for (const removed of before.filter((condition) => !after.includes(condition))) {
+        state.log.push(event(state, "ConditionExpired", `${combatant.displayName} lost ${removed.name}`, {
+          combatantId: combatant.id, condition: removed, concentrationEnded: true
+        }));
+      }
+      combatant.conditions = after;
+    }
+  }
+}
+
+/**
+ * The bearer re-rolls each `repeatSave`-tagged condition at the given timing on
+ * its own turn; a success ends that condition. Call alongside
+ * `applyTimedFeatureEffects` in the turn loop.
+ */
+export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
+  const combatant = state.snapshot.combatants.find((candidate) => candidate.id === combatantId);
+  if (!combatant?.conditions?.length) {
+    return;
+  }
+  const definition = getDefinition(state.snapshot, combatant);
+  const surviving: ConditionInstance[] = [];
+  for (const condition of combatant.conditions) {
+    const repeat = condition.repeatSave;
+    if (!repeat || repeat.timing !== timing) {
+      surviving.push(condition);
+      continue;
+    }
+    const saveBonus = (definition.saves?.[repeat.ability] ?? abilityModifier(definition.abilities[repeat.ability]))
+      + conditionSaveModifier(combatant, repeat.ability);
+    const roll = rollD20WithBonus(state.rng, saveBonus);
+    const success = roll.total >= repeat.dc;
+    state.log.push(event(state, "SaveRolled", `${combatant.displayName} repeated a ${repeat.ability.toUpperCase()} save vs ${condition.name}`, {
+      targetId: combatantId, conditionId: condition.id, saveRoll: roll, total: roll.total, dc: repeat.dc, success, repeatSave: true
+    }));
+    if (success) {
+      state.log.push(event(state, "ConditionExpired", `${combatant.displayName} shook off ${condition.name}`, {
+        combatantId, condition, viaSave: true
+      }));
+    } else {
+      surviving.push(condition);
+    }
+  }
+  combatant.conditions = surviving;
+}
+
+function resolveOnSuccess(action: SaveActionDefinition | AreaSaveActionDefinition): "half" | "none" | "negates" {
+  return action.onSuccess ?? (action.halfDamageOnSuccess ? "half" : "none");
+}
+
 function featureSaveModifier(
   definition: CreatureDefinition,
   combatant: CombatantState,
@@ -1683,11 +2320,7 @@ function resolveConcentration(state: EngineState, combatant: CombatantState, dam
   });
   const success = roll.total >= dc;
   if (!success) {
-    const sourceConditionId = combatant.concentration.sourceConditionId;
-    combatant.concentration = undefined;
-    if (sourceConditionId) {
-      combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.id !== sourceConditionId);
-    }
+    breakConcentration(state, combatant.id);
   }
   state.log.push(event(state, "ConcentrationChecked", `${combatant.displayName} checked concentration`, {
     combatantId: combatant.id,
