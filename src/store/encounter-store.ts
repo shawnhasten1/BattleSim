@@ -41,9 +41,13 @@ import {
   type TokenVisuals,
   type WeaponDefinition,
   normalizeWall,
+  normalizeWeaponDefinition,
+  normalizeSpellDefinition,
+  type ActionRider,
   type CoverLevel,
   type WallSegment
 } from "@/engine";
+import { findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { clampReplayIndex } from "@/lib/replay";
 import { downscaleDataUrl } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
@@ -177,6 +181,17 @@ interface EncounterStore {
   addSpell: (definitionId: string, input: { name: string; level: number; castingTime: "action" | "bonus" | "reaction"; ability: Ability; range: number; damageDice: string; damageType: DamageType; resourceId?: string }) => void;
   attachSpellDefinition: (definitionId: string, spell: SpellDefinition) => void;
   attachWeaponDefinition: (definitionId: string, weapon: WeaponDefinition) => void;
+  /**
+   * Attach a copy of a bundled SRD weapon to a definition. Deep-clones the
+   * library entry, re-mints its id / actionId / rider ids, and — for a weapon
+   * with a `charges` pool — namespaces the resource id, rewrites the matching
+   * rider `resourceCost`, seeds `definition.resources`, and tops up existing
+   * combatants of that definition. One undo step. Returns the new weapon id, or
+   * `undefined` if the srd id or definition is unknown.
+   */
+  attachSrdWeapon: (definitionId: string, srdId: string) => string | undefined;
+  /** Attach a copy of a bundled SRD spell to a definition. Re-mints id / action id / rider ids. One undo step. */
+  attachSrdSpell: (definitionId: string, srdId: string) => string | undefined;
   attachFeatureDefinition: (definitionId: string, feature: FeatureDefinition) => void;
   addFeatureOrTrait: (definitionId: string, input: { category: "feature" | "trait"; name: string; description?: string; effectPreset?: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" }) => void;
   addStructuredAction: (definitionId: string, input: { kind: "attack" | "save" | "area-save" | "healing"; name: string; actionType: "action" | "bonus"; attackType: "melee" | "ranged" | "spell"; ability: Ability; saveAbility: Ability; dc: number; range: number; areaSize: number; damageDice: string; damageType: DamageType }) => void;
@@ -250,6 +265,20 @@ function defaultResourcesForDefinition(definition: CreatureDefinition): Record<s
     return undefined;
   }
   return structuredClone(definition.resources);
+}
+
+/** Give every rider a fresh id so an attached copy never collides with the library entry or a sibling. */
+function remintRiderIds(riders: ActionRider[] | undefined): ActionRider[] | undefined {
+  return riders?.map((rider) => ({ ...rider, id: `rider-${crypto.randomUUID()}` }));
+}
+
+/** Rewrite a rider's charge `resourceCost.resourceId` from `from` to `to` (leaves other riders untouched). */
+function rewriteRiderResourceId(riders: ActionRider[] | undefined, from: string, to: string): ActionRider[] | undefined {
+  return riders?.map((rider) =>
+    "resourceCost" in rider && rider.resourceCost?.resourceId === from
+      ? { ...rider, resourceCost: { ...rider.resourceCost, resourceId: to } }
+      : rider
+  );
 }
 
 function steppedOutcome(engine: ReturnType<typeof createEngineState>): SimulationOutcome | null {
@@ -1550,6 +1579,74 @@ export const useEncounterStore = create<EncounterStore>()(
             ? { ...definition, weapons: [...(definition.weapons ?? []).filter((candidate) => candidate.id !== weapon.id), weapon] }
             : definition)
         });
+      },
+      attachSrdWeapon: (definitionId, srdId) => {
+        const source = findSrdWeapon(srdId);
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!source || !definition) return undefined;
+
+        const weaponId = `weapon-${crypto.randomUUID()}`;
+        const weapon = normalizeWeaponDefinition(structuredClone(source), definition.abilities);
+        weapon.id = weaponId;
+        weapon.actionId = `weapon-action-${weaponId}`;
+        weapon.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
+        weapon.onHit = remintRiderIds(weapon.onHit);
+
+        let seeded: Record<string, number> | undefined;
+        if (weapon.charges) {
+          const fromId = weapon.charges.id;
+          const chargeId = `${weaponId}:${fromId}`;
+          weapon.charges = { ...weapon.charges, id: chargeId };
+          weapon.onHit = rewriteRiderResourceId(weapon.onHit, fromId, chargeId);
+          if (weapon.resourceCost?.resourceId === fromId) {
+            weapon.resourceCost = { ...weapon.resourceCost, resourceId: chargeId };
+          }
+          seeded = { [chargeId]: weapon.charges.max };
+        }
+
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? {
+              ...candidate,
+              weapons: [...(candidate.weapons ?? []), weapon],
+              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
+            }
+            : candidate),
+          combatants: seeded
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
+        });
+        return weaponId;
+      },
+      attachSrdSpell: (definitionId, srdId) => {
+        const source = findSrdSpell(srdId);
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!source || !definition) return undefined;
+
+        const spellId = `spell-${crypto.randomUUID()}`;
+        const spell = normalizeSpellDefinition(structuredClone(source));
+        spell.id = spellId;
+        spell.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
+        if (spell.action) {
+          const action = { ...spell.action, id: `spell-action-${spellId}` };
+          if ("riders" in action) {
+            action.riders = remintRiderIds(action.riders);
+          }
+          spell.action = action;
+        }
+
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, spells: [...(candidate.spells ?? []), spell] }
+            : candidate)
+        });
+        return spellId;
       },
       attachFeatureDefinition: (definitionId, feature) => {
         const encounter = get().encounter;

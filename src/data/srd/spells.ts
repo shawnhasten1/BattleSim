@@ -1,0 +1,457 @@
+import type { SpellDefinition } from "@/engine";
+
+/**
+ * Bundled spell library — SRD 5.1 staples chosen to exercise every schema path:
+ * cantrip `scaling`, `attackDelivery: "beams"` (with and without `autoHit`),
+ * `beamCountByLevel`, `area-save` circle / cone / rectangle, `AreaTargeting`
+ * (`origin: "self"` + `aimedFromSelf`), save-or-condition `riders`
+ * (`save-ends` and `repeatSaveAt`), `push` riders, `concentration`, `upcast`,
+ * healing self / other, and a reference-only entry with no `action`.
+ *
+ * Authoring contract (see `README.md`):
+ * - `id` is `srd:spell:<kebab-slug>`, unique across the file.
+ * - `action.id` is a placeholder — it is re-minted on attach.
+ * - Save DCs use `dcFormula: { base: 8, ability, proficiency: true }` so the DC
+ *   scales with whoever casts it. The `ability` is the spell's iconic
+ *   spellcasting stat; the DM can retune it after attaching.
+ * - `automationSupport` is authored to its final intended value. Engine support
+ *   for riders / beams / aimed areas lands in the next phase; until then those
+ *   fields round-trip but are not yet resolved.
+ */
+export const SRD_SPELLS: readonly SpellDefinition[] = [
+  // ── Cantrips ──────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:fire-bolt",
+    name: "Fire Bolt",
+    level: 0,
+    school: "evocation",
+    castingTime: "action",
+    range: 120,
+    automationSupport: "full",
+    action: {
+      kind: "attack",
+      id: "srd:spell:fire-bolt:action",
+      name: "Fire Bolt",
+      actionType: "action",
+      attackType: "spell",
+      ability: "int",
+      attackBonusFormula: { ability: "int", proficiency: true },
+      range: 120,
+      damage: [{
+        dice: "1d10",
+        damageType: "fire",
+        magical: true,
+        scaling: {
+          mode: "cantrip-by-level",
+          steps: [{ atLevel: 5, dice: "2d10" }, { atLevel: 11, dice: "3d10" }, { atLevel: 17, dice: "4d10" }]
+        }
+      }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:sacred-flame",
+    name: "Sacred Flame",
+    level: 0,
+    school: "evocation",
+    castingTime: "action",
+    range: 60,
+    automationSupport: "full",
+    action: {
+      kind: "save",
+      id: "srd:spell:sacred-flame:action",
+      name: "Sacred Flame",
+      actionType: "action",
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "wis", proficiency: true },
+      range: 60,
+      damage: [{
+        dice: "1d8",
+        damageType: "radiant",
+        magical: true,
+        scaling: {
+          mode: "cantrip-by-level",
+          steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }]
+        }
+      }],
+      halfDamageOnSuccess: false,
+      onSuccess: "none",
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:eldritch-blast",
+    name: "Eldritch Blast",
+    level: 0,
+    school: "evocation",
+    castingTime: "action",
+    range: 120,
+    automationSupport: "full",
+    action: {
+      kind: "attack",
+      id: "srd:spell:eldritch-blast:action",
+      name: "Eldritch Blast",
+      actionType: "action",
+      attackType: "spell",
+      ability: "cha",
+      attackBonusFormula: { ability: "cha", proficiency: true },
+      range: 120,
+      attackDelivery: "beams",
+      beamCount: 1,
+      beamCountByLevel: [{ atLevel: 5, count: 2 }, { atLevel: 11, count: 3 }, { atLevel: 17, count: 4 }],
+      damage: [{ dice: "1d10", damageType: "force", magical: true }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:poison-spray",
+    name: "Poison Spray",
+    level: 0,
+    school: "conjuration",
+    castingTime: "action",
+    range: 10,
+    automationSupport: "full",
+    action: {
+      kind: "save",
+      id: "srd:spell:poison-spray:action",
+      name: "Poison Spray",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 10,
+      damage: [{
+        dice: "1d12",
+        damageType: "poison",
+        magical: true,
+        scaling: {
+          mode: "cantrip-by-level",
+          steps: [{ atLevel: 5, dice: "2d12" }, { atLevel: 11, dice: "3d12" }, { atLevel: 17, dice: "4d12" }]
+        }
+      }],
+      halfDamageOnSuccess: false,
+      onSuccess: "none",
+      automationSupport: "full"
+    }
+  },
+  // ── Level 1 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:magic-missile",
+    name: "Magic Missile",
+    level: 1,
+    school: "evocation",
+    castingTime: "action",
+    range: 120,
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { beams: 1 } },
+    automationSupport: "full",
+    action: {
+      kind: "attack",
+      id: "srd:spell:magic-missile:action",
+      name: "Magic Missile",
+      actionType: "action",
+      attackType: "spell",
+      ability: "int",
+      range: 120,
+      attackDelivery: "beams",
+      beamCount: 3,
+      autoHit: true,
+      damage: [{ dice: "1d4+1", damageType: "force", magical: true }],
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:burning-hands",
+    name: "Burning Hands",
+    level: 1,
+    school: "evocation",
+    castingTime: "action",
+    range: "self",
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d6" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:burning-hands:action",
+      name: "Burning Hands",
+      actionType: "action",
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "cha", proficiency: true },
+      range: 15,
+      area: { type: "cone", size: 15 },
+      targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "3d6", damageType: "fire", magical: true }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "all",
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:thunderwave",
+    name: "Thunderwave",
+    level: 1,
+    school: "evocation",
+    castingTime: "action",
+    range: "self",
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d8" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:thunderwave:action",
+      name: "Thunderwave",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 15,
+      area: { type: "rectangle", size: 15, width: 15 },
+      targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "2d8", damageType: "thunder", magical: true }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "all",
+      riders: [{ kind: "push", when: "on-save-fail", distance: 10 }],
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:cure-wounds",
+    name: "Cure Wounds",
+    level: 1,
+    school: "abjuration",
+    castingTime: "action",
+    range: "touch",
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d8" } },
+    automationSupport: "full",
+    action: {
+      kind: "healing",
+      id: "srd:spell:cure-wounds:action",
+      name: "Cure Wounds",
+      actionType: "action",
+      range: 5,
+      healing: [{ dice: "1d8", abilityModifier: "wis" }],
+      targeting: { target: "single" },
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:healing-word",
+    name: "Healing Word",
+    level: 1,
+    school: "abjuration",
+    castingTime: "bonus",
+    range: 60,
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d4" } },
+    automationSupport: "full",
+    action: {
+      kind: "healing",
+      id: "srd:spell:healing-word:action",
+      name: "Healing Word",
+      actionType: "bonus",
+      range: 60,
+      healing: [{ dice: "1d4", abilityModifier: "wis" }],
+      targeting: { target: "single" },
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  // ── Level 2 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:scorching-ray",
+    name: "Scorching Ray",
+    level: 2,
+    school: "evocation",
+    castingTime: "action",
+    range: 120,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    upcast: { perSlotAboveBase: { beams: 1 } },
+    automationSupport: "full",
+    action: {
+      kind: "attack",
+      id: "srd:spell:scorching-ray:action",
+      name: "Scorching Ray",
+      actionType: "action",
+      attackType: "spell",
+      ability: "int",
+      attackBonusFormula: { ability: "int", proficiency: true },
+      range: 120,
+      attackDelivery: "beams",
+      beamCount: 3,
+      damage: [{ dice: "2d6", damageType: "fire", magical: true }],
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:hold-person",
+    name: "Hold Person",
+    level: 2,
+    school: "enchantment",
+    castingTime: "action",
+    range: 60,
+    concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "save",
+      id: "srd:spell:hold-person:action",
+      name: "Hold Person",
+      actionType: "action",
+      saveAbility: "wis",
+      dcFormula: { base: 8, ability: "wis", proficiency: true },
+      range: 60,
+      damage: [],
+      halfDamageOnSuccess: false,
+      onSuccess: "negates",
+      concentration: true,
+      riders: [{
+        kind: "condition",
+        when: "on-save-fail",
+        condition: "paralyzed",
+        duration: { kind: "save-ends", saveAt: "turn-end" },
+        save: { ability: "wis", onSuccess: "negates" }
+      }],
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:web",
+    name: "Web",
+    level: 2,
+    school: "conjuration",
+    castingTime: "action",
+    range: 60,
+    concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:web:action",
+      name: "Web",
+      actionType: "action",
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 60,
+      area: { type: "circle", size: 20 },
+      targeting: { origin: "point", range: 60 },
+      damage: [],
+      halfDamageOnSuccess: false,
+      onSuccess: "negates",
+      affects: "all",
+      concentration: true,
+      riders: [{
+        kind: "condition",
+        when: "on-save-fail",
+        condition: "restrained",
+        duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
+        save: { ability: "dex", onSuccess: "negates" }
+      }],
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  // ── Level 3 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:fireball",
+    name: "Fireball",
+    level: 3,
+    school: "evocation",
+    castingTime: "action",
+    range: 150,
+    resourceCost: { resourceId: "slot-3", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d6" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:fireball:action",
+      name: "Fireball",
+      actionType: "action",
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 150,
+      area: { type: "circle", size: 20 },
+      targeting: { origin: "point", range: 150 },
+      damage: [{ dice: "8d6", damageType: "fire", magical: true }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "all",
+      resourceCost: { resourceId: "slot-3", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:lightning-bolt",
+    name: "Lightning Bolt",
+    level: 3,
+    school: "evocation",
+    castingTime: "action",
+    range: "self",
+    resourceCost: { resourceId: "slot-3", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d6" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:lightning-bolt:action",
+      name: "Lightning Bolt",
+      actionType: "action",
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 100,
+      area: { type: "rectangle", size: 100, width: 5 },
+      targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "8d6", damageType: "lightning", magical: true }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "all",
+      resourceCost: { resourceId: "slot-3", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:counterspell",
+    name: "Counterspell",
+    level: 3,
+    school: "abjuration",
+    castingTime: "reaction",
+    range: 60,
+    resourceCost: { resourceId: "slot-3", amount: 1 },
+    description: "Reaction to interrupt a creature casting a spell. Reference only — resolve the interrupt manually.",
+    automationSupport: "manual-only"
+  },
+  // ── Level 5 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:cone-of-cold",
+    name: "Cone of Cold",
+    level: 5,
+    school: "evocation",
+    castingTime: "action",
+    range: "self",
+    resourceCost: { resourceId: "slot-5", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d8" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:cone-of-cold:action",
+      name: "Cone of Cold",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 60,
+      area: { type: "cone", size: 60 },
+      targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "8d8", damageType: "cold", magical: true }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "all",
+      resourceCost: { resourceId: "slot-5", amount: 1 },
+      automationSupport: "full"
+    }
+  }
+];

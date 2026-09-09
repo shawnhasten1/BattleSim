@@ -23,6 +23,7 @@ import {
   type RiderGate,
   type RiderSave,
   type AreaTemplate,
+  type SpellDefinition,
   type SpellUpcast,
   type WeaponCharges,
   type WeaponDefinition
@@ -86,24 +87,7 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
   const bonusActions = normalizeActionList(input.bonusActions, "bonus", actionIdMap, featureIdByName);
   const reactions = normalizeActionList(input.reactions, "reaction", actionIdMap, featureIdByName);
   const weapons = normalizeWeapons(input.weapons, actionIdMap, input.abilities);
-  const spells = normalizeIdList(input.spells, "spell").map((spell) => {
-    if (!isRecord(spell)) {
-      return spell;
-    }
-    const normalized: Record<string, unknown> = {
-      ...spell,
-      ritual: spell.ritual === true ? true : undefined,
-      concentration: typeof spell.concentration === "boolean" ? spell.concentration : undefined,
-      range: normalizeSpellRange(spell.range),
-      components: normalizeSpellComponents(spell.components),
-      upcast: normalizeSpellUpcast(spell.upcast)
-    };
-    if (isRecord(spell.action)) {
-      const actionType = spell.castingTime === "bonus" || spell.castingTime === "reaction" ? spell.castingTime : "action";
-      normalized.action = normalizeAction(spell.action, 0, actionType, new Map(), featureIdByName);
-    }
-    return normalized;
-  });
+  const spells = normalizeIdList(input.spells, "spell").map((spell) => normalizeSpellRecord(spell, featureIdByName));
   const normalized = {
     ...input,
     id: typeof input.id === "string" && input.id.trim() ? input.id : `def-${crypto.randomUUID()}`,
@@ -336,6 +320,45 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
 
 function normalizeWeaponAbility(input: unknown): Ability | "finesse" | undefined {
   return input === "finesse" ? "finesse" : normalizeAbility(input);
+}
+
+/**
+ * Normalize a single weapon record — the SRD-library / builder entry point.
+ * `abilities` is only consulted to break a finesse tie when `ability` is absent.
+ */
+export function normalizeWeaponDefinition(input: unknown, abilities?: CreatureDefinition["abilities"]): WeaponDefinition {
+  return normalizeWeapons([input], new Map(), abilities)[0] as WeaponDefinition;
+}
+
+/** Normalize a single spell record — the SRD-library / builder entry point. */
+export function normalizeSpellDefinition(
+  input: unknown,
+  featureIdByName: Map<string, string> = new Map()
+): SpellDefinition {
+  const normalized = normalizeSpellRecord(input, featureIdByName);
+  if (isRecord(normalized) && (typeof normalized.id !== "string" || !normalized.id.trim())) {
+    normalized.id = `spell-${safeFileName(typeof normalized.name === "string" ? normalized.name : "spell")}`;
+  }
+  return normalized as SpellDefinition;
+}
+
+function normalizeSpellRecord(input: unknown, featureIdByName: Map<string, string>): unknown {
+  if (!isRecord(input)) {
+    return input;
+  }
+  const normalized: Record<string, unknown> = {
+    ...input,
+    ritual: input.ritual === true ? true : undefined,
+    concentration: typeof input.concentration === "boolean" ? input.concentration : undefined,
+    range: normalizeSpellRange(input.range),
+    components: normalizeSpellComponents(input.components),
+    upcast: normalizeSpellUpcast(input.upcast)
+  };
+  if (isRecord(input.action)) {
+    const actionType = input.castingTime === "bonus" || input.castingTime === "reaction" ? input.castingTime : "action";
+    normalized.action = normalizeAction(input.action, 0, actionType, new Map(), featureIdByName);
+  }
+  return normalized;
 }
 
 function normalizeWeaponCharges(input: unknown): WeaponCharges | undefined {
