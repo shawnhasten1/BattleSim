@@ -17,7 +17,8 @@ export type FieldControl =
   | "dice"
   | "riders"
   | "properties"
-  | "reaction-trigger";
+  | "reaction-trigger"
+  | "feature-effects";
 
 export interface FieldSpec {
   /** Flat key into the draft. */

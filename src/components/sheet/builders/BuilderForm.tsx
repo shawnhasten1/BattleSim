@@ -1,11 +1,12 @@
 "use client";
 
 import { type ReactNode } from "react";
-import type { Ability, DamageType, ReactionTrigger } from "@/engine";
+import type { Ability, DamageType, FeatureEffect, ReactionTrigger } from "@/engine";
 import { FIELD_COPY } from "./field-copy";
 import { visibleSpecs, type BuilderDraft, type FieldSpec } from "./field-spec";
 import { blankReactionTrigger, diceValueToString, parseDiceValue, REACTION_TRIGGER_KINDS, type DiceValue } from "./schemas";
 import { RiderEditor } from "./RiderEditor";
+import { FeatureEffectEditor } from "./FeatureEffectEditor";
 import styles from "./builders.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -147,6 +148,8 @@ function BuilderControl({
       );
     case "reaction-trigger":
       return <ReactionTriggerControl id={id} value={value as ReactionTrigger | undefined} onChange={onChange} />;
+    case "feature-effects":
+      return <FeatureEffectEditor value={(value as FeatureEffect[]) ?? []} onChange={onChange} />;
     default:
       return null;
   }

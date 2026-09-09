@@ -751,8 +751,8 @@ function resolveAttackCore(
   const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
   const attackOptions = {
     ...options,
-    advantage: options.advantage || featureAdvantage.applied,
-    disadvantage: options.disadvantage || longRange || forcedDisadvantage
+    advantage: options.advantage || featureAdvantage.advantage,
+    disadvantage: options.disadvantage || longRange || forcedDisadvantage || featureAdvantage.disadvantage
   };
   const rollMode = attackRollMode({
     ...attackOptions
@@ -761,7 +761,7 @@ function resolveAttackCore(
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
   const total = d20.total + attackBonus + conditionAttackModifier(attacker)
-    + conditionIncomingAttackModifier(target) + featureAttackBonus.total;
+    + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
   const targetAc = effectiveArmorClass(targetDefinition, target) + cover.acBonus;
   const natural = d20.total;
   const critical = natural === 20;
@@ -1123,13 +1123,22 @@ export function resolveActivateFeatureAction(
     }));
   }
 
-  // Action Surge & friends: an `extra-action` effect hands back a spent slot.
+  // Action Surge & friends: an `extra-action` effect hands back a spent slot;
+  // `resource-regain` with `timing: "on-activate"` tops up a named pool.
   for (const effect of feature?.effects ?? []) {
     if (effect.kind === "extra-action" && featureConditionsMetForSelf(actorDefinition, actor, effect)) {
       actor.actionEconomy ??= { action: true, bonus: true, reaction: true };
       actor.actionEconomy[effect.slot] = true;
       state.log.push(event(state, "ActionEconomyRefreshed", `${actor.displayName} regained a ${effect.slot} from ${feature?.name ?? action.name}`, {
         combatantId: actorId, actionId, featureId: feature?.id, slot: effect.slot
+      }));
+    }
+    if (effect.kind === "resource-regain" && effect.timing === "on-activate") {
+      const previous = actor.resources?.[effect.resourceId] ?? 0;
+      const next = Math.min(effect.max ?? Number.POSITIVE_INFINITY, previous + resolveNumericFormula(effect.amount, actorDefinition));
+      actor.resources = { ...(actor.resources ?? {}), [effect.resourceId]: next };
+      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName} regained ${effect.resourceId}`, {
+        combatantId: actorId, actionId, featureId: feature?.id, effect, previous, next
       }));
     }
   }
@@ -1894,12 +1903,37 @@ function featureAttackAdvantage(
   target: CombatantState,
   action: AttackActionDefinition,
   definition: CreatureDefinition
-): { applied: boolean; sources: string[] } {
-  const sources = featureSources(definition, attacker)
-    .filter((feature) => (feature.effects ?? []).some((effect) => effect.kind === "attack-advantage"
-      && featureAppliesToAction(effect, action)
-      && featureConditionsMet(state, attacker, target, effect, { rollMode: "normal", critical: false })));
-  return { applied: sources.length > 0, sources: sources.map((source) => source.name) };
+): { advantage: boolean; disadvantage: boolean; sources: string[] } {
+  const advantage: string[] = [];
+  const disadvantage: string[] = [];
+  for (const feature of featureSources(definition, attacker)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "attack-advantage"
+        || !featureAppliesToAction(effect, action)
+        || !featureConditionsMet(state, attacker, target, effect, { rollMode: "normal", critical: false })) {
+        continue;
+      }
+      (effect.mode === "disadvantage" ? disadvantage : advantage).push(feature.name);
+    }
+  }
+  return { advantage: advantage.length > 0, disadvantage: disadvantage.length > 0, sources: [...advantage, ...disadvantage] };
+}
+
+/** Sum of `incoming-attack-modifier` feature effects active on the target (+5 ≈ advantage against it). */
+function featureIncomingAttackModifier(
+  state: EngineState,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition
+): number {
+  let total = 0;
+  for (const feature of featureSources(targetDefinition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind === "incoming-attack-modifier" && featureConditionsMetForSelf(targetDefinition, target, effect)) {
+        total += effect.amount;
+      }
+    }
+  }
+  return total;
 }
 
 function featureAttackModifier(

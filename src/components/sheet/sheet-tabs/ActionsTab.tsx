@@ -280,7 +280,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                 <button type="button" onClick={() => startNew("weapon", weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "melee", ability: "str", range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }] }))}>Weapon</button>
                 <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, automationSupport: "full" }))}>Spell</button>
                 <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
-                <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effectTemplate: "none" })}>Feature / trait</button>
+                <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
               </div>
             ) : null}
 

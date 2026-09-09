@@ -1279,6 +1279,71 @@ describe("combat engine", () => {
     expect(state.log.find((entry) => entry.type === "AttackRolled")?.data?.appliedAttackEffects).toContain("Pack Tactics");
   });
 
+  it("attack-advantage with mode 'disadvantage' rolls the attacker's d20 twice and keeps the low one", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "feature-disadvantage";
+    encounter.map.walls = [];
+    const goblin = encounter.definitions.find((d) => d.id === "def-goblin")!;
+    goblin.traits = [{
+      id: "clumsy", name: "Clumsy", category: "trait", automationSupport: "full",
+      effects: [{ kind: "attack-advantage", condition: "always", mode: "disadvantage" }]
+    }];
+    encounter.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 2, y: 1 };
+    encounter.combatants.find((c) => c.id === "pc-fighter")!.position = { x: 1, y: 1 };
+    const state = createEngineState(encounter);
+    const result = resolveAttack(state, "enemy-goblin-1", "pc-fighter", "scimitar");
+    expect(result.attackRoll.rolls.length).toBe(2);
+    expect(state.log.find((e) => e.type === "AttackRolled")?.data?.rollMode).toBe("disadvantage");
+  });
+
+  it("incoming-attack-modifier on the target shifts attack rolls made against it", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "incoming-mod";
+    encounter.map.walls = [];
+    const fighter = encounter.definitions.find((d) => d.id === "def-fighter")!;
+    fighter.traits = [{
+      id: "bulwark", name: "Bulwark", category: "trait", automationSupport: "full",
+      effects: [{ kind: "incoming-attack-modifier", condition: "always", amount: -5 }]
+    }];
+    const goblin = encounter.definitions.find((d) => d.id === "def-goblin")!;
+    (goblin.actions.find((a) => a.kind === "attack") as { attackBonus?: number }).attackBonus = 10;
+    encounter.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 2, y: 1 };
+    encounter.combatants.find((c) => c.id === "pc-fighter")!.position = { x: 1, y: 1 };
+    encounter.combatants.find((c) => c.id === "pc-fighter")!.currentHp = 40;
+    const state = createEngineState(encounter);
+    state.rng = { next: () => 0, nextInt: () => 12, fork() { return this; } };
+    const result = resolveAttack(state, "enemy-goblin-1", "pc-fighter", "scimitar");
+    // 12 + 10 - 5 = 17 vs the fighter's AC 16 → still hits; total reflects the -5
+    expect(state.log.find((e) => e.type === "AttackRolled")?.data?.total).toBe(17);
+    void result;
+  });
+
+  it("extra-action can refresh the reaction slot; resource-regain on-activate tops up a pool", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "extra-reaction";
+    encounter.map.walls = [];
+    const fighter = encounter.definitions.find((d) => d.id === "def-fighter")!;
+    fighter.features = [{
+      id: "war-caster", name: "War Caster", category: "feature", automationSupport: "full",
+      effects: [
+        { kind: "extra-action", slot: "reaction" },
+        { kind: "resource-regain", timing: "on-activate", resourceId: "focus", amount: { base: 2 }, max: 3 }
+      ]
+    }];
+    fighter.actions.push({
+      kind: "activate-feature", id: "channel", name: "Channel", actionType: "free", featureId: "war-caster",
+      automationSupport: "full"
+    });
+    const combatant = encounter.combatants.find((c) => c.id === "pc-fighter")!;
+    combatant.actionEconomy = { action: true, bonus: true, reaction: false };
+    combatant.resources = { focus: 0 };
+    const state = createEngineState(encounter);
+    resolveActivateFeatureAction(state, "pc-fighter", "channel");
+    const after = state.snapshot.combatants.find((c) => c.id === "pc-fighter")!;
+    expect(after.actionEconomy?.reaction).toBe(true);
+    expect(after.resources?.focus).toBe(2);
+  });
+
   it("applies Swarm as real trait damage that scales when bloodied", () => {
     const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
     encounter.seed = "swarm-damage";

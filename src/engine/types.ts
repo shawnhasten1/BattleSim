@@ -259,11 +259,22 @@ export type FeatureEffect =
   | ({
     kind: "attack-advantage";
     condition: FeatureCondition;
+    /** Whether the bearer's own attack rolls get advantage or disadvantage. Default `"advantage"`. */
+    mode?: "advantage" | "disadvantage";
   } & FeatureEffectScope & Omit<FeatureEffectConditions, "condition">)
   | ({
     kind: "attack-bonus";
     bonus: NumericFormula;
   } & FeatureEffectScope & FeatureEffectConditions)
+  | ({
+    /**
+     * Modifier added to attack rolls made *against* the bearer while active.
+     * +5 ≈ attackers have advantage; -5 ≈ disadvantage (matches the crude
+     * condition proxy). Read on the target in `resolveAttackCore`.
+     */
+    kind: "incoming-attack-modifier";
+    amount: number;
+  } & FeatureEffectConditions)
   | ({
     kind: "damage-bonus";
     damage: DamageComponent[];
@@ -319,7 +330,8 @@ export type FeatureEffect =
   }
   | {
     kind: "resource-regain";
-    timing: "turn-start" | "turn-end";
+    /** `"on-activate"` fires once from `resolveActivateFeatureAction`; the others fire at the bearer's turn boundary. */
+    timing: "turn-start" | "turn-end" | "on-activate";
     resourceId: string;
     amount: NumericFormula;
     max?: number;
@@ -327,10 +339,11 @@ export type FeatureEffect =
   | ({
     /**
      * Activating the owning feature hands back a spent economy slot (Action
-     * Surge → a second `action`). Applied by `resolveActivateFeatureAction`.
+     * Surge → a second `action`; War Caster → a reaction). Applied by
+     * `resolveActivateFeatureAction`.
      */
     kind: "extra-action";
-    slot: "action" | "bonus";
+    slot: "action" | "bonus" | "reaction";
   } & FeatureEffectConditions)
   | ({
     /**

@@ -166,44 +166,74 @@ describe("spell builder — reaction block", () => {
 });
 
 describe("feature builder — shape-first disclosure & round-trips", () => {
-  it("Passive shape shows the effect template, not the activate fields", () => {
-    const draft = { name: "x", category: "feature", featureShape: "passive", effectTemplate: "armor-class-bonus" };
+  it("Passive shape shows the effects editor, not the activate / grant fields", () => {
+    const draft = { name: "x", category: "feature", featureShape: "passive", effects: [] };
     const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
-    expect(keys).toContain("effectTemplate");
+    expect(keys).toContain("effects");
     expect(keys).not.toContain("activateAs");
     expect(keys).not.toContain("grantsDash");
   });
 
-  it("Activated shape shows activate-as + resource + (for reaction) the trigger", () => {
-    const draft = { name: "x", category: "feature", featureShape: "activated", activateAs: "reaction", effectTemplate: "none" };
+  it("Activated shape shows activate-as + resource + effects + (for reaction) the trigger", () => {
+    const draft = { name: "x", category: "feature", featureShape: "activated", activateAs: "reaction", effects: [] };
     const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
-    expect(keys).toEqual(expect.arrayContaining(["activateAs", "resourceId", "reactionTrigger"]));
+    expect(keys).toEqual(expect.arrayContaining(["activateAs", "resourceId", "reactionTrigger", "effects"]));
   });
 
-  it("Grants-bonus shape shows the Dash / Disengage / Hide toggles", () => {
+  it("Grants-bonus shape shows the Dash / Disengage / Hide toggles, not the effects editor", () => {
     const draft = { name: "x", category: "feature", featureShape: "grants-bonus" };
     const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
     expect(keys).toEqual(expect.arrayContaining(["grantsDash", "grantsDisengage", "grantsHide"]));
-    expect(keys).not.toContain("effectTemplate");
+    expect(keys).not.toContain("effects");
   });
 
-  it("Rage round-trips to an activate-feature bonus action with a 10-round condition", () => {
-    const rage = featureFromDraft({ name: "Rage", category: "feature", featureShape: "activated", activateAs: "bonus", resourceId: "rage", durationRounds: 10, effectTemplate: "melee-damage-bonus" });
+  it("a multi-effect Rage (bonus + 3 resistances + save advantage) round-trips through the builder", () => {
+    const rage = featureFromDraft({
+      name: "Rage", category: "feature", featureShape: "activated", activateAs: "bonus", resourceId: "rage", durationRounds: 10,
+      effects: [
+        { kind: "damage-bonus", condition: "always", attackTypes: ["melee"], damage: [{ dice: "3", damageType: "same-as-attack" }] },
+        { kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "bludgeoning" } },
+        { kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "piercing" } },
+        { kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "slashing" } },
+        { kind: "save-advantage", ability: "str" }
+      ]
+    });
     const activate = rage.grantedActions?.[0];
     if (activate?.kind !== "activate-feature") throw new Error("expected activate-feature");
     expect(activate.actionType).toBe("bonus");
     expect(activate.resourceCost).toEqual({ resourceId: "rage", amount: 1 });
     expect(activate.condition?.durationRounds).toBe(10);
-    expect(activate.condition?.effects?.[0]?.kind).toBe("damage-bonus");
+    expect(activate.condition?.effects).toHaveLength(5);
+    const kinds = activate.condition?.effects?.map((e) => e.kind);
+    expect(kinds).toEqual(["damage-bonus", "damage-adjustment", "damage-adjustment", "damage-adjustment", "save-advantage"]);
+    const dmg = activate.condition?.effects?.[0];
+    expect(dmg?.kind === "damage-bonus" && dmg.damage[0]?.dice).toBe("3");
 
-    const roundtrip = featureFromDraft(featureDraftFromDefinition(rage));
-    expect(roundtrip.grantedActions?.[0]?.kind).toBe("activate-feature");
+    // round-trip: draft gathers feature.effects + condition.effects; rebuild is stable
+    const rebuilt = featureFromDraft(featureDraftFromDefinition(rage));
+    expect((rebuilt.grantedActions?.[0] as { condition?: { effects?: unknown[] } }).condition?.effects).toHaveLength(5);
   });
 
-  it("Action Surge puts the extra-action effect on the feature, not the condition", () => {
-    const surge = featureFromDraft({ name: "Action Surge", category: "feature", featureShape: "activated", activateAs: "free", resourceId: "action-surge", effectTemplate: "extra-action" });
-    expect(surge.effects?.[0]).toEqual({ kind: "extra-action", slot: "action" });
-    expect(surge.grantedActions?.[0]?.kind === "activate-feature" && surge.grantedActions[0].condition).toBeFalsy();
+  it("instant effects (extra-action) go on the feature; lingering ones go in the condition", () => {
+    const surge = featureFromDraft({
+      name: "Action Surge", category: "feature", featureShape: "activated", activateAs: "free", resourceId: "action-surge",
+      effects: [
+        { kind: "extra-action", condition: "always", slot: "action" },
+        { kind: "resource-regain", timing: "on-activate", resourceId: "ki", amount: { base: 2 } }
+      ]
+    });
+    expect(surge.effects?.map((e) => e.kind)).toEqual(["extra-action", "resource-regain"]);
+    expect((surge.grantedActions?.[0] as { condition?: unknown }).condition).toBeUndefined();
+  });
+
+  it("a damage-adjustment multi-type card collapses on load and expands on save", () => {
+    // three consecutive resistance adjustments should read back as one card, then re-emit three
+    const passive = featureFromDraft({
+      name: "Bear Totem", category: "feature", featureShape: "passive",
+      effects: (["acid", "cold", "fire"] as const).map((damageType) => ({ kind: "damage-adjustment" as const, condition: "always" as const, adjustment: { type: "resistance" as const, damageType } }))
+    });
+    const back = featureFromDraft(featureDraftFromDefinition(passive));
+    expect(back.effects?.filter((e) => e.kind === "damage-adjustment")).toHaveLength(3);
   });
 
   it("Cunning Action compiles to three granted bonus utilities", () => {

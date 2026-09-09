@@ -67,7 +67,7 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   // feature
   "feature.category": { label: "Kind" },
   "feature.shape": { label: "What it does" },
-  "feature.effectTemplate": { label: "Effect" },
+  "feature.effects": { label: "Effects", hint: "Add one or more — each fires while the feature is active" },
   "feature.activateAs": { label: "Activate as" },
   "feature.resourceId": { label: "Spends resource", hint: 'e.g. "rage", "action-surge" — a pool is seeded for you' },
   "feature.durationRounds": { label: "Lasts (rounds)" },
