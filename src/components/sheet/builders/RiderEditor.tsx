@@ -210,12 +210,14 @@ function ConditionRiderFields({
               if (kind === "rounds") setDuration({ kind: "rounds", rounds: 10 });
               else if (kind === "save-ends") setDuration({ kind: "save-ends", saveAt: "turn-end" });
               else if (kind === "concentration") setDuration({ kind: "concentration" });
+              else if (kind === "until-start-of-next-turn") setDuration({ kind: "until-start-of-next-turn" });
               else setDuration({ kind: "permanent" });
             }}
           >
             <option value="rounds">A number of rounds</option>
             <option value="save-ends">Until the target saves</option>
             <option value="concentration">While concentrating</option>
+            <option value="until-start-of-next-turn">Until its next turn</option>
             <option value="permanent">Until removed</option>
           </select>
         </label>
@@ -231,7 +233,20 @@ function ConditionRiderFields({
         ) : null}
       </div>
 
-      {context === "weapon" && hasActionSave ? null : null}
+      <label className={styles.fieldInlineLabel}>
+        <input
+          type="checkbox"
+          checked={Boolean(rider.modifiers?.deniesReactions)}
+          onChange={(e) => onChange({
+            ...rider,
+            modifiers: e.target.checked
+              ? { ...(rider.modifiers ?? {}), deniesReactions: true }
+              : (() => { const { deniesReactions, ...rest } = rider.modifiers ?? {}; return Object.keys(rest).length ? rest : undefined; })(),
+            duration: e.target.checked ? { kind: "until-start-of-next-turn" } : rider.duration
+          })}
+        />
+        Also: target can&apos;t take reactions until its next turn (Shocking Grasp)
+      </label>
     </>
   );
 }

@@ -5,6 +5,9 @@ import {
   actionFieldSchema,
   actionFromEffectDraft,
   effectDraftFromAction,
+  featureDraftFromDefinition,
+  featureFieldSchema,
+  featureFromDraft,
   spellDraftFromDefinition,
   spellFieldSchema,
   spellFromDraft,
@@ -12,7 +15,7 @@ import {
   weaponFieldSchema,
   weaponFromDraft
 } from "@/components/sheet/builders/schemas";
-import { findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import type { WeaponDefinition } from "@/engine";
 
 function visibleKeys(specs: ReturnType<typeof weaponFieldSchema>, draft: BuilderDraft, mode: "simple" | "advanced" = "simple") {
@@ -110,25 +113,140 @@ describe("spell builder — shape-first disclosure", () => {
   });
 });
 
+describe("weapon builder — reaction / grip / power-attack fields", () => {
+  it("round-trips usableAs, grip, powerAttack and a reaction trigger", () => {
+    const source: WeaponDefinition = {
+      ...MELEE, id: "spear", name: "Reach Spear",
+      usableAs: ["action", "bonus"], grip: "versatile", powerAttack: true
+    };
+    const back = weaponFromDraft(weaponDraftFromDefinition(source));
+    expect(back.usableAs).toEqual(["action", "bonus"]);
+    expect(back.grip).toBe("versatile");
+    expect(back.powerAttack).toBe(true);
+  });
+
+  it("a plain melee weapon emits no explicit usableAs (default action + reaction)", () => {
+    expect(weaponFromDraft(weaponDraftFromDefinition(MELEE)).usableAs).toBeUndefined();
+  });
+
+  it("turning the reaction toggle off on a melee weapon opts out of opportunity attacks", () => {
+    const draft = { ...weaponDraftFromDefinition(MELEE), usableAsReaction: false };
+    expect(weaponFromDraft(draft).usableAs).toEqual(["action"]);
+  });
+
+  it("the reaction-trigger control shows only for a reaction-capable melee weapon", () => {
+    const draft = { ...weaponDraftFromDefinition(MELEE), usableAsReaction: true };
+    expect(visibleKeys(weaponFieldSchema(draft), draft, "advanced")).toContain("reactionTrigger");
+    const off = { ...draft, usableAsReaction: false };
+    expect(visibleKeys(weaponFieldSchema(off), off, "advanced")).not.toContain("reactionTrigger");
+  });
+});
+
+describe("spell builder — reaction block", () => {
+  const base: BuilderDraft = { shape: "attack", level: 1, range: "60" };
+  it("reveals the reaction trigger only when the casting time is a reaction", () => {
+    const action = { ...base, timing: "action" };
+    expect(visibleKeys(spellFieldSchema(action), action, "advanced")).not.toContain("reactionTrigger");
+    const reaction = { ...base, timing: "reaction" };
+    expect(visibleKeys(spellFieldSchema(reaction), reaction, "advanced")).toEqual(expect.arrayContaining(["reactionTrigger", "reactionTarget", "reactionPriority"]));
+  });
+
+  it("stamps a reaction meta onto the compiled action", () => {
+    const draft: BuilderDraft = {
+      ...base, name: "Rebuke", timing: "reaction", shape: "save", saveAbility: "dex", dealsDamage: true,
+      dmg: { count: 2, die: 10, mod: 0, type: "fire" }, onSuccess: "half",
+      reactionTrigger: { kind: "hit-by-attack" }, reactionTarget: "trigger-source", reactionPriority: "worthwhile"
+    };
+    const spell = spellFromDraft(draft);
+    expect(spell.castingTime).toBe("reaction");
+    if (spell.action?.kind !== "save") throw new Error("expected save");
+    // "trigger-source" is the default, so it is stored as `undefined`
+    expect(spell.action.reaction).toEqual({ trigger: { kind: "hit-by-attack" }, target: undefined, priority: "worthwhile" });
+  });
+});
+
+describe("feature builder — shape-first disclosure & round-trips", () => {
+  it("Passive shape shows the effect template, not the activate fields", () => {
+    const draft = { name: "x", category: "feature", featureShape: "passive", effectTemplate: "armor-class-bonus" };
+    const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
+    expect(keys).toContain("effectTemplate");
+    expect(keys).not.toContain("activateAs");
+    expect(keys).not.toContain("grantsDash");
+  });
+
+  it("Activated shape shows activate-as + resource + (for reaction) the trigger", () => {
+    const draft = { name: "x", category: "feature", featureShape: "activated", activateAs: "reaction", effectTemplate: "none" };
+    const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
+    expect(keys).toEqual(expect.arrayContaining(["activateAs", "resourceId", "reactionTrigger"]));
+  });
+
+  it("Grants-bonus shape shows the Dash / Disengage / Hide toggles", () => {
+    const draft = { name: "x", category: "feature", featureShape: "grants-bonus" };
+    const keys = visibleSpecs(featureFieldSchema(draft), draft, "advanced").map((s) => s.key);
+    expect(keys).toEqual(expect.arrayContaining(["grantsDash", "grantsDisengage", "grantsHide"]));
+    expect(keys).not.toContain("effectTemplate");
+  });
+
+  it("Rage round-trips to an activate-feature bonus action with a 10-round condition", () => {
+    const rage = featureFromDraft({ name: "Rage", category: "feature", featureShape: "activated", activateAs: "bonus", resourceId: "rage", durationRounds: 10, effectTemplate: "melee-damage-bonus" });
+    const activate = rage.grantedActions?.[0];
+    if (activate?.kind !== "activate-feature") throw new Error("expected activate-feature");
+    expect(activate.actionType).toBe("bonus");
+    expect(activate.resourceCost).toEqual({ resourceId: "rage", amount: 1 });
+    expect(activate.condition?.durationRounds).toBe(10);
+    expect(activate.condition?.effects?.[0]?.kind).toBe("damage-bonus");
+
+    const roundtrip = featureFromDraft(featureDraftFromDefinition(rage));
+    expect(roundtrip.grantedActions?.[0]?.kind).toBe("activate-feature");
+  });
+
+  it("Action Surge puts the extra-action effect on the feature, not the condition", () => {
+    const surge = featureFromDraft({ name: "Action Surge", category: "feature", featureShape: "activated", activateAs: "free", resourceId: "action-surge", effectTemplate: "extra-action" });
+    expect(surge.effects?.[0]).toEqual({ kind: "extra-action", slot: "action" });
+    expect(surge.grantedActions?.[0]?.kind === "activate-feature" && surge.grantedActions[0].condition).toBeFalsy();
+  });
+
+  it("Cunning Action compiles to three granted bonus utilities", () => {
+    const cunning = featureFromDraft({ name: "Cunning Action", category: "feature", featureShape: "grants-bonus", grantsDash: true, grantsDisengage: true, grantsHide: true });
+    expect(cunning.grantedActions?.map((a) => (a.kind === "utility" ? a.mode : "")).sort()).toEqual(["dash", "disengage", "hide"]);
+    expect(cunning.grantedActions?.every((a) => a.actionType === "bonus")).toBe(true);
+  });
+
+  it("an SRD feature edits without losing its shape", () => {
+    const packTactics = findSrdFeature("srd:feature:pack-tactics")!;
+    const back = featureFromDraft(featureDraftFromDefinition(packTactics));
+    expect(back.effects?.[0]?.kind).toBe("attack-advantage");
+  });
+});
+
 describe("every rendered field resolves a label", () => {
   const drafts: BuilderDraft[] = [
     weaponDraftFromDefinition(MELEE),
-    { ...weaponDraftFromDefinition(MELEE), weaponKind: "ranged", chargesEnabled: true },
-    { shape: "attack", attackDelivery: "beams" },
-    { shape: "save" },
+    { ...weaponDraftFromDefinition(MELEE), weaponKind: "ranged", chargesEnabled: true, usableAsBonus: true },
+    { shape: "attack", attackDelivery: "beams", timing: "reaction" },
+    { shape: "save", timing: "reaction" },
     { shape: "area", areaType: "rectangle" },
     { shape: "healing" }
   ];
+  const featureDrafts: BuilderDraft[] = [
+    { name: "x", category: "feature", featureShape: "passive" },
+    { name: "x", category: "feature", featureShape: "activated", activateAs: "reaction" },
+    { name: "x", category: "feature", featureShape: "grants-bonus" }
+  ];
 
   it("no FieldSpec.copy key is missing from FIELD_COPY", () => {
-    const schemas = [weaponFieldSchema, spellFieldSchema, actionFieldSchema];
     for (const draft of drafts) {
-      for (const schema of schemas) {
+      for (const schema of [weaponFieldSchema, spellFieldSchema, actionFieldSchema]) {
         for (const spec of schema(draft)) {
           const copy = FIELD_COPY[spec.copy];
           expect(copy, `missing FIELD_COPY["${spec.copy}"]`).toBeDefined();
           expect(copy.label.length).toBeGreaterThan(0);
         }
+      }
+    }
+    for (const draft of featureDrafts) {
+      for (const spec of featureFieldSchema(draft)) {
+        expect(FIELD_COPY[spec.copy], `missing FIELD_COPY["${spec.copy}"]`).toBeDefined();
       }
     }
   });

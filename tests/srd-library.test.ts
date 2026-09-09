@@ -2,9 +2,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   SRD_DRAG_MIME,
+  SRD_FEATURES,
   SRD_LIBRARY_VERSION,
   SRD_SPELLS,
   SRD_WEAPONS,
+  findSrdFeature,
   findSrdSpell,
   findSrdWeapon,
   parseSrdDragPayload,
@@ -134,7 +136,40 @@ describe("SRD library — lookup & search", () => {
     expect(weaponsOnly).toContain("srd:weapon:dagger");
     expect(weaponsOnly).toContain("srd:weapon:dagger-of-venom");
 
-    expect(searchSrd("").length).toBe(SRD_WEAPONS.length + SRD_SPELLS.length);
+    const featuresOnly = searchSrd("rage", "feature").map((result) => result.id);
+    expect(featuresOnly).toEqual(["srd:feature:rage"]);
+    expect(findSrdFeature("srd:feature:cunning-action")?.name).toBe("Cunning Action");
+
+    expect(searchSrd("").length).toBe(SRD_WEAPONS.length + SRD_SPELLS.length + SRD_FEATURES.length);
+  });
+});
+
+describe("SRD features — attach & compile", () => {
+  it("every feature attaches, re-mints granted-action ids, and compiles cleanly", () => {
+    for (const feature of SRD_FEATURES) {
+      useEncounterStore.setState(pristine, true);
+      const before = getExecutableActions(fighterDefinition()).length;
+      const newId = useEncounterStore.getState().attachSrdFeature(DEF_ID, feature.id);
+      expect(newId, feature.id).toBeTruthy();
+      const definition = fighterDefinition();
+      const attached = [...(definition.features ?? []), ...(definition.traits ?? [])].find((f) => f.id === newId);
+      expect(attached, feature.id).toBeDefined();
+      for (const granted of attached?.grantedActions ?? []) {
+        expect(granted.id.startsWith(`${newId}-granted-`), feature.id).toBe(true);
+        if ("featureId" in granted) expect(granted.featureId, feature.id).toBe(newId);
+      }
+      // compiles without throwing, and adds one executable per granted action
+      const after = getExecutableActions(fighterDefinition());
+      expect(after.length - before, feature.id).toBe((feature.grantedActions ?? []).length);
+    }
+  });
+
+  it("Action Surge seeds its resource pool on the definition and combatant", () => {
+    useEncounterStore.setState(pristine, true);
+    useEncounterStore.getState().attachSrdFeature(DEF_ID, "srd:feature:action-surge");
+    const encounter = useEncounterStore.getState().encounter;
+    expect(encounter.definitions.find((d) => d.id === DEF_ID)?.resources?.["action-surge"]).toBe(1);
+    expect(encounter.combatants.find((c) => c.id === COMBATANT_ID)?.resources?.["action-surge"]).toBe(1);
   });
 });
 

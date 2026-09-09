@@ -34,6 +34,11 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "weapon.charges": { label: "Limited uses", hint: "A charge pool the on-hit effect spends; the plain attack still works when it is empty" },
   "weapon.chargesMax": { label: "Charge pool size" },
   "weapon.chargesRecharge": { label: "Refills" },
+  "weapon.usableAsBonus": { label: "Also as a bonus action", hint: "An off-hand attack — Crossbow Expert, two-weapon fighting" },
+  "weapon.usableAsReaction": { label: "Can make opportunity attacks", hint: "Melee weapons can react to a creature leaving reach; turn this off to opt out" },
+  "weapon.grip": { label: "Grip", hint: "Two-handed / versatile use the larger damage die" },
+  "weapon.powerAttack": { label: "Power attack option", hint: "Great Weapon Master / Sharpshooter: also offer a -5 to hit / +10 damage swing" },
+  "weapon.reactionTrigger": { label: "Reaction trigger" },
 
   // spell / action
   "spell.level": { label: "Spell level", hint: "0 for a cantrip" },
@@ -55,6 +60,29 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "spell.ritual": { label: "Ritual" },
   "spell.resourceId": { label: "Spends resource", hint: 'e.g. "slot-3" for a 3rd-level slot' },
   "spell.upcastDamage": { label: "Extra damage per slot above base", hint: 'e.g. "1d6" for Fireball' },
+  "spell.reactionTrigger": { label: "Reaction trigger", hint: "What has to happen for you to cast this as a reaction" },
+  "spell.reactionTarget": { label: "Reaction acts on" },
+  "spell.reactionPriority": { label: "AI eagerness", hint: "How readily the simulator spends the reaction on this" },
+
+  // feature
+  "feature.category": { label: "Kind" },
+  "feature.shape": { label: "What it does" },
+  "feature.effectTemplate": { label: "Effect" },
+  "feature.activateAs": { label: "Activate as" },
+  "feature.resourceId": { label: "Spends resource", hint: 'e.g. "rage", "action-surge" — a pool is seeded for you' },
+  "feature.durationRounds": { label: "Lasts (rounds)" },
+  "feature.reactionTrigger": { label: "Reaction trigger" },
+  "feature.grantsDash": { label: "Grants a bonus-action Dash" },
+  "feature.grantsDisengage": { label: "Grants a bonus-action Disengage" },
+  "feature.grantsHide": { label: "Grants a bonus-action Hide" },
+  "feature.description": { label: "Reference text" },
+
+  // reaction-trigger control
+  "reactionTrigger.kind": { label: "When" },
+  "reactionTrigger.withinFt": { label: "Within (ft)" },
+  "reactionTrigger.meleeOnly": { label: "Melee attacks only" },
+  "reactionTrigger.maxSpellLevel": { label: "Up to spell level" },
+  "reactionTrigger.note": { label: "Describe the trigger" },
 
   // area
   "area.type": { label: "Shape" },

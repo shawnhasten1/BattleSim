@@ -60,3 +60,24 @@ sheet's resource strip or a future rest action.
 If the library browser later needs facets that are not derivable from the engine
 record (curated tags, blurbs), add a `Partial<Record<string, SrdMeta>>` sidecar
 map keyed by id in `index.ts` — do **not** widen the engine types.
+
+## Features (`features.ts`)
+
+`SRD_FEATURES` is the third library type — plain `FeatureDefinition` records,
+ids `srd:feature:<slug>`. Attaching one (`attachSrdFeature`) deep-clones it,
+re-mints the feature id and every `grantedActions` id (`<featureId>-granted-N`),
+points each granted `featureId` back at the fresh id, and seeds a resource pool
+for any granted `resourceCost` whose id is a known pool (`rage`, `action-surge`,
+`second-wind`, `bardic-inspiration`).
+
+Authoring:
+- **Activated** features carry their `activate-feature` (or a granted `attack` /
+  `healing` / `utility`) in `grantedActions`. The sheet groups each granted
+  action by its own `actionType`. A lingering effect goes in the granted
+  `activate-feature`'s `condition.effects`; an instantaneous one (Action Surge's
+  `extra-action`) goes on the feature's own `effects` (that's where
+  `resolveActivateFeatureAction` looks).
+- **Passive** features carry only `effects`.
+- **Grants** features carry `grantedActions: [{ kind: "utility", actionType:
+  "bonus", mode, … }]` (Cunning Action).
+- Skip pure flavour — no damage / utility / economy impact, no entry.

@@ -49,7 +49,7 @@ import {
   type CoverLevel,
   type WallSegment
 } from "@/engine";
-import { findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { clampReplayIndex } from "@/lib/replay";
 import { downscaleDataUrl } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
@@ -193,8 +193,18 @@ interface EncounterStore {
   /** Attach a copy of a bundled SRD spell to a definition. Re-mints id / action id / rider ids. One undo step. */
   attachSrdSpell: (definitionId: string, srdId: string) => string | undefined;
   attachFeatureDefinition: (definitionId: string, feature: FeatureDefinition) => void;
-  addFeatureOrTrait: (definitionId: string, input: { category: "feature" | "trait"; name: string; description?: string; effectPreset?: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" }) => void;
-  addMultiattack: (definitionId: string, input: { name: string; actionIds: string[]; count: number }) => void;
+  /**
+   * Attach a copy of a bundled SRD feature. Re-mints the feature id + every
+   * `grantedActions` id, points `featureId` back at the fresh id, and seeds any
+   * `resourceCost` pool (rage / action-surge / second-wind …) on the definition
+   * and its combatants. One undo step. `undefined` if the srd id is unknown.
+   */
+  attachSrdFeature: (definitionId: string, srdId: string) => string | undefined;
+  /** Add a fully-formed feature / trait from the guided builder (light-normalized, one undo step). Returns its id. */
+  addFeatureV2: (definitionId: string, feature: FeatureDefinition) => string;
+  /** Merge a partial patch into one feature / trait. One undo step. */
+  updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
+  addMultiattack: (definitionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
   /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
   addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
   /** Add a fully-formed spell record from the guided builder. Returns its id. */
@@ -1621,30 +1631,80 @@ export const useEncounterStore = create<EncounterStore>()(
           })
         });
       },
-      addFeatureOrTrait: (definitionId, input) => {
+      attachSrdFeature: (definitionId, srdId) => {
+        const source = findSrdFeature(srdId);
         const encounter = get().encounter;
-        const feature: FeatureDefinition = {
-          id: `${input.category}-${crypto.randomUUID()}`,
-          name: input.name,
-          category: input.category,
-          description: input.description,
-          effects: featureEffectsFromPreset(input.effectPreset),
-          automationSupport: input.effectPreset && input.effectPreset !== "none" ? "full" : "manual-only"
-        };
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!source || !definition) return undefined;
+
+        const featureId = `feature-${crypto.randomUUID()}`;
+        const feature = normalizeFeatureRecord(structuredClone(source), featureId, srdId);
+        const seeded = seededResourcesForFeature(feature);
+
+        const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            return input.category === "feature"
-              ? { ...definition, features: [...(definition.features ?? []), feature] }
-              : { ...definition, traits: [...(definition.traits ?? []), feature] };
-          })
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? {
+              ...candidate,
+              [bucket]: [...(candidate[bucket] ?? []), feature],
+              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
+            }
+            : candidate),
+          combatants: seeded
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
+        });
+        return featureId;
+      },
+      addFeatureV2: (definitionId, input) => {
+        const encounter = get().encounter;
+        const id = `feature-${crypto.randomUUID()}`;
+        const feature = normalizeFeatureRecord(structuredClone(input), id);
+        const seeded = seededResourcesForFeature(feature);
+        const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? {
+              ...candidate,
+              [bucket]: [...(candidate[bucket] ?? []), feature],
+              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
+            }
+            : candidate),
+          combatants: seeded
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
+        });
+        return id;
+      },
+      updateFeature: (definitionId, featureId, patch) => {
+        const encounter = get().encounter;
+        const patchIn = (list: FeatureDefinition[] | undefined) =>
+          (list ?? []).map((feature) => feature.id === featureId
+            ? normalizeFeatureRecord({ ...feature, ...patch, id: feature.id }, feature.id)
+            : feature);
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => definition.id === definitionId
+            ? { ...definition, features: patchIn(definition.features), traits: patchIn(definition.traits) }
+            : definition)
         });
       },
       addMultiattack: (definitionId, input) => {
         const encounter = get().encounter;
-        const uniqueActionIds = input.actionIds.filter(Boolean);
-        if (uniqueActionIds.length === 0) return;
+        const attacks = input.attacks
+          .filter((step) => step.actionId)
+          .map((step) => ({
+            actionId: step.actionId,
+            count: Math.max(1, Math.floor(step.count) || 1),
+            targetGroup: step.targetGroup && step.targetGroup > 0 ? Math.floor(step.targetGroup) : undefined
+          }));
+        if (attacks.length === 0) return;
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
@@ -1657,7 +1717,7 @@ export const useEncounterStore = create<EncounterStore>()(
                   id: `multiattack-${crypto.randomUUID()}`,
                   name: input.name,
                   actionType: "action" as const,
-                  attacks: uniqueActionIds.map((actionId) => ({ actionId, count: Math.max(1, input.count) })),
+                  attacks,
                   automationSupport: "full" as const
                 }
               ]
@@ -1907,34 +1967,41 @@ function pointsMatch(a: Point, b: Point): boolean {
   return Math.abs(a.x - b.x) < 0.001 && Math.abs(a.y - b.y) < 0.001;
 }
 
-function featureEffectsFromPreset(preset: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" | undefined): FeatureEffect[] | undefined {
-  if (!preset || preset === "none") {
-    return undefined;
+/**
+ * Light-normalize a feature record for the sheet: pin the id, coerce the
+ * category, and re-mint every `grantedActions` id (pointing `featureId` back at
+ * this feature). `srdSlug` records provenance when the feature came from the
+ * bundled library.
+ */
+function normalizeFeatureRecord(input: FeatureDefinition, id: string, srdSlug?: string): FeatureDefinition {
+  const category: FeatureDefinition["category"] = input.category === "trait" ? "trait" : "feature";
+  const grantedActions = (input.grantedActions ?? []).map((action, index) => {
+    const nextId = `${id}-granted-${index + 1}`;
+    return "featureId" in action
+      ? { ...action, id: nextId, featureId: id }
+      : { ...action, id: nextId };
+  });
+  return {
+    ...input,
+    id,
+    category,
+    grantedActions: grantedActions.length ? grantedActions : undefined,
+    source: srdSlug
+      ? { provider: "homebrew", documentName: "SRD", slug: srdSlug, importedAt: new Date().toISOString() }
+      : input.source,
+    automationSupport: input.automationSupport ?? "manual-only"
+  };
+}
+
+/** Resource pools a feature's granted actions spend, seeded to a sensible default when the definition lacks them. */
+function seededResourcesForFeature(feature: FeatureDefinition): Record<string, number> | undefined {
+  const defaults: Record<string, number> = { rage: 3, "action-surge": 1, "second-wind": 1, "bardic-inspiration": 3 };
+  const seeded: Record<string, number> = {};
+  for (const action of feature.grantedActions ?? []) {
+    const cost = "resourceCost" in action ? action.resourceCost : undefined;
+    if (cost?.resourceId && defaults[cost.resourceId] !== undefined) {
+      seeded[cost.resourceId] = defaults[cost.resourceId];
+    }
   }
-  if (preset === "pack-tactics") {
-    return [{
-      kind: "attack-advantage",
-      condition: "ally-adjacent-to-target"
-    }];
-  }
-  if (preset === "swarm") {
-    return [{
-      kind: "swarm-damage",
-      fullHpDamage: [{ dice: "2d6", damageType: "piercing" }],
-      bloodiedDamage: [{ dice: "1d6", damageType: "piercing" }]
-    }];
-  }
-  if (preset === "defense") {
-    return [{
-      kind: "armor-class-bonus",
-      bonus: { base: 1 }
-    }];
-  }
-  return [{
-    kind: "resource-regain",
-    timing: "turn-start",
-    resourceId: "limited-use",
-    amount: { base: 1 },
-    max: 1
-  }];
+  return Object.keys(seeded).length ? seeded : undefined;
 }

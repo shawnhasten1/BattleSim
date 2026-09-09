@@ -12,15 +12,13 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { StatsTab } from "./sheet-tabs/StatsTab";
 import { ActionsTab } from "./sheet-tabs/ActionsTab";
-import { FeaturesTab } from "./sheet-tabs/FeaturesTab";
 import { TacticsTab } from "./sheet-tabs/TacticsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
 import styles from "./sheet.module.css";
 
 const TABS = [
   { id: "stats", label: "Stats" },
-  { id: "actions", label: "Actions" },
-  { id: "features", label: "Features" },
+  { id: "abilities", label: "Abilities" },
   { id: "tactics", label: "Tactics" },
   { id: "token", label: "Token" }
 ] as const;
@@ -35,6 +33,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
+  const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
   const [tab, setTab] = useState<SheetTabId>("token");
   const [dropActive, setDropActive] = useState(false);
 
@@ -60,6 +59,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       const payload = parseSrdDragPayload(srdRaw);
       if (payload?.kind === "weapon") attachSrdWeapon(definition.id, payload.id);
       else if (payload?.kind === "spell") attachSrdSpell(definition.id, payload.id);
+      else if (payload?.kind === "feature") attachSrdFeature(definition.id, payload.id);
       return;
     }
     const raw = event.dataTransfer.getData("application/x-battle-sim-compendium");
@@ -108,8 +108,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       </p>
 
       {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} /> : null}
-      {tab === "actions" ? <ActionsTab combatant={combatant} definition={definition} compendium={compendium} /> : null}
-      {tab === "features" ? <FeaturesTab combatant={combatant} definition={definition} /> : null}
+      {tab === "abilities" ? <ActionsTab combatant={combatant} definition={definition} compendium={compendium} /> : null}
       {tab === "tactics" ? <TacticsTab combatant={combatant} definition={definition} /> : null}
       {tab === "token" ? <TokenTab combatant={combatant} definition={definition} /> : null}
     </FloatingWindow>

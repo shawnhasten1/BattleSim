@@ -1,10 +1,10 @@
 "use client";
 
 import { type ReactNode } from "react";
-import type { Ability, DamageType } from "@/engine";
+import type { Ability, DamageType, ReactionTrigger } from "@/engine";
 import { FIELD_COPY } from "./field-copy";
 import { visibleSpecs, type BuilderDraft, type FieldSpec } from "./field-spec";
-import { diceValueToString, parseDiceValue, type DiceValue } from "./schemas";
+import { blankReactionTrigger, diceValueToString, parseDiceValue, REACTION_TRIGGER_KINDS, type DiceValue } from "./schemas";
 import { RiderEditor } from "./RiderEditor";
 import styles from "./builders.module.css";
 
@@ -145,9 +145,47 @@ function BuilderControl({
           hasActionSave={draft.shape === "save" || draft.shape === "area"}
         />
       );
+    case "reaction-trigger":
+      return <ReactionTriggerControl id={id} value={value as ReactionTrigger | undefined} onChange={onChange} />;
     default:
       return null;
   }
+}
+
+/** Composite control for a `ReactionTrigger` — a kind select plus the kind's parameters. */
+function ReactionTriggerControl({
+  id, value, onChange
+}: { id: string; value: ReactionTrigger | undefined; onChange: (next: ReactionTrigger) => void }) {
+  const trigger = value ?? { kind: "enemy-leaves-reach" as const };
+  const set = (next: ReactionTrigger) => onChange(next);
+  return (
+    <div className={styles.riderRow}>
+      <select id={id} value={trigger.kind} onChange={(e) => set(blankReactionTrigger(e.target.value as ReactionTrigger["kind"]))}>
+        {REACTION_TRIGGER_KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      {(trigger.kind === "targeted-by-attack" || trigger.kind === "hit-by-attack") ? (
+        <label className={styles.fieldInlineLabel}>
+          <input type="checkbox" checked={Boolean(trigger.meleeOnly)} onChange={(e) => set({ ...trigger, meleeOnly: e.target.checked })} />
+          Melee only
+        </label>
+      ) : null}
+      {(trigger.kind === "ally-targeted-by-attack" || trigger.kind === "enemy-casts-spell") ? (
+        <label className={styles.fieldInlineLabel}>
+          Within (ft)
+          <input type="number" min={5} step={5} value={trigger.withinFt} onChange={(e) => set({ ...trigger, withinFt: Number(e.target.value) || 5 })} />
+        </label>
+      ) : null}
+      {trigger.kind === "enemy-casts-spell" ? (
+        <label className={styles.fieldInlineLabel}>
+          Up to level
+          <input type="number" min={1} max={9} value={trigger.maxSpellLevel ?? ""} onChange={(e) => set({ ...trigger, maxSpellLevel: e.target.value === "" ? undefined : Number(e.target.value) })} />
+        </label>
+      ) : null}
+      {trigger.kind === "manual" ? (
+        <input type="text" placeholder="Describe the trigger" value={trigger.note} onChange={(e) => set({ ...trigger, note: e.target.value })} />
+      ) : null}
+    </div>
+  );
 }
 
 export function BuilderForm({

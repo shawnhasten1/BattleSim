@@ -9,6 +9,10 @@ import type {
   ActionRider,
   AreaTemplate,
   DamageComponent,
+  FeatureDefinition,
+  FeatureEffect,
+  ReactionMeta,
+  ReactionTrigger,
   SpellDefinition,
   WeaponDefinition
 } from "@/engine";
@@ -90,6 +94,41 @@ const ON_SUCCESS_OPTIONS = [
   { value: "negates", label: "Effect negated" }
 ] as const;
 
+/* ─── reaction trigger ────────────────────────────────────────────────────── */
+
+export const REACTION_TRIGGER_KINDS = [
+  { value: "enemy-leaves-reach", label: "An enemy leaves my reach" },
+  { value: "targeted-by-attack", label: "I'm targeted by an attack" },
+  { value: "hit-by-attack", label: "I'm hit by an attack" },
+  { value: "ally-targeted-by-attack", label: "An ally near me is targeted" },
+  { value: "enemy-casts-spell", label: "An enemy nearby casts a spell" },
+  { value: "manual", label: "A trigger I'll describe" }
+] as const;
+
+export function blankReactionTrigger(kind: ReactionTrigger["kind"]): ReactionTrigger {
+  switch (kind) {
+    case "targeted-by-attack": return { kind, meleeOnly: false };
+    case "hit-by-attack": return { kind, meleeOnly: false };
+    case "ally-targeted-by-attack": return { kind, withinFt: 5 };
+    case "enemy-casts-spell": return { kind, withinFt: 60 };
+    case "manual": return { kind, note: "" };
+    case "enemy-leaves-reach":
+    default: return { kind: "enemy-leaves-reach" };
+  }
+}
+
+function reactionMetaFromDraft(draft: BuilderDraft): ReactionMeta | undefined {
+  if (draft.timing !== "reaction" && draft.activateAs !== "reaction") {
+    return undefined;
+  }
+  const trigger = (draft.reactionTrigger as ReactionTrigger | undefined) ?? { kind: "enemy-leaves-reach" };
+  const target = draft.reactionTarget === "self" || draft.reactionTarget === "trigger-target" ? draft.reactionTarget : undefined;
+  const priority = draft.reactionPriority === "always" || draft.reactionPriority === "manual" || draft.reactionPriority === "worthwhile"
+    ? draft.reactionPriority
+    : undefined;
+  return { trigger, target, priority };
+}
+
 /* ─── weapon ──────────────────────────────────────────────────────────────── */
 
 export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
@@ -108,6 +147,12 @@ export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
       key: "chargesRecharge", copy: "weapon.chargesRecharge", control: "select", visibleWhen: (d) => Boolean(d.chargesEnabled),
       options: [{ value: "dawn", label: "At dawn" }, { value: "short-rest", label: "Short rest" }, { value: "long-rest", label: "Long rest" }]
     },
+    { key: "usableAsBonus", copy: "weapon.usableAsBonus", control: "toggle", advanced: true },
+    { key: "usableAsReaction", copy: "weapon.usableAsReaction", control: "toggle", advanced: true, visibleWhen: () => isMelee },
+    { key: "reactionTrigger", copy: "weapon.reactionTrigger", control: "reaction-trigger", advanced: true, visibleWhen: (d) => isMelee && Boolean(d.usableAsReaction) },
+    { key: "grip", copy: "weapon.grip", control: "select", advanced: true, visibleWhen: () => isMelee,
+      options: [{ value: "one-handed", label: "One-handed" }, { value: "two-handed", label: "Two-handed" }, { value: "versatile", label: "Versatile" }] },
+    { key: "powerAttack", copy: "weapon.powerAttack", control: "toggle", advanced: true },
     { key: "nonProficient", copy: "weapon.nonProficient", control: "toggle", advanced: true },
     { key: "toHitBonus", copy: "weapon.toHitBonus", control: "number", advanced: true },
     { key: "reach", copy: "weapon.reach", control: "number", advanced: true, visibleWhen: () => isMelee },
@@ -119,6 +164,7 @@ export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
 
 export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraft {
   const primary = weapon.damage[0];
+  const usableAs = weapon.usableAs;
   return {
     name: weapon.name,
     weaponKind: weapon.attackType,
@@ -131,6 +177,11 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     chargesMax: weapon.charges?.max ?? 1,
     chargesRecharge: typeof weapon.charges?.recharge === "string" ? weapon.charges.recharge : "dawn",
     // advanced fields carry a value only when the weapon deviates from the default
+    usableAsBonus: usableAs ? usableAs.includes("bonus") : false,
+    usableAsReaction: usableAs ? usableAs.includes("reaction") : weapon.attackType === "melee",
+    reactionTrigger: weapon.reactionTrigger,
+    grip: weapon.grip && weapon.grip !== "one-handed" ? weapon.grip : undefined,
+    powerAttack: Boolean(weapon.powerAttack),
     nonProficient: weapon.proficient === false,
     toHitBonus: weapon.toHitBonus || undefined,
     reach: weapon.attackType === "melee" && weapon.reach && weapon.reach !== 5 ? weapon.reach : undefined,
@@ -144,6 +195,14 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
   const kind: WeaponDefinition["attackType"] = draft.weaponKind === "ranged" ? "ranged" : "melee";
   const ability = (draft.ability as WeaponDefinition["ability"]) ?? "str";
   const damageAbility: Ability = ability === "finesse" ? "str" : ability;
+  const reactionOn = kind === "melee" && draft.usableAsReaction !== false;
+  const usableAs: Array<"action" | "bonus" | "reaction"> = [
+    "action",
+    ...(draft.usableAsBonus ? (["bonus"] as const) : []),
+    ...(reactionOn ? (["reaction"] as const) : [])
+  ];
+  const isDefaultSlots = usableAs.length === (kind === "melee" ? 2 : 1)
+    && usableAs.includes("action") && (kind !== "melee" || usableAs.includes("reaction")) && !usableAs.includes("bonus");
   return {
     id: "",
     name: (draft.name as string) || "Weapon",
@@ -161,7 +220,11 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
     onHit: (draft.onHit as ActionRider[])?.length ? (draft.onHit as ActionRider[]) : undefined,
     charges: draft.chargesEnabled
       ? { id: "charge", max: Math.max(1, Number(draft.chargesMax) || 1), recharge: (draft.chargesRecharge as "dawn" | "short-rest" | "long-rest") ?? "dawn" }
-      : undefined
+      : undefined,
+    usableAs: isDefaultSlots ? undefined : usableAs,
+    grip: draft.grip === "two-handed" || draft.grip === "versatile" ? draft.grip : undefined,
+    powerAttack: draft.powerAttack ? true : undefined,
+    reactionTrigger: reactionOn ? (draft.reactionTrigger as ReactionTrigger | undefined) : undefined
   };
 }
 
@@ -206,11 +269,23 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
 
 /* ─── spell ───────────────────────────────────────────────────────────────── */
 
+/** Reaction block shown when the action / spell casting time is "Reaction". */
+function reactionBlockSpecs(triggerCopy: string, targetCopy: string, priorityCopy: string, when: (d: BuilderDraft) => boolean): FieldSpec[] {
+  return [
+    { key: "reactionTrigger", copy: triggerCopy, control: "reaction-trigger", visibleWhen: when },
+    { key: "reactionTarget", copy: targetCopy, control: "select", advanced: true, visibleWhen: when,
+      options: [{ value: "trigger-source", label: "The attacker / caster" }, { value: "trigger-target", label: "The attack's target" }, { value: "self", label: "Me" }] },
+    { key: "reactionPriority", copy: priorityCopy, control: "select", advanced: true, visibleWhen: when,
+      options: [{ value: "worthwhile", label: "When it's worth it" }, { value: "always", label: "Whenever possible" }, { value: "manual", label: "Never automatically" }] }
+  ];
+}
+
 export function spellFieldSchema(draft: BuilderDraft): FieldSpec[] {
   return [
     { key: "name", copy: "name", control: "text" },
     { key: "level", copy: "spell.level", control: "number", min: 0, max: 9, step: 1 },
     { key: "timing", copy: "timing", control: "select", options: TIMING_OPTIONS as unknown as FieldSpec["options"] },
+    ...reactionBlockSpecs("spell.reactionTrigger", "spell.reactionTarget", "spell.reactionPriority", (d) => d.timing === "reaction"),
     { key: "range", copy: "spell.range", control: "text", placeholder: "60" },
     ...effectShapeSpecs(draft),
     { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true },
@@ -226,6 +301,7 @@ export function actionFieldSchema(draft: BuilderDraft): FieldSpec[] {
   return [
     { key: "name", copy: "name", control: "text" },
     { key: "timing", copy: "timing", control: "select", options: TIMING_OPTIONS as unknown as FieldSpec["options"] },
+    ...reactionBlockSpecs("spell.reactionTrigger", "spell.reactionTarget", "spell.reactionPriority", (d) => d.timing === "reaction"),
     { key: "range", copy: "spell.range", control: "text", placeholder: "5" },
     ...effectShapeSpecs(draft),
     { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true }
@@ -257,9 +333,13 @@ function draftRangeToNumber(value: unknown): number {
 
 export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
   const shape = shapeOfAction(action);
+  const reaction = "reaction" in action ? action.reaction : undefined;
   const base: BuilderDraft = {
     name: action.name,
     timing: action.actionType,
+    reactionTrigger: reaction?.trigger,
+    reactionTarget: reaction?.target,
+    reactionPriority: reaction?.priority,
     shape,
     attackAbility: "int",
     attackDelivery: undefined,
@@ -343,10 +423,11 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
   const dmg = diceToComponent(draft.dmg as DiceValue, "int");
   const dcValue = Number(draft.saveDc);
   const dcFormula = options.spell ? { base: 8, ability: (draft.saveAbility as Ability) ?? "int", proficiency: true } : { base: 8, proficiency: true };
+  const reaction = actionType === "reaction" ? reactionMetaFromDraft(draft) : undefined;
 
   if (shape === "attack") {
     return {
-      kind: "attack", id: "", name, actionType,
+      kind: "attack", id: "", name, actionType, reaction,
       attackType: options.spell ? "spell" : "ranged",
       ability: (draft.attackAbility as Ability) ?? "int",
       attackBonusFormula: { ability: (draft.attackAbility as Ability) ?? "int", proficiency: true },
@@ -377,7 +458,7 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       width: (draft.areaType === "line" || draft.areaType === "rectangle") ? Math.max(5, Number(draft.areaWidth) || 5) : undefined
     };
     return {
-      kind: "area-save", id: "", name, actionType, range,
+      kind: "area-save", id: "", name, actionType, range, reaction,
       saveAbility: (draft.saveAbility as Ability) ?? "dex",
       dc: Number.isFinite(dcValue) && dcValue > 0 ? dcValue : undefined,
       dcFormula: Number.isFinite(dcValue) && dcValue > 0 ? undefined : dcFormula,
@@ -393,7 +474,7 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
     };
   }
   return {
-    kind: "save", id: "", name, actionType, range,
+    kind: "save", id: "", name, actionType, range, reaction,
     saveAbility: (draft.saveAbility as Ability) ?? "dex",
     dc: Number.isFinite(dcValue) && dcValue > 0 ? dcValue : undefined,
     dcFormula: Number.isFinite(dcValue) && dcValue > 0 ? undefined : dcFormula,
@@ -451,9 +532,173 @@ function rangeToSpellRange(value: unknown): SpellDefinition["range"] {
   return Number.isFinite(n) ? n : 60;
 }
 
+/* ─── feature / trait ────────────────────────────────────────────────────── */
+
+const FEATURE_SHAPE_OPTIONS = [
+  { value: "passive", label: "A passive bonus (always on)" },
+  { value: "activated", label: "Something you activate" },
+  { value: "grants-bonus", label: "Grants a bonus-action option" }
+] as const;
+
+const FEATURE_EFFECT_TEMPLATES = [
+  { value: "none", label: "Reference only (no automation)" },
+  { value: "melee-damage-bonus", label: "+2 melee damage" },
+  { value: "resistance-bps", label: "Resistance to b / p / s" },
+  { value: "attack-advantage-pack", label: "Advantage when an ally flanks the target" },
+  { value: "attack-advantage-reckless", label: "Advantage on melee attacks (Reckless)" },
+  { value: "sneak-attack", label: "Sneak Attack (once per turn, +3d6)" },
+  { value: "armor-class-bonus", label: "+1 AC" },
+  { value: "save-advantage-str", label: "Advantage on STR saves" },
+  { value: "avoids-opportunity-attacks", label: "Never provokes opportunity attacks" },
+  { value: "extra-action", label: "Regain a spent action (Action Surge)" }
+] as const;
+
+const ACTIVATE_AS_OPTIONS = [
+  { value: "bonus", label: "Bonus action" },
+  { value: "action", label: "Action" },
+  { value: "reaction", label: "Reaction" },
+  { value: "free", label: "Free (no economy cost)" }
+] as const;
+
+export function featureFieldSchema(draft: BuilderDraft): FieldSpec[] {
+  const shape = (draft.featureShape as string) ?? "passive";
+  return [
+    { key: "name", copy: "name", control: "text" },
+    { key: "category", copy: "feature.category", control: "select", options: [{ value: "feature", label: "Feature" }, { value: "trait", label: "Trait" }] },
+    { key: "featureShape", copy: "feature.shape", control: "select", options: FEATURE_SHAPE_OPTIONS as unknown as FieldSpec["options"] },
+    { key: "effectTemplate", copy: "feature.effectTemplate", control: "select", options: FEATURE_EFFECT_TEMPLATES as unknown as FieldSpec["options"],
+      visibleWhen: () => shape === "passive" || shape === "activated" },
+    { key: "activateAs", copy: "feature.activateAs", control: "select", options: ACTIVATE_AS_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "activated" },
+    { key: "durationRounds", copy: "feature.durationRounds", control: "number", min: 1, max: 100, advanced: true, visibleWhen: () => shape === "activated" },
+    { key: "resourceId", copy: "feature.resourceId", control: "text", advanced: true, placeholder: "rage", visibleWhen: () => shape === "activated" },
+    { key: "reactionTrigger", copy: "feature.reactionTrigger", control: "reaction-trigger", visibleWhen: (d) => shape === "activated" && d.activateAs === "reaction" },
+    { key: "grantsDash", copy: "feature.grantsDash", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
+    { key: "grantsDisengage", copy: "feature.grantsDisengage", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
+    { key: "grantsHide", copy: "feature.grantsHide", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
+    { key: "description", copy: "feature.description", control: "text" }
+  ];
+}
+
+function templateEffects(template: string): FeatureEffect[] {
+  switch (template) {
+    case "melee-damage-bonus":
+      return [{ kind: "damage-bonus", condition: "always", attackTypes: ["melee"], damage: [{ dice: "2", damageType: "same-as-attack" }] }];
+    case "resistance-bps":
+      return (["bludgeoning", "piercing", "slashing"] as const).map((damageType) => ({ kind: "damage-adjustment", adjustment: { type: "resistance", damageType } }));
+    case "attack-advantage-pack":
+      return [{ kind: "attack-advantage", condition: "ally-adjacent-to-target" }];
+    case "attack-advantage-reckless":
+      return [{ kind: "attack-advantage", condition: "always", attackTypes: ["melee"] }];
+    case "sneak-attack":
+      return [{ kind: "damage-bonus", oncePerTurn: true, condition: "always", anyConditions: ["attack-has-advantage", "ally-adjacent-to-target"], attackTypes: ["melee", "ranged"], damage: [{ dice: "3d6", damageType: "same-as-attack" }] }];
+    case "armor-class-bonus":
+      return [{ kind: "armor-class-bonus", bonus: { base: 1 } }];
+    case "save-advantage-str":
+      return [{ kind: "save-advantage", ability: "str" }];
+    case "avoids-opportunity-attacks":
+      return [{ kind: "avoids-opportunity-attacks", condition: "always" }];
+    case "extra-action":
+      return [{ kind: "extra-action", slot: "action" }];
+    default:
+      return [];
+  }
+}
+
+function templateOfEffects(effects: FeatureEffect[] | undefined): string {
+  const first = effects?.[0];
+  if (!first) return "none";
+  if (first.kind === "extra-action") return "extra-action";
+  if (first.kind === "armor-class-bonus") return "armor-class-bonus";
+  if (first.kind === "save-advantage") return "save-advantage-str";
+  if (first.kind === "avoids-opportunity-attacks") return "avoids-opportunity-attacks";
+  if (first.kind === "damage-adjustment") return "resistance-bps";
+  if (first.kind === "attack-advantage") return first.condition === "ally-adjacent-to-target" ? "attack-advantage-pack" : "attack-advantage-reckless";
+  if (first.kind === "damage-bonus") return first.oncePerTurn ? "sneak-attack" : "melee-damage-bonus";
+  return "none";
+}
+
+export function featureDraftFromDefinition(feature: FeatureDefinition): BuilderDraft {
+  const granted = feature.grantedActions ?? [];
+  const activate = granted.find((action) => action.kind === "activate-feature") as Extract<ActionDefinition, { kind: "activate-feature" }> | undefined;
+  const grantedUtilities = granted.filter((action) => action.kind === "utility");
+  const shape = activate ? "activated" : grantedUtilities.length > 0 ? "grants-bonus" : "passive";
+  const conditionEffects = activate?.condition?.effects;
+  return {
+    name: feature.name,
+    category: feature.category === "trait" ? "trait" : "feature",
+    featureShape: shape,
+    effectTemplate: shape === "activated"
+      ? templateOfEffects(conditionEffects ?? feature.effects)
+      : templateOfEffects(feature.effects),
+    activateAs: activate?.actionType ?? "bonus",
+    durationRounds: activate?.condition?.durationRounds ?? undefined,
+    resourceId: activate?.resourceCost?.resourceId ?? "",
+    reactionTrigger: activate?.reaction?.trigger,
+    grantsDash: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "dash"),
+    grantsDisengage: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "disengage"),
+    grantsHide: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "hide"),
+    description: feature.description ?? ""
+  };
+}
+
+export function featureFromDraft(draft: BuilderDraft): FeatureDefinition {
+  const name = (draft.name as string) || "Feature";
+  const category: FeatureDefinition["category"] = draft.category === "trait" ? "trait" : "feature";
+  const shape = (draft.featureShape as string) ?? "passive";
+  const template = (draft.effectTemplate as string) ?? "none";
+  const effects = templateEffects(template);
+  const description = String(draft.description ?? "").trim() || undefined;
+
+  if (shape === "grants-bonus") {
+    const modes: Array<{ key: "grantsDash" | "grantsDisengage" | "grantsHide"; mode: "dash" | "disengage" | "hide"; support: "full" | "partial" }> = [
+      { key: "grantsDash", mode: "dash", support: "full" },
+      { key: "grantsDisengage", mode: "disengage", support: "full" },
+      { key: "grantsHide", mode: "hide", support: "partial" }
+    ];
+    const grantedActions = modes.filter((m) => draft[m.key]).map((m) => ({
+      kind: "utility" as const, id: `grant-${m.mode}`, name: `${name}: ${m.mode[0]!.toUpperCase()}${m.mode.slice(1)}`,
+      actionType: "bonus" as const, mode: m.mode, automationSupport: m.support
+    }));
+    return { id: "", name, category, description, grantedActions: grantedActions.length ? grantedActions : undefined, automationSupport: "full" };
+  }
+
+  if (shape === "activated") {
+    const activateAs = (draft.activateAs as "action" | "bonus" | "reaction" | "free") ?? "bonus";
+    const resourceId = String(draft.resourceId ?? "").trim();
+    const rounds = Number(draft.durationRounds);
+    const isExtraAction = template === "extra-action";
+    const conditionEffects = isExtraAction ? [] : effects;
+    const modifiers = template === "attack-advantage-reckless" ? { incomingAttackRoll: 5 } : undefined;
+    const activate: Extract<ActionDefinition, { kind: "activate-feature" }> = {
+      kind: "activate-feature", id: "activate", name,
+      actionType: activateAs,
+      featureId: "",
+      resourceCost: resourceId ? { resourceId, amount: 1 } : undefined,
+      reaction: activateAs === "reaction" ? reactionMetaFromDraft({ ...draft, activateAs }) : undefined,
+      condition: (conditionEffects.length || modifiers || Number.isFinite(rounds))
+        ? { id: `${name.toLowerCase().replace(/\s+/g, "-")}-active`, name: "custom", durationRounds: Number.isFinite(rounds) && rounds > 0 ? Math.floor(rounds) : undefined, modifiers, effects: conditionEffects.length ? conditionEffects : undefined }
+        : undefined,
+      automationSupport: "full"
+    };
+    return {
+      id: "", name, category, description,
+      effects: isExtraAction ? effects : undefined,
+      grantedActions: [activate],
+      automationSupport: "full"
+    };
+  }
+
+  // passive
+  return {
+    id: "", name, category, description,
+    effects: effects.length ? effects : undefined,
+    automationSupport: effects.length ? "full" : "manual-only"
+  };
+}
+
 /* ─── preset skeletons ───────────────────────────────────────────────────── */
 
-export type BuilderKind = "weapon" | "spell" | "action";
+export type BuilderKind = "weapon" | "spell" | "action" | "feature";
 
 export interface PresetSkeleton {
   kind: BuilderKind;
@@ -468,5 +713,12 @@ export const PRESETS: PresetSkeleton[] = [
   { kind: "spell", label: "Damage cantrip", draft: { ...spellDraftFromDefinition({ id: "", name: "New Cantrip", level: 0, castingTime: "action", range: 120, automationSupport: "full", action: { kind: "attack", id: "", name: "New Cantrip", actionType: "action", attackType: "spell", ability: "int", range: 120, damage: [{ dice: "1d10", damageType: "fire", magical: true }], automationSupport: "full" } }) } },
   { kind: "spell", label: "Save-or-condition spell", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 2, castingTime: "action", range: 60, concentration: true, automationSupport: "full", action: { kind: "save", id: "", name: "New Spell", actionType: "action", saveAbility: "wis", range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates", riders: [{ kind: "condition", when: "on-save-fail", condition: "paralyzed", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }], automationSupport: "full" } }) } },
   { kind: "spell", label: "Area blast", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 3, castingTime: "action", range: 150, automationSupport: "full", action: { kind: "area-save", id: "", name: "New Spell", actionType: "action", saveAbility: "dex", range: 150, area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 150 }, damage: [{ dice: "8d6", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", automationSupport: "full" } }) } },
-  { kind: "spell", label: "Healing", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: "touch", automationSupport: "full", action: { kind: "healing", id: "", name: "New Spell", actionType: "action", range: 5, healing: [{ dice: "1d8", abilityModifier: "wis" }], targeting: { target: "single" }, automationSupport: "full" } }) } }
+  { kind: "spell", label: "Healing", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: "touch", automationSupport: "full", action: { kind: "healing", id: "", name: "New Spell", actionType: "action", range: 5, healing: [{ dice: "1d8", abilityModifier: "wis" }], targeting: { target: "single" }, automationSupport: "full" } }) } },
+  { kind: "spell", label: "Reaction spell (Shield / Rebuke)", draft: { ...spellDraftFromDefinition({ id: "", name: "New Reaction", level: 1, castingTime: "reaction", range: 60, automationSupport: "full", action: { kind: "save", id: "", name: "New Reaction", actionType: "reaction", saveAbility: "dex", range: 60, damage: [{ dice: "2d10", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", reaction: { trigger: { kind: "hit-by-attack" }, target: "trigger-source", priority: "worthwhile" }, automationSupport: "full" } }) } },
+  { kind: "feature", label: "Rage", draft: { name: "Rage", category: "feature", featureShape: "activated", activateAs: "bonus", resourceId: "rage", durationRounds: 10, effectTemplate: "melee-damage-bonus", description: "Advantage on STR checks / saves, +2 melee damage, resistance to b / p / s." } },
+  { kind: "feature", label: "Reckless Attack", draft: { name: "Reckless Attack", category: "feature", featureShape: "activated", activateAs: "free", durationRounds: 1, effectTemplate: "attack-advantage-reckless" } },
+  { kind: "feature", label: "Action Surge", draft: { name: "Action Surge", category: "feature", featureShape: "activated", activateAs: "free", resourceId: "action-surge", effectTemplate: "extra-action" } },
+  { kind: "feature", label: "Cunning Action", draft: { name: "Cunning Action", category: "feature", featureShape: "grants-bonus", grantsDash: true, grantsDisengage: true, grantsHide: true } },
+  { kind: "feature", label: "Pack Tactics", draft: { name: "Pack Tactics", category: "trait", featureShape: "passive", effectTemplate: "attack-advantage-pack" } },
+  { kind: "feature", label: "Sneak Attack", draft: { name: "Sneak Attack", category: "feature", featureShape: "passive", effectTemplate: "sneak-attack" } }
 ];
