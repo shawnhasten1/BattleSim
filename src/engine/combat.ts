@@ -322,7 +322,7 @@ export function resolveAttack(
   return resolveAttackCore(state, attacker, target, attackerDefinition, action, options, true);
 }
 
-function resolveBeamCount(action: AttackActionDefinition, casterLevel: number, slotLevel: number | undefined): number {
+export function resolveBeamCount(action: AttackActionDefinition, casterLevel: number, slotLevel: number | undefined): number {
   let count = action.beamCount ?? 1;
   for (const step of action.beamCountByLevel ?? []) {
     if (casterLevel >= step.atLevel) {
@@ -683,18 +683,10 @@ export function resolveAreaSaveAction(
   }
 
   // Resolve where the template sits and which way it points.
-  const footprint = sizeFootprint(attackerDefinition.size);
-  const selfOrigin: Point = {
-    x: Math.floor(attacker.position.x + (footprint - 1) / 2),
-    y: Math.floor(attacker.position.y + (footprint - 1) / 2)
-  };
-  const fromSelf = action.targeting?.origin === "self";
-  const origin = fromSelf ? selfOrigin : aim;
-  const aimVector = action.targeting?.aimedFromSelf
-    ? normalizeVector({ x: aim.x - selfOrigin.x, y: aim.y - selfOrigin.y })
-    : undefined;
+  const placement = resolveAreaTargeting(attacker, attackerDefinition, action, aim);
+  const { origin, aimVector } = placement;
 
-  if (!fromSelf) {
+  if (!placement.fromSelf) {
     validateOriginTargeting(state.snapshot, attacker, origin, action);
   }
   validateAndSpendAction(attacker, action);
@@ -781,6 +773,34 @@ export function resolveAreaSaveAction(
 function normalizeVector(vector: { x: number; y: number }): { x: number; y: number } {
   const length = Math.hypot(vector.x, vector.y);
   return length === 0 ? { x: 1, y: 0 } : { x: vector.x / length, y: vector.y / length };
+}
+
+/**
+ * Where an area action's template sits and which way it points, given the
+ * caster's chosen `aim` point. Single source of truth shared by
+ * `resolveAreaSaveAction` and the simulation's area scoring.
+ * - `origin: "self"` centres the template on the caster's footprint.
+ * - `aimedFromSelf` derives a unit `aimVector` from the caster toward `aim`.
+ */
+export function resolveAreaTargeting(
+  attacker: CombatantState,
+  attackerDefinition: CreatureDefinition,
+  action: AreaSaveActionDefinition,
+  aim: Point
+): { origin: Point; aimVector?: { x: number; y: number }; fromSelf: boolean } {
+  const footprint = sizeFootprint(attackerDefinition.size);
+  const selfOrigin: Point = {
+    x: Math.floor(attacker.position.x + (footprint - 1) / 2),
+    y: Math.floor(attacker.position.y + (footprint - 1) / 2)
+  };
+  const fromSelf = action.targeting?.origin === "self";
+  return {
+    origin: fromSelf ? selfOrigin : aim,
+    aimVector: action.targeting?.aimedFromSelf
+      ? normalizeVector({ x: aim.x - selfOrigin.x, y: aim.y - selfOrigin.y })
+      : undefined,
+    fromSelf
+  };
 }
 
 export function resolveHealingAction(

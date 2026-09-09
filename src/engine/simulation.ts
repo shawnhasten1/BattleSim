@@ -10,7 +10,9 @@ import {
   opportunityAttackThreats,
   resetActionEconomy,
   resolveAreaSaveAction,
+  resolveAreaTargeting,
   resolveAttackBonus,
+  resolveBeamCount,
   rollInitiative,
   resolveAttack,
   resolveDeathSave,
@@ -24,9 +26,9 @@ import {
   type EngineState
 } from "./combat";
 import { combatantsInArea } from "./areas";
-import { abilityModifier, parseDiceExpression } from "./dice";
+import { abilityModifier, parseDiceExpression, resolveScaledDamage } from "./dice";
 import { coverBetween, findReachableCells, gridDistance, lineOfEffect, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
-import type { ActionDefinition, CombatLogEvent, CombatantState, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
+import type { ActionDefinition, ActionRider, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -83,6 +85,8 @@ interface TacticsSettings {
   reactionRiskWeight: number;
   /** How hard a ranged actor works to keep cover between itself and its threats. Melee: 0. */
   coverWeight: number;
+  /** How much a `condition` rider's expected control value is worth. Controllers: high; brutes: near zero. */
+  controlWeight: number;
   reposition: boolean;
 }
 
@@ -326,6 +330,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 2,
         coverWeight: 3,
+        controlWeight: 6,
         reposition: true
       };
     case "skirmisher":
@@ -340,6 +345,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 4,
         coverWeight: 4,
+        controlWeight: 6,
         reposition: true
       };
     case "brute":
@@ -354,6 +360,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 1,
         coverWeight: 0,
+        controlWeight: 2,
         reposition: false
       };
     case "defender":
@@ -368,6 +375,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 22,
         reactionRiskWeight: 3,
         coverWeight: 0,
+        controlWeight: 14,
         reposition: false
       };
     case "controller":
@@ -382,6 +390,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 8,
         reactionRiskWeight: 3,
         coverWeight: 2.5,
+        controlWeight: 26,
         reposition: true
       };
     case "basic-melee":
@@ -397,6 +406,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 2,
         coverWeight: 0,
+        controlWeight: 4,
         reposition: false
       };
   }
@@ -499,7 +509,8 @@ function selectOffensivePlan(
       const reachableNow = isValidTarget(snapshot, actor, target, range);
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition);
-      const preferredBonus = actionMatchesPreference(action, definition, tactics.preferred) ? 8 : 0;
+      const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
+      const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
       const resourcePenalty = resourceCostAmount(action) * 4;
       const targetHpRatio = clamp(target.currentHp / Math.max(1, targetDefinition.maxHp), 0, 1);
       const killPressure = target.currentHp <= expectedDamage
@@ -539,7 +550,9 @@ function selectOffensivePlan(
       if (protectPressure > 0) reasons.push("protecting wounded ally");
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
       if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
+      if (controlValue > 0) reasons.push("imposes a condition");
       let score = expectedDamage * 2
+        + controlValue
         + preferredBonus
         + killPressure
         + woundedPressure
@@ -553,15 +566,21 @@ function selectOffensivePlan(
       else if (canMoveIntoRange) score += 2;
       else score -= 35;
       if (action.kind === "area-save") {
-        const affected = combatantsInArea(snapshot.map, target.position, action.area, snapshot.combatants, definitionsById);
-        const hostileValue = affected
-          .filter((combatant) => combatant.faction !== actor.faction)
-          .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant)), 0);
+        // Score the blast where it will actually land (self-centred / aimed templates included).
+        const { origin, aimVector } = resolveAreaTargeting(actor, definition, action, target.position);
+        const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector);
+        const hostiles = affected.filter((combatant) => combatant.faction !== actor.faction);
+        const hostileValue = hostiles.reduce((sum, combatant) => {
+          const combatantDefinition = getDefinition(snapshot, combatant);
+          return sum
+            + expectedDamageAgainst(action, definition, actor, combatantDefinition)
+            + expectedRiderControl(action, definition, combatantDefinition, tactics);
+        }, 0);
         const friendlyRisk = affected
           .filter((combatant) => combatant.faction === actor.faction)
           .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant)), 0);
         score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
-        reasons.push(`${affected.filter((combatant) => combatant.faction !== actor.faction).length} hostile targets`);
+        reasons.push(`${hostiles.length} hostile targets`);
         if (friendlyRisk > 0) reasons.push("friendly fire risk");
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
@@ -766,9 +785,13 @@ function resourceCostAmount(action: ActionDefinition): number {
   return "resourceCost" in action && action.resourceCost ? action.resourceCost.amount : 0;
 }
 
-function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typeof getDefinition>, preferred: "melee" | "ranged"): boolean {
+function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typeof getDefinition>, tactics: TacticsSettings): boolean {
+  // control-focused profiles treat a save-or-condition / rider action as on-profile.
+  if (tactics.controlWeight >= 15 && actionImposesConditions(action, source)) {
+    return true;
+  }
   if (action.kind === "attack") {
-    return preferred === "ranged"
+    return tactics.preferred === "ranged"
       ? action.attackType === "ranged" || action.attackType === "spell"
       : action.attackType === "melee";
   }
@@ -776,10 +799,29 @@ function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typ
     const actions = getExecutableActions(source);
     return action.attacks.some((step) => {
       const child = actions.find((candidate) => candidate.id === step.actionId);
-      return child?.kind === "attack" && actionMatchesPreference(child, source, preferred);
+      return child?.kind === "attack" && actionMatchesPreference(child, source, tactics);
     });
   }
-  return preferred === "ranged";
+  return tactics.preferred === "ranged";
+}
+
+/** True when the action (or a multiattack child) carries a `condition` rider. */
+function actionImposesConditions(action: OffensiveAction, source: ReturnType<typeof getDefinition>): boolean {
+  if (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") {
+    return (action.riders ?? []).some((rider) => rider.kind === "condition");
+  }
+  if (action.kind === "multiattack") {
+    const actions = getExecutableActions(source);
+    return action.attacks.some((step) => {
+      const child = actions.find((candidate) => candidate.id === step.actionId);
+      return child?.kind === "attack" && (child.riders ?? []).some((rider) => rider.kind === "condition");
+    });
+  }
+  return false;
+}
+
+function saveOnSuccessIsHalf(action: Extract<OffensiveAction, { kind: "save" | "area-save" }>): boolean {
+  return action.onSuccess ? action.onSuccess === "half" : action.halfDamageOnSuccess;
 }
 
 function expectedDamageAgainst(
@@ -788,15 +830,18 @@ function expectedDamageAgainst(
   sourceCombatant: CombatantState,
   target: ReturnType<typeof getDefinition>
 ): number {
+  const casterLevel = source.character?.level ?? 1;
   if (action.kind === "attack") {
-    const average = averageDamage(action, source) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
-    const hitChance = chanceToHit(resolveAttackBonus(action, source), target.armorClass);
-    return average * hitChance;
+    const perHit = averageDamage(action, source) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
+    const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, undefined) : 1;
+    const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass);
+    return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
   if (action.kind === "save" || action.kind === "area-save") {
     const average = averageDamage(action, source);
     const failChance = chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]));
-    return average * (failChance + (action.halfDamageOnSuccess ? (1 - failChance) * 0.5 : 0));
+    const damageEv = average * (failChance + (saveOnSuccessIsHalf(action) ? (1 - failChance) * 0.5 : 0));
+    return damageEv + expectedRiderDamage(action, source, target, { failChance });
   }
   if (action.kind === "multiattack") {
     const actions = getExecutableActions(source);
@@ -827,6 +872,132 @@ function chanceToFailSave(dc: number, saveBonus: number): number {
   return 1 - successChance;
 }
 
+/** Chance a rider's gate passes, given the parent action's hit / save odds. */
+function riderTriggerChance(
+  when: Exclude<ActionRider, { kind: "note" }>["when"],
+  ctx: { landChance?: number; failChance?: number }
+): number {
+  switch (when) {
+    case "always": return 1;
+    case "on-hit": return ctx.landChance ?? 0.6;
+    case "on-crit": return (ctx.landChance ?? 0.6) * 0.05;
+    case "on-miss": return 1 - (ctx.landChance ?? 0.6);
+    case "on-save-fail": return ctx.failChance ?? 0.5;
+    case "on-save-success": return 1 - (ctx.failChance ?? 0.5);
+    default: return 0;
+  }
+}
+
+function riderComponentAverage(components: Array<{ dice: string; scaling?: unknown; abilityModifier?: keyof CreatureDefinition["abilities"]; bonusFormula?: Parameters<typeof resolveNumericFormula>[0] }>, source: ReturnType<typeof getDefinition>): number {
+  const casterLevel = source.character?.level ?? 1;
+  return components.reduce((sum, component) => {
+    const parsed = parseDiceExpression(resolveScaledDamage(component.dice, component.scaling as never, { casterLevel }));
+    const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
+    const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
+    return sum + diceAverage + abilityBonus + resolveNumericFormula(component.bonusFormula, source);
+  }, 0);
+}
+
+/** Expected extra HP damage from an action's `damage` riders. */
+function expectedRiderDamage(
+  action: OffensiveAction,
+  source: ReturnType<typeof getDefinition>,
+  _target: ReturnType<typeof getDefinition>,
+  ctx: { landChance?: number; failChance?: number; beams?: number }
+): number {
+  const riders = "riders" in action ? action.riders ?? [] : [];
+  let total = 0;
+  for (const rider of riders) {
+    if (rider.kind !== "damage") {
+      continue;
+    }
+    const average = riderComponentAverage(rider.components, source);
+    const triggerChance = riderTriggerChance(rider.when, ctx);
+    // an on-hit / on-crit rider fires per beam; a condition-gate rider is once
+    const multiplier = (rider.when === "on-hit" || rider.when === "on-crit") ? (ctx.beams ?? 1) : 1;
+    total += average * triggerChance * multiplier;
+  }
+  return total;
+}
+
+/** Relative disabling value of a condition, 0..1. */
+function conditionSeverity(name: ConditionName): number {
+  switch (name) {
+    case "paralyzed":
+    case "stunned":
+    case "unconscious":
+      return 1;
+    case "incapacitated":
+    case "restrained":
+      return 0.65;
+    case "frightened":
+    case "blinded":
+    case "prone":
+    case "grappled":
+      return 0.45;
+    case "charmed":
+    case "poisoned":
+    case "deafened":
+      return 0.3;
+    default:
+      return 0.2;
+  }
+}
+
+function riderSaveDc(rider: Extract<ActionRider, { kind: "condition" }>, source: ReturnType<typeof getDefinition>): number {
+  const save = rider.save;
+  if (!save) {
+    return 8 + (source.proficiencyBonus ?? 2);
+  }
+  if (save.dc != null) {
+    return save.dc;
+  }
+  return save.dcFormula ? resolveNumericFormula(save.dcFormula, source) : 8 + (source.proficiencyBonus ?? 2);
+}
+
+/** Expected control value from an action's `condition` riders against one target. */
+function expectedRiderControl(
+  action: OffensiveAction,
+  source: ReturnType<typeof getDefinition>,
+  target: ReturnType<typeof getDefinition>,
+  tactics: TacticsSettings
+): number {
+  if (tactics.controlWeight <= 0) {
+    return 0;
+  }
+  const riders = "riders" in action ? action.riders ?? [] : [];
+  let total = 0;
+  for (const rider of riders) {
+    if (rider.kind !== "condition") {
+      continue;
+    }
+    const name: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
+    const severity = conditionSeverity(name);
+
+    let pApplied: number;
+    if (rider.when === "always") {
+      pApplied = 1;
+    } else if (rider.when === "on-save-fail") {
+      pApplied = (action.kind === "save" || action.kind === "area-save")
+        ? chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]))
+        : 0.5;
+    } else if (rider.when === "on-hit") {
+      const hitChance = action.kind === "attack"
+        ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass))
+        : 1;
+      // a rider that negates on its own save only lands when that save fails
+      const negateChance = rider.save && rider.save.onSuccess === "negates"
+        ? 1 - chanceToFailSave(riderSaveDc(rider, source), target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]))
+        : 0;
+      pApplied = hitChance * (1 - negateChance);
+    } else {
+      pApplied = 0;
+    }
+    total += tactics.controlWeight * pApplied * severity;
+  }
+  return total;
+}
+
 function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
   return action.healing.reduce((sum, component) => {
     const parsed = parseDiceExpression(component.dice);
@@ -851,13 +1022,7 @@ function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDe
       return sum + (child ? averageDamage(child, source) * step.count : 0);
     }, 0);
   }
-  return action.damage.reduce((sum, component) => {
-    const parsed = parseDiceExpression(component.dice);
-    const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
-    const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
-    const formulaBonus = resolveNumericFormula(component.bonusFormula, source);
-    return sum + diceAverage + abilityBonus + formulaBonus;
-  }, 0);
+  return action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source), 0);
 }
 
 function averageAttackFeatureDamage(
@@ -926,7 +1091,8 @@ function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {
 }
 
 function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>): number {
-  const parsed = parseDiceExpression(component.dice);
+  const casterLevel = source.character?.level ?? 1;
+  const parsed = parseDiceExpression(resolveScaledDamage(component.dice, component.scaling, { casterLevel }));
   const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
   const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
   const formulaBonus = resolveNumericFormula(component.bonusFormula, source);
