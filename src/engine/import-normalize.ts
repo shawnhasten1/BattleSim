@@ -19,6 +19,8 @@ import {
   type FeatureEffect,
   type HealingComponent,
   type NumericFormula,
+  type ReactionMeta,
+  type ReactionTrigger,
   type ResourceCost,
   type RiderDuration,
   type RiderGate,
@@ -180,6 +182,7 @@ function normalizeAction(
       beamCountByLevel: normalizeBeamCountByLevel(input.beamCountByLevel),
       autoHit: input.autoHit === true ? true : undefined,
       riders: normalizeRiders(input.riders, "on-hit"),
+      reaction: normalizeReactionMeta(input.reaction),
       concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
@@ -199,6 +202,7 @@ function normalizeAction(
       onSuccess,
       targeting: normalizeSelfTargeting(input.targeting),
       riders: normalizeRiders(input.riders, "on-save-fail"),
+      reaction: normalizeReactionMeta(input.reaction),
       concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
@@ -220,6 +224,7 @@ function normalizeAction(
       onSuccess,
       affects: input.affects === "all" ? "all" : "hostile",
       riders: normalizeRiders(input.riders, "on-save-fail"),
+      reaction: normalizeReactionMeta(input.reaction),
       concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
@@ -273,6 +278,7 @@ function normalizeAction(
       name,
       actionType,
       featureId: stringField(input, "featureId") ?? featureIdByName.get(name.toLowerCase()) ?? previousId ?? generatedId,
+      reaction: normalizeReactionMeta(input.reaction),
       automationSupport: normalizeAutomationSupport(input.automationSupport, "manual-only")
     };
   }
@@ -338,7 +344,8 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
       magicBonus,
       usableAs: normalizeUsableAs(item.usableAs),
       grip: item.grip === "two-handed" || item.grip === "versatile" || item.grip === "one-handed" ? item.grip : undefined,
-      powerAttack: item.powerAttack === true ? true : undefined
+      powerAttack: item.powerAttack === true ? true : undefined,
+      reactionTrigger: normalizeReactionTrigger(item.reactionTrigger)
     } as WeaponDefinition;
   });
 }
@@ -680,6 +687,49 @@ function normalizeRiderDuration(input: unknown): RiderDuration {
     }
   }
   return { kind: "rounds", rounds: 1 };
+}
+
+function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  switch (input.kind) {
+    case "enemy-leaves-reach":
+      return { kind: "enemy-leaves-reach" };
+    case "targeted-by-attack":
+      return { kind: "targeted-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
+    case "hit-by-attack":
+      return { kind: "hit-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
+    case "ally-targeted-by-attack":
+      return { kind: "ally-targeted-by-attack", withinFt: numberField(input, "withinFt") ?? 5 };
+    case "enemy-casts-spell":
+      return {
+        kind: "enemy-casts-spell",
+        withinFt: numberField(input, "withinFt") ?? 60,
+        maxSpellLevel: numberField(input, "maxSpellLevel")
+      };
+    case "manual":
+      return { kind: "manual", note: stringField(input, "note") ?? "" };
+    default:
+      return undefined;
+  }
+}
+
+function normalizeReactionMeta(input: unknown): ReactionMeta | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const trigger = normalizeReactionTrigger(input.trigger);
+  if (!trigger) {
+    return undefined;
+  }
+  const target = input.target === "self" || input.target === "trigger-target" || input.target === "trigger-source"
+    ? input.target
+    : undefined;
+  const priority = input.priority === "always" || input.priority === "manual" || input.priority === "worthwhile"
+    ? input.priority
+    : undefined;
+  return { trigger, target, priority };
 }
 
 function normalizeRiderSave(input: unknown): RiderSave | undefined {

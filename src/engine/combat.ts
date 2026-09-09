@@ -29,6 +29,8 @@ import type {
   MultiattackActionDefinition,
   NumericFormula,
   Point,
+  ReactionMeta,
+  ReactionTrigger,
   RiderDuration,
   RiderGate,
   SaveActionDefinition,
@@ -39,7 +41,12 @@ export interface EngineState {
   snapshot: EncounterSnapshot;
   log: CombatLogEvent[];
   rng: RandomSource;
+  /** Re-entrancy guard for `runReactionWindow` — a reaction can't open the same window past depth 2. */
+  reactionDepth?: number;
 }
+
+/** How deep reaction windows may nest (a counter-counterspell is legal; a third is not). */
+const MAX_REACTION_DEPTH = 2;
 
 export interface AttackResult {
   hit: boolean;
@@ -135,7 +142,25 @@ export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantS
   return definition;
 }
 
+/**
+ * `getExecutableActions` is pure in `definition` and called on hot paths (every
+ * reaction window scans it per combatant). Definitions are immutable for the
+ * life of an engine run — the store hands out a fresh object on every edit — so
+ * memoising on object identity is safe.
+ */
+const executableActionsCache = new WeakMap<CreatureDefinition, ActionDefinition[]>();
+
 export function getExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
+  const cached = executableActionsCache.get(definition);
+  if (cached) {
+    return cached;
+  }
+  const compiled = compileExecutableActions(definition);
+  executableActionsCache.set(definition, compiled);
+  return compiled;
+}
+
+function compileExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
   const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
@@ -361,7 +386,7 @@ export function opportunityAttackThreats(snapshot: EncounterSnapshot, moverId: I
       if (committedReactors.has(reactor.id) || reactor.id === mover.id || reactor.faction === mover.faction || reactor.state !== "active") {
         continue;
       }
-      const action = opportunityAttackAction(snapshot, reactor, from, to);
+      const action = findLeaveReachReaction(snapshot, reactor, mover, from, to);
       if (!action) {
         continue;
       }
@@ -450,6 +475,9 @@ function resolveBeamAttack(
   }
   const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel);
   declareAction(state, attacker, action, { target: findCombatant(state.snapshot, targetIds[0] as Id) });
+  if (counterspellWindow(state, attacker, action)) {
+    return emptyAttackResult();
+  }
 
   const beams: AttackResult[] = [];
   let totalDamage = 0;
@@ -529,6 +557,10 @@ export function resolveMultiattackAction(
       throw new Error(`Multiattack child action ${step.actionId} is not an attack`);
     }
     for (let index = 0; index < step.count; index += 1) {
+      // A `hit-by-attack` reaction (Hellish Rebuke) can drop the attacker mid-multiattack.
+      if (attacker.state !== "active") {
+        break;
+      }
       const target = pickTarget(step.targetGroup ?? 0);
       if (!target) {
         break;
@@ -651,6 +683,15 @@ function coverAgainst(
   return { level: result.level, acBonus, sources: result.sources };
 }
 
+/** The result a spell resolver returns when the spell was countered before it could take effect. */
+function emptyAttackResult(): AttackResult {
+  return {
+    hit: false, critical: false,
+    attackRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 },
+    total: 0, targetAc: 0, damageApplied: 0
+  };
+}
+
 function resolveAttackCore(
   state: EngineState,
   attacker: CombatantState,
@@ -676,12 +717,26 @@ function resolveAttackCore(
     declareAction(state, attacker, action, { target });
   }
 
+  // Counterspell — spell attacks only, and only when this call owns the cast.
+  if (spendAction && !parentAction && counterspellWindow(state, attacker, action)) {
+    return emptyAttackResult();
+  }
+
+  // Pre-roll reactions: Shield raises `target`'s AC (a condition `effectiveArmorClass`
+  // reads below); Protection forces the roll to disadvantage.
+  runReactionWindow(state, {
+    kind: "targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+  });
+  const forcedDisadvantage = runReactionWindow(state, {
+    kind: "ally-targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+  }).imposedDisadvantage === true;
+
   const featureAdvantage = featureAttackAdvantage(state, attacker, target, action, attackerDefinition);
   const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
   const attackOptions = {
     ...options,
     advantage: options.advantage || featureAdvantage.applied,
-    disadvantage: options.disadvantage || longRange
+    disadvantage: options.disadvantage || longRange || forcedDisadvantage
   };
   const rollMode = attackRollMode({
     ...attackOptions
@@ -721,6 +776,13 @@ function resolveAttackCore(
       concentrating: action.concentration
     });
     appliedConditionEffects = [...appliedConditionEffects, ...riderOutcome.appliedConditions];
+  }
+
+  // Post-hit reactions — Hellish Rebuke: `target` retaliates against `attacker`.
+  if (hit) {
+    runReactionWindow(state, {
+      kind: "hit-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+    });
   }
 
   const coverNote = cover.level !== "none" ? ` (${target.displayName} had ${coverLabel(cover.level)})` : "";
@@ -774,6 +836,9 @@ export function resolveSaveAction(
     breakConcentration(state, attackerId);
   }
   declareAction(state, attacker, action, { target });
+  if (counterspellWindow(state, attacker, action)) {
+    return { success: true, saveRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
+  }
 
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
@@ -849,6 +914,12 @@ export function resolveAreaSaveAction(
     breakConcentration(state, attackerId);
   }
   declareAction(state, attacker, action, { origin });
+  if (counterspellWindow(state, attacker, action)) {
+    state.log.push(event(state, "AreaSaveResolved", `${attacker.displayName}'s ${action.name} was countered`, {
+      attackerId, actionId, origin, aim, targets: []
+    }));
+    return { targets: [] };
+  }
 
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
   const onSuccess = resolveOnSuccess(action);
@@ -977,6 +1048,9 @@ export function resolveHealingAction(
   }
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, { target });
+  if (counterspellWindow(state, healer, action)) {
+    return { healingApplied: 0 };
+  }
 
   let healingApplied = 0;
   const rolls = action.healing.map((component) => {
@@ -1576,16 +1650,17 @@ function wieldsTwoHanded(definition: CreatureDefinition, weapon: WeaponInput): b
 }
 
 /**
- * Which economy slots a weapon compiles a distinct attack for. Only an explicit
- * `usableAs` list adds `"bonus"` / `"reaction"` copies; the default is a single
- * `"action"` attack. Every melee weapon can still make an opportunity attack —
- * that path (`opportunityAttackAction`) synthesises the reaction from the
- * `"action"` attack and does not need a compiled copy until the Phase-3 reaction
- * engine generalises the scan.
+ * Which economy slots a weapon compiles a distinct attack for. An absent
+ * `usableAs` defaults to `["action", "reaction"]` for melee (every melee weapon
+ * can make an opportunity attack) and `["action"]` for ranged. An explicit list
+ * is honoured verbatim (order-normalised so `"action"`, if present, is first).
  */
 function weaponUsableSlots(weapon: WeaponInput): Array<"action" | "bonus" | "reaction"> {
-  const slots = weapon.usableAs?.length ? [...new Set(weapon.usableAs)] : [];
-  return slots.includes("action") || slots.length === 0 ? ["action", ...slots.filter((s) => s !== "action")] : slots;
+  if (!weapon.usableAs?.length) {
+    return weapon.attackType === "melee" ? ["action", "reaction"] : ["action"];
+  }
+  const slots = [...new Set(weapon.usableAs)];
+  return slots.includes("action") ? ["action", ...slots.filter((slot) => slot !== "action")] : slots;
 }
 
 function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition {
@@ -1646,15 +1721,34 @@ function powerAttackVariant(base: AttackActionDefinition): AttackActionDefinitio
  * Compile a weapon to one attack per usable economy slot (`weaponUsableSlots`),
  * plus a power-attack copy of each when `weapon.powerAttack` is set. The
  * `"action"` slot keeps the plain compiled id; `"bonus"` / `"reaction"` copies
- * get an `:<slot>` suffix.
+ * get an `:<slot>` suffix. The `"reaction"` copy carries a `reaction` meta
+ * (default: an opportunity attack); when a melee weapon opts *out* of reaction
+ * via an explicit `usableAs`, its `"action"` copy is marked `opportunityAttack:
+ * false` so the OA scan skips it.
  */
 function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition[] {
   const base = weaponToAction(definition, weapon);
+  const slots = weaponUsableSlots(weapon);
+  const barsOpportunityAttack = weapon.attackType === "melee" && !slots.includes("reaction");
   const out: AttackActionDefinition[] = [];
-  for (const slot of weaponUsableSlots(weapon)) {
-    const forSlot: AttackActionDefinition = slot === "action"
-      ? base
-      : { ...base, id: `${base.id}:${slot}`, actionType: slot };
+  for (const slot of slots) {
+    let forSlot: AttackActionDefinition;
+    if (slot === "action") {
+      forSlot = barsOpportunityAttack ? { ...base, opportunityAttack: false } : base;
+    } else if (slot === "reaction") {
+      forSlot = {
+        ...base,
+        id: `${base.id}:reaction`,
+        actionType: "reaction",
+        reaction: {
+          trigger: weapon.reactionTrigger ?? { kind: "enemy-leaves-reach" },
+          target: "trigger-source",
+          priority: "always"
+        }
+      };
+    } else {
+      forSlot = { ...base, id: `${base.id}:${slot}`, actionType: slot };
+    }
     out.push(forSlot);
     if (weapon.powerAttack) {
       out.push(powerAttackVariant(forSlot));
@@ -2716,25 +2810,7 @@ function resolveOpportunityAttacksForStep(
   from: Point,
   to: Point
 ): void {
-  for (const reactor of state.snapshot.combatants) {
-    if (reactor.id === mover.id || reactor.faction === mover.faction || reactor.state !== "active" || mover.state !== "active") {
-      continue;
-    }
-    const action = opportunityAttackAction(state.snapshot, reactor, from, to);
-    if (!action) {
-      continue;
-    }
-    const reactorDefinition = getDefinition(state.snapshot, reactor);
-    const reactionAction: AttackActionDefinition = { ...action, actionType: "reaction" };
-    state.log.push(event(state, "OpportunityAttackTriggered", `${reactor.displayName} makes an opportunity attack against ${mover.displayName}`, {
-      reactorId: reactor.id,
-      moverId: mover.id,
-      actionId: action.id,
-      from,
-      to
-    }));
-    resolveAttackCore(state, reactor, mover, reactorDefinition, reactionAction, {}, true);
-  }
+  runReactionWindow(state, { kind: "enemy-leaves-reach", sourceId: mover.id, from, to });
 }
 
 /** True when the mover currently ignores opportunity attacks — Disengaged this turn, or a `avoids-opportunity-attacks` feature effect. */
@@ -2749,18 +2825,33 @@ function moverAvoidsOpportunityAttacks(snapshot: EncounterSnapshot, mover: Comba
       && featureConditionsMetForSelf(definition, mover, effect)));
 }
 
-function opportunityAttackAction(
+/**
+ * The melee attack `reactor` would use to punish `mover` for leaving its reach on
+ * the step `from → to`, or `undefined`. Accepts a compiled `"reaction"` copy
+ * (authored / weapon-derived, trigger `enemy-leaves-reach`) or any plain
+ * `"action"`-typed melee attack (the universal "any melee weapon threatens an
+ * OA" rule) unless it is explicitly barred (`opportunityAttack === false`).
+ */
+function findLeaveReachReaction(
   snapshot: EncounterSnapshot,
   reactor: CombatantState,
+  mover: CombatantState,
   from: Point,
   to: Point
 ): AttackActionDefinition | undefined {
-  if (!canAct(reactor, "reaction")) {
+  if (reactor.faction === mover.faction || !canAct(reactor, "reaction")) {
     return undefined;
   }
   const definition = getDefinition(snapshot, reactor);
-  return getExecutableActions(definition).find((action): action is AttackActionDefinition => {
+  const eligible = (action: ActionDefinition): action is AttackActionDefinition => {
     if (action.kind !== "attack" || action.attackType !== "melee" || action.automationSupport !== "full") {
+      return false;
+    }
+    if (action.actionType === "reaction") {
+      if (action.reaction && action.reaction.trigger.kind !== "enemy-leaves-reach") {
+        return false;
+      }
+    } else if (action.actionType !== "action" || action.opportunityAttack === false) {
       return false;
     }
     if (!canSpendResource(reactor, action)) {
@@ -2769,10 +2860,300 @@ function opportunityAttackAction(
     const reach = action.reach ?? action.range;
     const wasInReach = gridDistance(reactor.position, from, snapshot.map.grid) <= reach;
     const leavesReach = gridDistance(reactor.position, to, snapshot.map.grid) > reach;
-    return wasInReach
-      && leavesReach
+    return wasInReach && leavesReach
       && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, reactor.position, from));
+  };
+  const actions = getExecutableActions(definition).filter(eligible);
+  // Prefer an authored reaction copy over the synthesised "any melee attack" one.
+  return actions.find((action) => action.actionType === "reaction") ?? actions[0];
+}
+
+/* ─── Reaction windows ─────────────────────────────────────────────────────────
+ * One dispatcher, `runReactionWindow`, is opened at each point a reaction may
+ * trigger. It finds every eligible reactor, fires the best reaction (spending
+ * that reactor's reaction via the normal resolver), and returns whatever the
+ * caller needs to know (`countered`, `imposedDisadvantage`).
+ */
+
+export interface ReactionEvent {
+  kind: ReactionTrigger["kind"];
+  /** The attacker / caster / mover whose action opened the window. */
+  sourceId: Id;
+  /** The attack's target (for `targeted-by-attack` / `hit-by-attack` / `ally-targeted-by-attack`). */
+  targetId?: Id;
+  /** Point the range check is measured from (`enemy-casts-spell`). */
+  origin?: Point;
+  /** Level of the spell being cast (`enemy-casts-spell`). */
+  spellLevel?: number;
+  /** The triggering attack's type — for `meleeOnly` triggers. */
+  attackType?: AttackActionDefinition["attackType"];
+  /** Movement step, for `enemy-leaves-reach`. */
+  from?: Point;
+  to?: Point;
+}
+
+export interface ReactionWindowResult {
+  /** A Counterspell landed — the calling spell resolver must abort with an empty result. */
+  countered?: boolean;
+  /** A Protection-style reaction forces the triggering attack roll to disadvantage. */
+  imposedDisadvantage?: boolean;
+}
+
+/** The reaction `reactor` will spend on `event`, plus the resolved reaction target, or `undefined`. */
+interface EligibleReaction {
+  reactor: CombatantState;
+  action: Extract<ActionDefinition, { reaction?: ReactionMeta }>;
+  meta: ReactionMeta;
+  targetId: Id;
+}
+
+function reactionMetaFor(action: ActionDefinition): ReactionMeta | undefined {
+  if ("reaction" in action && action.reaction) {
+    return action.reaction;
+  }
+  // A bare reaction-typed melee attack is treated as an opportunity attack.
+  if (action.kind === "attack" && action.actionType === "reaction" && action.attackType === "melee") {
+    return { trigger: { kind: "enemy-leaves-reach" }, target: "trigger-source", priority: "always" };
+  }
+  return undefined;
+}
+
+function reactionTriggerPasses(
+  state: EngineState,
+  reactor: CombatantState,
+  trigger: ReactionTrigger,
+  event: ReactionEvent,
+  action: ActionDefinition
+): boolean {
+  if (trigger.kind !== event.kind) {
+    return false;
+  }
+  switch (trigger.kind) {
+    case "enemy-leaves-reach":
+      // Handled by `findLeaveReachReaction` — this window builds its list there.
+      return true;
+    case "targeted-by-attack":
+    case "hit-by-attack":
+      return reactor.id === event.targetId
+        && (!trigger.meleeOnly || event.attackType === "melee");
+    case "ally-targeted-by-attack": {
+      if (!event.targetId || reactor.id === event.targetId) {
+        return false;
+      }
+      const ally = state.snapshot.combatants.find((c) => c.id === event.targetId);
+      if (!ally || ally.faction !== reactor.faction) {
+        return false;
+      }
+      // `gridDistance` already returns feet.
+      return gridDistance(reactor.position, ally.position, state.snapshot.map.grid) <= trigger.withinFt;
+    }
+    case "enemy-casts-spell": {
+      const caster = state.snapshot.combatants.find((c) => c.id === event.sourceId);
+      if (!caster || caster.faction === reactor.faction || event.spellLevel == null || event.origin === undefined) {
+        return false;
+      }
+      if (trigger.maxSpellLevel != null && event.spellLevel > trigger.maxSpellLevel) {
+        return false;
+      }
+      const withinRange = gridDistance(reactor.position, event.origin, state.snapshot.map.grid) <= trigger.withinFt;
+      // v1 Counterspell: auto-succeeds only if the counter slot's level ≥ the spell's.
+      const counterSlot = "resourceCost" in action ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
+      return withinRange && counterSlot != null && counterSlot >= event.spellLevel;
+    }
+    case "manual":
+      return false;
+  }
+}
+
+/** Crude value gate for `priority: "worthwhile"` — Phase 4 replaces this with the full EV bar. */
+function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, event: ReactionEvent): boolean {
+  const { action, meta } = reaction;
+  if (meta.trigger.kind === "enemy-casts-spell") {
+    return (event.spellLevel ?? 0) >= 2;
+  }
+  if (meta.trigger.kind === "ally-targeted-by-attack") {
+    const ally = state.snapshot.combatants.find((c) => c.id === event.targetId);
+    const allyDefinition = ally ? getDefinition(state.snapshot, ally) : undefined;
+    return !!ally && !!allyDefinition && ally.currentHp * 2 <= allyDefinition.maxHp;
+  }
+  // Any reaction that deals damage clears the bar.
+  return (action.kind === "attack" || action.kind === "save" || action.kind === "area-save")
+    && (action.damage?.length ?? 0) > 0;
+}
+
+function eligibleReactionFor(
+  state: EngineState,
+  reactor: CombatantState,
+  event: ReactionEvent
+): EligibleReaction | undefined {
+  if (!canAct(reactor, "reaction")) {
+    return undefined;
+  }
+  const definition = getDefinition(state.snapshot, reactor);
+  for (const action of getExecutableActions(definition)) {
+    if (action.actionType !== "reaction" || action.automationSupport !== "full" || !canSpendResource(reactor, action)) {
+      continue;
+    }
+    const meta = reactionMetaFor(action);
+    if (!meta || meta.priority === "manual") {
+      continue;
+    }
+    if (!reactionTriggerPasses(state, reactor, meta.trigger, event, action)) {
+      continue;
+    }
+    const targetId = meta.target === "self"
+      ? reactor.id
+      : meta.target === "trigger-target"
+        ? event.targetId ?? event.sourceId
+        : event.sourceId;
+    const reaction: EligibleReaction = { reactor, action: action as EligibleReaction["action"], meta, targetId };
+    if (meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event)) {
+      continue;
+    }
+    return reaction;
+  }
+  return undefined;
+}
+
+/**
+ * Open a reaction window. Finds every eligible reactor (initiative order), fires
+ * one reaction each, and reports back. Nesting past `MAX_REACTION_DEPTH` is a
+ * no-op (a counter-counterspell is legal; a third is not).
+ */
+export function runReactionWindow(state: EngineState, ev: ReactionEvent): ReactionWindowResult {
+  const depth = state.reactionDepth ?? 0;
+  if (depth >= MAX_REACTION_DEPTH) {
+    return {};
+  }
+  state.reactionDepth = depth + 1;
+  const result: ReactionWindowResult = {};
+  try {
+    const source = state.snapshot.combatants.find((c) => c.id === ev.sourceId);
+    if (!source) {
+      return result;
+    }
+
+    // The leave-reach window has its own reach-aware finder (covers both authored
+    // reaction copies and the universal "any melee weapon" opportunity attack).
+    if (ev.kind === "enemy-leaves-reach") {
+      if (!ev.from || !ev.to || source.state !== "active") {
+        return result;
+      }
+      for (const reactor of orderedByInitiative(state.snapshot.combatants)) {
+        if (source.state !== "active") {
+          break;
+        }
+        const action = findLeaveReachReaction(state.snapshot, reactor, source, ev.from, ev.to);
+        if (!action) {
+          continue;
+        }
+        const reactorDefinition = getDefinition(state.snapshot, reactor);
+        const reactionAction: AttackActionDefinition = action.actionType === "reaction"
+          ? action
+          : { ...action, actionType: "reaction" };
+        logReactionTriggered(state, reactor, action.id, "enemy-leaves-reach", ev);
+        state.log.push(event(state, "OpportunityAttackTriggered", `${reactor.displayName} makes an opportunity attack against ${source.displayName}`, {
+          reactorId: reactor.id, moverId: source.id, actionId: action.id, from: ev.from, to: ev.to
+        }));
+        resolveAttackCore(state, reactor, source, reactorDefinition, reactionAction, {}, true);
+      }
+      return result;
+    }
+
+    for (const reactor of orderedByInitiative(state.snapshot.combatants)) {
+      const reaction = eligibleReactionFor(state, reactor, ev);
+      if (!reaction) {
+        continue;
+      }
+      logReactionTriggered(state, reactor, reaction.action.id, ev.kind, ev);
+      const outcome = fireReaction(state, reaction, ev);
+      if (outcome.countered) {
+        result.countered = true;
+      }
+      if (outcome.imposedDisadvantage) {
+        result.imposedDisadvantage = true;
+      }
+      if (ev.kind === "enemy-casts-spell" && result.countered) {
+        break;
+      }
+    }
+    return result;
+  } finally {
+    state.reactionDepth = depth;
+  }
+}
+
+function orderedByInitiative(combatants: CombatantState[]): CombatantState[] {
+  return [...combatants].sort((a, b) => (b.initiative ?? 0) - (a.initiative ?? 0) || a.id.localeCompare(b.id));
+}
+
+function logReactionTriggered(state: EngineState, reactor: CombatantState, actionId: Id, kind: ReactionTrigger["kind"], ev: ReactionEvent): void {
+  state.log.push(event(state, "ReactionTriggered", `${reactor.displayName} reacts (${kind})`, {
+    reactorId: reactor.id, actionId, trigger: kind, sourceId: ev.sourceId, targetId: ev.targetId
+  }));
+}
+
+/** Resolve one eligible reaction through its normal resolver. A resolver throw is contained. */
+function fireReaction(state: EngineState, reaction: EligibleReaction, ev: ReactionEvent): ReactionWindowResult {
+  const { reactor, action, meta, targetId } = reaction;
+  const reactorDefinition = getDefinition(state.snapshot, reactor);
+  try {
+    if (meta.trigger.kind === "ally-targeted-by-attack") {
+      // Protection: spend the reaction, impose disadvantage on the triggering roll.
+      validateAndSpendAction(reactor, action);
+      return { imposedDisadvantage: true };
+    }
+    if (meta.trigger.kind === "enemy-casts-spell") {
+      // Counterspell: spend the reaction (+ its slot) and report the counter.
+      resolveActivateFeatureAction(state, reactor.id, action.id);
+      return { countered: true };
+    }
+    switch (action.kind) {
+      case "attack":
+        resolveAttackCore(state, reactor, findCombatant(state.snapshot, targetId), reactorDefinition,
+          action.actionType === "reaction" ? action : { ...action, actionType: "reaction" }, {}, true);
+        return {};
+      case "save":
+        resolveSaveAction(state, reactor.id, targetId, action.id);
+        return {};
+      case "area-save":
+        resolveAreaSaveAction(state, reactor.id, findCombatant(state.snapshot, targetId).position, action.id);
+        return {};
+      case "activate-feature":
+        resolveActivateFeatureAction(state, reactor.id, action.id);
+        return {};
+      default:
+        return {};
+    }
+  } catch (error) {
+    state.log.push(event(state, "AutomationWarning", `${reactor.displayName}'s reaction (${meta.trigger.kind}) could not resolve`, {
+      reactorId: reactor.id, actionId: action.id, sourceId: ev.sourceId, error: error instanceof Error ? error.message : String(error)
+    }));
+    return {};
+  }
+}
+
+/**
+ * Counterspell window for a spell resolver. Call right after the caster's action
+ * + slot are spent and the action is declared; a `true` return means the spell
+ * was countered and the resolver must return an empty result.
+ */
+function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition): boolean {
+  if (!("spellLevel" in action) || action.spellLevel == null) {
+    return false;
+  }
+  const { countered } = runReactionWindow(state, {
+    kind: "enemy-casts-spell",
+    sourceId: caster.id,
+    origin: caster.position,
+    spellLevel: action.spellLevel
   });
+  if (countered) {
+    state.log.push(event(state, "SpellCountered", `${caster.displayName}'s ${action.name} was countered`, {
+      casterId: caster.id, actionId: action.id, spellLevel: action.spellLevel
+    }));
+  }
+  return countered === true;
 }
 
 function occupiedCells(snapshot: EncounterSnapshot, movingCombatantId: Id): Point[] {

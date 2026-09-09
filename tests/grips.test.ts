@@ -80,8 +80,16 @@ describe("weapon usableAs", () => {
     expect(list[0]?.id).toBe("weapon:spike:reaction");
   });
 
-  it("defaults to a single action-typed attack (melee OA still works via the OA scan)", () => {
+  it("melee defaults to an action attack + an opportunity-attack reaction copy", () => {
     const list = attacks(creatureWith(longsword));
+    expect(list.map((a) => a.actionType).sort()).toEqual(["action", "reaction"]);
+    const reactionCopy = list.find((a) => a.actionType === "reaction");
+    expect(reactionCopy?.reaction?.trigger.kind).toBe("enemy-leaves-reach");
+    expect(reactionCopy?.reaction?.priority).toBe("always");
+  });
+
+  it("ranged defaults to a single action attack (no reaction copy)", () => {
+    const list = attacks(creatureWith({ ...longsword, id: "bow", name: "Shortbow", attackType: "ranged" }));
     expect(list).toHaveLength(1);
     expect(list[0]?.actionType).toBe("action");
   });

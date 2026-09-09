@@ -150,16 +150,24 @@ describe("SRD library — drag payload", () => {
 });
 
 describe("SRD library — every entry attaches & compiles", () => {
-  it("attaches each weapon as one executable attack", () => {
+  it("attaches each weapon as an executable attack (melee also gets an opportunity-attack reaction copy)", () => {
     for (const weapon of SRD_WEAPONS) {
       useEncounterStore.setState(pristine, true);
       const before = getExecutableActions(fighterDefinition()).length;
       const newId = useEncounterStore.getState().attachSrdWeapon(DEF_ID, weapon.id);
       expect(newId, weapon.id).toBeTruthy();
       const actions = getExecutableActions(fighterDefinition());
-      expect(actions.length, weapon.id).toBe(before + 1);
       const attached = actions.find((action) => action.id === `weapon-action-${newId}`);
       expect(attached?.kind, weapon.id).toBe("attack");
+      const isMelee = weapon.attackType === "melee";
+      expect(actions.length - before, weapon.id).toBe(isMelee ? 2 : 1);
+      const reactionCopy = actions.find((action) => action.id === `weapon-action-${newId}:reaction`);
+      if (isMelee) {
+        expect(reactionCopy?.actionType, weapon.id).toBe("reaction");
+        expect(reactionCopy?.kind === "attack" && reactionCopy.reaction?.trigger.kind, weapon.id).toBe("enemy-leaves-reach");
+      } else {
+        expect(reactionCopy, weapon.id).toBeUndefined();
+      }
     }
   });
 

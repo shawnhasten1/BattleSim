@@ -258,6 +258,23 @@ describe("schema normalization — riders", () => {
     expect(rider.resourceCost).toEqual({ resourceId: "fear-strike", amount: 1 });
   });
 
+  it("normalizes a reaction meta on a save action and drops a malformed one", () => {
+    const rebuke = normalizeAction<SaveActionDefinition>({
+      kind: "save", name: "Hellish Rebuke", actionType: "reaction", saveAbility: "dex", dc: 15,
+      damage: [{ dice: "2d10", damageType: "fire" }],
+      reaction: { trigger: { kind: "hit-by-attack", meleeOnly: true }, target: "trigger-source", priority: "always" }
+    });
+    expect(rebuke.reaction).toEqual({
+      trigger: { kind: "hit-by-attack", meleeOnly: true }, target: "trigger-source", priority: "always"
+    });
+
+    const noMeta = normalizeAction<SaveActionDefinition>({
+      kind: "save", name: "Bad", actionType: "reaction", saveAbility: "dex", dc: 10, damage: [],
+      reaction: { trigger: { kind: "not-a-trigger" } }
+    });
+    expect(noMeta.reaction).toBeUndefined();
+  });
+
   it("defaults an on-save-fail gate for save-action riders", () => {
     const action = normalizeAction<SaveActionDefinition>({
       kind: "save",
@@ -341,6 +358,18 @@ describe("schema normalization — weapons", () => {
       resourceCost: { resourceId: "trick", amount: 1 }
     });
     expect(weapon.versatileDamage?.[0]).toMatchObject({ dice: "1d8", diceCount: 1, diceSize: 8 });
+  });
+
+  it("normalizes a weapon reactionTrigger and drops a malformed one", () => {
+    expect(normalizeWeapon({
+      name: "Pike", attackType: "melee", ability: "str", damage: [{ dice: "1d10", damageType: "piercing" }],
+      reactionTrigger: { kind: "enemy-leaves-reach" }
+    }).reactionTrigger).toEqual({ kind: "enemy-leaves-reach" });
+
+    expect(normalizeWeapon({
+      name: "Bad", attackType: "melee", ability: "str", damage: [{ dice: "1d4", damageType: "slashing" }],
+      reactionTrigger: { kind: "nonsense" }
+    }).reactionTrigger).toBeUndefined();
   });
 
   it("normalizes both weapon-charge recharge forms", () => {

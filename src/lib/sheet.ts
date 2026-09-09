@@ -150,6 +150,11 @@ export function buildSheetItems(definition: CreatureDefinition): SheetItems {
     // The synthesised Dash / Disengage / Dodge / Hide / Help get their own
     // read-only group in the sheet (Phase 5) — keep them out of the row lists.
     .filter((action) => action.kind !== "utility")
+    // Implicit opportunity-attack copies of a weapon are not their own row —
+    // the weapon already shows once as an action.
+    .filter((action) => !(action.kind === "attack"
+      && action.actionType === "reaction"
+      && action.reaction?.trigger.kind === "enemy-leaves-reach"))
     .map((action) => ({
       id: action.id,
       name: action.name,

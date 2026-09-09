@@ -444,6 +444,37 @@ export type ActionRider =
   | (TriggeredRider & { kind: "push"; distance: number })
   | (ActionRiderCommon & { kind: "note"; text: string });
 
+/* ─── Reaction triggers ────────────────────────────────────────────────────────
+ * What must happen for a `reaction`-typed action to become available. Consumed
+ * by `runReactionWindow` (engine). Only meaningful on an action whose
+ * `actionType === "reaction"`.
+ */
+export type ReactionTrigger =
+  /** An enemy the reactor threatens leaves its melee reach (opportunity attack). */
+  | { kind: "enemy-leaves-reach" }
+  /** The reactor is targeted by an attack, before it resolves (Shield). */
+  | { kind: "targeted-by-attack"; meleeOnly?: boolean }
+  /** The reactor was hit by an attack (Hellish Rebuke). */
+  | { kind: "hit-by-attack"; meleeOnly?: boolean }
+  /** An ally within `withinFt` is targeted by an attack (Protection fighting style). */
+  | { kind: "ally-targeted-by-attack"; withinFt: number }
+  /** An enemy within `withinFt` casts a spell of level ≤ `maxSpellLevel` (Counterspell). */
+  | { kind: "enemy-casts-spell"; withinFt: number; maxSpellLevel?: number }
+  /** Author-described — reference only, never auto-fires. */
+  | { kind: "manual"; note: string };
+
+export interface ReactionMeta {
+  trigger: ReactionTrigger;
+  /**
+   * Who the reaction acts on. `"trigger-source"` = the attacker / caster / mover;
+   * `"trigger-target"` = the creature the triggering attack was aimed at;
+   * `"self"` = the reactor. Default `"trigger-source"`.
+   */
+  target?: "trigger-source" | "self" | "trigger-target";
+  /** How eagerly the AI spends the reaction. `"manual"` never auto-fires. Default `"worthwhile"`. */
+  priority?: "always" | "worthwhile" | "manual";
+}
+
 export interface AttackActionDefinition {
   kind: "attack";
   id: Id;
@@ -453,6 +484,13 @@ export interface AttackActionDefinition {
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
   grip?: "one-handed" | "two-handed";
+  /** What makes this reaction available (only when `actionType === "reaction"`). */
+  reaction?: ReactionMeta;
+  /**
+   * `false` explicitly bars this melee attack from being used as an opportunity
+   * attack (a weapon whose `usableAs` omits `"reaction"`). Absent ⇒ eligible.
+   */
+  opportunityAttack?: boolean;
   attackBonus?: number;
   attackBonusFormula?: NumericFormula;
   range: number;
@@ -483,6 +521,8 @@ export interface SaveActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** What makes this reaction available (only when `actionType === "reaction"`). */
+  reaction?: ReactionMeta;
   saveAbility: Ability;
   dc?: number;
   dcFormula?: NumericFormula;
@@ -508,6 +548,8 @@ export interface AreaSaveActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** What makes this reaction available (only when `actionType === "reaction"`). */
+  reaction?: ReactionMeta;
   saveAbility: Ability;
   dc?: number;
   dcFormula?: NumericFormula;
@@ -557,6 +599,8 @@ export interface ActivateFeatureActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** What makes this reaction available (only when `actionType === "reaction"`) — Shield, Counterspell. */
+  reaction?: ReactionMeta;
   featureId: Id;
   resourceCost?: ResourceCost;
   condition?: {
@@ -671,6 +715,12 @@ export interface WeaponDefinition {
    * (a loose heuristic — a real hand model is a non-goal). Default `"one-handed"`.
    */
   grip?: "one-handed" | "two-handed" | "versatile";
+  /**
+   * Trigger for the compiled reaction copy (when `usableAs` includes
+   * `"reaction"`). Default `{ kind: "enemy-leaves-reach" }` — a plain
+   * opportunity attack.
+   */
+  reactionTrigger?: ReactionTrigger;
   /**
    * Great Weapon Master / Sharpshooter: also compile a "power" attack variant
    * at -5 to hit / +10 damage. The AI weighs it against the plain attack.
@@ -921,6 +971,8 @@ export interface CombatLogEvent {
     | "RiderApplied"
     | "BeamsResolved"
     | "OpportunityAttackTriggered"
+    | "ReactionTriggered"
+    | "SpellCountered"
     | "UtilityActionResolved"
     | "ActionEconomyRefreshed"
     | "AiDecision"
@@ -1067,6 +1119,21 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
   z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number() }),
   z.object({ id: z.string().optional(), oncePerTurn: z.boolean().optional(), kind: z.literal("note"), text: z.string() })
 ]) as z.ZodType<ActionRider>;
+
+export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("enemy-leaves-reach") }),
+  z.object({ kind: z.literal("targeted-by-attack"), meleeOnly: z.boolean().optional() }),
+  z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional() }),
+  z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
+  z.object({ kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional() }),
+  z.object({ kind: z.literal("manual"), note: z.string() })
+]) as z.ZodType<ReactionTrigger>;
+
+export const reactionMetaSchema: z.ZodType<ReactionMeta> = z.object({
+  trigger: reactionTriggerSchema,
+  target: z.enum(["trigger-source", "self", "trigger-target"]).optional(),
+  priority: z.enum(["always", "worthwhile", "manual"]).optional()
+});
 
 const tacticsProfileSchema = z.preprocess(
   (value) => value === "manual" ? "basic-melee" : value,
