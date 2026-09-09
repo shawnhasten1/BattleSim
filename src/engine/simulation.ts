@@ -24,7 +24,7 @@ import {
 } from "./combat";
 import { combatantsInArea } from "./areas";
 import { abilityModifier, parseDiceExpression } from "./dice";
-import { findReachableCells, gridDistance, lineOfEffect, sizeFootprint, type ReachableCell } from "./geometry";
+import { coverBetween, findReachableCells, gridDistance, lineOfEffect, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
 import type { ActionDefinition, CombatLogEvent, CombatantState, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -60,6 +60,8 @@ interface MovementPlan {
   targetDistance: number;
   score: number;
   opportunityThreats: number;
+  /** Average cover (AC value 0/2/5) the actor would have from hostiles at this cell. */
+  coverBonus: number;
 }
 
 interface FeatureActivationPlan {
@@ -78,6 +80,8 @@ interface TacticsSettings {
   woundedWeight: number;
   protectWeight: number;
   reactionRiskWeight: number;
+  /** How hard a ranged actor works to keep cover between itself and its threats. Melee: 0. */
+  coverWeight: number;
   reposition: boolean;
 }
 
@@ -194,7 +198,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         const previousDistance = gridDistance(actor.position, plan.target.position, state.snapshot.map.grid);
         moveCombatant(state, actor.id, movement.cell);
         movedThisTurn = true;
-        state.log.push(event(state, "AiDecision", `${actor.displayName} moved ${Math.round(movement.pathCost * state.snapshot.map.grid.distancePerSquare)} ft toward ${plan.target.displayName}`, {
+        const coverNote = movement.coverBonus >= 2 ? ` into ${coverPhrase(movement.coverBonus)}` : "";
+        state.log.push(event(state, "AiDecision", `${actor.displayName} moved ${Math.round(movement.pathCost * state.snapshot.map.grid.distancePerSquare)} ft toward ${plan.target.displayName}${coverNote}`, {
           combatantId: actor.id,
           targetId: plan.target.id,
           destination: movement.cell,
@@ -202,6 +207,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
           previousDistance,
           remainingDistance: movement.targetDistance,
           opportunityThreats: movement.opportunityThreats,
+          coverAtDestination: movement.coverBonus,
           movementScore: movement.score
         }));
       } catch {
@@ -258,13 +264,15 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     if (reposition) {
       try {
         moveCombatant(state, actor.id, reposition.cell);
-        state.log.push(event(state, "AiDecision", `${actor.displayName} repositioned`, {
+        const coverNote = reposition.coverBonus >= 2 ? ` to ${coverPhrase(reposition.coverBonus)}` : "";
+        state.log.push(event(state, "AiDecision", `${actor.displayName} repositioned${coverNote}`, {
           combatantId: actor.id,
           targetId: plan.target.id,
           destination: reposition.cell,
           pathCost: reposition.pathCost,
           remainingDistance: reposition.targetDistance,
           opportunityThreats: reposition.opportunityThreats,
+          coverAtDestination: reposition.coverBonus,
           movementScore: reposition.score
         }));
       } catch {
@@ -314,6 +322,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 7,
         protectWeight: 0,
         reactionRiskWeight: 2,
+        coverWeight: 3,
         reposition: true
       };
     case "skirmisher":
@@ -327,6 +336,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 10,
         protectWeight: 0,
         reactionRiskWeight: 4,
+        coverWeight: 4,
         reposition: true
       };
     case "brute":
@@ -340,6 +350,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 16,
         protectWeight: 0,
         reactionRiskWeight: 1,
+        coverWeight: 0,
         reposition: false
       };
     case "defender":
@@ -353,6 +364,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 8,
         protectWeight: 22,
         reactionRiskWeight: 3,
+        coverWeight: 0,
         reposition: false
       };
     case "controller":
@@ -366,6 +378,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 6,
         protectWeight: 8,
         reactionRiskWeight: 3,
+        coverWeight: 2.5,
         reposition: true
       };
     case "basic-melee":
@@ -380,6 +393,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         woundedWeight: 8,
         protectWeight: 0,
         reactionRiskWeight: 2,
+        coverWeight: 0,
         reposition: false
       };
   }
@@ -500,6 +514,18 @@ function selectOffensivePlan(
         && action.attackType !== "melee"
         ? 12
         : 0;
+      const targetCover = snapshot.rules.cover
+        && ((action.kind === "attack" && action.attackType !== "melee")
+          || (action.kind === "save" && action.saveAbility === "dex"))
+        ? coverBetween(
+          snapshot.map,
+          actor.position,
+          sizeFootprint(definition.size),
+          target.position,
+          sizeFootprint(targetDefinition.size)
+        ).acBonus
+        : 0;
+      const coverPenalty = targetCover * 1.5;
       const reasons = [
         `${Math.round(expectedDamage * 10) / 10} expected damage`,
         reachableNow ? "target in range" : canMoveIntoRange ? "can move into range" : "out of reach",
@@ -509,6 +535,7 @@ function selectOffensivePlan(
       if (woundedPressure > 0) reasons.push("wounded target");
       if (protectPressure > 0) reasons.push("protecting wounded ally");
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
+      if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
       let score = expectedDamage * 2
         + preferredBonus
         + killPressure
@@ -517,6 +544,7 @@ function selectOffensivePlan(
         + spacingScore
         - resourcePenalty
         - threatenedRangedPenalty
+        - coverPenalty
         - distance / 12;
       if (reachableNow) score += 10;
       else if (canMoveIntoRange) score += 2;
@@ -581,7 +609,12 @@ function bestRepositionAfterAction(
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare;
   const currentDistance = gridDistance(actor.position, target.position, snapshot.map.grid);
   const currentNearestHostile = nearestHostileDistanceFrom(snapshot, actor, actor.position);
-  const currentScore = distanceBandScore(currentDistance, tactics) + Math.min(currentNearestHostile, tactics.preferredMinDistance) / 5;
+  const currentCover = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
+    ? coverFromHostilesAt(snapshot, actor, actor.position)
+    : 0;
+  const currentScore = distanceBandScore(currentDistance, tactics)
+    + Math.min(currentNearestHostile, tactics.preferredMinDistance) / 5
+    + (currentCover > 0 ? currentCover * tactics.coverWeight + 4 : 0);
   const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
@@ -593,6 +626,37 @@ function bestRepositionAfterAction(
 
   candidates.sort((a, b) => b.score - a.score || a.pathCost - b.pathCost || a.cell.y - b.cell.y || a.cell.x - b.cell.x);
   return candidates[0];
+}
+
+function mapHasCoverWalls(snapshot: EncounterSnapshot): boolean {
+  return snapshot.map.walls.some((wall) => wallCover(wall) !== "none");
+}
+
+function coverPhrase(coverBonus: number): string {
+  return coverBonus >= 5 ? "three-quarters cover" : coverBonus >= 2 ? "half cover" : "the open";
+}
+
+/** Mean cover (AC value 0/2/5) the actor would have from every active hostile if it stood on `cell`. */
+function coverFromHostilesAt(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point): number {
+  const actorFootprint = sizeFootprint(getDefinition(snapshot, actor).size);
+  const hostiles = snapshot.combatants.filter(
+    (combatant) => combatant.faction !== actor.faction && combatant.state === "active"
+  );
+  if (hostiles.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const hostile of hostiles) {
+    const result = coverBetween(
+      snapshot.map,
+      hostile.position,
+      sizeFootprint(getDefinition(snapshot, hostile).size),
+      cell,
+      actorFootprint
+    );
+    sum += result.blocksTargeting ? 5 : result.acBonus;
+  }
+  return sum / hostiles.length;
 }
 
 function movementPlanForCell(
@@ -607,14 +671,21 @@ function movementPlanForCell(
   const targetDistance = gridDistance(cell, target.position, snapshot.map.grid);
   const threats = opportunityAttackThreats(snapshot, actor.id, cells).length;
   const nearestHostile = nearestHostileDistanceFrom(snapshot, actor, cell);
+  const coverBonus = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
+    ? coverFromHostilesAt(snapshot, actor, cell)
+    : 0;
+  // A flat bump for being in *any* cover clears the reposition hysteresis; the
+  // scaled term then rewards stronger cover.
+  const coverScore = coverBonus > 0 ? coverBonus * tactics.coverWeight + 4 : 0;
   const score = tactics.preferred === "melee"
     ? -targetDistance * 2 - cost - threats * tactics.reactionRiskWeight * 10
     : distanceBandScore(targetDistance, tactics)
       + Math.min(nearestHostile, tactics.preferredMinDistance) / 4
       - cost * 0.75
       - threats * tactics.reactionRiskWeight * 10
-      - (targetDistance > range ? 30 : 0);
-  return { cell, pathCost: cost, targetDistance, score, opportunityThreats: threats };
+      - (targetDistance > range ? 30 : 0)
+      + coverScore;
+  return { cell, pathCost: cost, targetDistance, score, opportunityThreats: threats, coverBonus };
 }
 
 function distanceBandScore(distance: number, tactics: TacticsSettings): number {

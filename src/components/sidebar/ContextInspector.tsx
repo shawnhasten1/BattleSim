@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { type AreaTemplate, type PlacedTemplate, type TerrainType } from "@/engine";
+import { type AreaTemplate, type CoverLevel, type PlacedTemplate, type TerrainType } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { clamp } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
@@ -10,6 +10,12 @@ import styles from "./ContextInspector.module.css";
 const TERRAIN_TYPES: TerrainType[] = ["normal", "difficult", "impassable", "hazard", "cover", "elevation", "custom"];
 const TEMPLATE_TYPES: AreaTemplate["type"][] = ["circle", "cone", "line", "square"];
 const TEMPLATE_DIRECTIONS: NonNullable<AreaTemplate["direction"]>[] = ["north", "east", "south", "west"];
+const COVER_LEVELS: Array<{ value: CoverLevel; label: string }> = [
+  { value: "total", label: "Total — solid wall" },
+  { value: "three-quarters", label: "Three-quarters — +5 AC" },
+  { value: "half", label: "Half — +2 AC" },
+  { value: "none", label: "None — marker only" }
+];
 
 interface ContextInspectorProps {
   scene: SceneInteraction;
@@ -23,6 +29,9 @@ interface ContextInspectorProps {
  */
 export function ContextInspector({ scene }: ContextInspectorProps) {
   const grid = useEncounterStore((state) => state.encounter.map.grid);
+  const tool = useEncounterStore((state) => state.tool);
+  const wallCoverDraft = useEncounterStore((state) => state.wallCoverDraft);
+  const setWallCoverDraft = useEncounterStore((state) => state.setWallCoverDraft);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
   const deleteWallNode = useEncounterStore((state) => state.deleteWallNode);
   const updateWall = useEncounterStore((state) => state.updateWall);
@@ -59,6 +68,26 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
 
   return (
     <div className={styles.inspector}>
+      {tool === "wall" ? (
+        <section className={styles.block}>
+          <header><h4>Wall tool</h4></header>
+          <div className={styles.stack}>
+            <label>
+              Cover for new walls
+              <select
+                value={wallCoverDraft}
+                aria-label="New wall cover level"
+                onChange={(event) => setWallCoverDraft(event.target.value as CoverLevel)}
+              >
+                {COVER_LEVELS.map((level) => (
+                  <option key={level.value} value={level.value}>{level.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+      ) : null}
+
       {selectedWallNode ? (
         <section className={styles.block}>
           <header>
@@ -128,6 +157,20 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
               <Trash2 size={14} />
             </button>
           </header>
+          <div className={styles.stack}>
+            <label>
+              Cover
+              <select
+                value={selectedWall.cover ?? (selectedWall.blocksProjectiles ? "total" : "none")}
+                aria-label="Wall cover level"
+                onChange={(event) => updateWall(selectedWall.id, { cover: event.target.value as CoverLevel })}
+              >
+                {COVER_LEVELS.map((level) => (
+                  <option key={level.value} value={level.value}>{level.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className={styles.checks}>
             <label>
               <input

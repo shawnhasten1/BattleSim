@@ -1,4 +1,4 @@
-import type { BattleMapState, GridConfig, Point, SizeCategory, TerrainZone, WallSegment } from "./types";
+import type { BattleMapState, CoverLevel, GridConfig, Point, SizeCategory, TerrainZone, WallSegment } from "./types";
 
 export interface PathResult {
   reachable: boolean;
@@ -93,9 +93,148 @@ export function lineBlocked(
       ? wall.blocksMovement
       : mode === "sight"
         ? wall.blocksSight
-        : wall.blocksProjectiles;
+        : wallCover(wall) === "total";
     return blocks && segmentIntersects(from, to, wall.start, wall.end);
   });
+}
+
+/* ============================================================
+ * Cover (5e) — how much an obstacle shields a creature behind it.
+ * ============================================================ */
+
+const COVER_RANK: Record<CoverLevel, number> = { none: 0, half: 1, "three-quarters": 2, total: 3 };
+/** AC / Dex-save bonus per level. `total` keeps +5 so a "soft" (no line-of-effect) rules profile still shields. */
+const COVER_BONUS: Record<CoverLevel, number> = { none: 0, half: 2, "three-quarters": 5, total: 5 };
+const COVER_LABEL: Record<CoverLevel, string> = {
+  none: "",
+  half: "low wall",
+  "three-quarters": "cover wall",
+  total: "wall"
+};
+
+export interface CoverResult {
+  level: CoverLevel;
+  /** AC bonus vs ranged attacks (0 when targeting is blocked and line-of-effect is enforced). */
+  acBonus: number;
+  /** Bonus to Dex saving throws (e.g. vs an area effect). */
+  dexSaveBonus: number;
+  /** True only for `total` cover — the target cannot be targeted through it. */
+  blocksTargeting: boolean;
+  /** Short labels for the obstacles granting cover, for the log / inspector. */
+  sources: string[];
+}
+
+function noCover(): CoverResult {
+  return { level: "none", acBonus: 0, dexSaveBonus: 0, blocksTargeting: false, sources: [] };
+}
+
+/** The cover a wall segment currently grants (open / destroyed doors grant none). */
+export function wallCover(wall: WallSegment): CoverLevel {
+  if (wall.doorState === "open" || wall.doorState === "destroyed") {
+    return "none";
+  }
+  return wall.cover ?? (wall.blocksProjectiles ? "total" : "none");
+}
+
+function footprintBox(cell: Point, footprint: number): { min: Point; max: Point } {
+  return { min: { x: cell.x, y: cell.y }, max: { x: cell.x + footprint, y: cell.y + footprint } };
+}
+
+/** Attacker centre → the target box's 4 (inset) corners + centre. */
+function probeLines(from: Point, fromFootprint: number, to: Point, toFootprint: number): Array<[Point, Point]> {
+  const origin = { x: from.x + fromFootprint / 2, y: from.y + fromFootprint / 2 };
+  const box = footprintBox(to, toFootprint);
+  const inset = 0.12;
+  const targets: Point[] = [
+    { x: box.min.x + inset, y: box.min.y + inset },
+    { x: box.max.x - inset, y: box.min.y + inset },
+    { x: box.min.x + inset, y: box.max.y - inset },
+    { x: box.max.x - inset, y: box.max.y - inset },
+    { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2 }
+  ];
+  return targets.map((point) => [origin, point] as [Point, Point]);
+}
+
+/** An intervening body the caller wants considered for creature-granted half cover. */
+export interface CoverBlocker {
+  position: Point;
+  footprint: number;
+}
+
+/**
+ * Cover the creature at `to` has from an attacker / effect origin at `from`.
+ *
+ * Samples ~5 lines from the attacker's centre to the target square's corners +
+ * centre. For each line the strongest obstacle is recorded — a cover wall, or
+ * an `opts.blockers` body (→ half) — then:
+ * - every line blocked by `total` cover ⇒ `total` (blocks targeting);
+ * - otherwise the level scales with the fraction of lines obstructed and the
+ *   strongest obstacle: mostly-covered behind a strong wall ⇒ three-quarters;
+ *   a strong wall clipping only a corner, or any half wall ⇒ half.
+ *
+ * `opts.blockers` is caller-resolved (position + footprint) so this stays free
+ * of creature-definition lookups; pass `[]` (or omit) to ignore creature cover.
+ */
+export function coverBetween(
+  map: BattleMapState,
+  from: Point,
+  fromFootprint: number,
+  to: Point,
+  toFootprint: number,
+  opts: { blockers?: CoverBlocker[] } = {}
+): CoverResult {
+  const coverWalls = map.walls.filter((wall) => wallCover(wall) !== "none");
+  const blockers = opts.blockers ?? [];
+  if (coverWalls.length === 0 && blockers.length === 0) {
+    return noCover();
+  }
+
+  const lines = probeLines(from, fromFootprint, to, toFootprint);
+  const sources = new Set<string>();
+  let obstructed = 0;
+  let blockedByTotal = 0;
+  let strongestRank = 0;
+
+  for (const [a, b] of lines) {
+    let lineRank = 0;
+    for (const wall of coverWalls) {
+      if (!segmentIntersects(a, b, wall.start, wall.end)) continue;
+      const level = wallCover(wall);
+      if (COVER_RANK[level] > lineRank) lineRank = COVER_RANK[level];
+      sources.add(COVER_LABEL[level]);
+    }
+    for (const blocker of blockers) {
+      if (blocker.footprint <= 0) continue;
+      const box = footprintBox(blocker.position, blocker.footprint);
+      const crossesBox = segmentIntersects(a, b, box.min, box.max)
+        || segmentIntersects(a, b, { x: box.min.x, y: box.max.y }, { x: box.max.x, y: box.min.y });
+      if (crossesBox) {
+        sources.add("a creature");
+        if (COVER_RANK.half > lineRank) lineRank = COVER_RANK.half;
+      }
+    }
+    if (lineRank > 0) obstructed += 1;
+    if (lineRank >= COVER_RANK.total) blockedByTotal += 1;
+    if (lineRank > strongestRank) strongestRank = lineRank;
+  }
+
+  if (obstructed === 0) return noCover();
+  if (blockedByTotal === lines.length) {
+    return { level: "total", acBonus: 0, dexSaveBonus: 0, blocksTargeting: true, sources: [...sources].filter(Boolean) };
+  }
+
+  const fraction = obstructed / lines.length;
+  const level: CoverLevel = strongestRank >= COVER_RANK["three-quarters"]
+    ? (fraction >= 0.5 ? "three-quarters" : "half")
+    : "half";
+
+  return {
+    level,
+    acBonus: COVER_BONUS[level],
+    dexSaveBonus: COVER_BONUS[level],
+    blocksTargeting: false,
+    sources: [...sources].filter(Boolean)
+  };
 }
 
 export function footprintCells(position: Point, footprint: number): Point[] {

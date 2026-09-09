@@ -7,6 +7,8 @@ export type Faction = "party" | "enemy" | "neutral";
 export type Ability = "str" | "dex" | "con" | "int" | "wis" | "cha";
 export type SizeCategory = "tiny" | "small" | "medium" | "large" | "huge" | "gargantuan";
 export type TerrainType = "normal" | "difficult" | "impassable" | "hazard" | "cover" | "elevation" | "custom";
+/** How much an obstacle shields a creature on the far side of it (5e cover). */
+export type CoverLevel = "none" | "half" | "three-quarters" | "total";
 export type TacticsProfile =
   | "basic-melee"
   | "basic-ranged"
@@ -56,8 +58,24 @@ export interface WallSegment {
   end: Point;
   blocksMovement: boolean;
   blocksSight: boolean;
+  /**
+   * @deprecated Kept in sync with `cover === "total"`. Read `cover` (via
+   * `wallCover()`); this remains only as a fallback for pre-cover snapshots.
+   */
   blocksProjectiles: boolean;
+  /** Cover this segment grants a creature tucked behind it. Authoritative for ranged AC / line of effect. */
+  cover?: CoverLevel;
   doorState?: "open" | "closed" | "locked" | "destroyed";
+}
+
+/**
+ * Backfill `cover` on a wall from the legacy `blocksProjectiles` flag and keep
+ * that flag mirrored to `cover === "total"`. Idempotent; runs on every parse
+ * (via the schema) and on the in-memory sample / duplicate paths.
+ */
+export function normalizeWall(wall: WallSegment): WallSegment {
+  const cover: CoverLevel = wall.cover ?? (wall.blocksProjectiles ? "total" : "none");
+  return { ...wall, cover, blocksProjectiles: cover === "total" };
 }
 
 export interface TerrainZone {
@@ -548,6 +566,10 @@ export interface RuleProfile {
   playerDeathSaves: boolean;
   enemiesDropAtZero: boolean;
   requireLineOfEffect: boolean;
+  /** Apply cover AC / Dex-save bonuses and let the AI weight cover. `total` cover still blocks line of effect regardless. */
+  cover: boolean;
+  /** Optional 5e rule: an intervening creature grants half cover. Off by default. */
+  coverFromCreatures?: boolean;
 }
 
 export interface EncounterSnapshot {
@@ -599,6 +621,13 @@ export const pointSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite()
 });
+
+export const coverLevelSchema = z.union([
+  z.literal("none"),
+  z.literal("half"),
+  z.literal("three-quarters"),
+  z.literal("total")
+]);
 
 const tacticsProfileSchema = z.preprocess(
   (value) => value === "manual" ? "basic-melee" : value,
@@ -729,13 +758,14 @@ export const encounterSnapshotSchema = z.object({
         blocksMovement: z.boolean(),
         blocksSight: z.boolean(),
         blocksProjectiles: z.boolean(),
+        cover: coverLevelSchema.optional(),
         doorState: z.union([
           z.literal("open"),
           z.literal("closed"),
           z.literal("locked"),
           z.literal("destroyed")
         ]).optional()
-      })
+      }).transform(normalizeWall)
     ),
     terrain: z.array(
       z.object({
@@ -774,7 +804,9 @@ export const encounterSnapshotSchema = z.object({
   rules: z.object({
     playerDeathSaves: z.boolean(),
     enemiesDropAtZero: z.boolean(),
-    requireLineOfEffect: z.boolean()
+    requireLineOfEffect: z.boolean(),
+    cover: z.boolean().default(true),
+    coverFromCreatures: z.boolean().optional()
   }),
   definitions: z.array(z.any()),
   combatants: z.array(

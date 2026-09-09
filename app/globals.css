@@ -516,6 +516,24 @@ img {
   pointer-events: stroke;
 }
 
+/* Cover level reads by weight: solid full wall → faint dotted marker. */
+.wall-line.cover-three-quarters {
+  stroke-width: 0.09;
+  stroke: #4a4034;
+}
+
+.wall-line.cover-half {
+  stroke-width: 0.06;
+  stroke: #6b5d49;
+  stroke-dasharray: 0.26 0.12;
+}
+
+.wall-line.cover-none {
+  stroke-width: 0.04;
+  stroke: rgba(107, 93, 73, 0.55);
+  stroke-dasharray: 0.06 0.14;
+}
+
 .wall-line.selected {
   stroke: var(--ui-accent-soft);
   stroke-width: 0.16;

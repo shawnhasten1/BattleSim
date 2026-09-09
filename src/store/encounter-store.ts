@@ -40,6 +40,8 @@ import {
   type TerrainZone,
   type TokenVisuals,
   type WeaponDefinition,
+  normalizeWall,
+  type CoverLevel,
   type WallSegment
 } from "@/engine";
 import { clampReplayIndex } from "@/lib/replay";
@@ -104,7 +106,10 @@ interface EncounterStore {
   deleteLastWall: () => void;
   deleteLastTerrain: () => void;
   removeWall: (wallId: string) => void;
-  updateWall: (wallId: string, updates: Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState">>) => void;
+  updateWall: (wallId: string, updates: Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>) => void;
+  /** Cover level applied to the next wall drawn with the wall tool. */
+  wallCoverDraft: CoverLevel;
+  setWallCoverDraft: (cover: CoverLevel) => void;
   moveWallNode: (from: Point, to: Point) => void;
   deleteWallNode: (point: Point) => void;
   cancelWallPlacement: () => void;
@@ -186,6 +191,7 @@ function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnaps
     map: {
       ...encounter.map,
       grid,
+      walls: encounter.map.walls.map(normalizeWall),
       image: {
         ...DEFAULT_MAP_IMAGE_SETTINGS,
         ...encounter.map.image
@@ -195,6 +201,15 @@ function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnaps
         heightPx: encounter.map.canvas?.heightPx ?? grid.height * DEFAULT_GRID_VISUALS.squareSizePx
       }
     }
+  };
+}
+
+/** Default movement / sight flags for a freshly drawn or re-levelled wall. */
+function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles"> {
+  return {
+    blocksMovement: cover !== "none",
+    blocksSight: cover === "total",
+    blocksProjectiles: cover === "total"
   };
 }
 
@@ -331,6 +346,8 @@ export const useEncounterStore = create<EncounterStore>()(
       redoStack: [],
       tool: "select",
       pendingWallStart: null,
+      wallCoverDraft: "total",
+      setWallCoverDraft: (cover) => set({ wallCoverDraft: cover }),
       setTool: (tool) => set({ tool, pendingWallStart: null }),
       handleMapClick: (point) => {
         const state = get();
@@ -342,14 +359,13 @@ export const useEncounterStore = create<EncounterStore>()(
           if (pointsMatch(state.pendingWallStart, point)) {
             return;
           }
-          const wall: WallSegment = {
+          const wall: WallSegment = normalizeWall({
             id: `wall-${crypto.randomUUID()}`,
             start: state.pendingWallStart,
             end: point,
-            blocksMovement: true,
-            blocksSight: true,
-            blocksProjectiles: true
-          };
+            cover: state.wallCoverDraft,
+            ...wallPresetFlags(state.wallCoverDraft)
+          });
           commitEncounter({
             ...state.encounter,
             map: { ...state.encounter.map, walls: [...state.encounter.map.walls, wall] }
@@ -600,7 +616,15 @@ export const useEncounterStore = create<EncounterStore>()(
           ...encounter,
           map: {
             ...encounter.map,
-            walls: encounter.map.walls.map((wall) => wall.id === wallId ? { ...wall, ...updates } : wall)
+            walls: encounter.map.walls.map((wall) => {
+              if (wall.id !== wallId) return wall;
+              // Re-levelling via the `cover` select re-applies that level's block preset;
+              // the individual checkboxes can then still be tuned (they don't carry `cover`).
+              const presets = updates.cover !== undefined && updates.cover !== wall.cover
+                ? wallPresetFlags(updates.cover)
+                : {};
+              return normalizeWall({ ...wall, ...presets, ...updates });
+            })
           }
         });
       },

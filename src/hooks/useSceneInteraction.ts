@@ -13,6 +13,7 @@ import {
   DEFAULT_GRID_VISUALS,
   findPath,
   gridDistance,
+  coverBetween,
   lineOfEffect,
   lineOfSight,
   sizeFootprint,
@@ -159,6 +160,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       ? {
           sight: lineOfSight(encounter.map, sightStart, sightEnd),
           effect: lineOfEffect(encounter.map, sightStart, sightEnd),
+          cover: coverBetween(encounter.map, sightStart, 1, sightEnd, 1).level,
           distance: gridDistance(sightStart, sightEnd, encounter.map.grid)
         }
       : null;

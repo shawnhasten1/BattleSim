@@ -19,7 +19,7 @@ function toolReadout(
   measuredDistance: number | null,
   measuredPathCostFeet: number | null,
   measuredPathReachable: boolean | undefined,
-  sightResult: { sight: boolean; effect: boolean; distance: number } | null
+  sightResult: { sight: boolean; effect: boolean; cover: string; distance: number } | null
 ): string {
   if (tool === "measure" && measuredDistance !== null) {
     return measuredPathReachable
@@ -27,7 +27,11 @@ function toolReadout(
       : `${measuredDistance} ft direct, path blocked`;
   }
   if (tool === "sight" && sightResult) {
-    return `${sightResult.distance} ft · ${sightResult.sight ? "LOS clear" : "LOS blocked"} · ${sightResult.effect ? "LOE clear" : "LOE blocked"}`;
+    const coverNote = sightResult.cover === "none" ? "no cover"
+      : sightResult.cover === "half" ? "half cover"
+        : sightResult.cover === "three-quarters" ? "¾ cover"
+          : "total cover";
+    return `${sightResult.distance} ft · ${sightResult.sight ? "LOS clear" : "LOS blocked"} · ${sightResult.effect ? "LOE clear" : "LOE blocked"} · ${coverNote}`;
   }
   if (tool === "template") return "Click the canvas to place the configured template.";
   if (tool === "wall") return "Click grid intersections to draw walls; drag nodes to reshape.";

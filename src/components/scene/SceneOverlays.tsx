@@ -1,6 +1,6 @@
 "use client";
 
-import { cellsInArea, lineOfEffect, type BattleMapState } from "@/engine";
+import { cellsInArea, lineOfEffect, wallCover, type BattleMapState } from "@/engine";
 import { pointsMatch } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
@@ -132,7 +132,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           y1={wall.start.y}
           x2={wall.end.x}
           y2={wall.end.y}
-          className={`wall-line ${wall.id === selectedWallId ? "selected" : ""}`}
+          className={`wall-line cover-${wallCover(wall)} ${wall.id === selectedWallId ? "selected" : ""}`}
           onClick={(event) => {
             event.stopPropagation();
             setSelectedWallId(wall.id);
@@ -183,7 +183,9 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           <circle cx={sightStart.x + 0.5} cy={sightStart.y + 0.5} r="0.1" className="measure-point" />
           <circle cx={sightEnd.x + 0.5} cy={sightEnd.y + 0.5} r="0.1" className="measure-point" />
           <text x={(sightStart.x + sightEnd.x) / 2 + 0.5} y={(sightStart.y + sightEnd.y) / 2 + 0.3} className="measure-label">
-            {sightResult ? `${sightResult.distance} ft ${sightResult.sight ? "LOS" : "no LOS"} ${sightResult.effect ? "LOE" : "no LOE"}` : ""}
+            {sightResult
+              ? `${sightResult.distance} ft ${sightResult.sight ? "LOS" : "no LOS"} ${sightResult.effect ? "LOE" : "no LOE"}${sightResult.cover !== "none" ? ` · ${sightResult.cover === "three-quarters" ? "¾" : sightResult.cover} cover` : ""}`
+              : ""}
           </text>
         </g>
       ) : null}

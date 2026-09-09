@@ -1,6 +1,6 @@
 import { combatantsInArea } from "./areas";
 import { rollDice, abilityModifier, type DiceRollResult } from "./dice";
-import { gridDistance, lineOfEffect, findPath, sizeFootprint } from "./geometry";
+import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   ActionDefinition,
@@ -10,6 +10,7 @@ import type {
   CombatLogEvent,
   CombatantState,
   ConditionInstance,
+  CoverLevel,
   CreatureDefinition,
   DamageComponent,
   DamageType,
@@ -343,6 +344,54 @@ export function resolveMultiattackAction(
   return { attacks };
 }
 
+function coverLabel(level: CoverLevel): string {
+  return level === "half" ? "half cover"
+    : level === "three-quarters" ? "three-quarters cover"
+      : level === "total" ? "total cover"
+        : "no cover";
+}
+
+/** Active combatants (other than the two given) as cover blockers, when the optional creature-cover rule is on. */
+function coverBlockersFor(snapshot: EncounterSnapshot, ...excludeIds: Id[]): CoverBlocker[] {
+  if (!snapshot.rules.coverFromCreatures) {
+    return [];
+  }
+  return snapshot.combatants
+    .filter((combatant) => combatant.state === "active" && !excludeIds.includes(combatant.id))
+    .map((combatant) => ({
+      position: combatant.position,
+      footprint: sizeFootprint(getDefinition(snapshot, combatant).size)
+    }));
+}
+
+/**
+ * Cover for `target` from `from`'s position, for a ranged/effect line. Melee is
+ * unaffected. Respects `rules.cover`; `total` cover yields an AC bonus only in
+ * the "soft" profile where line of effect is not enforced (otherwise the shot is
+ * refused before this matters).
+ */
+function coverAgainst(
+  snapshot: EncounterSnapshot,
+  from: CombatantState,
+  target: CombatantState
+): { level: CoverLevel; acBonus: number; sources: string[] } {
+  if (!snapshot.rules.cover) {
+    return { level: "none", acBonus: 0, sources: [] };
+  }
+  const result = coverBetween(
+    snapshot.map,
+    from.position,
+    sizeFootprint(getDefinition(snapshot, from).size),
+    target.position,
+    sizeFootprint(getDefinition(snapshot, target).size),
+    { blockers: coverBlockersFor(snapshot, from.id, target.id) }
+  );
+  const acBonus = result.blocksTargeting
+    ? (snapshot.rules.requireLineOfEffect ? 0 : 5)
+    : result.acBonus;
+  return { level: result.level, acBonus, sources: result.sources };
+}
+
 function resolveAttackCore(
   state: EngineState,
   attacker: CombatantState,
@@ -355,6 +404,9 @@ function resolveAttackCore(
 ): AttackResult {
   const targetDefinition = getDefinition(state.snapshot, target);
   validateTargeting(state.snapshot, attacker, target, action);
+  const cover = options.coverBonus === undefined && action.attackType !== "melee"
+    ? coverAgainst(state.snapshot, attacker, target)
+    : { level: "none" as const, acBonus: options.coverBonus ?? 0, sources: [] as string[] };
   if (spendAction) {
     validateAndSpendAction(attacker, action);
   }
@@ -376,7 +428,7 @@ function resolveAttackCore(
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
   const total = d20.total + attackBonus + conditionAttackModifier(attacker) + featureAttackBonus.total;
-  const targetAc = effectiveArmorClass(targetDefinition, target) + (options.coverBonus ?? 0);
+  const targetAc = effectiveArmorClass(targetDefinition, target) + cover.acBonus;
   const natural = d20.total;
   const critical = natural === 20;
   const hit = critical || (natural !== 1 && total >= targetAc);
@@ -399,7 +451,8 @@ function resolveAttackCore(
     appliedConditionEffects = applyOnHitFeatureConditions(state, attacker, target, action, attackerDefinition, { rollMode, critical });
   }
 
-  state.log.push(event(state, "AttackRolled", `${attacker.displayName} ${hit ? "hit" : "missed"} ${target.displayName} with ${action.name}`, {
+  const coverNote = cover.level !== "none" ? ` (${target.displayName} had ${coverLabel(cover.level)})` : "";
+  state.log.push(event(state, "AttackRolled", `${attacker.displayName} ${hit ? "hit" : "missed"} ${target.displayName} with ${action.name}${coverNote}`, {
     attackerId: attacker.id,
     targetId: target.id,
     actionId: action.id,
@@ -413,6 +466,9 @@ function resolveAttackCore(
     attackBonusFormula: action.attackBonusFormula,
     rollMode,
     longRange,
+    cover: cover.level,
+    coverAcBonus: cover.acBonus,
+    coverSources: cover.sources,
     total,
     targetAc,
     hit,
@@ -441,12 +497,14 @@ export function resolveSaveAction(
   validateAndSpendAction(attacker, action);
   declareAction(state, attacker, action, { target });
 
+  const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
+  const coverSaveBonus = cover?.acBonus ?? 0;
   const saveBonus = (targetDefinition.saves?.[action.saveAbility]
     ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
     + conditionSaveModifier(target, action.saveAbility);
   const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
   const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
-  const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
+  const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
     advantage: featureSaveAdvantage.applied
   });
   const dc = resolveSaveDc(action, attackerDefinition);
@@ -463,6 +521,8 @@ export function resolveSaveAction(
     total: saveRoll.total,
     dc,
     featureSaveBonus: featureSaveBonus.total,
+    cover: cover?.level ?? "none",
+    coverSaveBonus,
     appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
     success,
     damageApplied
@@ -488,16 +548,30 @@ export function resolveAreaSaveAction(
   declareAction(state, attacker, action, { origin });
 
   const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
+  const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
+    ? coverBetween(
+      state.snapshot.map,
+      origin,
+      1,
+      target.position,
+      sizeFootprint(getDefinition(state.snapshot, target).size),
+      { blockers: coverBlockersFor(state.snapshot, attacker.id, target.id) }
+    )
+    : null;
   const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById)
-    .filter((target) => action.affects === "all" || target.faction !== attacker.faction);
+    .filter((target) => action.affects === "all" || target.faction !== attacker.faction)
+    // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
+    .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
   const targets = affected.map((target) => {
     const targetDefinition = getDefinition(state.snapshot, target);
+    const cover = areaCoverFor(target);
+    const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
     const saveBonus = (targetDefinition.saves?.[action.saveAbility]
       ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
       + conditionSaveModifier(target, action.saveAbility);
     const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
     const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
-    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
+    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
       advantage: featureSaveAdvantage.applied
     });
     const dc = resolveSaveDc(action, attackerDefinition);
@@ -514,6 +588,8 @@ export function resolveAreaSaveAction(
       total: saveRoll.total,
       dc,
       featureSaveBonus: featureSaveBonus.total,
+      cover: cover?.level ?? "none",
+      coverSaveBonus,
       appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
       success,
       damageApplied
