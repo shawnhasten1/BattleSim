@@ -24,17 +24,41 @@ export function formatAutomationSupport(value: string): string {
   return value === "manual-only" ? "reference-only" : value;
 }
 
+function describeRiders(riders: unknown): string {
+  const list = (Array.isArray(riders) ? riders : []) as Array<{ kind: string; condition?: unknown; distance?: number }>;
+  const parts = list.map((rider) => {
+    if (rider.kind === "condition") {
+      return typeof rider.condition === "string" ? `→ ${rider.condition}` : "→ a condition";
+    }
+    if (rider.kind === "push") return `→ push ${rider.distance ?? 0}ft`;
+    if (rider.kind === "damage") return "→ + damage";
+    if (rider.kind === "note") return "→ note";
+    return "";
+  }).filter(Boolean);
+  return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
 export function describeAction(action: ActionDefinition, definition: CreatureDefinition): string {
   if (action.kind === "attack") {
-    return `${action.actionType} ${action.attackType} ${formatBonus(resolveAttackBonus(action, definition))}, ${action.damage
+    const beams = action.attackDelivery === "beams"
+      ? `${action.beamCount ?? 1}${action.autoHit ? " auto-hit" : ""} beams, `
+      : "";
+    const base = `${action.actionType} ${action.attackType} ${formatBonus(resolveAttackBonus(action, definition))}, ${beams}${action.damage
       .map((component) => `${component.dice}${component.abilityModifier ? ` + ${component.abilityModifier.toUpperCase()}` : ""} ${component.damageType}`)
       .join(", ")}`;
+    return base + describeRiders(action.riders);
   }
-  if (action.kind === "healing") return `healing ${action.range} ft`;
+  if (action.kind === "healing") {
+    return `heal ${action.range} ft${action.targeting?.target === "self" ? " (self)" : ""}, ${action.healing.map((h) => h.dice).join(", ")}`;
+  }
   if (action.kind === "unsupported") return "mapping required";
   if (action.kind === "activate-feature") return `${action.actionType} activates ${action.featureId}`;
   if (action.kind === "multiattack") return action.attacks.map((step) => `${step.count} x ${step.actionId}`).join(", ");
-  return `${action.saveAbility.toUpperCase()} DC ${resolveSaveDc(action, definition)}`;
+  const area = action.kind === "area-save"
+    ? ` · ${action.area.type} ${action.area.size}ft${action.targeting?.origin === "self" ? " (self)" : ""}`
+    : "";
+  const dmg = action.damage.length ? `, ${action.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}` : "";
+  return `${action.saveAbility.toUpperCase()} DC ${resolveSaveDc(action, definition)}${area}${dmg}${describeRiders(action.riders)}`;
 }
 
 function resourceSortKey(resourceId: string): string {

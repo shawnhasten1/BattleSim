@@ -44,6 +44,7 @@ import {
   normalizeWall,
   normalizeWeaponDefinition,
   normalizeSpellDefinition,
+  normalizeActionDefinition,
   type ActionRider,
   type CoverLevel,
   type WallSegment
@@ -197,6 +198,18 @@ interface EncounterStore {
   addFeatureOrTrait: (definitionId: string, input: { category: "feature" | "trait"; name: string; description?: string; effectPreset?: "none" | "pack-tactics" | "swarm" | "defense" | "resource-regain" }) => void;
   addStructuredAction: (definitionId: string, input: { kind: "attack" | "save" | "area-save" | "healing"; name: string; actionType: "action" | "bonus"; attackType: "melee" | "ranged" | "spell"; ability: Ability; saveAbility: Ability; dc: number; range: number; areaSize: number; damageDice: string; damageType: DamageType }) => void;
   addMultiattack: (definitionId: string, input: { name: string; actionIds: string[]; count: number }) => void;
+  /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
+  addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
+  /** Add a fully-formed spell record from the guided builder. Returns its id. */
+  addSpellV2: (definitionId: string, spell: SpellDefinition) => string;
+  /** Add a fully-formed action from the guided builder; routed to actions / bonusActions / reactions by `actionType`. Returns its id. */
+  addActionV2: (definitionId: string, action: ActionDefinition) => string;
+  /** Merge a partial patch into one weapon and re-normalize it. One undo step. */
+  updateWeapon: (definitionId: string, weaponId: string, patch: Partial<WeaponDefinition>) => void;
+  /** Merge a partial patch into one spell and re-normalize it. One undo step. */
+  updateSpell: (definitionId: string, spellId: string, patch: Partial<SpellDefinition>) => void;
+  /** Merge a partial patch into one action (searched across actions / bonusActions / reactions) and re-normalize it. One undo step. */
+  updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
   removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
   mapBasicAttack: (definitionId: string, input?: { attackBonus?: number; damageDice?: string }) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
@@ -1769,6 +1782,114 @@ export const useEncounterStore = create<EncounterStore>()(
                   automationSupport: "full" as const
                 }
               ]
+            }
+            : definition)
+        });
+      },
+      addWeaponV2: (definitionId, weapon) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const id = `weapon-${crypto.randomUUID()}`;
+        const normalized = normalizeWeaponDefinition({ ...weapon, id }, definition?.abilities);
+        normalized.id = id;
+        normalized.actionId = `weapon-action-${id}`;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, weapons: [...(candidate.weapons ?? []), normalized] }
+            : candidate)
+        });
+        return id;
+      },
+      addSpellV2: (definitionId, spell) => {
+        const encounter = get().encounter;
+        const id = `spell-${crypto.randomUUID()}`;
+        const normalized = normalizeSpellDefinition({ ...spell, id });
+        normalized.id = id;
+        if (normalized.action) {
+          normalized.action = { ...normalized.action, id: `spell-action-${id}` };
+        }
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, spells: [...(candidate.spells ?? []), normalized] }
+            : candidate)
+        });
+        return id;
+      },
+      addActionV2: (definitionId, action) => {
+        const encounter = get().encounter;
+        const id = `action-${crypto.randomUUID()}`;
+        const fallbackType = action.actionType === "bonus" || action.actionType === "reaction" ? action.actionType : "action";
+        const normalized = normalizeActionDefinition({ ...action, id }, fallbackType);
+        normalized.id = id;
+        const bucket: "actions" | "bonusActions" | "reactions" =
+          normalized.actionType === "bonus" ? "bonusActions" : normalized.actionType === "reaction" ? "reactions" : "actions";
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, [bucket]: [...(candidate[bucket] ?? []), normalized] }
+            : candidate)
+        });
+        return id;
+      },
+      updateWeapon: (definitionId, weaponId, patch) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            return {
+              ...definition,
+              weapons: (definition.weapons ?? []).map((weapon) => {
+                if (weapon.id !== weaponId) return weapon;
+                const merged = normalizeWeaponDefinition({ ...weapon, ...patch, id: weapon.id }, definition.abilities);
+                merged.id = weapon.id;
+                merged.actionId = weapon.actionId ?? `weapon-action-${weapon.id}`;
+                return merged;
+              })
+            };
+          })
+        });
+      },
+      updateSpell: (definitionId, spellId, patch) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            return {
+              ...definition,
+              spells: (definition.spells ?? []).map((spell) => {
+                if (spell.id !== spellId) return spell;
+                const merged = normalizeSpellDefinition({ ...spell, ...patch, id: spell.id });
+                merged.id = spell.id;
+                if (merged.action) {
+                  merged.action = { ...merged.action, id: spell.action?.id ?? `spell-action-${spell.id}` };
+                }
+                return merged;
+              })
+            };
+          })
+        });
+      },
+      updateAction: (definitionId, actionId, patch) => {
+        const encounter = get().encounter;
+        const patchBucket = (list: ActionDefinition[] | undefined, fallback: "action" | "bonus" | "reaction") =>
+          (list ?? []).map((action) => {
+            if (action.id !== actionId) return action;
+            const merged = normalizeActionDefinition({ ...action, ...patch, id: action.id }, fallback);
+            merged.id = action.id;
+            return merged;
+          });
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => definition.id === definitionId
+            ? {
+              ...definition,
+              actions: patchBucket(definition.actions, "action"),
+              bonusActions: definition.bonusActions ? patchBucket(definition.bonusActions, "bonus") : definition.bonusActions,
+              reactions: definition.reactions ? patchBucket(definition.reactions, "reaction") : definition.reactions
             }
             : definition)
         });

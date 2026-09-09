@@ -330,6 +330,14 @@ export function normalizeWeaponDefinition(input: unknown, abilities?: CreatureDe
   return normalizeWeapons([input], new Map(), abilities)[0] as WeaponDefinition;
 }
 
+/** Normalize a single action record — the builder entry point for innate / monster actions. */
+export function normalizeActionDefinition(
+  input: unknown,
+  fallbackActionType: "action" | "bonus" | "reaction" = "action"
+): ActionDefinition {
+  return normalizeAction(input, 0, fallbackActionType, new Map(), new Map());
+}
+
 /** Normalize a single spell record — the SRD-library / builder entry point. */
 export function normalizeSpellDefinition(
   input: unknown,
