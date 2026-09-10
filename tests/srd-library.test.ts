@@ -27,9 +27,7 @@ const DEF_ID = "def-fighter";
 const COMBATANT_ID = "pc-fighter";
 
 /** Spells whose declared automationSupport is intentionally not "full". */
-const SPELL_SUPPORT_OVERRIDES: Record<string, string> = {
-  "srd:spell:counterspell": "manual-only"
-};
+const SPELL_SUPPORT_OVERRIDES: Record<string, string> = {};
 
 const pristine = useEncounterStore.getState();
 beforeEach(() => useEncounterStore.setState(pristine, true));

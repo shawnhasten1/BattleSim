@@ -422,8 +422,18 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "reaction",
     range: 60,
     resourceCost: { resourceId: "slot-3", amount: 1 },
-    description: "Reaction to interrupt a creature casting a spell. Reference only — resolve the interrupt manually.",
-    automationSupport: "manual-only"
+    description: "When a creature within 60 ft casts a spell, interrupt it. v1: succeeds while your slot's level is at least the spell's.",
+    automationSupport: "full",
+    action: {
+      kind: "activate-feature",
+      id: "srd:spell:counterspell:action",
+      name: "Counterspell",
+      actionType: "reaction",
+      featureId: "srd:spell:counterspell",
+      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60 }, priority: "worthwhile" },
+      resourceCost: { resourceId: "slot-3", amount: 1 },
+      automationSupport: "full"
+    }
   },
   // ── Level 5 ───────────────────────────────────────────────────────────────
   {
@@ -470,6 +480,10 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       kind: "attack", id: "srd:spell:shocking-grasp:action", name: "Shocking Grasp", actionType: "action", attackType: "spell",
       ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 5,
       damage: [{ dice: "1d8", damageType: "lightning", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      riders: [{
+        kind: "condition", when: "on-hit", condition: { custom: "reaction-locked" },
+        modifiers: { deniesReactions: true }, duration: { kind: "until-start-of-next-turn" }
+      }],
       automationSupport: "full"
     }
   },
@@ -567,6 +581,37 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile", concentration: true,
       riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }],
       resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  // ── Reaction spells (phase 6) ─────────────────────────────────────────────
+  {
+    id: "srd:spell:hellish-rebuke", name: "Hellish Rebuke", level: 1, school: "evocation", castingTime: "reaction", range: 60,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d10" } },
+    description: "As a reaction to being hit by an attack, wreathe the attacker in flames: DEX save vs 2d10 fire (half on a save).",
+    automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:hellish-rebuke:action", name: "Hellish Rebuke", actionType: "reaction",
+      reaction: { trigger: { kind: "hit-by-attack" }, target: "trigger-source", priority: "worthwhile" },
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "2d10", damageType: "fire", magical: true }],
+      halfDamageOnSuccess: true, onSuccess: "half",
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:shield", name: "Shield", level: 1, school: "abjuration", castingTime: "reaction", range: "self",
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    description: "As a reaction when you are targeted by an attack, gain +5 AC until the start of your next turn.",
+    automationSupport: "full",
+    action: {
+      kind: "activate-feature", id: "srd:spell:shield:action", name: "Shield", actionType: "reaction",
+      featureId: "srd:spell:shield",
+      // Pre-roll window has no roll to gate on, so v1 fires whenever an attack
+      // targets the caster and a slot is available (mirrors Protection's "always").
+      reaction: { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" },
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      condition: { id: "shield-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 5 } },
+      automationSupport: "full"
     }
   }
 ];

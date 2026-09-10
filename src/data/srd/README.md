@@ -81,3 +81,21 @@ Authoring:
 - **Grants** features carry `grantedActions: [{ kind: "utility", actionType:
   "bonus", mode, … }]` (Cunning Action).
 - Skip pure flavour — no damage / utility / economy impact, no entry.
+
+## Reaction spells (`spells.ts`)
+
+A spell whose `castingTime` is `"reaction"` carries a `reaction` block on its
+`action` (`{ trigger: { kind, withinFt? }, target?, priority }`) so the engine's
+reaction windows can auto-fire it — no feature record or `reactions[]` entry
+needed. Authored so far: **Hellish Rebuke** (`hit-by-attack` → a `save` aimed at
+`trigger-source`), **Shield** (`targeted-by-attack` → an `activate-feature` with a
+1-round `armorClass: 5` condition; `priority: "always"` because the pre-roll
+window has no roll to gate on), **Counterspell** (`enemy-casts-spell` within
+60 ft → `activate-feature`; v1 auto-succeeds while the counter slot's level ≥ the
+spell's, and `priority: "worthwhile"` lets cantrips / 1st-level spells through).
+**Shocking Grasp** stays an `action` cantrip but its `onHit` rider applies a
+`{ custom: "reaction-locked" }` condition with `modifiers.deniesReactions` and
+`duration: { kind: "until-start-of-next-turn" }` — the target loses its
+opportunity attack until its next turn. A `{ custom }` condition rider keeps
+`automationSupport: "full"` only when it carries explicit `modifiers`
+(`riderNeedsHuman`).

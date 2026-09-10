@@ -245,9 +245,18 @@ export function effectiveAutomationSupport(
   return ridersNeedHuman(riders) ? "partial" : "full";
 }
 
+/**
+ * A rider needs a human when the engine can't resolve it: a reference `note`, or
+ * a `{ custom }` condition with no explicit `modifiers` (a bare custom *name* has
+ * no mechanical meaning — but `{ custom }` + `modifiers` is fully specified).
+ */
+export function riderNeedsHuman(rider: ActionRider): boolean {
+  return rider.kind === "note"
+    || (rider.kind === "condition" && typeof rider.condition !== "string" && !rider.modifiers);
+}
+
 function ridersNeedHuman(riders: ActionRider[]): boolean {
-  return riders.some((rider) =>
-    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"));
+  return riders.some(riderNeedsHuman);
 }
 
 export function findActionDefinition(definition: CreatureDefinition, actionId: Id): ActionDefinition | undefined {
@@ -1115,7 +1124,9 @@ export function resolveActivateFeatureAction(
   declareAction(state, actor, action);
 
   const feature = featureSources(actorDefinition, actor).find((candidate) => candidate.id === action.featureId);
-  if (!feature) {
+  // A self-contained activation (its own `condition` buff, or a reaction whose
+  // effect is the window result — Shield, Counterspell) needs no feature record.
+  if (!feature && !action.condition && !action.reaction) {
     state.log.push(event(state, "AutomationWarning", `${actor.displayName} activated an unknown feature`, {
       combatantId: actorId,
       actionId,
@@ -1782,10 +1793,9 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
   return out;
 }
 
-/** A weapon compiles to full automation unless an on-hit rider needs a human (a note or a custom condition). */
+/** A weapon compiles to full automation unless an on-hit rider needs a human (a note or an unspecified custom condition). */
 function weaponAutomationSupport(weapon: NonNullable<CreatureDefinition["weapons"]>[number]): "full" | "partial" {
-  const manual = (weapon.onHit ?? []).some((rider) =>
-    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"));
+  const manual = (weapon.onHit ?? []).some(riderNeedsHuman);
   return manual ? "partial" : "full";
 }
 

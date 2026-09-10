@@ -343,7 +343,7 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
       actionId: stringField(item, "actionId") ?? actionIdMap.get(stringField(item, "name") ?? ""),
       magicBonus,
       usableAs: normalizeUsableAs(item.usableAs),
-      grip: item.grip === "two-handed" || item.grip === "versatile" || item.grip === "one-handed" ? item.grip : undefined,
+      grip: normalizeWeaponGrip(item),
       powerAttack: item.powerAttack === true ? true : undefined,
       reactionTrigger: normalizeReactionTrigger(item.reactionTrigger)
     } as WeaponDefinition;
@@ -352,6 +352,17 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
 
 function normalizeWeaponAbility(input: unknown): Ability | "finesse" | undefined {
   return input === "finesse" ? "finesse" : normalizeAbility(input);
+}
+
+/** Explicit `grip`, else derive it from the weapon's `properties` (`versatile` / `two-handed`). */
+function normalizeWeaponGrip(item: Record<string, unknown>): WeaponDefinition["grip"] {
+  if (item.grip === "two-handed" || item.grip === "versatile" || item.grip === "one-handed") {
+    return item.grip;
+  }
+  const properties = Array.isArray(item.properties) ? item.properties.map((p) => String(p).toLowerCase()) : [];
+  if (properties.includes("versatile")) return "versatile";
+  if (properties.includes("two-handed")) return "two-handed";
+  return undefined;
 }
 
 function normalizeUsableAs(input: unknown): Array<"action" | "bonus" | "reaction"> | undefined {

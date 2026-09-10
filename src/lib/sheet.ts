@@ -3,6 +3,7 @@ import {
   getExecutableActions,
   resolveAttackBonus,
   resolveSaveDc,
+  riderNeedsHuman,
   type ActionDefinition,
   type CombatantState,
   type CreatureDefinition,
@@ -13,10 +14,7 @@ import { formatBonus } from "@/lib/ui-helpers";
 
 /** Automation level of a weapon once its `onHit` riders are considered. */
 export function weaponAutomation(weapon: WeaponDefinition): "full" | "partial" {
-  return (weapon.onHit ?? []).some((rider) =>
-    rider.kind === "note" || (rider.kind === "condition" && typeof rider.condition !== "string"))
-    ? "partial"
-    : "full";
+  return (weapon.onHit ?? []).some(riderNeedsHuman) ? "partial" : "full";
 }
 
 /** Automation level of a spell once its action + riders are considered. */
@@ -44,10 +42,12 @@ export function formatAutomationSupport(value: string): string {
 }
 
 function describeRiders(riders: unknown): string {
-  const list = (Array.isArray(riders) ? riders : []) as Array<{ kind: string; condition?: unknown; distance?: number }>;
+  const list = (Array.isArray(riders) ? riders : []) as Array<{ kind: string; condition?: unknown; distance?: number; modifiers?: Record<string, unknown> }>;
   const parts = list.map((rider) => {
     if (rider.kind === "condition") {
-      return typeof rider.condition === "string" ? `→ ${rider.condition}` : "→ a condition";
+      if (typeof rider.condition === "string") return `→ ${rider.condition}`;
+      if (rider.modifiers?.deniesReactions) return "→ no reactions";
+      return "→ a condition";
     }
     if (rider.kind === "push") return `→ push ${rider.distance ?? 0}ft`;
     if (rider.kind === "damage") return "→ + damage";
@@ -55,6 +55,22 @@ function describeRiders(riders: unknown): string {
     return "";
   }).filter(Boolean);
   return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+const REACTION_TRIGGER_TEXT: Record<string, string> = {
+  "enemy-leaves-reach": "an enemy leaves reach",
+  "targeted-by-attack": "targeted by an attack",
+  "hit-by-attack": "hit by an attack",
+  "ally-targeted-by-attack": "an ally is targeted",
+  "enemy-casts-spell": "an enemy casts a spell",
+  "manual": "a described trigger"
+};
+
+/** " · reacts: …" suffix for an action that carries a `reaction` meta. */
+function describeReaction(action: ActionDefinition): string {
+  const reaction = "reaction" in action ? action.reaction : undefined;
+  if (!reaction || action.actionType !== "reaction") return "";
+  return ` · reacts: ${REACTION_TRIGGER_TEXT[reaction.trigger.kind] ?? reaction.trigger.kind}`;
 }
 
 export function describeAction(action: ActionDefinition, definition: CreatureDefinition): string {
@@ -65,20 +81,24 @@ export function describeAction(action: ActionDefinition, definition: CreatureDef
     const base = `${action.actionType} ${action.attackType} ${formatBonus(resolveAttackBonus(action, definition))}, ${beams}${action.damage
       .map((component) => `${component.dice}${component.abilityModifier ? ` + ${component.abilityModifier.toUpperCase()}` : ""} ${component.damageType}`)
       .join(", ")}`;
-    return base + describeRiders(action.riders);
+    return base + describeRiders(action.riders) + describeReaction(action);
   }
   if (action.kind === "healing") {
     return `heal ${action.range} ft${action.targeting?.target === "self" ? " (self)" : ""}, ${action.healing.map((h) => h.dice).join(", ")}`;
   }
   if (action.kind === "unsupported") return "mapping required";
-  if (action.kind === "activate-feature") return `${action.actionType} activates ${action.featureId}`;
+  if (action.kind === "activate-feature") {
+    return action.actionType === "reaction"
+      ? `reaction${describeReaction(action)}`
+      : `${action.actionType} activates ${action.featureId}`;
+  }
   if (action.kind === "utility") return `${action.actionType} · ${action.mode}`;
   if (action.kind === "multiattack") return action.attacks.map((step) => `${step.count} x ${step.actionId}`).join(", ");
   const area = action.kind === "area-save"
     ? ` · ${action.area.type} ${action.area.size}ft${action.targeting?.origin === "self" ? " (self)" : ""}`
     : "";
   const dmg = action.damage.length ? `, ${action.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}` : "";
-  return `${action.saveAbility.toUpperCase()} DC ${resolveSaveDc(action, definition)}${area}${dmg}${describeRiders(action.riders)}`;
+  return `${action.saveAbility.toUpperCase()} DC ${resolveSaveDc(action, definition)}${area}${dmg}${describeRiders(action.riders)}${describeReaction(action)}`;
 }
 
 function resourceSortKey(resourceId: string): string {

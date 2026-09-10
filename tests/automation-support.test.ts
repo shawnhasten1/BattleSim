@@ -55,6 +55,6 @@ describe("lib/sheet automation helpers", () => {
   it("spellAutomation downgrades Faerie Fire (note rider) and keeps Fireball full", () => {
     expect(spellAutomation(findSrdSpell("srd:spell:faerie-fire")!)).toBe("partial");
     expect(spellAutomation(findSrdSpell("srd:spell:fireball")!)).toBe("full");
-    expect(spellAutomation(findSrdSpell("srd:spell:counterspell")!)).toBe("manual-only");
+    expect(spellAutomation(findSrdSpell("srd:spell:counterspell")!)).toBe("full");
   });
 });
