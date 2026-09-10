@@ -184,7 +184,7 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     name: "Extra Attack",
     category: "feature",
     automationSupport: "manual-only",
-    description: 'Attack twice whenever you take the Attack action. Build this as a Multiattack ("Extra Attack ×2" preset).'
+    description: 'Not a feature to attach — build it in the Multiattack section (the "Extra Attack (×2)" button). This entry is only a reminder.'
   },
   {
     id: "srd:feature:great-weapon-master",

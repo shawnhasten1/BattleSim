@@ -80,6 +80,13 @@ describe("weapon usableAs", () => {
     expect(list[0]?.id).toBe("weapon:spike:reaction");
   });
 
+  it("a bonus-action-only weapon (off-hand / monk strike) compiles one bonus attack, no action, no OA", () => {
+    const list = attacks(creatureWith({ ...longsword, id: "punch", name: "Flurry Strike", usableAs: ["bonus"] }));
+    expect(list).toHaveLength(1);
+    expect(list[0]?.actionType).toBe("bonus");
+    expect(list[0]?.id).toBe("weapon:punch:bonus");
+  });
+
   it("melee defaults to an action attack + an opportunity-attack reaction copy", () => {
     const list = attacks(creatureWith(longsword));
     expect(list.map((a) => a.actionType).sort()).toEqual(["action", "reaction"]);

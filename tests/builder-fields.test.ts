@@ -134,6 +134,20 @@ describe("weapon builder — reaction / grip / power-attack fields", () => {
     expect(weaponFromDraft(draft).usableAs).toEqual(["action"]);
   });
 
+  it("the 'bonus action only' toggle makes an off-hand / flurry weapon (no action slot), and round-trips", () => {
+    const draft = { ...weaponDraftFromDefinition(MELEE), bonusOnly: true };
+    expect(weaponFromDraft(draft).usableAs).toEqual(["bonus"]);
+    const back = weaponDraftFromDefinition({ ...MELEE, usableAs: ["bonus"] });
+    expect(back.bonusOnly).toBe(true);
+    expect(back.usableAsBonus).toBe(false);
+    expect(weaponFromDraft(back).usableAs).toEqual(["bonus"]);
+  });
+
+  it("the 'also as a bonus action' toggle keeps the action slot", () => {
+    const draft = { ...weaponDraftFromDefinition(MELEE), usableAsBonus: true };
+    expect(weaponFromDraft(draft).usableAs).toEqual(["action", "bonus", "reaction"]);
+  });
+
   it("the reaction-trigger control shows only for a reaction-capable melee weapon", () => {
     const draft = { ...weaponDraftFromDefinition(MELEE), usableAsReaction: true };
     expect(visibleKeys(weaponFieldSchema(draft), draft, "advanced")).toContain("reactionTrigger");

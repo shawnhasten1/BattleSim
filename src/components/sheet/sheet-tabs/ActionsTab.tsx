@@ -312,7 +312,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
       {edit?.kind === "new" ? builderFor(edit) : null}
 
-      {multiattacks.length > 0 || attackChoices.length > 1 ? (
+      {multiattacks.length > 0 || attackChoices.length >= 1 ? (
         <div className={styles.group}>
           <h4>Multiattack</h4>
           {multiattacks.map((action) => row(
@@ -321,10 +321,14 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             false
           ))}
           <div className={styles.riderCard} style={{ marginTop: 6 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 11, color: "var(--ui-text-dim)" }}>
+              Attack more than once per Attack action (Extra Attack, a monster&apos;s multiattack). Pick each attack and how many times it&apos;s made.
+            </p>
             <input type="text" aria-label="Multiattack name" value={maName} onChange={(e) => setMaName(e.target.value)} />
             <div className={styles.chips}>
-              <button type="button" onClick={() => extraAttackPreset(2)}>Extra Attack ×2</button>
-              <button type="button" onClick={() => extraAttackPreset(3)}>Extra Attack ×3</button>
+              <button type="button" onClick={() => extraAttackPreset(2)}>Extra Attack (×2)</button>
+              <button type="button" onClick={() => extraAttackPreset(3)}>Extra Attack (×3)</button>
+              <button type="button" onClick={() => extraAttackPreset(4)}>×4</button>
             </div>
             {maRows.map((maRow, index) => (
               <div key={index} className={styles.riderRow}>

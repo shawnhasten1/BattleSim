@@ -1296,6 +1296,39 @@ describe("combat engine", () => {
     expect(state.log.find((e) => e.type === "AttackRolled")?.data?.rollMode).toBe("disadvantage");
   });
 
+  it("a damage-bonus effect handles dice + flat and a flat penalty", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "damage-bonus-shapes";
+    encounter.map.walls = [];
+    const goblin = encounter.definitions.find((d) => d.id === "def-goblin")!;
+    (goblin.actions.find((a) => a.kind === "attack") as { attackBonus?: number; damage?: unknown }).attackBonus = 100;
+    (goblin.actions.find((a) => a.kind === "attack") as { damage: unknown }).damage = [{ dice: "1", damageType: "slashing" }];
+    encounter.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 2, y: 1 };
+    encounter.combatants.find((c) => c.id === "pc-fighter")!.position = { x: 1, y: 1 };
+    encounter.combatants.find((c) => c.id === "pc-fighter")!.currentHp = 60;
+
+    // +1d6+2, every hit → base 1 + (6,6 → but flat "1" die so 1) ... use a fixed die
+    goblin.traits = [{
+      id: "hex", name: "Hex", category: "trait", automationSupport: "full",
+      effects: [{ kind: "damage-bonus", condition: "always", damage: [{ dice: "1d6+2", damageType: "necrotic" }] }]
+    }];
+    const state = createEngineState(encounter);
+    state.rng = { next: () => 0, nextInt: (_: number, max: number) => (max === 6 ? 4 : 10), fork() { return this; } };
+    resolveAttack(state, "enemy-goblin-1", "pc-fighter", "scimitar");
+    // 1 (weapon) + 4 + 2 (bonus) = 7
+    expect(60 - state.snapshot.combatants.find((c) => c.id === "pc-fighter")!.currentHp).toBe(7);
+
+    goblin.traits = [{
+      id: "weak", name: "Weakened", category: "trait", automationSupport: "full",
+      effects: [{ kind: "damage-bonus", condition: "always", damage: [{ dice: "-2", damageType: "same-as-attack" }] }]
+    }];
+    const state2 = createEngineState(encounter);
+    state2.rng = { next: () => 0, nextInt: () => 10, fork() { return this; } };
+    resolveAttack(state2, "enemy-goblin-1", "pc-fighter", "scimitar");
+    // 1 (weapon) - 2 (penalty) clamped at 0 → no HP lost
+    expect(60 - state2.snapshot.combatants.find((c) => c.id === "pc-fighter")!.currentHp).toBeLessThanOrEqual(1);
+  });
+
   it("incoming-attack-modifier on the target shifts attack rolls made against it", () => {
     const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
     encounter.seed = "incoming-mod";

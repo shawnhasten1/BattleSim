@@ -168,7 +168,7 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
     return (
       <>
         <div className={styles.riderRow}>
-          <SignedDice value={first.dice} onChange={(dice) => set({ ...effect, damage: [{ ...first, dice }] })} />
+          <DamageAmount value={first.dice} onChange={(dice) => set({ ...effect, damage: [{ ...first, dice }] })} />
           <select
             aria-label="Damage type"
             value={first.damageType}
@@ -188,9 +188,9 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
             </select>
           </label>
           <label className={styles.fieldInlineLabel}>
-            Frequency
+            Applies
             <select value={effect.oncePerTurn ? "once" : "every"} onChange={(e) => set({ ...effect, oncePerTurn: e.target.value === "once" ? true : undefined })}>
-              <option value="every">every attack</option>
+              <option value="every">to every hit</option>
               <option value="once">once per turn</option>
             </select>
           </label>
@@ -357,35 +357,58 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
   return null;
 }
 
-function SignedDice({ value, onChange }: { value: string; onChange: (dice: string) => void }) {
-  const negative = value.trim().startsWith("-");
-  const bare = value.replace(/^-/, "");
-  const match = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(bare);
-  const count = match ? Number(match[1] || "1") : 0;
-  const die = match ? Number(match[2]) : 6;
-  const flat = match ? Number(match[3] ?? "0") : (Number(bare) || 0);
+type DamageMode = "flat" | "dice" | "dice-flat";
 
-  const build = (next: { negative?: boolean; count?: number; die?: number; flat?: number }) => {
-    const neg = next.negative ?? negative;
-    const c = next.count ?? count;
-    const d = next.die ?? die;
-    const f = next.flat ?? flat;
-    const body = c > 0 ? `${c}d${d}${f ? (f > 0 ? `+${f}` : String(f)) : ""}` : String(Math.abs(f) || 0);
-    onChange((neg ? "-" : "") + body);
+/**
+ * A damage bonus / penalty as one `dice` string: a flat amount (`"2"` / `"-2"`),
+ * extra dice (`"3d6"` / `"-1d4"`), or dice + a per-attack flat (`"1d6+2"` — the
+ * sign applies to the whole bonus).
+ */
+function DamageAmount({ value, onChange }: { value: string; onChange: (dice: string) => void }) {
+  const negative = value.trim().startsWith("-");
+  const bare = value.replace(/^[+-]/, "");
+  const dm = /^(\d*)d(\d+)(?:[+-](\d+))?$/i.exec(bare);
+  const count = dm ? Number(dm[1] || "1") : 0;
+  const die = dm ? Number(dm[2]) : 6;
+  const flat = dm ? Number(dm[3] ?? "0") : Math.abs(Number(bare) || 0);
+  const mode: DamageMode = count > 0 ? (flat !== 0 ? "dice-flat" : "dice") : "flat";
+
+  const emit = (n: { negative?: boolean; count?: number; die?: number; flat?: number; mode?: DamageMode }) => {
+    const neg = n.negative ?? negative;
+    const m = n.mode ?? mode;
+    const c = m === "flat" ? 0 : Math.max(1, n.count ?? (count || 1));
+    const d = n.die ?? die;
+    const f = m === "dice" ? 0 : Math.max(0, n.flat ?? (flat || (m === "dice-flat" ? 1 : 2)));
+    const sign = neg ? "-" : "";
+    const body = c > 0 && f > 0 ? `${sign}${c}d${d}${neg ? "-" : "+"}${f}`
+      : c > 0 ? `${sign}${c}d${d}`
+        : `${sign}${f}`;
+    onChange(body);
   };
 
   return (
     <div className={styles.riderRow}>
-      <select aria-label="Sign" value={negative ? "-" : "+"} onChange={(e) => build({ negative: e.target.value === "-" })}>
+      <select aria-label="Bonus kind" value={mode} onChange={(e) => emit({ mode: e.target.value as DamageMode })}>
+        <option value="flat">Flat amount</option>
+        <option value="dice">Extra dice</option>
+        <option value="dice-flat">Extra dice + flat</option>
+      </select>
+      <select aria-label="Sign" value={negative ? "-" : "+"} onChange={(e) => emit({ negative: e.target.value === "-" })}>
         <option value="+">+</option>
         <option value="-">−</option>
       </select>
-      <input aria-label="Dice count" type="number" min={0} style={{ width: 48 }} value={count} onChange={(e) => build({ count: Math.max(0, Number(e.target.value) || 0) })} />
-      <span>d</span>
-      <select aria-label="Die size" value={die} onChange={(e) => build({ die: Number(e.target.value) })}>
-        {[4, 6, 8, 10, 12, 20].map((s) => <option key={s} value={s}>{s}</option>)}
-      </select>
-      <input aria-label="Flat" type="number" placeholder="+0" style={{ width: 48 }} value={flat || ""} onChange={(e) => build({ flat: Number(e.target.value) || 0 })} />
+      {mode !== "flat" ? (
+        <>
+          <input aria-label="Dice count" type="number" min={1} style={{ width: 44 }} value={count || 1} onChange={(e) => emit({ count: Math.max(1, Number(e.target.value) || 1) })} />
+          <span>d</span>
+          <select aria-label="Die size" value={die} onChange={(e) => emit({ die: Number(e.target.value) })}>
+            {[4, 6, 8, 10, 12, 20].map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </>
+      ) : null}
+      {mode !== "dice" ? (
+        <input aria-label="Flat amount" type="number" min={0} style={{ width: 48 }} value={mode === "flat" ? (flat || 2) : flat} onChange={(e) => emit({ flat: Math.abs(Number(e.target.value) || 0) })} />
+      ) : null}
     </div>
   );
 }

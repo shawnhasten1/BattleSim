@@ -147,9 +147,10 @@ export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
       key: "chargesRecharge", copy: "weapon.chargesRecharge", control: "select", visibleWhen: (d) => Boolean(d.chargesEnabled),
       options: [{ value: "dawn", label: "At dawn" }, { value: "short-rest", label: "Short rest" }, { value: "long-rest", label: "Long rest" }]
     },
-    { key: "usableAsBonus", copy: "weapon.usableAsBonus", control: "toggle", advanced: true },
-    { key: "usableAsReaction", copy: "weapon.usableAsReaction", control: "toggle", advanced: true, visibleWhen: () => isMelee },
-    { key: "reactionTrigger", copy: "weapon.reactionTrigger", control: "reaction-trigger", advanced: true, visibleWhen: (d) => isMelee && Boolean(d.usableAsReaction) },
+    { key: "bonusOnly", copy: "weapon.bonusOnly", control: "toggle", advanced: true },
+    { key: "usableAsBonus", copy: "weapon.usableAsBonus", control: "toggle", advanced: true, visibleWhen: (d) => !d.bonusOnly },
+    { key: "usableAsReaction", copy: "weapon.usableAsReaction", control: "toggle", advanced: true, visibleWhen: (d) => isMelee && !d.bonusOnly },
+    { key: "reactionTrigger", copy: "weapon.reactionTrigger", control: "reaction-trigger", advanced: true, visibleWhen: (d) => isMelee && !d.bonusOnly && Boolean(d.usableAsReaction) },
     { key: "grip", copy: "weapon.grip", control: "select", advanced: true, visibleWhen: () => isMelee,
       options: [{ value: "one-handed", label: "One-handed" }, { value: "two-handed", label: "Two-handed" }, { value: "versatile", label: "Versatile" }] },
     { key: "powerAttack", copy: "weapon.powerAttack", control: "toggle", advanced: true },
@@ -177,7 +178,8 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     chargesMax: weapon.charges?.max ?? 1,
     chargesRecharge: typeof weapon.charges?.recharge === "string" ? weapon.charges.recharge : "dawn",
     // advanced fields carry a value only when the weapon deviates from the default
-    usableAsBonus: usableAs ? usableAs.includes("bonus") : false,
+    bonusOnly: usableAs ? (usableAs.includes("bonus") && !usableAs.includes("action")) : false,
+    usableAsBonus: usableAs ? (usableAs.includes("bonus") && usableAs.includes("action")) : false,
     usableAsReaction: usableAs ? usableAs.includes("reaction") : weapon.attackType === "melee",
     reactionTrigger: weapon.reactionTrigger,
     grip: weapon.grip && weapon.grip !== "one-handed" ? weapon.grip : undefined,
@@ -195,13 +197,17 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
   const kind: WeaponDefinition["attackType"] = draft.weaponKind === "ranged" ? "ranged" : "melee";
   const ability = (draft.ability as WeaponDefinition["ability"]) ?? "str";
   const damageAbility: Ability = ability === "finesse" ? "str" : ability;
-  const reactionOn = kind === "melee" && draft.usableAsReaction !== false;
-  const usableAs: Array<"action" | "bonus" | "reaction"> = [
-    "action",
-    ...(draft.usableAsBonus ? (["bonus"] as const) : []),
-    ...(reactionOn ? (["reaction"] as const) : [])
-  ];
-  const isDefaultSlots = usableAs.length === (kind === "melee" ? 2 : 1)
+  const bonusOnly = Boolean(draft.bonusOnly);
+  const reactionOn = kind === "melee" && !bonusOnly && draft.usableAsReaction !== false;
+  const usableAs: Array<"action" | "bonus" | "reaction"> = bonusOnly
+    ? ["bonus"]
+    : [
+      "action",
+      ...(draft.usableAsBonus ? (["bonus"] as const) : []),
+      ...(reactionOn ? (["reaction"] as const) : [])
+    ];
+  const isDefaultSlots = !bonusOnly
+    && usableAs.length === (kind === "melee" ? 2 : 1)
     && usableAs.includes("action") && (kind !== "melee" || usableAs.includes("reaction")) && !usableAs.includes("bonus");
   return {
     id: "",
