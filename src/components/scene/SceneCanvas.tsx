@@ -54,6 +54,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const removeCombatants = useEncounterStore((state) => state.removeCombatants);
   const duplicateCombatant = useEncounterStore((state) => state.duplicateCombatant);
   const updateHp = useEncounterStore((state) => state.updateHp);
+  const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
+  const combatRound = useEncounterStore((state) => state.encounter.round);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
   const attachSrdWeapon = useEncounterStore((state) => state.attachSrdWeapon);
@@ -189,8 +191,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       ? scene.selectedCombatantIds
       : [combatantId];
 
+    const preCombat = combatRound <= 0;
+
     if (ids.length >= 2) {
       const present = ids.filter((id) => encounter.combatants.some((entry) => entry.id === id));
+      const arrivals = present.map((id) => encounter.combatants.find((c) => c.id === id)?.arrivesRound ?? 1);
+      const allSame = new Set(arrivals).size === 1;
+      const shown = allSame ? arrivals[0]! : Math.max(...arrivals);
+      const anyBenched = arrivals.some((n) => n > 1);
       return [
         { heading: `${present.length} tokens` },
         { label: "Duplicate all", onSelect: () => present.forEach((id) => duplicateCombatant(id)) },
@@ -201,7 +209,23 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
             removeCombatants(present);
             scene.clearCombatantSelection();
           }
-        }
+        },
+        ...(preCombat
+          ? [
+              { separator: true } as ContextMenuItem,
+              { heading: "Reinforcement" } as ContextMenuItem,
+              {
+                stepper: {
+                  label: "Arrives round",
+                  value: shown,
+                  sub: !allSame ? "mixed" : shown > 1 ? "" : "on board",
+                  steps: [-1, 1],
+                  onStep: (delta: number) => setArrivesRound(present, shown + delta)
+                }
+              } as ContextMenuItem,
+              { label: "All start on board", disabled: !anyBenched, onSelect: () => setArrivesRound(present, undefined) } as ContextMenuItem
+            ]
+          : [])
       ];
     }
 
@@ -232,6 +256,26 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       },
       { label: "Set to full", disabled: hp >= maxHp, onSelect: () => updateHp(combatant.id, maxHp) },
       { label: "Down (0 HP)", disabled: hp <= 0, onSelect: () => updateHp(combatant.id, 0) },
+      ...(preCombat
+        ? [
+            { separator: true } as ContextMenuItem,
+            { heading: "Reinforcement" } as ContextMenuItem,
+            {
+              stepper: {
+                label: "Arrives round",
+                value: combatant.arrivesRound ?? 1,
+                sub: combatant.arrivesRound ? "" : "on board",
+                steps: [-1, 1],
+                onStep: (delta: number) => setArrivesRound([combatant.id], (combatant.arrivesRound ?? 1) + delta)
+              }
+            } as ContextMenuItem,
+            {
+              label: "Start on board",
+              disabled: !combatant.arrivesRound,
+              onSelect: () => setArrivesRound([combatant.id], undefined)
+            } as ContextMenuItem
+          ]
+        : []),
       { separator: true },
       { label: "Duplicate", onSelect: () => duplicateCombatant(combatant.id) },
       { label: "Delete", danger: true, onSelect: () => removeCombatant(combatant.id) }

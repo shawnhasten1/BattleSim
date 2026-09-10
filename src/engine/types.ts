@@ -926,7 +926,16 @@ export interface CombatantState {
   };
   initiative?: number;
   turnFlags?: TurnFlags;
-  state: "active" | "downed" | "dead" | "defeated" | "fled";
+  /**
+   * `"reserve"` = a scheduled reinforcement not yet on the board: it takes no
+   * turns, cannot be targeted, blocks nothing, and is drawn ghosted. The engine
+   * flips it to `"active"` at the start of `arrivesRound` (see
+   * `admitReinforcements`). Its faction still counts as "in the fight" while it
+   * waits, so combat doesn't end before it shows up.
+   */
+  state: "active" | "reserve" | "downed" | "dead" | "defeated" | "fled";
+  /** Round this combatant enters play (1-based). Only meaningful with `state: "reserve"`. */
+  arrivesRound?: number;
   tacticsProfile: TacticsProfile;
 }
 
@@ -985,6 +994,7 @@ export interface CombatLogEvent {
     | "BeamsResolved"
     | "OpportunityAttackTriggered"
     | "ReactionTriggered"
+    | "ReinforcementArrived"
     | "SpellCountered"
     | "UtilityActionResolved"
     | "ActionEconomyRefreshed"
@@ -1230,11 +1240,13 @@ export const combatantExportSchema = z.object({
     }).optional(),
     state: z.union([
       z.literal("active"),
+      z.literal("reserve"),
       z.literal("downed"),
       z.literal("dead"),
       z.literal("defeated"),
       z.literal("fled")
     ]),
+    arrivesRound: z.number().int().min(1).optional(),
     tacticsProfile: tacticsProfileSchema
   }).optional()
 });
@@ -1367,11 +1379,13 @@ export const encounterSnapshotSchema = z.object({
       initiative: z.number().optional(),
       state: z.union([
         z.literal("active"),
+        z.literal("reserve"),
         z.literal("downed"),
         z.literal("dead"),
         z.literal("defeated"),
         z.literal("fled")
       ]),
+      arrivesRound: z.number().int().min(1).optional(),
       tacticsProfile: tacticsProfileSchema
     })
   )

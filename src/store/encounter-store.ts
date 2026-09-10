@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
   activeFactions,
+  admitReinforcements,
   createEngineState,
   applyCondition,
   applyTimedFeatureEffects,
@@ -166,6 +167,8 @@ interface EncounterStore {
   addCustomPc: (input: { name: string; ac: number; hp: number; speed: number; attackBonus: number; damageDice: string }) => void;
   addCustomToken: (input: { name: string; faction: "party" | "enemy"; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"]; attackName: string; attackType: "melee" | "ranged"; attackAbility: Ability; damageDice: string; damageType: DamageType }) => void;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
+  /** Bench one or more tokens as reinforcements arriving on a given round (≤ 1 / undefined = on the board). */
+  setArrivesRound: (combatantIds: string[], arrivesRound: number | undefined) => void;
   updateCombatantVisuals: (combatantId: string, updates: Partial<TokenVisuals>) => void;
   updateDefinitionVisuals: (definitionId: string, updates: Partial<TokenVisuals>) => void;
   removeCombatant: (combatantId: string) => void;
@@ -266,11 +269,20 @@ function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" 
 
 function hasOpenActionEconomy(combatant: CombatantState): boolean {
   const actionEconomy = combatant.actionEconomy;
-  return Boolean(actionEconomy && (actionEconomy.action || actionEconomy.bonus || actionEconomy.reaction));
+  // The reaction is deliberately excluded: a finished turn keeps its reaction
+  // available (see `closeActionEconomy`), so it is not a signal that the turn's
+  // end-of-turn bookkeeping still needs to run.
+  return Boolean(actionEconomy && (actionEconomy.action || actionEconomy.bonus));
 }
 
 function closeActionEconomy(combatant: CombatantState): void {
-  combatant.actionEconomy = { action: false, bonus: false, reaction: false };
+  // Ending a turn spends the remaining action + bonus action, but NOT the
+  // reaction: a creature keeps its reaction from the end of its turn until the
+  // start of its next one — that is the whole window in which opportunity
+  // attacks, Shield, Counterspell and Hellish Rebuke fire. `resetActionEconomy`
+  // refreshes it at the start of the creature's next turn.
+  const current = combatant.actionEconomy ?? { action: true, bonus: true, reaction: true };
+  combatant.actionEconomy = { ...current, action: false, bonus: false };
 }
 
 function defaultTacticsForDefinition(definition: CreatureDefinition): CombatantState["tacticsProfile"] {
@@ -507,16 +519,27 @@ export const useEncounterStore = create<EncounterStore>()(
           closeActionEconomy(currentActor);
         }
 
-        const turnIndexes = encounter.combatants
+        const eligibleIndexes = () => encounter.combatants
           .map((combatant, index) => ({ combatant, index }))
           .filter(({ combatant }) => canTakeTurn(encounter, combatant));
-        if (turnIndexes.length === 0) return;
+
+        let turnIndexes = eligibleIndexes();
+        if (turnIndexes.length === 0 && !encounter.combatants.some((c) => c.state === "reserve")) return;
         const current = encounter.turnIndex;
-        const next = turnHasStarted
+        const prospectiveNext = turnHasStarted
           ? turnIndexes.find(({ index }) => index > current)?.index ?? turnIndexes[0]?.index ?? 0
           : turnIndexes[0]?.index ?? 0;
-        const wrapped = turnHasStarted && next <= current;
+        const wrapped = turnHasStarted && (turnIndexes.length === 0 || prospectiveNext <= current);
         encounter.round = encounter.round <= 0 ? 1 : wrapped ? encounter.round + 1 : encounter.round;
+
+        // Scheduled reinforcements enter at the start of the round they are due.
+        // Re-derive the eligible set afterward so an arrival takes its turn now.
+        admitReinforcements(engine);
+        turnIndexes = eligibleIndexes();
+        if (turnIndexes.length === 0) return;
+        const next = wrapped || !turnHasStarted
+          ? turnIndexes[0]?.index ?? 0
+          : turnIndexes.find(({ index }) => index > current)?.index ?? turnIndexes[0]?.index ?? 0;
         encounter.turnIndex = next;
 
         const combatant = encounter.combatants[next];
@@ -1437,6 +1460,24 @@ export const useEncounterStore = create<EncounterStore>()(
           combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
             ? { ...combatant, ...updates }
             : combatant)
+        });
+      },
+      setArrivesRound: (combatantIds, arrivesRound) => {
+        const encounter = get().encounter;
+        const ids = new Set(combatantIds);
+        // A future round benches the token as a ghosted reinforcement; anything
+        // ≤ 1 (or cleared) puts it on the board. Only meaningful before combat
+        // starts — once a token is `active`/`downed`/etc. we leave its state be.
+        const at = typeof arrivesRound === "number" && arrivesRound > 1 ? Math.floor(arrivesRound) : undefined;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => {
+            if (!ids.has(combatant.id)) return combatant;
+            if (at) {
+              return { ...combatant, arrivesRound: at, state: combatant.state === "active" ? "reserve" : combatant.state };
+            }
+            return { ...combatant, arrivesRound: undefined, state: combatant.state === "reserve" ? "active" : combatant.state };
+          })
         });
       },
       updateCombatantVisuals: (combatantId, updates) => {

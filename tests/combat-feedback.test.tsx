@@ -40,6 +40,14 @@ describe("combatTextForEvent", () => {
       .toBeNull();
   });
 
+  it("labels an off-turn reaction attack (opportunity attack) even though it is a plain attack", () => {
+    expect(combatTextForEvent(ev("ActionDeclared", { actorId: "golem", actionName: "Slam", actionKind: "attack", actionType: "reaction" })))
+      .toEqual({ anchorId: "golem", text: "Slam", kind: "reaction" });
+    // a normal-turn swing of the same attack still stays silent
+    expect(combatTextForEvent(ev("ActionDeclared", { actorId: "golem", actionName: "Slam", actionKind: "attack", actionType: "action" })))
+      .toBeNull();
+  });
+
   it("formats damage and healing on the target, skipping zeroes", () => {
     expect(combatTextForEvent(ev("DamageApplied", { targetId: "t1", totalApplied: 7 })))
       .toEqual({ anchorId: "t1", text: "-7", kind: "damage" });
@@ -90,6 +98,24 @@ describe("areaFlashForEvent", () => {
     expect(east!.cells.every((c) => c.x >= 2)).toBe(true);
     expect(west!.cells.every((c) => c.x <= 2)).toBe(true);
     expect(east!.cells).not.toEqual(west!.cells);
+  });
+
+  it("rotates the cone toward a stamped aim vector instead of the cardinal fallback", () => {
+    const aimed = areaFlashForEvent(
+      ev("ActionDeclared", {
+        actorId: "a1",
+        actionKind: "area-save",
+        origin: { x: 5, y: 4 },
+        area: { type: "cone", size: 20 },
+        aimVector: { x: 0, y: 1 }
+      }),
+      map
+    );
+    // aimed straight down — every covered cell is at or below the origin row,
+    // not the east-pointing default a bare `cone` template would give.
+    expect(aimed!.cells.every((c) => c.y >= 4)).toBe(true);
+    expect(aimed!.cells.some((c) => c.x < 5)).toBe(true);
+    expect(aimed!.cells.some((c) => c.x > 5)).toBe(true);
   });
 
   it("treats an unresolved 'same-as-attack' type as generic (null)", () => {

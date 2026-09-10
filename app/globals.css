@@ -393,6 +393,14 @@ img {
   opacity: 0.58;
 }
 
+/* Scheduled reinforcement not yet on the board: a ghosted preview at its staging
+   cell so you can see where it will enter. Still selectable for setup. */
+.token.reserve {
+  filter: grayscale(0.85);
+  opacity: 0.32;
+  border-style: dashed;
+}
+
 .token.selected {
   outline: 3px solid var(--ui-accent-soft);
   outline-offset: 2px;
@@ -450,6 +458,14 @@ img {
   color: #2b2620;
   font-size: 12px;
   font-weight: 700;
+}
+
+/* Off-turn reactions (opportunity attacks, Shield, Counterspell, …) — violet so
+   they read as an interruption, not a normal action. */
+.feedback-reaction {
+  color: #6d28d9;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 @keyframes feedback-float {

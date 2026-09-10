@@ -148,6 +148,12 @@ function applyEvent(
       return;
     }
 
+    case "ReinforcementArrived": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant && combatant.state === "reserve") combatant.state = "active";
+      return;
+    }
+
     case "CombatantStabilized": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant) {
@@ -227,6 +233,8 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
     case "CombatantStabilized":
     case "DeathSaveRolled":
       return 800;
+    case "ReinforcementArrived":
+      return 900;
     case "TurnStarted":
       return 350;
     case "CombatEnded":

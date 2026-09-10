@@ -938,7 +938,7 @@ export function resolveAreaSaveAction(
   if (action.concentration) {
     breakConcentration(state, attackerId);
   }
-  declareAction(state, attacker, action, { origin });
+  declareAction(state, attacker, action, { origin, aimVector });
   if (counterspellWindow(state, attacker, action)) {
     state.log.push(event(state, "AreaSaveResolved", `${attacker.displayName}'s ${action.name} was countered`, {
       attackerId, actionId, origin, aim, targets: []
@@ -962,6 +962,9 @@ export function resolveAreaSaveAction(
     : null;
   const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, aimVector)
     .filter((target) => action.affects === "all" || target.faction !== attacker.faction)
+    // A self-origin template (cone / line / burst centred on the caster) emanates
+    // *from* the caster — it never catches them, even when `affects: "all"`.
+    .filter((target) => !(placement.fromSelf && target.id === attacker.id))
     // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
     .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
   const targets = affected.map((target) => {
@@ -1256,12 +1259,43 @@ export function activeFactions(snapshot: EncounterSnapshot): Set<string> {
   return new Set(
     snapshot.combatants
       .filter((combatant) => combatant.state === "active" && combatant.currentHp > 0
+        // A scheduled reinforcement keeps its faction "in the fight" until it
+        // arrives, so combat doesn't end in the empty rounds before it shows up.
+        || combatant.state === "reserve"
         || (snapshot.rules.playerDeathSaves
           && combatant.faction === "party"
           && combatant.state === "downed"
           && !combatant.deathSaves?.stable))
       .map((combatant) => combatant.faction)
   );
+}
+
+/**
+ * Flip every `"reserve"` combatant whose `arrivesRound` has been reached to
+ * `"active"` — a scheduled reinforcement entering the fight. Call at the start of
+ * each round (after `round` is incremented), before turns are taken. Returns the
+ * combatants that just arrived.
+ */
+export function admitReinforcements(state: EngineState): CombatantState[] {
+  const arrived: CombatantState[] = [];
+  for (const combatant of state.snapshot.combatants) {
+    if (combatant.state !== "reserve") {
+      continue;
+    }
+    const at = typeof combatant.arrivesRound === "number" ? combatant.arrivesRound : 1;
+    if (state.snapshot.round >= at) {
+      combatant.state = "active";
+      combatant.actionEconomy = undefined;
+      combatant.turnFlags = undefined;
+      arrived.push(combatant);
+      state.log.push(event(state, "ReinforcementArrived", `${combatant.displayName} arrives`, {
+        combatantId: combatant.id,
+        faction: combatant.faction,
+        round: state.snapshot.round
+      }));
+    }
+  }
+  return arrived;
 }
 
 export function firstUsableAction(definition: CreatureDefinition, preferred: "melee" | "ranged" | "any" = "any"): ActionDefinition | undefined {
@@ -1300,7 +1334,7 @@ function declareAction(
   state: EngineState,
   actor: CombatantState,
   action: ActionDefinition,
-  targetInfo: { target?: CombatantState; origin?: Point } = {}
+  targetInfo: { target?: CombatantState; origin?: Point; aimVector?: { x: number; y: number } } = {}
 ): void {
   const targetText = targetInfo.target
     ? ` on ${targetInfo.target.displayName}`
@@ -1308,8 +1342,10 @@ function declareAction(
       ? ` at (${targetInfo.origin.x}, ${targetInfo.origin.y})`
       : "";
   const resourceCost = "resourceCost" in action && action.resourceCost ? action.resourceCost : undefined;
-  // Area shape + damage type travel with the declaration so consumers (the
-  // replay AoE flash) don't have to re-resolve the action definition.
+  // Area shape + aim + damage type travel with the declaration so consumers (the
+  // replay AoE flash) don't have to re-resolve the action definition. Without the
+  // aim vector a cone / line flash falls back to the template's cardinal
+  // `direction` (always east) regardless of where it was actually pointed.
   const area = "area" in action ? action.area : undefined;
   const damageType = "damage" in action ? action.damage?.[0]?.damageType : undefined;
   state.log.push(event(state, "ActionDeclared", `${actor.displayName} uses ${action.name}${targetText}`, {
@@ -1320,6 +1356,7 @@ function declareAction(
     actionType: action.actionType,
     targetId: targetInfo.target?.id,
     origin: targetInfo.origin,
+    aimVector: targetInfo.aimVector,
     resourceCost,
     area,
     damageType

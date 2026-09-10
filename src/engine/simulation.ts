@@ -1,5 +1,6 @@
 import {
   activeFactions,
+  admitReinforcements,
   applyTimedFeatureEffects,
   canAct,
   createEngineState,
@@ -113,6 +114,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
 
   while (activeFactions(state.snapshot).size > 1 && state.snapshot.round < maxRounds) {
     state.snapshot.round += 1;
+    admitReinforcements(state);
     for (let index = 0; index < state.snapshot.combatants.length; index += 1) {
       state.snapshot.turnIndex = index;
       const actor = state.snapshot.combatants[index];
@@ -340,6 +342,21 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   if (!plan) {
     resolveDodgeIfThreatened(state, actor);
     maybeSpendBonusAction(state, actor, tactics);
+    // No target because the only opposition left is a reinforcement that hasn't
+    // arrived — hold position quietly rather than raising an automation warning.
+    const awaitingReinforcements = state.snapshot.combatants.some(
+      (other) => other.faction !== actor.faction && other.state === "reserve"
+    );
+    const noVisibleEnemies = !state.snapshot.combatants.some(
+      (other) => other.faction !== actor.faction && other.state === "active"
+    );
+    if (awaitingReinforcements && noVisibleEnemies) {
+      state.log.push(event(state, "AiDecision", `${actor.displayName} holds position — no enemies in sight`, {
+        combatantId: actor.id,
+        reason: "awaiting-reinforcements"
+      }));
+      return undefined;
+    }
     const warning = `${actor.displayName} has no fully automated action`;
     state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
     return warning;
@@ -766,8 +783,10 @@ function selectOffensivePlan(
       else score -= 35;
       if (action.kind === "area-save") {
         // Score the blast where it will actually land (self-centred / aimed templates included).
-        const { origin, aimVector } = resolveAreaTargeting(actor, definition, action, target.position);
-        const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector);
+        const { origin, aimVector, fromSelf } = resolveAreaTargeting(actor, definition, action, target.position);
+        const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
+          // A self-origin blast never catches its own caster (matches resolution).
+          .filter((combatant) => !(fromSelf && combatant.id === actor.id));
         const hostiles = affected.filter((combatant) => combatant.faction !== actor.faction);
         const hostileValue = hostiles.reduce((sum, combatant) => {
           const combatantDefinition = getDefinition(snapshot, combatant);

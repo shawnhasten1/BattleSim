@@ -24,7 +24,7 @@ export function hpTone(ratio: number): HpTone {
   return "low";
 }
 
-export type FeedbackKind = "action" | "damage" | "heal";
+export type FeedbackKind = "action" | "reaction" | "damage" | "heal";
 
 export interface CombatTextCue {
   /** Combatant the text floats from. */
@@ -52,9 +52,11 @@ function isAreaTemplate(value: unknown): value is AreaTemplate {
  * that shouldn't raise one.
  *
  * - `ActionDeclared` → the action name, but only for *notable* actions:
- *   anything that isn't a plain weapon attack, or that spends a resource
- *   (spells, features, multiattacks). Basic swings would be noise — the damage
- *   number already tells that story.
+ *   anything that isn't a plain weapon attack, that spends a resource
+ *   (spells, features, multiattacks), or that is a reaction (opportunity
+ *   attacks, Shield, Counterspell, …). A basic on-turn swing would be noise —
+ *   the damage number already tells that story — but an off-turn reaction is
+ *   easy to miss, so it always gets a label.
  * - `DamageApplied` → `-N` on the target (skips a 0).
  * - `HealingApplied` → `+N` on the target (skips a 0).
  */
@@ -63,11 +65,13 @@ export function combatTextForEvent(event: CombatLogEvent): CombatTextCue | null 
 
   switch (event.type) {
     case "ActionDeclared": {
-      const notable = data.actionKind !== "attack" || Boolean(data.resourceCost);
       const name = str(data.actionName);
       const actorId = str(data.actorId);
-      if (!notable || !name || !actorId) return null;
-      return { anchorId: actorId, text: name, kind: "action" };
+      if (!name || !actorId) return null;
+      const isReaction = data.actionType === "reaction";
+      const notable = isReaction || data.actionKind !== "attack" || Boolean(data.resourceCost);
+      if (!notable) return null;
+      return { anchorId: actorId, text: name, kind: isReaction ? "reaction" : "action" };
     }
     case "DamageApplied": {
       const targetId = str(data.targetId);
@@ -105,10 +109,14 @@ export interface AreaFlashCue {
 export function areaFlashForEvent(event: CombatLogEvent, map: BattleMapState): AreaFlashCue | null {
   if (event.type !== "ActionDeclared") return null;
   const data = event.data ?? {};
-  const { area, origin } = data;
+  const { area, origin, aimVector } = data;
   if (!isAreaTemplate(area) || !isPoint(origin)) return null;
+  // The aim vector (present for `aimedFromSelf` cones / lines) rotates the shape
+  // toward where it was actually cast; without it the flash falls back to the
+  // template's cardinal `direction` and always points east.
+  const aim = isPoint(aimVector) ? { x: aimVector.x, y: aimVector.y } : undefined;
   const damageType = typeof data.damageType === "string" && data.damageType !== "same-as-attack"
     ? (data.damageType as DamageType)
     : null;
-  return { origin: { x: origin.x, y: origin.y }, area, cells: cellsInArea(map, origin, area), damageType };
+  return { origin: { x: origin.x, y: origin.y }, area, cells: cellsInArea(map, origin, area, aim), damageType };
 }

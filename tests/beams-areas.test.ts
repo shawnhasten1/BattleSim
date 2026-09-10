@@ -153,6 +153,31 @@ describe("aimed area templates", () => {
     expect(declared?.data?.origin).toEqual({ x: 2, y: 2 }); // origin forced to the caster
   });
 
+  it("a self-origin `affects: all` cone never damages its own caster and stamps the aim vector", () => {
+    const encounter = baseEncounter("cone-selfsafe");
+    encounter.combatants.find((c) => c.id === CASTER)!.position = { x: 2, y: 2 };
+    encounter.combatants.find((c) => c.id === T1)!.position = { x: 6, y: 6 }; // south-east, in the cone
+    encounter.combatants.find((c) => c.id === T2)!.position = { x: 11, y: 0 }; // out of the cone
+    pushAction(encounter, {
+      kind: "area-save", id: "cone2", name: "Cone of Cold", actionType: "action", saveAbility: "con",
+      dc: 99, range: 60, area: { type: "cone", size: 60 },
+      targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "6", damageType: "cold" }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      automationSupport: "full"
+    });
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1, 1, 1] }); // everyone fails the save
+    const result = resolveAreaSaveAction(state, CASTER, { x: 10, y: 10 }, "cone2");
+
+    const hitIds = result.targets.map((t) => t.targetId);
+    expect(hitIds).toContain(T1);
+    expect(hitIds).not.toContain(CASTER); // caster is at the apex, not in the blast
+    expect(state.snapshot.combatants.find((c) => c.id === CASTER)!.currentHp).toBe(32); // undamaged
+
+    const declared = state.log.find((e) => e.type === "ActionDeclared" && e.data?.actionId === "cone2");
+    expect(declared?.data?.aimVector).toBeDefined(); // stamped for the replay flash
+  });
+
   it("a self-origin rectangle from a Large caster centres on the footprint", () => {
     const encounter = baseEncounter("rect-large"); // map is 12 × 8
     const caster = encounter.combatants.find((c) => c.id === CASTER)!;

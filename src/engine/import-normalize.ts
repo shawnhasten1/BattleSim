@@ -108,6 +108,11 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
 }
 
 function normalizeCombatantInput(input: Record<string, unknown>, definition: CreatureDefinition): Record<string, unknown> {
+  const arrivesRoundRaw = numberField(input, "arrivesRound");
+  const arrivesRound = arrivesRoundRaw !== undefined && arrivesRoundRaw > 1 ? Math.floor(arrivesRoundRaw) : undefined;
+  // A future arrival implies the token starts in reserve unless an explicit
+  // lifecycle state overrides it.
+  const state = typeof input.state === "string" ? input.state : arrivesRound ? "reserve" : "active";
   return {
     ...input,
     displayName: typeof input.displayName === "string" && input.displayName.trim() ? input.displayName : definition.name,
@@ -116,7 +121,8 @@ function normalizeCombatantInput(input: Record<string, unknown>, definition: Cre
     currentHp: typeof input.currentHp === "number" ? input.currentHp : definition.maxHp,
     tempHp: typeof input.tempHp === "number" ? input.tempHp : 0,
     resources: normalizeResourceRecord(input.resources),
-    state: typeof input.state === "string" ? input.state : "active",
+    state,
+    arrivesRound,
     tacticsProfile: normalizeTacticsProfile(input.tacticsProfile)
   };
 }

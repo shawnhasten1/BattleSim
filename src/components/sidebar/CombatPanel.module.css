@@ -152,6 +152,55 @@
   background: rgba(217, 138, 61, 0.12);
 }
 
+/* A scheduled reinforcement, not yet on the board. */
+.initiative button.reserve {
+  opacity: 0.6;
+}
+.initiative button.reserve .init {
+  border-style: dashed;
+}
+.initiative button.reserve .hp {
+  font-style: italic;
+  color: var(--ui-accent-soft);
+}
+
+/* Pre-combat: nudge which round each token enters play. */
+.arrival {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 6px 44px;
+  border-bottom: 1px solid var(--ui-border);
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+.arrival span {
+  min-width: 52px;
+  text-align: center;
+}
+.initiative .arrival button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.initiative .arrival button:hover:not(:disabled) {
+  background: var(--ui-panel-2);
+}
+.initiative .arrival button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .init {
   flex-shrink: 0;
   width: 24px;

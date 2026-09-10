@@ -48,6 +48,7 @@ export function CombatPanel() {
   const runAuto = useEncounterStore((state) => state.runAuto);
   const runBatch = useEncounterStore((state) => state.runBatch);
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
+  const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const updateFactionTactics = useEncounterStore((state) => state.updateFactionTactics);
   const { selectedCombatant } = useSelectedCombatant();
 
@@ -137,13 +138,17 @@ export function CombatPanel() {
       <ul className={styles.initiative}>
         {displayEncounter.combatants.map((combatant) => {
           const definition = getDefinition(displayEncounter, combatant);
+          const reserve = combatant.state === "reserve";
+          const preCombat = displayEncounter.round <= 0 && !replaying;
+          const arrivesRound = combatant.arrivesRound ?? 1;
           return (
             <li key={combatant.id}>
               <button
                 type="button"
                 className={[
                   combatant.id === selectedCombatant?.id ? styles.selected : "",
-                  combatant.id === currentCombatant?.id ? styles.active : ""
+                  combatant.id === currentCombatant?.id ? styles.active : "",
+                  reserve ? styles.reserve : ""
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -151,8 +156,30 @@ export function CombatPanel() {
               >
                 <span className={styles.init}>{combatant.initiative ?? "-"}</span>
                 <span className={styles.name}>{combatant.displayName}</span>
-                <span className={styles.hp}>{combatant.currentHp}/{definition.maxHp}</span>
+                <span className={styles.hp}>
+                  {reserve ? `arrives R${combatant.arrivesRound ?? "?"}` : `${combatant.currentHp}/${definition.maxHp}`}
+                </span>
               </button>
+              {preCombat ? (
+                <div className={styles.arrival} title="Round this token enters play">
+                  <button
+                    type="button"
+                    aria-label={`${combatant.displayName}: arrive one round earlier`}
+                    disabled={!combatant.arrivesRound}
+                    onClick={() => setArrivesRound([combatant.id], arrivesRound - 1)}
+                  >
+                    −
+                  </button>
+                  <span>{combatant.arrivesRound ? `R${combatant.arrivesRound}` : "on board"}</span>
+                  <button
+                    type="button"
+                    aria-label={`${combatant.displayName}: arrive one round later`}
+                    onClick={() => setArrivesRound([combatant.id], arrivesRound + 1)}
+                  >
+                    +
+                  </button>
+                </div>
+              ) : null}
             </li>
           );
         })}
