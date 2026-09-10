@@ -47,6 +47,8 @@ interface HealingPlan {
   target: CombatantState;
   score: number;
   reasons: string[];
+  /** The heal can land this turn without moving (target in range, or a self-heal). */
+  reachable: boolean;
 }
 
 interface OffensivePlan {
@@ -136,7 +138,15 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       applyTimedFeatureEffects(state, actor.id, "turn-start");
       runRepeatedSaves(state, actor.id, "turn-start");
       state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`, { combatantId: actor.id }));
-      const warning = takeAutomatedTurn(state, actor);
+      // A resolver throw from an AI mispick must not abort the whole run (and,
+      // through it, an entire batch) — contain it to a lost turn + a warning.
+      let warning: string | undefined;
+      try {
+        warning = takeAutomatedTurn(state, actor);
+      } catch (error) {
+        warning = `${actor.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`;
+        state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
+      }
       if (warning) {
         warnings.push(warning);
       }
@@ -333,7 +343,25 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       score: healing.score,
       reasons: healing.reasons
     }));
-    resolveHealingAction(state, actor.id, healing.target.id, healing.action.id);
+    if (!healing.reachable) {
+      const move = bestDestinationTowardTarget(state.snapshot, actor, healing.target, healing.action.range, tactics);
+      if (move) {
+        try {
+          moveCombatant(state, actor.id, move.cell);
+          movedThisTurn = true;
+        } catch { /* map state moved on */ }
+      }
+    }
+    try {
+      resolveHealingAction(state, actor.id, healing.target.id, healing.action.id);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s heal could not resolve`, {
+        combatantId: actor.id,
+        actionId: healing.action.id,
+        targetId: healing.target.id,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
     maybeSpendBonusAction(state, actor, tactics);
     return undefined;
   }
@@ -637,32 +665,40 @@ function selectHealingAction(
       && action.actionType === slot
       && action.automationSupport === "full"
       && canPayResource(actor, action));
+  const tactics = tacticsSettings(actor.tacticsProfile);
   const candidates = healingActions.flatMap((action) => woundedAllies.map((target) => {
     const targetDefinition = getDefinition(snapshot, target);
     const missingHp = targetDefinition.maxHp - target.currentHp;
     const missingHpRatio = missingHp / Math.max(1, targetDefinition.maxHp);
     const average = averageHealing(action, definition);
     const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
-    const reachable = isValidTarget(snapshot, actor, target, action.range);
+    const selfTarget = action.targeting?.target === "self" || (action.range === 0 && target.id === actor.id);
+    const reachable = selfTarget || isValidTarget(snapshot, actor, target, action.range);
+    // If it's out of range, it's only a real option when the healer can close
+    // the gap this turn — otherwise `resolveHealingAction` would just throw.
+    const canMoveIntoRange = reachable
+      || Boolean(bestDestinationTowardTarget(snapshot, actor, target, action.range, tactics));
     const reasons = [
       target.state === "downed" ? "downed ally" : `${Math.round(missingHpRatio * 100)}% HP missing`,
-      `${Math.round(average)} expected healing`
+      `${Math.round(average)} expected healing`,
+      reachable ? "in range" : "moves into range"
     ];
     const resourcePenalty = action.resourceCost ? action.resourceCost.amount * 3 : 0;
     const score = (target.state === "downed" ? 95 : missingHpRatio * 45)
       + Math.min(average, missingHp)
       - resourcePenalty
       - distance / 20
-      + (reachable ? 10 : -30);
-    return { action, target, score, reasons };
+      + (reachable ? 10 : 2);
+    return { action, target, score, reasons, reachable, canMoveIntoRange };
   }));
 
-  candidates.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.action.id.localeCompare(b.action.id));
-  const best = candidates[0];
+  const viable = candidates.filter((candidate) => candidate.canMoveIntoRange);
+  viable.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.action.id.localeCompare(b.action.id));
+  const best = viable[0];
   if (!best || best.score < 35) {
     return undefined;
   }
-  return best;
+  return { action: best.action, target: best.target, score: best.score, reasons: best.reasons, reachable: best.reachable };
 }
 
 function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: CombatantState): FeatureActivationPlan | undefined {

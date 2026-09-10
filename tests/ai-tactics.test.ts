@@ -288,6 +288,49 @@ describe("AI — bonus-action economy", () => {
     expect(state.log.some((e) => e.type === "HealingApplied" && e.data?.targetId === CASTER)).toBe(true);
     expect(actor.currentHp).toBeGreaterThan(5);
   });
+
+  it("moves into range before a short-range heal on an out-of-reach ally (no crash)", () => {
+    const cure: ActionDefinition = {
+      kind: "healing", id: "cure-wounds", name: "Cure Wounds", actionType: "action", range: 5,
+      healing: [{ dice: "1d8+3" }], automationSupport: "full"
+    };
+    const encounter = baseEncounter("heal-move");
+    encounter.combatants = [
+      { id: CASTER, definitionId: CASTER_DEF, displayName: "Cleric", faction: "party",
+        position: { x: 2, y: 2 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
+        position: { x: 2, y: 5 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged" },
+      { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 11, y: 7 }, currentHp: 7, tempHp: 0, state: "active", tacticsProfile: "basic-melee" }
+    ];
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB, cure];
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 8: [5], 20: [10] });
+
+    expect(() => takeAutomatedTurn(state, actorOf(state))).not.toThrow();
+    expect(state.log.some((e) => e.type === "CombatantMoved" && e.data?.combatantId === CASTER)).toBe(true);
+    expect(state.log.some((e) => e.type === "HealingApplied" && e.data?.targetId === "pc-archer")).toBe(true);
+    expect(actorOf(state, "pc-archer").currentHp).toBeGreaterThan(4);
+  });
+
+  it("skips a heal it cannot reach even with a full move (no crash)", () => {
+    const cure: ActionDefinition = {
+      kind: "healing", id: "cure-wounds", name: "Cure Wounds", actionType: "action", range: 5,
+      healing: [{ dice: "1d8+3" }], automationSupport: "full"
+    };
+    const encounter = baseEncounter("heal-unreachable");
+    encounter.combatants = [
+      { id: CASTER, definitionId: CASTER_DEF, displayName: "Cleric", faction: "party",
+        position: { x: 1, y: 1 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
+        position: { x: 11, y: 7 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged" }
+    ];
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [cure];
+    const state = createEngineState(encounter);
+
+    expect(() => takeAutomatedTurn(state, actorOf(state))).not.toThrow();
+    expect(state.log.some((e) => e.type === "HealingApplied")).toBe(false);
+  });
 });
 
 describe("AI — split multiattack allocation", () => {

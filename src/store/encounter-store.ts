@@ -556,7 +556,11 @@ export const useEncounterStore = create<EncounterStore>()(
           applyTimedFeatureEffects(engine, combatant.id, "turn-start");
           runRepeatedSaves(engine, combatant.id, "turn-start");
           resetActionEconomy(combatant);
-          takeAutomatedTurn(engine, combatant);
+          try {
+            takeAutomatedTurn(engine, combatant);
+          } catch (error) {
+            engine.log.push(event(engine, "AutomationWarning", `${combatant.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
+          }
           applyTimedFeatureEffects(engine, combatant.id, "turn-end");
           runRepeatedSaves(engine, combatant.id, "turn-end");
           expireConditions(engine, "end");
