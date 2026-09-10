@@ -6,6 +6,7 @@ import { getDefinition, sizeFootprint, wallCover, type CombatantState, type Cove
 import { useEncounterStore } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
 import { clamp, pointsMatch } from "@/components/scene/coords";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
@@ -86,7 +87,11 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const { tool, pendingWallStart } = scene;
   // Tokens tween between cells only while replay is scrubbing/playing; editing
   // stays instant. Faster playback → snappier tween.
-  const tokenMoveMs = replaying ? Math.round(clamp(620 / Math.max(0.1, replaySpeed), 90, 900)) : 0;
+  const slideMs = replaying ? Math.round(clamp(620 / Math.max(0.1, replaySpeed), 90, 900)) : 0;
+  // While playback steps onto a move, the token walks its recorded path one cell
+  // at a time (each hop = `walk.hopMs`); otherwise it slides straight over `slideMs`.
+  const walk = useReplayPathWalk(slideMs);
+  const tokenMoveMs = walk.hopMs ?? slideMs;
 
   // One pass over the roster: everything the token, its HP bar, and any future
   // per-token overlay need, so the tokens and the overlay layer stay in sync.
@@ -101,11 +106,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         const definition = getDefinition(encounter, combatant);
         const footprint = sizeFootprint(definition.size);
         const drag = draggedToken?.id === combatant.id ? draggedToken : null;
+        // During a traced replay move the token renders at the current path cell
+        // rather than its (already-final) real position.
+        const anchor = walk.positions.get(combatant.id) ?? combatant.position;
         const px = drag?.pixel
           ? drag.pixel
           : {
-              x: (drag ? drag.cell.x : combatant.position.x) * cellSize,
-              y: (drag ? drag.cell.y : combatant.position.y) * cellSize
+              x: (drag ? drag.cell.x : anchor.x) * cellSize,
+              y: (drag ? drag.cell.y : anchor.y) * cellSize
             };
         return {
           combatant,
@@ -119,7 +127,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           hpOut: combatant.currentHp <= 0 || combatant.state !== "active"
         };
       }),
-    [encounter, cellSize, draggedToken, droppingTokenId]
+    [encounter, cellSize, draggedToken, droppingTokenId, walk.positions]
   );
 
   function wallMenuItems(): ContextMenuItem[] {
