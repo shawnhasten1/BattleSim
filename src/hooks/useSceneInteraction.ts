@@ -110,16 +110,17 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   // sheet, sidebar, AI preview); this array is "primary + shift-added extras"
   // and is what the token outlines and the token context menu act on. It always
   // contains the primary unless the user has deliberately toggled everything off.
-  const [selectedCombatantIds, setSelectedCombatantIds] = useState<string[]>(
-    () => {
-      const primary = useEncounterStore.getState().selectedCombatantId;
-      return primary ? [primary] : [];
-    }
-  );
+  // Seed empty so the server render and the first client render agree: the
+  // encounter store rehydrates `selectedCombatantId` from localStorage
+  // synchronously on the client, so reading it here during render would diverge
+  // from the server's module default and trip a hydration mismatch on the
+  // token's `selected` class. The mount effect below snaps it to the real
+  // primary (same "restore after mount" shape as useViewport / the page prefs).
+  const [selectedCombatantIds, setSelectedCombatantIds] = useState<string[]>([]);
   // The primary we last reconciled against, so the store subscription below can
   // tell an *external* move of the selection (Combat panel row, turn advance,
   // duplicate, delete re-point, scene load) from our own push.
-  const reconciledPrimaryRef = useRef<string | null>(useEncounterStore.getState().selectedCombatantId);
+  const reconciledPrimaryRef = useRef<string | null>(null);
   // Live mirror so the imperative helpers and the once-bound keydown listener
   // can read the current set without stale closures.
   const selectedCombatantIdsRef = useRef(selectedCombatantIds);
@@ -356,6 +357,18 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       current && !encounter.combatants.some((combatant) => combatant.id === current.id) ? null : current
     );
   }, [encounter.combatants, tokenMenu]);
+
+  // Adopt the store's persisted primary once, after mount — see the note on the
+  // empty seed above. Runs before the store subscription is wired, so no
+  // external selection move can interleave.
+  useEffect(() => {
+    const primary = useEncounterStore.getState().selectedCombatantId;
+    if (!primary) return;
+    reconciledPrimaryRef.current = primary;
+    selectedCombatantIdsRef.current = [primary];
+    setSelectedCombatantIds([primary]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drop board-selected tokens that no longer exist (deleted / undone / scene swap).
   useEffect(() => {
