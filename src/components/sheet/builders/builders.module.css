@@ -603,3 +603,12 @@
 .maPreview strong {
   color: var(--ui-accent);
 }
+
+.maSubHead {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text);
+}

@@ -319,15 +319,49 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
       {edit?.kind === "new" ? builderFor(edit) : null}
 
-      {multiattacks.length > 0 || attackChoices.length >= 1 ? (
-        <div className={styles.group}>
-          <h4>Multiattack</h4>
-          {multiattacks.map((action) => row(
-            action.id, action.name, describeAction(action, definition), "full",
-            () => { /* multiattack edits: remove + re-add */ }, () => removeDefinitionItem(definition.id, "action", action.id),
-            false
-          ))}
+      <div className={styles.group}>
+        <h4>Weapons</h4>
+        {weapons.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
+        {weapons.map((weapon) => row(
+          weapon.id, weapon.name,
+          `${weapon.attackType} ${String(weapon.ability).toUpperCase()} · ${weapon.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}${weapon.magical ? " · magical" : ""}${weapon.grip && weapon.grip !== "one-handed" ? ` · ${weapon.grip}` : ""}${weapon.powerAttack ? " · power attack" : ""}${weapon.charges ? ` · ${weapon.charges.max} charge${weapon.charges.max === 1 ? "" : "s"}` : ""}${weapon.onHit?.length ? ` · on-hit ${weapon.onHit.map((r) => r.kind === "condition" && typeof r.condition === "string" ? r.condition : r.kind).join(", ")}` : ""}`,
+          weaponAutomation(weapon),
+          () => editWeapon(weapon), () => removeDefinitionItem(definition.id, "weapon", weapon.id),
+          edit?.kind === "weapon" && edit.id === weapon.id, { kind: "weapon", id: weapon.id }
+        ))}
+      </div>
+
+      <div className={styles.group}>
+        <h4>Spells</h4>
+        {spells.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
+        {spells.map((spell) => row(
+          spell.id, spell.name,
+          `level ${spell.level} · ${spell.castingTime} · ${typeof spell.range === "number" ? `${spell.range} ft` : spell.range}${spell.concentration ? " · concentration" : ""}${spell.action ? ` · ${describeAction(spell.action, definition)}` : " · reference only"}`,
+          spellAutomation(spell),
+          () => editSpell(spell), () => removeDefinitionItem(definition.id, "spell", spell.id),
+          edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
+        ))}
+      </div>
+
+      <div className={styles.group}>
+        <h4>Features &amp; traits</h4>
+        {features.length === 0 && multiattacks.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
+        {features.map((feature) => row(
+          feature.id, feature.name, featureDetail(feature), feature.automationSupport,
+          () => editFeature(feature),
+          () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
+          edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
+        ))}
+
+        {multiattacks.map((action) => row(
+          action.id, action.name, describeAction(action, definition), "full",
+          () => { /* multiattack edits: remove + re-add */ }, () => removeDefinitionItem(definition.id, "action", action.id),
+          false
+        ))}
+
+        {multiattacks.length > 0 || attackChoices.length >= 1 ? (
           <div className={styles.maBuilder} style={{ ["--ma-cols" as string]: maShowTargets ? "1fr 92px 1fr 24px" : "1fr 92px 24px" }}>
+            <p className={styles.maSubHead}>Multiattack</p>
             <p className={styles.maHint}>
               Make several attacks with one Attack action &mdash; a fighter&apos;s Extra Attack, or a
               monster&apos;s &ldquo;two claws and a bite&rdquo;. Choose each attack and how many times it&apos;s made.
@@ -415,42 +449,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
               Create multiattack
             </button>
           </div>
-        </div>
-      ) : null}
-
-      <div className={styles.group}>
-        <h4>Weapons</h4>
-        {weapons.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
-        {weapons.map((weapon) => row(
-          weapon.id, weapon.name,
-          `${weapon.attackType} ${String(weapon.ability).toUpperCase()} · ${weapon.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}${weapon.magical ? " · magical" : ""}${weapon.grip && weapon.grip !== "one-handed" ? ` · ${weapon.grip}` : ""}${weapon.powerAttack ? " · power attack" : ""}${weapon.charges ? ` · ${weapon.charges.max} charge${weapon.charges.max === 1 ? "" : "s"}` : ""}${weapon.onHit?.length ? ` · on-hit ${weapon.onHit.map((r) => r.kind === "condition" && typeof r.condition === "string" ? r.condition : r.kind).join(", ")}` : ""}`,
-          weaponAutomation(weapon),
-          () => editWeapon(weapon), () => removeDefinitionItem(definition.id, "weapon", weapon.id),
-          edit?.kind === "weapon" && edit.id === weapon.id, { kind: "weapon", id: weapon.id }
-        ))}
-      </div>
-
-      <div className={styles.group}>
-        <h4>Spells</h4>
-        {spells.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
-        {spells.map((spell) => row(
-          spell.id, spell.name,
-          `level ${spell.level} · ${spell.castingTime} · ${typeof spell.range === "number" ? `${spell.range} ft` : spell.range}${spell.concentration ? " · concentration" : ""}${spell.action ? ` · ${describeAction(spell.action, definition)}` : " · reference only"}`,
-          spellAutomation(spell),
-          () => editSpell(spell), () => removeDefinitionItem(definition.id, "spell", spell.id),
-          edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
-        ))}
-      </div>
-
-      <div className={styles.group}>
-        <h4>Features &amp; traits</h4>
-        {features.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
-        {features.map((feature) => row(
-          feature.id, feature.name, featureDetail(feature), feature.automationSupport,
-          () => editFeature(feature),
-          () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
-          edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
-        ))}
+        ) : null}
       </div>
 
       {[["Actions", plainActions, "action"], ["Bonus actions", bonusActions, "bonusAction"], ["Reactions", reactions, "reaction"]].map(([title, list, itemType]) => {
