@@ -1,0 +1,480 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-10T00:00:00.000Z",
+  "definition": {
+    "id": "def-arcane-trickster-lvl6",
+    "name": "Level 6 Arcane Trickster Rogue",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "type": "humanoid",
+    "armorClass": 16,
+    "maxHp": 44,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "rogue",
+          "name": "Rogue",
+          "level": 6,
+          "subclass": {
+            "id": "arcane-trickster",
+            "name": "Arcane Trickster"
+          },
+          "source": {
+            "provider": "homebrew"
+          }
+        }
+      ]
+    },
+    "abilities": {
+      "str": 8,
+      "dex": 18,
+      "con": 14,
+      "int": 14,
+      "wis": 12,
+      "cha": 10
+    },
+    "saves": {
+      "dex": {
+        "proficiency": true
+      },
+      "int": {
+        "proficiency": true
+      }
+    },
+    "resources": {
+      "slot-1": 3
+    },
+    "weapons": [
+      {
+        "id": "plus-one-shortsword",
+        "name": "+1 Shortsword",
+        "category": "martial",
+        "attackType": "melee",
+        "ability": "finesse",
+        "damage": [
+          {
+            "dice": "1d6",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "properties": [
+          "finesse",
+          "light"
+        ],
+        "grip": "one-handed",
+        "reach": 5,
+        "magicBonus": 1,
+        "usableAs": [
+          "action",
+          "reaction"
+        ]
+      },
+      {
+        "id": "plus-one-dagger",
+        "name": "+1 Dagger",
+        "category": "simple",
+        "attackType": "melee",
+        "ability": "finesse",
+        "damage": [
+          {
+            "dice": "1d4",
+            "damageType": "piercing"
+          }
+        ],
+        "properties": [
+          "finesse",
+          "light",
+          "thrown"
+        ],
+        "grip": "one-handed",
+        "reach": 5,
+        "range": 20,
+        "longRange": 60,
+        "magicBonus": 1,
+        "usableAs": [
+          "bonus"
+        ],
+        "onHit": [
+          {
+            "kind": "condition",
+            "when": "on-hit",
+            "condition": "poisoned",
+            "save": {
+              "ability": "con",
+              "dc": 13,
+              "onSuccess": "negates"
+            },
+            "duration": {
+              "kind": "save-ends",
+              "saveAt": "turn-end"
+            }
+          }
+        ]
+      }
+    ],
+    "traits": [
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "trait",
+        "description": "The rogue is a 6th-level Arcane Trickster spellcaster using Intelligence. Spell save DC 13 and +5 to hit with spell attacks. Spell slots: 3 x 1st level. Known spells are drawn from the wizard list (mostly enchantment and illusion).",
+        "automationSupport": "full"
+      },
+      {
+        "id": "sneak-attack",
+        "name": "Sneak Attack (3d6)",
+        "category": "feature",
+        "description": "Once per turn the rogue deals an extra 3d6 damage when it hits with a finesse or ranged weapon and either has advantage on the attack, or an ally of the target is within 5 feet of it and it doesn't have disadvantage.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "damage-bonus",
+            "actionIds": [
+              "weapon:plus-one-shortsword",
+              "weapon:plus-one-shortsword:reaction",
+              "weapon:plus-one-dagger:bonus"
+            ],
+            "damage": [
+              {
+                "dice": "3d6",
+                "damageType": "same-as-attack"
+              }
+            ],
+            "oncePerTurn": true,
+            "anyConditions": [
+              "attack-has-advantage",
+              "ally-adjacent-to-target"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cunning-action",
+        "name": "Cunning Action",
+        "category": "feature",
+        "description": "The rogue can take a bonus action on each of its turns to Dash, Disengage, or Hide.",
+        "automationSupport": "full",
+        "grantedActions": [
+          {
+            "kind": "utility",
+            "id": "cunning-action-dash",
+            "name": "Cunning Action: Dash",
+            "actionType": "bonus",
+            "mode": "dash",
+            "automationSupport": "full"
+          },
+          {
+            "kind": "utility",
+            "id": "cunning-action-disengage",
+            "name": "Cunning Action: Disengage",
+            "actionType": "bonus",
+            "mode": "disengage",
+            "automationSupport": "full"
+          },
+          {
+            "kind": "utility",
+            "id": "cunning-action-hide",
+            "name": "Cunning Action: Hide",
+            "actionType": "bonus",
+            "mode": "hide",
+            "automationSupport": "partial"
+          }
+        ]
+      },
+      {
+        "id": "uncanny-dodge-note",
+        "name": "Uncanny Dodge",
+        "category": "trait",
+        "description": "Reaction: when an attacker the rogue can see hits it with an attack, the rogue halves that attack's damage against it.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "mage-hand-legerdemain",
+        "name": "Mage Hand Legerdemain",
+        "category": "trait",
+        "description": "The rogue's spectral Mage Hand is invisible and can perform sleight-of-hand tasks (pick locks, disarm traps, stow or retrieve objects, pick pockets) at range as a bonus action.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "expertise",
+        "name": "Expertise",
+        "category": "trait",
+        "description": "The rogue doubles its proficiency bonus on four chosen skills (typically Stealth, Sleight of Hand, Perception, Investigation).",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "thieves-cant",
+        "name": "Thieves' Cant",
+        "category": "trait",
+        "description": "The rogue knows Thieves' Cant, a secret mix of dialect, jargon, and code.",
+        "automationSupport": "manual-only"
+      }
+    ],
+    "spells": [
+      {
+        "id": "mage-hand",
+        "name": "Mage Hand",
+        "level": 0,
+        "school": "conjuration",
+        "castingTime": "action",
+        "range": 30,
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "mage-hand-action",
+          "name": "Mage Hand",
+          "actionType": "action",
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "fire-bolt",
+        "name": "Fire Bolt",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 120,
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "fire-bolt-action",
+          "name": "Fire Bolt",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 120,
+          "damage": [
+            {
+              "dice": "2d10",
+              "damageType": "fire",
+              "magical": true
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "minor-illusion",
+        "name": "Minor Illusion",
+        "level": 0,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": 30,
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "minor-illusion-action",
+          "name": "Minor Illusion",
+          "actionType": "action",
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "shield",
+        "name": "Shield",
+        "level": 1,
+        "school": "abjuration",
+        "castingTime": "reaction",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "activate-feature",
+          "id": "shield-action",
+          "name": "Shield",
+          "actionType": "reaction",
+          "reaction": {
+            "trigger": {
+              "kind": "targeted-by-attack"
+            },
+            "target": "self",
+            "priority": "always"
+          },
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "condition": {
+            "id": "shield-active",
+            "name": "custom",
+            "durationRounds": 1,
+            "modifiers": {
+              "armorClass": 5
+            }
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "charm-person",
+        "name": "Charm Person",
+        "level": 1,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 30,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "save",
+          "id": "charm-person-action",
+          "name": "Charm Person",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dcFormula": {
+            "base": 8,
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 30,
+          "onSuccess": "negates",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "charmed",
+              "duration": {
+                "kind": "rounds",
+                "rounds": 10
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "tashas-hideous-laughter",
+        "name": "Tasha's Hideous Laughter",
+        "level": 1,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 30,
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "save",
+          "id": "tashas-hideous-laughter-action",
+          "name": "Tasha's Hideous Laughter",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dcFormula": {
+            "base": 8,
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 30,
+          "onSuccess": "negates",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "incapacitated",
+              "duration": {
+                "kind": "concentration"
+              }
+            },
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "prone",
+              "duration": {
+                "kind": "concentration"
+              }
+            },
+            {
+              "kind": "note",
+              "text": "The target repeats the save at the end of each of its turns (with advantage if it took damage since its last turn); a success ends the effect."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "disguise-self",
+        "name": "Disguise Self",
+        "level": 1,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "disguise-self-action",
+          "name": "Disguise Self",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      }
+    ],
+    "reactions": [
+      {
+        "kind": "activate-feature",
+        "id": "uncanny-dodge",
+        "name": "Uncanny Dodge",
+        "actionType": "reaction",
+        "featureId": "uncanny-dodge-note",
+        "reaction": {
+          "trigger": {
+            "kind": "manual",
+            "note": "When an attacker the rogue can see hits it with an attack, halve the damage."
+          },
+          "target": "self",
+          "priority": "manual"
+        },
+        "automationSupport": "partial"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Arcane Trickster",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 44,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "skirmisher",
+    "resources": {
+      "slot-1": 3
+    },
+    "conditions": []
+  }
+}

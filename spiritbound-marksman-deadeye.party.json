@@ -1,0 +1,643 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-10T00:00:00.000Z",
+  "definition": {
+    "id": "def-spiritbound-marksman-deadeye-lvl6",
+    "name": "Level 6 Spiritbound Marksman - Path of the Deadeye",
+    "source": {
+      "provider": "homebrew",
+      "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
+    },
+    "size": "medium",
+    "type": "humanoid",
+    "armorClass": 16,
+    "maxHp": 45,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "spiritbound-marksman",
+          "name": "Spiritbound Marksman",
+          "level": 6,
+          "subclass": {
+            "id": "path-of-the-deadeye",
+            "name": "Path of the Deadeye"
+          },
+          "source": {
+            "provider": "homebrew",
+            "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
+          }
+        }
+      ]
+    },
+    "abilities": {
+      "str": 8,
+      "dex": 16,
+      "con": 14,
+      "int": 12,
+      "wis": 18,
+      "cha": 10
+    },
+    "saves": {
+      "con": {
+        "proficiency": true
+      },
+      "wis": {
+        "proficiency": true
+      }
+    },
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 2,
+      "deaths-brand-second": 1
+    },
+    "weapons": [
+      {
+        "id": "light-crossbow",
+        "name": "Light Crossbow",
+        "category": "simple",
+        "attackType": "ranged",
+        "ability": "dex",
+        "damage": [
+          {
+            "dice": "1d8",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "properties": [
+          "ammunition",
+          "loading",
+          "two-handed"
+        ],
+        "grip": "two-handed",
+        "range": 80,
+        "longRange": 320,
+        "magicBonus": 0,
+        "usableAs": [
+          "action"
+        ]
+      },
+      {
+        "id": "dagger",
+        "name": "Dagger",
+        "category": "simple",
+        "attackType": "melee",
+        "ability": "finesse",
+        "damage": [
+          {
+            "dice": "1d4",
+            "damageType": "piercing",
+            "abilityModifier": "dex"
+          }
+        ],
+        "properties": [
+          "finesse",
+          "light",
+          "thrown"
+        ],
+        "grip": "one-handed",
+        "reach": 5,
+        "range": 20,
+        "longRange": 60,
+        "magicBonus": 0
+      }
+    ],
+    "traits": [
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "trait",
+        "description": "The marksman is a 6th-level spellcaster casting from the artificer list, using Wisdom (spell save DC 15, +7 to hit). It prepares 7 spells and has slots: 4 x 1st, 2 x 2nd.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "spiritfire-gun",
+        "name": "Spiritfire Gun",
+        "category": "trait",
+        "description": "A spirit-imbued firearm fired as a ranged spell attack using Wisdom for 1d10 force damage per shot. The marksman fires 2 shots at 6th level (3 at 11th, 4 at 17th) and may split them between targets.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "lesser-echo-marks",
+        "name": "Lesser Echo Marks",
+        "category": "trait",
+        "description": "Once per turn, before the attack roll, the marksman channels one Echo Mark into a Spiritfire shot. Known marks: Agonizing Echo (add Wisdom modifier to each shot - modeled as always-on here), Binding Shot (on hit, target's speed -10 ft until your next turn), Grasping Shot (on hit, target makes a Strength save or is pulled 10 ft toward you).",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "agonizing-echo",
+        "name": "Agonizing Echo",
+        "category": "feature",
+        "description": "The Agonizing Echo mark adds the marksman's Wisdom modifier to each Spiritfire Gun shot.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "damage-bonus",
+            "actionIds": [
+              "spiritfire-shot"
+            ],
+            "damage": [
+              {
+                "dice": "0",
+                "damageType": "same-as-attack",
+                "bonusFormula": {
+                  "ability": "wis"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "path-of-the-deadeye",
+        "name": "Path of the Deadeye",
+        "category": "trait",
+        "description": "The Spiritfire Gun takes the form of a tactical Six-Shooter with a normal range of 60 feet and a long range of 120 feet. Precise, controlled fire.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "spiritfire-gun-style",
+        "name": "Spiritfire Gun Style",
+        "category": "trait",
+        "description": "The marksman has committed to the Six-Shooter form of the Spiritfire Gun (Path of the Deadeye).",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "deaths-brand",
+        "name": "Death's Brand",
+        "category": "feature",
+        "description": "Once per turn, when the marksman hits a creature with a Spiritfire shot, it brands the target. With Mark of the Last Breath (6th level) the brand lasts until the end of the marksman's next turn; the next time the branded creature is hit, the brand is consumed and deals an extra 2d6 necrotic damage.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "apply-condition-on-hit",
+            "actionIds": [
+              "spiritfire-shot"
+            ],
+            "target": "target",
+            "oncePerTurn": true,
+            "appliedCondition": {
+              "id": "deaths-brand-active",
+              "name": "custom",
+              "durationRounds": 1,
+              "effects": [
+                {
+                  "kind": "incoming-hit-damage",
+                  "damage": [
+                    {
+                      "dice": "2d6",
+                      "damageType": "necrotic"
+                    }
+                  ],
+                  "critical": false,
+                  "consumeCondition": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "mark-of-the-last-breath",
+        "name": "Mark of the Last Breath",
+        "category": "trait",
+        "description": "6th-level Deadeye feature. Death's Brand now lasts until the end of the marksman's next turn and deals 2d6 necrotic when triggered. Once per long rest, the marksman may brand a second creature in the same turn (resource: deaths-brand-second).",
+        "automationSupport": "partial"
+      }
+    ],
+    "spells": [
+      {
+        "id": "fire-bolt",
+        "name": "Fire Bolt",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 120,
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "fire-bolt-action",
+          "name": "Fire Bolt",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "wis",
+          "attackBonusFormula": {
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 120,
+          "damage": [
+            {
+              "dice": "2d10",
+              "damageType": "fire",
+              "magical": true
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "ray-of-frost",
+        "name": "Ray of Frost",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "automationSupport": "partial",
+        "action": {
+          "kind": "attack",
+          "id": "ray-of-frost-action",
+          "name": "Ray of Frost",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "wis",
+          "attackBonusFormula": {
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "cold",
+              "magical": true
+            }
+          ],
+          "riders": [
+            {
+              "kind": "note",
+              "when": "on-hit",
+              "text": "The target's speed is reduced by 10 feet until the start of the marksman's next turn."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "cure-wounds",
+        "name": "Cure Wounds",
+        "level": 1,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": "touch",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d8"
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "healing",
+          "id": "cure-wounds-action",
+          "name": "Cure Wounds",
+          "actionType": "action",
+          "range": 5,
+          "healing": [
+            {
+              "dice": "1d8",
+              "abilityModifier": "wis"
+            }
+          ],
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "faerie-fire",
+        "name": "Faerie Fire",
+        "level": 1,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "faerie-fire-action",
+          "name": "Faerie Fire",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 60,
+          "area": {
+            "type": "square",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 60
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": {
+                "custom": "faerie-fire"
+              },
+              "modifiers": {
+                "incomingAttackRoll": 5
+              },
+              "duration": {
+                "kind": "concentration"
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "grease",
+        "name": "Grease",
+        "level": 1,
+        "school": "conjuration",
+        "castingTime": "action",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "grease-action",
+          "name": "Grease",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 60,
+          "area": {
+            "type": "square",
+            "size": 10
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 60
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "prone",
+              "duration": {
+                "kind": "until-start-of-next-turn"
+              }
+            },
+            {
+              "kind": "note",
+              "text": "The 10-foot square is difficult terrain; a creature entering it or ending its turn there must also make the save or fall prone, for the spell's 1-minute duration."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "absorb-elements",
+        "name": "Absorb Elements",
+        "level": 1,
+        "school": "abjuration",
+        "castingTime": "reaction",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "absorb-elements-action",
+          "name": "Absorb Elements",
+          "actionType": "reaction",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "scorching-ray",
+        "name": "Scorching Ray",
+        "level": 2,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 120,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "beams": 1
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "scorching-ray-action",
+          "name": "Scorching Ray",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "wis",
+          "attackBonusFormula": {
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 120,
+          "attackDelivery": "beams",
+          "beamCount": 3,
+          "damage": [
+            {
+              "dice": "2d6",
+              "damageType": "fire",
+              "magical": true
+            }
+          ],
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "web",
+        "name": "Web",
+        "level": 2,
+        "school": "conjuration",
+        "castingTime": "action",
+        "range": 60,
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "web-action",
+          "name": "Web",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "wis",
+            "proficiency": true
+          },
+          "range": 60,
+          "area": {
+            "type": "square",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 60
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "restrained",
+              "duration": {
+                "kind": "save-ends",
+                "saveAt": "turn-end"
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "blur",
+        "name": "Blur",
+        "level": 2,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": "self",
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "activate-feature",
+          "id": "blur-action",
+          "name": "Blur",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "targeting": {
+            "target": "self"
+          },
+          "condition": {
+            "id": "blur-active",
+            "name": "custom",
+            "durationRounds": 10,
+            "modifiers": {
+              "incomingAttackRoll": -5
+            }
+          },
+          "automationSupport": "full"
+        }
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "spiritfire-shot",
+        "name": "Spiritfire Gun",
+        "actionType": "action",
+        "attackType": "spell",
+        "ability": "wis",
+        "attackBonusFormula": {
+          "ability": "wis",
+          "proficiency": true
+        },
+        "range": 60,
+        "longRange": 120,
+        "damage": [
+          {
+            "dice": "1d10",
+            "damageType": "force",
+            "magical": true
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "multiattack",
+        "id": "spiritfire-volley",
+        "name": "Spiritfire Gun (2 shots)",
+        "actionType": "action",
+        "attacks": [
+          {
+            "actionId": "spiritfire-shot",
+            "count": 2
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Marksman (Deadeye)",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 45,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "basic-ranged",
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 2,
+      "deaths-brand-second": 1
+    },
+    "conditions": []
+  }
+}

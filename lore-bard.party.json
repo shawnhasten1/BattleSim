@@ -1,0 +1,853 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-10T00:00:00.000Z",
+  "definition": {
+    "id": "def-lore-bard-lvl6",
+    "name": "Level 6 College of Lore Bard",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "type": "humanoid",
+    "armorClass": 14,
+    "maxHp": 45,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "bard",
+          "name": "Bard",
+          "level": 6,
+          "subclass": {
+            "id": "college-of-lore",
+            "name": "College of Lore"
+          },
+          "source": {
+            "provider": "homebrew"
+          }
+        }
+      ]
+    },
+    "abilities": {
+      "str": 8,
+      "dex": 14,
+      "con": 14,
+      "int": 10,
+      "wis": 12,
+      "cha": 18
+    },
+    "saves": {
+      "dex": {
+        "proficiency": true
+      },
+      "cha": {
+        "proficiency": true
+      }
+    },
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3,
+      "bardic-inspiration": 4
+    },
+    "weapons": [
+      {
+        "id": "rapier",
+        "name": "Rapier",
+        "category": "martial",
+        "attackType": "melee",
+        "ability": "finesse",
+        "damage": "1d8",
+        "damageType": "piercing",
+        "properties": [
+          "finesse"
+        ],
+        "grip": "one-handed",
+        "reach": 5,
+        "magicBonus": 0,
+        "usableAs": [
+          "action",
+          "reaction"
+        ]
+      },
+      {
+        "id": "shortbow",
+        "name": "Shortbow",
+        "category": "simple",
+        "attackType": "ranged",
+        "ability": "dex",
+        "damage": "1d6",
+        "damageType": "piercing",
+        "properties": [
+          "two-handed",
+          "ammunition"
+        ],
+        "grip": "two-handed",
+        "range": 80,
+        "longRange": 320,
+        "magicBonus": 0,
+        "usableAs": [
+          "action"
+        ]
+      }
+    ],
+    "traits": [
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "trait",
+        "description": "The bard is a 6th-level spellcaster using Charisma. Base spell save DC 15 and +7 to hit with spell attacks; with the Moonlit Focus equipped this becomes DC 16 and +8. Spell slots: 4 x 1st, 3 x 2nd, 3 x 3rd.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "moonlit-focus",
+        "name": "Moonlit Focus (+1 Spellcasting Focus)",
+        "category": "trait",
+        "description": "While holding this arcane focus, the bard gains a +1 bonus to spell attack rolls and a +1 bonus to the saving throw DC of its spells.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "attack-bonus",
+            "bonus": {
+              "base": 1
+            },
+            "attackTypes": [
+              "spell"
+            ]
+          },
+          {
+            "kind": "save-dc-bonus",
+            "bonus": {
+              "base": 1
+            },
+            "actionIds": [
+              "vicious-mockery-action",
+              "mind-sliver-action",
+              "dissonant-whispers-action",
+              "faerie-fire-action",
+              "thunderwave-action",
+              "shatter-action",
+              "hypnotic-pattern-action",
+              "fireball-action"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "bardic-inspiration",
+        "name": "Bardic Inspiration (d8)",
+        "category": "trait",
+        "description": "Bonus action: one other creature within 60 feet gains a Bardic Inspiration die (1d8) it can add to one ability check, attack roll, or saving throw within 10 minutes. Recharges on a short or long rest (Font of Inspiration).",
+        "automationSupport": "partial",
+        "grantedActions": [
+          {
+            "kind": "activate-feature",
+            "id": "grant-bardic-inspiration",
+            "name": "Bardic Inspiration",
+            "actionType": "bonus",
+            "featureId": "bardic-inspiration",
+            "resourceCost": {
+              "resourceId": "bardic-inspiration",
+              "amount": 1
+            },
+            "automationSupport": "partial"
+          }
+        ]
+      },
+      {
+        "id": "jack-of-all-trades",
+        "name": "Jack of All Trades",
+        "category": "trait",
+        "description": "The bard adds +1 (half proficiency, rounded down) to any ability check it makes that doesn't already include its proficiency bonus, and to initiative.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "song-of-rest",
+        "name": "Song of Rest (d6)",
+        "category": "trait",
+        "description": "During a short rest, allies who spend Hit Dice regain an extra 1d6 hit points.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "countercharm",
+        "name": "Countercharm",
+        "category": "trait",
+        "description": "As an action, the bard grants itself and allies within 30 feet advantage on saving throws against being frightened or charmed until the end of its next turn.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "cutting-words-note",
+        "name": "Cutting Words",
+        "category": "trait",
+        "description": "Reaction: when a creature within 60 feet makes an attack roll, ability check, or damage roll, the bard expends one Bardic Inspiration to subtract 1d8 from the roll. Modeled here as a reaction that weakens the triggering attacker's rolls.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "additional-magical-secrets",
+        "name": "Additional Magical Secrets",
+        "category": "trait",
+        "description": "College of Lore lets the bard learn two spells from any class. This bard chose Fireball and Counterspell; both count as bard spells for it.",
+        "automationSupport": "manual-only"
+      }
+    ],
+    "spells": [
+      {
+        "id": "starry-wisp",
+        "name": "Starry Wisp",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "automationSupport": "partial",
+        "action": {
+          "kind": "attack",
+          "id": "starry-wisp-action",
+          "name": "Starry Wisp",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "cha",
+          "attackBonusFormula": {
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "radiant",
+              "magical": true
+            }
+          ],
+          "riders": [
+            {
+              "kind": "note",
+              "when": "on-hit",
+              "text": "The target emits Dim Light in a 10-foot radius and can't benefit from being invisible until the end of the bard's next turn."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "vicious-mockery",
+        "name": "Vicious Mockery",
+        "level": 0,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 60,
+        "automationSupport": "full",
+        "action": {
+          "kind": "save",
+          "id": "vicious-mockery-action",
+          "name": "Vicious Mockery",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d4",
+              "damageType": "psychic",
+              "magical": true
+            }
+          ],
+          "onSuccess": "none",
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": {
+                "custom": "vicious-mockery"
+              },
+              "modifiers": {
+                "attackRoll": -4
+              },
+              "duration": {
+                "kind": "rounds",
+                "rounds": 1
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "mind-sliver",
+        "name": "Mind Sliver",
+        "level": 0,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 60,
+        "automationSupport": "full",
+        "action": {
+          "kind": "save",
+          "id": "mind-sliver-action",
+          "name": "Mind Sliver",
+          "actionType": "action",
+          "saveAbility": "int",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d6",
+              "damageType": "psychic",
+              "magical": true
+            }
+          ],
+          "onSuccess": "none",
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": {
+                "custom": "mind-sliver"
+              },
+              "modifiers": {
+                "savingThrows": {
+                  "str": -2,
+                  "dex": -2,
+                  "con": -2,
+                  "int": -2,
+                  "wis": -2,
+                  "cha": -2
+                }
+              },
+              "duration": {
+                "kind": "until-start-of-next-turn"
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "healing-word",
+        "name": "Healing Word",
+        "level": 1,
+        "school": "evocation",
+        "castingTime": "bonus",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d4"
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "healing",
+          "id": "healing-word-action",
+          "name": "Healing Word",
+          "actionType": "bonus",
+          "range": 60,
+          "healing": [
+            {
+              "dice": "1d4",
+              "abilityModifier": "cha"
+            }
+          ],
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "dissonant-whispers",
+        "name": "Dissonant Whispers",
+        "level": 1,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d6"
+          }
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "save",
+          "id": "dissonant-whispers-action",
+          "name": "Dissonant Whispers",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "3d6",
+              "damageType": "psychic",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "note",
+              "when": "on-save-fail",
+              "text": "The target must immediately use its reaction to move as far from the bard as it can by the safest route."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "faerie-fire",
+        "name": "Faerie Fire",
+        "level": 1,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "faerie-fire-action",
+          "name": "Faerie Fire",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "area": {
+            "type": "square",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 60
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": {
+                "custom": "faerie-fire"
+              },
+              "modifiers": {
+                "incomingAttackRoll": 5
+              },
+              "duration": {
+                "kind": "concentration"
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "thunderwave",
+        "name": "Thunderwave",
+        "level": 1,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 15,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d8"
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "thunderwave-action",
+          "name": "Thunderwave",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 15,
+          "area": {
+            "type": "square",
+            "size": 15
+          },
+          "targeting": {
+            "origin": "self",
+            "aimedFromSelf": true,
+            "range": 0
+          },
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "thunder",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "push",
+              "when": "on-save-fail",
+              "distance": 10
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "shatter",
+        "name": "Shatter",
+        "level": 2,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d8"
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "shatter-action",
+          "name": "Shatter",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 60,
+          "area": {
+            "type": "circle",
+            "size": 10
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 60
+          },
+          "damage": [
+            {
+              "dice": "3d8",
+              "damageType": "thunder",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "all",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "mirror-image",
+        "name": "Mirror Image",
+        "level": 2,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "activate-feature",
+          "id": "mirror-image-action",
+          "name": "Mirror Image",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "targeting": {
+            "target": "self"
+          },
+          "condition": {
+            "id": "mirror-image-active",
+            "name": "custom",
+            "durationRounds": 10,
+            "modifiers": {
+              "incomingAttackRoll": -3
+            }
+          },
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "suggestion",
+        "name": "Suggestion",
+        "level": 2,
+        "school": "enchantment",
+        "castingTime": "action",
+        "range": 30,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "suggestion-action",
+          "name": "Suggestion",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "hypnotic-pattern",
+        "name": "Hypnotic Pattern",
+        "level": 3,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": 120,
+        "concentration": true,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "area-save",
+          "id": "hypnotic-pattern-action",
+          "name": "Hypnotic Pattern",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 120,
+          "area": {
+            "type": "square",
+            "size": 30
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 120
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "incapacitated",
+              "duration": {
+                "kind": "concentration"
+              }
+            },
+            {
+              "kind": "note",
+              "text": "A charmed target is also unable to move and its speed is 0; the effect ends for a creature if it takes damage or another creature uses an action to shake it awake."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "dispel-magic",
+        "name": "Dispel Magic",
+        "level": 3,
+        "school": "abjuration",
+        "castingTime": "action",
+        "range": 120,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "dispel-magic-action",
+          "name": "Dispel Magic",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "fireball",
+        "name": "Fireball",
+        "level": 3,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 150,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "upcast": {
+          "perSlotAboveBase": {
+            "damageDice": "1d6"
+          }
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "fireball-action",
+          "name": "Fireball",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 150,
+          "area": {
+            "type": "circle",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 150
+          },
+          "damage": [
+            {
+              "dice": "8d6",
+              "damageType": "fire",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "all",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      }
+    ],
+    "reactions": [
+      {
+        "kind": "activate-feature",
+        "id": "cutting-words",
+        "name": "Cutting Words",
+        "actionType": "reaction",
+        "featureId": "cutting-words-note",
+        "reaction": {
+          "trigger": {
+            "kind": "targeted-by-attack"
+          },
+          "target": "trigger-source",
+          "priority": "worthwhile"
+        },
+        "resourceCost": {
+          "resourceId": "bardic-inspiration",
+          "amount": 1
+        },
+        "condition": {
+          "id": "cutting-words-active",
+          "name": "custom",
+          "durationRounds": 1,
+          "modifiers": {
+            "attackRoll": -4
+          }
+        },
+        "automationSupport": "full"
+      },
+      {
+        "kind": "activate-feature",
+        "id": "counterspell",
+        "name": "Counterspell",
+        "actionType": "reaction",
+        "featureId": "counterspell",
+        "reaction": {
+          "trigger": {
+            "kind": "enemy-casts-spell",
+            "withinFt": 60
+          },
+          "priority": "worthwhile"
+        },
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "full"
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Lore Bard",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 45,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "controller",
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3,
+      "bardic-inspiration": 4
+    },
+    "conditions": []
+  }
+}
