@@ -967,6 +967,16 @@ export function resolveAreaSaveAction(
     .filter((target) => !(placement.fromSelf && target.id === attacker.id))
     // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
     .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
+
+  // 5e: roll the blast's damage once — every creature takes the same numbers,
+  // differing only by resistance / vulnerability and whether they saved.
+  const blastRoll = action.damage.length
+    ? rollAreaDamage(state, action.damage, attackerDefinition, {
+      casterLevel: scaling.casterLevel,
+      extraDiceOnFirst: scaling.upcastDamageDice
+    })
+    : [];
+
   const targets = affected.map((target) => {
     const targetDefinition = getDefinition(state.snapshot, target);
     const cover = areaCoverFor(target);
@@ -981,12 +991,8 @@ export function resolveAreaSaveAction(
     });
     const success = saveRoll.total >= dc;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
-    const damageApplied = dealsDamage
-      ? applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
-        halve: success && onSuccess === "half",
-        casterLevel: scaling.casterLevel,
-        extraDiceOnFirst: scaling.upcastDamageDice
-      })
+    const damageApplied = dealsDamage && blastRoll.length
+      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half")
       : 0;
 
     if (!(success && onSuccess === "negates")) {
@@ -1535,6 +1541,76 @@ function applyDamageEntries(
       sourceFeatureName: entry.sourceFeatureName,
       sourceEffectKind: entry.sourceEffectKind
     };
+  });
+
+  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
+    targetId: target.id,
+    components,
+    totalApplied,
+    currentHp: target.currentHp,
+    tempHp: target.tempHp
+  }));
+  if (totalApplied > 0) {
+    resolveConcentration(state, target, totalApplied);
+  }
+  updateDefeatState(state, target);
+  return totalApplied;
+}
+
+/** One component's dice rolled once, with no target — for area effects where every creature takes the same numbers. */
+interface RolledDamageComponent {
+  damageType: DamageType;
+  roll: DiceRollResult;
+  /** `roll.total` plus any `bonusFormula` — before per-target resistance / vulnerability and any half-on-save. */
+  base: number;
+  magical: boolean;
+}
+
+/**
+ * Roll an area action's damage **once** (5e: "roll damage once and apply it to
+ * every creature"). The result is then handed to `applyRolledAreaDamage` per
+ * target so each creature only differs by its own resistances and whether it
+ * saved — not by a fresh dice roll.
+ */
+function rollAreaDamage(
+  state: EngineState,
+  damage: DamageComponent[],
+  source: CreatureDefinition,
+  options: { casterLevel?: number; extraDiceOnFirst?: string } = {}
+): RolledDamageComponent[] {
+  return damage.map((component, index) => {
+    const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: options.casterLevel });
+    const dice = index === 0 && options.extraDiceOnFirst ? `${scaledBase}+${options.extraDiceOnFirst}` : scaledBase;
+    const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
+    const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
+    return {
+      damageType: resolveDamageTypeReference(component.damageType, undefined),
+      roll,
+      base: roll.total + resolveNumericFormula(component.bonusFormula, source),
+      magical: component.magical === true
+    };
+  });
+}
+
+/** Apply an already-rolled area blast to one creature: its own resistances / vulnerability, then half on a made save. */
+function applyRolledAreaDamage(
+  state: EngineState,
+  target: CombatantState,
+  rolled: RolledDamageComponent[],
+  halve: boolean
+): number {
+  const targetDefinition = getDefinition(state.snapshot, target);
+  let totalApplied = 0;
+  const components = rolled.map((entry) => {
+    const adjusted = adjustDamage(
+      entry.base,
+      entry.damageType,
+      damageAdjustmentsFor(targetDefinition, target),
+      entry.magical
+    );
+    const finalAmount = halve ? Math.floor(adjusted / 2) : adjusted;
+    totalApplied += applyHpDamage(target, finalAmount);
+    return { damageType: entry.damageType, roll: entry.roll, adjusted, finalAmount };
   });
 
   state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
