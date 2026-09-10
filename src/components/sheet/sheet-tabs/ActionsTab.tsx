@@ -87,6 +87,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const [libQuery, setLibQuery] = useState("");
   const [maName, setMaName] = useState("Multiattack");
   const [maRows, setMaRows] = useState<Array<{ actionId: string; count: number; targetGroup: number }>>([]);
+  const [maSplit, setMaSplit] = useState(false);
 
   function setModePersisted(next: "simple" | "advanced") {
     setMode(next);
@@ -199,7 +200,13 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     if (!primary) return;
     setMaName("Multiattack");
     setMaRows([{ actionId: primary, count: times, targetGroup: 0 }]);
+    setMaSplit(false);
   }
+
+  const maShowTargets = maSplit || maRows.some((r) => r.targetGroup > 0);
+  const maTotal = maRows.reduce((sum, r) => sum + r.count, 0);
+  const attackName = (id: string) => attackChoices.find((a) => a.id === id)?.name ?? id;
+  const AIM_LABELS = ["the main target", "the 2nd target", "the 3rd target", "the 4th target"];
 
   return (
     <div>
@@ -320,44 +327,92 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             () => { /* multiattack edits: remove + re-add */ }, () => removeDefinitionItem(definition.id, "action", action.id),
             false
           ))}
-          <div className={styles.riderCard} style={{ marginTop: 6 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11, color: "var(--ui-text-dim)" }}>
-              Attack more than once per Attack action (Extra Attack, a monster&apos;s multiattack). Pick each attack and how many times it&apos;s made.
+          <div className={styles.maBuilder} style={{ ["--ma-cols" as string]: maShowTargets ? "1fr 92px 1fr 24px" : "1fr 92px 24px" }}>
+            <p className={styles.maHint}>
+              Make several attacks with one Attack action &mdash; a fighter&apos;s Extra Attack, or a
+              monster&apos;s &ldquo;two claws and a bite&rdquo;. Choose each attack and how many times it&apos;s made.
             </p>
-            <input type="text" aria-label="Multiattack name" value={maName} onChange={(e) => setMaName(e.target.value)} />
-            <div className={styles.chips}>
-              <button type="button" onClick={() => extraAttackPreset(2)}>Extra Attack (×2)</button>
-              <button type="button" onClick={() => extraAttackPreset(3)}>Extra Attack (×3)</button>
-              <button type="button" onClick={() => extraAttackPreset(4)}>×4</button>
+
+            <label className={styles.fieldInlineLabel}>
+              Name of this multiattack
+              <input type="text" value={maName} onChange={(e) => setMaName(e.target.value)} />
+            </label>
+
+            <div className={styles.maQuick}>
+              <span>Quick start</span>
+              <button type="button" onClick={() => extraAttackPreset(2)}>Extra Attack (2 swings)</button>
+              <button type="button" onClick={() => extraAttackPreset(3)}>Extra Attack (3 swings)</button>
+              <button type="button" onClick={() => extraAttackPreset(4)}>4 swings</button>
             </div>
-            {maRows.map((maRow, index) => (
-              <div key={index} className={styles.riderRow}>
-                <select
-                  aria-label={`Attack ${index + 1}`}
-                  value={maRow.actionId}
-                  onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, actionId: e.target.value } : r)))}
-                >
-                  {attackChoices.map((action) => <option key={action.id} value={action.id}>{action.name}</option>)}
-                </select>
-                <label className={styles.fieldInlineLabel}>×
-                  <input type="number" min={1} value={maRow.count} style={{ width: 48 }}
-                    onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, count: Math.max(1, Number(e.target.value) || 1) } : r)))} />
-                </label>
-                <label className={styles.fieldInlineLabel}>→ target
-                  <input type="number" min={0} value={maRow.targetGroup} style={{ width: 48 }}
-                    onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, targetGroup: Math.max(0, Number(e.target.value) || 0) } : r)))} />
-                </label>
-                <button type="button" className={styles.riderRemove} aria-label={`Remove attack ${index + 1}`} onClick={() => setMaRows((rows) => rows.filter((_, i) => i !== index))}>×</button>
+
+            {maRows.length > 0 ? (
+              <div className={styles.maSteps}>
+                <div className={styles.maStepHead}>
+                  <span>Attack</span>
+                  <span>How many</span>
+                  {maShowTargets ? <span>Aim at</span> : null}
+                  <span />
+                </div>
+                {maRows.map((maRow, index) => (
+                  <div key={index} className={styles.maStep}>
+                    <select
+                      aria-label={`Attack ${index + 1} weapon`}
+                      value={maRow.actionId}
+                      onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, actionId: e.target.value } : r)))}
+                    >
+                      {attackChoices.map((action) => <option key={action.id} value={action.id}>{action.name}</option>)}
+                    </select>
+                    <div className={styles.maStepCount}>
+                      <input
+                        type="number" min={1} aria-label={`Attack ${index + 1} count`} value={maRow.count}
+                        onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, count: Math.max(1, Number(e.target.value) || 1) } : r)))}
+                      />
+                      <span>{maRow.count === 1 ? "time" : "times"}</span>
+                    </div>
+                    {maShowTargets ? (
+                      <select
+                        aria-label={`Attack ${index + 1} target`}
+                        value={maRow.targetGroup}
+                        onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, targetGroup: Number(e.target.value) || 0 } : r)))}
+                      >
+                        {AIM_LABELS.map((label, group) => <option key={group} value={group}>{label}</option>)}
+                      </select>
+                    ) : null}
+                    <button type="button" className={styles.riderRemove} aria-label={`Remove attack ${index + 1}`} onClick={() => setMaRows((rows) => rows.filter((_, i) => i !== index))}>×</button>
+                  </div>
+                ))}
               </div>
-            ))}
-            <button type="button" className={styles.riderAdd} onClick={() => addMaRow()}>+ Add attack</button>
+            ) : null}
+
+            <button type="button" className={styles.riderAdd} onClick={() => addMaRow()}>+ Add another attack</button>
+
+            <label className={styles.maSplitToggle}>
+              <input type="checkbox" checked={maShowTargets} onChange={(e) => setMaSplit(e.target.checked)} />
+              Send some attacks at a different enemy (like the Half-Red-Dragon Veteran)
+            </label>
+
+            {maRows.length > 0 ? (
+              <p className={styles.maPreview}>
+                This multiattack:{" "}
+                {maRows.map((r, i) => (
+                  <span key={i}>
+                    {i > 0 ? " + " : ""}
+                    <strong>{r.count}×</strong> {attackName(r.actionId)}
+                    {maShowTargets && r.targetGroup > 0 ? ` → ${AIM_LABELS[r.targetGroup] ?? "another target"}` : ""}
+                  </span>
+                ))}
+                {" "}({maTotal} attack{maTotal === 1 ? "" : "s"} total)
+              </p>
+            ) : null}
+
             <button
-              type="button" className={styles.riderAdd}
+              type="button" className={styles.builderSave}
+              disabled={maRows.length === 0}
               onClick={() => {
-                if (maRows.length) { addMultiattack(definition.id, { name: maName, attacks: maRows }); setMaRows([]); }
+                if (maRows.length) { addMultiattack(definition.id, { name: maName, attacks: maRows }); setMaRows([]); setMaSplit(false); }
               }}
             >
-              + Add multiattack
+              Create multiattack
             </button>
           </div>
         </div>

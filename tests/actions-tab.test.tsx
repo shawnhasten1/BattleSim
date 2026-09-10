@@ -124,4 +124,24 @@ describe("ActionsTab", () => {
     expect(screen.queryByLabelText("Save DC")).toBeNull();
     expect(screen.queryByLabelText("Shape")).toBeNull();
   });
+
+  it("builds a multiattack from the Extra Attack quick-start, with an aim-at column only when split is on", async () => {
+    renderTab();
+    // no "Aim at" column until the split toggle is checked
+    expect(screen.queryByText("Aim at")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Extra Attack (2 swings)" }));
+    expect(screen.getByRole("spinbutton", { name: "Attack 1 count" })).toHaveProperty("value", "2");
+
+    await userEvent.click(screen.getByLabelText(/different enemy/));
+    expect(screen.getByText("Aim at")).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Create multiattack" }));
+    const actions = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.actions;
+    const ma = actions.find((a) => a.kind === "multiattack");
+    expect(ma?.kind).toBe("multiattack");
+    if (ma?.kind === "multiattack") {
+      expect(ma.attacks).toHaveLength(1);
+      expect(ma.attacks[0]?.count).toBe(2);
+    }
+  });
 });
