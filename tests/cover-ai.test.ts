@@ -57,19 +57,44 @@ describe("cover-aware AI", () => {
     expect(state.log.some((entry) => entry.type === "AiDecision" && /cover/.test(String(entry.message)))).toBe(true);
   });
 
-  it("does not freeze when the target is also behind cover — the archer still fires", () => {
+  it("still fires into cover when no reachable cell gives a cleaner shot", () => {
     const e = encounter();
     place(e, "pc-archer", 1, 4, "basic-ranged");
     place(e, "enemy-goblin-1", 10, 4);
-    place(e, "enemy-goblin-2", 11, 9);
-    // low wall squarely between them: both sides get half cover, shot still legal
-    e.map.walls = [halfWall("w", [6, 1], [6, 7])];
+    place(e, "enemy-goblin-2", 11, 6).state = "dead";
+    // a low wall that fully divides the lane at x=8 — the archer (speed 30) can't
+    // cross it, so every shot at the goblin is through half cover
+    e.map.walls = [halfWall("w", [8, 0], [8, 8])];
 
     const state = createEngineState(e);
     takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
 
-    expect(state.log.some((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-archer")).toBe(true);
     const rolled = state.log.find((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-archer");
+    expect(rolled, "archer should still fire").toBeDefined();
     expect(rolled!.data!.cover).toBe("half");
+    expect(state.log.some((entry) => entry.type === "AiDecision" && /clear shot/.test(String(entry.message)))).toBe(false);
+  });
+
+  it("steps around a wall to deny an in-range target its cover before firing", () => {
+    const e = encounter();
+    place(e, "pc-archer", 1, 4, "basic-ranged");
+    const goblin = place(e, "enemy-goblin-1", 10, 4);
+    goblin.currentHp = 30;
+    place(e, "enemy-goblin-2", 11, 6).state = "dead";
+    // a short wall segment that only blocks the straight line; a step north/south
+    // clears it while staying well inside shortbow range
+    e.map.walls = [halfWall("w", [6, 3], [6, 6])];
+
+    // cover on the goblin from the archer's start, but not from a step away
+    expect(coverBetween(e.map, { x: 1, y: 4 }, sizeFootprint("medium"), { x: 10, y: 4 }, 1).acBonus).toBe(2);
+
+    const state = createEngineState(e);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
+
+    const repositioned = state.log.find((entry) => entry.type === "AiDecision" && /clear shot/.test(String(entry.message)));
+    expect(repositioned, "archer should reposition for a clean shot").toBeDefined();
+    const rolled = state.log.find((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-archer");
+    expect(rolled, "archer should still fire").toBeDefined();
+    expect(rolled!.data!.cover).toBe("none");
   });
 });

@@ -474,6 +474,31 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     return undefined;
   }
 
+  // Ranged: if the in-range target is behind cover, step out to a cell that
+  // denies it that cover before firing (uses the move, keeps the action).
+  if (!movedThisTurn && actor.state === "active" && planIsRangedThroughCover(plan.action)) {
+    const shotPos = bestShotPositionAgainst(state.snapshot, actor, plan.target, plan.range, tactics);
+    if (shotPos) {
+      try {
+        moveCombatant(state, actor.id, shotPos.cell);
+        movedThisTurn = true;
+        state.log.push(event(state, "AiDecision", `${actor.displayName} repositioned for a clear shot at ${plan.target.displayName}`, {
+          combatantId: actor.id,
+          targetId: plan.target.id,
+          destination: shotPos.cell,
+          pathCost: shotPos.pathCost,
+          opportunityThreats: shotPos.opportunityThreats,
+          movementScore: shotPos.score
+        }));
+      } catch { /* map state moved on */ }
+    }
+  }
+
+  if (!isValidTarget(state.snapshot, actor, plan.target, plan.range) || plan.target.state !== "active") {
+    maybeSpendBonusAction(state, actor, tactics);
+    return undefined;
+  }
+
   state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${plan.action.name}`, {
     combatantId: actor.id,
     actionId: plan.action.id,
@@ -1002,6 +1027,69 @@ function movementPlanForCell(
       - (targetDistance > range ? 30 : 0)
       + coverScore;
   return { cell, pathCost: cost, targetDistance, score, opportunityThreats: threats, coverBonus };
+}
+
+/** Cover (AC value; total cover scored as 6) `target` would have from an attacker standing on `cell`. */
+function targetCoverFrom(snapshot: EncounterSnapshot, cell: Point, actorFootprint: number, target: CombatantState): number {
+  const result = coverBetween(
+    snapshot.map,
+    cell,
+    actorFootprint,
+    target.position,
+    sizeFootprint(getDefinition(snapshot, target).size)
+  );
+  return result.blocksTargeting ? 6 : result.acBonus;
+}
+
+/** A ranged action whose to-hit / save is degraded by the target's cover. */
+function planIsRangedThroughCover(action: OffensiveAction): boolean {
+  if (action.kind === "attack") return action.attackType === "ranged" || action.attackType === "spell";
+  if (action.kind === "save" || action.kind === "area-save") return action.saveAbility === "dex";
+  return false;
+}
+
+/**
+ * A cell the actor can reach with a *normal* move (keeping its action for the
+ * shot) that gives a cleaner line at `target` — less cover, or unblocks a shot
+ * blocked by total cover — while staying in range and line of effect. Returns
+ * `undefined` when the actor already has a clear shot or nothing reachable
+ * improves it enough to be worth the step.
+ */
+function bestShotPositionAgainst(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  target: CombatantState,
+  range: number,
+  tactics: TacticsSettings
+): MovementPlan | undefined {
+  if (!snapshot.rules.cover || !mapHasCoverWalls(snapshot)) return undefined;
+  const definition = getDefinition(snapshot, actor);
+  const footprint = sizeFootprint(definition.size);
+  const currentCover = targetCoverFrom(snapshot, actor.position, footprint, target);
+  if (currentCover <= 0) return undefined; // already a clean shot
+
+  const occupied = occupiedCellsFor(snapshot, actor.id);
+  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
+  const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
+    allowOccupiedTransit: true,
+    occupiedMovementMultiplier: 2
+  })
+    .map((reachable) => ({ reachable, gain: currentCover - targetCoverFrom(snapshot, reachable.cell, footprint, target) }))
+    .filter(({ reachable, gain }) => gain > 0
+      && gridDistance(reachable.cell, target.position, snapshot.map.grid) <= range
+      && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, reachable.cell, target.position)))
+    .map(({ reachable, gain }) => {
+      const plan = movementPlanForCell(snapshot, actor, target, range, tactics, reachable);
+      // Reward the cover stripped off the target on top of the usual band /
+      // self-cover / threat / cost terms.
+      return { ...plan, score: plan.score + gain * 3, gain };
+    })
+    // Don't wade into a melee threat to shave a little cover — only if it opens
+    // an otherwise-blocked shot or removes three-quarters cover.
+    .filter((plan) => plan.opportunityThreats === 0 || plan.gain >= 5);
+
+  candidates.sort((a, b) => b.score - a.score || a.pathCost - b.pathCost || a.cell.y - b.cell.y || a.cell.x - b.cell.x);
+  return candidates[0];
 }
 
 function distanceBandScore(distance: number, tactics: TacticsSettings): number {
