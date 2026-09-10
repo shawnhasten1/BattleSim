@@ -1,7 +1,7 @@
 {
   "kind": "battle-sim-combatant",
   "schemaVersion": 1,
-  "exportedAt": "2026-09-07T00:00:00.000Z",
+  "exportedAt": "2026-09-09T00:00:00.000Z",
   "definition": {
     "id": "def-barbarian-lvl6",
     "name": "Level 6 Barbarian",
@@ -13,8 +13,18 @@
     "maxHp": 65,
     "speed": 40,
     "proficiencyBonus": 3,
-    "resources": {
-      "rage": 4
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "barbarian",
+          "name": "Barbarian",
+          "level": 6,
+          "source": {
+            "provider": "homebrew"
+          }
+        }
+      ]
     },
     "abilities": {
       "str": 18,
@@ -37,13 +47,20 @@
         "id": "plus-one-greataxe",
         "name": "+1 Greataxe",
         "type": "martial-melee",
+        "ability": "str",
         "damage": "1d12",
         "damageType": "slashing",
         "properties": [
           "heavy",
           "two-handed"
         ],
-        "magicBonus": 1
+        "grip": "two-handed",
+        "reach": 5,
+        "magicBonus": 1,
+        "usableAs": [
+          "action",
+          "reaction"
+        ]
       }
     ],
     "features": [
@@ -51,22 +68,114 @@
         "id": "rage",
         "name": "Rage",
         "category": "class-feature",
-        "description": "While raging, the barbarian gains advantage on Strength checks and Strength saving throws, +2 damage with Strength-based melee weapon attacks, and resistance to bludgeoning, piercing, and slashing damage.",
-        "automationSupport": "full"
+        "description": "As a bonus action, the barbarian enters a rage for up to 1 minute. While raging, Strength-based melee attacks deal +2 damage, the barbarian has resistance to bludgeoning, piercing, and slashing damage, and has advantage on Strength saving throws.",
+        "automationSupport": "full",
+        "grantedActions": [
+          {
+            "kind": "activate-feature",
+            "id": "activate-rage",
+            "name": "Rage",
+            "actionType": "bonus",
+            "featureId": "rage",
+            "resourceCost": {
+              "resourceId": "rage",
+              "amount": 1
+            },
+            "condition": {
+              "id": "rage-active",
+              "name": "custom",
+              "durationRounds": 10,
+              "effects": [
+                {
+                  "kind": "damage-bonus",
+                  "attackTypes": [
+                    "melee"
+                  ],
+                  "abilities": [
+                    "str"
+                  ],
+                  "damage": [
+                    {
+                      "dice": "2",
+                      "damageType": "same-as-attack"
+                    }
+                  ]
+                },
+                {
+                  "kind": "damage-adjustment",
+                  "adjustment": {
+                    "type": "resistance",
+                    "damageType": "bludgeoning"
+                  }
+                },
+                {
+                  "kind": "damage-adjustment",
+                  "adjustment": {
+                    "type": "resistance",
+                    "damageType": "piercing"
+                  }
+                },
+                {
+                  "kind": "damage-adjustment",
+                  "adjustment": {
+                    "type": "resistance",
+                    "damageType": "slashing"
+                  }
+                },
+                {
+                  "kind": "save-advantage",
+                  "ability": "str"
+                }
+              ]
+            },
+            "automationSupport": "full"
+          }
+        ]
       },
       {
         "id": "unarmored-defense",
         "name": "Unarmored Defense",
         "category": "class-feature",
-        "description": "While not wearing armor, AC equals 10 + Dexterity modifier + Constitution modifier.",
+        "description": "While not wearing armor, the barbarian's AC equals 10 + Dexterity modifier + Constitution modifier.",
         "automationSupport": "manual-only"
       },
       {
         "id": "reckless-attack",
         "name": "Reckless Attack",
         "category": "class-feature",
-        "description": "The barbarian may gain advantage on Strength-based melee weapon attacks during their turn, but attacks against them have advantage until their next turn.",
-        "automationSupport": "partial"
+        "description": "The barbarian can choose to make Strength-based melee weapon attacks with advantage during their turn. Attack rolls against the barbarian then have advantage until the barbarian's next turn.",
+        "automationSupport": "partial",
+        "grantedActions": [
+          {
+            "kind": "activate-feature",
+            "id": "activate-reckless-attack",
+            "name": "Reckless Attack",
+            "actionType": "free",
+            "featureId": "reckless-attack",
+            "condition": {
+              "id": "reckless-attack-active",
+              "name": "custom",
+              "durationRounds": 1,
+              "effects": [
+                {
+                  "kind": "attack-advantage",
+                  "attackTypes": [
+                    "melee"
+                  ],
+                  "abilities": [
+                    "str"
+                  ],
+                  "condition": "always"
+                },
+                {
+                  "kind": "incoming-attack-modifier",
+                  "amount": 5
+                }
+              ]
+            },
+            "automationSupport": "partial"
+          }
+        ]
       },
       {
         "id": "danger-sense",
@@ -79,14 +188,14 @@
         "id": "extra-attack",
         "name": "Extra Attack",
         "category": "class-feature",
-        "description": "The barbarian can attack twice whenever they take the Attack action.",
+        "description": "The barbarian attacks twice whenever they take the Attack action.",
         "automationSupport": "full"
       },
       {
         "id": "fast-movement",
         "name": "Fast Movement",
         "category": "class-feature",
-        "description": "Movement speed increases by 10 feet while not wearing heavy armor.",
+        "description": "The barbarian's speed increases by 10 feet while not wearing heavy armor.",
         "automationSupport": "full"
       }
     ],
@@ -112,7 +221,8 @@
             "abilityModifier": "str",
             "bonusFormula": {
               "base": 1
-            }
+            },
+            "magical": true
           }
         ],
         "automationSupport": "full"
@@ -131,67 +241,9 @@
         "automationSupport": "full"
       }
     ],
-    "bonusActions": [
-      {
-        "kind": "activate-feature",
-        "id": "activate-rage",
-        "name": "Rage",
-        "actionType": "bonus",
-        "featureId": "rage",
-        "resourceCost": {
-          "resourceId": "rage",
-          "amount": 1
-        },
-        "condition": {
-          "id": "rage-active",
-          "name": "custom",
-          "durationRounds": 10,
-          "effects": [
-            {
-              "kind": "damage-bonus",
-              "attackTypes": [
-                "melee"
-              ],
-              "abilities": [
-                "str"
-              ],
-              "damage": [
-                {
-                  "dice": "2",
-                  "damageType": "same-as-attack"
-                }
-              ]
-            },
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "bludgeoning"
-              }
-            },
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "piercing"
-              }
-            },
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "slashing"
-              }
-            },
-            {
-              "kind": "save-advantage",
-              "ability": "str"
-            }
-          ]
-        },
-        "automationSupport": "full"
-      }
-    ]
+    "resources": {
+      "rage": 4
+    }
   },
   "combatant": {
     "displayName": "Barbarian",
@@ -203,7 +255,7 @@
     "currentHp": 65,
     "tempHp": 0,
     "state": "active",
-    "tacticsProfile": "basic-melee",
+    "tacticsProfile": "brute",
     "resources": {
       "rage": 4
     },

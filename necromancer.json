@@ -1,7 +1,7 @@
 {
   "kind": "battle-sim-combatant",
   "schemaVersion": 1,
-  "exportedAt": "2026-09-08T00:00:00.000Z",
+  "exportedAt": "2026-09-09T00:00:00.000Z",
   "definition": {
     "id": "def-necromancer",
     "name": "Necromancer",
@@ -30,455 +30,754 @@
         "proficiency": true
       }
     },
+    "resources": {
+      "slot-1": 4,
+      "slot-2": 3,
+      "slot-3": 3,
+      "slot-4": 3,
+      "slot-5": 2
+    },
     "weapons": [
       {
         "id": "quarterstaff",
         "name": "Quarterstaff",
-        "type": "simple-melee",
-        "damage": "1d8",
+        "category": "simple",
+        "attackType": "melee",
+        "ability": "str",
+        "damage": "1d6",
         "damageType": "bludgeoning",
+        "versatileDamage": [
+          {
+            "dice": "1d8",
+            "damageType": "bludgeoning"
+          }
+        ],
         "properties": [
           "versatile"
         ],
-        "magicBonus": 0
+        "grip": "versatile",
+        "reach": 5,
+        "magicBonus": 0,
+        "usableAs": [
+          "action",
+          "reaction"
+        ]
       }
     ],
-    "features": [
-      {
-        "id": "spellcasting",
-        "name": "Spellcasting",
-        "category": "class-feature",
-        "description": "The necromancer is a 10th-level spellcaster. Its spellcasting ability is Intelligence (spell save DC 15, +7 to hit with spell attacks). Prepared wizard spells: cantrips (at will) chill touch, mage hand, poison spray, ray of frost; 1st level (4 slots) false life, mage armor, ray of sickness*; 2nd level (3 slots) blindness/deafness*, ray of enfeeblement*; 3rd level (3 slots) animate dead, dispel magic, fear, vampiric touch*; 4th level (3 slots) blight*, ice storm, stoneskin; 5th level (2 slots) cloudkill, cone of cold.",
-        "automationSupport": "manual-only"
-      },
+    "traits": [
       {
         "id": "grim-harvest",
         "name": "Grim Harvest",
-        "category": "class-feature",
-        "description": "Once per turn when a living creature fails a saving throw against, or is harmed by, one of the necromancer's Necromancy spells of 1st level or higher, the necromancer regains hit points equal to three times the spell's level.",
-        "automationSupport": "manual-only"
+        "category": "trait",
+        "description": "Once per turn when a living creature fails a saving throw against or is harmed by one of the necromancer's Necromancy spells of 1st level or higher, the necromancer regains hit points equal to three times the spell's level.",
+        "automationSupport": "partial"
       },
       {
         "id": "undead-thralls",
         "name": "Undead Thralls",
-        "category": "class-feature",
-        "description": "When the necromancer casts animate dead, it can target one additional corpse or pile of bones, creating another zombie or skeleton. Undead it creates have +9 hit points and a +3 bonus to their weapon damage rolls.",
-        "automationSupport": "manual-only"
-      },
-      {
-        "id": "necromancy-spells",
-        "name": "Necromancy Spells",
-        "category": "class-feature",
-        "description": "Spells marked with an asterisk (ray of sickness, ray of enfeeblement, blindness/deafness, vampiric touch, blight) are Necromancy spells of 1st level or higher that require a saving throw or attack roll and therefore trigger Grim Harvest.",
-        "automationSupport": "manual-only"
+        "category": "trait",
+        "description": "When the necromancer casts Animate Dead, it can target one additional corpse or pile of bones. Undead created by the necromancer gain 9 additional hit points and +3 damage with weapon attacks.",
+        "automationSupport": "partial"
       },
       {
         "id": "frightened-immunity",
-        "name": "Condition Immunity: Frightened",
+        "name": "Frightened Immunity",
         "category": "trait",
-        "description": "The necromancer can't be frightened.",
+        "description": "The necromancer is immune to the frightened condition.",
         "automationSupport": "manual-only"
+      },
+      {
+        "id": "spellcasting",
+        "name": "Spellcasting",
+        "category": "trait",
+        "description": "The necromancer is a 10th-level spellcaster using Intelligence. Spell save DC 15 and +7 to hit with spell attacks.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "lair-stitching-hooks",
+        "name": "Lair Action: Stitching Hooks",
+        "category": "trait",
+        "description": "On initiative count 20, one creature within 60 feet must make a DC 15 Dexterity save or take 2d6 piercing damage and become restrained until initiative count 20 of the next round.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "lair-surgical-vapors",
+        "name": "Lair Action: Surgical Vapors",
+        "category": "trait",
+        "description": "On initiative count 20, a 15-foot cube within 60 feet fills with vapors. Creatures entering or starting their turn there must make a DC 15 Constitution save or have their speed halved until the start of their next turn.",
+        "automationSupport": "manual-only"
+      },
+      {
+        "id": "lair-slab-restraints",
+        "name": "Lair Action: Slab Restraints",
+        "category": "trait",
+        "description": "On initiative count 20, a creature near an operating table must make a DC 15 Dexterity save or become grappled and restrained. While restrained it takes 1d10 necrotic damage at the start of each turn.",
+        "automationSupport": "manual-only"
+      }
+    ],
+    "spells": [
+      {
+        "id": "chill-touch",
+        "name": "Chill Touch",
+        "level": 0,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 120,
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "chill-touch-action",
+          "name": "Chill Touch",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 120,
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "necrotic",
+              "magical": true
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "mage-hand",
+        "name": "Mage Hand",
+        "level": 0,
+        "school": "conjuration",
+        "castingTime": "action",
+        "range": 30,
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "mage-hand-action",
+          "name": "Mage Hand",
+          "actionType": "action",
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "poison-spray",
+        "name": "Poison Spray",
+        "level": 0,
+        "school": "conjuration",
+        "castingTime": "action",
+        "range": 10,
+        "automationSupport": "full",
+        "action": {
+          "kind": "save",
+          "id": "poison-spray-action",
+          "name": "Poison Spray",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dc": 15,
+          "range": 10,
+          "damage": [
+            {
+              "dice": "2d12",
+              "damageType": "poison",
+              "magical": true
+            }
+          ],
+          "onSuccess": "none",
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "ray-of-frost",
+        "name": "Ray of Frost",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 60,
+        "automationSupport": "partial",
+        "action": {
+          "kind": "attack",
+          "id": "ray-of-frost-action",
+          "name": "Ray of Frost",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "cold",
+              "magical": true
+            }
+          ],
+          "riders": [
+            {
+              "kind": "note",
+              "when": "on-hit",
+              "text": "Target's speed is reduced by 10 feet until the start of the necromancer's next turn."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "false-life",
+        "name": "False Life",
+        "level": 1,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "false-life-action",
+          "name": "False Life",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
       },
       {
         "id": "mage-armor",
         "name": "Mage Armor",
-        "category": "class-feature",
-        "description": "The necromancer increases its Armor Class from 12 to 15 for 8 hours.",
-        "automationSupport": "full"
+        "level": 1,
+        "school": "abjuration",
+        "castingTime": "action",
+        "range": "touch",
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "activate-feature",
+          "id": "mage-armor-action",
+          "name": "Mage Armor",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "targeting": {
+            "target": "self"
+          },
+          "condition": {
+            "id": "mage-armor-active",
+            "name": "custom",
+            "durationRounds": 4800,
+            "modifiers": {
+              "armorClass": 3
+            }
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "ray-of-sickness",
+        "name": "Ray of Sickness",
+        "level": 1,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-1",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "ray-of-sickness-action",
+          "name": "Ray of Sickness",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 60,
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "poison",
+              "magical": true
+            }
+          ],
+          "resourceCost": {
+            "resourceId": "slot-1",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-hit",
+              "condition": "poisoned",
+              "save": {
+                "ability": "con",
+                "dc": 15,
+                "onSuccess": "negates"
+              },
+              "duration": {
+                "kind": "until-start-of-next-turn"
+              }
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "blindness-deafness",
+        "name": "Blindness/Deafness",
+        "level": 2,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 30,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "save",
+          "id": "blindness-deafness-action",
+          "name": "Blindness/Deafness",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dc": 15,
+          "range": 30,
+          "onSuccess": "negates",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "blinded",
+              "duration": {
+                "kind": "save-ends",
+                "saveAt": "turn-end"
+              }
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "ray-of-enfeeblement",
+        "name": "Ray of Enfeeblement",
+        "level": 2,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-2",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "ray-of-enfeeblement-action",
+          "name": "Ray of Enfeeblement",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-2",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "animate-dead",
+        "name": "Animate Dead",
+        "level": 3,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 10,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "animate-dead-action",
+          "name": "Animate Dead",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "dispel-magic",
+        "name": "Dispel Magic",
+        "level": 3,
+        "school": "abjuration",
+        "castingTime": "action",
+        "range": 120,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "dispel-magic-action",
+          "name": "Dispel Magic",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "fear",
+        "name": "Fear",
+        "level": 3,
+        "school": "illusion",
+        "castingTime": "action",
+        "range": 30,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "area-save",
+          "id": "fear-action",
+          "name": "Fear",
+          "actionType": "action",
+          "saveAbility": "wis",
+          "dc": 15,
+          "range": 30,
+          "area": {
+            "type": "cone",
+            "size": 30
+          },
+          "targeting": {
+            "origin": "self",
+            "aimedFromSelf": true,
+            "range": 0
+          },
+          "onSuccess": "negates",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "condition",
+              "when": "on-save-fail",
+              "condition": "frightened",
+              "duration": {
+                "kind": "concentration"
+              }
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "vampiric-touch",
+        "name": "Vampiric Touch",
+        "level": 3,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "attack",
+          "id": "vampiric-touch-action",
+          "name": "Vampiric Touch",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "int",
+          "attackBonusFormula": {
+            "ability": "int",
+            "proficiency": true
+          },
+          "range": 5,
+          "reach": 5,
+          "damage": [
+            {
+              "dice": "3d6",
+              "damageType": "necrotic",
+              "magical": true
+            }
+          ],
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "note",
+              "when": "on-hit",
+              "text": "Necromancer regains hit points equal to half the necrotic damage dealt."
+            }
+          ],
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "blight",
+        "name": "Blight",
+        "level": 4,
+        "school": "necromancy",
+        "castingTime": "action",
+        "range": 30,
+        "resourceCost": {
+          "resourceId": "slot-4",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "save",
+          "id": "blight-action",
+          "name": "Blight",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dc": 15,
+          "range": 30,
+          "damage": [
+            {
+              "dice": "8d8",
+              "damageType": "necrotic",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "resourceCost": {
+            "resourceId": "slot-4",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "ice-storm",
+        "name": "Ice Storm",
+        "level": 4,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 300,
+        "resourceCost": {
+          "resourceId": "slot-4",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "area-save",
+          "id": "ice-storm-action",
+          "name": "Ice Storm",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dc": 15,
+          "range": 300,
+          "area": {
+            "type": "circle",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 300
+          },
+          "damage": [
+            {
+              "dice": "2d8",
+              "damageType": "bludgeoning",
+              "magical": true
+            },
+            {
+              "dice": "4d6",
+              "damageType": "cold",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "all",
+          "resourceCost": {
+            "resourceId": "slot-4",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "note",
+              "text": "The affected ground becomes difficult terrain until the end of the necromancer's next turn."
+            }
+          ],
+          "automationSupport": "partial"
+        }
       },
       {
         "id": "stoneskin",
         "name": "Stoneskin",
-        "category": "class-feature",
-        "description": "For up to 1 hour (concentration), the necromancer has resistance to nonmagical bludgeoning, piercing, and slashing damage.",
-        "automationSupport": "full"
-      },
-      {
-        "id": "lair-actions",
-        "name": "Lair Actions",
-        "category": "trait",
-        "description": "On initiative count 20 (losing ties) the necromancer takes one lair action, and can't use the same one two rounds in a row. Stitching Hooks: one creature it can see within 60 ft. makes a DC 15 Dexterity save or takes 7 (2d6) piercing damage and is restrained until initiative 20 next round (escape with an action, DC 15 Str or Dex check). Surgical Vapors: a 15-ft. cube within 60 ft. becomes lightly obscured until initiative 20 next round; a creature that enters or starts its turn there makes a DC 15 Constitution save or has its speed halved until the start of its next turn. Slab Restraints: one creature within 5 ft. of an operating table makes a DC 15 Dexterity save or is grappled and restrained, taking 5 (1d10) necrotic damage at the start of each of its turns (escape with an action, DC 15 Str check).",
-        "automationSupport": "manual-only"
-      }
-    ],
-    "actions": [
-      {
-        "kind": "attack",
-        "id": "quarterstaff-attack",
-        "name": "Quarterstaff",
-        "actionType": "action",
-        "attackType": "melee",
-        "ability": "str",
-        "attackBonusFormula": {
-          "ability": "str",
-          "proficiency": true
-        },
-        "range": 5,
-        "reach": 5,
-        "damage": [
-          {
-            "dice": "1d8",
-            "damageType": "bludgeoning",
-            "abilityModifier": "str"
-          }
-        ],
-        "automationSupport": "full"
-      },
-      {
-        "kind": "attack",
-        "id": "chill-touch",
-        "name": "Chill Touch",
-        "actionType": "action",
-        "attackType": "spell",
-        "ability": "int",
-        "attackBonusFormula": {
-          "ability": "int",
-          "proficiency": true
-        },
-        "range": 120,
-        "damage": [
-          {
-            "dice": "2d8",
-            "damageType": "necrotic"
-          }
-        ],
-        "automationSupport": "full"
-      },
-      {
-        "kind": "attack",
-        "id": "ray-of-frost",
-        "name": "Ray of Frost",
-        "actionType": "action",
-        "attackType": "spell",
-        "ability": "int",
-        "attackBonusFormula": {
-          "ability": "int",
-          "proficiency": true
-        },
-        "range": 60,
-        "damage": [
-          {
-            "dice": "2d8",
-            "damageType": "cold"
-          }
-        ],
-        "automationSupport": "full"
-      },
-      {
-        "kind": "save",
-        "id": "poison-spray",
-        "name": "Poison Spray",
-        "actionType": "action",
-        "saveAbility": "con",
-        "dc": 15,
-        "range": 10,
-        "damage": [
-          {
-            "dice": "2d12",
-            "damageType": "poison"
-          }
-        ],
-        "halfDamageOnSuccess": false,
-        "automationSupport": "full"
-      },
-      {
-        "kind": "attack",
-        "id": "ray-of-sickness",
-        "name": "Ray of Sickness",
-        "actionType": "action",
-        "attackType": "spell",
-        "ability": "int",
-        "attackBonusFormula": {
-          "ability": "int",
-          "proficiency": true
-        },
-        "range": 60,
-        "damage": [
-          {
-            "dice": "2d8",
-            "damageType": "poison"
-          }
-        ],
-        "resourceCost": {
-          "resourceId": "slot-1",
-          "amount": 1
-        },
-        "automationSupport": "partial"
-      },
-      {
-        "kind": "attack",
-        "id": "vampiric-touch",
-        "name": "Vampiric Touch",
-        "actionType": "action",
-        "attackType": "spell",
-        "ability": "int",
-        "attackBonusFormula": {
-          "ability": "int",
-          "proficiency": true
-        },
-        "range": 5,
-        "reach": 5,
-        "damage": [
-          {
-            "dice": "3d6",
-            "damageType": "necrotic"
-          }
-        ],
-        "resourceCost": {
-          "resourceId": "slot-3",
-          "amount": 1
-        },
-        "automationSupport": "partial"
-      },
-      {
-        "kind": "save",
-        "id": "blight",
-        "name": "Blight",
-        "actionType": "action",
-        "saveAbility": "con",
-        "dc": 15,
-        "range": 30,
-        "damage": [
-          {
-            "dice": "8d8",
-            "damageType": "necrotic"
-          }
-        ],
-        "halfDamageOnSuccess": true,
+        "level": 4,
+        "school": "abjuration",
+        "castingTime": "action",
+        "range": "touch",
         "resourceCost": {
           "resourceId": "slot-4",
           "amount": 1
         },
-        "automationSupport": "full"
-      },
-      {
-        "kind": "area-save",
-        "id": "ice-storm",
-        "name": "Ice Storm",
-        "actionType": "action",
-        "saveAbility": "dex",
-        "dc": 15,
-        "range": 300,
-        "area": {
-          "type": "circle",
-          "size": 20
-        },
-        "damage": [
-          {
-            "dice": "2d8",
-            "damageType": "bludgeoning"
+        "automationSupport": "full",
+        "action": {
+          "kind": "activate-feature",
+          "id": "stoneskin-action",
+          "name": "Stoneskin",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-4",
+            "amount": 1
           },
-          {
-            "dice": "4d6",
-            "damageType": "cold"
-          }
-        ],
-        "halfDamageOnSuccess": true,
-        "affects": "all",
-        "resourceCost": {
-          "resourceId": "slot-4",
-          "amount": 1
-        },
-        "automationSupport": "full"
+          "targeting": {
+            "target": "self"
+          },
+          "condition": {
+            "id": "stoneskin-active",
+            "name": "custom",
+            "durationRounds": 100,
+            "modifiers": {
+              "damageAdjustments": [
+                {
+                  "type": "resistance",
+                  "damageType": "bludgeoning",
+                  "nonMagicalOnly": true
+                },
+                {
+                  "type": "resistance",
+                  "damageType": "piercing",
+                  "nonMagicalOnly": true
+                },
+                {
+                  "type": "resistance",
+                  "damageType": "slashing",
+                  "nonMagicalOnly": true
+                }
+              ]
+            }
+          },
+          "automationSupport": "full"
+        }
       },
       {
-        "kind": "area-save",
         "id": "cloudkill",
         "name": "Cloudkill",
-        "actionType": "action",
-        "saveAbility": "con",
-        "dc": 15,
+        "level": 5,
+        "school": "conjuration",
+        "castingTime": "action",
         "range": 120,
-        "area": {
-          "type": "circle",
-          "size": 20
-        },
-        "damage": [
-          {
-            "dice": "5d8",
-            "damageType": "poison"
-          }
-        ],
-        "halfDamageOnSuccess": true,
-        "affects": "all",
         "resourceCost": {
           "resourceId": "slot-5",
           "amount": 1
         },
-        "automationSupport": "full"
+        "automationSupport": "partial",
+        "action": {
+          "kind": "area-save",
+          "id": "cloudkill-action",
+          "name": "Cloudkill",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dc": 15,
+          "range": 120,
+          "area": {
+            "type": "circle",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 120
+          },
+          "damage": [
+            {
+              "dice": "5d8",
+              "damageType": "poison",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "all",
+          "resourceCost": {
+            "resourceId": "slot-5",
+            "amount": 1
+          },
+          "riders": [
+            {
+              "kind": "note",
+              "text": "Cloudkill persists while concentrating and moves away from the caster each round."
+            }
+          ],
+          "automationSupport": "partial"
+        }
       },
       {
-        "kind": "area-save",
         "id": "cone-of-cold",
         "name": "Cone of Cold",
-        "actionType": "action",
-        "saveAbility": "con",
-        "dc": 15,
+        "level": 5,
+        "school": "evocation",
+        "castingTime": "action",
         "range": 60,
-        "area": {
-          "type": "cone",
-          "size": 60
-        },
-        "damage": [
-          {
-            "dice": "8d8",
-            "damageType": "cold"
-          }
-        ],
-        "halfDamageOnSuccess": true,
-        "affects": "all",
         "resourceCost": {
           "resourceId": "slot-5",
           "amount": 1
         },
-        "automationSupport": "full"
-      },
-      {
-        "kind": "activate-feature",
-        "id": "cast-mage-armor",
-        "name": "Mage Armor",
-        "actionType": "action",
-        "featureId": "mage-armor",
-        "resourceCost": {
-          "resourceId": "slot-1",
-          "amount": 1
-        },
-        "condition": {
-          "id": "mage-armor-active",
-          "name": "custom",
-          "durationRounds": 4800,
-          "effects": [
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "cone-of-cold-action",
+          "name": "Cone of Cold",
+          "actionType": "action",
+          "saveAbility": "con",
+          "dc": 15,
+          "range": 60,
+          "area": {
+            "type": "cone",
+            "size": 60
+          },
+          "targeting": {
+            "origin": "self",
+            "aimedFromSelf": true,
+            "range": 0
+          },
+          "damage": [
             {
-              "kind": "armor-class-bonus",
-              "bonus": {
-                "base": 3
-              }
+              "dice": "8d8",
+              "damageType": "cold",
+              "magical": true
             }
-          ]
-        },
-        "automationSupport": "full"
-      },
-      {
-        "kind": "activate-feature",
-        "id": "cast-stoneskin",
-        "name": "Stoneskin",
-        "actionType": "action",
-        "featureId": "stoneskin",
-        "resourceCost": {
-          "resourceId": "slot-4",
-          "amount": 1
-        },
-        "condition": {
-          "id": "stoneskin-active",
-          "name": "custom",
-          "durationRounds": 600,
-          "effects": [
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "bludgeoning"
-              }
-            },
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "piercing"
-              }
-            },
-            {
-              "kind": "damage-adjustment",
-              "adjustment": {
-                "type": "resistance",
-                "damageType": "slashing"
-              }
-            }
-          ]
-        },
-        "automationSupport": "partial"
-      },
-      {
-        "kind": "unsupported",
-        "id": "animate-dead",
-        "name": "Animate Dead",
-        "actionType": "action",
-        "description": "Raises a corpse or pile of bones as a skeleton or zombie under the necromancer's control. Undead Thralls lets it target one extra body, and its undead gain +9 HP and +3 weapon damage.",
-        "resourceCost": {
-          "resourceId": "slot-3",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
-      },
-      {
-        "kind": "unsupported",
-        "id": "blindness-deafness",
-        "name": "Blindness/Deafness",
-        "actionType": "action",
-        "description": "One creature within 30 ft. must succeed on a DC 15 Constitution saving throw or be blinded (or deafened) for 1 minute, repeating the save at the end of each of its turns.",
-        "resourceCost": {
-          "resourceId": "slot-2",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
-      },
-      {
-        "kind": "unsupported",
-        "id": "ray-of-enfeeblement",
-        "name": "Ray of Enfeeblement",
-        "actionType": "action",
-        "description": "Ranged spell attack against a creature within 60 ft. On a hit, the target deals only half damage with Strength-based weapon attacks until it succeeds on a DC 15 Constitution save at the end of its turns (concentration, up to 1 minute).",
-        "resourceCost": {
-          "resourceId": "slot-2",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
-      },
-      {
-        "kind": "unsupported",
-        "id": "fear",
-        "name": "Fear",
-        "actionType": "action",
-        "description": "Each creature in a 30-ft. cone must succeed on a DC 15 Wisdom saving throw or drop what it is holding and become frightened for 1 minute (concentration).",
-        "resourceCost": {
-          "resourceId": "slot-3",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
-      },
-      {
-        "kind": "unsupported",
-        "id": "dispel-magic",
-        "name": "Dispel Magic",
-        "actionType": "action",
-        "description": "Ends spells of 3rd level or lower on one target automatically; higher-level spells require an ability check using the spellcasting ability (DC 10 + the spell's level).",
-        "resourceCost": {
-          "resourceId": "slot-3",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
-      },
-      {
-        "kind": "unsupported",
-        "id": "mage-hand",
-        "name": "Mage Hand",
-        "actionType": "action",
-        "description": "Creates a spectral hand that can manipulate objects, open doors, or carry up to 10 pounds within 30 ft.",
-        "automationSupport": "unsupported"
-      }
-    ],
-    "bonusActions": [
-      {
-        "kind": "unsupported",
-        "id": "false-life",
-        "name": "False Life",
-        "actionType": "bonus",
-        "description": "The necromancer gains 1d4 + 4 temporary hit points for 1 hour.",
-        "resourceCost": {
-          "resourceId": "slot-1",
-          "amount": 1
-        },
-        "automationSupport": "unsupported"
+          ],
+          "onSuccess": "half",
+          "affects": "hostile",
+          "resourceCost": {
+            "resourceId": "slot-5",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
       }
     ]
   },

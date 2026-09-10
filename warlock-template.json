@@ -1,0 +1,384 @@
+{
+  "kind": "battle-sim-combatant",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-09T00:00:00.000Z",
+  "definition": {
+    "id": "def-warlock-pact-blade-lvl6",
+    "name": "Level 6 Pact of the Blade Warlock",
+    "source": {
+      "provider": "homebrew"
+    },
+    "size": "medium",
+    "armorClass": 14,
+    "maxHp": 51,
+    "speed": 30,
+    "proficiencyBonus": 3,
+    "character": {
+      "level": 6,
+      "classes": [
+        {
+          "id": "warlock",
+          "name": "Warlock",
+          "level": 6,
+          "subclass": {
+            "id": "the-fiend",
+            "name": "The Fiend"
+          },
+          "source": {
+            "provider": "homebrew"
+          }
+        }
+      ]
+    },
+    "abilities": {
+      "str": 10,
+      "dex": 14,
+      "con": 16,
+      "int": 10,
+      "wis": 10,
+      "cha": 18
+    },
+    "saves": {
+      "wis": {
+        "proficiency": true
+      },
+      "cha": {
+        "proficiency": true
+      }
+    },
+    "resources": {
+      "slot-3": 2,
+      "dark-ones-own-luck": 1
+    },
+    "weapons": [
+      {
+        "id": "plus-two-longsword",
+        "name": "+2 Longsword",
+        "category": "martial",
+        "attackType": "melee",
+        "ability": "cha",
+        "damage": "1d8",
+        "damageType": "slashing",
+        "versatileDamage": [
+          {
+            "dice": "1d10",
+            "damageType": "slashing"
+          }
+        ],
+        "properties": [
+          "versatile"
+        ],
+        "grip": "two-handed",
+        "reach": 5,
+        "magicBonus": 2,
+        "usableAs": [
+          "action",
+          "reaction"
+        ]
+      }
+    ],
+    "features": [
+      {
+        "id": "pact-magic",
+        "name": "Pact Magic",
+        "category": "class-feature",
+        "description": "The warlock has two 3rd-level Pact Magic spell slots. Charisma is the warlock's spellcasting ability, with spell save DC 15 and +7 to hit with spell attacks.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "pact-of-the-blade",
+        "name": "Pact of the Blade",
+        "category": "class-feature",
+        "description": "The warlock's pact weapon is a +2 longsword. The warlock uses Charisma instead of Strength or Dexterity for the attack and damage rolls of the pact weapon.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "thirsting-blade",
+        "name": "Thirsting Blade",
+        "category": "class-feature",
+        "description": "The warlock can attack twice with their pact weapon whenever they take the Attack action.",
+        "automationSupport": "full"
+      },
+      {
+        "id": "agonizing-blast",
+        "name": "Agonizing Blast",
+        "category": "class-feature",
+        "description": "The warlock adds their Charisma modifier to the damage of each Eldritch Blast beam.",
+        "automationSupport": "full",
+        "effects": [
+          {
+            "kind": "damage-bonus",
+            "actionIds": [
+              "eldritch-blast-action"
+            ],
+            "damage": [
+              {
+                "dice": "4",
+                "damageType": "same-as-attack"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "dark-ones-blessing",
+        "name": "Dark One's Blessing",
+        "category": "class-feature",
+        "description": "When the warlock reduces a hostile creature to 0 hit points, they gain temporary hit points equal to their Charisma modifier plus their warlock level.",
+        "automationSupport": "partial"
+      },
+      {
+        "id": "dark-ones-own-luck",
+        "name": "Dark One's Own Luck",
+        "category": "class-feature",
+        "description": "Once per short or long rest, the warlock can add 1d10 to an ability check or saving throw.",
+        "automationSupport": "partial"
+      }
+    ],
+    "actions": [
+      {
+        "kind": "attack",
+        "id": "pact-longsword-attack",
+        "name": "+2 Longsword",
+        "actionType": "action",
+        "attackType": "melee",
+        "ability": "cha",
+        "attackBonusFormula": {
+          "base": 2,
+          "ability": "cha",
+          "proficiency": true
+        },
+        "range": 5,
+        "reach": 5,
+        "damage": [
+          {
+            "dice": "1d10",
+            "damageType": "slashing",
+            "abilityModifier": "cha",
+            "bonusFormula": {
+              "base": 2
+            },
+            "magical": true
+          }
+        ],
+        "automationSupport": "full"
+      },
+      {
+        "kind": "multiattack",
+        "id": "thirsting-blade-attack",
+        "name": "Thirsting Blade",
+        "actionType": "action",
+        "attacks": [
+          {
+            "actionId": "pact-longsword-attack",
+            "count": 2
+          }
+        ],
+        "automationSupport": "full"
+      }
+    ],
+    "spells": [
+      {
+        "id": "eldritch-blast",
+        "name": "Eldritch Blast",
+        "level": 0,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 120,
+        "automationSupport": "full",
+        "action": {
+          "kind": "attack",
+          "id": "eldritch-blast-action",
+          "name": "Eldritch Blast",
+          "actionType": "action",
+          "attackType": "spell",
+          "ability": "cha",
+          "attackBonusFormula": {
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 120,
+          "attackDelivery": "beams",
+          "beamCount": 2,
+          "damage": [
+            {
+              "dice": "1d10",
+              "damageType": "force",
+              "magical": true
+            }
+          ],
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "fireball",
+        "name": "Fireball",
+        "level": 3,
+        "school": "evocation",
+        "castingTime": "action",
+        "range": 150,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "area-save",
+          "id": "fireball-action",
+          "name": "Fireball",
+          "actionType": "action",
+          "saveAbility": "dex",
+          "dcFormula": {
+            "base": 8,
+            "ability": "cha",
+            "proficiency": true
+          },
+          "range": 150,
+          "area": {
+            "type": "circle",
+            "size": 20
+          },
+          "targeting": {
+            "origin": "point",
+            "range": 150
+          },
+          "damage": [
+            {
+              "dice": "8d6",
+              "damageType": "fire",
+              "magical": true
+            }
+          ],
+          "onSuccess": "half",
+          "affects": "all",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      },
+      {
+        "id": "hex",
+        "name": "Hex",
+        "level": 1,
+        "school": "enchantment",
+        "castingTime": "bonus",
+        "range": 90,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "unsupported",
+          "id": "hex-action",
+          "name": "Hex",
+          "actionType": "bonus",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "armor-of-agathys",
+        "name": "Armor of Agathys",
+        "level": 1,
+        "school": "abjuration",
+        "castingTime": "action",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "partial",
+        "action": {
+          "kind": "unsupported",
+          "id": "armor-of-agathys-action",
+          "name": "Armor of Agathys",
+          "actionType": "action",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "partial"
+        }
+      },
+      {
+        "id": "misty-step",
+        "name": "Misty Step",
+        "level": 2,
+        "school": "conjuration",
+        "castingTime": "bonus",
+        "range": "self",
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "unsupported",
+        "action": {
+          "kind": "unsupported",
+          "id": "misty-step-action",
+          "name": "Misty Step",
+          "actionType": "bonus",
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "unsupported"
+        }
+      },
+      {
+        "id": "counterspell",
+        "name": "Counterspell",
+        "level": 3,
+        "school": "abjuration",
+        "castingTime": "reaction",
+        "range": 60,
+        "resourceCost": {
+          "resourceId": "slot-3",
+          "amount": 1
+        },
+        "automationSupport": "full",
+        "action": {
+          "kind": "activate-feature",
+          "id": "counterspell-action",
+          "name": "Counterspell",
+          "actionType": "reaction",
+          "reaction": {
+            "trigger": {
+              "kind": "enemy-casts-spell",
+              "withinFt": 60
+            },
+            "target": "trigger-source",
+            "priority": "worthwhile"
+          },
+          "resourceCost": {
+            "resourceId": "slot-3",
+            "amount": 1
+          },
+          "automationSupport": "full"
+        }
+      }
+    ]
+  },
+  "combatant": {
+    "displayName": "Blade Warlock",
+    "faction": "party",
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "currentHp": 51,
+    "tempHp": 0,
+    "state": "active",
+    "tacticsProfile": "skirmisher",
+    "resources": {
+      "slot-3": 2,
+      "dark-ones-own-luck": 1
+    },
+    "conditions": []
+  }
+}
