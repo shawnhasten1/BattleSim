@@ -6,7 +6,16 @@ import { abilityModifier, type Ability, type CombatantState, type CreatureDefini
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import styles from "../sheet.module.css";
+
+const RESOURCES_HELP = (
+  <p>
+    <strong>Current</strong> is what's left this encounter — it's what actions spend. <strong>Default</strong> is
+    what it resets to at the start of a fresh encounter. Give a resource the exact id an action's "resource cost"
+    refers to (e.g. <code>slot-3</code> for a 3rd-level spell slot) or that action can't spend it.
+  </p>
+);
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 
@@ -107,7 +116,10 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
       </section>
 
       <section className={styles.section}>
-        <h3>Resources</h3>
+        <h3 className={styles.fieldLabel}>
+          Resources
+          <InfoTooltip label="About resources" content={RESOURCES_HELP} />
+        </h3>
         <div className={styles.stack}>
           {resourceIds.map((id) => (
             <div key={id} className={styles.grid}>

@@ -1,9 +1,48 @@
 "use client";
 
 import type { Ability, ActionRider, ConditionName, RiderDuration, RiderGate } from "@/engine";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { DiceInput } from "./BuilderForm";
 import { parseDiceValue, diceValueToString } from "./schemas";
 import styles from "./builders.module.css";
+
+const TRIGGER_HELP = (
+  <dl>
+    <div>
+      <dt>On weapon attacks</dt>
+      <dd>"On a hit" fires on any hit; "On a critical hit" only on a nat-20-style crit; "Always" fires even on a miss.</dd>
+    </div>
+    <div>
+      <dt>On saves / area effects</dt>
+      <dd>"On a failed save" is the usual case; "On a successful save" is rare (e.g. half the effect still lands); "Always" ignores the save entirely.</dd>
+    </div>
+  </dl>
+);
+
+const DURATION_HELP = (
+  <dl>
+    <div>
+      <dt>A number of rounds</dt>
+      <dd>Counts down and expires after that many rounds.</dd>
+    </div>
+    <div>
+      <dt>Until the target saves</dt>
+      <dd>The target gets to re-roll its save (usually at the end of its turn) to end the effect early.</dd>
+    </div>
+    <div>
+      <dt>While concentrating</dt>
+      <dd>Ends immediately if whoever applied it loses concentration.</dd>
+    </div>
+    <div>
+      <dt>Until its next turn</dt>
+      <dd>Ends automatically at the start of the target's very next turn — no save needed.</dd>
+    </div>
+    <div>
+      <dt>Until removed</dt>
+      <dd>Permanent — lasts until something else clears it.</dd>
+    </div>
+  </dl>
+);
 
 const CONDITIONS: ConditionName[] = [
   "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated",
@@ -132,7 +171,10 @@ function GateSelect({
     : [["on-save-fail", "On a failed save"], ["on-save-success", "On a successful save"], ["always", "Always"]];
   return (
     <label className={styles.fieldInlineLabel}>
-      Triggers
+      <span className={styles.fieldLabelRow}>
+        Triggers
+        <InfoTooltip label="About trigger timing" content={TRIGGER_HELP} />
+      </span>
       <select value={value} onChange={(e) => onChange(e.target.value as RiderGate)}>
         {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>
@@ -202,7 +244,10 @@ function ConditionRiderFields({
 
       <div className={styles.riderRow}>
         <label className={styles.fieldInlineLabel}>
-          Duration
+          <span className={styles.fieldLabelRow}>
+            Duration
+            <InfoTooltip label="About effect durations" content={DURATION_HELP} />
+          </span>
           <select
             value={dk}
             onChange={(e) => {

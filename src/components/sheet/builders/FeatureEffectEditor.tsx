@@ -1,6 +1,7 @@
 "use client";
 
 import type { Ability, DamageType, FeatureCondition, FeatureEffect, NumericFormula } from "@/engine";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import styles from "./builders.module.css";
 
 const DAMAGE_TYPES: DamageType[] = [
@@ -43,6 +44,51 @@ const KIND_LABELS: Array<[EditorKind, string]> = [
   ["resource-regain", "Regain a resource"],
   ["avoids-opportunity-attacks", "Never provokes opportunity attacks"]
 ];
+
+const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
+  "damage-bonus": "Extra (or reduced) damage added to a qualifying hit.",
+  "damage-adjustment": "Resistance, immunity, or vulnerability to a damage type.",
+  "attack-bonus": "A flat modifier to this creature's attack rolls.",
+  "attack-advantage": "Advantage or disadvantage on this creature's own attack rolls.",
+  "incoming-attack-modifier": "Advantage or disadvantage on attack rolls made against this creature.",
+  "armor-class-bonus": "A flat modifier to this creature's AC.",
+  "save-bonus": "A flat modifier to this creature's saving throws.",
+  "save-advantage": "Advantage on this creature's saving throws.",
+  "extra-action": "Regain a spent action, bonus action, or reaction so it can be used again this turn.",
+  "resource-regain": "Refund some amount of a limited-use resource (a spell slot, a charge, etc.).",
+  "avoids-opportunity-attacks": "This creature never provokes opportunity attacks by moving."
+};
+
+const KIND_HELP = (
+  <dl>
+    {KIND_LABELS.map(([value, label]) => (
+      <div key={value}>
+        <dt>{label}</dt>
+        <dd>{KIND_DESCRIPTIONS[value]}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
+const GATE_DESCRIPTIONS: Record<FeatureCondition, string> = {
+  always: "Applies with no condition.",
+  "self-bloodied": "Only while this creature is at half HP or less.",
+  "target-bloodied": "Only while the target of the action is at half HP or less.",
+  "attack-has-advantage": "Only when the attack roll already has advantage.",
+  "attack-has-no-disadvantage": "Only when the attack roll doesn't have disadvantage.",
+  "ally-adjacent-to-target": "Only when one of this creature's allies is within 5 ft of the target (e.g. Pack Tactics)."
+};
+
+const GATE_HELP = (
+  <dl>
+    {GATE_OPTIONS.map(([value, label]) => (
+      <div key={value}>
+        <dt>{label}</dt>
+        <dd>{GATE_DESCRIPTIONS[value]}</dd>
+      </div>
+    ))}
+  </dl>
+);
 
 function blankEffect(kind: EditorKind): FeatureEffect {
   switch (kind) {
@@ -134,12 +180,16 @@ export function FeatureEffectEditor({
             >
               {KIND_LABELS.map(([value_, label]) => <option key={value_} value={value_}>{label}</option>)}
             </select>
+            <InfoTooltip label="About effect types" content={KIND_HELP} />
             <button type="button" className={styles.riderRemove} aria-label="Remove effect" onClick={() => commit(cards.filter((_, i) => i !== index))}>×</button>
           </div>
           <EffectFields card={card} onChange={(next) => replace(index, next)} />
           {"condition" in card.effect ? (
             <label className={styles.fieldInlineLabel}>
-              When
+              <span className={styles.fieldLabelRow}>
+                When
+                <InfoTooltip label="About effect conditions" content={GATE_HELP} />
+              </span>
               <select
                 value={(card.effect as { condition?: FeatureCondition }).condition ?? "always"}
                 onChange={(e) => replace(index, { ...card, effect: { ...card.effect, condition: e.target.value as FeatureCondition } as FeatureEffect })}

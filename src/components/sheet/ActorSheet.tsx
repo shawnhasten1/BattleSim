@@ -7,6 +7,8 @@ import type { CompendiumDragPayload } from "@/lib/compendium";
 import { buildSheetItems } from "@/lib/sheet";
 import { sourceLabel } from "@/lib/ui-helpers";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEncounterStore } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
@@ -80,9 +82,15 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
         </>
       }
       ariaLabel={`${definition.name} sheet`}
+      width={680}
       storageKey="actor-sheet"
       onClose={onClose}
-      headerExtra={<AutomationBadge value={items.worst} />}
+      headerExtra={
+        <>
+          <AutomationBadge value={items.worst} />
+          <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
+        </>
+      }
       dropActive={dropActive}
       onDragOver={onDragOver}
       onDragLeave={() => setDropActive(false)}

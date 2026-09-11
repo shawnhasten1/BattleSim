@@ -35,6 +35,17 @@ const RESOURCE_STANCE_HELP = (
   </dl>
 );
 
+const TAGS_HELP = (
+  <dl>
+    {TAGS.map((tag) => (
+      <div key={tag.value}>
+        <dt>{tag.label}</dt>
+        <dd>{tag.hint}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
 export function TacticsTab({ combatant }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateTactics = useEncounterStore((s) => s.updateTactics);
   const updateResourceStance = useEncounterStore((s) => s.updateResourceStance);
@@ -87,7 +98,10 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
       </section>
 
       <section className={styles.section}>
-        <h3>Tags</h3>
+        <h3 className={styles.fieldLabel}>
+          Tags
+          <InfoTooltip label="About tags" content={TAGS_HELP} />
+        </h3>
         <div className={styles.stack}>
           {TAGS.map((tag) => (
             <label key={tag.value} className={`${styles.field} ${styles.checkLine}`} title={tag.hint}>

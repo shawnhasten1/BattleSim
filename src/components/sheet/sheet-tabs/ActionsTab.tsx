@@ -15,6 +15,8 @@ import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, searchSrd, type SrdEntryKind } f
 import { useEncounterStore } from "@/store/encounter-store";
 import { describeAction, spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
 import { BuilderForm } from "../builders/BuilderForm";
 import {
@@ -214,9 +216,12 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
           <Plus size={14} /> Add
         </button>
-        <div className={styles.modeToggle}>
-          <button type="button" className={mode === "simple" ? styles.on : ""} onClick={() => setModePersisted("simple")}>Simple</button>
-          <button type="button" className={mode === "advanced" ? styles.on : ""} onClick={() => setModePersisted("advanced")}>Advanced</button>
+        <div className={styles.headerRight}>
+          <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
+          <div className={styles.modeToggle}>
+            <button type="button" className={mode === "simple" ? styles.on : ""} onClick={() => setModePersisted("simple")}>Simple</button>
+            <button type="button" className={mode === "advanced" ? styles.on : ""} onClick={() => setModePersisted("advanced")}>Advanced</button>
+          </div>
         </div>
       </div>
 

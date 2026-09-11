@@ -5,6 +5,8 @@ import { type ChangeEvent } from "react";
 import type { CombatantState, ConditionName, CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { COMBATANT_STATE_HELP } from "@/lib/sheet-help";
 import styles from "../sheet.module.css";
 
 const QUICK_CONDITIONS: ConditionName[] = ["poisoned", "prone", "restrained", "unconscious"];
@@ -52,7 +54,10 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
               </select>
             </label>
             <label className={styles.field}>
-              State
+              <span className={styles.fieldLabel}>
+                State
+                <InfoTooltip label="About combatant states" content={COMBATANT_STATE_HELP} />
+              </span>
               <select value={combatant.state} onChange={(e) => updateCombatant(combatant.id, { state: e.target.value as typeof combatant.state })}>
                 <option value="active">Active</option>
                 <option value="downed">Downed</option>

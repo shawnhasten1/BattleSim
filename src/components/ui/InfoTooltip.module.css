@@ -36,8 +36,12 @@
   pointer-events: none;
 }
 
-.bubble dl {
+.bubble dl,
+.bubble p {
   margin: 0;
+}
+
+.bubble dl {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -51,4 +55,11 @@
 .bubble dd {
   margin: 0;
   color: var(--ui-text-dim);
+}
+
+.bubble code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--ui-panel-2);
+  font-size: 10.5px;
 }
