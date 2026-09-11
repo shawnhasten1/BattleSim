@@ -510,6 +510,29 @@ describe("combat engine", () => {
     expect(state.log[attackIndex]?.message).toContain("with Longsword");
   });
 
+  it("attributes damage and the killing blow to the attacker", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.seed = "kill-attribution";
+    encounter.map.walls = [];
+    const target = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+    if (target) target.position = { x: 2, y: 1 };
+    const action = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
+    if (action?.kind === "attack") {
+      action.attackBonus = 100;
+      action.damage = [{ dice: "20", damageType: "slashing" }];
+    }
+
+    const state = createEngineState(encounter);
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+
+    const damage = state.log.find((entry) => entry.type === "DamageApplied");
+    expect(damage?.data?.sourceId).toBe("pc-fighter");
+
+    const defeated = state.log.find((entry) => entry.type === "CombatantDefeated");
+    expect(defeated?.data?.combatantId).toBe("enemy-goblin-1");
+    expect(defeated?.data?.killerId).toBe("pc-fighter");
+  });
+
   it("rolls ordinary attacks without implicit disadvantage", () => {
     const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
     encounter.seed = "normal-attack-roll";

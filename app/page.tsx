@@ -17,6 +17,7 @@ import { CombatPanel } from "@/components/sidebar/CombatPanel";
 import { CompendiumPanel } from "@/components/sidebar/CompendiumPanel";
 import { ScenePanel } from "@/components/sidebar/ScenePanel";
 import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { BattleReport } from "@/components/combat/BattleReport";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
 import { SceneConfigModal } from "@/components/modals/SceneConfigModal";
 import { useViewport } from "@/hooks/useViewport";
@@ -44,6 +45,7 @@ export default function EncounterEditorPage() {
   const [showGrid, setShowGrid] = useState(true);
   const [showHealthBars, setShowHealthBars] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "scene" | null>(null);
 
   // Restore small view prefs after mount (keeps SSR output stable), then persist
@@ -149,6 +151,7 @@ export default function EncounterEditorPage() {
               setRightTab("actors");
             }}
             onOpenSceneConfig={() => setModal("scene")}
+            onOpenReport={() => setReportOpen(true)}
           />
         }
         rail={
@@ -187,6 +190,7 @@ export default function EncounterEditorPage() {
       />
 
       {sheetOpen ? <ActorSheet compendium={compendium} onClose={() => setSheetOpen(false)} /> : null}
+      {reportOpen ? <BattleReport onClose={() => setReportOpen(false)} /> : null}
       {modal === "create" ? <CreateTokenModal compendium={compendium} onClose={() => setModal(null)} /> : null}
       {modal === "scene" ? <SceneConfigModal onClose={() => setModal(null)} /> : null}
     </>

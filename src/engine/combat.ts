@@ -453,7 +453,7 @@ function resolveAutoHitBeam(
   const casterLevel = casterLevelOf(attackerDefinition);
   const damageApplied = applyDamageEntries(state, target, action.damage.map((component) => ({
     component, critical: false, triggerDamageType: firstActionDamageType(action), casterLevel
-  })), attackerDefinition);
+  })), attackerDefinition, attacker.id);
   state.log.push(event(state, "AttackRolled", `${attacker.displayName} auto-hit ${target.displayName} with ${action.name}`, {
     attackerId: attacker.id, targetId: target.id, actionId: action.id, autoHit: true, hit: true, critical: false, damageApplied
   }));
@@ -787,7 +787,7 @@ function resolveAttackCore(
       ...action.damage.map((component) => ({ component, critical, triggerDamageType: firstActionDamageType(action), casterLevel })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
-    ], attackerDefinition)
+    ], attackerDefinition, attacker.id)
     : 0;
   let appliedConditionEffects: string[] = [];
   if (hit) {
@@ -885,7 +885,7 @@ export function resolveSaveAction(
       halve: success && onSuccess === "half",
       casterLevel: scaling.casterLevel,
       extraDiceOnFirst: scaling.upcastDamageDice
-    })
+    }, attacker.id)
     : 0;
 
   if (!(success && onSuccess === "negates")) {
@@ -992,7 +992,7 @@ export function resolveAreaSaveAction(
     const success = saveRoll.total >= dc;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
     const damageApplied = dealsDamage && blastRoll.length
-      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half")
+      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", attacker.id)
       : 0;
 
     if (!(success && onSuccess === "negates")) {
@@ -1489,7 +1489,8 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string } = {}
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string } = {},
+  sourceId?: Id
 ): number {
   return applyDamageEntries(
     state,
@@ -1501,7 +1502,8 @@ function applyDamageComponents(
       casterLevel: options.casterLevel,
       extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined
     })),
-    source
+    source,
+    sourceId
   );
 }
 
@@ -1509,7 +1511,8 @@ function applyDamageEntries(
   state: EngineState,
   target: CombatantState,
   entries: DamageApplicationEntry[],
-  source: CreatureDefinition
+  source: CreatureDefinition,
+  sourceId?: Id
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   let totalApplied = 0;
@@ -1545,6 +1548,7 @@ function applyDamageEntries(
 
   state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
     targetId: target.id,
+    sourceId,
     components,
     totalApplied,
     currentHp: target.currentHp,
@@ -1553,7 +1557,7 @@ function applyDamageEntries(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
   }
-  updateDefeatState(state, target);
+  updateDefeatState(state, target, sourceId);
   return totalApplied;
 }
 
@@ -1597,7 +1601,8 @@ function applyRolledAreaDamage(
   state: EngineState,
   target: CombatantState,
   rolled: RolledDamageComponent[],
-  halve: boolean
+  halve: boolean,
+  sourceId?: Id
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   let totalApplied = 0;
@@ -1615,6 +1620,7 @@ function applyRolledAreaDamage(
 
   state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
     targetId: target.id,
+    sourceId,
     components,
     totalApplied,
     currentHp: target.currentHp,
@@ -1623,7 +1629,7 @@ function applyRolledAreaDamage(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
   }
-  updateDefeatState(state, target);
+  updateDefeatState(state, target, sourceId);
   return totalApplied;
 }
 
@@ -1635,7 +1641,7 @@ function applyHpDamage(target: CombatantState, amount: number): number {
   return amount;
 }
 
-function updateDefeatState(state: EngineState, target: CombatantState): void {
+function updateDefeatState(state: EngineState, target: CombatantState, killerId?: Id): void {
   if (target.currentHp > 0) {
     return;
   }
@@ -1647,11 +1653,11 @@ function updateDefeatState(state: EngineState, target: CombatantState): void {
       name: "unconscious",
       startedRound: state.snapshot.round
     });
-    state.log.push(event(state, "CombatantDowned", `${target.displayName} is downed`, { combatantId: target.id }));
+    state.log.push(event(state, "CombatantDowned", `${target.displayName} is downed`, { combatantId: target.id, killerId }));
     return;
   }
   target.state = "defeated";
-  state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id }));
+  state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
 }
 
 function adjustDamage(
@@ -2563,7 +2569,7 @@ function applyActionRiders(
     if (rider.kind === "damage") {
       outcome.extraDamage += applyDamageComponents(state, target, rider.components, sourceDefinition, ctx.critical === true, {
         casterLevel: casterLevelOf(sourceDefinition)
-      });
+      }, source.id);
     } else if (rider.kind === "healing") {
       const recipient = rider.target === "self" ? source : target;
       outcome.healing += applyRiderHealing(state, recipient, sourceDefinition, rider.components);

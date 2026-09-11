@@ -12,6 +12,8 @@ interface FloatingWindowProps {
   ariaLabel?: string;
   /** Where the window first appears (px from the viewport top-left). */
   initialPosition?: { x: number; y: number };
+  /** Override the default 340px window width (px). */
+  width?: number;
   /** Persist the dragged position under this key (localStorage). */
   storageKey?: string;
   /** Rendered in the title bar between the title and the window controls. */
@@ -36,6 +38,7 @@ export function FloatingWindow({
   onClose,
   ariaLabel,
   initialPosition = { x: 72, y: 60 },
+  width,
   storageKey,
   headerExtra,
   onDragOver,
@@ -68,7 +71,7 @@ export function FloatingWindow({
       ref={windowRef}
       tabIndex={-1}
       className={[styles.window, dropActive ? styles.dropActive : ""].filter(Boolean).join(" ")}
-      style={{ left: position.x, top: position.y }}
+      style={{ left: position.x, top: position.y, width }}
       role="dialog"
       aria-label={ariaLabel ?? (typeof title === "string" ? title : "Window")}
       onDragOver={onDragOver}

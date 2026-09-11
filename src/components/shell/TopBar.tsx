@@ -1,6 +1,6 @@
 "use client";
 
-import { Redo2, RotateCcw, Save, Settings, Swords, Undo2 } from "lucide-react";
+import { Redo2, RotateCcw, ScrollText, Save, Settings, Swords, Undo2 } from "lucide-react";
 import { useEncounterStore } from "@/store/encounter-store";
 import { SceneDropdown } from "./SceneDropdown";
 import styles from "./TopBar.module.css";
@@ -10,6 +10,8 @@ interface TopBarProps {
   onOpenBuilder: () => void;
   /** Opens the scene configuration modal. */
   onOpenSceneConfig: () => void;
+  /** Opens the post-combat battle report window. */
+  onOpenReport: () => void;
 }
 
 /**
@@ -17,11 +19,12 @@ interface TopBarProps {
  * history / save / settings controls. Turn and simulation controls live in the
  * Combat panel.
  */
-export function TopBar({ onOpenBuilder, onOpenSceneConfig }: TopBarProps) {
+export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBarProps) {
   const undo = useEncounterStore((state) => state.undo);
   const redo = useEncounterStore((state) => state.redo);
   const saveProject = useEncounterStore((state) => state.saveProject);
   const reset = useEncounterStore((state) => state.reset);
+  const hasOutcome = useEncounterStore((state) => state.outcome != null);
 
   return (
     <div className={styles.bar}>
@@ -45,6 +48,14 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig }: TopBarProps) {
         </button>
         <button type="button" onClick={reset} title="Reset encounter">
           <RotateCcw size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenReport}
+          disabled={!hasOutcome}
+          title={hasOutcome ? "Battle report" : "Battle report (finish a fight first)"}
+        >
+          <ScrollText size={16} />
         </button>
         <button type="button" onClick={onOpenSceneConfig} title="Scene settings">
           <Settings size={16} />

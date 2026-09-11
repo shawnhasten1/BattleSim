@@ -1,0 +1,208 @@
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+}
+
+.copyBtn:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* Summary grid — hairline-divided stat cells (mirrors CombatPanel .turnStatus). */
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 10px;
+  background: var(--ui-border);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+}
+
+.summary > div {
+  padding: 6px 9px;
+  background: var(--ui-panel);
+}
+
+.summary span {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.summary strong {
+  font-size: 13px;
+}
+
+.warnings {
+  margin: 0 10px 10px;
+  padding: 6px 10px 6px 22px;
+  border-radius: var(--ui-radius);
+  background: rgba(217, 164, 65, 0.1);
+  color: var(--ui-warn, #d9a441);
+  font-size: 11px;
+}
+
+.group {
+  margin: 0 10px 10px;
+}
+
+.group h4 {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.actor {
+  border: 1px solid var(--ui-border);
+  border-left: 2px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  margin-bottom: 4px;
+  background: var(--ui-panel-2);
+}
+
+.actor[data-faction="party"] {
+  border-left-color: var(--ui-pc);
+}
+
+.actor[data-faction="enemy"] {
+  border-left-color: var(--ui-hostile);
+}
+
+.actor > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.actor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headline {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.headline i {
+  color: var(--ui-text-dim);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 10px;
+}
+
+.koBadge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.statePill {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: var(--ui-radius);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.statePill[data-tone="down"] {
+  background: rgba(161, 66, 63, 0.25);
+  color: var(--ui-hp-red);
+}
+
+.statePill[data-tone="dead"] {
+  background: var(--ui-hp-red);
+  color: #fff;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  padding: 0 8px 8px;
+}
+
+.stats > div {
+  padding: 4px 6px;
+  background: var(--ui-panel);
+}
+
+.stats span {
+  display: block;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.stats strong {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats i {
+  color: var(--ui-text-dim);
+  font-style: normal;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.chipsLabel {
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.chip {
+  padding: 1px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel);
+  font-size: 10px;
+}

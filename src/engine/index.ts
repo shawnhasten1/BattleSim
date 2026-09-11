@@ -5,6 +5,7 @@ export * from "./dice";
 export * from "./fixtures";
 export * from "./geometry";
 export * from "./import-normalize";
+export * from "./report";
 export * from "./rng";
 export * from "./simulation";
 export * from "./types";
