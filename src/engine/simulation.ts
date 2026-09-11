@@ -31,7 +31,7 @@ import {
 } from "./combat";
 import { combatantsInArea } from "./areas";
 import { abilityModifier, parseDiceExpression, resolveScaledDamage } from "./dice";
-import { coverBetween, findReachableCells, gridDistance, lineOfEffect, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
+import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
 import type { ActionDefinition, ActionRider, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -71,6 +71,12 @@ interface MovementPlan {
   opportunityThreats: number;
   /** Average cover (AC value 0/2/5) the actor would have from hostiles at this cell. */
   coverBonus: number;
+  /**
+   * Real remaining route cost from `cell` to the target (walls/terrain-aware, not
+   * straight-line). Only set on a partial-approach plan — the in-range path never
+   * needs it, and `targetDistance` (straight-line) stays the field to use there.
+   */
+  routeToTarget?: number;
 }
 
 interface FeatureActivationPlan {
@@ -259,13 +265,16 @@ function dashDestinationTowardTarget(
   actor: CombatantState,
   target: CombatantState,
   range: number,
-  tactics: TacticsSettings
+  tactics: TacticsSettings,
+  options: { allowPartialApproach?: boolean } = {}
 ): MovementPlan | undefined {
   const saved = actor.turnFlags;
   actor.turnFlags = { ...(saved ?? {}), dashed: true };
   try {
-    const plan = bestDestinationTowardTarget(snapshot, actor, target, range, tactics);
-    return plan && plan.targetDistance <= range ? plan : undefined;
+    const plan = bestDestinationTowardTarget(snapshot, actor, target, range, tactics, options);
+    if (!plan) return undefined;
+    if (options.allowPartialApproach) return plan;
+    return plan.targetDistance <= range ? plan : undefined;
   } finally {
     actor.turnFlags = saved;
   }
@@ -403,8 +412,9 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
+    // No options ⇒ only cells already within attack range come back.
     const movement = bestDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics);
-    const normalReaches = movement != null && movement.targetDistance <= plan.range;
+    const normalReaches = movement != null;
     // A single move can't close the gap; if a doubled (Dash) move would, spend
     // the action on Dash instead of half-closing and standing idle.
     const dashMove = !normalReaches && canAct(actor, "action")
@@ -447,6 +457,67 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         // Candidate generation should avoid illegal moves; if map state changed, skip movement.
       }
     } else {
+      // Can't get within range this turn, even with a Dash. Close the distance
+      // instead of standing still: Dash toward the target if that covers more
+      // ground (the action would go unused anyway), otherwise just move — and
+      // Dodge if the advance walked into a threatened square.
+      const feet = (pathCost: number) => Math.round(pathCost * state.snapshot.map.grid.distancePerSquare);
+      const previousDistance = gridDistance(actor.position, plan.target.position, state.snapshot.map.grid);
+      const walkApproach = bestDestinationTowardTarget(
+        state.snapshot, actor, plan.target, plan.range, tactics, { allowPartialApproach: true }
+      );
+      const dashId = canAct(actor, "action")
+        ? utilityActionId(state.snapshot, actor, "dash", "action")
+        : undefined;
+      const dashApproach = dashId
+        ? dashDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics, { allowPartialApproach: true })
+        : undefined;
+
+      // Compare by real remaining route, not straight-line distance — a Dash is
+      // only worth it if it actually advances the walk-around further.
+      const walkRoute = walkApproach?.routeToTarget ?? Number.POSITIVE_INFINITY;
+      const dashRoute = dashApproach?.routeToTarget ?? Number.POSITIVE_INFINITY;
+
+      if (dashApproach && dashId && dashRoute < walkRoute - 1e-9) {
+        try {
+          resolveUtilityAction(state, actor.id, dashId);
+          moveCombatant(state, actor.id, dashApproach.cell);
+          movedThisTurn = true;
+          state.log.push(event(state, "AiDecision", `${actor.displayName} dashed ${feet(dashApproach.pathCost)} ft toward ${plan.target.displayName} (still out of range)`, {
+            combatantId: actor.id,
+            targetId: plan.target.id,
+            destination: dashApproach.cell,
+            pathCost: dashApproach.pathCost,
+            previousDistance,
+            remainingDistance: dashApproach.targetDistance,
+            remainingRoute: dashApproach.routeToTarget,
+            opportunityThreats: dashApproach.opportunityThreats
+          }));
+        } catch { /* map state moved on */ }
+        maybeSpendBonusAction(state, actor, tactics);
+        return undefined;
+      }
+
+      if (walkApproach) {
+        try {
+          moveCombatant(state, actor.id, walkApproach.cell);
+          movedThisTurn = true;
+          state.log.push(event(state, "AiDecision", `${actor.displayName} moved ${feet(walkApproach.pathCost)} ft toward ${plan.target.displayName} (still out of range)`, {
+            combatantId: actor.id,
+            targetId: plan.target.id,
+            destination: walkApproach.cell,
+            pathCost: walkApproach.pathCost,
+            previousDistance,
+            remainingDistance: walkApproach.targetDistance,
+            remainingRoute: walkApproach.routeToTarget,
+            opportunityThreats: walkApproach.opportunityThreats
+          }));
+          resolveDodgeIfThreatened(state, actor);
+        } catch { /* map state moved on */ }
+        maybeSpendBonusAction(state, actor, tactics);
+        return undefined;
+      }
+
       state.log.push(event(state, "AutomationWarning", `${actor.displayName} found no legal movement toward ${plan.target.displayName}`, {
         combatantId: actor.id,
         targetId: plan.target.id,
@@ -454,7 +525,16 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         range: plan.range
       }));
     }
-    plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
+    // A reaction provoked by that move (an opportunity attack) may have downed or
+    // killed the actor outright — there's no action left to spend.
+    if (actor.state !== "active") {
+      return undefined;
+    }
+    // After spending the move, re-pick among actions that can actually land from
+    // here — don't swap to a plan that needs yet more movement (and then stall).
+    plan = (movedThisTurn ? selectOffensivePlan(state.snapshot, actor, tactics, "action", { mustReachNow: true }) : undefined)
+      ?? selectOffensivePlan(state.snapshot, actor, tactics)
+      ?? plan;
   }
 
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
@@ -772,7 +852,8 @@ function selectOffensivePlan(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   tactics: TacticsSettings,
-  slot: "action" | "bonus" = "action"
+  slot: "action" | "bonus" = "action",
+  options: { mustReachNow?: boolean } = {}
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
@@ -865,8 +946,9 @@ function selectOffensivePlan(
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
     // A bonus action is a follow-up: the actor has already moved / acted, so only
-    // targets it can hit from where it stands count.
-    .filter((plan) => slot === "action" || plan.reachableNow);
+    // targets it can hit from where it stands count. `mustReachNow` applies the
+    // same rule after the action-phase move is already spent.
+    .filter((plan) => (slot === "action" && !options.mustReachNow) || plan.reachableNow);
 
   candidates.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.target.id.localeCompare(b.target.id));
   return candidates[0];
@@ -919,22 +1001,59 @@ function bestDestinationTowardTarget(
   actor: CombatantState,
   target: CombatantState,
   range: number,
-  tactics: TacticsSettings
+  tactics: TacticsSettings,
+  options: { allowPartialApproach?: boolean } = {}
 ): MovementPlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
-  const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
+  const plans = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
-  })
-    .map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable))
-    .filter((candidate) => candidate.targetDistance <= range
-      && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, candidate.cell, target.position)));
+  }).map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable));
 
-  candidates.sort((a, b) => b.score - a.score || a.pathCost - b.pathCost || a.cell.y - b.cell.y || a.cell.x - b.cell.x);
-  return candidates[0];
+  const inRange = plans.filter((candidate) => candidate.targetDistance <= range
+    && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, candidate.cell, target.position)));
+  if (inRange.length > 0) {
+    inRange.sort((a, b) => b.score - a.score || a.pathCost - b.pathCost || a.cell.y - b.cell.y || a.cell.x - b.cell.x);
+    return inRange[0];
+  }
+
+  if (!options.allowPartialApproach) {
+    return undefined;
+  }
+
+  // Nothing in range is reachable this move. Rather than stand still, advance as
+  // far toward the target as the budget allows — but "far" has to mean along a
+  // real route, not straight-line distance, or a wall between the actor and the
+  // target can send it to a cell that reads as "closer" while actually needing a
+  // much longer walk around. A single cost field rooted at the target gives every
+  // candidate's true remaining path length in one pass (movement cost is
+  // symmetric, so "cost from target to cell" == "cost from cell to target").
+  const routeField = pathCostField(snapshot.map, target.position, footprint, occupied, {
+    allowOccupiedTransit: true,
+    occupiedMovementMultiplier: 2
+  });
+  const currentRouteCost = routeField.get(cellKey(actor.position)) ?? Number.POSITIVE_INFINITY;
+  const approach = plans
+    .map((candidate) => ({ candidate, routeCost: routeField.get(cellKey(candidate.cell)) ?? Number.POSITIVE_INFINITY }))
+    .filter(({ routeCost }) => routeCost < currentRouteCost - 1e-9);
+  if (approach.length === 0) {
+    return undefined;
+  }
+  approach.sort((a, b) =>
+    a.routeCost - b.routeCost
+    || a.candidate.opportunityThreats - b.candidate.opportunityThreats
+    || a.candidate.pathCost - b.candidate.pathCost
+    || b.candidate.score - a.candidate.score
+    || a.candidate.cell.y - b.candidate.cell.y
+    || a.candidate.cell.x - b.candidate.cell.x);
+  return { ...approach[0].candidate, routeToTarget: approach[0].routeCost };
+}
+
+function cellKey(point: Point): string {
+  return `${point.x},${point.y}`;
 }
 
 function bestRepositionAfterAction(

@@ -382,6 +382,31 @@ export function findReachableCells(
     .filter(({ cell }) => isFootprintLegal(map, cell, footprint, occupied));
 }
 
+/**
+ * Legal-move path cost from `origin` to every cell it can reach (default:
+ * unbounded — the whole connected map), respecting walls, terrain, and
+ * occupancy exactly like `findReachableCells`. Movement cost is symmetric, so
+ * this doubles as "path distance back to `origin`" for any of those cells —
+ * use it to rank candidate cells by real route length (around walls, through
+ * doors) instead of straight-line distance, e.g. when nothing is reachable
+ * within a target's range this turn and the AI just wants to close the gap
+ * intelligently. Keyed by `"x,y"`.
+ */
+export function pathCostField(
+  map: BattleMapState,
+  origin: Point,
+  footprint: number,
+  occupied: Point[] = [],
+  options: OccupancyMovementOptions = {},
+  maxCost = Number.POSITIVE_INFINITY
+): Map<string, number> {
+  const field = new Map<string, number>();
+  for (const { cell, cost } of findReachableCells(map, origin, footprint, maxCost, occupied, options)) {
+    field.set(`${cell.x},${cell.y}`, cost);
+  }
+  return field;
+}
+
 export function movementBlockedBetween(
   walls: WallSegment[],
   from: Point,

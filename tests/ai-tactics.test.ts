@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEngineState, sampleEncounter, takeAutomatedTurn } from "@/engine";
+import { createEngineState, gridDistance, pathCostField, sampleEncounter, takeAutomatedTurn } from "@/engine";
 import type { ActionDefinition, CombatantState, EncounterSnapshot, RandomSource } from "@/engine";
 
 function scriptedRng(valuesBySides: Record<number, number[]>): RandomSource {
@@ -379,6 +379,78 @@ describe("AI — Dash / Dodge", () => {
     expect(state.log.some((e) => e.type === "CombatantMoved" && e.data?.combatantId === CASTER)).toBe(true);
   });
 
+  it("still advances toward a target it cannot reach even with a Dash", () => {
+    const encounter = baseEncounter("ai-approach");
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.speed = 10; // 2 sq move, 4 sq dash
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    fighter.tacticsProfile = "basic-melee";
+    fighter.position = { x: 1, y: 1 };
+    const g1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    g1.position = { x: 11, y: 7 }; // ~50 ft away — unreachable this turn by any means
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    const state = createEngineState(encounter);
+    const before = gridDistance(fighter.position, g1.position, encounter.map.grid);
+
+    takeAutomatedTurn(state, actorOf(state));
+
+    const moved = state.log.find((e) => e.type === "CombatantMoved" && e.data?.combatantId === CASTER);
+    expect(moved).toBeDefined();
+    const after = gridDistance(actorOf(state).position, g1.position, encounter.map.grid);
+    expect(after).toBeLessThan(before);
+    // it burns the action on Dash to close the most ground, and never warns about being stuck
+    expect(state.log.some((e) => e.type === "UtilityActionResolved" && e.data?.mode === "dash")).toBe(true);
+    expect(state.log.some((e) => e.type === "AutomationWarning" && /no legal movement|could not reach/.test(String(e.message)))).toBe(false);
+  });
+
+  it("routes around a wall instead of hugging the straight-line-closest dead end", () => {
+    const encounter = baseEncounter("ai-detour");
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.speed = 15; // 3 sq move — can't reach the gap yet
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    fighter.tacticsProfile = "basic-melee";
+    fighter.position = { x: 7, y: 3 };
+    const goblin = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    goblin.position = { x: 2, y: 3 }; // straight across the wall from the fighter
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    // a wall down almost the whole column; only the bottom row (y=7) is open, so
+    // every cell hugging the wall at x=6 reads as equally "close" to the target in
+    // straight-line terms (dx=4 dominates) regardless of how far it is from the
+    // one real opening.
+    encounter.map.walls = [
+      { id: "mid", start: { x: 5, y: 0 }, end: { x: 5, y: 7 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false }
+    ];
+    const footprint = 1;
+    const pathOptions = { allowOccupiedTransit: true, occupiedMovementMultiplier: 2 } as const;
+    const occupied = encounter.combatants.filter((c) => c.id !== CASTER).map((c) => c.position);
+
+    // Real route cost to the target from any cell, computed the same way the
+    // engine's fix does it (a cost field rooted at the target).
+    const routeField = pathCostField(encounter.map, goblin.position, footprint, occupied, pathOptions);
+    const routeCostAt = (p: { x: number; y: number }) => routeField.get(`${p.x},${p.y}`) ?? Number.POSITIVE_INFINITY;
+    const startRouteCost = routeCostAt(fighter.position);
+
+    // (5,3) is dead across from both the fighter's row and the target's row: the
+    // straight-line-distance ranking treats every cell hugging the wall as
+    // equally "closest" (dx dominates), so the old tie-break — cheapest move —
+    // landed here, the single most direct (and least useful) cell to reach: its
+    // real route still has to detour all the way down to the y=7 gap and back.
+    // Verified against the pre-fix straight-line ranking for this exact scenario.
+    const deadEndCell = { x: 5, y: 3 };
+    const deadEndRouteCost = routeCostAt(deadEndCell);
+
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    const destination = actorOf(state).position;
+    const afterRouteCost = routeCostAt(destination);
+
+    expect(state.log.some((e) => e.type === "CombatantMoved" && e.data?.combatantId === CASTER)).toBe(true);
+    // real progress along the actual route...
+    expect(afterRouteCost).toBeLessThan(startRouteCost);
+    // ...landing somewhere genuinely better than the straight-line dead end, not on it.
+    expect(destination).not.toEqual(deadEndCell);
+    expect(afterRouteCost).toBeLessThan(deadEndRouteCost);
+  });
+
   it("Dodges when it is threatened and has no reachable target", () => {
     const encounter = baseEncounter("ai-dodge");
     const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
@@ -436,6 +508,39 @@ describe("AI — reactions fire during a turn", () => {
 
     expect(state.log.some((e) => e.type === "OpportunityAttackTriggered")).toBe(true);
     expect(state.log.some((e) => e.type === "ReactionTriggered" && e.data?.trigger === "enemy-leaves-reach")).toBe(true);
+  });
+
+  it("does not act again if the opportunity attack drops it mid-charge", () => {
+    // Same charge as above, but the fighter's hit is lethal (this seed already
+    // rolls a killing blow — see the assertion on CombatantDefeated below).
+    const encounter = baseEncounter("ai-oa");
+    const fighter = encounter.combatants.find((c) => c.id === CASTER)!;
+    const archer = encounter.combatants.find((c) => c.id === "pc-archer")!;
+    const brute = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+    fighter.position = { x: 5, y: 4 };
+    archer.position = { x: 9, y: 4 };
+    archer.currentHp = 3;
+    brute.position = { x: 1, y: 4 };
+    brute.tacticsProfile = "basic-melee";
+    encounter.definitions.find((d) => d.id === "def-goblin")!.speed = 60;
+    encounter.map.walls = [
+      { id: "top", start: { x: 3, y: 3 }, end: { x: 10, y: 3 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false },
+      { id: "bot", start: { x: 3, y: 5 }, end: { x: 10, y: 5 }, blocksMovement: true, blocksSight: false, blocksProjectiles: false }
+    ];
+    const state = createEngineState(encounter);
+
+    expect(() => takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!)).not.toThrow();
+
+    expect(state.log.some((e) => e.type === "CombatantDefeated" && e.data?.combatantId === "enemy-goblin-1")).toBe(true);
+    // Nothing after the fatal opportunity attack should try to act as the dead goblin.
+    const defeatedIndex = state.log.findIndex((e) => e.type === "CombatantDefeated" && e.data?.combatantId === "enemy-goblin-1");
+    const actsAfterDeath = state.log
+      .slice(defeatedIndex + 1)
+      .some((e) =>
+        (e.type === "ActionDeclared" && e.data?.actorId === "enemy-goblin-1")
+        || (e.type === "AttackRolled" && e.data?.attackerId === "enemy-goblin-1"));
+    expect(actsAfterDeath).toBe(false);
   });
 
   it("a reactor Counterspells a level-3 spell the AI casts (priority: worthwhile)", () => {
