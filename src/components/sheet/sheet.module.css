@@ -81,6 +81,12 @@
   color: var(--ui-text-dim);
 }
 
+/** A `.field` label row that also carries an inline `InfoTooltip` trigger. */
+.fieldLabel {
+  display: inline-flex;
+  align-items: center;
+}
+
 .checkLine {
   flex-direction: row;
   align-items: center;

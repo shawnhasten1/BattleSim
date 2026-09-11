@@ -1,13 +1,37 @@
 "use client";
 
-import type { CombatantState, CreatureDefinition } from "@/engine";
+import type { ActorTag, CombatantState, CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
 import styles from "../sheet.module.css";
 
-const PROFILES = ["basic-melee", "basic-ranged", "skirmisher", "brute", "defender", "controller"] as const;
+const TAGS: { value: ActorTag; label: string; hint: string }[] = [
+  { value: "high-priority", label: "High priority", hint: "Enemies chase this target harder (e.g. a brute beelines it)." },
+  { value: "low-priority", label: "Low priority", hint: "Enemies deprioritize attacking and healing this actor." },
+  { value: "protected", label: "Protected", hint: "Allies guard this actor even at full HP and heal it first." }
+];
+
+const TACTICS_PROFILE_HELP = (
+  <dl>
+    {TACTICS_PROFILES.map((option) => (
+      <div key={option.value}>
+        <dt>{option.label}</dt>
+        <dd>{option.description}</dd>
+      </div>
+    ))}
+  </dl>
+);
 
 export function TacticsTab({ combatant }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateTactics = useEncounterStore((s) => s.updateTactics);
+  const updateTags = useEncounterStore((s) => s.updateTags);
+  const tags = combatant.tags ?? [];
+
+  const toggleTag = (tag: ActorTag) => {
+    const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
+    updateTags(combatant.id, next.length > 0 ? next : undefined);
+  };
 
   return (
     <div className={styles.tab}>
@@ -15,13 +39,16 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
         <h3>AI tactics</h3>
         <div className={styles.grid}>
           <label className={styles.field}>
-            Profile
+            <span className={styles.fieldLabel}>
+              Profile
+              <InfoTooltip label="About tactics profiles" content={TACTICS_PROFILE_HELP} />
+            </span>
             <select
               value={combatant.tacticsProfile}
               onChange={(e) => updateTactics(combatant.id, e.target.value as typeof combatant.tacticsProfile)}
             >
-              {PROFILES.map((profile) => (
-                <option key={profile} value={profile}>{profile}</option>
+              {TACTICS_PROFILES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
@@ -29,6 +56,22 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
             Faction
             <input value={combatant.faction} readOnly />
           </label>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h3>Tags</h3>
+        <div className={styles.stack}>
+          {TAGS.map((tag) => (
+            <label key={tag.value} className={`${styles.field} ${styles.checkLine}`} title={tag.hint}>
+              <input
+                type="checkbox"
+                checked={tags.includes(tag.value)}
+                onChange={() => toggleTag(tag.value)}
+              />
+              {tag.label}
+            </label>
+          ))}
         </div>
       </section>
 

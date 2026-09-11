@@ -157,6 +157,7 @@ interface EncounterStore {
   updateHp: (combatantId: string, hp: number) => void;
   updateTactics: (combatantId: string, tactics: EncounterSnapshot["combatants"][number]["tacticsProfile"]) => void;
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
+  updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
   applyConditionToCombatant: (combatantId: string, condition: ConditionName) => void;
@@ -1262,6 +1263,15 @@ export const useEncounterStore = create<EncounterStore>()(
           ...encounter,
           combatants: encounter.combatants.map((combatant) => combatant.faction === faction
             ? { ...combatant, tacticsProfile: tactics }
+            : combatant)
+        });
+      },
+      updateTags: (combatantId, tags) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
+            ? { ...combatant, tags }
             : combatant)
         });
       },

@@ -52,6 +52,7 @@
   --ui-z-topbar: 30;
   --ui-z-sheet: 40;
   --ui-z-modal: 100;
+  --ui-z-tooltip: 210;
 }
 
 * {

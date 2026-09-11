@@ -22,6 +22,12 @@ export type TacticsProfile =
   | "brute"
   | "defender"
   | "controller";
+/**
+ * DM-assigned combat flags that bias AI targeting/protection/healing decisions
+ * independent of tactics profile. See `TAG_PRIORITY_VALUE` and `tacticsSettings()`
+ * in simulation.ts for how each tag is weighted per profile.
+ */
+export type ActorTag = "high-priority" | "low-priority" | "protected";
 export type ConditionName =
   | "blinded"
   | "charmed"
@@ -937,6 +943,8 @@ export interface CombatantState {
   /** Round this combatant enters play (1-based). Only meaningful with `state: "reserve"`. */
   arrivesRound?: number;
   tacticsProfile: TacticsProfile;
+  /** DM-assigned targeting/protection/healing flags. See `ActorTag`. */
+  tags?: ActorTag[];
 }
 
 export interface CombatantExportPackage {
@@ -1170,6 +1178,8 @@ const tacticsProfileSchema = z.preprocess(
   ])
 );
 
+const actorTagSchema = z.enum(["high-priority", "low-priority", "protected"]) as z.ZodType<ActorTag>;
+
 export const creatureDefinitionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1247,7 +1257,8 @@ export const combatantExportSchema = z.object({
       z.literal("fled")
     ]),
     arrivesRound: z.number().int().min(1).optional(),
-    tacticsProfile: tacticsProfileSchema
+    tacticsProfile: tacticsProfileSchema,
+    tags: z.array(actorTagSchema).optional()
   }).optional()
 });
 
@@ -1386,7 +1397,8 @@ export const encounterSnapshotSchema = z.object({
         z.literal("fled")
       ]),
       arrivesRound: z.number().int().min(1).optional(),
-      tacticsProfile: tacticsProfileSchema
+      tacticsProfile: tacticsProfileSchema,
+      tags: z.array(actorTagSchema).optional()
     })
   )
 });

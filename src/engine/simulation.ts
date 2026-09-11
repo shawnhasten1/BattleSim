@@ -32,7 +32,7 @@ import {
 import { combatantsInArea } from "./areas";
 import { abilityModifier, parseDiceExpression, resolveScaledDamage } from "./dice";
 import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
-import type { ActionDefinition, ActionRider, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
+import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -99,7 +99,22 @@ interface TacticsSettings {
   coverWeight: number;
   /** How much a `condition` rider's expected control value is worth. Controllers: high; brutes: near zero. */
   controlWeight: number;
+  /** How strongly this profile chases a `high-priority`-tagged target / avoids a `low-priority` one. */
+  priorityWeight: number;
   reposition: boolean;
+}
+
+/** Score contribution of each `ActorTag` before it's scaled by a profile's `priorityWeight`. */
+const TAG_PRIORITY_VALUE: Partial<Record<ActorTag, number>> = {
+  "high-priority": 14,
+  "low-priority": -8
+};
+
+function tagPriorityValue(tags: ActorTag[] | undefined): number {
+  if (!tags || tags.length === 0) {
+    return 0;
+  }
+  return tags.reduce((sum, tag) => sum + (TAG_PRIORITY_VALUE[tag] ?? 0), 0);
 }
 
 export interface SimulationOutcome {
@@ -672,6 +687,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 2,
         coverWeight: 3,
         controlWeight: 6,
+        priorityWeight: 1,
         reposition: true
       };
     case "skirmisher":
@@ -687,6 +703,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 4,
         coverWeight: 4,
         controlWeight: 6,
+        priorityWeight: 1,
         reposition: true
       };
     case "brute":
@@ -702,6 +719,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 1,
         coverWeight: 0,
         controlWeight: 2,
+        priorityWeight: 2.5,
         reposition: false
       };
     case "defender":
@@ -717,6 +735,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 3,
         coverWeight: 0,
         controlWeight: 14,
+        priorityWeight: 0.6,
         reposition: false
       };
     case "controller":
@@ -732,6 +751,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 3,
         coverWeight: 2.5,
         controlWeight: 26,
+        priorityWeight: 0.8,
         reposition: true
       };
     case "basic-melee":
@@ -748,6 +768,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         reactionRiskWeight: 2,
         coverWeight: 0,
         controlWeight: 4,
+        priorityWeight: 1.2,
         reposition: false
       };
   }
@@ -789,8 +810,14 @@ function selectHealingAction(
       reachable ? "in range" : "moves into range"
     ];
     const resourcePenalty = action.resourceCost ? action.resourceCost.amount * 3 : 0;
+    const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
+      + (target.tags?.includes("high-priority") ? 10 : 0)
+      + (target.tags?.includes("low-priority") ? -15 : 0);
+    if (priorityBonus > 0) reasons.push("guarded ally");
+    if (priorityBonus < 0) reasons.push("tagged low-priority");
     const score = (target.state === "downed" ? 95 : missingHpRatio * 45)
       + Math.min(average, missingHp)
+      + priorityBonus
       - resourcePenalty
       - distance / 20
       + (reachable ? 10 : 2);
@@ -878,6 +905,7 @@ function selectOffensivePlan(
       const protectPressure = tactics.protectWeight > 0 && threatensWoundedAlly(snapshot, actor, target)
         ? tactics.protectWeight
         : 0;
+      const tagPressure = tagPriorityValue(target.tags) * tactics.priorityWeight;
       const spacingScore = action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell")
         ? distanceBandScore(distance, tactics)
         : 0;
@@ -909,12 +937,15 @@ function selectOffensivePlan(
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
       if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
       if (controlValue > 0) reasons.push("imposes a condition");
+      if (tagPressure > 0) reasons.push("tagged high-priority");
+      if (tagPressure < 0) reasons.push("tagged low-priority");
       let score = expectedDamage * 2
         + controlValue
         + preferredBonus
         + killPressure
         + woundedPressure
         + protectPressure
+        + tagPressure
         + spacingScore
         - resourcePenalty
         - threatenedRangedPenalty
@@ -934,7 +965,8 @@ function selectOffensivePlan(
           const combatantDefinition = getDefinition(snapshot, combatant);
           return sum
             + expectedDamageAgainst(action, definition, actor, combatantDefinition)
-            + expectedRiderControl(action, definition, combatantDefinition, tactics);
+            + expectedRiderControl(action, definition, combatantDefinition, tactics)
+            + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
         }, 0);
         const friendlyRisk = affected
           .filter((combatant) => combatant.faction === actor.faction)
@@ -1271,7 +1303,9 @@ function threatensWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState
     }
     const definition = getDefinition(snapshot, ally);
     const wounded = ally.currentHp <= Math.floor(definition.maxHp / 2);
-    return wounded && gridDistance(hostile.position, ally.position, snapshot.map.grid) <= 5;
+    // A `protected` ally is guarded at full HP too, not just once it's bloodied.
+    const guarded = wounded || Boolean(ally.tags?.includes("protected"));
+    return guarded && gridDistance(hostile.position, ally.position, snapshot.map.grid) <= 5;
   });
 }
 

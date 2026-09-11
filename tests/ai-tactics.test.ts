@@ -74,6 +74,10 @@ function chosenActionId(state: ReturnType<typeof createEngineState>): string | u
   return state.log.find((e) => e.type === "AiDecision" && e.data?.actionId)?.data?.actionId as string | undefined;
 }
 
+function chosenTargetId(state: ReturnType<typeof createEngineState>): string | undefined {
+  return state.log.find((e) => e.type === "AiDecision" && e.data?.actionId)?.data?.targetId as string | undefined;
+}
+
 describe("AI — condition-rider control value", () => {
   it("a controller picks a save-or-paralyze over a weak attack", () => {
     const state = runCasterTurn("ctrl-hold", "controller", [WEAK_JAB, HOLD]);
@@ -576,6 +580,81 @@ describe("AI — reactions fire during a turn", () => {
     expect(state.log.some((e) => e.type === "SpellCountered")).toBe(true);
     expect(state.snapshot.combatants.find((c) => c.id === CASTER)!.currentHp).toBe(100);
     expect(state.snapshot.combatants.find((c) => c.id === "pc-archer")!.resources?.["slot-3"]).toBe(0);
+  });
+});
+
+describe("AI — actor tags", () => {
+  it("a brute targets a tagged high-priority enemy over an equally close untagged one", () => {
+    const encounter = baseEncounter("tag-brute");
+    encounter.combatants = [
+      { id: CASTER, definitionId: CASTER_DEF, displayName: "Brute", faction: "party",
+        position: { x: 5, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "brute" },
+      { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 4, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee",
+        tags: ["high-priority"] }
+    ];
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    expect(chosenTargetId(state)).toBe("enemy-goblin-2");
+  });
+
+  it("a defender guards a protected ally even at full HP, not just once it's bloodied", () => {
+    const encounter = baseEncounter("tag-protected");
+    encounter.combatants = [
+      { id: CASTER, definitionId: CASTER_DEF, displayName: "Defender", faction: "party",
+        position: { x: 5, y: 5 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "defender" },
+      { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
+        position: { x: 5, y: 3 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-ranged",
+        tags: ["protected"] },
+      { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 5, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 5, y: 6 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" }
+    ];
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    // goblin-1 stands next to the protected archer (who is at full HP); goblin-2 threatens nobody.
+    expect(chosenTargetId(state)).toBe("enemy-goblin-1");
+  });
+
+  it("an area attacker still prefers a bigger untagged group over a lone tagged target", () => {
+    const fireball: ActionDefinition = {
+      kind: "area-save", id: "fireball", name: "Fireball", actionType: "action", saveAbility: "dex",
+      dc: 15, range: 100, area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 100 },
+      damage: [{ dice: "8d6", damageType: "fire" }], halfDamageOnSuccess: true, onSuccess: "half",
+      affects: "hostile", automationSupport: "full"
+    };
+    const encounter = baseEncounter("tag-aoe-group");
+    encounter.combatants = [
+      { id: CASTER, definitionId: CASTER_DEF, displayName: "Controller", faction: "party",
+        position: { x: 1, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "controller" },
+      { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 7, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "enemy-goblin-3", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
+        position: { x: 6, y: 5 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+      { id: "enemy-goblin-vip", definitionId: "def-goblin", displayName: "Goblin VIP", faction: "enemy",
+        position: { x: 1, y: 0 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee",
+        tags: ["high-priority"] }
+    ];
+    encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [fireball];
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, actorOf(state));
+
+    const resolved = state.log.find((e) => e.type === "AreaSaveResolved");
+    expect(resolved).toBeDefined();
+    const hit = (resolved!.data!.targets as Array<{ targetId: string }>).map((t) => t.targetId);
+    expect(hit).toContain("enemy-goblin-1");
+    expect(hit).toContain("enemy-goblin-2");
+    expect(hit).toContain("enemy-goblin-3");
+    expect(hit).not.toContain("enemy-goblin-vip");
   });
 });
 
