@@ -53,11 +53,11 @@ function reinforcedFight(seed: string): EncounterSnapshot {
   const enc = base(seed);
   enc.combatants = [
     { id: "hero", definitionId: "def-fighter", displayName: "Hero", faction: "party",
-      position: { x: 2, y: 2 }, currentHp: 40, tempHp: 0, state: "active", tacticsProfile: "basic-melee", initiative: 20 },
+      position: { x: 2, y: 2 }, currentHp: 40, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 20 },
     { id: "vanguard", definitionId: "def-weakling", displayName: "Vanguard", faction: "enemy",
-      position: { x: 3, y: 2 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-melee", initiative: 10 },
+      position: { x: 3, y: 2 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 10 },
     { id: "reinforcement", definitionId: "def-weakling", displayName: "Reinforcement", faction: "enemy",
-      position: { x: 8, y: 2 }, currentHp: 4, tempHp: 0, state: "reserve", arrivesRound: 3, tacticsProfile: "basic-melee", initiative: 5 }
+      position: { x: 8, y: 2 }, currentHp: 4, tempHp: 0, state: "reserve", arrivesRound: 3, tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 5 }
   ];
   return enc;
 }

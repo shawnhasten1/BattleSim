@@ -157,6 +157,8 @@ interface EncounterStore {
   updateHp: (combatantId: string, hp: number) => void;
   updateTactics: (combatantId: string, tactics: EncounterSnapshot["combatants"][number]["tacticsProfile"]) => void;
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
+  updateResourceStance: (combatantId: string, stance: CombatantState["resourceStance"]) => void;
+  updateFactionResourceStance: (faction: CombatantState["faction"], stance: CombatantState["resourceStance"]) => void;
   updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
@@ -1266,6 +1268,24 @@ export const useEncounterStore = create<EncounterStore>()(
             : combatant)
         });
       },
+      updateResourceStance: (combatantId, stance) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
+            ? { ...combatant, resourceStance: stance }
+            : combatant)
+        });
+      },
+      updateFactionResourceStance: (faction, stance) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => combatant.faction === faction
+            ? { ...combatant, resourceStance: stance }
+            : combatant)
+        });
+      },
       updateTags: (combatantId, tags) => {
         const encounter = get().encounter;
         commitEncounter({
@@ -1370,7 +1390,8 @@ export const useEncounterStore = create<EncounterStore>()(
           tempHp: 0,
           resources: defaultResourcesForDefinition(definition),
           state: "active" as const,
-          tacticsProfile: defaultTacticsForDefinition(definition)
+          tacticsProfile: defaultTacticsForDefinition(definition),
+          resourceStance: "balanced" as const
         };
         commitEncounter({
           ...encounter,
@@ -1404,7 +1425,8 @@ export const useEncounterStore = create<EncounterStore>()(
           resources: importedResources ?? defaultResourcesForDefinition(definition),
           tokenVisuals: imported?.tokenVisuals ? structuredClone(imported.tokenVisuals) : undefined,
           state: imported?.state ?? "active",
-          tacticsProfile: imported?.tacticsProfile ?? defaultTacticsForDefinition(definition)
+          tacticsProfile: imported?.tacticsProfile ?? defaultTacticsForDefinition(definition),
+          resourceStance: imported?.resourceStance ?? "balanced"
         };
         commitEncounter({
           ...encounter,

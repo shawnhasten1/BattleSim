@@ -7,6 +7,7 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
+import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import styles from "./CombatPanel.module.css";
 
 const TACTICS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -32,6 +33,16 @@ function factionTacticsValue(
   return tactics.every((candidate) => candidate === first) ? first : "mixed";
 }
 
+function factionResourceStanceValue(
+  combatants: CombatantState[],
+  faction: CombatantState["faction"]
+): CombatantState["resourceStance"] | "mixed" {
+  const stances = combatants.filter((c) => c.faction === faction).map((c) => c.resourceStance);
+  const first = stances[0];
+  if (!first) return "balanced";
+  return stances.every((candidate) => candidate === first) ? first : "mixed";
+}
+
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -50,6 +61,7 @@ export function CombatPanel() {
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const updateFactionTactics = useEncounterStore((state) => state.updateFactionTactics);
+  const updateFactionResourceStance = useEncounterStore((state) => state.updateFactionResourceStance);
   const { selectedCombatant } = useSelectedCombatant();
 
   const logEndRef = useRef<HTMLLIElement | null>(null);
@@ -76,6 +88,8 @@ export function CombatPanel() {
     );
   const partyTactics = factionTacticsValue(encounter.combatants, "party");
   const enemyTactics = factionTacticsValue(encounter.combatants, "enemy");
+  const partyResourceStance = factionResourceStanceValue(encounter.combatants, "party");
+  const enemyResourceStance = factionResourceStanceValue(encounter.combatants, "enemy");
 
   const headerStatus = replaying
     ? `Replay · round ${displayEncounter.round}`
@@ -129,6 +143,30 @@ export function CombatPanel() {
           >
             <option value="mixed" disabled>Mixed</option>
             {TACTICS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Party resources</span>
+          <select
+            value={partyResourceStance}
+            onChange={(event) => updateFactionResourceStance("party", event.target.value as CombatantState["resourceStance"])}
+          >
+            <option value="mixed" disabled>Mixed</option>
+            {RESOURCE_STANCES.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Enemy resources</span>
+          <select
+            value={enemyResourceStance}
+            onChange={(event) => updateFactionResourceStance("enemy", event.target.value as CombatantState["resourceStance"])}
+          >
+            <option value="mixed" disabled>Mixed</option>
+            {RESOURCE_STANCES.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>

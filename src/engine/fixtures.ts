@@ -158,7 +158,8 @@ export const sampleEncounter: EncounterSnapshot = {
       currentHp: 32,
       tempHp: 0,
       state: "active",
-      tacticsProfile: "basic-melee"
+      tacticsProfile: "basic-melee",
+      resourceStance: "balanced"
     },
     {
       id: "pc-archer",
@@ -169,7 +170,8 @@ export const sampleEncounter: EncounterSnapshot = {
       currentHp: 24,
       tempHp: 0,
       state: "active",
-      tacticsProfile: "basic-ranged"
+      tacticsProfile: "basic-ranged",
+      resourceStance: "balanced"
     },
     {
       id: "enemy-goblin-1",
@@ -180,7 +182,8 @@ export const sampleEncounter: EncounterSnapshot = {
       currentHp: 7,
       tempHp: 0,
       state: "active",
-      tacticsProfile: "basic-ranged"
+      tacticsProfile: "basic-ranged",
+      resourceStance: "balanced"
     },
     {
       id: "enemy-goblin-2",
@@ -191,7 +194,8 @@ export const sampleEncounter: EncounterSnapshot = {
       currentHp: 7,
       tempHp: 0,
       state: "active",
-      tacticsProfile: "basic-melee"
+      tacticsProfile: "basic-melee",
+      resourceStance: "balanced"
     }
   ]
 };

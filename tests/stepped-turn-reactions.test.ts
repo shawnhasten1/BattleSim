@@ -43,11 +43,11 @@ function steppedEncounter(): EncounterSnapshot {
   enc.definitions = [...enc.definitions, structuredClone(GOLEM_DEF)];
   enc.combatants = [
     { id: "golem", definitionId: GOLEM_DEF.id, displayName: "Golem", faction: "enemy",
-      position: { x: 4, y: 4 }, currentHp: 127, tempHp: 0, state: "active", tacticsProfile: "basic-melee", initiative: 20 },
+      position: { x: 4, y: 4 }, currentHp: 127, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 20 },
     { id: "barb", definitionId: "def-fighter", displayName: "Barb", faction: "party",
-      position: { x: 5, y: 4 }, currentHp: 40, tempHp: 0, state: "active", tacticsProfile: "basic-melee", initiative: 10 },
+      position: { x: 5, y: 4 }, currentHp: 40, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 10 },
     { id: "gob", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-      position: { x: 10, y: 4 }, currentHp: 3, tempHp: 0, state: "active", tacticsProfile: "basic-melee", initiative: 1 }
+      position: { x: 10, y: 4 }, currentHp: 3, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced", initiative: 1 }
   ];
   return enc;
 }

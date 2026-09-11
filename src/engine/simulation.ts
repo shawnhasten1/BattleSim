@@ -32,7 +32,7 @@ import {
 import { combatantsInArea } from "./areas";
 import { abilityModifier, parseDiceExpression, resolveScaledDamage } from "./dice";
 import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
-import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, TacticsProfile } from "./types";
+import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -115,6 +115,23 @@ function tagPriorityValue(tags: ActorTag[] | undefined): number {
     return 0;
   }
   return tags.reduce((sum, tag) => sum + (TAG_PRIORITY_VALUE[tag] ?? 0), 0);
+}
+
+/**
+ * Scales every `resourcePenalty` term (healing/feature-activation/offensive
+ * action scoring) by the actor's DM-assigned resource stance. `balanced` is
+ * exactly 1 so it reproduces today's scoring unchanged.
+ */
+function resourceStanceMultiplier(stance: ResourceStance): number {
+  switch (stance) {
+    case "conservative":
+      return 3;
+    case "liberal":
+      return 0.15;
+    case "balanced":
+    default:
+      return 1;
+  }
 }
 
 export interface SimulationOutcome {
@@ -809,7 +826,7 @@ function selectHealingAction(
       `${Math.round(average)} expected healing`,
       reachable ? "in range" : "moves into range"
     ];
-    const resourcePenalty = action.resourceCost ? action.resourceCost.amount * 3 : 0;
+    const resourcePenalty = action.resourceCost ? action.resourceCost.amount * 3 * resourceStanceMultiplier(actor.resourceStance) : 0;
     const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
       + (target.tags?.includes("high-priority") ? 10 : 0)
       + (target.tags?.includes("low-priority") ? -15 : 0);
@@ -854,7 +871,7 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       || effect.kind === "save-bonus"
       || effect.kind === "save-advantage");
     const duration = action.condition?.durationRounds ?? 1;
-    const resourcePenalty = resourceCostAmount(action) * 3;
+    const resourcePenalty = resourceCostAmount(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     const score = (hasOffense ? 25 : 0)
       + (hasDefense ? 18 : 0)
       + Math.min(duration, 10)
@@ -896,7 +913,7 @@ function selectOffensivePlan(
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
       const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
-      const resourcePenalty = resourceCostAmount(action) * 4;
+      const resourcePenalty = resourceCostAmount(action) * 4 * resourceStanceMultiplier(actor.resourceStance);
       const targetHpRatio = clamp(target.currentHp / Math.max(1, targetDefinition.maxHp), 0, 1);
       const killPressure = target.currentHp <= expectedDamage
         ? tactics.killWeight

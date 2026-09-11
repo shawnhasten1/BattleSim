@@ -23,6 +23,12 @@ export type TacticsProfile =
   | "defender"
   | "controller";
 /**
+ * DM-assigned appetite for spending limited-use resources (spell slots, per-encounter
+ * recharges). Scales the AI's existing resource-cost scoring penalty — see
+ * `resourceStanceMultiplier()` in simulation.ts. Independent of tactics profile.
+ */
+export type ResourceStance = "conservative" | "balanced" | "liberal";
+/**
  * DM-assigned combat flags that bias AI targeting/protection/healing decisions
  * independent of tactics profile. See `TAG_PRIORITY_VALUE` and `tacticsSettings()`
  * in simulation.ts for how each tag is weighted per profile.
@@ -943,6 +949,8 @@ export interface CombatantState {
   /** Round this combatant enters play (1-based). Only meaningful with `state: "reserve"`. */
   arrivesRound?: number;
   tacticsProfile: TacticsProfile;
+  /** DM-assigned appetite for spending limited-use resources. See `ResourceStance`. */
+  resourceStance: ResourceStance;
   /** DM-assigned targeting/protection/healing flags. See `ActorTag`. */
   tags?: ActorTag[];
 }
@@ -1178,6 +1186,12 @@ const tacticsProfileSchema = z.preprocess(
   ])
 );
 
+const resourceStanceSchema = z.union([
+  z.literal("conservative"),
+  z.literal("balanced"),
+  z.literal("liberal")
+]).default("balanced") as z.ZodType<ResourceStance>;
+
 const actorTagSchema = z.enum(["high-priority", "low-priority", "protected"]) as z.ZodType<ActorTag>;
 
 export const creatureDefinitionSchema = z.object({
@@ -1258,6 +1272,7 @@ export const combatantExportSchema = z.object({
     ]),
     arrivesRound: z.number().int().min(1).optional(),
     tacticsProfile: tacticsProfileSchema,
+    resourceStance: resourceStanceSchema,
     tags: z.array(actorTagSchema).optional()
   }).optional()
 });
@@ -1398,6 +1413,7 @@ export const encounterSnapshotSchema = z.object({
       ]),
       arrivesRound: z.number().int().min(1).optional(),
       tacticsProfile: tacticsProfileSchema,
+      resourceStance: resourceStanceSchema,
       tags: z.array(actorTagSchema).optional()
     })
   )

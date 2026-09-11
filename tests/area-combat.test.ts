@@ -53,13 +53,13 @@ describe("area combat", () => {
     encounter.map.walls = [];
     encounter.combatants = [
       { id: "mage", definitionId: "def-archer", displayName: "Mage", faction: "party",
-        position: { x: 1, y: 1 }, currentHp: 24, tempHp: 0, state: "active", tacticsProfile: "basic-ranged" },
+        position: { x: 1, y: 1 }, currentHp: 24, tempHp: 0, state: "active", tacticsProfile: "basic-ranged", resourceStance: "balanced" },
       { id: "g1", definitionId: "def-goblin", displayName: "G1", faction: "enemy",
-        position: { x: 8, y: 4 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 8, y: 4 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "g2", definitionId: "def-goblin", displayName: "G2", faction: "enemy",
-        position: { x: 9, y: 4 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 9, y: 4 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "g3", definitionId: "def-goblin", displayName: "G3", faction: "enemy",
-        position: { x: 8, y: 5 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee" }
+        position: { x: 8, y: 5 }, currentHp: 80, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" }
     ];
     encounter.definitions.find((d) => d.id === "def-archer")!.actions.push({
       kind: "area-save", id: "fireball", name: "Fireball", actionType: "action", saveAbility: "dex",

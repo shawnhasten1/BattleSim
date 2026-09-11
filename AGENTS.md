@@ -238,10 +238,14 @@ Automated simulations require tactical decision making, but the first version sh
 | Defender          | Protects designated allies, blocks chokepoints, values opportunity attacks                                  |
 | Custom            | Weighted behavior parameters selected per creature or faction                                               |
 
+## Resource stance
+
+Independent of tactics profile, each combatant (and each faction in bulk, via the Combat panel) carries a `resourceStance` of `conservative`, `balanced`, or `liberal`. It scales the resource-cost penalty applied when scoring any action with a `resourceCost` (spell slots, per-encounter recharges): `conservative` leans hard on at-will options and only spends when the payoff clearly justifies it, `liberal` spends freely — good for a fight the DM knows is the boss — and `balanced` reproduces the default scoring. See `resourceStanceMultiplier()` in `engine/simulation.ts`.
+
 ## Decision scoring
 
 - Generate legal candidate actions, targets, movement destinations, and action sequences.
-- Score candidates using expected damage/effect, kill/down chance, target priority, resource cost, risk, positioning, cover, concentration safety, friendly fire, and objective value.
+- Score candidates using expected damage/effect, kill/down chance, target priority, resource cost (scaled by resource stance), risk, positioning, cover, concentration safety, friendly fire, and objective value.
 - Select highest score, with optional small seeded variance so simulations do not always choose identical tactics.
 - Keep scoring output in debug mode so a DM/developer can inspect why the AI made a choice.
 

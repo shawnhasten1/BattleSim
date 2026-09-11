@@ -301,11 +301,11 @@ describe("AI — bonus-action economy", () => {
     const encounter = baseEncounter("heal-move");
     encounter.combatants = [
       { id: CASTER, definitionId: CASTER_DEF, displayName: "Cleric", faction: "party",
-        position: { x: 2, y: 2 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 2, y: 2 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
-        position: { x: 2, y: 5 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged" },
+        position: { x: 2, y: 5 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged", resourceStance: "balanced" },
       { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 11, y: 7 }, currentHp: 7, tempHp: 0, state: "active", tacticsProfile: "basic-melee" }
+        position: { x: 11, y: 7 }, currentHp: 7, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" }
     ];
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB, cure];
     const state = createEngineState(encounter);
@@ -325,9 +325,9 @@ describe("AI — bonus-action economy", () => {
     const encounter = baseEncounter("heal-unreachable");
     encounter.combatants = [
       { id: CASTER, definitionId: CASTER_DEF, displayName: "Cleric", faction: "party",
-        position: { x: 1, y: 1 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 1, y: 1 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
-        position: { x: 11, y: 7 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged" }
+        position: { x: 11, y: 7 }, currentHp: 4, tempHp: 0, state: "active", tacticsProfile: "basic-ranged", resourceStance: "balanced" }
     ];
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [cure];
     const state = createEngineState(encounter);
@@ -588,11 +588,11 @@ describe("AI — actor tags", () => {
     const encounter = baseEncounter("tag-brute");
     encounter.combatants = [
       { id: CASTER, definitionId: CASTER_DEF, displayName: "Brute", faction: "party",
-        position: { x: 5, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "brute" },
+        position: { x: 5, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "brute", resourceStance: "balanced" },
       { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 4, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee",
+        position: { x: 4, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced",
         tags: ["high-priority"] }
     ];
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB];
@@ -606,14 +606,14 @@ describe("AI — actor tags", () => {
     const encounter = baseEncounter("tag-protected");
     encounter.combatants = [
       { id: CASTER, definitionId: CASTER_DEF, displayName: "Defender", faction: "party",
-        position: { x: 5, y: 5 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "defender" },
+        position: { x: 5, y: 5 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "defender", resourceStance: "balanced" },
       { id: "pc-archer", definitionId: "def-archer", displayName: "Archer", faction: "party",
-        position: { x: 5, y: 3 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-ranged",
+        position: { x: 5, y: 3 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "basic-ranged", resourceStance: "balanced",
         tags: ["protected"] },
       { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 5, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 5, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 5, y: 6 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" }
+        position: { x: 5, y: 6 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" }
     ];
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [WEAK_JAB];
     const state = createEngineState(encounter);
@@ -633,15 +633,15 @@ describe("AI — actor tags", () => {
     const encounter = baseEncounter("tag-aoe-group");
     encounter.combatants = [
       { id: CASTER, definitionId: CASTER_DEF, displayName: "Controller", faction: "party",
-        position: { x: 1, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "controller" },
+        position: { x: 1, y: 4 }, currentHp: 30, tempHp: 0, state: "active", tacticsProfile: "controller", resourceStance: "balanced" },
       { id: "enemy-goblin-1", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 6, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "enemy-goblin-2", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 7, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 7, y: 4 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "enemy-goblin-3", definitionId: "def-goblin", displayName: "Goblin", faction: "enemy",
-        position: { x: 6, y: 5 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee" },
+        position: { x: 6, y: 5 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
       { id: "enemy-goblin-vip", definitionId: "def-goblin", displayName: "Goblin VIP", faction: "enemy",
-        position: { x: 1, y: 0 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee",
+        position: { x: 1, y: 0 }, currentHp: 20, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced",
         tags: ["high-priority"] }
     ];
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions = [fireball];

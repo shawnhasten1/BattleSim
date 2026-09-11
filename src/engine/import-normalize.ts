@@ -123,7 +123,8 @@ function normalizeCombatantInput(input: Record<string, unknown>, definition: Cre
     resources: normalizeResourceRecord(input.resources),
     state,
     arrivesRound,
-    tacticsProfile: normalizeTacticsProfile(input.tacticsProfile)
+    tacticsProfile: normalizeTacticsProfile(input.tacticsProfile),
+    resourceStance: normalizeResourceStance(input.resourceStance)
   };
 }
 
@@ -918,6 +919,10 @@ function normalizeTacticsProfile(input: unknown): "basic-melee" | "basic-ranged"
     || input === "controller"
     ? input
     : "basic-melee";
+}
+
+function normalizeResourceStance(input: unknown): "conservative" | "balanced" | "liberal" {
+  return input === "conservative" || input === "liberal" ? input : "balanced";
 }
 
 function numberField(record: Record<string, unknown>, field: string): number | undefined {

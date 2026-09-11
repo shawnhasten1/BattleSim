@@ -4,6 +4,7 @@ import type { ActorTag, CombatantState, CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
+import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import styles from "../sheet.module.css";
 
 const TAGS: { value: ActorTag; label: string; hint: string }[] = [
@@ -23,8 +24,20 @@ const TACTICS_PROFILE_HELP = (
   </dl>
 );
 
+const RESOURCE_STANCE_HELP = (
+  <dl>
+    {RESOURCE_STANCES.map((option) => (
+      <div key={option.value}>
+        <dt>{option.label}</dt>
+        <dd>{option.description}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
 export function TacticsTab({ combatant }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateTactics = useEncounterStore((s) => s.updateTactics);
+  const updateResourceStance = useEncounterStore((s) => s.updateResourceStance);
   const updateTags = useEncounterStore((s) => s.updateTags);
   const tags = combatant.tags ?? [];
 
@@ -48,6 +61,20 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
               onChange={(e) => updateTactics(combatant.id, e.target.value as typeof combatant.tacticsProfile)}
             >
               {TACTICS_PROFILES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>
+              Resource stance
+              <InfoTooltip label="About resource stances" content={RESOURCE_STANCE_HELP} />
+            </span>
+            <select
+              value={combatant.resourceStance}
+              onChange={(e) => updateResourceStance(combatant.id, e.target.value as typeof combatant.resourceStance)}
+            >
+              {RESOURCE_STANCES.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>

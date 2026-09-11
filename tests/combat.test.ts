@@ -383,7 +383,7 @@ describe("combat engine", () => {
           currentHp: 45,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-ranged"
+          tacticsProfile: "basic-ranged", resourceStance: "balanced"
         },
         {
           id: "target",
@@ -394,7 +394,7 @@ describe("combat engine", () => {
           currentHp: 20,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -458,7 +458,7 @@ describe("combat engine", () => {
         currentHp: 32,
         tempHp: 0,
         state: "active",
-        tacticsProfile: "basic-melee"
+        tacticsProfile: "basic-melee", resourceStance: "balanced"
       },
       {
         id: "target",
@@ -469,7 +469,7 @@ describe("combat engine", () => {
         currentHp: 20,
         tempHp: 0,
         state: "active",
-        tacticsProfile: "basic-melee"
+        tacticsProfile: "basic-melee", resourceStance: "balanced"
       }
     ];
     const action = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
@@ -711,7 +711,7 @@ describe("combat engine", () => {
           currentHp: 30,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "controller"
+          tacticsProfile: "controller", resourceStance: "balanced"
         },
         {
           id: "target-a",
@@ -722,7 +722,7 @@ describe("combat engine", () => {
           currentHp: 20,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         },
         {
           id: "target-b",
@@ -733,7 +733,7 @@ describe("combat engine", () => {
           currentHp: 20,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -1022,7 +1022,7 @@ describe("combat engine", () => {
           tempHp: 0,
           resources: { rage: 4 },
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         },
         {
           id: "target",
@@ -1033,7 +1033,7 @@ describe("combat engine", () => {
           currentHp: 100,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -1098,7 +1098,7 @@ describe("combat engine", () => {
           tempHp: 0,
           resources: { rage: 1 },
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         },
         {
           id: "attacker",
@@ -1109,7 +1109,7 @@ describe("combat engine", () => {
           currentHp: 100,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -1483,7 +1483,7 @@ describe("combat engine", () => {
           currentHp: 78,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         },
         {
           id: "target",
@@ -1494,7 +1494,7 @@ describe("combat engine", () => {
           currentHp: 100,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -1550,7 +1550,7 @@ describe("combat engine", () => {
           currentHp: 78,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         },
         {
           id: "target",
@@ -1561,7 +1561,7 @@ describe("combat engine", () => {
           currentHp: 100,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
@@ -1616,7 +1616,7 @@ describe("combat engine", () => {
           tempHp: 0,
           resources: { "second-deaths-brand": 1 },
           state: "active",
-          tacticsProfile: "basic-ranged"
+          tacticsProfile: "basic-ranged", resourceStance: "balanced"
         },
         {
           id: "target",
@@ -1627,7 +1627,7 @@ describe("combat engine", () => {
           currentHp: 100,
           tempHp: 0,
           state: "active",
-          tacticsProfile: "basic-melee"
+          tacticsProfile: "basic-melee", resourceStance: "balanced"
         }
       ]
     };
