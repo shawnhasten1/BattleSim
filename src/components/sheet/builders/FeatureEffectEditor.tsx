@@ -29,7 +29,7 @@ const SCOPE_OPTIONS: Array<[string, string]> = [
 type EditorKind =
   | "damage-bonus" | "damage-adjustment" | "attack-bonus" | "attack-advantage"
   | "incoming-attack-modifier" | "armor-class-bonus" | "save-bonus" | "save-advantage"
-  | "extra-action" | "resource-regain" | "avoids-opportunity-attacks";
+  | "save-dc-bonus" | "extra-action" | "resource-regain" | "avoids-opportunity-attacks";
 
 const KIND_LABELS: Array<[EditorKind, string]> = [
   ["damage-bonus", "Bonus / penalty damage"],
@@ -40,6 +40,7 @@ const KIND_LABELS: Array<[EditorKind, string]> = [
   ["armor-class-bonus", "AC modifier"],
   ["save-bonus", "Saving-throw modifier"],
   ["save-advantage", "Advantage on saving throws"],
+  ["save-dc-bonus", "Save DC modifier (spell focus, etc.)"],
   ["extra-action", "Regain a spent action / bonus action / reaction"],
   ["resource-regain", "Regain a resource"],
   ["avoids-opportunity-attacks", "Never provokes opportunity attacks"]
@@ -48,12 +49,13 @@ const KIND_LABELS: Array<[EditorKind, string]> = [
 const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
   "damage-bonus": "Extra (or reduced) damage added to a qualifying hit.",
   "damage-adjustment": "Resistance, immunity, or vulnerability to a damage type.",
-  "attack-bonus": "A flat modifier to this creature's attack rolls.",
+  "attack-bonus": "A flat modifier to this creature's attack rolls — pick \"spell attacks\" under Applies to for a spellcasting focus's bonus.",
   "attack-advantage": "Advantage or disadvantage on this creature's own attack rolls.",
   "incoming-attack-modifier": "Advantage or disadvantage on attack rolls made against this creature.",
   "armor-class-bonus": "A flat modifier to this creature's AC.",
   "save-bonus": "A flat modifier to this creature's saving throws.",
   "save-advantage": "Advantage on this creature's saving throws.",
+  "save-dc-bonus": "A flat modifier to the save DC this creature imposes with its own saving-throw effects (a spellcasting focus boosting spell save DC, etc.).",
   "extra-action": "Regain a spent action, bonus action, or reaction so it can be used again this turn.",
   "resource-regain": "Refund some amount of a limited-use resource (a spell slot, a charge, etc.).",
   "avoids-opportunity-attacks": "This creature never provokes opportunity attacks by moving."
@@ -106,6 +108,8 @@ function blankEffect(kind: EditorKind): FeatureEffect {
       return { kind: "armor-class-bonus", bonus: { base: 1 } };
     case "save-bonus":
       return { kind: "save-bonus", bonus: { base: 1 } };
+    case "save-dc-bonus":
+      return { kind: "save-dc-bonus", bonus: { base: 1 }, spellsOnly: true };
     case "save-advantage":
       return { kind: "save-advantage" };
     case "extra-action":
@@ -249,6 +253,18 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
             only on a crit
           </label>
         </div>
+        <div className={styles.riderRow}>
+          <label className={styles.fieldInlineLabel}>
+            Only if the base attack already deals
+            <select
+              value={effect.damageTypes?.[0] ?? "any"}
+              onChange={(e) => set({ ...effect, damageTypes: e.target.value === "any" ? undefined : [e.target.value as never] })}
+            >
+              <option value="any">any damage type</option>
+              {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+        </div>
       </>
     );
   }
@@ -314,6 +330,22 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
             </select>
           </label>
         ) : null}
+      </div>
+    );
+  }
+
+  if (effect.kind === "save-dc-bonus") {
+    return (
+      <div className={styles.riderRow}>
+        <NumericFormulaInput value={effect.bonus} onChange={(bonus) => set({ ...effect, bonus })} />
+        <label className={styles.fieldInlineLabel}>
+          <input
+            type="checkbox"
+            checked={Boolean(effect.spellsOnly)}
+            onChange={(e) => set({ ...effect, spellsOnly: e.target.checked ? true : undefined })}
+          />
+          spells only
+        </label>
       </div>
     );
   }

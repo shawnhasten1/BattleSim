@@ -7,6 +7,7 @@ import { visibleSpecs, type BuilderDraft, type FieldSpec } from "./field-spec";
 import { blankReactionTrigger, diceValueToString, parseDiceValue, REACTION_TRIGGER_KINDS, type DiceValue } from "./schemas";
 import { RiderEditor } from "./RiderEditor";
 import { FeatureEffectEditor } from "./FeatureEffectEditor";
+import { GrantedActionEditor } from "./GrantedActionEditor";
 import styles from "./builders.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -150,6 +151,14 @@ function BuilderControl({
       return <ReactionTriggerControl id={id} value={value as ReactionTrigger | undefined} onChange={onChange} />;
     case "feature-effects":
       return <FeatureEffectEditor value={(value as FeatureEffect[]) ?? []} onChange={onChange} />;
+    case "granted-actions":
+      return (
+        <GrantedActionEditor
+          value={(value as Parameters<typeof GrantedActionEditor>[0]["value"]) ?? []}
+          onChange={onChange}
+          chargesEnabled={Boolean(draft.chargesEnabled)}
+        />
+      );
     default:
       return null;
   }

@@ -31,6 +31,7 @@ import type {
   Point,
   ReactionMeta,
   ReactionTrigger,
+  ResourceCost,
   RiderDuration,
   RiderGate,
   SaveActionDefinition,
@@ -168,6 +169,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...(definition.features ?? []),
     ...(definition.traits ?? [])
   ].flatMap((feature) => feature.grantedActions ?? []);
+  const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
 
   const declared = [
     ...definition.actions,
@@ -175,7 +177,8 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...(definition.reactions ?? []),
     ...weaponActions,
     ...spellActions,
-    ...grantedActions
+    ...grantedActions,
+    ...weaponGrantedActions
   ];
 
   return dedupeActionsById([
@@ -1818,6 +1821,20 @@ function weaponUsableSlots(weapon: WeaponInput): Array<"action" | "bonus" | "rea
   return slots.includes("action") ? ["action", ...slots.filter((slot) => slot !== "action")] : slots;
 }
 
+/** A charge-gated rider the wielder may choose to hold back — it's compiled as a separate "spend charge" candidate action rather than folded into the base attack. */
+function isOptionalRider(rider: ActionRider): rider is Exclude<ActionRider, { kind: "note" }> & { resourceCost: ResourceCost } {
+  return "resourceCost" in rider && Boolean(rider.resourceCost) && rider.activation === "optional";
+}
+
+/** The base attack's riders, excluding any `"optional"` charge-gated ones — those instead spawn their own "spend charge" candidate action in `weaponToActions`. */
+function mandatoryRiders(onHit: ActionRider[] | undefined): ActionRider[] | undefined {
+  if (!onHit?.length) {
+    return onHit;
+  }
+  const filtered = onHit.filter((rider) => !isOptionalRider(rider));
+  return filtered.length ? filtered : undefined;
+}
+
 function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition {
   const magicBonus = weapon.magicBonus ?? 0;
   const toHitBonus = weapon.toHitBonus ?? 0;
@@ -1833,7 +1850,8 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
     id: weapon.actionId ?? `weapon:${weapon.id}`,
     name: weapon.name,
     actionType: "action",
-    attackType: weapon.attackType,
+    // Never "focus" here — `weaponToActions` returns early for a focus weapon before this runs.
+    attackType: weapon.attackType as "melee" | "ranged",
     ability,
     grip: twoHanded ? "two-handed" : "one-handed",
     attackBonusFormula: {
@@ -1852,7 +1870,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
         ? { ...(component.bonusFormula ?? {}), base: (component.bonusFormula?.base ?? 0) + magicBonus }
         : component.bonusFormula
     })),
-    riders: weapon.onHit,
+    riders: mandatoryRiders(weapon.onHit),
     resourceCost: weapon.resourceCost,
     automationSupport: weaponAutomationSupport(weapon)
   };
@@ -1882,6 +1900,9 @@ function powerAttackVariant(base: AttackActionDefinition): AttackActionDefinitio
  * false` so the OA scan skips it.
  */
 function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): AttackActionDefinition[] {
+  if (weapon.attackType === "focus") {
+    return [];
+  }
   const base = weaponToAction(definition, weapon);
   const slots = weaponUsableSlots(weapon);
   const barsOpportunityAttack = weapon.attackType === "melee" && !slots.includes("reaction");
@@ -1909,6 +1930,23 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
       out.push(powerAttackVariant(forSlot));
     }
   }
+
+  const optionalRiders = (weapon.onHit ?? []).filter(isOptionalRider);
+  if (optionalRiders.length) {
+    const upgraded = out.flatMap((action) => optionalRiders.map((rider, index) => ({
+      ...action,
+      id: `${action.id}:charged${optionalRiders.length > 1 ? `-${index + 1}` : ""}`,
+      name: `${action.name} (spend charge)`,
+      riders: [...(action.riders ?? []), rider],
+      // Surface the rider's cost on the action itself so the AI's existing
+      // resourceCost-based affordability filter / scoring penalty (which only
+      // ever looks at the action's own `resourceCost`) sees this variant as
+      // costing something, and won't offer it when unaffordable.
+      resourceCost: rider.resourceCost
+    })));
+    out.push(...upgraded);
+  }
+
   return out;
 }
 
@@ -2021,7 +2059,16 @@ function featureSources(definition: CreatureDefinition, combatant?: CombatantSta
       effects: condition.effects,
       automationSupport: "full" as const
     }));
-  return [...(definition.features ?? []), ...(definition.traits ?? []), ...activeConditionSources];
+  const weaponSources = (definition.weapons ?? [])
+    .filter((weapon) => weapon.effects?.length)
+    .map((weapon) => ({
+      id: weapon.id,
+      name: weapon.name,
+      category: "feature" as const,
+      effects: weapon.effects,
+      automationSupport: "full" as const
+    }));
+  return [...(definition.features ?? []), ...(definition.traits ?? []), ...weaponSources, ...activeConditionSources];
 }
 
 type FeatureDefinitionSource = NonNullable<CreatureDefinition["features"]>[number];
@@ -2710,6 +2757,9 @@ function featureSaveDcModifier(
       if (effect.actionIds && !effect.actionIds.includes(action.id)) {
         continue;
       }
+      if (effect.spellsOnly && action.spellLevel === undefined) {
+        continue;
+      }
       total += resolveNumericFormula(effect.bonus, definition);
       sources.push(feature.name);
     }
@@ -2813,6 +2863,13 @@ function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefin
     return false;
   }
   if ("attackTypes" in effect && effect.attackTypes && !effect.attackTypes.includes(action.attackType)) {
+    return false;
+  }
+  if ("spellsOnly" in effect && effect.spellsOnly && action.spellLevel === undefined) {
+    return false;
+  }
+  if ("damageTypes" in effect && effect.damageTypes
+    && !action.damage.some((component) => effect.damageTypes!.includes(component.damageType))) {
     return false;
   }
   return !("abilities" in effect) || !effect.abilities || effect.abilities.includes(action.ability);

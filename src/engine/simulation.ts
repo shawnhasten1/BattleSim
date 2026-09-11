@@ -913,7 +913,8 @@ function selectOffensivePlan(
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
       const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
-      const resourcePenalty = resourceCostAmount(action) * 4 * resourceStanceMultiplier(actor.resourceStance);
+      const resourcePenalty = resourceCostAmount(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
+        * optionalRiderCostDiscount(action, definition, targetDefinition);
       const targetHpRatio = clamp(target.currentHp / Math.max(1, targetDefinition.maxHp), 0, 1);
       const killPressure = target.currentHp <= expectedDamage
         ? tactics.killWeight
@@ -1335,6 +1336,35 @@ function canPayResource(actor: CombatantState, action: ActionDefinition): boolea
 
 function resourceCostAmount(action: ActionDefinition): number {
   return "resourceCost" in action && action.resourceCost ? action.resourceCost.amount : 0;
+}
+
+/**
+ * For a "spend charge" optional-rider action (see `weaponToActions`), the
+ * charge is only actually spent when the rider's own gate fires — an
+ * `on-crit` upgrade rarely pays its cost. Scale the resource penalty by that
+ * same trigger chance so the AI doesn't undervalue a rare-trigger upgrade the
+ * way a flat, certain cost would. Any other resourceCost (a spell slot, an
+ * `"always"` rider folded into the base attack) is a certain spend — discount 1.
+ */
+function optionalRiderCostDiscount(
+  action: ActionDefinition,
+  source: ReturnType<typeof getDefinition>,
+  target: ReturnType<typeof getDefinition>
+): number {
+  if (!("resourceCost" in action) || !action.resourceCost || !("riders" in action) || !action.riders) {
+    return 1;
+  }
+  const rider = action.riders.find((candidate) => "resourceCost" in candidate && candidate.resourceCost === action.resourceCost);
+  if (!rider || rider.kind === "note") {
+    return 1;
+  }
+  const landChance = action.kind === "attack"
+    ? chanceToHit(resolveAttackBonus(action, source), target.armorClass)
+    : undefined;
+  const failChance = (action.kind === "save" || action.kind === "area-save")
+    ? chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]))
+    : undefined;
+  return riderTriggerChance(rider.when, { landChance, failChance });
 }
 
 function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typeof getDefinition>, tactics: TacticsSettings): boolean {

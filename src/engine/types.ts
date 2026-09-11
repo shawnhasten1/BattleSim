@@ -244,6 +244,10 @@ export interface FeatureEffectScope {
   actionIds?: Id[];
   attackTypes?: Array<AttackActionDefinition["attackType"]>;
   abilities?: Ability[];
+  /** Restrict to compiled spell actions (`action.spellLevel !== undefined`) — any shape, not just attacks. */
+  spellsOnly?: boolean;
+  /** Restrict to actions that already deal at least one of these damage types (a Frost Staff amplifying cold spells, not adding cold to everything). */
+  damageTypes?: DamageTypeReference[];
 }
 
 export interface FeatureEffectConditions {
@@ -339,6 +343,8 @@ export type FeatureEffect =
     kind: "save-dc-bonus";
     bonus: NumericFormula;
     actionIds?: Id[];
+    /** Restrict to compiled spell actions (`action.spellLevel !== undefined`) instead of listing every spell id by hand. */
+    spellsOnly?: boolean;
   }
   | {
     kind: "resource-regain";
@@ -448,6 +454,15 @@ interface TriggeredRider extends ActionRiderCommon {
    * If unpayable the rider is skipped and the parent action still resolves.
    */
   resourceCost?: ResourceCost;
+  /**
+   * Only meaningful alongside `resourceCost`. `"always"` (default) spends the
+   * charge automatically whenever the gate fires and it's affordable — the
+   * upgrade isn't a choice. `"optional"` means the charge *can* be spent for
+   * the upgrade but doesn't have to be: `weaponToActions` compiles a second,
+   * plain candidate action alongside the upgraded one so the AI (or a player)
+   * can choose to hold the charge instead.
+   */
+  activation?: "always" | "optional";
 }
 
 export type ActionRider =
@@ -700,7 +715,12 @@ export interface WeaponDefinition {
   name: string;
   source?: SourceMetadata;
   category?: "simple" | "martial";
-  attackType: "melee" | "ranged";
+  /**
+   * `"focus"` is a spellcasting focus / wand / wondrous item with no attack of
+   * its own — `weaponToActions` compiles no base attack for it. Its `damage`
+   * and `range` are unused placeholders in that case.
+   */
+  attackType: "melee" | "ranged" | "focus";
   /** An `Ability`, or `"finesse"` — resolved to the better of STR/DEX at attack time. */
   ability: Ability | "finesse";
   /** Default `true`. `false` drops the proficiency bonus from the attack roll. */
@@ -722,6 +742,21 @@ export interface WeaponDefinition {
   resourceCost?: ResourceCost;
   /** Spell-like on-hit effects: extra damage, a save-or-condition, a shove. */
   onHit?: ActionRider[];
+  /**
+   * Additional independent actions this item grants — a spell-focus's tiered
+   * spells (1 charge Firebolt, 3 charge Fireball), or a magic weapon that also
+   * lets you cast something for charges. Each entry has its own `actionType`
+   * (action/bonus/reaction) and its own `resourceCost` against this weapon's
+   * `charges` pool; no `resourceCost` = at-will. Compiled the same way as
+   * `FeatureDefinition.grantedActions`.
+   */
+  grantedActions?: ActionDefinition[];
+  /**
+   * Passive bonuses while this item is carried (spell attack/DC bonus, a
+   * damage-type boost like a Frost Staff). Compiled the same way as
+   * `FeatureDefinition.effects` — folded into `featureSources()`.
+   */
+  effects?: FeatureEffect[];
   actionId?: Id;
   /** +1 / +2 / +3 — adds to both the attack roll and every damage component. */
   magicBonus?: number;

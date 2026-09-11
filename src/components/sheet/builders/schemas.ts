@@ -132,34 +132,41 @@ function reactionMetaFromDraft(draft: BuilderDraft): ReactionMeta | undefined {
 /* ─── weapon ──────────────────────────────────────────────────────────────── */
 
 export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
-  const isMelee = draft.weaponKind !== "ranged";
+  const isFocus = draft.weaponKind === "focus";
+  const isMelee = !isFocus && draft.weaponKind !== "ranged";
+  const hasAttack = (d: BuilderDraft) => d.weaponKind !== "focus";
   return [
     { key: "name", copy: "name", control: "text" },
-    { key: "weaponKind", copy: "weapon.kind", control: "select", options: [{ value: "melee", label: "Melee" }, { value: "ranged", label: "Ranged" }] },
-    { key: "ability", copy: "weapon.ability", control: "ability" },
-    { key: "dmg", copy: "weapon.damage", control: "dice" },
-    { key: "magicBonus", copy: "weapon.magicBonus", control: "number", min: 0, max: 3, step: 1 },
-    { key: "magical", copy: "weapon.magical", control: "toggle" },
-    { key: "onHit", copy: "weapon.onHit", control: "riders", riderContext: "weapon" },
+    {
+      key: "weaponKind", copy: "weapon.kind", control: "select",
+      options: [{ value: "melee", label: "Melee" }, { value: "ranged", label: "Ranged" }, { value: "focus", label: "Spellcasting focus (no attack)" }]
+    },
+    { key: "ability", copy: "weapon.ability", control: "ability", visibleWhen: hasAttack },
+    { key: "dmg", copy: "weapon.damage", control: "dice", visibleWhen: hasAttack },
+    { key: "magicBonus", copy: "weapon.magicBonus", control: "number", min: 0, max: 3, step: 1, visibleWhen: hasAttack },
+    { key: "magical", copy: "weapon.magical", control: "toggle", visibleWhen: hasAttack },
+    { key: "onHit", copy: "weapon.onHit", control: "riders", riderContext: "weapon", visibleWhen: hasAttack },
     { key: "chargesEnabled", copy: "weapon.charges", control: "toggle" },
     { key: "chargesMax", copy: "weapon.chargesMax", control: "number", min: 1, max: 20, step: 1, visibleWhen: (d) => Boolean(d.chargesEnabled) },
     {
       key: "chargesRecharge", copy: "weapon.chargesRecharge", control: "select", visibleWhen: (d) => Boolean(d.chargesEnabled),
       options: [{ value: "dawn", label: "At dawn" }, { value: "short-rest", label: "Short rest" }, { value: "long-rest", label: "Long rest" }]
     },
-    { key: "bonusOnly", copy: "weapon.bonusOnly", control: "toggle", advanced: true },
-    { key: "usableAsBonus", copy: "weapon.usableAsBonus", control: "toggle", advanced: true, visibleWhen: (d) => !d.bonusOnly },
+    { key: "grantedActions", copy: "weapon.grantedActions", control: "granted-actions" },
+    { key: "effects", copy: "weapon.effects", control: "feature-effects" },
+    { key: "bonusOnly", copy: "weapon.bonusOnly", control: "toggle", advanced: true, visibleWhen: hasAttack },
+    { key: "usableAsBonus", copy: "weapon.usableAsBonus", control: "toggle", advanced: true, visibleWhen: (d) => hasAttack(d) && !d.bonusOnly },
     { key: "usableAsReaction", copy: "weapon.usableAsReaction", control: "toggle", advanced: true, visibleWhen: (d) => isMelee && !d.bonusOnly },
     { key: "reactionTrigger", copy: "weapon.reactionTrigger", control: "reaction-trigger", advanced: true, visibleWhen: (d) => isMelee && !d.bonusOnly && Boolean(d.usableAsReaction) },
     { key: "grip", copy: "weapon.grip", control: "select", advanced: true, visibleWhen: () => isMelee,
       options: [{ value: "one-handed", label: "One-handed" }, { value: "two-handed", label: "Two-handed" }, { value: "versatile", label: "Versatile" }] },
-    { key: "powerAttack", copy: "weapon.powerAttack", control: "toggle", advanced: true },
-    { key: "nonProficient", copy: "weapon.nonProficient", control: "toggle", advanced: true },
-    { key: "toHitBonus", copy: "weapon.toHitBonus", control: "number", advanced: true },
+    { key: "powerAttack", copy: "weapon.powerAttack", control: "toggle", advanced: true, visibleWhen: hasAttack },
+    { key: "nonProficient", copy: "weapon.nonProficient", control: "toggle", advanced: true, visibleWhen: hasAttack },
+    { key: "toHitBonus", copy: "weapon.toHitBonus", control: "number", advanced: true, visibleWhen: hasAttack },
     { key: "reach", copy: "weapon.reach", control: "number", advanced: true, visibleWhen: () => isMelee },
-    { key: "range", copy: "weapon.range", control: "number", advanced: true, visibleWhen: () => !isMelee },
-    { key: "longRange", copy: "weapon.longRange", control: "number", advanced: true, visibleWhen: () => !isMelee },
-    { key: "properties", copy: "weapon.properties", control: "properties", advanced: true }
+    { key: "range", copy: "weapon.range", control: "number", advanced: true, visibleWhen: (d) => hasAttack(d) && !isMelee },
+    { key: "longRange", copy: "weapon.longRange", control: "number", advanced: true, visibleWhen: (d) => hasAttack(d) && !isMelee },
+    { key: "properties", copy: "weapon.properties", control: "properties", advanced: true, visibleWhen: hasAttack }
   ];
 }
 
@@ -174,6 +181,8 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     magicBonus: weapon.magicBonus ?? 0,
     magical: Boolean(weapon.magical),
     onHit: weapon.onHit ?? [],
+    grantedActions: grantedDraftsFromActions(weapon.grantedActions),
+    effects: weapon.effects ?? [],
     chargesEnabled: Boolean(weapon.charges),
     chargesMax: weapon.charges?.max ?? 1,
     chargesRecharge: typeof weapon.charges?.recharge === "string" ? weapon.charges.recharge : "dawn",
@@ -194,7 +203,7 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
 }
 
 export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
-  const kind: WeaponDefinition["attackType"] = draft.weaponKind === "ranged" ? "ranged" : "melee";
+  const kind: WeaponDefinition["attackType"] = draft.weaponKind === "focus" ? "focus" : draft.weaponKind === "ranged" ? "ranged" : "melee";
   const ability = (draft.ability as WeaponDefinition["ability"]) ?? "str";
   const damageAbility: Ability = ability === "finesse" ? "str" : ability;
   const bonusOnly = Boolean(draft.bonusOnly);
@@ -209,6 +218,30 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
   const isDefaultSlots = !bonusOnly
     && usableAs.length === (kind === "melee" ? 2 : 1)
     && usableAs.includes("action") && (kind !== "melee" || usableAs.includes("reaction")) && !usableAs.includes("bonus");
+
+  const chargesEnabled = Boolean(draft.chargesEnabled);
+  const charges = chargesEnabled
+    ? { id: "charge", max: Math.max(1, Number(draft.chargesMax) || 1), recharge: (draft.chargesRecharge as "dawn" | "short-rest" | "long-rest") ?? "dawn" }
+    : undefined;
+  const grantedActions = (draft.grantedActions as BuilderDraft[] | undefined)?.length
+    ? (draft.grantedActions as BuilderDraft[]).map((item) => grantedActionFromDraft(item, chargesEnabled ? "charge" : undefined))
+    : undefined;
+  const effects = (draft.effects as FeatureEffect[])?.length ? (draft.effects as FeatureEffect[]) : undefined;
+
+  if (kind === "focus") {
+    return {
+      id: "",
+      name: (draft.name as string) || "Weapon",
+      attackType: "focus",
+      ability: "int",
+      range: 0,
+      damage: [],
+      charges,
+      grantedActions,
+      effects
+    };
+  }
+
   return {
     id: "",
     name: (draft.name as string) || "Weapon",
@@ -224,9 +257,9 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
     damage: [diceToComponent(draft.dmg as DiceValue, damageAbility)],
     properties: (draft.properties as string[])?.length ? (draft.properties as string[]) : undefined,
     onHit: (draft.onHit as ActionRider[])?.length ? (draft.onHit as ActionRider[]) : undefined,
-    charges: draft.chargesEnabled
-      ? { id: "charge", max: Math.max(1, Number(draft.chargesMax) || 1), recharge: (draft.chargesRecharge as "dawn" | "short-rest" | "long-rest") ?? "dawn" }
-      : undefined,
+    charges,
+    grantedActions,
+    effects,
     usableAs: isDefaultSlots ? undefined : usableAs,
     grip: draft.grip === "two-handed" || draft.grip === "versatile" ? draft.grip : undefined,
     powerAttack: draft.powerAttack ? true : undefined,
@@ -490,6 +523,50 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
     riders: riders.length ? riders : undefined,
     concentration: draft.concentration ? true : undefined,
     automationSupport: "full"
+  };
+}
+
+/* ─── granted-action drafts (weapon / focus `grantedActions`) ─────────────── */
+
+const BLANK_GRANTED_ACTION: ActionDefinition = {
+  kind: "attack",
+  id: "",
+  name: "Granted Spell",
+  actionType: "action",
+  attackType: "spell",
+  ability: "int",
+  range: 60,
+  damage: [{ dice: "1d10", damageType: "fire" }],
+  automationSupport: "full"
+};
+
+export function blankGrantedDraft(): BuilderDraft {
+  return { ...effectDraftFromAction(BLANK_GRANTED_ACTION), chargeCost: 0 };
+}
+
+export function grantedDraftsFromActions(actions: ActionDefinition[] | undefined): BuilderDraft[] {
+  return (actions ?? []).map((action) => ({
+    ...effectDraftFromAction(action),
+    chargeCost: "resourceCost" in action ? action.resourceCost?.amount ?? 0 : 0
+  }));
+}
+
+/**
+ * Convert one granted-action draft back to a compiled `ActionDefinition`.
+ * `chargeResourceId` is the weapon's own charge-pool id — pass `undefined`
+ * when the weapon has no pool enabled, which drops any charge cost the card
+ * was showing (nothing to spend it from).
+ */
+export function grantedActionFromDraft(draft: BuilderDraft, chargeResourceId: string | undefined): ActionDefinition {
+  const action = actionFromEffectDraft(draft, { spell: true });
+  const amount = Math.max(0, Number(draft.chargeCost) || 0);
+  return {
+    ...action,
+    // Every granted action is treated as a spell for scoping purposes (a
+    // focus's own spell-attack / save-DC / damage-type bonuses, and any other
+    // item's, apply to it) — cantrip-level (0) unless the author raises it.
+    spellLevel: action.spellLevel ?? 0,
+    resourceCost: chargeResourceId && amount > 0 ? { resourceId: chargeResourceId, amount } : undefined
   };
 }
 

@@ -322,7 +322,9 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
     if (!isRecord(item)) {
       return item as WeaponDefinition;
     }
-    const attackType = normalizeAttackType(item.attackType) ?? normalizeAttackType(item.type) ?? "melee";
+    const attackType = item.attackType === "focus"
+      ? "focus"
+      : normalizeAttackType(item.attackType) ?? normalizeAttackType(item.type) ?? "melee";
     const attackAttackType = attackType === "spell" ? "ranged" : attackType;
     const ability = normalizeWeaponAbility(item.ability) ?? inferWeaponAbility(item, attackType, abilitiesInput);
     const damageAbility = ability === "finesse" ? undefined : ability;
@@ -347,6 +349,9 @@ function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abil
       charges: normalizeWeaponCharges(item.charges),
       resourceCost: normalizeResourceCost(item.resourceCost),
       onHit: normalizeRiders(item.onHit, "on-hit"),
+      grantedActions: Array.isArray(item.grantedActions)
+        ? normalizeActionList(item.grantedActions, "action", new Map(), new Map())
+        : undefined,
       actionId: stringField(item, "actionId") ?? actionIdMap.get(stringField(item, "name") ?? ""),
       magicBonus,
       usableAs: normalizeUsableAs(item.usableAs),
@@ -447,7 +452,7 @@ function normalizeWeaponCharges(input: unknown): WeaponCharges | undefined {
   return { id, max: Math.floor(max), recharge };
 }
 
-function inferWeaponAbility(item: Record<string, unknown>, attackType: "melee" | "ranged" | "spell", abilitiesInput: unknown): Ability {
+function inferWeaponAbility(item: Record<string, unknown>, attackType: "melee" | "ranged" | "spell" | "focus", abilitiesInput: unknown): Ability {
   if (attackType === "ranged" || attackType === "spell") {
     return "dex";
   }
@@ -636,7 +641,8 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
 
   const when = normalizeRiderGate(input.when) ?? defaultGate;
   const resourceCost = normalizeResourceCost(input.resourceCost);
-  const base = { id, oncePerTurn, when, resourceCost };
+  const activation: "optional" | undefined = input.activation === "optional" ? "optional" : undefined;
+  const base = { id, oncePerTurn, when, resourceCost, activation };
 
   if (input.kind === "damage") {
     return { ...base, kind: "damage", components: normalizeDamageComponents(input.components, input.damageType) };

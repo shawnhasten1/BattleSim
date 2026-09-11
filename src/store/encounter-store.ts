@@ -316,6 +316,48 @@ function rewriteRiderResourceId(riders: ActionRider[] | undefined, from: string,
   );
 }
 
+/** Rewrite a granted action's own `resourceCost.resourceId` from `from` to `to` (leaves other actions untouched). */
+function rewriteActionResourceId(actions: ActionDefinition[] | undefined, from: string, to: string): ActionDefinition[] | undefined {
+  return actions?.map((action) =>
+    "resourceCost" in action && action.resourceCost?.resourceId === from
+      ? { ...action, resourceCost: { ...action.resourceCost, resourceId: to } }
+      : action
+  );
+}
+
+/**
+ * Finish preparing a weapon for attachment to a creature: mint a fresh id for
+ * every `onHit` rider and `grantedActions` entry (scoped to `weaponId`, so two
+ * copies of the same weapon never collide), namespace its charge pool to
+ * `<weaponId>:<id>` and rewrite every reference to it, and compute the
+ * resource seed the pool needs. Shared by `attachSrdWeapon` and `addWeaponV2`
+ * so a custom-built weapon's charges work exactly like a library weapon's.
+ */
+function prepareWeaponForAttach(weapon: WeaponDefinition, weaponId: string): { weapon: WeaponDefinition; seeded?: Record<string, number> } {
+  let next: WeaponDefinition = {
+    ...weapon,
+    onHit: remintRiderIds(weapon.onHit),
+    grantedActions: weapon.grantedActions?.map((action, index) => ({ ...action, id: `${weaponId}-granted-${index + 1}` }))
+  };
+
+  let seeded: Record<string, number> | undefined;
+  if (next.charges) {
+    const fromId = next.charges.id;
+    const chargeId = `${weaponId}:${fromId}`;
+    const max = next.charges.max;
+    next = {
+      ...next,
+      charges: { ...next.charges, id: chargeId },
+      onHit: rewriteRiderResourceId(next.onHit, fromId, chargeId),
+      grantedActions: rewriteActionResourceId(next.grantedActions, fromId, chargeId),
+      resourceCost: next.resourceCost?.resourceId === fromId ? { ...next.resourceCost, resourceId: chargeId } : next.resourceCost
+    };
+    seeded = { [chargeId]: max };
+  }
+
+  return { weapon: next, seeded };
+}
+
 function steppedOutcome(engine: ReturnType<typeof createEngineState>): SimulationOutcome | null {
   const factions = [...activeFactions(engine.snapshot)];
   if (factions.length > 1) {
@@ -1635,23 +1677,11 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!source || !definition) return undefined;
 
         const weaponId = `weapon-${crypto.randomUUID()}`;
-        const weapon = normalizeWeaponDefinition(structuredClone(source), definition.abilities);
-        weapon.id = weaponId;
-        weapon.actionId = `weapon-action-${weaponId}`;
-        weapon.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
-        weapon.onHit = remintRiderIds(weapon.onHit);
-
-        let seeded: Record<string, number> | undefined;
-        if (weapon.charges) {
-          const fromId = weapon.charges.id;
-          const chargeId = `${weaponId}:${fromId}`;
-          weapon.charges = { ...weapon.charges, id: chargeId };
-          weapon.onHit = rewriteRiderResourceId(weapon.onHit, fromId, chargeId);
-          if (weapon.resourceCost?.resourceId === fromId) {
-            weapon.resourceCost = { ...weapon.resourceCost, resourceId: chargeId };
-          }
-          seeded = { [chargeId]: weapon.charges.max };
-        }
+        const normalized = normalizeWeaponDefinition(structuredClone(source), definition.abilities);
+        normalized.id = weaponId;
+        normalized.actionId = `weapon-action-${weaponId}`;
+        normalized.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
+        const { weapon, seeded } = prepareWeaponForAttach(normalized, weaponId);
 
         commitEncounter({
           ...encounter,
@@ -1802,18 +1832,28 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
-      addWeaponV2: (definitionId, weapon) => {
+      addWeaponV2: (definitionId, weaponInput) => {
         const encounter = get().encounter;
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
         const id = `weapon-${crypto.randomUUID()}`;
-        const normalized = normalizeWeaponDefinition({ ...weapon, id }, definition?.abilities);
+        const normalized = normalizeWeaponDefinition({ ...weaponInput, id }, definition?.abilities);
         normalized.id = id;
         normalized.actionId = `weapon-action-${id}`;
+        const { weapon, seeded } = prepareWeaponForAttach(normalized, id);
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, weapons: [...(candidate.weapons ?? []), normalized] }
-            : candidate)
+            ? {
+              ...candidate,
+              weapons: [...(candidate.weapons ?? []), weapon],
+              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
+            }
+            : candidate),
+          combatants: seeded
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
         });
         return id;
       },
@@ -1851,21 +1891,36 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       updateWeapon: (definitionId, weaponId, patch) => {
         const encounter = get().encounter;
+        let seeded: Record<string, number> | undefined;
+        const definitions = encounter.definitions.map((definition) => {
+          if (definition.id !== definitionId) return definition;
+          const weapons = (definition.weapons ?? []).map((weapon) => {
+            if (weapon.id !== weaponId) return weapon;
+            const merged = normalizeWeaponDefinition({ ...weapon, ...patch, id: weapon.id }, definition.abilities);
+            merged.id = weapon.id;
+            merged.actionId = weapon.actionId ?? `weapon-action-${weapon.id}`;
+            // A pool that just gained a `charges` block (or is being seen for
+            // the first time) needs a starting value — an edit shouldn't reset
+            // an already-seeded pool back to max.
+            if (merged.charges && definition.resources?.[merged.charges.id] === undefined) {
+              seeded = { ...seeded, [merged.charges.id]: merged.charges.max };
+            }
+            return merged;
+          });
+          return {
+            ...definition,
+            weapons,
+            resources: seeded ? { ...(definition.resources ?? {}), ...seeded } : definition.resources
+          };
+        });
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            return {
-              ...definition,
-              weapons: (definition.weapons ?? []).map((weapon) => {
-                if (weapon.id !== weaponId) return weapon;
-                const merged = normalizeWeaponDefinition({ ...weapon, ...patch, id: weapon.id }, definition.abilities);
-                merged.id = weapon.id;
-                merged.actionId = weapon.actionId ?? `weapon-action-${weapon.id}`;
-                return merged;
-              })
-            };
-          })
+          definitions,
+          combatants: seeded
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
         });
       },
       updateSpell: (definitionId, spellId, patch) => {

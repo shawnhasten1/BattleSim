@@ -19,6 +19,19 @@ const TRIGGER_HELP = (
   </dl>
 );
 
+const ACTIVATION_HELP = (
+  <dl>
+    <div>
+      <dt>Always spend if affordable</dt>
+      <dd>The charge is spent automatically whenever this effect triggers and the pool can pay for it — not a choice.</dd>
+    </div>
+    <div>
+      <dt>Optional — spend only when worth it</dt>
+      <dd>The charge can be spent for this upgrade, but doesn't have to be — the plain effect stays available too, so a charge can be held back.</dd>
+    </div>
+  </dl>
+);
+
 const DURATION_HELP = (
   <dl>
     <div>
@@ -152,7 +165,9 @@ export function RiderEditor({
               value={rider.text}
               onChange={(e) => replace(index, { ...rider, text: e.target.value })}
             />
-          ) : null}
+          ) : (
+            <RiderChargeCost rider={rider} onChange={(next) => replace(index, next)} />
+          )}
         </div>
       ))}
 
@@ -179,6 +194,68 @@ function GateSelect({
         {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>
     </label>
+  );
+}
+
+/** Shared "costs charges" block for any rider except `note` — amount, which pool, and whether spending it is automatic or optional. */
+function RiderChargeCost({
+  rider, onChange
+}: { rider: Exclude<ActionRider, { kind: "note" }>; onChange: (next: Exclude<ActionRider, { kind: "note" }>) => void }) {
+  const hasCost = Boolean(rider.resourceCost);
+  return (
+    <div className={styles.riderRow}>
+      <label className={styles.fieldInlineLabel}>
+        <input
+          type="checkbox"
+          checked={hasCost}
+          onChange={(e) => onChange({
+            ...rider,
+            resourceCost: e.target.checked ? { resourceId: rider.resourceCost?.resourceId ?? "charge", amount: 1 } : undefined,
+            activation: e.target.checked ? rider.activation : undefined
+          })}
+        />
+        Costs charges
+      </label>
+      {hasCost ? (
+        <>
+          <label className={styles.fieldInlineLabel}>
+            Amount
+            <input
+              type="number" min={1} step={1} style={{ width: 56 }}
+              value={rider.resourceCost?.amount ?? 1}
+              onChange={(e) => onChange({
+                ...rider,
+                resourceCost: { resourceId: rider.resourceCost?.resourceId ?? "charge", amount: Math.max(1, Number(e.target.value) || 1) }
+              })}
+            />
+          </label>
+          <label className={styles.fieldInlineLabel}>
+            Pool
+            <input
+              type="text" style={{ width: 90 }}
+              value={rider.resourceCost?.resourceId ?? "charge"}
+              onChange={(e) => onChange({
+                ...rider,
+                resourceCost: { resourceId: e.target.value || "charge", amount: rider.resourceCost?.amount ?? 1 }
+              })}
+            />
+          </label>
+          <label className={styles.fieldInlineLabel}>
+            <span className={styles.fieldLabelRow}>
+              Activation
+              <InfoTooltip label="About optional charges" content={ACTIVATION_HELP} />
+            </span>
+            <select
+              value={rider.activation ?? "always"}
+              onChange={(e) => onChange({ ...rider, activation: e.target.value === "optional" ? "optional" : undefined })}
+            >
+              <option value="always">Always spend if affordable</option>
+              <option value="optional">Optional — spend only when worth it</option>
+            </select>
+          </label>
+        </>
+      ) : null}
+    </div>
   );
 }
 

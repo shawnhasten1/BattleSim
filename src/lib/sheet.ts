@@ -137,9 +137,14 @@ export function buildSheetItems(definition: CreatureDefinition): SheetItems {
   const weapons: SheetItem[] = (definition.weapons ?? []).map((weapon) => ({
     id: weapon.id,
     name: weapon.name,
-    detail: `${weapon.attackType} ${weapon.ability.toUpperCase()} ${weapon.damage
-      .map((component) => `${component.dice} ${component.damageType}`)
-      .join(", ")}`,
+    detail: weapon.attackType === "focus"
+      ? [
+        weapon.charges ? `${weapon.charges.max} charges` : undefined,
+        weapon.grantedActions?.length ? `grants ${weapon.grantedActions.length} spell${weapon.grantedActions.length === 1 ? "" : "s"}` : undefined
+      ].filter(Boolean).join(" · ") || "focus"
+      : `${weapon.attackType} ${weapon.ability.toUpperCase()} ${weapon.damage
+        .map((component) => `${component.dice} ${component.damageType}`)
+        .join(", ")}`,
     type: "weapon",
     source: weapon.source,
     automationSupport: weaponAutomation(weapon),
