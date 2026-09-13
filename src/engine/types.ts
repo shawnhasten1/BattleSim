@@ -793,8 +793,8 @@ export interface SpellUpcast {
   perSlotAboveBase?: {
     damageDice?: string;
     beams?: number;
+    /** Extra creatures a single-target `save` action can affect for free (Hold Person-style). */
     targets?: number;
-    areaSize?: number;
   };
 }
 

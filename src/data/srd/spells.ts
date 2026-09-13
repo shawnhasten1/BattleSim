@@ -297,6 +297,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     range: 60,
     concentration: true,
     resourceCost: { resourceId: "slot-2", amount: 1 },
+    upcast: { perSlotAboveBase: { targets: 1 } },
     automationSupport: "full",
     action: {
       kind: "save",

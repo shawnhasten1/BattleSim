@@ -27,10 +27,11 @@ import {
   resolveSaveAction,
   resolveUtilityAction,
   runRepeatedSaves,
+  spellSlotLevel,
   type EngineState
 } from "./combat";
 import { combatantsInArea } from "./areas";
-import { abilityModifier, parseDiceExpression, resolveScaledDamage } from "./dice";
+import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
 import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
@@ -228,7 +229,8 @@ function executeOffensivePlan(state: EngineState, actor: CombatantState, plan: O
     const alloc = multiattackTargetIds(state.snapshot, actor, action, plan.target, plan.range);
     resolveMultiattackAction(state, actor.id, alloc.targetIds, action.id, { attackTargetIds: alloc.attackTargetIds });
   } else if (action.kind === "save") {
-    resolveSaveAction(state, actor.id, plan.target.id, action.id);
+    const bonusTargetIds = saveBonusTargetIds(state.snapshot, actor, action, plan.target, plan.range);
+    resolveSaveAction(state, actor.id, plan.target.id, action.id, { bonusTargetIds });
   } else if (action.kind === "area-save") {
     resolveAreaSaveAction(state, actor.id, plan.target.position, action.id);
   }
@@ -826,7 +828,7 @@ function selectHealingAction(
       `${Math.round(average)} expected healing`,
       reachable ? "in range" : "moves into range"
     ];
-    const resourcePenalty = action.resourceCost ? action.resourceCost.amount * 3 * resourceStanceMultiplier(actor.resourceStance) : 0;
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
       + (target.tags?.includes("high-priority") ? 10 : 0)
       + (target.tags?.includes("low-priority") ? -15 : 0);
@@ -871,7 +873,7 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       || effect.kind === "save-bonus"
       || effect.kind === "save-advantage");
     const duration = action.condition?.durationRounds ?? 1;
-    const resourcePenalty = resourceCostAmount(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     const score = (hasOffense ? 25 : 0)
       + (hasDefense ? 18 : 0)
       + Math.min(duration, 10)
@@ -913,7 +915,7 @@ function selectOffensivePlan(
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
       const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
-      const resourcePenalty = resourceCostAmount(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
+      const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
         * optionalRiderCostDiscount(action, definition, targetDefinition);
       const targetHpRatio = clamp(target.currentHp / Math.max(1, targetDefinition.maxHp), 0, 1);
       const killPressure = target.currentHp <= expectedDamage
@@ -992,6 +994,17 @@ function selectOffensivePlan(
         score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
         reasons.push(`${hostiles.length} hostile targets`);
         if (friendlyRisk > 0) reasons.push("friendly fire risk");
+      } else if (action.kind === "save") {
+        // Hold Person-style upcast: extra in-range hostiles caught for free, valued like the primary target.
+        const capacity = upcastExtraTargetCapacity(action);
+        if (capacity > 0) {
+          const extraTargets = hostiles.filter((hostile) => hostile.id !== target.id && isValidTarget(snapshot, actor, hostile, range));
+          const bonusCount = Math.min(capacity, extraTargets.length);
+          if (bonusCount > 0) {
+            score += bonusCount * (expectedDamage + controlValue) * 0.85;
+            reasons.push(`hits ${bonusCount} bonus target${bonusCount > 1 ? "s" : ""} from upcasting`);
+          }
+        }
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
@@ -1022,7 +1035,7 @@ function beamTargets(
   range: number
 ): string[] {
   const definition = getDefinition(snapshot, actor);
-  const beams = resolveBeamCount(action, definition.character?.level ?? 1, undefined);
+  const beams = resolveBeamCount(action, definition.character?.level ?? 1, spellSlotLevel(action.resourceCost?.resourceId));
   if (beams <= 1) {
     return [primary.id];
   }
@@ -1044,6 +1057,25 @@ function beamTargets(
     assigned[pick.id] = (assigned[pick.id] ?? 0) + perBeam;
   }
   return result;
+}
+
+/** Extra in-range hostiles an upcast save spell catches for free (Hold Person-style), nearest first, capped by `upcastExtraTargetCapacity`. */
+function saveBonusTargetIds(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  action: Extract<ActionDefinition, { kind: "save" }>,
+  primary: CombatantState,
+  range: number
+): string[] {
+  const capacity = upcastExtraTargetCapacity(action);
+  if (capacity <= 0) {
+    return [];
+  }
+  return snapshot.combatants
+    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
+    .sort((a, b) => gridDistance(actor.position, a.position, snapshot.map.grid) - gridDistance(actor.position, b.position, snapshot.map.grid))
+    .slice(0, capacity)
+    .map((c) => c.id);
 }
 
 function bestDestinationTowardTarget(
@@ -1334,8 +1366,18 @@ function canPayResource(actor: CombatantState, action: ActionDefinition): boolea
   return (actor.resources?.[action.resourceCost.resourceId] ?? 0) >= action.resourceCost.amount;
 }
 
-function resourceCostAmount(action: ActionDefinition): number {
-  return "resourceCost" in action && action.resourceCost ? action.resourceCost.amount : 0;
+/**
+ * Scoring weight for spending an action's resourceCost. A spell slot's real
+ * scarcity is its tier, not the flat `amount` (always 1 whether it's a slot-1
+ * or a slot-9) — spending a higher slot should look pricier even though every
+ * `spellUpcastVariants` tier "costs 1". Non-slot resources (ki points, item
+ * charges) keep the flat amount-based weight.
+ */
+function resourceCostWeight(action: ActionDefinition): number {
+  if (!("resourceCost" in action) || !action.resourceCost) {
+    return 0;
+  }
+  return spellSlotLevel(action.resourceCost.resourceId) ?? action.resourceCost.amount;
 }
 
 /**
@@ -1415,7 +1457,7 @@ function expectedDamageAgainst(
   const casterLevel = source.character?.level ?? 1;
   if (action.kind === "attack") {
     const perHit = averageDamage(action, source) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
-    const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, undefined) : 1;
+    const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass);
     return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
@@ -1581,12 +1623,13 @@ function expectedRiderControl(
 }
 
 function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
-  return action.healing.reduce((sum, component) => {
+  const base = action.healing.reduce((sum, component) => {
     const parsed = parseDiceExpression(component.dice);
     const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
     const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
     return sum + diceAverage + abilityBonus;
   }, 0);
+  return base + averageUpcastDiceBonus(action);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1604,7 +1647,34 @@ function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDe
       return sum + (child ? averageDamage(child, source) * step.count : 0);
     }, 0);
   }
-  return action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source), 0);
+  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source), 0);
+  return base + averageUpcastDiceBonus(action);
+}
+
+/** How many extra targets a save action's upcast grants for free at whatever slot tier its own `resourceCost` implies (Hold Person-style). 0 for a base cast or an action with no `upcast.targets`. */
+function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { kind: "save" }>): number {
+  const perSlotTargets = action.upcast?.perSlotAboveBase?.targets;
+  if (!perSlotTargets || action.spellLevel == null) {
+    return 0;
+  }
+  const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
+  const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
+  return slotsAboveBase * perSlotTargets;
+}
+
+/** Expected value of an action's upcast damage-dice bonus at whatever slot tier its own `resourceCost` implies (0 for a base cast, or an action with no `upcast`). */
+function averageUpcastDiceBonus(action: Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" }>): number {
+  const perSlotDice = action.upcast?.perSlotAboveBase?.damageDice;
+  if (!perSlotDice || action.spellLevel == null) {
+    return 0;
+  }
+  const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
+  const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
+  if (slotsAboveBase === 0) {
+    return 0;
+  }
+  const parsed = parseDiceExpression(repeatDice(perSlotDice, slotsAboveBase));
+  return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
 }
 
 function averageAttackFeatureDamage(

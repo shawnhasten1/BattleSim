@@ -165,6 +165,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
+  const spellUpcastActions = spellActions.flatMap((action) => spellUpcastVariants(definition, action));
   const grantedActions = [
     ...(definition.features ?? []),
     ...(definition.traits ?? [])
@@ -177,6 +178,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...(definition.reactions ?? []),
     ...weaponActions,
     ...spellActions,
+    ...spellUpcastActions,
     ...grantedActions,
     ...weaponGrantedActions
   ];
@@ -485,7 +487,7 @@ function resolveBeamAttack(
   if (action.concentration) {
     breakConcentration(state, attacker.id);
   }
-  const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel);
+  const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   declareAction(state, attacker, action, { target: findCombatant(state.snapshot, targetIds[0] as Id) });
   if (counterspellWindow(state, attacker, action)) {
     return emptyAttackResult();
@@ -726,7 +728,7 @@ function resolveAttackCore(
   target: CombatantState,
   attackerDefinition: CreatureDefinition,
   action: AttackActionDefinition,
-  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; suppressDeclare?: boolean },
+  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; suppressDeclare?: boolean; slotLevel?: number },
   spendAction: boolean,
   parentAction?: MultiattackActionDefinition
 ): AttackResult {
@@ -784,10 +786,13 @@ function resolveAttackCore(
   const targetHitDamage = hit
     ? targetIncomingHitDamageEntries(state, attacker, target, action, { rollMode, critical })
     : { entries: [], sources: [] };
-  const casterLevel = casterLevelOf(attackerDefinition);
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const damageApplied = hit
     ? applyDamageEntries(state, target, [
-      ...action.damage.map((component) => ({ component, critical, triggerDamageType: firstActionDamageType(action), casterLevel })),
+      ...action.damage.map((component, index) => ({
+        component, critical, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
+        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined
+      })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
     ], attackerDefinition, attacker.id)
@@ -846,7 +851,7 @@ export function resolveSaveAction(
   attackerId: Id,
   targetId: Id,
   actionId: Id,
-  options: { slotLevel?: number } = {}
+  options: { slotLevel?: number; bonusTargetIds?: Id[] } = {}
 ): SaveResult {
   const attacker = findCombatant(state.snapshot, attackerId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
@@ -855,7 +860,6 @@ export function resolveSaveAction(
     throw new Error(`Save action ${actionId} is not available to ${attacker.displayName}`);
   }
   const target = findCombatant(state.snapshot, action.targeting?.target === "self" ? attackerId : targetId);
-  const targetDefinition = getDefinition(state.snapshot, target);
   if (action.targeting?.target !== "self") {
     validateTargeting(state.snapshot, attacker, target, action);
   }
@@ -868,7 +872,32 @@ export function resolveSaveAction(
     return { success: true, saveRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
   }
 
-  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const dc = resolveSaveDc(action, attackerDefinition);
+  const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId);
+
+  // Upcast-granted bonus targets (Hold Person-style): same save/DC/riders, no extra resource spend.
+  for (const bonusId of options.bonusTargetIds ?? []) {
+    if (bonusId === target.id) continue;
+    const bonusTarget = findCombatant(state.snapshot, bonusId);
+    if (bonusTarget.state !== "active" && bonusTarget.state !== "downed") continue;
+    resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, bonusTarget, scaling, dc, actionId);
+  }
+
+  return result;
+}
+
+function resolveSaveAgainstTarget(
+  state: EngineState,
+  attacker: CombatantState,
+  attackerDefinition: CreatureDefinition,
+  action: SaveActionDefinition,
+  target: CombatantState,
+  scaling: DamageScalingContext,
+  dc: number,
+  actionId: Id
+): SaveResult {
+  const targetDefinition = getDefinition(state.snapshot, target);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
   const saveBonus = (targetDefinition.saves?.[action.saveAbility]
@@ -879,7 +908,6 @@ export function resolveSaveAction(
   const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
     advantage: featureSaveAdvantage.applied
   });
-  const dc = resolveSaveDc(action, attackerDefinition);
   const success = saveRoll.total >= dc;
   const onSuccess = resolveOnSuccess(action);
   const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
@@ -899,7 +927,7 @@ export function resolveSaveAction(
   }
 
   state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${action.saveAbility.toUpperCase()} save against ${action.name}`, {
-    attackerId,
+    attackerId: attacker.id,
     targetId: target.id,
     actionId,
     saveRoll,
@@ -949,7 +977,7 @@ export function resolveAreaSaveAction(
     return { targets: [] };
   }
 
-  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel);
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const onSuccess = resolveOnSuccess(action);
   const dc = resolveSaveDc(action, attackerDefinition);
   const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
@@ -1070,7 +1098,8 @@ export function resolveHealingAction(
   state: EngineState,
   healerId: Id,
   targetId: Id,
-  actionId: Id
+  actionId: Id,
+  options: { slotLevel?: number } = {}
 ): HealingResult {
   const healer = findCombatant(state.snapshot, healerId);
   const healerDefinition = getDefinition(state.snapshot, healer);
@@ -1089,10 +1118,16 @@ export function resolveHealingAction(
     return { healingApplied: 0 };
   }
 
+  const slotLevel = options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId);
+  const slotsAboveBase = slotLevel != null && action.spellLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
+  const perSlotDice = action.upcast?.perSlotAboveBase?.damageDice;
+  const upcastDice = slotsAboveBase > 0 && perSlotDice ? repeatDice(perSlotDice, slotsAboveBase) : "";
+
   let healingApplied = 0;
-  const rolls = action.healing.map((component) => {
+  const rolls = action.healing.map((component, index) => {
     const abilityBonus = component.abilityModifier ? abilityModifier(healerDefinition.abilities[component.abilityModifier]) : 0;
-    const roll = rollDice(withBonus(component.dice, abilityBonus), state.rng);
+    const dice = index === 0 && upcastDice ? `${component.dice}+${upcastDice}` : component.dice;
+    const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
     healingApplied += roll.total;
     return roll;
   });
@@ -1975,12 +2010,40 @@ function stampSpellContext(
   return stamped;
 }
 
+/**
+ * One extra compiled variant per spell-slot tier above a spell's base level
+ * that this creature's resource pool declares — mirrors `weaponToActions`'
+ * optional-charge variants (see the "spend charge" weapon actions above) so
+ * the AI's existing resourceCost-based affordability filter and scoring
+ * penalty see each higher slot as its own candidate action, each spending
+ * (and only spending) the slot it upcasts to.
+ */
+function spellUpcastVariants(definition: CreatureDefinition, action: ActionDefinition): ActionDefinition[] {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing") {
+    return [];
+  }
+  if (!action.resourceCost || action.spellLevel == null || !action.upcast?.perSlotAboveBase) {
+    return [];
+  }
+  const baseLevel = spellSlotLevel(action.resourceCost.resourceId) ?? action.spellLevel;
+  const higherTiers = Object.keys(definition.resources ?? {})
+    .map((resourceId) => spellSlotLevel(resourceId))
+    .filter((level): level is number => level != null && level > baseLevel)
+    .sort((a, b) => a - b);
+  return higherTiers.map((level) => ({
+    ...action,
+    id: `${action.id}:upcast-${level}`,
+    name: `${action.name} (upcast to slot ${level})`,
+    resourceCost: { resourceId: `slot-${level}`, amount: 1 }
+  } as ActionDefinition));
+}
+
 function casterLevelOf(definition: CreatureDefinition): number {
   return definition.character?.level ?? 1;
 }
 
 /** Parse `slot-3` → 3. Anything else → undefined. */
-function spellSlotLevel(resourceId: string | undefined): number | undefined {
+export function spellSlotLevel(resourceId: string | undefined): number | undefined {
   const match = resourceId ? /^slot-(\d+)$/.exec(resourceId) : null;
   return match ? Number.parseInt(match[1] as string, 10) : undefined;
 }

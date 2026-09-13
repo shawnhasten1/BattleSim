@@ -860,8 +860,6 @@ function normalizeSpellUpcast(input: unknown): SpellUpcast | undefined {
   if (beams !== undefined) perSlot.beams = beams;
   const targets = numberField(source, "targets");
   if (targets !== undefined) perSlot.targets = targets;
-  const areaSize = numberField(source, "areaSize");
-  if (areaSize !== undefined) perSlot.areaSize = areaSize;
   return Object.keys(perSlot).length ? { perSlotAboveBase: perSlot } : undefined;
 }
 
