@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
 import { encounterSnapshotSchema } from "@/engine";
 
 const createProjectSchema = z.object({
@@ -10,7 +11,11 @@ const createProjectSchema = z.object({
 });
 
 export async function GET() {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const projects = await prisma.project.findMany({
+    where: { ownerId: userId },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -27,9 +32,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const body = createProjectSchema.parse(await request.json());
   const project = await prisma.project.create({
     data: {
+      ownerId: userId,
       name: body.name,
       description: body.description,
       maps: {

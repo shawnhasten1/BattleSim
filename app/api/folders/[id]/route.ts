@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 import type { CreatureDefinition } from "@/engine";
 
@@ -10,11 +11,19 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  const existing = await prisma.actorFolder.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!existing || existing.ownerId !== userId) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  }
+
   const body = updateSchema.parse(await request.json());
 
   if (body.parentId !== undefined) {
-    const folders = await prisma.actorFolder.findMany();
+    const folders = await prisma.actorFolder.findMany({ where: { ownerId: userId } });
     const asActorFolders: ActorFolder[] = folders.map((f) => ({ id: f.id, name: f.name, parentId: f.parentId }));
     if (wouldCreateCycle(asActorFolders, id, body.parentId)) {
       return NextResponse.json({ error: "Cannot move a folder into itself or one of its own descendants" }, { status: 400 });
@@ -32,16 +41,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  const existing = await prisma.actorFolder.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!existing || existing.ownerId !== userId) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  }
 
   await prisma.$transaction(async (tx) => {
     const folder = await tx.actorFolder.findUnique({ where: { id } });
     if (!folder) return;
     const newParentId = folder.parentId;
 
-    await tx.actorFolder.updateMany({ where: { parentId: id }, data: { parentId: newParentId } });
+    await tx.actorFolder.updateMany({ where: { parentId: id, ownerId: userId }, data: { parentId: newParentId } });
 
-    const definitionRecords = await tx.creatureDefinition.findMany();
+    const definitionRecords = await tx.creatureDefinition.findMany({ where: { ownerId: userId } });
     for (const record of definitionRecords) {
       const definition = JSON.parse(record.data) as CreatureDefinition;
       if (definition.folderId !== id) continue;

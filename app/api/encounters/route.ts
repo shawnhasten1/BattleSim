@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { encounterSnapshotSchema } from "@/engine";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
 
 const createEncounterSchema = z.object({
   projectId: z.string().min(1),
@@ -10,12 +11,15 @@ const createEncounterSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const body = createEncounterSchema.parse(await request.json());
   const existingProject = await prisma.project.findUnique({
     where: { id: body.projectId },
-    select: { id: true }
+    select: { id: true, ownerId: true }
   });
-  if (!existingProject) {
+  if (!existingProject || existingProject.ownerId !== userId) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 

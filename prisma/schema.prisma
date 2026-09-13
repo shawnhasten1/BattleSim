@@ -7,8 +7,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String               @id @default(cuid())
+  name         String?
+  email        String?              @unique
+  emailVerified DateTime?
+  image        String?
+  /** Null for Google-only accounts (no password set). */
+  passwordHash String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  accounts     Account[]
+  sessions     Session[]
+  projects     Project[]
+  definitions  CreatureDefinition[]
+  folders      ActorFolder[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+/** Unused while sessions run as JWTs, kept for adapter-schema compatibility and a future switch to database sessions. */
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
 model Project {
   id          String      @id @default(cuid())
+  ownerId     String
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name        String
   description String?
   createdAt   DateTime    @default(now())
@@ -38,6 +92,11 @@ model BattleMap {
 
 model CreatureDefinition {
   id             String      @id @default(cuid())
+  /** Null = shared read-only template (e.g. SRD/open5e imports); set = a user's own actor. */
+  ownerId        String?
+  owner          User?       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /** Id of the template this was cloned from, for provenance. Not an enforced FK — the source may later change or be removed. */
+  copiedFromId   String?
   name           String
   sourceKey      String?
   sourceName     String?
@@ -52,6 +111,9 @@ model CreatureDefinition {
 
 model ActorFolder {
   id        String        @id @default(cuid())
+  /** Null would mark a shared/system folder; unused today but kept consistent with CreatureDefinition. */
+  ownerId   String?
+  owner     User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name      String
   parentId  String?
   createdAt DateTime      @default(now())
@@ -67,6 +129,8 @@ model Encounter {
   name           String
   schemaVersion  Int             @default(1)
   snapshotJson   String
+  /** Vercel Blob (CDN) URL for this scene's map background, if one is set. Lives here rather than on BattleMap since each Encounter's own snapshotJson is the real source of truth for its map, not the BattleMap row. */
+  mapImageUrl    String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)

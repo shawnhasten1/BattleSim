@@ -75,6 +75,7 @@ export interface EncounterSummary {
   updatedAt?: string;
   projectId?: string;
   snapshotJson?: EncounterSnapshot;
+  mapImageUrl?: string | null;
 }
 
 interface EncounterStore {
@@ -91,11 +92,15 @@ interface EncounterStore {
   selectedCombatantId: string | null;
   /** The *current* scene's background, mirrored from IndexedDB for rendering. Not persisted to localStorage. */
   mapImageDataUrl: string | null;
+  /** Vercel Blob (CDN) URL for the current scene's background, if it's been synced to the server. Lets hydrateMapImage fall back to it on a device whose IndexedDB doesn't have this scene cached yet. */
+  mapImageUrl: string | null;
   currentProjectId: string | null;
   currentEncounterId: string | null;
   projects: ProjectSummary[];
   projectStatus: string;
   definitionsLibrary: CreatureDefinition[];
+  /** Ids within definitionsLibrary that are shared, read-only templates (not owned by you) — see copyLibraryDefinition. */
+  templateDefinitionIds: string[];
   definitionStatus: string;
   actorFolders: ActorFolder[];
   folderStatus: string;
@@ -138,6 +143,10 @@ interface EncounterStore {
   saveProject: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  /** Creates a campaign with a single blank encounter, independent of whatever is currently open in the editor. Returns the new campaign id, or null on failure. */
+  createCampaign: (name: string) => Promise<string | null>;
+  /** Creates a blank encounter under an existing campaign without touching the editor's live state. Returns the new encounter id, or null on failure. */
+  createEncounterInCampaign: (campaignId: string, name: string) => Promise<string | null>;
   createEncounter: (name: string) => Promise<void>;
   saveCurrentEncounter: () => Promise<void>;
   loadEncounter: (encounterId: string) => Promise<void>;
@@ -150,6 +159,8 @@ interface EncounterStore {
   saveDefinition: (definitionId: string) => Promise<void>;
   addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => void;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
+  /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
+  copyLibraryDefinition: (definitionId: string) => Promise<void>;
   loadActorFolders: () => Promise<void>;
   createActorFolder: (name: string, parentId?: string | null) => Promise<void>;
   renameActorFolder: (folderId: string, name: string) => Promise<void>;
@@ -427,10 +438,39 @@ export const useEncounterStore = create<EncounterStore>()(
         const key = mapImageKey(get());
         void getMapImage(key).then((image) => {
           // Ignore if the user switched scenes while the read was in flight.
-          if (mapImageKey(get()) === key) {
-            set({ mapImageDataUrl: image ?? null });
+          if (mapImageKey(get()) !== key) return;
+          if (image) {
+            set({ mapImageDataUrl: image });
+            return;
           }
+          // Nothing cached locally for this scene (e.g. a different device than
+          // the one that uploaded it) — fall back to the CDN URL synced at save
+          // time, and opportunistically cache the URL itself for next time.
+          const remoteUrl = get().mapImageUrl;
+          set({ mapImageDataUrl: remoteUrl ?? null });
+          if (remoteUrl) void putMapImage(key, remoteUrl);
         });
+      };
+
+      /** Best-effort push of a scene's background to Vercel Blob so it's visible cross-device. Never throws into a render or a store action. */
+      const syncMapImageToServer = (encounterId: string, dataUrl: string | null) => {
+        if (!encounterId) return;
+        if (dataUrl) {
+          void fetch(`/api/encounters/${encodeURIComponent(encounterId)}/map-image`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dataUrl })
+          })
+            .then((response) => (response.ok ? (response.json() as Promise<{ url?: string }>) : null))
+            .then((data) => {
+              if (data?.url) set({ mapImageUrl: data.url });
+            })
+            .catch(() => undefined);
+        } else {
+          void fetch(`/api/encounters/${encodeURIComponent(encounterId)}/map-image`, { method: "DELETE" })
+            .then(() => set({ mapImageUrl: null }))
+            .catch(() => undefined);
+        }
       };
 
       /** Move a scene's stored image from one key to another (draft id -> saved DB id). */
@@ -467,11 +507,13 @@ export const useEncounterStore = create<EncounterStore>()(
       replaySpeed: 1,
       selectedCombatantId: "pc-fighter",
       mapImageDataUrl: null,
+      mapImageUrl: null,
       currentProjectId: null,
       currentEncounterId: null,
       projects: [],
       projectStatus: "",
       definitionsLibrary: [],
+      templateDefinitionIds: [],
       definitionStatus: "",
       actorFolders: [],
       folderStatus: "",
@@ -919,12 +961,16 @@ export const useEncounterStore = create<EncounterStore>()(
         const data = await response.json() as { project: ProjectSummary & { encounters?: Array<{ id: string; name: string }> } };
         const encounterId = data.project.encounters?.[0]?.id ?? get().currentEncounterId;
         const draftKey = mapImageKey(get());
+        const draftImage = get().mapImageDataUrl;
         set({
           currentProjectId: data.project.id,
           currentEncounterId: encounterId,
           projectStatus: "Saved"
         });
-        if (encounterId) migrateMapImageKey(draftKey, encounterId);
+        if (encounterId) {
+          migrateMapImageKey(draftKey, encounterId);
+          if (draftImage) syncMapImageToServer(encounterId, draftImage);
+        }
         await get().loadProjects();
       },
       loadProject: async (projectId) => {
@@ -933,7 +979,7 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ projectStatus: "Load failed" });
           return;
         }
-        const data = await response.json() as { project: { id: string; encounters: Array<{ id: string; snapshotJson: EncounterSnapshot }> } };
+        const data = await response.json() as { project: { id: string; encounters: Array<{ id: string; snapshotJson: EncounterSnapshot; mapImageUrl?: string | null }> } };
         const snapshot = data.project.encounters[0]?.snapshotJson;
         if (!snapshot) {
           set({ projectStatus: "Project has no encounter" });
@@ -946,6 +992,7 @@ export const useEncounterStore = create<EncounterStore>()(
           encounter: normalizedSnapshot,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           mapImageDataUrl: null,
+          mapImageUrl: data.project.encounters[0]?.mapImageUrl ?? null,
           undoStack: [],
           redoStack: [],
           log: [],
@@ -965,6 +1012,30 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ currentProjectId: null, currentEncounterId: null });
         }
         await get().loadProjects();
+      },
+      createCampaign: async (name) => {
+        const trimmedName = name.trim() || "Untitled Campaign";
+        const snapshot = createSceneSnapshot(sampleEncounter, "New Encounter", "empty");
+        const response = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmedName, encounter: snapshot })
+        });
+        if (!response.ok) return null;
+        const data = await response.json() as { project: { id: string } };
+        return data.project.id;
+      },
+      createEncounterInCampaign: async (campaignId, name) => {
+        const trimmedName = name.trim() || "Untitled Encounter";
+        const snapshot = createSceneSnapshot(sampleEncounter, trimmedName, "empty");
+        const response = await fetch("/api/encounters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: campaignId, name: trimmedName, encounter: snapshot })
+        });
+        if (!response.ok) return null;
+        const data = await response.json() as { encounter: { id: string } };
+        return data.encounter.id;
       },
       createEncounter: async (name) => {
         const trimmedName = name.trim() || "Untitled Encounter";
@@ -1004,7 +1075,10 @@ export const useEncounterStore = create<EncounterStore>()(
           projectStatus: "Scene created"
         });
         // A new scene keeps the carried-over map layout, so carry its background too.
-        if (currentMapImage) void putMapImage(mapImageKey(get()), currentMapImage);
+        if (currentMapImage) {
+          void putMapImage(mapImageKey(get()), currentMapImage);
+          syncMapImageToServer(data.encounter.id, currentMapImage);
+        }
         await get().loadProjects();
       },
       saveCurrentEncounter: async () => {
@@ -1043,6 +1117,7 @@ export const useEncounterStore = create<EncounterStore>()(
           currentEncounterId: data.encounter.id,
           encounter: normalizedSnapshot,
           mapImageDataUrl: null,
+          mapImageUrl: data.encounter.mapImageUrl ?? null,
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
@@ -1132,7 +1207,11 @@ export const useEncounterStore = create<EncounterStore>()(
           replayIndex: null,
           projectStatus: "Scene duplicated"
         });
-        void copyMapImage(sourceImageKey, mapImageKey(get())).then(() => hydrateMapImage());
+        void copyMapImage(sourceImageKey, mapImageKey(get())).then(() => {
+          hydrateMapImage();
+          const copiedImage = get().mapImageDataUrl;
+          if (copiedImage) syncMapImageToServer(data.encounter.id, copiedImage);
+        });
         await get().loadProjects();
       },
       deleteEncounter: async (encounterId) => {
@@ -1174,8 +1253,12 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ definitionStatus: "Definition library failed" });
           return;
         }
-        const data = await response.json() as { definitions: CreatureDefinition[] };
-        set({ definitionsLibrary: data.definitions, definitionStatus: `${data.definitions.length} saved definitions` });
+        const data = await response.json() as { definitions: CreatureDefinition[]; templateIds?: string[] };
+        set({
+          definitionsLibrary: data.definitions,
+          templateDefinitionIds: data.templateIds ?? [],
+          definitionStatus: `${data.definitions.length} saved definitions`
+        });
       },
       saveSelectedDefinition: async () => {
         const state = get();
@@ -1226,6 +1309,13 @@ export const useEncounterStore = create<EncounterStore>()(
         const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}`, { method: "DELETE" });
         set({ definitionStatus: response.ok ? "Definition deleted" : "Definition delete failed" });
         await get().loadDefinitionsLibrary();
+      },
+      copyLibraryDefinition: async (definitionId) => {
+        const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}/copy`, { method: "POST" });
+        set({ definitionStatus: response.ok ? "Copied to your library" : "Copy failed" });
+        if (response.ok) {
+          await get().loadDefinitionsLibrary();
+        }
       },
       loadActorFolders: async () => {
         const response = await fetch("/api/folders");
@@ -1314,6 +1404,10 @@ export const useEncounterStore = create<EncounterStore>()(
           // the current one is mirrored into state above (for rendering).
           if (value) void putMapImage(key, value);
           else void deleteMapImage(key);
+          // Once the scene is actually saved, also push to Vercel Blob so it
+          // follows the encounter to any other device. Drafts sync on first save instead.
+          const encounterId = get().currentEncounterId;
+          if (encounterId) syncMapImageToServer(encounterId, value);
         };
 
         // A raw upload/import data URL can be many MB. Shrink it before it is

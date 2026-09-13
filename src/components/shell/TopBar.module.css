@@ -37,7 +37,8 @@
   gap: 2px;
 }
 
-.group > button {
+.group > button,
+.group > a {
   display: grid;
   place-items: center;
   width: 30px;
@@ -47,9 +48,11 @@
   background: transparent;
   color: var(--ui-text-dim);
   cursor: pointer;
+  text-decoration: none;
 }
 
-.group > button:hover {
+.group > button:hover,
+.group > a:hover {
   background: var(--ui-panel-2);
   color: var(--ui-text);
 }

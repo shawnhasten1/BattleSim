@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
 import { encounterSnapshotSchema } from "@/engine";
 
 const updateProjectSchema = z.object({
@@ -10,6 +11,9 @@ const updateProjectSchema = z.object({
 });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id },
@@ -18,20 +22,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       encounters: { orderBy: { updatedAt: "desc" }, include: { simulationRuns: { orderBy: { createdAt: "desc" }, take: 10 } } }
     }
   });
-  if (!project) {
+  if (!project || project.ownerId !== userId) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
   return NextResponse.json({ project: deserializeProject(project) });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
   const body = updateProjectSchema.parse(await request.json());
   const existing = await prisma.project.findUnique({
     where: { id },
     include: { encounters: { orderBy: { updatedAt: "desc" }, take: 1 }, maps: { orderBy: { updatedAt: "desc" }, take: 1 } }
   });
-  if (!existing) {
+  if (!existing || existing.ownerId !== userId) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
@@ -93,7 +100,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  const existing = await prisma.project.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!existing || existing.ownerId !== userId) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
   await prisma.project.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

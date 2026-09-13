@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { encounterSnapshotSchema } from "@/engine";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
+import { isOwnEncounter } from "@/server/encounter-access";
 
 const updateEncounterSchema = z.object({
   name: z.string().min(1).optional(),
@@ -9,7 +11,13 @@ const updateEncounterSchema = z.object({
 });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  if (!(await isOwnEncounter(id, userId))) {
+    return NextResponse.json({ error: "Encounter not found" }, { status: 404 });
+  }
   const encounter = await prisma.encounter.findUnique({
     where: { id },
     include: {
@@ -23,7 +31,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  if (!(await isOwnEncounter(id, userId))) {
+    return NextResponse.json({ error: "Encounter not found" }, { status: 404 });
+  }
   const body = updateEncounterSchema.parse(await request.json());
   const existing = await prisma.encounter.findUnique({ where: { id } });
   if (!existing) {
@@ -54,7 +68,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const { id } = await params;
+  if (!(await isOwnEncounter(id, userId))) {
+    return NextResponse.json({ error: "Encounter not found" }, { status: 404 });
+  }
   await prisma.encounter.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

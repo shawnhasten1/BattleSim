@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/prisma";
+import { requireUserId } from "@/server/require-user";
+import { isOwnEncounter } from "@/server/encounter-access";
 import { encounterSnapshotSchema } from "@/engine";
 
 const runSchema = z.object({
@@ -14,7 +16,14 @@ const runSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
   const body = runSchema.parse(await request.json());
+  if (!(await isOwnEncounter(body.encounterId, userId))) {
+    return NextResponse.json({ error: "Encounter not found" }, { status: 404 });
+  }
+
   const run = await prisma.simulationRun.create({
     data: {
       encounterId: body.encounterId,

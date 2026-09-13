@@ -1,6 +1,7 @@
 "use client";
 
-import { Redo2, RotateCcw, ScrollText, Save, Settings, Swords, Undo2 } from "lucide-react";
+import { LayoutGrid, LogOut, Redo2, RotateCcw, ScrollText, Save, Settings, Swords, Undo2 } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { useEncounterStore } from "@/store/encounter-store";
 import { SceneDropdown } from "./SceneDropdown";
 import styles from "./TopBar.module.css";
@@ -25,6 +26,7 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
   const saveProject = useEncounterStore((state) => state.saveProject);
   const reset = useEncounterStore((state) => state.reset);
   const hasOutcome = useEncounterStore((state) => state.outcome != null);
+  const { data: session } = useSession();
 
   return (
     <div className={styles.bar}>
@@ -37,6 +39,9 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
       <div className={styles.spacer} />
 
       <div className={styles.group}>
+        <a href="/campaigns" title="Back to campaigns">
+          <LayoutGrid size={16} />
+        </a>
         <button type="button" onClick={undo} title="Undo">
           <Undo2 size={16} />
         </button>
@@ -59,6 +64,13 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
         </button>
         <button type="button" onClick={onOpenSceneConfig} title="Scene settings">
           <Settings size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={() => void signOut({ redirectTo: "/login" })}
+          title={session?.user?.email ? `Sign out (${session.user.email})` : "Sign out"}
+        >
+          <LogOut size={16} />
         </button>
       </div>
     </div>

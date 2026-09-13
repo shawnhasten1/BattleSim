@@ -24,12 +24,14 @@ interface ActorsPanelProps {
 export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const encounter = useEncounterStore((state) => state.encounter);
   const definitionsLibrary = useEncounterStore((state) => state.definitionsLibrary);
+  const templateDefinitionIds = useEncounterStore((state) => state.templateDefinitionIds);
   const definitionStatus = useEncounterStore((state) => state.definitionStatus);
   const actorFolders = useEncounterStore((state) => state.actorFolders);
   const folderStatus = useEncounterStore((state) => state.folderStatus);
   const addCreatureDefinition = useEncounterStore((state) => state.addCreatureDefinition);
   const addLibraryDefinitionToEncounter = useEncounterStore((state) => state.addLibraryDefinitionToEncounter);
   const deleteLibraryDefinition = useEncounterStore((state) => state.deleteLibraryDefinition);
+  const copyLibraryDefinition = useEncounterStore((state) => state.copyLibraryDefinition);
   const saveDefinition = useEncounterStore((state) => state.saveDefinition);
   const saveSelectedDefinition = useEncounterStore((state) => state.saveSelectedDefinition);
   const loadDefinitionsLibrary = useEncounterStore((state) => state.loadDefinitionsLibrary);
@@ -53,6 +55,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
     () => new Set(definitionsLibrary.map((definition) => definition.id)),
     [definitionsLibrary]
   );
+  const templateIdSet = useMemo(() => new Set(templateDefinitionIds), [templateDefinitionIds]);
   const directory = useMemo(() => {
     const byId = new Map<string, CreatureDefinition>();
     for (const definition of definitionsLibrary) byId.set(definition.id, definition);
@@ -127,22 +130,32 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
 
   function renderActorRow(definition: CreatureDefinition) {
     const isSaved = savedDefinitionIds.has(definition.id);
+    const isTemplate = templateIdSet.has(definition.id);
     return (
       <li key={definition.id} draggable onDragStart={(event) => onActorDragStart(event, definition)}>
         <ActorThumbnail definition={definition} />
         <button type="button" className={styles.cardMain} onClick={() => addToEncounter(definition, defaultFactionForDefinition(definition))}>
           <strong>{definition.name}</strong>
-          <span>{isSaved ? definition.source?.documentName ?? definition.source?.provider ?? "homebrew" : "scene actor"}</span>
+          <span>
+            {isSaved ? definition.source?.documentName ?? definition.source?.provider ?? "homebrew" : "scene actor"}
+            {isTemplate ? " · Template" : ""}
+          </span>
         </button>
         <button type="button" onClick={() => addToEncounter(definition, "party")} title="Add as party"><Users size={14} /></button>
         <button type="button" onClick={() => addToEncounter(definition, "enemy")} title="Add as enemy"><Swords size={14} /></button>
-        <button
-          type="button"
-          onClick={() => (isSaved ? void deleteLibraryDefinition(definition.id) : void saveDefinition(definition.id))}
-          title={isSaved ? "Delete definition" : "Save to library"}
-        >
-          {isSaved ? <Trash2 size={14} /> : <Save size={14} />}
-        </button>
+        {isTemplate ? (
+          <button type="button" onClick={() => void copyLibraryDefinition(definition.id)} title="Copy to my library">
+            <Copy size={14} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => (isSaved ? void deleteLibraryDefinition(definition.id) : void saveDefinition(definition.id))}
+            title={isSaved ? "Delete definition" : "Save to library"}
+          >
+            {isSaved ? <Trash2 size={14} /> : <Save size={14} />}
+          </button>
+        )}
       </li>
     );
   }
@@ -242,7 +255,13 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
             <button type="button" onClick={onOpenSheet}><Swords size={14} /> Sheet</button>
             <button type="button" onClick={duplicateSelected}><Copy size={14} /> Duplicate</button>
             <button type="button" onClick={exportSelected}><Download size={14} /> Export</button>
-            <button type="button" onClick={() => void saveSelectedDefinition()}><Save size={14} /> Save</button>
+            {templateIdSet.has(selectedDefinition.id) ? (
+              <button type="button" onClick={() => void copyLibraryDefinition(selectedDefinition.id)} title="Templates are read-only — this saves an editable copy to your library">
+                <Copy size={14} /> Copy to My Library
+              </button>
+            ) : (
+              <button type="button" onClick={() => void saveSelectedDefinition()}><Save size={14} /> Save</button>
+            )}
             <button type="button" className={styles.danger} onClick={() => removeCombatant(selectedCombatant.id)}>
               <Trash2 size={14} /> Delete
             </button>
