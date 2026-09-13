@@ -1,10 +1,19 @@
 "use client";
 
-import type { Ability, ActionRider, ConditionName, RiderDuration, RiderGate } from "@/engine";
+import type { Ability, ActionRider, ConditionName, CreatureType, RiderDuration, RiderGate } from "@/engine";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { CREATURE_TYPES } from "@/lib/creature-types";
 import { DiceInput } from "./BuilderForm";
 import { parseDiceValue, diceValueToString } from "./schemas";
 import styles from "./builders.module.css";
+
+const CREATURE_TYPE_FILTER_HELP = (
+  <p>
+    When enabled, this effect only applies to targets whose creature type is checked below — every other
+    target automatically resists it (no roll, it just has no effect on them). Leave unchecked for an effect
+    that works on any creature.
+  </p>
+);
 
 const TRIGGER_HELP = (
   <dl>
@@ -166,7 +175,10 @@ export function RiderEditor({
               onChange={(e) => replace(index, { ...rider, text: e.target.value })}
             />
           ) : (
-            <RiderChargeCost rider={rider} onChange={(next) => replace(index, next)} />
+            <>
+              <RiderChargeCost rider={rider} onChange={(next) => replace(index, next)} />
+              <RiderCreatureTypeFilter rider={rider} onChange={(next) => replace(index, next)} />
+            </>
           )}
         </div>
       ))}
@@ -255,6 +267,49 @@ function RiderChargeCost({
           </label>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** Shared "only affects certain creature types" filter for any rider except `note`. */
+function RiderCreatureTypeFilter({
+  rider, onChange
+}: { rider: Exclude<ActionRider, { kind: "note" }>; onChange: (next: Exclude<ActionRider, { kind: "note" }>) => void }) {
+  const selected = rider.restrictToCreatureTypes ?? [];
+  const restricted = selected.length > 0;
+
+  const toggle = (type: CreatureType) => {
+    const next = selected.includes(type) ? selected.filter((t) => t !== type) : [...selected, type];
+    onChange({ ...rider, restrictToCreatureTypes: next.length ? next : undefined });
+  };
+
+  return (
+    <div className={styles.riderRow}>
+      <div className={styles.riderTypeFilter}>
+        <label className={styles.riderTypeToggle}>
+          <input
+            type="checkbox"
+            checked={restricted}
+            onChange={(e) => onChange({ ...rider, restrictToCreatureTypes: e.target.checked ? ["undead"] : undefined })}
+          />
+          Restrict to creature types
+          <InfoTooltip label="About creature-type restriction" content={CREATURE_TYPE_FILTER_HELP} />
+        </label>
+        {restricted ? (
+          <div className={styles.riderTypeGroup}>
+            {CREATURE_TYPES.map((option) => (
+              <label key={option.value} className={styles.riderTypeItem}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.value)}
+                  onChange={() => toggle(option.value)}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

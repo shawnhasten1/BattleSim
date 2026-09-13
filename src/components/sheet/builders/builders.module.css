@@ -212,6 +212,37 @@
   align-items: center;
 }
 
+.riderTypeFilter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.riderTypeToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.riderTypeGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.riderTypeItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  text-transform: none;
+  color: var(--ui-text-dim);
+}
+
 .riderNote {
   width: 100%;
   min-height: 44px;

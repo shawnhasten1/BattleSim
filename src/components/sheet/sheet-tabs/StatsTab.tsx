@@ -2,10 +2,11 @@
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { abilityModifier, type Ability, type CombatantState, type CreatureDefinition } from "@/engine";
+import { abilityModifier, type Ability, type CombatantState, type CreatureDefinition, type CreatureType } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
+import { CREATURE_TYPES } from "@/lib/creature-types";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import styles from "../sheet.module.css";
 
@@ -14,6 +15,14 @@ const RESOURCES_HELP = (
     <strong>Current</strong> is what's left this encounter — it's what actions spend. <strong>Default</strong> is
     what it resets to at the start of a fresh encounter. Give a resource the exact id an action's "resource cost"
     refers to (e.g. <code>slot-3</code> for a 3rd-level spell slot) or that action can't spend it.
+  </p>
+);
+
+const CREATURE_TYPE_HELP = (
+  <p>
+    Standard 5e creature type. Some spell effects can be restricted to only affect certain types (e.g. a
+    condition that only works on undead) — leaving this unspecified means this actor won't match any
+    type-restricted effect.
   </p>
 );
 
@@ -66,6 +75,25 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           <label className={styles.field}>
             Size
             <input value={definition.size} readOnly />
+          </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>
+              Type
+              <InfoTooltip label="About creature type" content={CREATURE_TYPE_HELP} />
+            </span>
+            <select
+              value={definition.type ?? ""}
+              onChange={(e) =>
+                updateCreatureDefinition(definition.id, {
+                  type: e.target.value ? (e.target.value as CreatureType) : undefined
+                })
+              }
+            >
+              <option value="">Unspecified</option>
+              {CREATURE_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </label>
           <label className={styles.field}>
             Level

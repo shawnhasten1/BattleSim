@@ -302,6 +302,50 @@ describe("weapon onHit riders (via weaponToAction) + charges", () => {
   });
 });
 
+describe("creature-type-restricted riders", () => {
+  function turnUndeadEncounter() {
+    const encounter = baseEncounter("turn-undead");
+    encounter.combatants.find((c) => c.id === TARGET)!.position = { x: 2, y: 1 };
+    pushAction(encounter, CASTER_DEF, {
+      kind: "save", id: "turn", name: "Turn Undead", actionType: "action", saveAbility: "wis", dc: 15, range: 60,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates",
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: "frightened",
+        duration: { kind: "rounds", rounds: 10 },
+        restrictToCreatureTypes: ["undead"]
+      }],
+      automationSupport: "full"
+    });
+    return encounter;
+  }
+
+  it("skips the rider when the target's type isn't in the restriction list", () => {
+    const state = createEngineState(turnUndeadEncounter());
+    state.rng = scriptedRng({ 20: [1] }); // fails the save
+    resolveSaveAction(state, CASTER, TARGET, "turn"); // goblin has no `type` set
+    expect(state.snapshot.combatants.find((c) => c.id === TARGET)!.conditions ?? []).toHaveLength(0);
+  });
+
+  it("applies the rider when the target's type is in the restriction list", () => {
+    const encounter = turnUndeadEncounter();
+    encounter.definitions.find((d) => d.id === TARGET_DEF)!.type = "undead";
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1] }); // fails the save
+    resolveSaveAction(state, CASTER, TARGET, "turn");
+    expect(state.snapshot.combatants.find((c) => c.id === TARGET)!.conditions?.some((c) => c.name === "frightened")).toBe(true);
+  });
+
+  it("an unrestricted rider still applies regardless of target type", () => {
+    const encounter = turnUndeadEncounter();
+    (encounter.definitions.find((d) => d.id === CASTER_DEF)!.actions.find((a) => a.id === "turn") as { riders?: Array<{ restrictToCreatureTypes?: unknown }> })
+      .riders![0]!.restrictToCreatureTypes = undefined;
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1] });
+    resolveSaveAction(state, CASTER, TARGET, "turn");
+    expect(state.snapshot.combatants.find((c) => c.id === TARGET)!.conditions?.some((c) => c.name === "frightened")).toBe(true);
+  });
+});
+
 describe("push rider", () => {
   it("shoves the target directly away from the origin", () => {
     const encounter = baseEncounter("push");

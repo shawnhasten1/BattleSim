@@ -12,6 +12,11 @@ export type Faction = "party" | "enemy" | "neutral";
 export type ActionType = "action" | "bonus" | "reaction" | "free";
 export type Ability = "str" | "dex" | "con" | "int" | "wis" | "cha";
 export type SizeCategory = "tiny" | "small" | "medium" | "large" | "huge" | "gargantuan";
+/** Standard 5e creature types. Drives which type-restricted spell/effect riders can affect this creature. */
+export type CreatureType =
+  | "aberration" | "beast" | "celestial" | "construct" | "dragon"
+  | "elemental" | "fey" | "fiend" | "giant" | "humanoid"
+  | "monstrosity" | "ooze" | "plant" | "undead";
 export type TerrainType = "normal" | "difficult" | "impassable" | "hazard" | "cover" | "elevation" | "custom";
 /** How much an obstacle shields a creature on the far side of it (5e cover). */
 export type CoverLevel = "none" | "half" | "three-quarters" | "total";
@@ -463,6 +468,13 @@ interface TriggeredRider extends ActionRiderCommon {
    * can choose to hold the charge instead.
    */
   activation?: "always" | "optional";
+  /**
+   * If set, this rider's effect only applies to targets whose `CreatureDefinition.type`
+   * is in this list — every other target is treated as automatically unaffected by this
+   * rider (no roll; the rider is silently skipped for them). The action's own attack/save
+   * roll and any other riders still resolve normally.
+   */
+  restrictToCreatureTypes?: CreatureType[];
 }
 
 export type ActionRider =
@@ -847,6 +859,7 @@ export interface CreatureDefinition {
   name: string;
   source?: SourceMetadata;
   size: SizeCategory;
+  type?: CreatureType;
   armorClass: number;
   maxHp: number;
   speed: number;
@@ -1166,11 +1179,18 @@ export const riderSaveSchema = z.object({
   onSuccess: z.enum(["negates", "ends-early"])
 });
 
+export const creatureTypeSchema = z.enum([
+  "aberration", "beast", "celestial", "construct", "dragon",
+  "elemental", "fey", "fiend", "giant", "humanoid",
+  "monstrosity", "ooze", "plant", "undead"
+]) as z.ZodType<CreatureType>;
+
 const triggeredRiderBase = {
   id: z.string().optional(),
   oncePerTurn: z.boolean().optional(),
   when: riderGateSchema,
-  resourceCost: resourceCostSchema.optional()
+  resourceCost: resourceCostSchema.optional(),
+  restrictToCreatureTypes: z.array(creatureTypeSchema).optional()
 };
 
 export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("kind", [
@@ -1241,7 +1261,7 @@ export const creatureDefinitionSchema = z.object({
     z.literal("huge"),
     z.literal("gargantuan")
   ]),
-  type: z.string().optional(),
+  type: creatureTypeSchema.optional(),
   armorClass: z.number().int(),
   maxHp: z.number().int().positive(),
   speed: z.number().int().min(0),

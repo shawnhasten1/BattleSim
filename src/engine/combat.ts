@@ -2665,6 +2665,10 @@ function applyActionRiders(
     if (rider.oncePerTurn && wasRiderUsedThisTurn(state, source.id, useKey)) {
       return;
     }
+    if (rider.restrictToCreatureTypes?.length
+      && (!targetDefinition.type || !rider.restrictToCreatureTypes.includes(targetDefinition.type))) {
+      return;
+    }
     if (rider.resourceCost) {
       const held = source.resources?.[rider.resourceCost.resourceId] ?? 0;
       if (held < rider.resourceCost.amount) {
