@@ -38,6 +38,7 @@ export default function EncounterEditorPage() {
   const definitionsLibrary = useEncounterStore((s) => s.definitionsLibrary);
   const loadProjects = useEncounterStore((s) => s.loadProjects);
   const loadDefinitionsLibrary = useEncounterStore((s) => s.loadDefinitionsLibrary);
+  const loadActorFolders = useEncounterStore((s) => s.loadActorFolders);
   const addCreatureDefinition = useEncounterStore((s) => s.addCreatureDefinition);
   const addLibraryDefinitionToEncounter = useEncounterStore((s) => s.addLibraryDefinitionToEncounter);
 
@@ -47,6 +48,7 @@ export default function EncounterEditorPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "scene" | null>(null);
+  const [createFolderId, setCreateFolderId] = useState<string | null>(null);
 
   // Restore small view prefs after mount (keeps SSR output stable), then persist
   // on change. The `prefsReady` gate keeps the persist effects from firing
@@ -88,7 +90,8 @@ export default function EncounterEditorPage() {
   useEffect(() => {
     void loadProjects();
     void loadDefinitionsLibrary();
-  }, [loadDefinitionsLibrary, loadProjects]);
+    void loadActorFolders();
+  }, [loadActorFolders, loadDefinitionsLibrary, loadProjects]);
 
   function onCanvasDragOver(event: DragEvent<HTMLDivElement>) {
     if (
@@ -178,7 +181,10 @@ export default function EncounterEditorPage() {
             {rightTab === "actors" ? (
               <ActorsPanel
                 compendium={compendium}
-                onOpenCreate={() => setModal("create")}
+                onOpenCreate={(folderId) => {
+                  setCreateFolderId(folderId ?? null);
+                  setModal("create");
+                }}
                 onOpenSheet={() => setSheetOpen(true)}
               />
             ) : null}
@@ -191,7 +197,16 @@ export default function EncounterEditorPage() {
 
       {sheetOpen ? <ActorSheet compendium={compendium} onClose={() => setSheetOpen(false)} /> : null}
       {reportOpen ? <BattleReport onClose={() => setReportOpen(false)} /> : null}
-      {modal === "create" ? <CreateTokenModal compendium={compendium} onClose={() => setModal(null)} /> : null}
+      {modal === "create" ? (
+        <CreateTokenModal
+          compendium={compendium}
+          targetFolderId={createFolderId}
+          onClose={() => {
+            setModal(null);
+            setCreateFolderId(null);
+          }}
+        />
+      ) : null}
       {modal === "scene" ? <SceneConfigModal onClose={() => setModal(null)} /> : null}
     </>
   );

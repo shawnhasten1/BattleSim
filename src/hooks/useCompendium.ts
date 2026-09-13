@@ -23,6 +23,7 @@ interface UseCompendiumOptions {
  */
 export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {}) {
   const addCreatureDefinition = useEncounterStore((state) => state.addCreatureDefinition);
+  const moveDefinitionToFolder = useEncounterStore((state) => state.moveDefinitionToFolder);
   const attachSpellDefinition = useEncounterStore((state) => state.attachSpellDefinition);
   const attachWeaponDefinition = useEncounterStore((state) => state.attachWeaponDefinition);
   const attachFeatureDefinition = useEncounterStore((state) => state.attachFeatureDefinition);
@@ -51,7 +52,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
     setStatus(`${data.results.length} compendium results`);
   }
 
-  async function importCreature(slug: string, position?: { x: number; y: number }) {
+  async function importCreature(slug: string, position?: { x: number; y: number }, folderId?: string | null) {
     setStatus("Importing");
     const response = await fetch(`/api/open5e/creatures/${encodeURIComponent(slug)}`);
     if (!response.ok) {
@@ -64,6 +65,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
       return;
     }
     addCreatureDefinition(data.definition, "enemy", position);
+    if (folderId) void moveDefinitionToFolder(data.definition.id, folderId);
     setStatus("Imported as mapped creature");
     onCreatureImported?.();
   }

@@ -20,13 +20,26 @@ interface CreatureSearchResult {
   documentTitle?: string;
 }
 
-export function CreateTokenModal({ compendium, onClose }: { compendium: Compendium; onClose: () => void }) {
+interface CreateTokenModalProps {
+  compendium: Compendium;
+  onClose: () => void;
+  /** When set, every actor created through this modal is filed into this folder automatically. */
+  targetFolderId?: string | null;
+}
+
+export function CreateTokenModal({ compendium, onClose, targetFolderId }: CreateTokenModalProps) {
   const encounter = useEncounterStore((s) => s.encounter);
   const definitionsLibrary = useEncounterStore((s) => s.definitionsLibrary);
+  const actorFolders = useEncounterStore((s) => s.actorFolders);
   const addCustomToken = useEncounterStore((s) => s.addCustomToken);
   const addLibraryDefinitionToEncounter = useEncounterStore((s) => s.addLibraryDefinitionToEncounter);
   const deleteLibraryDefinition = useEncounterStore((s) => s.deleteLibraryDefinition);
   const importCombatantPackage = useEncounterStore((s) => s.importCombatantPackage);
+  const moveDefinitionToFolder = useEncounterStore((s) => s.moveDefinitionToFolder);
+
+  const targetFolderName = targetFolderId
+    ? actorFolders.find((folder) => folder.id === targetFolderId)?.name
+    : undefined;
 
   const [form, setForm] = useState({
     name: "Bandit",
@@ -62,7 +75,8 @@ export function CreateTokenModal({ compendium, onClose }: { compendium: Compendi
     if (!file) return;
     try {
       const payload = parseCombatantPackage(JSON.parse(await file.text()));
-      importCombatantPackage(payload);
+      const newId = importCombatantPackage(payload);
+      if (targetFolderId) void moveDefinitionToFolder(newId, targetFolderId);
       compendium.setStatus(`Imported ${payload.combatant?.displayName ?? payload.definition.name}`);
       onClose();
     } catch (error) {
@@ -75,6 +89,9 @@ export function CreateTokenModal({ compendium, onClose }: { compendium: Compendi
   return (
     <Modal open onClose={onClose} title="Create Token">
       <div className={styles.form}>
+        {targetFolderId ? (
+          <p className={styles.status}>Adding to folder: <strong>{targetFolderName ?? "Unknown folder"}</strong></p>
+        ) : null}
         <label className={styles.upload}>
           <Upload size={14} /> Import Player / Enemy JSON
           <input type="file" accept="application/json" onChange={importJson} />
@@ -128,7 +145,8 @@ export function CreateTokenModal({ compendium, onClose }: { compendium: Compendi
           type="button"
           className={styles.primary}
           onClick={() => {
-            addCustomToken(form);
+            const newId = addCustomToken(form);
+            if (targetFolderId) void moveDefinitionToFolder(newId, targetFolderId);
             setForm({ ...form, name: `${form.faction === "party" ? "PC" : "Enemy"} ${encounter.combatants.length + 1}` });
             onClose();
           }}
@@ -187,7 +205,7 @@ export function CreateTokenModal({ compendium, onClose }: { compendium: Compendi
                 type="button"
                 className={styles.listMain}
                 onClick={() => {
-                  void compendium.importCreature(result.slug);
+                  void compendium.importCreature(result.slug, undefined, targetFolderId);
                 }}
               >
                 <strong>{result.name}</strong>

@@ -50,6 +50,16 @@ model CreatureDefinition {
   updatedAt      DateTime    @updatedAt
 }
 
+model ActorFolder {
+  id        String        @id @default(cuid())
+  name      String
+  parentId  String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  parent    ActorFolder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children  ActorFolder[] @relation("FolderChildren")
+}
+
 model Encounter {
   id             String          @id @default(cuid())
   projectId      String

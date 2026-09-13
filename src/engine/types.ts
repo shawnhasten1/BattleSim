@@ -865,6 +865,8 @@ export interface CreatureDefinition {
   speed: number;
   proficiencyBonus?: number;
   resources?: Record<string, number>;
+  /** Which ActorFolder this saved actor is filed under. Undefined/null = unfiled (root). */
+  folderId?: Id | null;
   tokenVisuals?: TokenVisuals;
   character?: {
     level?: number;

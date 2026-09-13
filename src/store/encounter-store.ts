@@ -55,6 +55,7 @@ import { clampReplayIndex } from "@/lib/replay";
 import { downscaleDataUrl } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
+import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
 export type EditorTool = "select" | "move" | "measure" | "sight" | "wall" | "terrain" | "template" | "delete";
 
@@ -96,6 +97,8 @@ interface EncounterStore {
   projectStatus: string;
   definitionsLibrary: CreatureDefinition[];
   definitionStatus: string;
+  actorFolders: ActorFolder[];
+  folderStatus: string;
   undoStack: EncounterSnapshot[];
   redoStack: EncounterSnapshot[];
   tool: EditorTool;
@@ -147,6 +150,12 @@ interface EncounterStore {
   saveDefinition: (definitionId: string) => Promise<void>;
   addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => void;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
+  loadActorFolders: () => Promise<void>;
+  createActorFolder: (name: string, parentId?: string | null) => Promise<void>;
+  renameActorFolder: (folderId: string, name: string) => Promise<void>;
+  moveActorFolder: (folderId: string, parentId: string | null) => Promise<void>;
+  deleteActorFolder: (folderId: string) => Promise<void>;
+  moveDefinitionToFolder: (definitionId: string, folderId: string | null) => Promise<void>;
   selectCombatant: (id: string | null) => void;
   setMapImage: (dataUrl: string | null) => void;
   /** Load the current scene's background from IndexedDB into `mapImageDataUrl`. */
@@ -166,9 +175,9 @@ interface EncounterStore {
   clearConditions: (combatantId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
   addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
-  importCombatantPackage: (input: CombatantExportPackage) => void;
-  addCustomPc: (input: { name: string; ac: number; hp: number; speed: number; attackBonus: number; damageDice: string }) => void;
-  addCustomToken: (input: { name: string; faction: "party" | "enemy"; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"]; attackName: string; attackType: "melee" | "ranged"; attackAbility: Ability; damageDice: string; damageType: DamageType }) => void;
+  importCombatantPackage: (input: CombatantExportPackage) => string;
+  addCustomPc: (input: { name: string; ac: number; hp: number; speed: number; attackBonus: number; damageDice: string }) => string;
+  addCustomToken: (input: { name: string; faction: "party" | "enemy"; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"]; attackName: string; attackType: "melee" | "ranged"; attackAbility: Ability; damageDice: string; damageType: DamageType }) => string;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
   /** Bench one or more tokens as reinforcements arriving on a given round (≤ 1 / undefined = on the board). */
   setArrivesRound: (combatantIds: string[], arrivesRound: number | undefined) => void;
@@ -464,6 +473,8 @@ export const useEncounterStore = create<EncounterStore>()(
       projectStatus: "",
       definitionsLibrary: [],
       definitionStatus: "",
+      actorFolders: [],
+      folderStatus: "",
       undoStack: [],
       redoStack: [],
       tool: "select",
@@ -1216,6 +1227,83 @@ export const useEncounterStore = create<EncounterStore>()(
         set({ definitionStatus: response.ok ? "Definition deleted" : "Definition delete failed" });
         await get().loadDefinitionsLibrary();
       },
+      loadActorFolders: async () => {
+        const response = await fetch("/api/folders");
+        if (!response.ok) {
+          set({ folderStatus: "Folder list failed" });
+          return;
+        }
+        const data = await response.json() as { folders: ActorFolder[] };
+        set({ actorFolders: data.folders, folderStatus: "" });
+      },
+      createActorFolder: async (name, parentId = null) => {
+        const response = await fetch("/api/folders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, parentId })
+        });
+        set({ folderStatus: response.ok ? "" : "Folder create failed" });
+        if (response.ok) await get().loadActorFolders();
+      },
+      renameActorFolder: async (folderId, name) => {
+        const response = await fetch(`/api/folders/${encodeURIComponent(folderId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name })
+        });
+        set({ folderStatus: response.ok ? "" : "Folder rename failed" });
+        if (response.ok) await get().loadActorFolders();
+      },
+      moveActorFolder: async (folderId, parentId) => {
+        if (wouldCreateCycle(get().actorFolders, folderId, parentId)) {
+          set({ folderStatus: "Cannot move a folder into itself or one of its own descendants" });
+          return;
+        }
+        const response = await fetch(`/api/folders/${encodeURIComponent(folderId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentId })
+        });
+        set({ folderStatus: response.ok ? "" : "Folder move failed" });
+        if (response.ok) await get().loadActorFolders();
+      },
+      deleteActorFolder: async (folderId) => {
+        const response = await fetch(`/api/folders/${encodeURIComponent(folderId)}`, { method: "DELETE" });
+        set({ folderStatus: response.ok ? "" : "Folder delete failed" });
+        await get().loadActorFolders();
+        await get().loadDefinitionsLibrary();
+      },
+      moveDefinitionToFolder: async (definitionId, folderId) => {
+        const state = get();
+        const definition = state.encounter.definitions.find((candidate) => candidate.id === definitionId)
+          ?? state.definitionsLibrary.find((candidate) => candidate.id === definitionId);
+        if (!definition) {
+          set({ definitionStatus: "Definition not found" });
+          return;
+        }
+        // Filing an actor into a folder implicitly saves it to the library (there's
+        // nothing to organize otherwise) — mirrors saveDefinition's upsert-the-whole-blob call.
+        const updated: CreatureDefinition = { ...definition, folderId };
+        // Also patch the live encounter's copy (if any): the directory view merges
+        // definitionsLibrary with encounter.definitions, preferring the latter, so
+        // without this the folder move would appear to silently no-op for any actor
+        // that's also placed in the current scene.
+        if (state.encounter.definitions.some((candidate) => candidate.id === definitionId)) {
+          commitEncounter({
+            ...state.encounter,
+            definitions: state.encounter.definitions.map((candidate) => candidate.id === definitionId ? updated : candidate)
+          });
+        }
+        const response = await fetch("/api/definitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ definition: updated })
+        });
+        set({ definitionStatus: response.ok ? "Actor moved" : "Move failed" });
+        if (response.ok) {
+          await get().loadDefinitionsLibrary();
+        }
+      },
       selectCombatant: (id) => set({ selectedCombatantId: id }),
       hydrateMapImage,
       setMapImage: (dataUrl) => {
@@ -1484,9 +1572,10 @@ export const useEncounterStore = create<EncounterStore>()(
             message: `Imported ${combatant.displayName} from JSON`
           }]
         });
+        return definition.id;
       },
       addCustomPc: (input) => {
-        get().addCustomToken({
+        return get().addCustomToken({
           name: input.name,
           faction: "party",
           ac: input.ac,
@@ -1530,6 +1619,7 @@ export const useEncounterStore = create<EncounterStore>()(
             }
           ]
         }, input.faction);
+        return id;
       },
       updateCombatant: (combatantId, updates) => {
         const encounter = get().encounter;
