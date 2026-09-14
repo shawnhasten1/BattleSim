@@ -13,9 +13,10 @@ export default function EncounterRoutePage({
 }) {
   const { id: campaignId, encounterId } = use(params);
   const loadEncounter = useEncounterStore((s) => s.loadEncounter);
-  const [status, setStatus] = useState<LoadStatus>(() =>
-    useEncounterStore.getState().currentEncounterId === encounterId ? "ready" : "loading"
-  );
+  // Always start at "loading" so this matches the server render (which never has
+  // access to the persisted store) — the effect below flips to "ready" on the
+  // client as soon as it can, without risking a hydration mismatch.
+  const [status, setStatus] = useState<LoadStatus>("loading");
 
   useEffect(() => {
     if (useEncounterStore.getState().currentEncounterId === encounterId) {
