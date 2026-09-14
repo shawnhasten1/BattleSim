@@ -2,7 +2,7 @@
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
-import { getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
+import { cellIntersectsArea, getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
 import { isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
@@ -118,6 +118,11 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
               x: (drag ? drag.cell.x : anchor.x) * cellSize,
               y: (drag ? drag.cell.y : anchor.y) * cellSize
             };
+        // A standing zone can be subtle at a glance across a busy map — flag
+        // any token currently inside one directly, so "is this player still
+        // affected" doesn't depend on eyeballing polygon overlap.
+        const inActiveZone = (encounter.activeZones ?? []).some((zone) =>
+          cellIntersectsArea(anchor, zone.origin, zone.area, map.grid.distancePerSquare));
         return {
           combatant,
           definition,
@@ -127,10 +132,11 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           dragging: Boolean(drag),
           dropping: droppingTokenId === combatant.id,
           visuals: tokenVisualsFor(definition, combatant),
-          hpOut: combatant.currentHp <= 0 || combatant.state !== "active"
+          hpOut: combatant.currentHp <= 0 || combatant.state !== "active",
+          inActiveZone
         };
       }),
-    [encounter, cellSize, draggedToken, droppingTokenId, walk.positions]
+    [encounter, cellSize, draggedToken, droppingTokenId, walk.positions, map.grid.distancePerSquare]
   );
 
   function wallMenuItems(): ContextMenuItem[] {
@@ -382,14 +388,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           activeZones={encounter.activeZones}
           round={encounter.round}
         />
-        {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals }) => {
+        {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals, inActiveZone }) => {
           const tokenImage = visuals.imageUrl;
           const tokenScale = clamp(visuals.scale ?? 1, 0.5, 1.5);
           return (
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""} ${inActiveZone ? "in-active-zone" : ""}`}
               style={{
                 left: x,
                 top: y,
@@ -421,7 +427,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                       scene.openTokenMenu(combatant.id, event.clientX, event.clientY);
                     }
               }
-              title={combatant.displayName}
+              title={inActiveZone ? `${combatant.displayName} · in zone` : combatant.displayName}
             >
               {tokenImage ? (
                 <img
