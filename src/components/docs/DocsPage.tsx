@@ -211,37 +211,237 @@ const SECTIONS: Section[] = [
     content: (
       <>
         <p>
-          Attacks and spells are both defined as actions on an actor's sheet, with a shared shape: damage dice,
-          a to-hit bonus or save DC, range, and any secondary effects.
+          This section is a full walkthrough of the spell builder — every field, what it means, and how the
+          pieces fit together. If you just want the short version: open an actor's <strong>Actions</strong>{" "}
+          tab, hit <strong>Add</strong>, and either drop in something ready-made or start blank and follow the
+          form top to bottom.
         </p>
+
+        <h3>Three ways to put a spell on a sheet</h3>
+        <p>Click <strong>Add</strong> on the Actions tab to open a popover with four tabs:</p>
         <ul>
           <li>
-            <strong>Attacks</strong> roll to hit against AC and deal damage on a hit (with the usual crit and
-            resistance/vulnerability handling).
+            <strong>Library</strong> — search the built-in SRD spell list and click (or drag onto the sheet)
+            to attach one as-is, fully simulated.
           </li>
           <li>
-            <strong>Save-based spells</strong> force a saving throw against the caster's DC instead of an
-            attack roll.
+            <strong>Preset</strong> — a handful of common shapes (damage cantrip, save-or-condition spell,
+            area blast, healing, reaction spell) pre-filled as a starting point you then edit.
           </li>
           <li>
-            <strong>Upcasting</strong> — a spell can scale its damage (or add extra targets, Hold Person–style)
-            when cast using a higher spell slot. The AI will choose to upcast a spell on its own when it has
-            slots to spare and the fight calls for it.
+            <strong>Blank</strong> — an empty spell, built entirely by hand in the builder form. This is what
+            the rest of this section walks through.
           </li>
           <li>
-            <strong>Riders</strong> — an attack or spell can attach a secondary effect, like an applied
-            condition, on top of its normal damage.
-          </li>
-          <li>
-            <strong>Creature-type restrictions</strong> — some effects (Turn Undead–style abilities, for
-            example) only work against specific creature types, and won't be considered valid targets for
-            anything else.
+            <strong>Import</strong> — search the Open5e compendium and pull in a spell by name. This attaches
+            it as a <em>reference</em> — its text is there for you to read, but it isn't compiled into
+            simulateable damage/save/area data, so the AI won't actually cast it. Treat it as a head start:
+            open it afterward and fill in the Blank-style fields if you want it to actually fire in combat.
           </li>
         </ul>
         <p>
-          Some spells also place a lasting area on the map when cast — those are covered next, since they
-          behave differently turn to turn than a one-shot attack or save.
+          Whichever way you start, editing opens the same builder form. It has a{" "}
+          <strong>Simple / Advanced</strong> toggle near the top of the Actions tab — Simple hides the
+          fields most spells don't need (concentration, ritual, resource cost, upcast, beam count, zone
+          behavior, DC override); Advanced reveals all of it. The toggle is remembered in your browser, not
+          per-spell, so flip it to Advanced any time a field mentioned below seems to be missing.
         </p>
+
+        <h3>The core fields</h3>
+        <ul>
+          <li><strong>Name</strong> — whatever you want it called on the sheet.</li>
+          <li><strong>Spell level</strong> — 0 for a cantrip, 1–9 otherwise. This drives upcasting (below).</li>
+          <li>
+            <strong>Timing</strong> — Action, Bonus action, or Reaction. Choosing Reaction reveals a trigger
+            block: what has to happen for it to fire (an enemy casts a spell nearby, you're hit by an attack,
+            and so on), who it acts on, and how eagerly the AI spends it — see the same reaction-trigger
+            picker described for weapons.
+          </li>
+          <li>
+            <strong>Range (ft)</strong> — a number, or the words <code>self</code> / <code>touch</code>.
+          </li>
+        </ul>
+
+        <h3>What it does — the four shapes</h3>
+        <p>
+          The <strong>What it does</strong> field picks the spell's shape, and everything below it in the
+          form changes to match:
+        </p>
+
+        <p><strong>Attack roll</strong> — rolls to hit against the target's AC, like a weapon attack.</p>
+        <ul>
+          <li><strong>Spell attack uses</strong> — the ability that drives the attack bonus (INT/WIS/CHA for most casters).</li>
+          <li><strong>Damage</strong> — dice, die size, flat bonus, and damage type.</li>
+          <li>
+            <strong>Delivery</strong> (Advanced) — Single, or Multiple beams for something like Magic Missile
+            or Scorching Ray. Beams reveals <strong>Number of beams</strong> and <strong>Always hits</strong>{" "}
+            (skips the attack roll entirely — each beam's damage just lands).
+          </li>
+          <li><strong>Effects</strong> — optional riders on top of the damage; see below.</li>
+        </ul>
+
+        <p><strong>Saving throw (one target)</strong> — the target rolls a save instead of you rolling to hit.</p>
+        <ul>
+          <li><strong>Saving throw</strong> — which ability the target saves with.</li>
+          <li>
+            <strong>Save DC</strong> (Advanced) — leave it blank and the engine auto-calculates it from the
+            caster's spellcasting stat; only set a number here to hardcode it.
+          </li>
+          <li><strong>On a successful save</strong> — Half damage, No damage, or Effect negated.</li>
+          <li><strong>Deals damage</strong> — toggle on to reveal the damage dice (a spell can be pure save-or-condition with this off).</li>
+          <li><strong>Effects</strong> — riders, usually gated on a failed save.</li>
+        </ul>
+
+        <p><strong>Saving throw (area)</strong> — everything above, plus a template you place on the map:</p>
+        <ul>
+          <li><strong>Shape</strong> — Circle, Cone, Line, Rectangle, or Square.</li>
+          <li><strong>Radius (ft)</strong> — circle radius / cone or line length / rectangle length.</li>
+          <li><strong>Width (ft)</strong> — line and rectangle only.</li>
+          <li><strong>Centred on</strong> — a point you choose within range, or the caster.</li>
+          <li><strong>Aimed from the caster</strong> — cones/lines/rectangles point from the caster toward the spot you pick.</li>
+          <li><strong>Affects</strong> (Advanced) — Enemies only, or everyone standing in the area.</li>
+          <li>
+            <strong>Leaves a persistent zone</strong> (Advanced) — turns this from a one-shot burst into a
+            standing area like Cloudkill or Web; see <a href="#zone-builder">turning an area spell into a
+            zone</a> below.
+          </li>
+        </ul>
+
+        <p><strong>Healing</strong> — restores hit points instead of dealing damage.</p>
+        <ul>
+          <li><strong>Healing</strong> — dice, plus an option to add the caster's ability modifier.</li>
+          <li><strong>Heals</strong> — one creature you target, or the caster.</li>
+        </ul>
+
+        <h3>Effects (riders)</h3>
+        <p>
+          Any damage-dealing shape has an <strong>Effects</strong> field — a list of secondary effects on top
+          of the spell's main damage/save. Click <strong>+ Add effect</strong> and pick a kind:
+        </p>
+        <ul>
+          <li>
+            <strong>Condition</strong> — applies a condition (frightened, poisoned, paralyzed, etc.). For a
+            save-based spell it's automatically gated on your existing save; for an attack it can optionally
+            require its own separate save. Set a <strong>Duration</strong>: a number of rounds, until the
+            target saves again, while you concentrate, until the target's next turn, or permanent until
+            something removes it.
+          </li>
+          <li><strong>Extra damage</strong> — bonus damage dice on top of the main hit.</li>
+          <li><strong>Push</strong> — shoves the target a set distance.</li>
+          <li><strong>Reference note</strong> — plain text for an effect you'll resolve by hand; not simulated.</li>
+        </ul>
+        <p>
+          Every rider (except a reference note) has a <strong>Triggers</strong> setting — on a hit / on a
+          crit / always for weapon-style contexts, or on a failed save / on a successful save / always for
+          save-based ones — plus an optional <strong>creature-type restriction</strong>: check it and tick
+          specific types (undead, fiend, etc.) and the rider silently does nothing to any target outside that
+          list, while the spell's main attack or save still resolves normally against them.
+        </p>
+
+        <h3 id="zone-builder">Turning an area spell into a persistent zone</h3>
+        <p>
+          With <strong>Saving throw (area)</strong> selected and Advanced mode on, toggle{" "}
+          <strong>Leaves a persistent zone</strong> to make the area stick around instead of resolving once.
+          This is exactly how Cloudkill, Spike Growth, Web, Insect Plague, and Moonbeam are built — see{" "}
+          <a href="#zones">Zones &amp; Persistent Effects</a> for what each of those looks like in play. The
+          zone fields:
+        </p>
+        <ul>
+          <li><strong>Lasts</strong> — a number of rounds, as long as you concentrate, or until dismissed.</li>
+          <li>
+            <strong>Triggers when a creature enters the area</strong> / <strong>starts its turn there</strong>{" "}
+            / <strong>ends its turn there</strong> — each is its own toggle; re-fire the zone's save/damage/
+            riders whenever the ones you enable happen. Cloudkill uses start-of-turn (hits you again every
+            round you're standing in it); most others use on-enter.
+          </li>
+          <li>
+            <strong>Also resolves immediately on cast</strong> — most zones (Insect Plague, Web) don't hit
+            anyone the instant they're cast, only later when a trigger fires; turn this on if yours should.
+          </li>
+          <li>
+            <strong>Drifts away from the caster</strong> + <strong>Feet per turn</strong> — Cloudkill-style
+            automatic movement, no choice involved.
+          </li>
+          <li>
+            <strong>Caster can reposition it</strong> + <strong>Feet per turn</strong> — Moonbeam-style: spends
+            your bonus action each turn to steer the zone instead of it drifting on its own.
+          </li>
+          <li>
+            <strong>Damages creatures that move through it</strong> + dice — Spike Growth-style automatic
+            movement damage, no save, charged once per grid step into or within the zone.
+          </li>
+          <li>
+            <strong>Becomes difficult or impassable terrain</strong> + a movement-cost multiplier (default
+            double cost) — Web/Spike Growth-style.
+          </li>
+          <li><strong>Heavily obscures the area</strong> — flags the zone for the manual sight-measurement tool; it doesn't gate targeting/cover on its own.</li>
+        </ul>
+
+        <h3>Concentration, ritual, and spending a resource</h3>
+        <p>These live under Advanced:</p>
+        <ul>
+          <li><strong>Concentration</strong> — casting another concentration spell ends this one.</li>
+          <li><strong>Ritual</strong> — reference flag only; doesn't change simulation.</li>
+          <li>
+            <strong>Spends resource</strong> — the exact id of a resource pool on the caster's sheet (e.g.{" "}
+            <code>slot-3</code>) that casting this spell consumes one of. If you leave this blank the spell
+            costs nothing to cast. The id has to match a resource you've added on the actor's{" "}
+            <strong>Stats</strong> tab, under Resources — type the same id there, give it a Current and a
+            Default (max) value, and this spell will draw from it.
+          </li>
+        </ul>
+
+        <h3>Upcasting with a higher slot</h3>
+        <p>
+          <strong>Extra damage per slot above base</strong> (Advanced, e.g. <code>1d6</code> for Fireball) adds
+          that many extra dice for every spell-slot level above the spell's own level it gets cast with. This
+          only works if <strong>Spends resource</strong> is set to a slot resource whose id is exactly{" "}
+          <code>slot-&lt;level&gt;</code> — e.g. a 3rd-level spell should spend <code>slot-3</code>. The engine
+          reads the number out of that id to know which higher slots are available, so a differently-named
+          resource (or a flat non-slot resource like a limited-use charge) won't upcast even with this field
+          filled in. Give the caster resources <code>slot-1</code> through however high they can cast, and the
+          AI will choose a higher slot on its own when it has one to spare and the fight calls for it.
+        </p>
+
+        <h3>Two more things worth knowing</h3>
+        <ul>
+          <li>
+            <strong>Restricting a rider to specific creature types</strong> — see{" "}
+            <a href="#actors">Actor Sheets</a> for where a creature's own type is set; a rider's own
+            restriction (above) is what makes an effect like Turn Undead only land on the types you check.
+          </li>
+          <li>
+            <strong>Multi-target spells like Hold Person</strong> — authored as a single-target save with{" "}
+            <strong>Extra creatures</strong> added via upcasting's <code>targets</code> growth (this one isn't
+            exposed as its own form field yet — it comes from the same <code>Extra damage per slot above
+            base</code> upcast data, authored on the SRD entry). Attach it from the Library rather than
+            building it blank if you want that behavior out of the box.
+          </li>
+        </ul>
+
+        <h3>Worked example: building Fireball from scratch</h3>
+        <ol>
+          <li>Actions tab → Add → Blank → Spell.</li>
+          <li>Name: <em>Fireball</em>. Spell level: <em>3</em>. Timing: <em>Action</em>. Range: <em>150</em>.</li>
+          <li>What it does: <em>Saving throw (area)</em>.</li>
+          <li>Saving throw: <em>DEX</em>. On a successful save: <em>Half damage</em>. Deals damage: on, dice <em>8d6 fire</em>.</li>
+          <li>Shape: <em>Circle</em>. Radius (ft): <em>20</em>. Centred on: <em>A point you choose</em>.</li>
+          <li>Switch to Advanced. Concentration: off. Spends resource: <code>slot-3</code>. Extra damage per slot above base: <code>1d6</code>.</li>
+          <li>Add to sheet. Make sure the caster has resources <code>slot-3</code> (and higher, if they can upcast it) on their Stats tab.</li>
+        </ol>
+
+        <h3>Worked example: a Cloudkill-style poison cloud</h3>
+        <ol>
+          <li>Actions tab → Add → Blank → Spell.</li>
+          <li>Name: <em>Poison Cloud</em>. Spell level: <em>5</em>. Timing: <em>Action</em>. Range: <em>150</em>.</li>
+          <li>What it does: <em>Saving throw (area)</em>. Saving throw: <em>CON</em>. On a successful save: <em>Half damage</em>. Deals damage: on, dice <em>5d8 poison</em>.</li>
+          <li>Shape: <em>Circle</em>. Radius (ft): <em>20</em>. Centred on: <em>A point you choose</em>.</li>
+          <li>Switch to Advanced. Toggle <strong>Leaves a persistent zone</strong> on.</li>
+          <li>Lasts: <em>A number of rounds</em> → <em>10</em>. Trigger: enable <strong>starts its turn there</strong> (so it re-hits every round), leave the others off.</li>
+          <li>Toggle <strong>Drifts away from the caster</strong> on, Feet per turn: <em>10</em>.</li>
+          <li>Concentration: on. Spends resource: <code>slot-5</code>.</li>
+          <li>Add to sheet — the zone will now settle onto the map, damage anyone standing in it at the start of their turn, and drift away from the caster each of the caster's turns until it expires or concentration breaks.</li>
+        </ol>
       </>
     )
   },

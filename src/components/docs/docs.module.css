@@ -94,6 +94,13 @@
   gap: 48px;
 }
 
+.section h3 {
+  margin: 28px 0 10px;
+  font-size: 15px;
+  color: var(--ui-accent-soft);
+  scroll-margin-top: 20px;
+}
+
 .section h2 {
   margin: 0 0 14px;
   font-size: 20px;
