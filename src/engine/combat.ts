@@ -1773,6 +1773,10 @@ function resolveOneDeathEffect(
     x: Math.floor(deceased.position.x + (footprint - 1) / 2),
     y: Math.floor(deceased.position.y + (footprint - 1) / 2)
   };
+  // Same `ActionDeclared` a spell's area-save logs — the board's AoE flash and
+  // floating action-name cue (`combatFeedback.ts`) key off that event type, so
+  // a death effect gets the same on-board indicator for free, no new UI wiring.
+  declareAction(state, deceased, action, { origin });
 
   const onSuccess = resolveOnSuccess(action);
   const dc = resolveSaveDc(action, definition);

@@ -1819,6 +1819,49 @@ describe("combat engine", () => {
     expect(triggered.map((entry) => entry.data?.combatantId).sort()).toEqual(["enemy-goblin-1", "enemy-goblin-2"]);
   });
 
+  it("logs an ActionDeclared for a death effect so the board's AoE flash picks it up, same as a spell", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.map.walls = [];
+
+    const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter");
+    if (fighter) fighter.position = { x: 7, y: 2 };
+    const goblin1 = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+    if (goblin1) goblin1.position = { x: 8, y: 2 };
+
+    const fighterAction = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
+    if (fighterAction?.kind === "attack") {
+      fighterAction.attackBonus = 100;
+      fighterAction.damage = [{ dice: "20", damageType: "slashing" }];
+    }
+    const goblinDefinition = encounter.definitions.find((definition) => definition.id === "def-goblin");
+    if (goblinDefinition) {
+      goblinDefinition.deathEffects = [{
+        id: "spore-burst",
+        name: "Spore Burst",
+        action: {
+          kind: "area-save", id: "spore-burst", name: "Spore Burst", actionType: "action",
+          saveAbility: "con", dc: 100, range: 0,
+          area: { type: "circle", size: 10 },
+          targeting: { origin: "self", range: 0 },
+          damage: [{ dice: "3d6", damageType: "poison" }],
+          halfDamageOnSuccess: false, onSuccess: "none", affects: "all",
+          automationSupport: "full"
+        },
+        automationSupport: "full"
+      }];
+    }
+
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [20] });
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+
+    const declared = state.log.find((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "enemy-goblin-1");
+    expect(declared).toBeDefined();
+    expect(declared?.data?.area).toEqual({ type: "circle", size: 10 });
+    expect(declared?.data?.origin).toEqual({ x: 8, y: 2 });
+    expect(declared?.data?.damageType).toBe("poison");
+  });
+
   it("does not re-fire a death effect for overkill damage applied after a creature is already defeated", () => {
     const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
     encounter.map.walls = [];
