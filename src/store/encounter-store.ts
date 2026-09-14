@@ -444,11 +444,14 @@ export const useEncounterStore = create<EncounterStore>()(
             return;
           }
           // Nothing cached locally for this scene (e.g. a different device than
-          // the one that uploaded it) — fall back to the CDN URL synced at save
-          // time, and opportunistically cache the URL itself for next time.
+          // the one that uploaded it) — fall back to the authenticated proxy for
+          // the image synced at save time, and opportunistically cache it for
+          // next time. The Blob store is private, so the raw CDN URL can't be
+          // used directly as an <img> src.
           const remoteUrl = get().mapImageUrl;
-          set({ mapImageDataUrl: remoteUrl ?? null });
-          if (remoteUrl) void putMapImage(key, remoteUrl);
+          const proxyUrl = remoteUrl ? `/api/encounters/${encodeURIComponent(key)}/map-image` : null;
+          set({ mapImageDataUrl: proxyUrl });
+          if (proxyUrl) void putMapImage(key, proxyUrl);
         });
       };
 

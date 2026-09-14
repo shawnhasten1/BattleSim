@@ -1,4 +1,4 @@
-import { put, del } from "@vercel/blob";
+import { put, del, get } from "@vercel/blob";
 
 /** Splits a `data:image/...;base64,...` URL into bytes + content type. */
 export function parseDataUrl(dataUrl: string): { buffer: Buffer; contentType: string; extension: string } {
@@ -20,7 +20,7 @@ export async function replaceBlobImage(
 ): Promise<string> {
   const { buffer, contentType, extension } = parseDataUrl(dataUrl);
   const blob = await put(`${pathnameBase}.${extension}`, buffer, {
-    access: "public",
+    access: "private",
     contentType,
     addRandomSuffix: false,
     allowOverwrite: true
@@ -34,4 +34,11 @@ export async function replaceBlobImage(
 export async function deleteBlobImage(url: string | null): Promise<void> {
   if (!url) return;
   await del(url).catch(() => undefined);
+}
+
+/** Streams a private blob's bytes + content type, or null if it doesn't exist. */
+export async function readBlobImage(url: string): Promise<{ stream: ReadableStream; contentType: string } | null> {
+  const result = await get(url, { access: "private" });
+  if (result?.statusCode !== 200) return null;
+  return { stream: result.stream, contentType: result.blob.contentType };
 }

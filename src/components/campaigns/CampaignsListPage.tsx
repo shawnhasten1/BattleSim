@@ -167,7 +167,7 @@ export function CampaignsListPage() {
                 {renamingId === campaign.id ? (
                   <div className={styles.cardMain}>
                     <div className={styles.thumb}>
-                      {campaign.coverImageUrl ? <img src={campaign.coverImageUrl} alt="" /> : <Swords size={28} />}
+                      {campaign.coverImageUrl ? <img src={`/api/projects/${campaign.id}/cover-image`} alt="" /> : <Swords size={28} />}
                     </div>
                     <div className={styles.cardBody}>
                       <RenameInput
@@ -183,7 +183,7 @@ export function CampaignsListPage() {
                       {uploadingId === campaign.id ? (
                         <span>Uploading…</span>
                       ) : campaign.coverImageUrl ? (
-                        <img src={campaign.coverImageUrl} alt="" />
+                        <img src={`/api/projects/${campaign.id}/cover-image`} alt="" />
                       ) : (
                         <Swords size={28} />
                       )}

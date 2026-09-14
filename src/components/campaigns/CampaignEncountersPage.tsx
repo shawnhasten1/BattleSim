@@ -118,7 +118,7 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
                 >
                   <div className={styles.thumb}>
                     {encounter.mapImageUrl ? (
-                      <img src={encounter.mapImageUrl} alt="" />
+                      <img src={`/api/encounters/${encounter.id}/map-image`} alt="" />
                     ) : (
                       <Map size={28} />
                     )}

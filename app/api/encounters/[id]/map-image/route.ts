@@ -3,11 +3,31 @@ import { z } from "zod";
 import { prisma } from "@/server/prisma";
 import { requireUserId } from "@/server/require-user";
 import { isOwnEncounter } from "@/server/encounter-access";
-import { replaceBlobImage, deleteBlobImage } from "@/server/blob-image";
+import { replaceBlobImage, deleteBlobImage, readBlobImage } from "@/server/blob-image";
 
 const uploadSchema = z.object({
   dataUrl: z.string().regex(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "Expected a base64 image data URL")
 });
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
+
+  const { id } = await params;
+  if (!(await isOwnEncounter(id, userId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const existing = await prisma.encounter.findUnique({ where: { id }, select: { mapImageUrl: true } });
+  if (!existing?.mapImageUrl) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const blob = await readBlobImage(existing.mapImageUrl);
+  if (!blob) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return new NextResponse(blob.stream, {
+    headers: { "Content-Type": blob.contentType, "Cache-Control": "private, no-cache" }
+  });
+}
 
 /**
  * Persists an encounter's map background to Vercel Blob (CDN-served) so it's
