@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { ArrowLeft, LogOut, Map, Plus, Trash2 } from "lucide-react";
@@ -40,10 +41,9 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
-  async function enterEncounter(encounterId: string) {
+  function enterEncounter(encounterId: string) {
     setEntering(encounterId);
-    await useEncounterStore.getState().loadEncounter(encounterId);
-    router.push("/");
+    router.push(`/campaigns/${campaignId}/encounters/${encounterId}` as Route);
   }
 
   async function onCreate(event: FormEvent) {
@@ -51,7 +51,7 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
     setCreating(true);
     const id = await useEncounterStore.getState().createEncounterInCampaign(campaignId, newName);
     setCreating(false);
-    if (id) await enterEncounter(id);
+    if (id) enterEncounter(id);
     else setStatus("Create encounter failed");
   }
 
@@ -114,7 +114,7 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
                   type="button"
                   className={styles.cardMain}
                   disabled={entering === encounter.id}
-                  onClick={() => void enterEncounter(encounter.id)}
+                  onClick={() => enterEncounter(encounter.id)}
                 >
                   <div className={styles.thumb}>
                     {encounter.mapImageUrl ? (

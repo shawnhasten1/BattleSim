@@ -315,6 +315,62 @@ map background:
   paths become live at the same time). `npm run typecheck`, `npm run test`
   (521 passing), `npm run build` all green.
 
+**Follow-up (2026-09-14): every encounter gets its own URL.** Previously
+the whole editor lived at `/` regardless of which encounter was loaded —
+the campaign picker would `loadEncounter()` into the store and then
+navigate to `/`, so a saved encounter had no bookmarkable/shareable URL and
+two browser tabs would fight over the same client state. Now:
+- `app/campaigns/[id]/encounters/[encounterId]/page.tsx` — loads the
+  encounter named in the URL (skipping the fetch if the store already has
+  it, e.g. on a back/forward navigation), shows a loading state while
+  fetching and a clean error state (with a link back to the campaign) if it
+  fails to load — deleted, or not yours.
+- The actual editor UI was extracted from `app/page.tsx` into
+  `src/components/editor/EncounterEditor.tsx` (verbatim move, no logic
+  changes) so both the sandbox page and the new per-encounter route render
+  the same component.
+- `app/page.tsx` is now just the **sandbox** — freeplay against
+  whatever's already in the store/localStorage, no campaign attached, kept
+  exactly as it worked before.
+- New `src/hooks/useSyncEncounterRoute.ts`, mounted unconditionally inside
+  `EncounterEditor`: watches the store's `currentProjectId`/
+  `currentEncounterId` and pushes the URL to match whenever they change —
+  regardless of *how* they changed. This means the **old in-editor
+  SceneDropdown/ScenePanel needed zero changes**: loading a different
+  encounter through them now transparently updates the address bar too,
+  since both paths (a fresh URL navigation, or the old dropdown) funnel
+  through the same store fields the hook watches. It also handles the
+  sandbox → real-encounter promotion (saving from `/` jumps you to the new
+  canonical URL) and the delete-out-from-under-you case (both ids go null
+  → bounced back to `/campaigns`).
+- `CampaignEncountersPage`'s `enterEncounter` now does a plain
+  `router.push` to the encounter's URL instead of loading into the store
+  and pushing to `/` — the destination route page owns its own loading now,
+  so there's no double-fetch.
+- `TopBar`'s "back to campaigns" icon is now context-aware: links to the
+  current campaign's encounter list (`/campaigns/{currentProjectId}`) when
+  one is loaded, `/campaigns` otherwise.
+- **Verified**: the new route resolves and renders (200, no server errors)
+  for a real owned encounter and for a bogus encounter id under a real
+  campaign; unauthenticated access still redirects to `/login` with the
+  full deep link preserved as `callbackUrl`. The client-side loading/error/
+  redirect logic (React effects) couldn't be exercised by clicking through
+  in a real browser — no headless browser available in this environment,
+  same limitation as every prior phase — so treat that half as
+  code-reviewed/reasoned-through rather than click-tested.
+  `npm run typecheck`, `npm run test` (521 passing), `npm run build` all green.
+
+**Unrelated but notable, found mid-task:** `CampaignsListPage.tsx`,
+`CampaignEncountersPage.tsx`, the map-image/cover-image routes, and
+`blob-image.ts` had already been modified on disk (outside this session)
+before this change started — Vercel Blob storage switched from `access:
+"public"` to `"private"`, with new authenticated `GET` handlers on both
+image routes that stream the bytes through our own API instead of exposing
+a public CDN URL. That's a real security improvement (previously anyone
+with a URL could view an image forever, logged in or not) and was kept —
+verified it still typechecks/tests/builds clean. If you didn't make that
+change yourself, it's worth knowing something else touched this repo.
+
 Remaining phases (5 cont'd, 6): the `Project` → `Campaign` rename (see
 above — now optional/cosmetic rather than blocking), optional hardening
 (password reset, rate limiting, account settings, the pre-existing

@@ -26,6 +26,7 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
   const saveProject = useEncounterStore((state) => state.saveProject);
   const reset = useEncounterStore((state) => state.reset);
   const hasOutcome = useEncounterStore((state) => state.outcome != null);
+  const currentProjectId = useEncounterStore((state) => state.currentProjectId);
   const { data: session } = useSession();
 
   return (
@@ -39,7 +40,7 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
       <div className={styles.spacer} />
 
       <div className={styles.group}>
-        <a href="/campaigns" title="Back to campaigns">
+        <a href={currentProjectId ? `/campaigns/${currentProjectId}` : "/campaigns"} title="Back to campaigns">
           <LayoutGrid size={16} />
         </a>
         <button type="button" onClick={undo} title="Undo">
