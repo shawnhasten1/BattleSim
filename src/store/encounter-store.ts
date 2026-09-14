@@ -8,6 +8,7 @@ import {
   createEngineState,
   applyCondition,
   applyTimedFeatureEffects,
+  defaultConditionModifiers,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   event,
@@ -27,7 +28,9 @@ import {
   type CombatantExportPackage,
   type CombatLogEvent,
   type CombatantState,
+  type ConditionInstance,
   type ConditionName,
+  type Faction,
   type Ability,
   type ActionDefinition,
   type CreatureDefinition,
@@ -112,6 +115,8 @@ interface EncounterStore {
   handleMapClick: (point: Point) => void;
   rollInitiativeNow: () => void;
   advanceTurn: () => void;
+  /** Rewind this fight to round 0 with the same combatants/map: full HP, no conditions, fresh resources, no initiative. */
+  restartCombat: () => void;
   runAuto: () => Promise<void>;
   runBatch: (count: number) => void;
   setReplayIndex: (index: number) => void;
@@ -179,6 +184,10 @@ interface EncounterStore {
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
   updateResourceStance: (combatantId: string, stance: CombatantState["resourceStance"]) => void;
   updateFactionResourceStance: (faction: CombatantState["faction"], stance: CombatantState["resourceStance"]) => void;
+  /** Toggle the "surprised" condition on one combatant — denies its first turn, self-expires at round 2. */
+  toggleCombatantSurprised: (combatantId: string) => void;
+  /** Add/remove "surprised" across every combatant in a faction. */
+  setFactionSurprised: (faction: Faction, surprised: boolean) => void;
   updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
@@ -256,6 +265,21 @@ function canTakeTurn(encounter: EncounterSnapshot, combatant: CombatantState): b
       && combatant.faction === "party"
       && combatant.state === "downed"
       && !combatant.deathSaves?.stable);
+}
+
+export function isSurprised(combatant: CombatantState): boolean {
+  return (combatant.conditions ?? []).some((condition) => condition.name === "surprised");
+}
+
+/** A fresh "surprised" condition: denies the bearer's first turn, then self-expires at the start of round 2. */
+function surprisedCondition(encounter: EncounterSnapshot): ConditionInstance {
+  return {
+    id: "surprised",
+    name: "surprised",
+    startedRound: encounter.round,
+    expiresAt: { round: Math.max(2, encounter.round + 1), turnIndex: 0, timing: "start" },
+    modifiers: defaultConditionModifiers("surprised")
+  };
 }
 
 function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnapshot {
@@ -590,6 +614,30 @@ export const useEncounterStore = create<EncounterStore>()(
         engine.log = [...state.log];
         rollInitiative(engine);
         commitEncounter(engine.snapshot, { log: engine.log });
+      },
+      restartCombat: () => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          round: 0,
+          turnIndex: 0,
+          combatants: encounter.combatants.map((combatant) => {
+            const definition = getDefinition(encounter, combatant);
+            return {
+              ...combatant,
+              currentHp: definition.maxHp,
+              tempHp: 0,
+              initiative: undefined,
+              conditions: [],
+              deathSaves: undefined,
+              actionEconomy: undefined,
+              turnFlags: undefined,
+              concentration: undefined,
+              resources: defaultResourcesForDefinition(definition),
+              state: combatant.arrivesRound ? "reserve" : "active"
+            };
+          })
+        }, { log: [] });
       },
       advanceTurn: () => {
         const state = get();
@@ -1511,6 +1559,34 @@ export const useEncounterStore = create<EncounterStore>()(
           combatants: encounter.combatants.map((combatant) => combatant.faction === faction
             ? { ...combatant, resourceStance: stance }
             : combatant)
+        });
+      },
+      toggleCombatantSurprised: (combatantId) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
+            ? {
+                ...combatant,
+                conditions: isSurprised(combatant)
+                  ? (combatant.conditions ?? []).filter((condition) => condition.name !== "surprised")
+                  : [...(combatant.conditions ?? []), surprisedCondition(encounter)]
+              }
+            : combatant)
+        });
+      },
+      setFactionSurprised: (faction, surprised) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((combatant) => {
+            if (combatant.faction !== faction) return combatant;
+            const withoutSurprised = (combatant.conditions ?? []).filter((condition) => condition.name !== "surprised");
+            return {
+              ...combatant,
+              conditions: surprised ? [...withoutSurprised, surprisedCondition(encounter)] : withoutSurprised
+            };
+          })
         });
       },
       updateTags: (combatantId, tags) => {

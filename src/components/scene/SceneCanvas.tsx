@@ -3,7 +3,7 @@
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
 import { getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
-import { useEncounterStore } from "@/store/encounter-store";
+import { isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
@@ -55,6 +55,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const duplicateCombatant = useEncounterStore((state) => state.duplicateCombatant);
   const updateHp = useEncounterStore((state) => state.updateHp);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
+  const toggleCombatantSurprised = useEncounterStore((state) => state.toggleCombatantSurprised);
   const combatRound = useEncounterStore((state) => state.encounter.round);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
@@ -192,6 +193,11 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       : [combatantId];
 
     const preCombat = combatRound <= 0;
+    // Surprise's expiry is computed relative to round 0, and Auto Run/Batch
+    // re-derive round numbering independently of the live turn order — marking
+    // surprise once any round is already in progress can desync the two and
+    // clear the condition before it does anything. Keep this strictly pre-combat.
+    const canMarkSurprised = preCombat;
 
     if (ids.length >= 2) {
       const present = ids.filter((id) => encounter.combatants.some((entry) => entry.id === id));
@@ -210,6 +216,9 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
             scene.clearCombatantSelection();
           }
         },
+        ...(canMarkSurprised
+          ? [{ label: "Toggle surprised", onSelect: () => present.forEach((id) => toggleCombatantSurprised(id)) } as ContextMenuItem]
+          : []),
         ...(preCombat
           ? [
               { separator: true } as ContextMenuItem,
@@ -256,6 +265,15 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       },
       { label: "Set to full", disabled: hp >= maxHp, onSelect: () => updateHp(combatant.id, maxHp) },
       { label: "Down (0 HP)", disabled: hp <= 0, onSelect: () => updateHp(combatant.id, 0) },
+      ...(canMarkSurprised
+        ? [
+            {
+              label: "Surprised",
+              checked: isSurprised(combatant),
+              onSelect: () => toggleCombatantSurprised(combatant.id)
+            } as ContextMenuItem
+          ]
+        : []),
       ...(preCombat
         ? [
             { separator: true } as ContextMenuItem,
@@ -369,7 +387,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""}`}
               style={{
                 left: x,
                 top: y,

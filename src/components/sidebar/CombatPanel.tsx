@@ -1,9 +1,9 @@
 "use client";
 
-import { Dices, SkipForward, Swords, Waypoints } from "lucide-react";
+import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { getDefinition, type CombatantState } from "@/engine";
-import { useEncounterStore } from "@/store/encounter-store";
+import { getDefinition, type CombatantState, type Faction } from "@/engine";
+import { isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
@@ -43,6 +43,12 @@ function factionResourceStanceValue(
   return stances.every((candidate) => candidate === first) ? first : "mixed";
 }
 
+function factionSurprisedValue(combatants: CombatantState[], faction: Faction): boolean | "mixed" {
+  const flags = combatants.filter((c) => c.faction === faction).map((c) => isSurprised(c));
+  if (flags.length === 0) return false;
+  return flags.every((flag) => flag === flags[0]) ? flags[0] : "mixed";
+}
+
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -56,12 +62,14 @@ export function CombatPanel() {
   const batchSummary = useEncounterStore((state) => state.batchSummary);
   const rollInitiativeNow = useEncounterStore((state) => state.rollInitiativeNow);
   const advanceTurn = useEncounterStore((state) => state.advanceTurn);
+  const restartCombat = useEncounterStore((state) => state.restartCombat);
   const runAuto = useEncounterStore((state) => state.runAuto);
   const runBatch = useEncounterStore((state) => state.runBatch);
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const updateFactionTactics = useEncounterStore((state) => state.updateFactionTactics);
   const updateFactionResourceStance = useEncounterStore((state) => state.updateFactionResourceStance);
+  const setFactionSurprised = useEncounterStore((state) => state.setFactionSurprised);
   const { selectedCombatant } = useSelectedCombatant();
 
   const logEndRef = useRef<HTMLLIElement | null>(null);
@@ -90,6 +98,13 @@ export function CombatPanel() {
   const enemyTactics = factionTacticsValue(encounter.combatants, "enemy");
   const partyResourceStance = factionResourceStanceValue(encounter.combatants, "party");
   const enemyResourceStance = factionResourceStanceValue(encounter.combatants, "enemy");
+  const partySurprised = factionSurprisedValue(encounter.combatants, "party");
+  const enemySurprised = factionSurprisedValue(encounter.combatants, "enemy");
+  // Surprise's expiry is computed relative to round 0, and Auto Run/Batch
+  // re-derive round numbering independently of the live turn order — marking
+  // surprise once any round is already in progress can desync the two and
+  // clear the condition before it does anything. Keep this strictly pre-combat.
+  const canMarkSurprised = encounter.round <= 0;
 
   const headerStatus = replaying
     ? `Replay · round ${displayEncounter.round}`
@@ -118,6 +133,17 @@ export function CombatPanel() {
         <button type="button" onClick={advanceTurn}><SkipForward size={15} /> Step</button>
         <button type="button" data-primary onClick={() => void runAuto()}><Swords size={15} /> Auto Run</button>
         <button type="button" onClick={() => runBatch(100)}><Waypoints size={15} /> Batch 100</button>
+        <button
+          type="button"
+          onClick={() => {
+            if (encounter.round <= 0 || confirm("Restart this fight? Round/turn order, HP, and conditions will reset back to round 0 for every combatant.")) {
+              restartCombat();
+            }
+          }}
+          title="Restart combat: keeps combatants and the map, resets round/turn, HP, conditions, and initiative"
+        >
+          <RotateCcw size={15} /> Restart
+        </button>
       </div>
 
       <ReplayBar />
@@ -171,6 +197,28 @@ export function CombatPanel() {
             ))}
           </select>
         </label>
+        {canMarkSurprised ? (
+          <>
+            <label>
+              <span>Party surprised</span>
+              <input
+                type="checkbox"
+                checked={partySurprised === true}
+                ref={(el) => { if (el) el.indeterminate = partySurprised === "mixed"; }}
+                onChange={(event) => setFactionSurprised("party", event.target.checked)}
+              />
+            </label>
+            <label>
+              <span>Enemy surprised</span>
+              <input
+                type="checkbox"
+                checked={enemySurprised === true}
+                ref={(el) => { if (el) el.indeterminate = enemySurprised === "mixed"; }}
+                onChange={(event) => setFactionSurprised("enemy", event.target.checked)}
+              />
+            </label>
+          </>
+        ) : null}
       </div>
 
       <ul className={styles.initiative}>
@@ -194,6 +242,7 @@ export function CombatPanel() {
               >
                 <span className={styles.init}>{combatant.initiative ?? "-"}</span>
                 <span className={styles.name}>{combatant.displayName}</span>
+                {isSurprised(combatant) ? <span className={styles.surprised}>Surprised</span> : null}
                 <span className={styles.hp}>
                   {reserve ? `arrives R${combatant.arrivesRound ?? "?"}` : `${combatant.currentHp}/${definition.maxHp}`}
                 </span>

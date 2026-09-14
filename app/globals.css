@@ -394,6 +394,12 @@ img {
   opacity: 0.58;
 }
 
+/* Surprised: loses its first turn of combat, then clears automatically at round 2. */
+.token.surprised {
+  outline: 2px dashed var(--ui-accent);
+  outline-offset: 2px;
+}
+
 /* Scheduled reinforcement not yet on the board: a ghosted preview at its staging
    cell so you can see where it will enter. Still selectable for setup. */
 .token.reserve {

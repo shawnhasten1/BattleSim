@@ -2493,7 +2493,7 @@ function resolveRiderSaveDc(
 }
 
 /** Crude, engine-consistent mechanical effect of a bare condition name (mirrors the store's `applyConditionToCombatant`). */
-function defaultConditionModifiers(name: ConditionName): ConditionInstance["modifiers"] | undefined {
+export function defaultConditionModifiers(name: ConditionName): ConditionInstance["modifiers"] | undefined {
   switch (name) {
     case "poisoned":
     case "frightened":
@@ -2517,6 +2517,10 @@ function defaultConditionModifiers(name: ConditionName): ConditionInstance["modi
         deniesActions: true, deniesBonusActions: true, deniesReactions: true,
         movementMultiplier: 999, incomingAttackRoll: 5
       };
+    case "surprised":
+      // Can't act, react, or move on this first turn of combat only (no
+      // attacker advantage from this alone, unlike stunned/paralyzed).
+      return { deniesActions: true, deniesBonusActions: true, deniesReactions: true, movementMultiplier: 999 };
     default:
       return undefined;
   }

@@ -164,6 +164,16 @@
   color: var(--ui-accent-soft);
 }
 
+/* Loses its first turn of combat; clears automatically at round 2. */
+.surprised {
+  font-size: 0.7em;
+  font-style: italic;
+  color: var(--ui-accent-soft);
+  border: 1px dashed var(--ui-accent-soft);
+  border-radius: var(--ui-radius);
+  padding: 0 4px;
+}
+
 /* Pre-combat: nudge which round each token enters play. */
 .arrival {
   display: flex;

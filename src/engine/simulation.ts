@@ -153,10 +153,24 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
   const warnings: string[] = [];
   rollIfNeeded(state);
 
+  // Resume from wherever the incoming snapshot's turn order already stands
+  // (e.g. the DM stepped a few turns by hand before clicking Auto Run) instead
+  // of always restarting at a fresh round. Otherwise anyone who hasn't gone
+  // yet this round gets skipped straight into "round + 1": already-acted
+  // combatants can get a phantom extra turn, and round-scoped state (like a
+  // "surprised" bearer who hasn't had their round-1 turn denied yet) desyncs
+  // and can resolve early.
+  let nextIndex = state.snapshot.round > 0 ? state.snapshot.turnIndex + 1 : 0;
+
   while (activeFactions(state.snapshot).size > 1 && state.snapshot.round < maxRounds) {
-    state.snapshot.round += 1;
-    admitReinforcements(state);
-    for (let index = 0; index < state.snapshot.combatants.length; index += 1) {
+    if (nextIndex >= state.snapshot.combatants.length) {
+      nextIndex = 0;
+    }
+    if (nextIndex === 0) {
+      state.snapshot.round += 1;
+      admitReinforcements(state);
+    }
+    for (let index = nextIndex; index < state.snapshot.combatants.length; index += 1) {
       state.snapshot.turnIndex = index;
       const actor = state.snapshot.combatants[index];
       if (!actor) {
@@ -196,6 +210,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       runRepeatedSaves(state, actor.id, "turn-end");
       expireConditions(state, "end");
     }
+    nextIndex = 0;
   }
 
   const factions = [...activeFactions(state.snapshot)];

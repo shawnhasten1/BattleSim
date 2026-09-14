@@ -52,6 +52,7 @@ export type ConditionName =
   | "prone"
   | "restrained"
   | "stunned"
+  | "surprised"
   | "unconscious"
   | "custom";
 export type DamageType =
