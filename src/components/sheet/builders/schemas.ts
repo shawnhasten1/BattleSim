@@ -318,6 +318,8 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneDurationRounds", copy: "zone.durationRounds", control: "number", advanced: true, min: 1, step: 1,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneDurationKind ?? "rounds") === "rounds" },
     { key: "zoneApplyOnCast", copy: "zone.applyOnCast", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneTriggerEnter", copy: "zone.triggerEnter", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneTriggerStart", copy: "zone.triggerStart", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneTriggerEnd", copy: "zone.triggerEnd", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneDrifts", copy: "zone.drifts", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneDriftFeet", copy: "zone.driftFeet", control: "number", advanced: true, min: 5, step: 5,
@@ -488,7 +490,11 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     healDice: parseDiceValue("1d8"),
     healTarget: "single",
     riders: [],
-    concentration: false
+    concentration: false,
+    // Matches every zone-shaped SRD spell so far (Insect Plague, Cloudkill,
+    // Web, Moonbeam) — a fresh zone starts with the common pair on.
+    zoneTriggerEnter: true,
+    zoneTriggerStart: true
   };
   if (action.kind === "attack") {
     const primary = action.damage[0];
@@ -518,6 +524,12 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         zoneDurationKind: action.zone?.duration.kind ?? "rounds",
         zoneDurationRounds: action.zone?.duration.kind === "rounds" ? action.zone.duration.rounds : 10,
         zoneApplyOnCast: Boolean(action.zone?.applyOnCast),
+        // Default to the common on-enter + start-of-turn pair when there's no
+        // existing zone yet (enabling the toggle for the first time) rather
+        // than decompiling to all-false, which would silently build a zone
+        // that never triggers.
+        zoneTriggerEnter: action.zone ? action.zone.trigger.includes("on-enter") : true,
+        zoneTriggerStart: action.zone ? action.zone.trigger.includes("start-of-turn-in-zone") : true,
         zoneTriggerEnd: Boolean(action.zone?.trigger.includes("end-of-turn-in-zone")),
         zoneDrifts: Boolean(action.zone?.movement),
         zoneDriftFeet: action.zone?.movement?.driftFeetPerCasterTurn ?? 10,
@@ -558,9 +570,15 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
   return { ...base, range: "60" };
 }
 
-/** MVP scope: fixed-origin only, "on-enter" + "start-of-turn-in-zone" always on, "end-of-turn-in-zone" opt-in. See `ZonePersistence`. */
+/** MVP scope: fixed-origin only. Each trigger kind is its own independent toggle — see `ZonePersistence`. */
 function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
-  const trigger: ZoneTrigger[] = ["on-enter", "start-of-turn-in-zone"];
+  const trigger: ZoneTrigger[] = [];
+  if (draft.zoneTriggerEnter) {
+    trigger.push("on-enter");
+  }
+  if (draft.zoneTriggerStart) {
+    trigger.push("start-of-turn-in-zone");
+  }
   if (draft.zoneTriggerEnd) {
     trigger.push("end-of-turn-in-zone");
   }

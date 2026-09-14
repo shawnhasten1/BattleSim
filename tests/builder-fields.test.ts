@@ -415,3 +415,76 @@ describe("draft <-> definition round-trips", () => {
     expect(back.riders?.[0]?.kind).toBe("condition");
   });
 });
+
+describe("zone trigger toggles", () => {
+  it("Cloudkill round-trips its on-enter + start-of-turn triggers, with end-of-turn off", () => {
+    const cloudkill = findSrdSpell("srd:spell:cloudkill")!;
+    const draft = spellDraftFromDefinition(cloudkill);
+    expect(draft.zoneTriggerEnter).toBe(true);
+    expect(draft.zoneTriggerStart).toBe(true);
+    expect(draft.zoneTriggerEnd).toBe(false);
+
+    const back = spellFromDraft(draft);
+    const action = back.action;
+    if (action?.kind !== "area-save") throw new Error("expected area-save");
+    expect(action.zone?.trigger).toEqual(expect.arrayContaining(["on-enter", "start-of-turn-in-zone"]));
+    expect(action.zone?.trigger).not.toContain("end-of-turn-in-zone");
+  });
+
+  it("Spike Growth round-trips its empty trigger list (movement damage only, no save-gated trigger)", () => {
+    const spikeGrowth = findSrdSpell("srd:spell:spike-growth")!;
+    const draft = spellDraftFromDefinition(spikeGrowth);
+    expect(draft.zoneTriggerEnter).toBe(false);
+    expect(draft.zoneTriggerStart).toBe(false);
+    expect(draft.zoneTriggerEnd).toBe(false);
+
+    const back = spellFromDraft(draft);
+    const action = back.action;
+    if (action?.kind !== "area-save") throw new Error("expected area-save");
+    expect(action.zone?.trigger).toEqual([]);
+    expect(action.zone?.movementDamage).toBeDefined();
+  });
+
+  it("compiles only the toggled-on triggers, independently of one another", () => {
+    const source = {
+      kind: "area-save" as const, id: "a", name: "Test Zone", actionType: "action" as const,
+      saveAbility: "con" as const, dc: 12, range: 30,
+      area: { type: "circle" as const, size: 15 },
+      targeting: { origin: "point" as const, range: 30 },
+      damage: [{ dice: "1d6", damageType: "fire" as const }],
+      halfDamageOnSuccess: true, onSuccess: "half" as const, affects: "hostile" as const,
+      zone: { duration: { kind: "rounds" as const, rounds: 3 }, trigger: [], anchor: "fixed" as const },
+      automationSupport: "full" as const
+    };
+    const draft = effectDraftFromAction(source);
+    // Only enable "start of turn" — leave enter and end off.
+    draft.zoneTriggerEnter = false;
+    draft.zoneTriggerStart = true;
+    draft.zoneTriggerEnd = false;
+
+    const back = actionFromEffectDraft(draft);
+    if (back.kind !== "area-save") throw new Error("expected area-save");
+    expect(back.zone?.trigger).toEqual(["start-of-turn-in-zone"]);
+  });
+
+  it("defaults a brand-new zone (no existing action.zone) to on-enter + start-of-turn", () => {
+    const source = {
+      kind: "area-save" as const, id: "a", name: "New Zone Spell", actionType: "action" as const,
+      saveAbility: "con" as const, dc: 12, range: 30,
+      area: { type: "circle" as const, size: 15 },
+      targeting: { origin: "point" as const, range: 30 },
+      damage: [{ dice: "1d6", damageType: "fire" as const }],
+      halfDamageOnSuccess: true, onSuccess: "half" as const, affects: "hostile" as const,
+      automationSupport: "full" as const
+      // no `zone` at all yet
+    };
+    const draft = effectDraftFromAction(source);
+    expect(draft.zoneTriggerEnter).toBe(true);
+    expect(draft.zoneTriggerStart).toBe(true);
+
+    draft.zoneEnabled = true;
+    const back = actionFromEffectDraft(draft);
+    if (back.kind !== "area-save") throw new Error("expected area-save");
+    expect(back.zone?.trigger).toEqual(expect.arrayContaining(["on-enter", "start-of-turn-in-zone"]));
+  });
+});
