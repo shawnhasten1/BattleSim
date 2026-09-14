@@ -639,6 +639,18 @@ export type ZoneDuration =
   | { kind: "permanent" };
 
 /**
+ * Cloudkill-style automatic drift: at the start of each of the caster's own
+ * turns, the zone moves this many feet directly away from the caster's
+ * current position — no choice involved (5e: "The fog moves 10 feet away
+ * from you..."). This is distinct from Moonbeam-style *caster-directed*
+ * repositioning (an explicit move-the-zone choice each turn), which isn't
+ * modeled yet — it needs its own AI targeting decision, not just a hook.
+ */
+export interface ZoneMovement {
+  driftFeetPerCasterTurn: number;
+}
+
+/**
  * A standing area a spell leaves on the map instead of (or alongside)
  * resolving once at cast time — Insect Plague, Cloudkill, Web. Authored on
  * `AreaSaveActionDefinition.zone` (or `SpellDefinition.zone`, stamped onto the
@@ -646,13 +658,17 @@ export type ZoneDuration =
  * into a runtime `ActiveZone` by `resolveAreaSaveAction`. The zone reuses the
  * action's own `damage` / `saveAbility` / `dc` / `riders` / `affects` /
  * `restrictToCreatureTypes` for each trigger firing — no separate effect
- * authoring. MVP scope: `anchor: "fixed"` only (stays at the cast origin);
- * caster-following auras and caster-directed drift are a later phase.
+ * authoring. `anchor: "fixed"` — the zone doesn't recenter on the caster
+ * (Spirit Guardians-style auras are a separate, later mechanic); `movement`
+ * optionally drifts a fixed-anchor zone away from the caster each of the
+ * caster's turns.
  */
 export interface ZonePersistence {
   duration: ZoneDuration;
   trigger: ZoneTrigger[];
   anchor: "fixed";
+  /** Cloudkill-style automatic drift away from the caster. Absent = stays put. */
+  movement?: ZoneMovement;
   /**
    * Also resolve the action's normal area-save burst at cast time, in
    * addition to creating the zone. Default `false` — most persistent zones
@@ -677,6 +693,7 @@ export interface ActiveZone {
   area: AreaTemplate;
   affects: "hostile" | "all";
   trigger: ZoneTrigger[];
+  movement?: ZoneMovement;
   saveAbility?: Ability;
   /** Resolved to a concrete number at creation — a spell's DC doesn't change round to round. */
   dc?: number;
@@ -1149,6 +1166,7 @@ export interface CombatLogEvent {
     | "ConditionApplied"
     | "ConditionExpired"
     | "ZoneCreated"
+    | "ZoneMoved"
     | "ZoneExpired"
     | "FeatureEffectApplied"
     | "RiderApplied"

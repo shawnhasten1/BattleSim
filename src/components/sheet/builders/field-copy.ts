@@ -104,6 +104,8 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "zone.durationRounds": { label: "Rounds" },
   "zone.applyOnCast": { label: "Also resolves immediately on cast", hint: "Most persistent zones (Insect Plague, Web) don't hit anyone the instant they're cast — only later, when a creature triggers them" },
   "zone.triggerEnd": { label: "Also triggers at end of turn", hint: "Most zones only trigger on entering or starting a turn there" },
+  "zone.drifts": { label: "Drifts away from the caster", hint: "Cloudkill-style: automatically moves away from the caster at the start of each of the caster's turns — not a choice" },
+  "zone.driftFeet": { label: "Feet per turn" },
 
   // rider editor
   "rider.effectType": { label: "Effect" },

@@ -6,6 +6,7 @@ import {
   canAct,
   createEngineState,
   dashFactor,
+  driftZones,
   event,
   expireConditions,
   getDefinition,
@@ -196,6 +197,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       applyTimedFeatureEffects(state, actor.id, "turn-start");
       runRepeatedSaves(state, actor.id, "turn-start");
       applyZoneTriggers(state, actor.id, "turn-start");
+      driftZones(state, actor.id);
       // A zone can down/kill an actor before its turn body runs (Insect Plague
       // on a low-HP combatant) — bail out the same way the pre-turn state check
       // above does, rather than letting `takeAutomatedTurn` act on a corpse.

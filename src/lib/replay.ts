@@ -128,7 +128,8 @@ function applyEvent(
       return;
     }
 
-    case "ZoneCreated": {
+    case "ZoneCreated":
+    case "ZoneMoved": {
       const zone = data.zone as ActiveZone | undefined;
       if (zone) {
         snapshot.activeZones = [...(snapshot.activeZones ?? []).filter((existing) => existing.id !== zone.id), zone];
@@ -253,6 +254,7 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
     case "ReinforcementArrived":
       return 900;
     case "ZoneCreated":
+    case "ZoneMoved":
     case "ZoneExpired":
       return 650;
     case "TurnStarted":

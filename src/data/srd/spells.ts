@@ -500,6 +500,46 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       automationSupport: "full"
     }
   },
+  {
+    id: "srd:spell:cloudkill",
+    name: "Cloudkill",
+    level: 5,
+    school: "conjuration",
+    castingTime: "action",
+    range: 60,
+    concentration: true,
+    resourceCost: { resourceId: "slot-5", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d8" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:cloudkill:action",
+      name: "Cloudkill",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "int", proficiency: true },
+      range: 60,
+      area: { type: "circle", size: 20 },
+      targeting: { origin: "point", range: 60 },
+      damage: [{ dice: "5d8", damageType: "poison" }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      // Unlike Insect Plague, the poison cloud doesn't discriminate by
+      // faction — anyone (including an ally who walks into it) is affected.
+      affects: "all",
+      concentration: true,
+      zone: {
+        duration: { kind: "concentration" },
+        trigger: ["on-enter", "start-of-turn-in-zone"],
+        anchor: "fixed",
+        // 5e: "The fog moves 10 feet away from you at the start of each of
+        // your turns" — automatic, not a choice the caster makes.
+        movement: { driftFeetPerCasterTurn: 10 }
+      },
+      resourceCost: { resourceId: "slot-5", amount: 1 },
+      automationSupport: "full"
+    }
+  },
   // ── Backfill (phase 6) ────────────────────────────────────────────────────
   {
     id: "srd:spell:ray-of-frost", name: "Ray of Frost", level: 0, school: "evocation", castingTime: "action", range: 60, automationSupport: "full",

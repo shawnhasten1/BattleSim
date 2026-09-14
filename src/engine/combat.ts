@@ -1359,6 +1359,7 @@ function createZone(
     area: action.area,
     affects: action.affects,
     trigger: zone.trigger,
+    movement: zone.movement,
     saveAbility: action.saveAbility,
     dc,
     damage: action.damage.length ? action.damage : undefined,
@@ -1507,6 +1508,36 @@ export function tickZones(state: EngineState): void {
     return !expired;
   });
   state.snapshot.activeZones = remaining;
+}
+
+/**
+ * Cloudkill-style automatic drift: any zone sourced by `casterId` with a
+ * `movement` config steps `driftFeetPerCasterTurn` directly away from the
+ * caster's current position. Call at the start of the caster's own turn —
+ * unrelated to `applyZoneTriggers`, which fires per-combatant on *their* own
+ * turn boundary. A zone sitting exactly on the caster (no direction to drift
+ * away from) falls back to due east, matching `normalizeVector`'s convention
+ * for a zero-length vector elsewhere in this file.
+ */
+export function driftZones(state: EngineState, casterId: Id): void {
+  const zones = state.snapshot.activeZones;
+  if (!zones?.length) {
+    return;
+  }
+  const caster = state.snapshot.combatants.find((combatant) => combatant.id === casterId);
+  if (!caster) {
+    return;
+  }
+  const distancePerSquare = state.snapshot.map.grid.distancePerSquare;
+  for (const zone of zones) {
+    if (zone.sourceCombatantId !== casterId || !zone.movement) {
+      continue;
+    }
+    const direction = normalizeVector({ x: zone.origin.x - caster.position.x, y: zone.origin.y - caster.position.y });
+    const stepSquares = zone.movement.driftFeetPerCasterTurn / distancePerSquare;
+    zone.origin = { x: zone.origin.x + direction.x * stepSquares, y: zone.origin.y + direction.y * stepSquares };
+    state.log.push(event(state, "ZoneMoved", `${zone.name} drifts`, { zone }));
+  }
 }
 
 export function activeFactions(snapshot: EncounterSnapshot): Set<string> {

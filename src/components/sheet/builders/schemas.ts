@@ -316,6 +316,9 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneDurationKind ?? "rounds") === "rounds" },
     { key: "zoneApplyOnCast", copy: "zone.applyOnCast", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneTriggerEnd", copy: "zone.triggerEnd", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneDrifts", copy: "zone.drifts", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneDriftFeet", copy: "zone.driftFeet", control: "number", advanced: true, min: 5, step: 5,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneDrifts) },
 
     { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
@@ -499,7 +502,9 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         zoneDurationKind: action.zone?.duration.kind ?? "rounds",
         zoneDurationRounds: action.zone?.duration.kind === "rounds" ? action.zone.duration.rounds : 10,
         zoneApplyOnCast: Boolean(action.zone?.applyOnCast),
-        zoneTriggerEnd: Boolean(action.zone?.trigger.includes("end-of-turn-in-zone"))
+        zoneTriggerEnd: Boolean(action.zone?.trigger.includes("end-of-turn-in-zone")),
+        zoneDrifts: Boolean(action.zone?.movement),
+        zoneDriftFeet: action.zone?.movement?.driftFeetPerCasterTurn ?? 10
       }
       : {};
     return {
@@ -541,6 +546,7 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
     duration,
     trigger,
     anchor: "fixed",
+    movement: draft.zoneDrifts ? { driftFeetPerCasterTurn: Math.max(5, Number(draft.zoneDriftFeet) || 10) } : undefined,
     applyOnCast: draft.zoneApplyOnCast ? true : undefined
   };
 }

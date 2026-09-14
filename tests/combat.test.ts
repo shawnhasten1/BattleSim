@@ -26,6 +26,7 @@ import {
   sampleEncounter,
   takeAutomatedTurn,
   applyZoneTriggers,
+  driftZones,
   tickZones
 } from "@/engine";
 import type { EncounterSnapshot, RandomSource, ZonePersistence } from "@/engine";
@@ -2055,6 +2056,51 @@ describe("combat engine", () => {
 
       expect(state.snapshot.activeZones).toHaveLength(0);
       expect(state.log.some((entry) => entry.type === "ZoneExpired" && entry.data?.concentrationEnded === true)).toBe(true);
+    });
+
+    it("drifts a zone directly away from its caster at the start of the caster's turn (Cloudkill)", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "concentration" },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        movement: { driftFeetPerCasterTurn: 10 }
+      });
+      const state = createEngineState(encounter);
+      // pc-fighter is at (1,1); casting at (5,1) puts the zone due east of the caster.
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      driftZones(state, "pc-fighter");
+
+      const zone = state.snapshot.activeZones?.[0];
+      // 10 ft at 5 ft/square = 2 squares east.
+      expect(zone?.origin).toEqual({ x: 7, y: 1 });
+      expect(state.log.some((entry) => entry.type === "ZoneMoved")).toBe(true);
+    });
+
+    it("leaves a zone with no movement config in place", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      driftZones(state, "pc-fighter");
+
+      expect(state.snapshot.activeZones?.[0]?.origin).toEqual({ x: 5, y: 1 });
+      expect(state.log.some((entry) => entry.type === "ZoneMoved")).toBe(false);
+    });
+
+    it("only drifts zones sourced by the given caster", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "concentration" },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        movement: { driftFeetPerCasterTurn: 10 }
+      });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      driftZones(state, "enemy-goblin-1");
+
+      expect(state.snapshot.activeZones?.[0]?.origin).toEqual({ x: 5, y: 1 });
     });
   });
 });
