@@ -642,12 +642,38 @@ export type ZoneDuration =
  * Cloudkill-style automatic drift: at the start of each of the caster's own
  * turns, the zone moves this many feet directly away from the caster's
  * current position — no choice involved (5e: "The fog moves 10 feet away
- * from you..."). This is distinct from Moonbeam-style *caster-directed*
- * repositioning (an explicit move-the-zone choice each turn), which isn't
- * modeled yet — it needs its own AI targeting decision, not just a hook.
+ * from you..."). Distinct from `ZoneReposition` (Moonbeam-style, a choice).
  */
 export interface ZoneMovement {
   driftFeetPerCasterTurn: number;
+}
+
+/**
+ * Moonbeam-style caster-directed repositioning: the caster may spend a bonus
+ * action to move the zone up to this many feet from its current origin
+ * toward wherever they choose. Modeled as a special AI hook
+ * (`repositionZone` in combat.ts, considered by `maybeRepositionZone` in
+ * simulation.ts) rather than a compiled `ActionDefinition` — the option only
+ * exists while the caster actually has a zone of their own on the board, which
+ * doesn't fit the static, definition-compiled action model. Always spends the
+ * caster's bonus action (matches Moonbeam; no spell needing an `action`-cost
+ * reposition exists yet to justify a configurable slot).
+ */
+export interface ZoneReposition {
+  maxFeetPerCasterTurn: number;
+}
+
+/**
+ * Zone-imposed movement cost, layered onto the map's own terrain wherever the
+ * zone currently sits (`zoneTerrainOverlay` in areas.ts) — Web and Spike
+ * Growth both become difficult terrain. Uses the same vocabulary as
+ * `TerrainZone.type` minus `"normal"`/`"hazard"`/`"cover"`/`"elevation"`/`"custom"`,
+ * which don't apply to a spell-imposed effect.
+ */
+export interface ZoneTerrainEffect {
+  type: "difficult" | "impassable";
+  /** Only meaningful for `"difficult"`. Default 2 (double cost), matching 5e. */
+  movementMultiplier?: number;
 }
 
 /**
@@ -683,8 +709,18 @@ export interface ZonePersistence {
   anchor: "fixed";
   /** Cloudkill-style automatic drift away from the caster. Absent = stays put. */
   movement?: ZoneMovement;
+  /** Moonbeam-style caster-chosen repositioning (a bonus action). Absent = the caster can't move it. */
+  repositionable?: ZoneReposition;
   /** Spike Growth-style automatic per-step movement damage. Independent of `trigger` — no save. */
   movementDamage?: ZoneMovementDamage;
+  /** Web / Spike Growth-style difficult (or impassable) terrain layered onto the map while the zone stands. */
+  terrain?: ZoneTerrainEffect;
+  /**
+   * Heavily obscures the zone's area — checked only by the manual sight
+   * gizmo (`lineOfSight`) today, not by targeting/cover (which stay governed
+   * by walls + `requireLineOfEffect`, per the existing rules profile).
+   */
+  blocksSight?: boolean;
   /**
    * Also resolve the action's normal area-save burst at cast time, in
    * addition to creating the zone. Default `false` — most persistent zones
@@ -710,7 +746,10 @@ export interface ActiveZone {
   affects: "hostile" | "all";
   trigger: ZoneTrigger[];
   movement?: ZoneMovement;
+  repositionable?: ZoneReposition;
   movementDamage?: ZoneMovementDamage;
+  terrain?: ZoneTerrainEffect;
+  blocksSight?: boolean;
   saveAbility?: Ability;
   /** Resolved to a concrete number at creation — a spell's DC doesn't change round to round. */
   dc?: number;

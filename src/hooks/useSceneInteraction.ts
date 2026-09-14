@@ -18,6 +18,8 @@ import {
   lineOfEffect,
   lineOfSight,
   sizeFootprint,
+  zoneBlocksSightBetween,
+  zoneTerrainOverlay,
   type PlacedTemplate
 } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -257,12 +259,13 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
         .filter((combatant) => combatant.id !== selectedCombatant.id && combatant.state === "active")
         .map((combatant) => combatant.position)
     : [];
+  const mapWithZoneTerrain = zoneTerrainOverlay(encounter.map, encounter.activeZones);
   const measuredDistance =
     measureStart && measureEnd ? gridDistance(measureStart, measureEnd, encounter.map.grid) : null;
   const measuredPath =
     measureStart && measureEnd && selectedDefinition
       ? findPath(
-          encounter.map,
+          mapWithZoneTerrain,
           measureStart,
           measureEnd,
           sizeFootprint(selectedDefinition.size),
@@ -275,7 +278,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const sightResult =
     sightStart && sightEnd
       ? {
-          sight: lineOfSight(encounter.map, sightStart, sightEnd),
+          sight: lineOfSight(encounter.map, sightStart, sightEnd)
+            && !zoneBlocksSightBetween(encounter.activeZones, sightStart, sightEnd, encounter.map.grid.distancePerSquare),
           effect: lineOfEffect(encounter.map, sightStart, sightEnd),
           cover: coverBetween(encounter.map, sightStart, 1, sightEnd, 1).level,
           distance: gridDistance(sightStart, sightEnd, encounter.map.grid)
@@ -286,7 +290,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       return null;
     }
     return findPath(
-      encounter.map,
+      zoneTerrainOverlay(encounter.map, encounter.activeZones),
       selectedCombatant.position,
       nearestEnemy.position,
       sizeFootprint(selectedDefinition.size),

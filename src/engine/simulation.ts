@@ -13,6 +13,7 @@ import {
   getExecutableActions,
   moveCombatant,
   opportunityAttackThreats,
+  repositionZone,
   resetActionEconomy,
   resolveAreaSaveAction,
   resolveAreaTargeting,
@@ -33,7 +34,7 @@ import {
   tickZones,
   type EngineState
 } from "./combat";
-import { cellIntersectsArea, cellsInArea, combatantsInArea, type AimVector } from "./areas";
+import { cellIntersectsArea, cellsInArea, combatantsInArea, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
 import type { ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
@@ -402,7 +403,58 @@ function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactic
     try {
       executeOffensivePlan(state, actor, offense);
     } catch { /* map state moved on */ }
+    return;
   }
+  maybeRepositionZone(state, actor);
+}
+
+/**
+ * Moonbeam-style caster-directed reposition: only reached once a real bonus-
+ * action spell/heal has already had its shot (a genuine bonus action always
+ * beats "free extra value" from nudging a zone). If the actor has a zone of
+ * their own that's `repositionable` and some hostile isn't caught by it yet,
+ * spend the leftover bonus action moving it toward the nearest such hostile,
+ * capped at `maxFeetPerCasterTurn`.
+ */
+function maybeRepositionZone(state: EngineState, actor: CombatantState): void {
+  const zone = state.snapshot.activeZones?.find((candidate) =>
+    candidate.sourceCombatantId === actor.id && candidate.repositionable);
+  if (!zone || !canAct(actor, "bonus")) {
+    return;
+  }
+  const snapshot = state.snapshot;
+  const definitionsById = new Map(snapshot.definitions.map((definition) => [definition.id, definition]));
+  const caughtIds = new Set(combatantsInArea(snapshot.map, zone.origin, zone.area, snapshot.combatants, definitionsById).map((combatant) => combatant.id));
+  const uncaught = snapshot.combatants.filter((combatant) =>
+    combatant.faction !== actor.faction && combatant.state === "active" && !caughtIds.has(combatant.id));
+  if (!uncaught.length) {
+    return;
+  }
+  const nearest = uncaught.reduce<{ combatant: CombatantState; distance: number } | null>((closest, candidate) => {
+    const distance = gridDistance(zone.origin, candidate.position, snapshot.map.grid);
+    return !closest || distance < closest.distance ? { combatant: candidate, distance } : closest;
+  }, null)?.combatant;
+  if (!nearest) {
+    return;
+  }
+
+  const distancePerSquare = snapshot.map.grid.distancePerSquare;
+  const maxSquares = zone.repositionable!.maxFeetPerCasterTurn / distancePerSquare;
+  const dx = nearest.position.x - zone.origin.x;
+  const dy = nearest.position.y - zone.origin.y;
+  const distSquares = Math.hypot(dx, dy);
+  if (distSquares < 0.01) {
+    return;
+  }
+  const step = Math.min(distSquares, maxSquares);
+  const destination = { x: zone.origin.x + (dx / distSquares) * step, y: zone.origin.y + (dy / distSquares) * step };
+
+  try {
+    repositionZone(state, actor.id, zone.id, destination);
+    state.log.push(event(state, "AiDecision", `${actor.displayName} moves ${zone.name} toward ${nearest.displayName}`, {
+      combatantId: actor.id, zoneId: zone.id, targetId: nearest.id, slot: "bonus"
+    }));
+  } catch { /* not actually repositionable right now */ }
 }
 
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
@@ -1144,7 +1196,7 @@ function bestDestinationTowardTarget(
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
-  const plans = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
+  const plans = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   }).map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable));
@@ -1167,7 +1219,7 @@ function bestDestinationTowardTarget(
   // much longer walk around. A single cost field rooted at the target gives every
   // candidate's true remaining path length in one pass (movement cost is
   // symmetric, so "cost from target to cell" == "cost from cell to target").
-  const routeField = pathCostField(snapshot.map, target.position, footprint, occupied, {
+  const routeField = pathCostField(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), target.position, footprint, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   });
@@ -1211,7 +1263,7 @@ function bestRepositionAfterAction(
   const currentScore = distanceBandScore(currentDistance, tactics)
     + Math.min(currentNearestHostile, tactics.preferredMinDistance) / 5
     + (currentCover > 0 ? currentCover * tactics.coverWeight + 4 : 0);
-  const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
+  const candidates = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   })
@@ -1397,7 +1449,7 @@ function bestShotPositionAgainst(
 
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
-  const candidates = findReachableCells(snapshot.map, actor.position, footprint, movementBudget, occupied, {
+  const candidates = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   })

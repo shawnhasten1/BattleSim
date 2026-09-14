@@ -27,9 +27,11 @@ import {
   takeAutomatedTurn,
   applyZoneTriggers,
   driftZones,
-  tickZones
+  repositionZone,
+  tickZones,
+  zoneBlocksSightBetween
 } from "@/engine";
-import type { EncounterSnapshot, RandomSource, ZonePersistence } from "@/engine";
+import type { ActiveZone, EncounterSnapshot, RandomSource, ZonePersistence } from "@/engine";
 
 function scriptedRng(valuesBySides: Record<number, number[]>): RandomSource {
   const indexes: Record<number, number> = {};
@@ -2138,6 +2140,134 @@ describe("combat engine", () => {
       moveCombatant(state, "enemy-goblin-1", { x: 2, y: 1 }, { provokeOpportunityAttacks: false });
 
       expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(false);
+    });
+
+    it("layers a zone's difficult terrain onto movement cost (Web, Spike Growth)", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "rounds", rounds: 5 },
+        trigger: [],
+        anchor: "fixed",
+        terrain: { type: "difficult", movementMultiplier: 2 }
+      });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 8, y: 1 };
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      // Without terrain this exact move costs exactly 30 ft (the goblin's full
+      // budget) — see the movement-damage test above. With 5 of those 6 steps
+      // doubled to difficult terrain, it now costs 55 ft, over budget.
+      expect(() => moveCombatant(state, "enemy-goblin-1", { x: 2, y: 1 }, { provokeOpportunityAttacks: false }))
+        .toThrow(/not reachable/);
+    });
+
+    it("makes an impassable zone's cells unreachable", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "rounds", rounds: 5 },
+        trigger: [],
+        anchor: "fixed",
+        terrain: { type: "impassable" }
+      });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 8, y: 1 };
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      expect(() => moveCombatant(state, "enemy-goblin-1", { x: 5, y: 1 }, { provokeOpportunityAttacks: false }))
+        .toThrow(/not reachable/);
+    });
+
+    it("repositions a zone toward a chosen destination, capped by maxFeetPerCasterTurn, spending the bonus action", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "concentration" },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        repositionable: { maxFeetPerCasterTurn: 20 }
+      });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      const zoneId = state.snapshot.activeZones![0]!.id;
+
+      // 4 squares = 20 ft, exactly the cap.
+      repositionZone(state, "pc-fighter", zoneId, { x: 9, y: 1 });
+
+      expect(state.snapshot.activeZones![0]!.origin).toEqual({ x: 9, y: 1 });
+      const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter");
+      expect(caster?.actionEconomy?.bonus).toBe(false);
+      expect(state.log.some((entry) => entry.type === "ZoneMoved")).toBe(true);
+    });
+
+    it("rejects a reposition beyond maxFeetPerCasterTurn", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "concentration" },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        repositionable: { maxFeetPerCasterTurn: 20 }
+      });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      const zoneId = state.snapshot.activeZones![0]!.id;
+
+      // 5 squares = 25 ft, over the 20 ft cap.
+      expect(() => repositionZone(state, "pc-fighter", zoneId, { x: 10, y: 1 })).toThrow(/can only move/);
+    });
+
+    it("rejects repositioning once the caster's bonus action is already spent", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "concentration" },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        repositionable: { maxFeetPerCasterTurn: 20 }
+      });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      const zoneId = state.snapshot.activeZones![0]!.id;
+      repositionZone(state, "pc-fighter", zoneId, { x: 6, y: 1 });
+
+      expect(() => repositionZone(state, "pc-fighter", zoneId, { x: 7, y: 1 })).toThrow(/no bonus action/);
+    });
+
+    it("rejects repositioning a zone that isn't marked repositionable", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      const zoneId = state.snapshot.activeZones![0]!.id;
+
+      expect(() => repositionZone(state, "pc-fighter", zoneId, { x: 6, y: 1 })).toThrow(/no repositionable zone/);
+    });
+  });
+
+  describe("zone sight blocking", () => {
+    function fogZone(overrides: Partial<ActiveZone> = {}): ActiveZone {
+      return {
+        id: "fog-1",
+        name: "Fog",
+        sourceCombatantId: "pc-fighter",
+        sourceActionId: "fog-spell",
+        origin: { x: 5, y: 1 },
+        area: { type: "circle", size: 10 },
+        affects: "all",
+        trigger: [],
+        concentration: false,
+        createdRound: 0,
+        blocksSight: true,
+        ...overrides
+      };
+    }
+
+    it("blocks a sight line that passes through a blocksSight zone", () => {
+      const zone = fogZone();
+      expect(zoneBlocksSightBetween([zone], { x: 0, y: 1 }, { x: 10, y: 1 }, 5)).toBe(true);
+    });
+
+    it("does not block a sight line that misses the zone entirely", () => {
+      const zone = fogZone();
+      expect(zoneBlocksSightBetween([zone], { x: 0, y: 7 }, { x: 10, y: 7 }, 5)).toBe(false);
+    });
+
+    it("ignores a zone without blocksSight even if the line crosses it", () => {
+      const zone = fogZone({ blocksSight: false });
+      expect(zoneBlocksSightBetween([zone], { x: 0, y: 1 }, { x: 10, y: 1 }, 5)).toBe(false);
     });
   });
 });

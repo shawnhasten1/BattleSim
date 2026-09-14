@@ -1,4 +1,4 @@
-import { cellIntersectsArea, combatantsInArea } from "./areas";
+import { cellIntersectsArea, combatantsInArea, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
@@ -362,7 +362,8 @@ export function moveCombatant(
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCells(state.snapshot, combatantId);
   const start = combatant.position;
-  const path = findPath(state.snapshot.map, start, destination, footprint, occupied, {
+  const map = zoneTerrainOverlay(state.snapshot.map, state.snapshot.activeZones);
+  const path = findPath(map, start, destination, footprint, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   });
@@ -378,7 +379,7 @@ export function moveCombatant(
   const movedCells = moveAlongPath(state, combatant, path.cells, provoke);
   const actualPath = pointsEqual(combatant.position, destination)
     ? path
-    : findPath(state.snapshot.map, start, combatant.position, footprint, occupied, {
+    : findPath(map, start, combatant.position, footprint, occupied, {
       allowOccupiedTransit: true,
       occupiedMovementMultiplier: 2
     });
@@ -1360,7 +1361,10 @@ function createZone(
     affects: action.affects,
     trigger: zone.trigger,
     movement: zone.movement,
+    repositionable: zone.repositionable,
     movementDamage: zone.movementDamage,
+    terrain: zone.terrain,
+    blocksSight: zone.blocksSight,
     saveAbility: action.saveAbility,
     dc,
     damage: action.damage.length ? action.damage : undefined,
@@ -1539,6 +1543,35 @@ export function driftZones(state: EngineState, casterId: Id): void {
     zone.origin = { x: zone.origin.x + direction.x * stepSquares, y: zone.origin.y + direction.y * stepSquares };
     state.log.push(event(state, "ZoneMoved", `${zone.name} drifts`, { zone }));
   }
+}
+
+/**
+ * Moonbeam-style caster-directed reposition: move `zoneId` (must be sourced
+ * by `casterId`, and carry `repositionable`) to `destination`, capped at
+ * `maxFeetPerCasterTurn` from its current origin. Spends the caster's bonus
+ * action — matches Moonbeam; see `ZoneReposition`. Called both by the AI
+ * (`maybeRepositionZone` in simulation.ts) and available for a manual/player
+ * driver to call directly.
+ */
+export function repositionZone(state: EngineState, casterId: Id, zoneId: Id, destination: Point): void {
+  const caster = findCombatant(state.snapshot, casterId);
+  const zone = state.snapshot.activeZones?.find((candidate) => candidate.id === zoneId);
+  if (!zone || zone.sourceCombatantId !== casterId || !zone.repositionable) {
+    throw new Error(`${caster.displayName} has no repositionable zone ${zoneId}`);
+  }
+  caster.actionEconomy ??= { action: true, bonus: true, reaction: true };
+  if (!canAct(caster, "bonus") || caster.actionEconomy.bonus === false) {
+    throw new Error(`${caster.displayName} has no bonus action to move ${zone.name}`);
+  }
+  const distancePerSquare = state.snapshot.map.grid.distancePerSquare;
+  const stepSquares = Math.hypot(destination.x - zone.origin.x, destination.y - zone.origin.y);
+  const maxSquares = zone.repositionable.maxFeetPerCasterTurn / distancePerSquare;
+  if (stepSquares > maxSquares + 1e-6) {
+    throw new Error(`${zone.name} can only move ${zone.repositionable.maxFeetPerCasterTurn} ft`);
+  }
+  caster.actionEconomy.bonus = false;
+  zone.origin = destination;
+  state.log.push(event(state, "ZoneMoved", `${caster.displayName} moves ${zone.name}`, { zone }));
 }
 
 export function activeFactions(snapshot: EncounterSnapshot): Set<string> {

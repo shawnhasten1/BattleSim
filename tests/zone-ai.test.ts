@@ -80,3 +80,80 @@ describe("persistent-zone AI placement", () => {
     expect(resolved!.data!.origin).toEqual({ x: 6, y: 1 });
   });
 });
+
+/**
+ * Phase 3's remaining item: Moonbeam-style caster-directed repositioning.
+ * `maybeRepositionZone` (simulation.ts) only runs once a real bonus-action
+ * spell/heal has had its shot, so this scenario gives the caster no bonus
+ * actions at all — the only thing that can happen with a leftover bonus
+ * action is the zone chasing the hostile it didn't already catch.
+ */
+describe("persistent-zone AI repositioning", () => {
+  it("spends a leftover bonus action moving a repositionable zone toward an uncaught hostile (Moonbeam)", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.map.walls = [];
+    encounter.map.terrain = [];
+    encounter.seed = "zone-reposition";
+
+    const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+    fighter.position = { x: 1, y: 1 };
+    const archer = encounter.combatants.find((combatant) => combatant.id === "pc-archer")!;
+    archer.state = "dead";
+
+    // Much closer than the other hostile (so it's overwhelmingly the AI's
+    // preferred initial cast target), but still far enough from the caster
+    // that a 5 ft-radius blast centred on it doesn't also catch the caster
+    // as friendly fire.
+    const near = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1")!;
+    near.position = { x: 4, y: 1 };
+    // Far enough that a 5 ft-radius blast on the near hostile can't also
+    // catch this one, but within the 60 ft reposition cap of that cast point.
+    const far = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-2")!;
+    far.position = { x: 11, y: 1 };
+
+    const casterDefinition = encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+    casterDefinition.actions = [{
+      kind: "area-save",
+      id: "moonbeam",
+      name: "Moonbeam",
+      actionType: "action",
+      saveAbility: "con",
+      dc: 10,
+      range: 60,
+      area: { type: "circle", size: 5 },
+      targeting: { origin: "point", range: 60 },
+      damage: [{ dice: "2d10", damageType: "radiant" }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "hostile",
+      zone: {
+        duration: { kind: "rounds", rounds: 5 },
+        trigger: ["on-enter"],
+        anchor: "fixed",
+        repositionable: { maxFeetPerCasterTurn: 60 }
+      },
+      automationSupport: "full"
+    }];
+    // No bonus-action actions at all — the only reason a bonus action gets
+    // spent this turn is `maybeRepositionZone`.
+    casterDefinition.bonusActions = [];
+
+    const state = createEngineState(encounter);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter")!);
+
+    const cast = state.log.find((entry) => entry.type === "AreaSaveResolved");
+    expect(cast, "should have cast Moonbeam").toBeDefined();
+    expect(cast!.data!.origin).toEqual({ x: 4, y: 1 });
+
+    const reposition = state.log.find((entry) => entry.type === "AiDecision" && entry.data?.slot === "bonus" && entry.data?.zoneId);
+    expect(reposition, "should have repositioned the zone toward the uncaught hostile").toBeDefined();
+    expect(reposition!.data!.targetId).toBe("enemy-goblin-2");
+
+    const zone = state.snapshot.activeZones?.[0];
+    // 7 squares = 35 ft, under the 60 ft cap — the zone reaches the far hostile exactly.
+    expect(zone?.origin).toEqual({ x: 11, y: 1 });
+
+    const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter");
+    expect(caster?.actionEconomy?.bonus).toBe(false);
+  });
+});

@@ -19,6 +19,7 @@ import type {
   WeaponDefinition,
   ZoneMovementDamage,
   ZonePersistence,
+  ZoneTerrainEffect,
   ZoneTrigger
 } from "@/engine";
 import type { BuilderDraft, FieldSpec } from "./field-spec";
@@ -324,6 +325,16 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneMovementDamageEnabled", copy: "zone.movementDamageEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneMovementDamageDice", copy: "zone.movementDamage", control: "dice", advanced: true,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneMovementDamageEnabled) },
+    { key: "zoneTerrainEnabled", copy: "zone.terrainEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneTerrainType", copy: "zone.terrainType", control: "select", advanced: true,
+      options: [{ value: "difficult", label: "Difficult terrain" }, { value: "impassable", label: "Impassable" }],
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneTerrainEnabled) },
+    { key: "zoneTerrainMultiplier", copy: "zone.terrainMultiplier", control: "number", advanced: true, min: 1, step: 1,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneTerrainEnabled) && (draft.zoneTerrainType ?? "difficult") === "difficult" },
+    { key: "zoneBlocksSight", copy: "zone.blocksSight", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneRepositionable", copy: "zone.repositionable", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneRepositionFeet", copy: "zone.repositionFeet", control: "number", advanced: true, min: 5, step: 5,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneRepositionable) },
 
     { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
@@ -513,7 +524,13 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         zoneMovementDamageEnabled: Boolean(action.zone?.movementDamage),
         zoneMovementDamageDice: action.zone?.movementDamage
           ? parseDiceValue(action.zone.movementDamage.dice, action.zone.movementDamage.damageType)
-          : parseDiceValue("2d4", "piercing")
+          : parseDiceValue("2d4", "piercing"),
+        zoneTerrainEnabled: Boolean(action.zone?.terrain),
+        zoneTerrainType: action.zone?.terrain?.type ?? "difficult",
+        zoneTerrainMultiplier: action.zone?.terrain?.movementMultiplier ?? 2,
+        zoneBlocksSight: Boolean(action.zone?.blocksSight),
+        zoneRepositionable: Boolean(action.zone?.repositionable),
+        zoneRepositionFeet: action.zone?.repositionable?.maxFeetPerCasterTurn ?? 60
       }
       : {};
     return {
@@ -560,7 +577,17 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
     trigger,
     anchor: "fixed",
     movement: draft.zoneDrifts ? { driftFeetPerCasterTurn: Math.max(5, Number(draft.zoneDriftFeet) || 10) } : undefined,
+    repositionable: draft.zoneRepositionable ? { maxFeetPerCasterTurn: Math.max(5, Number(draft.zoneRepositionFeet) || 60) } : undefined,
     movementDamage,
+    terrain: draft.zoneTerrainEnabled
+      ? {
+        type: (draft.zoneTerrainType as ZoneTerrainEffect["type"]) ?? "difficult",
+        movementMultiplier: (draft.zoneTerrainType ?? "difficult") === "difficult"
+          ? Math.max(1, Number(draft.zoneTerrainMultiplier) || 2)
+          : undefined
+      }
+      : undefined,
+    blocksSight: draft.zoneBlocksSight ? true : undefined,
     applyOnCast: draft.zoneApplyOnCast ? true : undefined
   };
 }

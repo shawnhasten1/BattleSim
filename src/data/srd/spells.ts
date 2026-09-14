@@ -354,6 +354,15 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
         duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
         save: { ability: "dex", onSuccess: "negates" }
       }],
+      // A standing web, not an instant burst — re-checks the save whenever a
+      // creature enters it or starts a turn inside, and the webs themselves
+      // are difficult terrain for as long as it lasts.
+      zone: {
+        duration: { kind: "concentration" },
+        trigger: ["on-enter", "start-of-turn-in-zone"],
+        anchor: "fixed",
+        terrain: { type: "difficult" }
+      },
       resourceCost: { resourceId: "slot-2", amount: 1 },
       automationSupport: "full"
     }
@@ -391,10 +400,48 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
         duration: { kind: "concentration" },
         trigger: [],
         anchor: "fixed",
-        // 2d4 piercing per 5 ft moved into/within the area, no save. The
-        // "becomes difficult terrain" half of the spell isn't modeled yet —
-        // zone-imposed terrain still isn't wired into pathfinding.
-        movementDamage: { dice: "2d4", damageType: "piercing" }
+        // 2d4 piercing per 5 ft moved into/within the area, no save — and
+        // the ground itself is difficult terrain for the duration.
+        movementDamage: { dice: "2d4", damageType: "piercing" },
+        terrain: { type: "difficult" }
+      },
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:moonbeam",
+    name: "Moonbeam",
+    level: 2,
+    school: "evocation",
+    castingTime: "action",
+    range: 120,
+    concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d10" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:moonbeam:action",
+      name: "Moonbeam",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "wis", proficiency: true },
+      range: 120,
+      area: { type: "circle", size: 5 },
+      targeting: { origin: "point", range: 120 },
+      damage: [{ dice: "2d10", damageType: "radiant" }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "hostile",
+      concentration: true,
+      zone: {
+        duration: { kind: "concentration" },
+        trigger: ["on-enter", "start-of-turn-in-zone"],
+        anchor: "fixed",
+        // "As a bonus action, you can move the beam up to 60 feet" — a
+        // caster's choice, not automatic drift (contrast Cloudkill).
+        repositionable: { maxFeetPerCasterTurn: 60 }
       },
       resourceCost: { resourceId: "slot-2", amount: 1 },
       automationSupport: "full"

@@ -108,6 +108,12 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "zone.driftFeet": { label: "Feet per turn" },
   "zone.movementDamageEnabled": { label: "Damages creatures that move through it", hint: "Spike Growth-style: no saving throw, rolled once per step a creature takes into or within the zone" },
   "zone.movementDamage": { label: "Movement damage" },
+  "zone.terrainEnabled": { label: "Becomes difficult or impassable terrain", hint: "Web, Spike Growth-style: layered onto the map wherever the zone currently sits" },
+  "zone.terrainType": { label: "Terrain" },
+  "zone.terrainMultiplier": { label: "Movement cost multiplier", hint: "5e default is double cost (2)" },
+  "zone.blocksSight": { label: "Heavily obscures the area", hint: "Checked by the manual sight-measurement tool only — doesn't gate targeting" },
+  "zone.repositionable": { label: "Caster can reposition it", hint: "Moonbeam-style: spends the caster's bonus action to move the zone toward the nearest hostile it hasn't caught yet" },
+  "zone.repositionFeet": { label: "Feet per turn" },
 
   // rider editor
   "rider.effectType": { label: "Effect" },
