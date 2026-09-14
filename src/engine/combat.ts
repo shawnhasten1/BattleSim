@@ -1979,6 +1979,8 @@ export function updateDefeatState(state: EngineState, target: CombatantState, ki
       startedRound: state.snapshot.round
     });
     state.log.push(event(state, "CombatantDowned", `${target.displayName} is downed`, { combatantId: target.id, killerId }));
+    // Unconscious is incapacitated — 5e: concentration ends when you're incapacitated or killed.
+    breakConcentration(state, target.id);
     return;
   }
   if (target.state === "defeated") {
@@ -1988,6 +1990,7 @@ export function updateDefeatState(state: EngineState, target: CombatantState, ki
   }
   target.state = "defeated";
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
+  breakConcentration(state, target.id);
   resolveDeathEffect(state, target.id, killerId);
 }
 

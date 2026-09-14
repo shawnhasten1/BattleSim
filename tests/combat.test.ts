@@ -29,6 +29,7 @@ import {
   driftZones,
   repositionZone,
   tickZones,
+  updateDefeatState,
   zoneBlocksSightBetween
 } from "@/engine";
 import type { ActiveZone, EncounterSnapshot, RandomSource, ZonePersistence } from "@/engine";
@@ -2234,6 +2235,71 @@ describe("combat engine", () => {
       const zoneId = state.snapshot.activeZones![0]!.id;
 
       expect(() => repositionZone(state, "pc-fighter", zoneId, { x: 6, y: 1 })).toThrow(/no repositionable zone/);
+    });
+
+    it("removes the zone when its caster is defeated (dies)", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      // Drop straight to "defeated" instead of "downed" — matches how an
+      // enemy caster (e.g. a necromancer) actually dies in this engine.
+      encounter.rules.playerDeathSaves = false;
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      expect(state.snapshot.activeZones).toHaveLength(1);
+
+      const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+      caster.currentHp = 0;
+      updateDefeatState(state, caster);
+
+      expect(caster.state).toBe("defeated");
+      expect(state.snapshot.activeZones).toHaveLength(0);
+      expect(state.log.some((entry) => entry.type === "ZoneExpired" && entry.data?.concentrationEnded === true)).toBe(true);
+    });
+
+    it("removes the zone when its caster is downed (unconscious, not yet dead)", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      encounter.rules.playerDeathSaves = true;
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      expect(state.snapshot.activeZones).toHaveLength(1);
+
+      const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+      caster.currentHp = 0;
+      updateDefeatState(state, caster);
+
+      // Unconscious, not dead — but 5e still ends concentration (incapacitated).
+      expect(caster.state).toBe("downed");
+      expect(state.snapshot.activeZones).toHaveLength(0);
+    });
+
+    it("removes the zone when its caster takes damage from an unrelated attack and fails the resulting concentration check", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      const casterDefinition = encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+      casterDefinition.abilities.con = 8; // a save this bad will fail against a big enough hit
+      casterDefinition.saves = {};
+      casterDefinition.maxHp = 500;
+      const goblinAction = encounter.definitions.find((definition) => definition.id === "def-goblin")?.actions[0];
+      if (goblinAction?.kind === "attack") {
+        goblinAction.attackBonus = 100;
+        goblinAction.damage = [{ dice: "100", damageType: "piercing" }];
+      }
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      expect(state.snapshot.activeZones).toHaveLength(1);
+      const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+      expect(caster.concentration).toBeDefined();
+      caster.currentHp = 500;
+      // Scimitar is melee (5 ft) — bring the goblin adjacent to the fighter;
+      // this attack has nothing to do with the zone (still sitting at (5, 1)).
+      const goblin = state.snapshot.combatants.find((combatant) => combatant.id === "enemy-goblin-1")!;
+      goblin.position = { x: 2, y: 1 };
+
+      // A big non-lethal hit from an unrelated attacker — nothing to do with
+      // the zone itself — should still force (and, with CON 8, fail) a
+      // concentration check that tears the zone down too.
+      resolveAttack(state, "enemy-goblin-1", "pc-fighter", goblinAction!.id);
+
+      expect(state.snapshot.activeZones).toHaveLength(0);
+      expect(state.log.some((entry) => entry.type === "ConcentrationChecked" && entry.data?.combatantId === "pc-fighter")).toBe(true);
     });
   });
 
