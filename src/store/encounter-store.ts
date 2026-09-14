@@ -8,7 +8,9 @@ import {
   createEngineState,
   applyCondition,
   applyTimedFeatureEffects,
+  applyZoneTriggers,
   defaultConditionModifiers,
+  driftZones,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   event,
@@ -24,6 +26,7 @@ import {
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
+  tickZones,
   updateDefeatState,
   type BatchSimulationSummary,
   type CombatantExportPackage,
@@ -670,6 +673,7 @@ export const useEncounterStore = create<EncounterStore>()(
           if (currentActor.state === "active") {
             applyTimedFeatureEffects(engine, currentActor.id, "turn-end");
             runRepeatedSaves(engine, currentActor.id, "turn-end");
+            applyZoneTriggers(engine, currentActor.id, "turn-end");
           }
           expireConditions(engine, "end");
           closeActionEconomy(currentActor);
@@ -691,6 +695,10 @@ export const useEncounterStore = create<EncounterStore>()(
         // Scheduled reinforcements enter at the start of the round they are due.
         // Re-derive the eligible set afterward so an arrival takes its turn now.
         admitReinforcements(engine);
+        // Idempotent within a round (a zone only expires once `round >=
+        // expiresAtRound`), so — like `admitReinforcements` above — it's safe
+        // to call on every step rather than only when `wrapped`.
+        tickZones(engine);
         turnIndexes = eligibleIndexes();
         if (turnIndexes.length === 0) return;
         const next = wrapped || !turnHasStarted
@@ -711,6 +719,8 @@ export const useEncounterStore = create<EncounterStore>()(
           expireConditions(engine, "start");
           applyTimedFeatureEffects(engine, combatant.id, "turn-start");
           runRepeatedSaves(engine, combatant.id, "turn-start");
+          applyZoneTriggers(engine, combatant.id, "turn-start");
+          driftZones(engine, combatant.id);
           resetActionEconomy(combatant);
           try {
             takeAutomatedTurn(engine, combatant);
@@ -719,6 +729,7 @@ export const useEncounterStore = create<EncounterStore>()(
           }
           applyTimedFeatureEffects(engine, combatant.id, "turn-end");
           runRepeatedSaves(engine, combatant.id, "turn-end");
+          applyZoneTriggers(engine, combatant.id, "turn-end");
           expireConditions(engine, "end");
           closeActionEconomy(combatant);
         }
