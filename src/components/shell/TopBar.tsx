@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid, LogOut, Redo2, RotateCcw, ScrollText, Save, Settings, Swords, Undo2 } from "lucide-react";
+import { BookOpen, LayoutGrid, LogOut, Redo2, RotateCcw, ScrollText, Save, Settings, Swords, Undo2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useEncounterStore } from "@/store/encounter-store";
 import { SceneDropdown } from "./SceneDropdown";
@@ -42,6 +42,9 @@ export function TopBar({ onOpenBuilder, onOpenSceneConfig, onOpenReport }: TopBa
       <div className={styles.group}>
         <a href={currentProjectId ? `/campaigns/${currentProjectId}` : "/campaigns"} title="Back to campaigns">
           <LayoutGrid size={16} />
+        </a>
+        <a href="/docs" title="Docs">
+          <BookOpen size={16} />
         </a>
         <button type="button" onClick={undo} title="Undo">
           <Undo2 size={16} />

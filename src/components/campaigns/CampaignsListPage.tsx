@@ -4,7 +4,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { ImagePlus, LogOut, Pencil, Plus, Swords, Trash2 } from "lucide-react";
+import { BookOpen, ImagePlus, LogOut, Pencil, Plus, Swords, Trash2 } from "lucide-react";
 import { useEncounterStore } from "@/store/encounter-store";
 import { downscaleDataUrl } from "@/lib/imageResize";
 import { RenameInput } from "@/components/sidebar/ActorFolderNode";
@@ -105,6 +105,9 @@ export function CampaignsListPage() {
         <div className={styles.spacer} />
         <a href="/">
           <Swords size={14} /> Sandbox
+        </a>
+        <a href="/docs">
+          <BookOpen size={14} /> Docs
         </a>
         <button type="button" onClick={() => void signOut({ redirectTo: "/login" })}>
           <LogOut size={14} /> Sign out

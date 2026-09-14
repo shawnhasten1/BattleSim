@@ -1,6 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 
-const PUBLIC_PATHS = ["/login", "/signup"];
+const PUBLIC_PATHS = ["/login", "/signup", "/docs"];
 
 /**
  * Edge-safe half of the Auth.js config — used directly by `middleware.ts`,
