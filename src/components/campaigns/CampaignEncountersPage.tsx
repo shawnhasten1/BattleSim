@@ -96,18 +96,20 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
           <div className={styles.grid}>
             {encounters.map((encounter) => (
               <div key={encounter.id} className={styles.card}>
-                <button
-                  type="button"
-                  className={styles.cardDelete}
-                  title="Delete encounter"
-                  onClick={() => {
-                    if (confirm(`Delete "${encounter.name}"? This can't be undone.`)) {
-                      void onDelete(encounter.id);
-                    }
-                  }}
-                >
-                  <Trash2 size={13} />
-                </button>
+                <div className={styles.cardActions}>
+                  <button
+                    type="button"
+                    className={`${styles.cardAction} ${styles.cardActionDanger}`}
+                    title="Delete encounter"
+                    onClick={() => {
+                      if (confirm(`Delete "${encounter.name}"? This can't be undone.`)) {
+                        void onDelete(encounter.id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
                 <button
                   type="button"
                   className={styles.cardMain}

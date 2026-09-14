@@ -286,6 +286,35 @@ a real successful upload.
 
 ---
 
+**Follow-up (2026-09-14): campaign rename + cover thumbnail.** Requested
+after the initial Phase 5 ship — `/campaigns` cards can now be renamed
+inline and given their own thumbnail image, independent of any encounter's
+map background:
+- `Project.coverImageUrl String?` (new nullable column).
+- `POST`/`DELETE /api/projects/[id]/cover-image` — same upload/replace/
+  delete pattern as the encounter map-image route. Extracted the shared
+  logic both now use into `src/server/blob-image.ts`
+  (`parseDataUrl`/`replaceBlobImage`/`deleteBlobImage`), and refactored
+  `encounters/[id]/map-image/route.ts` to use it too rather than duplicating.
+  Rename reuses the *existing* `PUT /api/projects/[id]` (it already
+  supported a bare `{name}` update — no backend change needed there).
+- `GET /api/projects` now also selects `coverImageUrl`.
+- `CampaignsListPage.tsx`: each card grew a small action row (top-right,
+  outside the card's main clickable button to avoid nesting interactive
+  elements) with rename (reuses the existing `RenameInput` from
+  `ActorFolderNode.tsx`), a hidden-file-input cover-image upload
+  (downscaled client-side via the existing `downscaleDataUrl`), and delete.
+  `campaigns.module.css`'s old single-purpose `.cardDelete` became a
+  general `.cardActions`/`.cardAction`/`.cardActionDanger` set, also
+  adopted by `CampaignEncountersPage.tsx`'s delete button for consistency.
+- Verified with disposable test accounts: rename persists and is
+  reflected immediately; cross-account rename/cover-image attempts 404;
+  cover-image upload fails with the same clean, expected "no Blob
+  credentials" error as the encounter map-image path (still blocked on the
+  same `BLOB_READ_WRITE_TOKEN` manual step — once that's set, both upload
+  paths become live at the same time). `npm run typecheck`, `npm run test`
+  (521 passing), `npm run build` all green.
+
 Remaining phases (5 cont'd, 6): the `Project` → `Campaign` rename (see
 above — now optional/cosmetic rather than blocking), optional hardening
 (password reset, rate limiting, account settings, the pre-existing

@@ -65,6 +65,8 @@ model Project {
   owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  /** Vercel Blob (CDN) URL for the campaign card's thumbnail, if one is set. */
+  coverImageUrl String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   maps        BattleMap[]

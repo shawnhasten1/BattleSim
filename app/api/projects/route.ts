@@ -21,6 +21,7 @@ export async function GET() {
       id: true,
       name: true,
       description: true,
+      coverImageUrl: true,
       updatedAt: true,
       encounters: {
         orderBy: { updatedAt: "desc" },

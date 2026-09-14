@@ -180,6 +180,10 @@
   overflow: hidden;
 }
 
+.thumb span {
+  font-size: 11px;
+}
+
 .thumb img {
   width: 100%;
   height: 100%;
@@ -203,10 +207,16 @@
   color: var(--ui-text-dim);
 }
 
-.cardDelete {
+.cardActions {
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.cardAction {
   display: grid;
   place-items: center;
   width: 26px;
@@ -218,7 +228,16 @@
   cursor: pointer;
 }
 
-.cardDelete:hover {
+.cardAction:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.cardAction input[type="file"] {
+  display: none;
+}
+
+.cardActionDanger:hover {
   border-color: var(--ui-hostile);
   color: var(--ui-hostile);
 }

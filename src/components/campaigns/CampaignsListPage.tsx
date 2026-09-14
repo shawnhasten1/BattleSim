@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LogOut, Plus, Swords, Trash2 } from "lucide-react";
+import { ImagePlus, LogOut, Pencil, Plus, Swords, Trash2 } from "lucide-react";
 import { useEncounterStore } from "@/store/encounter-store";
+import { downscaleDataUrl } from "@/lib/imageResize";
+import { RenameInput } from "@/components/sidebar/ActorFolderNode";
 import styles from "./campaigns.module.css";
 
 interface CampaignSummary {
   id: string;
   name: string;
   description?: string | null;
+  coverImageUrl?: string | null;
   updatedAt: string;
   encounters?: Array<{ id: string; name: string; updatedAt: string }>;
 }
@@ -22,6 +25,8 @@ export function CampaignsListPage() {
   const [status, setStatus] = useState("Loading campaigns…");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   async function refresh() {
     const response = await fetch("/api/projects");
@@ -51,6 +56,46 @@ export function CampaignsListPage() {
     const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
     if (response.ok) setCampaigns((prev) => prev.filter((campaign) => campaign.id !== id));
     else setStatus("Delete failed");
+  }
+
+  async function onRename(id: string, name: string) {
+    setRenamingId(null);
+    const response = await fetch(`/api/projects/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    });
+    if (response.ok) setCampaigns((prev) => prev.map((campaign) => (campaign.id === id ? { ...campaign, name } : campaign)));
+    else setStatus("Rename failed");
+  }
+
+  function onCoverImageChange(id: string, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = typeof reader.result === "string" ? reader.result : null;
+      if (raw) void uploadCoverImage(id, raw);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function uploadCoverImage(id: string, rawDataUrl: string) {
+    setUploadingId(id);
+    const dataUrl = await downscaleDataUrl(rawDataUrl);
+    const response = await fetch(`/api/projects/${id}/cover-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl })
+    });
+    setUploadingId(null);
+    if (!response.ok) {
+      setStatus("Cover image upload failed");
+      return;
+    }
+    const data = (await response.json()) as { url: string };
+    setCampaigns((prev) => prev.map((campaign) => (campaign.id === id ? { ...campaign, coverImageUrl: data.url } : campaign)));
   }
 
   return (
@@ -88,30 +133,70 @@ export function CampaignsListPage() {
           <div className={styles.grid}>
             {campaigns.map((campaign) => (
               <div key={campaign.id} className={styles.card}>
-                <button
-                  type="button"
-                  className={styles.cardDelete}
-                  title="Delete campaign"
-                  onClick={() => {
-                    if (confirm(`Delete "${campaign.name}" and all of its encounters? This can't be undone.`)) {
-                      void onDelete(campaign.id);
-                    }
-                  }}
-                >
-                  <Trash2 size={13} />
-                </button>
-                <button type="button" className={styles.cardMain} onClick={() => router.push(`/campaigns/${campaign.id}` as Route)}>
-                  <div className={styles.thumb}>
-                    <Swords size={28} />
+                <div className={styles.cardActions}>
+                  <label className={styles.cardAction} title="Set cover image">
+                    <ImagePlus size={13} />
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => onCoverImageChange(campaign.id, event)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={styles.cardAction}
+                    title="Rename campaign"
+                    onClick={() => setRenamingId(campaign.id)}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.cardAction} ${styles.cardActionDanger}`}
+                    title="Delete campaign"
+                    onClick={() => {
+                      if (confirm(`Delete "${campaign.name}" and all of its encounters? This can't be undone.`)) {
+                        void onDelete(campaign.id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                {renamingId === campaign.id ? (
+                  <div className={styles.cardMain}>
+                    <div className={styles.thumb}>
+                      {campaign.coverImageUrl ? <img src={campaign.coverImageUrl} alt="" /> : <Swords size={28} />}
+                    </div>
+                    <div className={styles.cardBody}>
+                      <RenameInput
+                        initialName={campaign.name}
+                        onCommit={(name) => void onRename(campaign.id, name)}
+                        onCancel={() => setRenamingId(null)}
+                      />
+                    </div>
                   </div>
-                  <div className={styles.cardBody}>
-                    <strong>{campaign.name}</strong>
-                    <span>
-                      {campaign.encounters?.length ?? 0} encounter{(campaign.encounters?.length ?? 0) === 1 ? "" : "s"} ·
-                      updated {new Date(campaign.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </button>
+                ) : (
+                  <button type="button" className={styles.cardMain} onClick={() => router.push(`/campaigns/${campaign.id}` as Route)}>
+                    <div className={styles.thumb}>
+                      {uploadingId === campaign.id ? (
+                        <span>Uploading…</span>
+                      ) : campaign.coverImageUrl ? (
+                        <img src={campaign.coverImageUrl} alt="" />
+                      ) : (
+                        <Swords size={28} />
+                      )}
+                    </div>
+                    <div className={styles.cardBody}>
+                      <strong>{campaign.name}</strong>
+                      <span>
+                        {campaign.encounters?.length ?? 0} encounter{(campaign.encounters?.length ?? 0) === 1 ? "" : "s"} ·
+                        updated {new Date(campaign.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </button>
+                )}
               </div>
             ))}
           </div>
