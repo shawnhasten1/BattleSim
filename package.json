@@ -14,6 +14,7 @@
     "db:init": "prisma db push",
     "db:push": "prisma db push",
     "db:init:sqlite": "node scripts/init-db.mjs",
+    "db:seed-test-user": "node scripts/seed-test-user.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
