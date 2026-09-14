@@ -416,6 +416,32 @@ describe("draft <-> definition round-trips", () => {
   });
 });
 
+describe("spell casting ability drives the save DC, not the target's saving throw ability", () => {
+  it("Cloudkill (CON save, INT-based DC) keeps INT as the DC ability through the builder round-trip", () => {
+    const cloudkill = findSrdSpell("srd:spell:cloudkill")!;
+    const draft = spellDraftFromDefinition(cloudkill);
+    expect(draft.saveAbility).toBe("con");
+    expect(draft.castingAbility).toBe("int");
+
+    const back = spellFromDraft(draft);
+    const action = back.action;
+    if (action?.kind !== "area-save") throw new Error("expected area-save");
+    expect(action.saveAbility).toBe("con");
+    expect(action.dcFormula?.ability).toBe("int");
+  });
+
+  it("a brand-new save-shaped spell defaults its DC ability to the caster's stat, independent of the save ability chosen", () => {
+    const draft: BuilderDraft = {
+      name: "Test Spell", shape: "save", saveAbility: "con", castingAbility: "int", dealsDamage: true,
+      dmg: { count: 2, die: 6, mod: 0, type: "poison" }, range: "60"
+    };
+    const action = actionFromEffectDraft(draft, { spell: true });
+    if (action.kind !== "save") throw new Error("expected save");
+    expect(action.saveAbility).toBe("con");
+    expect(action.dcFormula?.ability).toBe("int");
+  });
+});
+
 describe("zone trigger toggles", () => {
   it("Cloudkill round-trips its on-enter + start-of-turn triggers, with end-of-turn off", () => {
     const cloudkill = findSrdSpell("srd:spell:cloudkill")!;

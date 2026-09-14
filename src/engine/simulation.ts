@@ -37,7 +37,7 @@ import {
 import { cellIntersectsArea, cellsInArea, combatantsInArea, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
-import type { ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -1746,15 +1746,27 @@ function conditionSeverity(name: ConditionName): number {
   }
 }
 
-function riderSaveDc(rider: Extract<ActionRider, { kind: "condition" }>, source: ReturnType<typeof getDefinition>): number {
+/** Best-guess ability driving a rider's save DC when it has none of its own — mirrors the parent action's own DC-driving ability. */
+function riderFallbackAbility(action: OffensiveAction): Ability {
+  if (action.kind === "attack") {
+    return action.ability;
+  }
+  if (action.kind === "save" || action.kind === "area-save") {
+    return action.saveAbility;
+  }
+  return "str";
+}
+
+function riderSaveDc(rider: Extract<ActionRider, { kind: "condition" }>, source: ReturnType<typeof getDefinition>, fallbackAbility: Ability): number {
   const save = rider.save;
+  const fallbackDc = 8 + abilityModifier(source.abilities[fallbackAbility]) + (source.proficiencyBonus ?? 2);
   if (!save) {
-    return 8 + (source.proficiencyBonus ?? 2);
+    return fallbackDc;
   }
   if (save.dc != null) {
     return save.dc;
   }
-  return save.dcFormula ? resolveNumericFormula(save.dcFormula, source) : 8 + (source.proficiencyBonus ?? 2);
+  return save.dcFormula ? resolveNumericFormula(save.dcFormula, source) : fallbackDc;
 }
 
 /** Expected control value from an action's `condition` riders against one target. */
@@ -1789,7 +1801,7 @@ function expectedRiderControl(
         : 1;
       // a rider that negates on its own save only lands when that save fails
       const negateChance = rider.save && rider.save.onSuccess === "negates"
-        ? 1 - chanceToFailSave(riderSaveDc(rider, source), target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]))
+        ? 1 - chanceToFailSave(riderSaveDc(rider, source, riderFallbackAbility(action)), target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]))
         : 0;
       pApplied = hitChance * (1 - negateChance);
     } else {
@@ -1879,7 +1891,9 @@ function averageAttackFeatureDamage(
       }
       const damageAverage = effect.damage.reduce((sum, component) => sum + averageDamageComponent(component, source), 0);
       if (effect.kind === "save-gated-damage") {
-        const dc = effect.save.dc ?? (effect.save.dcFormula ? resolveNumericFormula(effect.save.dcFormula, source) : 8 + (source.proficiencyBonus ?? 2));
+        const dc = effect.save.dc ?? (effect.save.dcFormula
+          ? resolveNumericFormula(effect.save.dcFormula, source)
+          : 8 + abilityModifier(source.abilities[effect.save.ability]) + (source.proficiencyBonus ?? 2));
         const saveBonus = target.saves?.[effect.save.ability] ?? abilityModifier(target.abilities[effect.save.ability]);
         const failChance = chanceToFailSave(dc, saveBonus);
         total += damageAverage * (failChance + ((effect.save.halfDamageOnSuccess ?? false) ? (1 - failChance) * 0.5 : 0));

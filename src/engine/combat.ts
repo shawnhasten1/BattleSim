@@ -293,12 +293,17 @@ export function resolveAttackBonus(action: AttackActionDefinition, definition: C
   return action.attackBonus ?? (abilityModifier(definition.abilities[action.ability]) + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition)));
 }
 
+/** 8 + ability modifier + proficiency bonus — the standard 5e save DC fallback when no explicit `dc`/`dcFormula` is set. */
+function defaultSaveDc(definition: CreatureDefinition, ability: Ability): number {
+  return 8 + abilityModifier(definition.abilities[ability]) + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
+}
+
 export function resolveSaveDc(action: SaveActionDefinition | AreaSaveActionDefinition, definition: CreatureDefinition): number {
   const featureDcBonus = featureSaveDcModifier(definition, action);
   if (action.dcFormula) {
     return resolveNumericFormula(action.dcFormula, definition) + featureDcBonus.total;
   }
-  return (action.dc ?? 8 + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition))) + featureDcBonus.total;
+  return (action.dc ?? defaultSaveDc(definition, action.saveAbility)) + featureDcBonus.total;
 }
 
 export function applyTimedFeatureEffects(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
@@ -475,7 +480,7 @@ function resolveAutoHitBeam(
   if (action.riders?.length) {
     applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
       actionId: action.id, landed: true, saved: null, origin: attacker.position,
-      fallbackDc: 8 + (attackerDefinition.proficiencyBonus ?? proficiencyFromDefinition(attackerDefinition))
+      fallbackDc: defaultSaveDc(attackerDefinition, action.ability)
     });
   }
   return {
@@ -815,7 +820,7 @@ function resolveAttackCore(
   if (action.riders?.length) {
     const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
       actionId: action.id, landed: hit, critical, saved: null, origin: attacker.position,
-      fallbackDc: 8 + (attackerDefinition.proficiencyBonus ?? proficiencyFromDefinition(attackerDefinition)),
+      fallbackDc: defaultSaveDc(attackerDefinition, action.ability),
       concentrating: action.concentration
     });
     appliedConditionEffects = [...appliedConditionEffects, ...riderOutcome.appliedConditions];
@@ -3321,7 +3326,7 @@ function resolveFeatureSaveDc(save: FeatureEffectSaveGate, definition: CreatureD
   if (save.dcFormula) {
     return resolveNumericFormula(save.dcFormula, definition);
   }
-  return save.dc ?? 8 + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
+  return save.dc ?? defaultSaveDc(definition, save.ability);
 }
 
 function markFeatureEffectApplied(

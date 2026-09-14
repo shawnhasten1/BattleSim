@@ -300,6 +300,7 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "autoHit", copy: "spell.autoHit", control: "toggle", advanced: true,
       visibleWhen: () => shape === "attack" && draft.attackDelivery === "beams" },
 
+    { key: "castingAbility", copy: "spell.castingAbility", control: "ability", visibleWhen: () => inSaveShape },
     { key: "saveAbility", copy: "spell.saveAbility", control: "ability", visibleWhen: () => inSaveShape },
     { key: "saveDc", copy: "spell.saveDc", control: "number", advanced: true, visibleWhen: () => inSaveShape },
     { key: "onSuccess", copy: "spell.onSuccess", control: "select", options: ON_SUCCESS_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => inSaveShape },
@@ -477,6 +478,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     attackDelivery: undefined,
     beamCount: 1,
     autoHit: false,
+    castingAbility: "int",
     saveAbility: "dex",
     onSuccess: "half",
     areaType: "circle",
@@ -549,6 +551,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       ...base,
       ...areaExtra,
       range: rangeToDraft(action.range),
+      castingAbility: action.dcFormula?.ability ?? action.saveAbility,
       saveAbility: action.saveAbility,
       saveDc: action.dc,
       onSuccess: action.onSuccess ?? (action.halfDamageOnSuccess ? "half" : "none"),
@@ -621,7 +624,7 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
   const riders = ((draft.riders as ActionRider[]) ?? []).filter(Boolean);
   const dmg = diceToComponent(draft.dmg as DiceValue, "int");
   const dcValue = Number(draft.saveDc);
-  const dcFormula = options.spell ? { base: 8, ability: (draft.saveAbility as Ability) ?? "int", proficiency: true } : { base: 8, proficiency: true };
+  const dcFormula = { base: 8, ability: (draft.castingAbility as Ability) ?? "int", proficiency: true };
   const reaction = actionType === "reaction" ? reactionMetaFromDraft(draft) : undefined;
 
   if (shape === "attack") {
