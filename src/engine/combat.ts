@@ -1360,6 +1360,7 @@ function createZone(
     affects: action.affects,
     trigger: zone.trigger,
     movement: zone.movement,
+    movementDamage: zone.movementDamage,
     saveAbility: action.saveAbility,
     dc,
     damage: action.damage.length ? action.damage : undefined,
@@ -3510,8 +3511,49 @@ function moveAlongPath(
     }
     combatant.position = to;
     movedCells.push(to);
+    applyZoneMovementDamage(state, combatant, to);
+    if (combatant.state !== "active") {
+      return movedCells;
+    }
   }
   return movedCells;
+}
+
+/**
+ * Spike Growth-style automatic damage: one roll per grid step whose
+ * destination lands inside a zone with `movementDamage` set — no save,
+ * independent of `applyZoneEffect`'s save-gated on-enter/turn-boundary path.
+ * Called per step from `moveAlongPath`, same granularity as the opportunity-
+ * attack check beside it.
+ */
+function applyZoneMovementDamage(state: EngineState, mover: CombatantState, to: Point): void {
+  const zones = state.snapshot.activeZones;
+  if (!zones?.length) {
+    return;
+  }
+  const distancePerSquare = state.snapshot.map.grid.distancePerSquare;
+  for (const zone of zones) {
+    if (!zone.movementDamage || !cellIntersectsArea(to, zone.origin, zone.area, distancePerSquare)) {
+      continue;
+    }
+    const source = state.snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId) ?? mover;
+    if (zone.affects === "hostile" && source.faction === mover.faction) {
+      continue;
+    }
+    const sourceDefinition = getDefinition(state.snapshot, source);
+    applyDamageComponents(
+      state,
+      mover,
+      [{ dice: zone.movementDamage.dice, damageType: zone.movementDamage.damageType }],
+      sourceDefinition,
+      false,
+      {},
+      source.id
+    );
+    if (mover.state !== "active") {
+      return;
+    }
+  }
 }
 
 function resolveOpportunityAttacksForStep(

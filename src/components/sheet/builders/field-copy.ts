@@ -106,6 +106,8 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "zone.triggerEnd": { label: "Also triggers at end of turn", hint: "Most zones only trigger on entering or starting a turn there" },
   "zone.drifts": { label: "Drifts away from the caster", hint: "Cloudkill-style: automatically moves away from the caster at the start of each of the caster's turns — not a choice" },
   "zone.driftFeet": { label: "Feet per turn" },
+  "zone.movementDamageEnabled": { label: "Damages creatures that move through it", hint: "Spike Growth-style: no saving throw, rolled once per step a creature takes into or within the zone" },
+  "zone.movementDamage": { label: "Movement damage" },
 
   // rider editor
   "rider.effectType": { label: "Effect" },

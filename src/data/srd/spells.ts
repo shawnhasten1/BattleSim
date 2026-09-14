@@ -358,6 +358,48 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       automationSupport: "full"
     }
   },
+  {
+    id: "srd:spell:spike-growth",
+    name: "Spike Growth",
+    level: 2,
+    school: "transmutation",
+    castingTime: "action",
+    range: 150,
+    concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:spike-growth:action",
+      name: "Spike Growth",
+      actionType: "action",
+      // No saving throw at all — see `zone.movementDamage` below. `saveAbility`
+      // / `dcFormula` are structurally required by AreaSaveActionDefinition
+      // but never consulted: `zone.trigger` is empty, so no save-gated effect
+      // ever fires for this zone.
+      saveAbility: "dex",
+      dcFormula: { base: 8, ability: "wis", proficiency: true },
+      range: 150,
+      area: { type: "circle", size: 20 },
+      targeting: { origin: "point", range: 150 },
+      damage: [],
+      halfDamageOnSuccess: false,
+      onSuccess: "negates",
+      affects: "all",
+      concentration: true,
+      zone: {
+        duration: { kind: "concentration" },
+        trigger: [],
+        anchor: "fixed",
+        // 2d4 piercing per 5 ft moved into/within the area, no save. The
+        // "becomes difficult terrain" half of the spell isn't modeled yet —
+        // zone-imposed terrain still isn't wired into pathfinding.
+        movementDamage: { dice: "2d4", damageType: "piercing" }
+      },
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
   // ── Level 3 ───────────────────────────────────────────────────────────────
   {
     id: "srd:spell:fireball",

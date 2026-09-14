@@ -651,6 +651,20 @@ export interface ZoneMovement {
 }
 
 /**
+ * Spike Growth-style automatic movement damage: a creature that moves into
+ * or within the zone takes this damage — no saving throw, independent of
+ * `trigger`/`saveAbility`/`damage` (which are for the save-gated on-enter /
+ * turn-boundary effects other zones use). Applied once per grid step whose
+ * *destination* cell falls inside the zone (matches the level of granularity
+ * `moveAlongPath` already resolves opportunity attacks at — this engine
+ * doesn't model sub-5-ft movement anywhere else either).
+ */
+export interface ZoneMovementDamage {
+  dice: string;
+  damageType: DamageType;
+}
+
+/**
  * A standing area a spell leaves on the map instead of (or alongside)
  * resolving once at cast time — Insect Plague, Cloudkill, Web. Authored on
  * `AreaSaveActionDefinition.zone` (or `SpellDefinition.zone`, stamped onto the
@@ -669,6 +683,8 @@ export interface ZonePersistence {
   anchor: "fixed";
   /** Cloudkill-style automatic drift away from the caster. Absent = stays put. */
   movement?: ZoneMovement;
+  /** Spike Growth-style automatic per-step movement damage. Independent of `trigger` — no save. */
+  movementDamage?: ZoneMovementDamage;
   /**
    * Also resolve the action's normal area-save burst at cast time, in
    * addition to creating the zone. Default `false` — most persistent zones
@@ -694,6 +710,7 @@ export interface ActiveZone {
   affects: "hostile" | "all";
   trigger: ZoneTrigger[];
   movement?: ZoneMovement;
+  movementDamage?: ZoneMovementDamage;
   saveAbility?: Ability;
   /** Resolved to a concrete number at creation — a spell's DC doesn't change round to round. */
   dc?: number;

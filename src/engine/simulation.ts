@@ -33,10 +33,10 @@ import {
   tickZones,
   type EngineState
 } from "./combat";
-import { cellIntersectsArea, combatantsInArea } from "./areas";
+import { cellIntersectsArea, cellsInArea, combatantsInArea, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
-import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
-import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
+import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
+import type { ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -115,6 +115,16 @@ const TAG_PRIORITY_VALUE: Partial<Record<ActorTag, number>> = {
   "high-priority": 14,
   "low-priority": -8
 };
+
+/**
+ * How much a persistent-zone spell's placement score credits a hostile who
+ * *isn't* standing in the blast yet but whose shortest path to its nearest
+ * target of the caster's side runs through it — a one-shot burst only cares
+ * who's caught right now, but a zone will still be there next turn, so
+ * blocking a likely approach route has real (if speculative) value. Well
+ * under 1 since it's a prediction, not a landed hit.
+ */
+const ZONE_PREDICTIVE_APPROACH_DISCOUNT = 0.4;
 
 function tagPriorityValue(tags: ActorTag[] | undefined): number {
   if (!tags || tags.length === 0) {
@@ -1033,6 +1043,11 @@ function selectOffensivePlan(
         score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
         reasons.push(`${hostiles.length} hostile targets`);
         if (friendlyRisk > 0) reasons.push("friendly fire risk");
+        if (action.zone) {
+          const predictedValue = predictedZoneApproachValue(snapshot, actor, definition, action, origin, aimVector, affected, tactics);
+          score += predictedValue * (1.2 + tactics.areaWeight);
+          if (predictedValue > 0) reasons.push("blocks a likely approach route");
+        }
       } else if (action.kind === "save") {
         // Hold Person-style upcast: extra in-range hostiles caught for free, valued like the primary target.
         const capacity = upcastExtraTargetCapacity(action);
@@ -1238,6 +1253,56 @@ function coverFromHostilesAt(snapshot: EncounterSnapshot, actor: CombatantState,
     sum += result.blocksTargeting ? 5 : result.acBonus;
   }
   return sum / hostiles.length;
+}
+
+/**
+ * Extra placement value for a persistent-zone spell from hostiles who
+ * *aren't* caught in the blast yet: for each such hostile, find its nearest
+ * target on the caster's side and check whether the shortest path there
+ * crosses the candidate zone. A one-shot burst has no reason to care about
+ * this (the blast is gone next turn); a zone sticking around makes "sits on
+ * their approach route" a real, if speculative, reason to place it here.
+ */
+function predictedZoneApproachValue(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  definition: CreatureDefinition,
+  action: AreaSaveActionDefinition,
+  origin: Point,
+  aimVector: AimVector | undefined,
+  alreadyCaught: CombatantState[],
+  tactics: TacticsSettings
+): number {
+  const zoneCellKeys = new Set(cellsInArea(snapshot.map, origin, action.area, aimVector).map((cell) => `${cell.x},${cell.y}`));
+  if (zoneCellKeys.size === 0) {
+    return 0;
+  }
+  const alliesOfCaster = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+  if (alliesOfCaster.length === 0) {
+    return 0;
+  }
+  const caughtIds = new Set(alreadyCaught.map((combatant) => combatant.id));
+  const otherHostiles = snapshot.combatants.filter((combatant) =>
+    combatant.faction !== actor.faction && combatant.state === "active" && !caughtIds.has(combatant.id));
+
+  let value = 0;
+  for (const hostile of otherHostiles) {
+    const hostileDefinition = getDefinition(snapshot, hostile);
+    const nearestAlly = alliesOfCaster.reduce<{ ally: CombatantState; distance: number } | null>((closest, ally) => {
+      const distance = gridDistance(hostile.position, ally.position, snapshot.map.grid);
+      return !closest || distance < closest.distance ? { ally, distance } : closest;
+    }, null)?.ally;
+    if (!nearestAlly) {
+      continue;
+    }
+    const path = findPath(snapshot.map, hostile.position, nearestAlly.position, sizeFootprint(hostileDefinition.size));
+    if (!path.reachable || !path.cells.some((cell) => zoneCellKeys.has(`${cell.x},${cell.y}`))) {
+      continue;
+    }
+    value += (expectedDamageAgainst(action, definition, actor, hostileDefinition)
+      + tagPriorityValue(hostile.tags) * tactics.priorityWeight) * ZONE_PREDICTIVE_APPROACH_DISCOUNT;
+  }
+  return value;
 }
 
 /** Sum of enemy-sourced damaging/rider `ActiveZone`s covering `cell`, from `actor`'s perspective (an ally's own zone is never a hazard to them). */

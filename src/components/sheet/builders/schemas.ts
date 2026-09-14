@@ -9,6 +9,7 @@ import type {
   ActionRider,
   AreaTemplate,
   DamageComponent,
+  DamageType,
   DeathEffectDefinition,
   FeatureDefinition,
   FeatureEffect,
@@ -16,6 +17,7 @@ import type {
   ReactionTrigger,
   SpellDefinition,
   WeaponDefinition,
+  ZoneMovementDamage,
   ZonePersistence,
   ZoneTrigger
 } from "@/engine";
@@ -319,6 +321,9 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneDrifts", copy: "zone.drifts", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneDriftFeet", copy: "zone.driftFeet", control: "number", advanced: true, min: 5, step: 5,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneDrifts) },
+    { key: "zoneMovementDamageEnabled", copy: "zone.movementDamageEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneMovementDamageDice", copy: "zone.movementDamage", control: "dice", advanced: true,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneMovementDamageEnabled) },
 
     { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
@@ -504,7 +509,11 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         zoneApplyOnCast: Boolean(action.zone?.applyOnCast),
         zoneTriggerEnd: Boolean(action.zone?.trigger.includes("end-of-turn-in-zone")),
         zoneDrifts: Boolean(action.zone?.movement),
-        zoneDriftFeet: action.zone?.movement?.driftFeetPerCasterTurn ?? 10
+        zoneDriftFeet: action.zone?.movement?.driftFeetPerCasterTurn ?? 10,
+        zoneMovementDamageEnabled: Boolean(action.zone?.movementDamage),
+        zoneMovementDamageDice: action.zone?.movementDamage
+          ? parseDiceValue(action.zone.movementDamage.dice, action.zone.movementDamage.damageType)
+          : parseDiceValue("2d4", "piercing")
       }
       : {};
     return {
@@ -542,11 +551,16 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
   const duration: ZonePersistence["duration"] = durationKind === "rounds"
     ? { kind: "rounds", rounds: Math.max(1, Number(draft.zoneDurationRounds) || 10) }
     : { kind: durationKind };
+  const movementDamageDice = draft.zoneMovementDamageDice as DiceValue | undefined;
+  const movementDamage: ZoneMovementDamage | undefined = draft.zoneMovementDamageEnabled
+    ? { dice: diceValueToString(movementDamageDice ?? DEFAULT_DICE), damageType: (movementDamageDice?.type as DamageType) ?? "piercing" }
+    : undefined;
   return {
     duration,
     trigger,
     anchor: "fixed",
     movement: draft.zoneDrifts ? { driftFeetPerCasterTurn: Math.max(5, Number(draft.zoneDriftFeet) || 10) } : undefined,
+    movementDamage,
     applyOnCast: draft.zoneApplyOnCast ? true : undefined
   };
 }

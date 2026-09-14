@@ -2102,5 +2102,42 @@ describe("combat engine", () => {
 
       expect(state.snapshot.activeZones?.[0]?.origin).toEqual({ x: 5, y: 1 });
     });
+
+    it("damages a creature per step moved into or within a movement-damage zone, with no saving throw (Spike Growth)", () => {
+      const encounter = zoneSpellEncounter({
+        duration: { kind: "rounds", rounds: 5 },
+        trigger: [],
+        anchor: "fixed",
+        movementDamage: { dice: "1d4", damageType: "piercing" }
+      });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) {
+        enemy.position = { x: 8, y: 1 };
+        enemy.currentHp = 100; // survive every possible step's damage regardless of rolls
+      }
+      const state = createEngineState(encounter);
+      // Zone at (5,1), radius 10 ft (2 squares): covers x=3..7 along y=1.
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      // 6 squares = 30 ft, exactly the goblin's speed budget.
+      moveCombatant(state, "enemy-goblin-1", { x: 2, y: 1 }, { provokeOpportunityAttacks: false });
+
+      // Steps from (8,1) to (2,1) land on x=7..2; x=7,6,5,4,3 (5 cells) are inside the zone.
+      const damageEvents = state.log.filter((entry) => entry.type === "DamageApplied");
+      expect(damageEvents).toHaveLength(5);
+      expect(state.log.some((entry) => entry.type === "SaveRolled")).toBe(false);
+    });
+
+    it("does not damage movement through a zone with no movementDamage config", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "rounds", rounds: 5 }, trigger: [], anchor: "fixed" });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 8, y: 1 };
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      moveCombatant(state, "enemy-goblin-1", { x: 2, y: 1 }, { provokeOpportunityAttacks: false });
+
+      expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(false);
+    });
   });
 });
