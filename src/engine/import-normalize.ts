@@ -15,6 +15,7 @@ import {
   type DamageComponent,
   type DamageScaling,
   type DamageType,
+  type DeathEffectDefinition,
   type FeatureDefinition,
   type FeatureEffect,
   type HealingComponent,
@@ -91,6 +92,7 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
   const reactions = normalizeActionList(input.reactions, "reaction", actionIdMap, featureIdByName);
   const weapons = normalizeWeapons(input.weapons, actionIdMap, input.abilities);
   const spells = normalizeIdList(input.spells, "spell").map((spell) => normalizeSpellRecord(spell, featureIdByName));
+  const deathEffects = normalizeIdList(input.deathEffects, "death-effect").map((effect) => normalizeDeathEffectRecord(effect, featureIdByName));
   const normalized = {
     ...input,
     id: typeof input.id === "string" && input.id.trim() ? input.id : `def-${crypto.randomUUID()}`,
@@ -101,6 +103,7 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
     reactions,
     weapons,
     spells,
+    deathEffects,
     features,
     traits
   };
@@ -415,6 +418,18 @@ export function normalizeSpellDefinition(
   return normalized as SpellDefinition;
 }
 
+/** Normalize a single death effect record — the builder entry point. */
+export function normalizeDeathEffectDefinition(
+  input: unknown,
+  featureIdByName: Map<string, string> = new Map()
+): DeathEffectDefinition {
+  const normalized = normalizeDeathEffectRecord(input, featureIdByName);
+  if (isRecord(normalized) && (typeof normalized.id !== "string" || !normalized.id.trim())) {
+    normalized.id = `death-effect-${safeFileName(typeof normalized.name === "string" ? normalized.name : "death-effect")}`;
+  }
+  return normalized as DeathEffectDefinition;
+}
+
 function normalizeSpellRecord(input: unknown, featureIdByName: Map<string, string>): unknown {
   if (!isRecord(input)) {
     return input;
@@ -430,6 +445,23 @@ function normalizeSpellRecord(input: unknown, featureIdByName: Map<string, strin
   if (isRecord(input.action)) {
     const actionType = input.castingTime === "bonus" || input.castingTime === "reaction" ? input.castingTime : "action";
     normalized.action = normalizeAction(input.action, 0, actionType, new Map(), featureIdByName);
+  }
+  return normalized;
+}
+
+/**
+ * Death effects have no casting time of their own (they fire automatically,
+ * not spent from the dying creature's action economy), so the wrapped
+ * action's `actionType` always normalizes to `"action"` — it's unused by the
+ * death-effect resolver.
+ */
+function normalizeDeathEffectRecord(input: unknown, featureIdByName: Map<string, string>): unknown {
+  if (!isRecord(input)) {
+    return input;
+  }
+  const normalized: Record<string, unknown> = { ...input };
+  if (isRecord(input.action)) {
+    normalized.action = normalizeAction(input.action, 0, "action", new Map(), featureIdByName);
   }
   return normalized;
 }

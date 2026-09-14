@@ -7,6 +7,7 @@ import {
   type ActionDefinition,
   type CombatantState,
   type CreatureDefinition,
+  type DeathEffectDefinition,
   type FeatureDefinition,
   type SpellDefinition,
   type WeaponDefinition
@@ -22,6 +23,9 @@ import { BuilderForm } from "../builders/BuilderForm";
 import {
   actionFieldSchema,
   actionFromEffectDraft,
+  deathEffectDraftFromDefinition,
+  deathEffectFieldSchema,
+  deathEffectFromDraft,
   effectDraftFromAction,
   featureDraftFromDefinition,
   featureFieldSchema,
@@ -41,6 +45,7 @@ import styles from "../builders/builders.module.css";
 type EditTarget =
   | { kind: "weapon"; id: string }
   | { kind: "spell"; id: string }
+  | { kind: "deathEffect"; id: string }
   | { kind: "action"; id: string }
   | { kind: "feature"; id: string }
   | { kind: "new"; builderKind: BuilderKind };
@@ -70,10 +75,12 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const addSpellV2 = useEncounterStore((s) => s.addSpellV2);
   const addActionV2 = useEncounterStore((s) => s.addActionV2);
   const addFeatureV2 = useEncounterStore((s) => s.addFeatureV2);
+  const addDeathEffectV2 = useEncounterStore((s) => s.addDeathEffectV2);
   const updateWeapon = useEncounterStore((s) => s.updateWeapon);
   const updateSpell = useEncounterStore((s) => s.updateSpell);
   const updateAction = useEncounterStore((s) => s.updateAction);
   const updateFeature = useEncounterStore((s) => s.updateFeature);
+  const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const addMultiattack = useEncounterStore((s) => s.addMultiattack);
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
@@ -98,6 +105,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
   const weapons = definition.weapons ?? [];
   const spells = definition.spells ?? [];
+  const deathEffects = definition.deathEffects ?? [];
   const features = [...(definition.features ?? []), ...(definition.traits ?? [])];
   const nativeActions = definition.actions ?? [];
   const bonusActions = definition.bonusActions ?? [];
@@ -123,6 +131,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
   function editWeapon(weapon: WeaponDefinition) { openEdit({ kind: "weapon", id: weapon.id }, weaponDraftFromDefinition(weapon)); }
   function editSpell(spell: SpellDefinition) { openEdit({ kind: "spell", id: spell.id }, spellDraftFromDefinition(spell)); }
+  function editDeathEffect(deathEffect: DeathEffectDefinition) { openEdit({ kind: "deathEffect", id: deathEffect.id }, deathEffectDraftFromDefinition(deathEffect)); }
   function editActionRecord(action: ActionDefinition) { openEdit({ kind: "action", id: action.id }, effectDraftFromAction(action)); }
   function editFeature(feature: FeatureDefinition) { openEdit({ kind: "feature", id: feature.id }, featureDraftFromDefinition(feature)); }
 
@@ -134,11 +143,13 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     if (!edit) return;
     if (edit.kind === "weapon") updateWeapon(definition.id, edit.id, weaponFromDraft(draft));
     else if (edit.kind === "spell") updateSpell(definition.id, edit.id, spellFromDraft(draft));
+    else if (edit.kind === "deathEffect") updateDeathEffect(definition.id, edit.id, deathEffectFromDraft(draft));
     else if (edit.kind === "action") updateAction(definition.id, edit.id, actionFromEffectDraft(draft));
     else if (edit.kind === "feature") updateFeature(definition.id, edit.id, featureFromDraft(draft));
     else if (edit.kind === "new") {
       if (edit.builderKind === "weapon") addWeaponV2(definition.id, weaponFromDraft(draft));
       else if (edit.builderKind === "spell") addSpellV2(definition.id, spellFromDraft(draft));
+      else if (edit.builderKind === "deathEffect") addDeathEffectV2(definition.id, deathEffectFromDraft(draft));
       else if (edit.builderKind === "feature") addFeatureV2(definition.id, featureFromDraft(draft));
       else addActionV2(definition.id, actionFromEffectDraft(draft));
     }
@@ -158,9 +169,11 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
       ? weaponFieldSchema(draft)
       : kind === "spell"
         ? spellFieldSchema(draft)
-        : kind === "feature"
-          ? featureFieldSchema(draft)
-          : actionFieldSchema(draft);
+        : kind === "deathEffect"
+          ? deathEffectFieldSchema(draft)
+          : kind === "feature"
+            ? featureFieldSchema(draft)
+            : actionFieldSchema(draft);
     return (
       <div className={styles.builder}>
         <BuilderForm specs={specs} draft={draft} mode={mode} onChange={(key, value) => setDraft((d) => ({ ...d, [key]: value }))} />
@@ -291,6 +304,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
               <div className={styles.presetGrid}>
                 <button type="button" onClick={() => startNew("weapon", weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "melee", ability: "str", range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }] }))}>Weapon</button>
                 <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, automationSupport: "full" }))}>Spell</button>
+                <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
                 <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
               </div>
@@ -345,6 +359,21 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           spellAutomation(spell),
           () => editSpell(spell), () => removeDefinitionItem(definition.id, "spell", spell.id),
           edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
+        ))}
+      </div>
+
+      <div className={styles.group}>
+        <h4>Death effects</h4>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--ui-text-dim)" }}>
+          Fires once, automatically, the moment this creature drops to 0 HP &mdash; no action spent, no target chosen.
+        </p>
+        {deathEffects.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
+        {deathEffects.map((deathEffect) => row(
+          deathEffect.id, deathEffect.name,
+          describeAction(deathEffect.action, definition),
+          deathEffect.automationSupport,
+          () => editDeathEffect(deathEffect), () => removeDefinitionItem(definition.id, "deathEffect", deathEffect.id),
+          edit?.kind === "deathEffect" && edit.id === deathEffect.id, { kind: "deathEffect", id: deathEffect.id }
         ))}
       </div>
 

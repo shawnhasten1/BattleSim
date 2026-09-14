@@ -19,6 +19,7 @@ import type {
   DamageComponent,
   DamageType,
   DamageTypeReference,
+  DeathEffectDefinition,
   EncounterSnapshot,
   FeatureCondition,
   FeatureEffect,
@@ -44,10 +45,15 @@ export interface EngineState {
   rng: RandomSource;
   /** Re-entrancy guard for `runReactionWindow` — a reaction can't open the same window past depth 2. */
   reactionDepth?: number;
+  /** Re-entrancy guard for `resolveDeathEffect` — one death effect's blast can kill another creature and trigger its death effect in turn, up to `MAX_DEATH_EFFECT_DEPTH`. */
+  deathEffectDepth?: number;
 }
 
 /** How deep reaction windows may nest (a counter-counterspell is legal; a third is not). */
 const MAX_REACTION_DEPTH = 2;
+
+/** How deep death-effect chains may cascade (a room of gas spores can chain-explode, but not infinitely). */
+const MAX_DEATH_EFFECT_DEPTH = 10;
 
 export interface AttackResult {
   hit: boolean;
@@ -1244,6 +1250,7 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
   if (combatant.deathSaves.failures >= 3) {
     combatant.state = "dead";
     state.log.push(event(state, "CombatantDied", `${combatant.displayName} died`, { combatantId }));
+    resolveDeathEffect(state, combatantId);
   } else if (combatant.deathSaves.successes >= 3) {
     combatant.deathSaves.stable = true;
     state.log.push(event(state, "CombatantStabilized", `${combatant.displayName} stabilized`, { combatantId }));
@@ -1679,11 +1686,23 @@ function applyHpDamage(target: CombatantState, amount: number): number {
   return amount;
 }
 
-function updateDefeatState(state: EngineState, target: CombatantState, killerId?: Id): void {
+/**
+ * The single choke point for a combatant's `currentHp <= 0` transition —
+ * downs a party member (or defeats outright, per `rules.playerDeathSaves`) or
+ * defeats a monster, exactly once per transition, and fires `resolveDeathEffect`.
+ * Exported so manual HP edits (`updateHp` in the store — dragging a token's HP
+ * to 0 outside of simulated combat) go through the same path as damage applied
+ * during a simulated attack, rather than silently skipping death effects.
+ */
+export function updateDefeatState(state: EngineState, target: CombatantState, killerId?: Id): void {
   if (target.currentHp > 0) {
     return;
   }
   if (target.faction === "party" && state.snapshot.rules.playerDeathSaves) {
+    if (target.state === "downed") {
+      // Already down — further overkill damage doesn't re-trigger the transition.
+      return;
+    }
     target.state = "downed";
     target.deathSaves = { successes: 0, failures: 0, stable: false };
     applyCondition(state, target.id, {
@@ -1694,8 +1713,142 @@ function updateDefeatState(state: EngineState, target: CombatantState, killerId?
     state.log.push(event(state, "CombatantDowned", `${target.displayName} is downed`, { combatantId: target.id, killerId }));
     return;
   }
+  if (target.state === "defeated") {
+    // Already defeated — further overkill damage doesn't re-trigger the transition
+    // (and must not re-fire the death effect below).
+    return;
+  }
   target.state = "defeated";
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
+  resolveDeathEffect(state, target.id, killerId);
+}
+
+/**
+ * Fire every `deathEffects` entry on `deceasedId`'s definition once, automatically —
+ * no action economy is spent (the creature is dead) and no player chooses a target.
+ * Only the `area-save` action shape is automatable without a chosen target; other
+ * shapes log an `AutomationWarning` and are skipped. Guarded by `deathEffectDepth`
+ * so a chain of explosions (one death effect kills a creature with its own) can
+ * cascade without risking infinite recursion.
+ */
+export function resolveDeathEffect(state: EngineState, deceasedId: Id, killerId?: Id): void {
+  const depth = state.deathEffectDepth ?? 0;
+  if (depth >= MAX_DEATH_EFFECT_DEPTH) {
+    state.log.push(event(state, "AutomationWarning", "Death effect chain stopped at max depth", { combatantId: deceasedId }));
+    return;
+  }
+  const deceased = findCombatant(state.snapshot, deceasedId);
+  const definition = getDefinition(state.snapshot, deceased);
+  const deathEffects = definition.deathEffects;
+  if (!deathEffects?.length) {
+    return;
+  }
+  state.deathEffectDepth = depth + 1;
+  try {
+    for (const deathEffect of deathEffects) {
+      resolveOneDeathEffect(state, deceased, definition, deathEffect, killerId);
+    }
+  } finally {
+    state.deathEffectDepth = depth;
+  }
+}
+
+function resolveOneDeathEffect(
+  state: EngineState,
+  deceased: CombatantState,
+  definition: CreatureDefinition,
+  deathEffect: DeathEffectDefinition,
+  killerId: Id | undefined
+): void {
+  const action = deathEffect.action;
+  if (action.kind !== "area-save") {
+    state.log.push(event(state, "AutomationWarning",
+      `${deceased.displayName}'s death effect "${deathEffect.name}" (${action.kind}) has no automatic target and was skipped`,
+      { combatantId: deceased.id, deathEffectId: deathEffect.id, actionKind: action.kind }));
+    return;
+  }
+
+  const footprint = sizeFootprint(definition.size);
+  const origin: Point = {
+    x: Math.floor(deceased.position.x + (footprint - 1) / 2),
+    y: Math.floor(deceased.position.y + (footprint - 1) / 2)
+  };
+
+  const onSuccess = resolveOnSuccess(action);
+  const dc = resolveSaveDc(action, definition);
+  const definitionsById = new Map(state.snapshot.definitions.map((d) => [d.id, d]));
+  const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
+    ? coverBetween(
+      state.snapshot.map,
+      origin,
+      1,
+      target.position,
+      sizeFootprint(getDefinition(state.snapshot, target).size),
+      { blockers: coverBlockersFor(state.snapshot, deceased.id, target.id) }
+    )
+    : null;
+
+  // No aim vector: a death effect has no one choosing where to point a cone/line,
+  // so directional shapes fall back to their authored cardinal `direction` (east by
+  // default) — the same fallback `cellIntersectsArea` already applies when a
+  // template carries no `aimVector`.
+  const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById)
+    .filter((target) => action.affects === "all" || target.faction !== deceased.faction)
+    .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
+
+  const blastRoll = action.damage.length
+    ? rollAreaDamage(state, action.damage, definition)
+    : [];
+
+  const targets = affected.map((target) => {
+    const targetDefinition = getDefinition(state.snapshot, target);
+    const cover = areaCoverFor(target);
+    const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
+    const saveBonus = (targetDefinition.saves?.[action.saveAbility]
+      ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
+      + conditionSaveModifier(target, action.saveAbility);
+    const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
+    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
+      advantage: featureSaveAdvantage.applied
+    });
+    const success = saveRoll.total >= dc;
+    const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+    const damageApplied = dealsDamage && blastRoll.length
+      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", deceased.id)
+      : 0;
+
+    if (!(success && onSuccess === "negates")) {
+      applyActionRiders(state, deceased, target, definition, action.riders, {
+        actionId: deathEffect.id, landed: true, saved: success, saveAbility: action.saveAbility, fallbackDc: dc, origin
+      });
+    }
+
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${action.saveAbility.toUpperCase()} save against ${deathEffect.name}`, {
+      attackerId: deceased.id,
+      targetId: target.id,
+      actionId: deathEffect.id,
+      saveRoll,
+      total: saveRoll.total,
+      dc,
+      featureSaveBonus: featureSaveBonus.total,
+      cover: cover?.level ?? "none",
+      coverSaveBonus,
+      appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
+      success,
+      damageApplied
+    }));
+
+    return { targetId: target.id, success, damageApplied };
+  });
+
+  state.log.push(event(state, "DeathEffectTriggered", `${deceased.displayName}'s ${deathEffect.name} triggers`, {
+    combatantId: deceased.id,
+    deathEffectId: deathEffect.id,
+    killerId,
+    origin,
+    targets
+  }));
 }
 
 function adjustDamage(

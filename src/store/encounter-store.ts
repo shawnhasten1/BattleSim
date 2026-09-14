@@ -24,6 +24,7 @@ import {
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
+  updateDefeatState,
   type BatchSimulationSummary,
   type CombatantExportPackage,
   type CombatLogEvent,
@@ -35,6 +36,7 @@ import {
   type ActionDefinition,
   type CreatureDefinition,
   type DamageType,
+  type DeathEffectDefinition,
   type EncounterSnapshot,
   type FeatureEffect,
   type FeatureDefinition,
@@ -49,6 +51,7 @@ import {
   normalizeWeaponDefinition,
   normalizeSpellDefinition,
   normalizeActionDefinition,
+  normalizeDeathEffectDefinition,
   type ActionRider,
   type CoverLevel,
   type WallSegment
@@ -246,13 +249,17 @@ interface EncounterStore {
   addSpellV2: (definitionId: string, spell: SpellDefinition) => string;
   /** Add a fully-formed action from the guided builder; routed to actions / bonusActions / reactions by `actionType`. Returns its id. */
   addActionV2: (definitionId: string, action: ActionDefinition) => string;
+  /** Add a fully-formed death effect from the guided builder. Returns its id. */
+  addDeathEffectV2: (definitionId: string, deathEffect: DeathEffectDefinition) => string;
   /** Merge a partial patch into one weapon and re-normalize it. One undo step. */
   updateWeapon: (definitionId: string, weaponId: string, patch: Partial<WeaponDefinition>) => void;
   /** Merge a partial patch into one spell and re-normalize it. One undo step. */
   updateSpell: (definitionId: string, spellId: string, patch: Partial<SpellDefinition>) => void;
   /** Merge a partial patch into one action (searched across actions / bonusActions / reactions) and re-normalize it. One undo step. */
   updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
-  removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
+  /** Merge a partial patch into one death effect and re-normalize it. One undo step. */
+  updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
+  removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "deathEffect" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
   duplicateCombatant: (combatantId: string) => void;
   /** Clone whatever combatant is currently selected. Thin wrapper over `duplicateCombatant`. */
@@ -1515,15 +1522,23 @@ export const useEncounterStore = create<EncounterStore>()(
         });
       },
       updateHp: (combatantId, hp) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          combatants: encounter.combatants.map((combatant) => {
-            if (combatant.id !== combatantId) return combatant;
-            const nextState = hp <= 0 ? (combatant.faction === "party" ? "downed" : "defeated") : "active";
-            return { ...combatant, currentHp: Math.max(0, hp), state: nextState };
-          })
-        });
+        const state = get();
+        const engine = createEngineState(state.encounter);
+        engine.log = [...state.log];
+        const combatant = engine.snapshot.combatants.find((candidate) => candidate.id === combatantId);
+        if (!combatant) return;
+        const nextHp = Math.max(0, hp);
+        combatant.currentHp = nextHp;
+        if (nextHp <= 0) {
+          // Same choke point a simulated attack's damage goes through — downs /
+          // defeats at most once per transition and fires any death effect.
+          updateDefeatState(engine, combatant);
+        } else if (combatant.state === "downed" || combatant.state === "defeated") {
+          combatant.state = "active";
+          combatant.deathSaves = { successes: 0, failures: 0, stable: false };
+          combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+        }
+        commitEncounter(engine.snapshot, { log: engine.log });
       },
       updateTactics: (combatantId, tactics) => {
         const encounter = get().encounter;
@@ -2152,6 +2167,22 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         return id;
       },
+      addDeathEffectV2: (definitionId, deathEffect) => {
+        const encounter = get().encounter;
+        const id = `death-effect-${crypto.randomUUID()}`;
+        const normalized = normalizeDeathEffectDefinition({ ...deathEffect, id });
+        normalized.id = id;
+        if (normalized.action) {
+          normalized.action = { ...normalized.action, id: `death-effect-action-${id}` };
+        }
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, deathEffects: [...(candidate.deathEffects ?? []), normalized] }
+            : candidate)
+        });
+        return id;
+      },
       updateWeapon: (definitionId, weaponId, patch) => {
         const encounter = get().encounter;
         let seeded: Record<string, number> | undefined;
@@ -2228,6 +2259,27 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
+      updateDeathEffect: (definitionId, deathEffectId, patch) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            return {
+              ...definition,
+              deathEffects: (definition.deathEffects ?? []).map((deathEffect) => {
+                if (deathEffect.id !== deathEffectId) return deathEffect;
+                const merged = normalizeDeathEffectDefinition({ ...deathEffect, ...patch, id: deathEffect.id });
+                merged.id = deathEffect.id;
+                if (merged.action) {
+                  merged.action = { ...merged.action, id: deathEffect.action?.id ?? `death-effect-action-${deathEffect.id}` };
+                }
+                return merged;
+              })
+            };
+          })
+        });
+      },
       removeDefinitionItem: (definitionId, itemType, itemId) => {
         const encounter = get().encounter;
         commitEncounter({
@@ -2267,6 +2319,7 @@ export const useEncounterStore = create<EncounterStore>()(
               ...definition,
               weapons: itemType === "weapon" || weaponIdsFromAction.size > 0 ? (definition.weapons ?? []).filter((item) => item.id !== itemId && !weaponIdsFromAction.has(item.id)) : definition.weapons,
               spells: itemType === "spell" || spellIdsFromAction.size > 0 ? (definition.spells ?? []).filter((item) => item.id !== itemId && !spellIdsFromAction.has(item.id)) : definition.spells,
+              deathEffects: itemType === "deathEffect" ? (definition.deathEffects ?? []).filter((item) => item.id !== itemId) : definition.deathEffects,
               features: itemType === "feature" ? (definition.features ?? []).filter((item) => item.id !== itemId) : definition.features,
               traits: itemType === "trait" ? (definition.traits ?? []).filter((item) => item.id !== itemId) : definition.traits,
               actions: scrubbedActions,

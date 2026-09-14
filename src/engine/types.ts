@@ -830,6 +830,23 @@ export interface SpellDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/**
+ * A one-time effect that fires automatically when this creature drops to 0 HP
+ * (monster `"defeated"` transition, or a PC's 3rd failed death save). Wraps a
+ * full `ActionDefinition` so it can reuse the same damage/save/area/riders
+ * machinery as a spell — `actionType`/`castingTime`-shaped fields on the
+ * wrapped action are ignored since the trigger is automatic, not spent from
+ * the dying creature's action economy.
+ */
+export interface DeathEffectDefinition {
+  id: Id;
+  name: string;
+  source?: SourceMetadata;
+  description?: string;
+  action: ActionDefinition;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
 export interface FeatureDefinition {
   id: Id;
   name: string;
@@ -893,6 +910,7 @@ export interface CreatureDefinition {
   damageAdjustments?: DamageAdjustment[];
   weapons?: WeaponDefinition[];
   spells?: SpellDefinition[];
+  deathEffects?: DeathEffectDefinition[];
   features?: FeatureDefinition[];
   traits?: FeatureDefinition[];
   actions: ActionDefinition[];
@@ -1069,6 +1087,7 @@ export interface CombatLogEvent {
     | "CombatantDowned"
     | "CombatantDefeated"
     | "CombatantDied"
+    | "DeathEffectTriggered"
     | "CombatantStabilized"
     | "CombatEnded"
     | "AutomationWarning";
@@ -1290,6 +1309,7 @@ export const creatureDefinitionSchema = z.object({
   reactions: z.array(z.any()).optional(),
   weapons: z.array(z.any()).optional(),
   spells: z.array(z.any()).optional(),
+  deathEffects: z.array(z.any()).optional(),
   features: z.array(z.any()).optional(),
   traits: z.array(z.any()).optional()
 }).passthrough() as z.ZodType<CreatureDefinition>;

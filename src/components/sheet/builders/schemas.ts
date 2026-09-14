@@ -9,6 +9,7 @@ import type {
   ActionRider,
   AreaTemplate,
   DamageComponent,
+  DeathEffectDefinition,
   FeatureDefinition,
   FeatureEffect,
   ReactionMeta,
@@ -86,6 +87,15 @@ const SHAPE_OPTIONS = [
 const AREA_OPTIONS = [
   { value: "circle", label: "Circle" }, { value: "cone", label: "Cone" },
   { value: "line", label: "Line" }, { value: "rectangle", label: "Rectangle" }, { value: "square", label: "Square" }
+] as const;
+
+/**
+ * A death effect has no one choosing where to aim it, so directional shapes
+ * (cone / line / rectangle) would always point the same hardcoded way — a
+ * confusing trap. Only origin-symmetric shapes are offered.
+ */
+const DEATH_EFFECT_AREA_OPTIONS = [
+  { value: "circle", label: "Circle" }, { value: "square", label: "Square" }
 ] as const;
 
 const ON_SUCCESS_OPTIONS = [
@@ -332,6 +342,57 @@ export function spellFieldSchema(draft: BuilderDraft): FieldSpec[] {
     { key: "resourceId", copy: "spell.resourceId", control: "text", advanced: true, placeholder: "slot-1" },
     { key: "upcastDamage", copy: "spell.upcastDamage", control: "text", advanced: true, placeholder: "1d6" }
   ];
+}
+
+/* ─── death effect ───────────────────────────────────────────────────────── */
+
+/**
+ * A death effect fires automatically when the creature drops to 0 HP — there is
+ * no caster spending an action, choosing a casting time, or aiming a template.
+ * So unlike `spellFieldSchema` / `actionFieldSchema`, this doesn't spread
+ * `effectShapeSpecs` (which bundles the attack / save / healing shapes and the
+ * point-vs-self / aimed-cone fields that only make sense when someone is
+ * choosing a target): the engine only ever resolves the area-save shape
+ * automatically, centred on the dying creature, so that's the only shape this
+ * builder offers.
+ */
+export function deathEffectFieldSchema(draft: BuilderDraft): FieldSpec[] {
+  return [
+    { key: "name", copy: "name", control: "text" },
+    { key: "areaType", copy: "area.type", control: "select", options: DEATH_EFFECT_AREA_OPTIONS as unknown as FieldSpec["options"] },
+    { key: "areaSize", copy: "area.size", control: "number", min: 5, step: 5 },
+    { key: "saveAbility", copy: "spell.saveAbility", control: "ability" },
+    { key: "saveDc", copy: "spell.saveDc", control: "number", advanced: true },
+    { key: "onSuccess", copy: "spell.onSuccess", control: "select", options: ON_SUCCESS_OPTIONS as unknown as FieldSpec["options"] },
+    { key: "affects", copy: "area.affects", control: "select", advanced: true,
+      options: [{ value: "hostile", label: "Enemies only" }, { value: "all", label: "Everyone in the area" }] },
+    { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle" },
+    { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: (d) => Boolean(d.dealsDamage) },
+    { key: "riders", copy: "spell.riders", control: "riders", riderContext: "save" },
+    { key: "description", copy: "deathEffect.description", control: "text", advanced: true }
+  ];
+}
+
+export function deathEffectDraftFromDefinition(deathEffect: DeathEffectDefinition): BuilderDraft {
+  return {
+    ...effectDraftFromAction(deathEffect.action),
+    name: deathEffect.name,
+    description: deathEffect.description ?? "",
+    shape: "area"
+  };
+}
+
+/** Build a `DeathEffectDefinition` from a draft. Always area-save shaped, self-origin, no range (there is no one to aim it). */
+export function deathEffectFromDraft(draft: BuilderDraft): DeathEffectDefinition {
+  const action = actionFromEffectDraft({ ...draft, shape: "area", range: "0", areaOrigin: "self" });
+  const description = String(draft.description ?? "").trim();
+  return {
+    id: "",
+    name: (draft.name as string) || "Death Effect",
+    description: description || undefined,
+    action,
+    automationSupport: "full"
+  };
 }
 
 /* ─── innate action ──────────────────────────────────────────────────────── */
@@ -741,7 +802,7 @@ export function featureFromDraft(draft: BuilderDraft): FeatureDefinition {
 
 /* ─── preset skeletons ───────────────────────────────────────────────────── */
 
-export type BuilderKind = "weapon" | "spell" | "action" | "feature";
+export type BuilderKind = "weapon" | "spell" | "deathEffect" | "action" | "feature";
 
 export interface PresetSkeleton {
   kind: BuilderKind;
@@ -758,6 +819,28 @@ export const PRESETS: PresetSkeleton[] = [
   { kind: "spell", label: "Area blast", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 3, castingTime: "action", range: 150, automationSupport: "full", action: { kind: "area-save", id: "", name: "New Spell", actionType: "action", saveAbility: "dex", range: 150, area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 150 }, damage: [{ dice: "8d6", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", automationSupport: "full" } }) } },
   { kind: "spell", label: "Healing", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: "touch", automationSupport: "full", action: { kind: "healing", id: "", name: "New Spell", actionType: "action", range: 5, healing: [{ dice: "1d8", abilityModifier: "wis" }], targeting: { target: "single" }, automationSupport: "full" } }) } },
   { kind: "spell", label: "Reaction spell (Shield / Rebuke)", draft: { ...spellDraftFromDefinition({ id: "", name: "New Reaction", level: 1, castingTime: "reaction", range: 60, automationSupport: "full", action: { kind: "save", id: "", name: "New Reaction", actionType: "reaction", saveAbility: "dex", range: 60, damage: [{ dice: "2d10", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", reaction: { trigger: { kind: "hit-by-attack" }, target: "trigger-source", priority: "worthwhile" }, automationSupport: "full" } }) } },
+  {
+    kind: "deathEffect", label: "Death explosion (Gas Spore-style)",
+    draft: deathEffectDraftFromDefinition({
+      id: "", name: "Death Burst",
+      description: "When this creature dies, it explodes.",
+      action: {
+        kind: "area-save", id: "", name: "Death Burst", actionType: "action",
+        saveAbility: "con", dc: 8, range: 0,
+        area: { type: "circle", size: 10 },
+        targeting: { origin: "self", range: 0 },
+        damage: [{ dice: "3d6", damageType: "poison" }],
+        halfDamageOnSuccess: false, onSuccess: "negates", affects: "all",
+        riders: [{
+          kind: "condition", when: "on-save-fail", condition: "poisoned",
+          duration: { kind: "rounds", rounds: 10 },
+          save: { ability: "con", onSuccess: "negates" }
+        }],
+        automationSupport: "full"
+      },
+      automationSupport: "full"
+    })
+  },
   {
     kind: "feature", label: "Rage",
     draft: {

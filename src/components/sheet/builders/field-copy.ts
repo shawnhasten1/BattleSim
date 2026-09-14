@@ -67,6 +67,9 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "spell.reactionTarget": { label: "Reaction acts on" },
   "spell.reactionPriority": { label: "AI eagerness", hint: "How readily the simulator spends the reaction on this" },
 
+  // death effect
+  "deathEffect.description": { label: "Reference text", hint: "Flavor text — not used by the simulator" },
+
   // feature
   "feature.category": { label: "Kind" },
   "feature.shape": { label: "What it does" },

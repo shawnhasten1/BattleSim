@@ -293,6 +293,71 @@ describe("store — duplicateCombatant", () => {
   });
 });
 
+describe("store — updateHp", () => {
+  function giveGoblinADeathEffect() {
+    const encounter = useEncounterStore.getState().encounter;
+    useEncounterStore.setState({
+      encounter: {
+        ...encounter,
+        definitions: encounter.definitions.map((definition) => definition.id === "def-goblin"
+          ? {
+            ...definition,
+            deathEffects: [{
+              id: "spore-burst",
+              name: "Spore Burst",
+              action: {
+                kind: "area-save", id: "spore-burst", name: "Spore Burst", actionType: "action",
+                saveAbility: "con", dc: 100, range: 0,
+                area: { type: "circle", size: 10 },
+                targeting: { origin: "self", range: 0 },
+                damage: [{ dice: "1", damageType: "poison" }],
+                halfDamageOnSuccess: false, onSuccess: "none", affects: "all",
+                automationSupport: "full"
+              },
+              automationSupport: "full"
+            }]
+          }
+          : definition)
+      }
+    });
+  }
+
+  // A manual HP edit (dragging a token's HP to 0 outside simulated combat) has
+  // to go through the same defeat-state transition a simulated attack does, or
+  // a creature's death effect silently never fires when played live.
+  it("fires a death effect when a manual edit drops a combatant's HP to 0", () => {
+    giveGoblinADeathEffect();
+
+    useEncounterStore.getState().updateHp("enemy-goblin-1", 0);
+
+    const state = useEncounterStore.getState();
+    expect(state.encounter.combatants.find((c) => c.id === "enemy-goblin-1")?.state).toBe("defeated");
+    expect(state.log.some((entry) => entry.type === "DeathEffectTriggered" && entry.data?.combatantId === "enemy-goblin-1")).toBe(true);
+  });
+
+  it("does not re-fire the death effect for a combatant that is already defeated", () => {
+    giveGoblinADeathEffect();
+
+    useEncounterStore.getState().updateHp("enemy-goblin-1", 0);
+    useEncounterStore.getState().updateHp("enemy-goblin-1", 0);
+
+    const triggered = useEncounterStore.getState().log.filter(
+      (entry) => entry.type === "DeathEffectTriggered" && entry.data?.combatantId === "enemy-goblin-1"
+    );
+    expect(triggered).toHaveLength(1);
+  });
+
+  it("still downs (not defeats) a party member at 0 HP, and revives on a positive edit", () => {
+    useEncounterStore.getState().updateHp("pc-fighter", 0);
+    expect(useEncounterStore.getState().encounter.combatants.find((c) => c.id === "pc-fighter")?.state).toBe("downed");
+
+    useEncounterStore.getState().updateHp("pc-fighter", 10);
+    const fighter = useEncounterStore.getState().encounter.combatants.find((c) => c.id === "pc-fighter");
+    expect(fighter?.state).toBe("active");
+    expect(fighter?.conditions?.some((c) => c.name === "unconscious")).toBe(false);
+  });
+});
+
 const posOf = (id: string) =>
   useEncounterStore.getState().encounter.combatants.find((c) => c.id === id)?.position;
 

@@ -821,6 +821,47 @@ describe("combat engine", () => {
     expect(result.successes + result.failures).toBeGreaterThanOrEqual(1);
   });
 
+  it("fires a death effect when a player character dies from a third failed death save", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter");
+    if (fighter) {
+      fighter.currentHp = 0;
+      fighter.state = "downed";
+      fighter.deathSaves = { successes: 0, failures: 1, stable: false };
+    }
+    const fighterDefinition = encounter.definitions.find((definition) => definition.id === "def-fighter");
+    if (fighterDefinition) {
+      fighterDefinition.deathEffects = [{
+        id: "last-stand",
+        name: "Last Stand",
+        action: {
+          kind: "area-save",
+          id: "last-stand",
+          name: "Last Stand",
+          actionType: "action",
+          saveAbility: "con",
+          dc: 10,
+          range: 0,
+          area: { type: "circle", size: 10 },
+          targeting: { origin: "self", range: 0 },
+          damage: [{ dice: "20", damageType: "radiant" }],
+          halfDamageOnSuccess: false,
+          onSuccess: "none",
+          affects: "hostile",
+          automationSupport: "full"
+        },
+        automationSupport: "full"
+      }];
+    }
+
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1] }); // natural 1 on the death save: +2 failures -> 3 total, dies
+    const result = resolveDeathSave(state, "pc-fighter");
+
+    expect(result.died).toBe(true);
+    expect(state.log.some((entry) => entry.type === "DeathEffectTriggered" && entry.data?.combatantId === "pc-fighter")).toBe(true);
+  });
+
   // A 100-encounter CPU stress test — needs headroom over the 5s default when the
   // whole suite is spawning workers in parallel (runs in ~2.5s on its own).
   it("runs 100 headless simulations and reports aggregate outcomes", () => {
@@ -1717,5 +1758,121 @@ describe("combat engine", () => {
     expect(state.log.find((entry) => entry.type === "ConcentrationChecked")?.data?.roll).toMatchObject({
       expression: "1d20-1"
     });
+  });
+
+  it("triggers a chain of death effects when one explosion kills another creature with its own", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.map.walls = [];
+
+    const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter");
+    if (fighter) fighter.position = { x: 7, y: 2 };
+    const goblin1 = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+    if (goblin1) goblin1.position = { x: 8, y: 2 };
+    const goblin2 = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-2");
+    if (goblin2) goblin2.position = { x: 8, y: 3 };
+
+    const fighterAction = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
+    if (fighterAction?.kind === "attack") {
+      fighterAction.attackBonus = 100;
+      fighterAction.damage = [{ dice: "20", damageType: "slashing" }];
+    }
+
+    const goblinDefinition = encounter.definitions.find((definition) => definition.id === "def-goblin");
+    if (goblinDefinition) {
+      goblinDefinition.deathEffects = [{
+        id: "spore-burst",
+        name: "Spore Burst",
+        action: {
+          kind: "area-save",
+          id: "spore-burst",
+          name: "Spore Burst",
+          actionType: "action",
+          saveAbility: "con",
+          dc: 100,
+          range: 0,
+          area: { type: "circle", size: 10 },
+          targeting: { origin: "self", range: 0 },
+          damage: [{ dice: "20", damageType: "poison" }],
+          halfDamageOnSuccess: false,
+          onSuccess: "none",
+          affects: "all",
+          automationSupport: "full"
+        },
+        automationSupport: "full"
+      }];
+    }
+
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [20] });
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+
+    const finalGoblin1 = state.snapshot.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+    const finalGoblin2 = state.snapshot.combatants.find((combatant) => combatant.id === "enemy-goblin-2");
+    expect(finalGoblin1?.state).toBe("defeated");
+    expect(finalGoblin2?.state).toBe("defeated");
+
+    // Goblin 2's own (nested) trigger logs before goblin 1's outer summary —
+    // the recursive call happens mid-loop, before goblin 1's own event is
+    // pushed — so assert membership rather than order.
+    const triggered = state.log.filter((entry) => entry.type === "DeathEffectTriggered");
+    expect(triggered).toHaveLength(2);
+    expect(triggered.map((entry) => entry.data?.combatantId).sort()).toEqual(["enemy-goblin-1", "enemy-goblin-2"]);
+  });
+
+  it("does not re-fire a death effect for overkill damage applied after a creature is already defeated", () => {
+    const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+    encounter.map.walls = [];
+
+    const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter");
+    if (fighter) fighter.position = { x: 7, y: 2 };
+    const goblin1 = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+    if (goblin1) {
+      goblin1.position = { x: 8, y: 2 };
+      goblin1.currentHp = 1;
+    }
+
+    const goblinDefinition = encounter.definitions.find((definition) => definition.id === "def-goblin");
+    if (goblinDefinition) {
+      goblinDefinition.deathEffects = [{
+        id: "spore-burst",
+        name: "Spore Burst",
+        action: {
+          kind: "area-save",
+          id: "spore-burst",
+          name: "Spore Burst",
+          actionType: "action",
+          saveAbility: "con",
+          dc: 100,
+          range: 0,
+          area: { type: "circle", size: 5 },
+          targeting: { origin: "self", range: 0 },
+          damage: [{ dice: "20", damageType: "poison" }],
+          halfDamageOnSuccess: false,
+          onSuccess: "none",
+          affects: "all",
+          automationSupport: "full"
+        },
+        automationSupport: "full"
+      }];
+    }
+
+    const state = createEngineState(encounter);
+    // The base hit drops the goblin to 0 (one `updateDefeatState` call), then a
+    // separate on-hit damage rider applies overkill damage — a *second*
+    // `updateDefeatState` call on the same already-defeated target — which must
+    // not re-fire the death effect or re-log CombatantDefeated.
+    const fighterAction = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
+    if (fighterAction?.kind === "attack") {
+      fighterAction.attackBonus = 100;
+      fighterAction.damage = [{ dice: "20", damageType: "slashing" }];
+      fighterAction.riders = [{ kind: "damage", when: "on-hit", components: [{ dice: "20", damageType: "fire" }] }];
+    }
+    state.rng = scriptedRng({ 20: [20] });
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+
+    const triggered = state.log.filter((entry) => entry.type === "DeathEffectTriggered");
+    expect(triggered).toHaveLength(1);
+    const defeatedEvents = state.log.filter((entry) => entry.type === "CombatantDefeated" && entry.data?.combatantId === "enemy-goblin-1");
+    expect(defeatedEvents).toHaveLength(1);
   });
 });

@@ -4,6 +4,9 @@ import { visibleSpecs, type BuilderDraft } from "@/components/sheet/builders/fie
 import {
   actionFieldSchema,
   actionFromEffectDraft,
+  deathEffectDraftFromDefinition,
+  deathEffectFieldSchema,
+  deathEffectFromDraft,
   effectDraftFromAction,
   featureDraftFromDefinition,
   featureFieldSchema,
@@ -293,6 +296,62 @@ describe("every rendered field resolves a label", () => {
         expect(FIELD_COPY[spec.copy], `missing FIELD_COPY["${spec.copy}"]`).toBeDefined();
       }
     }
+    for (const spec of deathEffectFieldSchema({ name: "x", areaType: "circle", dealsDamage: true })) {
+      expect(FIELD_COPY[spec.copy], `missing FIELD_COPY["${spec.copy}"]`).toBeDefined();
+    }
+  });
+});
+
+describe("death effect builder", () => {
+  it("only offers origin-symmetric area shapes (no directional aim exists for an automatic trigger)", () => {
+    const draft = { name: "x", areaType: "circle" };
+    const options = deathEffectFieldSchema(draft).find((spec) => spec.key === "areaType")?.options ?? [];
+    expect(options.map((option) => option.value)).toEqual(["circle", "square"]);
+  });
+
+  it("never shows a shape picker, timing, or aim fields — the trigger is always an automatic self-origin area save", () => {
+    const draft = { name: "x", areaType: "circle" };
+    const keys = deathEffectFieldSchema(draft).map((spec) => spec.key);
+    expect(keys).not.toContain("shape");
+    expect(keys).not.toContain("timing");
+    expect(keys).not.toContain("areaAimed");
+    expect(keys).not.toContain("areaOrigin");
+    expect(keys).toContain("areaType");
+    expect(keys).toContain("saveAbility");
+    expect(keys).toContain("riders");
+  });
+
+  it("a gas-spore-style death effect (damage + condition) round-trips", () => {
+    const source = {
+      id: "d", name: "Death Burst", description: "It pops.",
+      action: {
+        kind: "area-save" as const, id: "a", name: "Death Burst", actionType: "action" as const,
+        saveAbility: "con" as const, dc: 8, range: 0,
+        area: { type: "circle" as const, size: 10 },
+        targeting: { origin: "self" as const, range: 0 },
+        damage: [{ dice: "3d6", damageType: "poison" as const }],
+        halfDamageOnSuccess: false, onSuccess: "negates" as const, affects: "all" as const,
+        riders: [{ kind: "condition" as const, when: "on-save-fail" as const, condition: "poisoned" as const, duration: { kind: "rounds" as const, rounds: 10 } }],
+        automationSupport: "full" as const
+      },
+      automationSupport: "full" as const
+    };
+    const back = deathEffectFromDraft(deathEffectDraftFromDefinition(source));
+    expect(back.name).toBe("Death Burst");
+    expect(back.description).toBe("It pops.");
+    if (back.action.kind !== "area-save") throw new Error("expected area-save");
+    expect(back.action.area).toEqual({ type: "circle", size: 10 });
+    expect(back.action.saveAbility).toBe("con");
+    expect(back.action.affects).toBe("all");
+    expect(back.action.damage[0]?.dice).toBe("3d6");
+    expect(back.action.riders?.[0]?.kind).toBe("condition");
+  });
+
+  it("compiles with no range (there is no one to aim it) and a self origin", () => {
+    const deathEffect = deathEffectFromDraft({ name: "Burst", areaType: "circle", areaSize: 15, saveAbility: "con", dealsDamage: true, dmg: { count: 2, die: 6, mod: 0, type: "poison" } });
+    if (deathEffect.action.kind !== "area-save") throw new Error("expected area-save");
+    expect(deathEffect.action.range).toBe(0);
+    expect(deathEffect.action.targeting?.origin).toBe("self");
   });
 });
 
