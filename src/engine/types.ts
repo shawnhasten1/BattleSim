@@ -619,7 +619,77 @@ export interface AreaSaveActionDefinition {
   concentration?: boolean;
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /** Leaves a standing `ActiveZone` on the board instead of (or alongside) resolving once at cast time — see `ZonePersistence`. */
+  zone?: ZonePersistence;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
+/** When during a bearer's presence in a zone it re-triggers the zone's damage/save/riders. */
+export type ZoneTrigger = "on-enter" | "start-of-turn-in-zone" | "end-of-turn-in-zone";
+
+/**
+ * How long a persistent zone lasts. A narrower vocabulary than `RiderDuration`
+ * — a zone has no bearer to roll a repeat save, so `save-ends` /
+ * `until-start-of-next-turn` don't apply; it only ever ticks at the global
+ * round boundary or tears down with the caster's concentration.
+ */
+export type ZoneDuration =
+  | { kind: "rounds"; rounds: number }
+  | { kind: "concentration" }
+  | { kind: "permanent" };
+
+/**
+ * A standing area a spell leaves on the map instead of (or alongside)
+ * resolving once at cast time — Insect Plague, Cloudkill, Web. Authored on
+ * `AreaSaveActionDefinition.zone` (or `SpellDefinition.zone`, stamped onto the
+ * action by `stampSpellContext` the same way `concentration` is); resolved
+ * into a runtime `ActiveZone` by `resolveAreaSaveAction`. The zone reuses the
+ * action's own `damage` / `saveAbility` / `dc` / `riders` / `affects` /
+ * `restrictToCreatureTypes` for each trigger firing — no separate effect
+ * authoring. MVP scope: `anchor: "fixed"` only (stays at the cast origin);
+ * caster-following auras and caster-directed drift are a later phase.
+ */
+export interface ZonePersistence {
+  duration: ZoneDuration;
+  trigger: ZoneTrigger[];
+  anchor: "fixed";
+  /**
+   * Also resolve the action's normal area-save burst at cast time, in
+   * addition to creating the zone. Default `false` — most persistent zones
+   * (Insect Plague, Web) don't damage anyone the instant they're cast.
+   */
+  applyOnCast?: boolean;
+  color?: string;
+}
+
+/**
+ * A live persistent-area instance on the board, created by casting a spell
+ * whose compiled action carries `zone`. Lives on `EncounterSnapshot.activeZones`
+ * — mutated by the engine (`combat.ts`) and folded forward by the replay
+ * reducer (`ZoneCreated` / `ZoneExpired` log events) the same way conditions are.
+ */
+export interface ActiveZone {
+  id: Id;
+  name: string;
+  sourceCombatantId: Id;
+  sourceActionId: Id;
+  origin: Point;
+  area: AreaTemplate;
+  affects: "hostile" | "all";
+  trigger: ZoneTrigger[];
+  saveAbility?: Ability;
+  /** Resolved to a concrete number at creation — a spell's DC doesn't change round to round. */
+  dc?: number;
+  damage?: DamageComponent[];
+  onSuccess?: "half" | "none" | "negates";
+  riders?: ActionRider[];
+  concentration: boolean;
+  /** Absolute round this zone expires at (checked at the round boundary). Absent for concentration/permanent zones. */
+  expiresAtRound?: number;
+  createdRound: number;
+  /** Last round each combatant was hit by this zone, keyed by combatant id — dedupes on-enter + start-of-turn firing twice in the same round. */
+  appliedRounds?: Record<Id, number>;
+  color?: string;
 }
 
 export interface HealingActionDefinition {
@@ -825,6 +895,8 @@ export interface SpellDefinition {
   components?: { v?: boolean; s?: boolean; m?: string };
   resourceCost?: ResourceCost;
   upcast?: SpellUpcast;
+  /** Authoring convenience for an `area-save` action's `zone` — stamped onto the compiled action by `stampSpellContext`, same as `concentration`. */
+  zone?: ZonePersistence;
   action?: ActionDefinition;
   description?: string;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
@@ -1053,6 +1125,8 @@ export interface EncounterSnapshot {
   rules: RuleProfile;
   definitions: CreatureDefinition[];
   combatants: CombatantState[];
+  /** Standing persistent-area effects currently on the board. See `ActiveZone`. */
+  activeZones?: ActiveZone[];
 }
 
 export interface CombatLogEvent {
@@ -1074,6 +1148,8 @@ export interface CombatLogEvent {
     | "ConcentrationChecked"
     | "ConditionApplied"
     | "ConditionExpired"
+    | "ZoneCreated"
+    | "ZoneExpired"
     | "FeatureEffectApplied"
     | "RiderApplied"
     | "BeamsResolved"
@@ -1444,6 +1520,7 @@ export const encounterSnapshotSchema = z.object({
     coverFromCreatures: z.boolean().optional()
   }),
   definitions: z.array(z.any()),
+  activeZones: z.array(z.any()).optional(),
   combatants: z.array(
     z.object({
       id: z.string(),

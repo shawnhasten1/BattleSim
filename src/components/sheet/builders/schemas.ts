@@ -15,7 +15,9 @@ import type {
   ReactionMeta,
   ReactionTrigger,
   SpellDefinition,
-  WeaponDefinition
+  WeaponDefinition,
+  ZonePersistence,
+  ZoneTrigger
 } from "@/engine";
 import type { BuilderDraft, FieldSpec } from "./field-spec";
 
@@ -306,6 +308,15 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "areaAimed", copy: "area.aimedFromSelf", control: "toggle", visibleWhen: () => shape === "area" && (areaType === "cone" || areaType === "line" || areaType === "rectangle") },
     { key: "affects", copy: "area.affects", control: "select", advanced: true, options: [{ value: "hostile", label: "Enemies only" }, { value: "all", label: "Everyone in the area" }], visibleWhen: () => shape === "area" },
 
+    { key: "zoneEnabled", copy: "zone.enabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" },
+    { key: "zoneDurationKind", copy: "zone.durationKind", control: "select", advanced: true,
+      options: [{ value: "rounds", label: "A number of rounds" }, { value: "concentration", label: "As long as concentrating" }, { value: "permanent", label: "Until dismissed" }],
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneDurationRounds", copy: "zone.durationRounds", control: "number", advanced: true, min: 1, step: 1,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneDurationKind ?? "rounds") === "rounds" },
+    { key: "zoneApplyOnCast", copy: "zone.applyOnCast", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneTriggerEnd", copy: "zone.triggerEnd", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+
     { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
 
@@ -483,7 +494,12 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         areaWidth: action.area.width ?? 5,
         areaOrigin: action.targeting?.origin ?? "point",
         areaAimed: Boolean(action.targeting?.aimedFromSelf),
-        affects: action.affects === "all" ? "all" : undefined
+        affects: action.affects === "all" ? "all" : undefined,
+        zoneEnabled: Boolean(action.zone),
+        zoneDurationKind: action.zone?.duration.kind ?? "rounds",
+        zoneDurationRounds: action.zone?.duration.kind === "rounds" ? action.zone.duration.rounds : 10,
+        zoneApplyOnCast: Boolean(action.zone?.applyOnCast),
+        zoneTriggerEnd: Boolean(action.zone?.trigger.includes("end-of-turn-in-zone"))
       }
       : {};
     return {
@@ -509,6 +525,24 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     };
   }
   return { ...base, range: "60" };
+}
+
+/** MVP scope: fixed-origin only, "on-enter" + "start-of-turn-in-zone" always on, "end-of-turn-in-zone" opt-in. See `ZonePersistence`. */
+function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
+  const trigger: ZoneTrigger[] = ["on-enter", "start-of-turn-in-zone"];
+  if (draft.zoneTriggerEnd) {
+    trigger.push("end-of-turn-in-zone");
+  }
+  const durationKind = (draft.zoneDurationKind as ZonePersistence["duration"]["kind"]) ?? "rounds";
+  const duration: ZonePersistence["duration"] = durationKind === "rounds"
+    ? { kind: "rounds", rounds: Math.max(1, Number(draft.zoneDurationRounds) || 10) }
+    : { kind: durationKind };
+  return {
+    duration,
+    trigger,
+    anchor: "fixed",
+    applyOnCast: draft.zoneApplyOnCast ? true : undefined
+  };
 }
 
 type BuildableAction = Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" }>;
@@ -570,6 +604,7 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       affects: draft.affects === "all" ? "all" : "hostile",
       riders: riders.length ? riders : undefined,
       concentration: draft.concentration ? true : undefined,
+      zone: draft.zoneEnabled ? zoneFromDraft(draft) : undefined,
       automationSupport: "full"
     };
   }

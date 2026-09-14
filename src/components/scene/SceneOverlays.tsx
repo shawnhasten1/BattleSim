@@ -1,6 +1,6 @@
 "use client";
 
-import { cellsInArea, lineOfEffect, wallCover, type BattleMapState } from "@/engine";
+import { cellsInArea, lineOfEffect, wallCover, type ActiveZone, type BattleMapState } from "@/engine";
 import { pointsMatch } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
@@ -15,6 +15,10 @@ interface SceneOverlaysProps {
   replaying?: boolean;
   /** Transient AoE-shape flashes from `useSceneFeedback` (replay / Step playback). */
   areaFlashes?: ActiveAreaFlash[];
+  /** Standing persistent-area effects (Insect Plague, Web, ...) — from the replay-aware display encounter, not the live map. */
+  activeZones?: ActiveZone[];
+  /** Current round of the display encounter, for a zone's remaining-duration label. */
+  round?: number;
 }
 
 /**
@@ -23,7 +27,7 @@ interface SceneOverlaysProps {
  * preview/cursor/nodes, the nearest-enemy line-of-effect line, and the sight /
  * measure gizmos. Ported verbatim from the old inline canvas markup.
  */
-export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [] }: SceneOverlaysProps) {
+export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0 }: SceneOverlaysProps) {
   const {
     tool,
     pendingWallStart,
@@ -78,6 +82,24 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
             setSelectedTemplateId(null);
           }}
         />
+      ))}
+      {activeZones.map((zone) => (
+        <g key={zone.id} className="active-zone">
+          {cellsInArea(map, zone.origin, zone.area).map((cell) => (
+            <rect
+              key={`${zone.id}-${cell.x}-${cell.y}`}
+              x={cell.x}
+              y={cell.y}
+              width="1"
+              height="1"
+              className="zone-cell"
+              style={{ fill: zone.color ?? undefined, stroke: zone.color ?? undefined }}
+            />
+          ))}
+          <text x={zone.origin.x + 0.5} y={zone.origin.y + 0.5} className="zone-label">
+            {zone.concentration ? "Concentration" : zone.expiresAtRound != null ? `${Math.max(0, zone.expiresAtRound - round)} rd` : ""}
+          </text>
+        </g>
       ))}
       {areaFlashes.map((flash) => (
         <g key={flash.id} className={`area-flash ${flash.damageType ? `dmg-${flash.damageType}` : "dmg-generic"}`}>

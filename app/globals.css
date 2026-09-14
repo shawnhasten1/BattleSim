@@ -784,3 +784,43 @@ img {
     100% { opacity: 0; }
   }
 }
+
+/* ============================================================
+ * Standing persistent-area zones (Insect Plague, Web, ...) — unlike the
+ * one-shot area-flash above, these stay on the board for the zone's whole
+ * duration. Distinguished with a dashed border and a slow pulse.
+ * ============================================================ */
+
+.active-zone {
+  pointer-events: none;
+}
+
+.zone-cell {
+  fill: rgba(130, 90, 180, 0.26);
+  stroke: rgba(130, 90, 180, 0.7);
+  stroke-width: 0.03;
+  stroke-dasharray: 0.08 0.06;
+  animation: zone-pulse 2400ms ease-in-out infinite;
+}
+
+@keyframes zone-pulse {
+  0%, 100% { fill-opacity: 0.8; }
+  50% { fill-opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zone-cell {
+    animation: none;
+  }
+}
+
+.zone-label {
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 0.1;
+  fill: #5a3d80;
+  font-size: 0.28px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}

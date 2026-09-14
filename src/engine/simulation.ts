@@ -2,6 +2,7 @@ import {
   activeFactions,
   admitReinforcements,
   applyTimedFeatureEffects,
+  applyZoneTriggers,
   canAct,
   createEngineState,
   dashFactor,
@@ -28,9 +29,10 @@ import {
   resolveUtilityAction,
   runRepeatedSaves,
   spellSlotLevel,
+  tickZones,
   type EngineState
 } from "./combat";
-import { combatantsInArea } from "./areas";
+import { cellIntersectsArea, combatantsInArea } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
 import type { ActionDefinition, ActionRider, ActorTag, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
@@ -98,6 +100,8 @@ interface TacticsSettings {
   reactionRiskWeight: number;
   /** How hard a ranged actor works to keep cover between itself and its threats. Melee: 0. */
   coverWeight: number;
+  /** How strongly this profile avoids standing in an enemy-sourced damaging `ActiveZone`. */
+  hazardWeight: number;
   /** How much a `condition` rider's expected control value is worth. Controllers: high; brutes: near zero. */
   controlWeight: number;
   /** How strongly this profile chases a `high-priority`-tagged target / avoids a `low-priority` one. */
@@ -169,6 +173,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
     if (nextIndex === 0) {
       state.snapshot.round += 1;
       admitReinforcements(state);
+      tickZones(state);
     }
     for (let index = nextIndex; index < state.snapshot.combatants.length; index += 1) {
       state.snapshot.turnIndex = index;
@@ -190,6 +195,16 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       expireConditions(state, "start");
       applyTimedFeatureEffects(state, actor.id, "turn-start");
       runRepeatedSaves(state, actor.id, "turn-start");
+      applyZoneTriggers(state, actor.id, "turn-start");
+      // A zone can down/kill an actor before its turn body runs (Insect Plague
+      // on a low-HP combatant) — bail out the same way the pre-turn state check
+      // above does, rather than letting `takeAutomatedTurn` act on a corpse.
+      if (actor.state !== "active") {
+        if (activeFactions(state.snapshot).size <= 1) {
+          break;
+        }
+        continue;
+      }
       state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`, { combatantId: actor.id }));
       // A resolver throw from an AI mispick must not abort the whole run (and,
       // through it, an entire batch) — contain it to a lost turn + a warning.
@@ -208,6 +223,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       }
       applyTimedFeatureEffects(state, actor.id, "turn-end");
       runRepeatedSaves(state, actor.id, "turn-end");
+      applyZoneTriggers(state, actor.id, "turn-end");
       expireConditions(state, "end");
     }
     nextIndex = 0;
@@ -720,6 +736,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 2,
         coverWeight: 3,
+        hazardWeight: 2.5,
         controlWeight: 6,
         priorityWeight: 1,
         reposition: true
@@ -736,6 +753,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 4,
         coverWeight: 4,
+        hazardWeight: 3,
         controlWeight: 6,
         priorityWeight: 1,
         reposition: true
@@ -752,6 +770,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 1,
         coverWeight: 0,
+        hazardWeight: 1,
         controlWeight: 2,
         priorityWeight: 2.5,
         reposition: false
@@ -768,6 +787,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 22,
         reactionRiskWeight: 3,
         coverWeight: 0,
+        hazardWeight: 1.5,
         controlWeight: 14,
         priorityWeight: 0.6,
         reposition: false
@@ -784,6 +804,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 8,
         reactionRiskWeight: 3,
         coverWeight: 2.5,
+        hazardWeight: 2,
         controlWeight: 26,
         priorityWeight: 0.8,
         reposition: true
@@ -801,6 +822,7 @@ function tacticsSettings(profile: TacticsProfile): TacticsSettings {
         protectWeight: 0,
         reactionRiskWeight: 2,
         coverWeight: 0,
+        hazardWeight: 1.5,
         controlWeight: 4,
         priorityWeight: 1.2,
         reposition: false
@@ -1216,6 +1238,26 @@ function coverFromHostilesAt(snapshot: EncounterSnapshot, actor: CombatantState,
   return sum / hostiles.length;
 }
 
+/** Sum of enemy-sourced damaging/rider `ActiveZone`s covering `cell`, from `actor`'s perspective (an ally's own zone is never a hazard to them). */
+function hazardAtCell(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point): number {
+  const zones = snapshot.activeZones;
+  if (!zones?.length) {
+    return 0;
+  }
+  let hazard = 0;
+  for (const zone of zones) {
+    if (!zone.damage?.length && !zone.riders?.length) {
+      continue;
+    }
+    const source = snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId);
+    const harmsActor = !(zone.affects === "hostile" && source?.faction === actor.faction);
+    if (harmsActor && cellIntersectsArea(cell, zone.origin, zone.area, snapshot.map.grid.distancePerSquare)) {
+      hazard += 1;
+    }
+  }
+  return hazard;
+}
+
 function movementPlanForCell(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
@@ -1234,14 +1276,16 @@ function movementPlanForCell(
   // A flat bump for being in *any* cover clears the reposition hysteresis; the
   // scaled term then rewards stronger cover.
   const coverScore = coverBonus > 0 ? coverBonus * tactics.coverWeight + 4 : 0;
+  const hazardPenalty = tactics.hazardWeight > 0 ? hazardAtCell(snapshot, actor, cell) * tactics.hazardWeight * 10 : 0;
   const score = tactics.preferred === "melee"
-    ? -targetDistance * 2 - cost - threats * tactics.reactionRiskWeight * 10
+    ? -targetDistance * 2 - cost - threats * tactics.reactionRiskWeight * 10 - hazardPenalty
     : distanceBandScore(targetDistance, tactics)
       + Math.min(nearestHostile, tactics.preferredMinDistance) / 4
       - cost * 0.75
       - threats * tactics.reactionRiskWeight * 10
       - (targetDistance > range ? 30 : 0)
-      + coverScore;
+      + coverScore
+      - hazardPenalty;
   return { cell, pathCost: cost, targetDistance, score, opportunityThreats: threats, coverBonus };
 }
 

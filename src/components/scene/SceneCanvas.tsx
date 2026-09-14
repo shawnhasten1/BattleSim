@@ -379,6 +379,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           gridPixelHeight={metrics.gridPixelHeight}
           replaying={replaying}
           areaFlashes={areaFlashes}
+          activeZones={encounter.activeZones}
+          round={encounter.round}
         />
         {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals }) => {
           const tokenImage = visuals.imageUrl;

@@ -24,9 +24,11 @@ import {
   runBatchSimulations,
   runAutomatedEncounter,
   sampleEncounter,
-  takeAutomatedTurn
+  takeAutomatedTurn,
+  applyZoneTriggers,
+  tickZones
 } from "@/engine";
-import type { EncounterSnapshot, RandomSource } from "@/engine";
+import type { EncounterSnapshot, RandomSource, ZonePersistence } from "@/engine";
 
 function scriptedRng(valuesBySides: Record<number, number[]>): RandomSource {
   const indexes: Record<number, number> = {};
@@ -1917,5 +1919,142 @@ describe("combat engine", () => {
     expect(triggered).toHaveLength(1);
     const defeatedEvents = state.log.filter((entry) => entry.type === "CombatantDefeated" && entry.data?.combatantId === "enemy-goblin-1");
     expect(defeatedEvents).toHaveLength(1);
+  });
+
+  describe("persistent zones", () => {
+    function zoneSpellEncounter(zone: ZonePersistence): EncounterSnapshot {
+      const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+      encounter.map.walls = [];
+      const caster = encounter.definitions.find((definition) => definition.id === "def-fighter");
+      if (caster) {
+        caster.actions = [{
+          kind: "area-save",
+          id: "swarm-zone",
+          name: "Swarm Zone",
+          actionType: "action",
+          saveAbility: "con",
+          dc: 10,
+          range: 30,
+          area: { type: "circle", size: 10 },
+          targeting: { origin: "point", range: 30 },
+          damage: [{ dice: "1", damageType: "poison" }],
+          halfDamageOnSuccess: true,
+          onSuccess: "half",
+          affects: "hostile",
+          concentration: true,
+          zone,
+          automationSupport: "full"
+        }];
+      }
+      return encounter;
+    }
+
+    it("settles a zone on the board without resolving damage at cast time", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter", "start-of-turn-in-zone"], anchor: "fixed" });
+      const state = createEngineState(encounter);
+
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      expect(state.snapshot.activeZones).toHaveLength(1);
+      expect(state.log.some((entry) => entry.type === "ZoneCreated")).toBe(true);
+      expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(false);
+      expect(state.log.some((entry) => entry.type === "SaveRolled")).toBe(false);
+    });
+
+    it("links the caster's concentration even with no condition rider", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter", "start-of-turn-in-zone"], anchor: "fixed" });
+      const state = createEngineState(encounter);
+
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      const caster = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter");
+      expect(caster?.concentration).toBeDefined();
+    });
+
+    it("also resolves an immediate burst when applyOnCast is set", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed", applyOnCast: true });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 5, y: 1 };
+      const state = createEngineState(encounter);
+
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      expect(state.snapshot.activeZones).toHaveLength(1);
+      expect(state.log.some((entry) => entry.type === "SaveRolled")).toBe(true);
+    });
+
+    it("triggers on-enter when a hostile combatant moves into the zone, and dedupes a same-round start-of-turn trigger", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter", "start-of-turn-in-zone"], anchor: "fixed" });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 9, y: 1 };
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+
+      const zoneAfterEnter = state.snapshot.activeZones?.[0];
+      expect(zoneAfterEnter?.appliedRounds?.["enemy-goblin-1"]).toBe(state.snapshot.round);
+      const eventCountAfterEnter = state.log.length;
+
+      applyZoneTriggers(state, "enemy-goblin-1", "turn-start");
+
+      expect(state.log.length).toBe(eventCountAfterEnter);
+    });
+
+    it("triggers start-of-turn-in-zone for a combatant already standing in the zone", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["start-of-turn-in-zone"], anchor: "fixed" });
+      const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
+      if (enemy) enemy.position = { x: 5, y: 1 };
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+
+      applyZoneTriggers(state, "enemy-goblin-1", "turn-start");
+
+      const zone = state.snapshot.activeZones?.[0];
+      expect(zone?.appliedRounds?.["enemy-goblin-1"]).toBe(state.snapshot.round);
+    });
+
+    it("expires a rounds-limited zone once the round boundary passes", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "rounds", rounds: 2 }, trigger: ["on-enter"], anchor: "fixed" });
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      const expiresAtRound = state.snapshot.activeZones?.[0]?.expiresAtRound;
+
+      state.snapshot.round = expiresAtRound ?? 0;
+      tickZones(state);
+
+      expect(state.snapshot.activeZones).toHaveLength(0);
+      expect(state.log.some((entry) => entry.type === "ZoneExpired")).toBe(true);
+    });
+
+    it("tears down a concentration zone when the caster starts concentrating on something else", () => {
+      const encounter = zoneSpellEncounter({ duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "fixed" });
+      const caster = encounter.definitions.find((definition) => definition.id === "def-fighter");
+      if (caster) {
+        caster.actions.push({
+          kind: "save",
+          id: "other-concentration-spell",
+          name: "Other Concentration Spell",
+          actionType: "action",
+          saveAbility: "wis",
+          dc: 10,
+          range: 60,
+          damage: [],
+          halfDamageOnSuccess: false,
+          concentration: true,
+          automationSupport: "full"
+        });
+      }
+      const state = createEngineState(encounter);
+      resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
+      expect(state.snapshot.activeZones).toHaveLength(1);
+      const casterAfterFirstCast = state.snapshot.combatants.find((combatant) => combatant.id === "pc-fighter");
+      if (casterAfterFirstCast) casterAfterFirstCast.actionEconomy = { action: true, bonus: true, reaction: true };
+
+      resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", "other-concentration-spell");
+
+      expect(state.snapshot.activeZones).toHaveLength(0);
+      expect(state.log.some((entry) => entry.type === "ZoneExpired" && entry.data?.concentrationEnded === true)).toBe(true);
+    });
   });
 });

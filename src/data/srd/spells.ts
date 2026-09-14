@@ -465,6 +465,41 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       automationSupport: "full"
     }
   },
+  {
+    id: "srd:spell:insect-plague",
+    name: "Insect Plague",
+    level: 5,
+    school: "conjuration",
+    castingTime: "action",
+    range: 300,
+    concentration: true,
+    resourceCost: { resourceId: "slot-5", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d10" } },
+    automationSupport: "full",
+    action: {
+      kind: "area-save",
+      id: "srd:spell:insect-plague:action",
+      name: "Insect Plague",
+      actionType: "action",
+      saveAbility: "con",
+      dcFormula: { base: 8, ability: "wis", proficiency: true },
+      range: 300,
+      area: { type: "circle", size: 20 },
+      targeting: { origin: "point", range: 300 },
+      damage: [{ dice: "4d10", damageType: "piercing" }],
+      halfDamageOnSuccess: true,
+      onSuccess: "half",
+      affects: "hostile",
+      concentration: true,
+      // A swarming cloud, not an instant burst — no one takes damage the
+      // moment it's cast, only on entering / starting a turn inside it. 5e's
+      // stated cap ("up to 10 minutes") is moot against `concentration` in
+      // any encounter this engine runs, so duration is concentration-only.
+      zone: { duration: { kind: "concentration" }, trigger: ["on-enter", "start-of-turn-in-zone"], anchor: "fixed" },
+      resourceCost: { resourceId: "slot-5", amount: 1 },
+      automationSupport: "full"
+    }
+  },
   // ── Backfill (phase 6) ────────────────────────────────────────────────────
   {
     id: "srd:spell:ray-of-frost", name: "Ray of Frost", level: 0, school: "evocation", castingTime: "action", range: 60, automationSupport: "full",

@@ -1,4 +1,5 @@
 import type {
+  ActiveZone,
   CombatantState,
   CombatLogEvent,
   ConditionInstance,
@@ -127,6 +128,22 @@ function applyEvent(
       return;
     }
 
+    case "ZoneCreated": {
+      const zone = data.zone as ActiveZone | undefined;
+      if (zone) {
+        snapshot.activeZones = [...(snapshot.activeZones ?? []).filter((existing) => existing.id !== zone.id), zone];
+      }
+      return;
+    }
+
+    case "ZoneExpired": {
+      const zone = data.zone as ActiveZone | undefined;
+      if (zone) {
+        snapshot.activeZones = (snapshot.activeZones ?? []).filter((existing) => existing.id !== zone.id);
+      }
+      return;
+    }
+
     case "CombatantDowned": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant) {
@@ -235,6 +252,9 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
       return 800;
     case "ReinforcementArrived":
       return 900;
+    case "ZoneCreated":
+    case "ZoneExpired":
+      return 650;
     case "TurnStarted":
       return 350;
     case "CombatEnded":

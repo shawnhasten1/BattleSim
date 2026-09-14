@@ -98,6 +98,13 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "area.aimedFromSelf": { label: "Aimed from the caster", hint: "The shape points from the caster toward the chosen spot" },
   "area.affects": { label: "Affects" },
 
+  // persistent zone
+  "zone.enabled": { label: "Leaves a persistent zone", hint: "Settles onto the board instead of (or as well as) resolving once — Insect Plague, Web, Cloudkill" },
+  "zone.durationKind": { label: "Lasts" },
+  "zone.durationRounds": { label: "Rounds" },
+  "zone.applyOnCast": { label: "Also resolves immediately on cast", hint: "Most persistent zones (Insect Plague, Web) don't hit anyone the instant they're cast — only later, when a creature triggers them" },
+  "zone.triggerEnd": { label: "Also triggers at end of turn", hint: "Most zones only trigger on entering or starting a turn there" },
+
   // rider editor
   "rider.effectType": { label: "Effect" },
   "rider.condition": { label: "Condition" },

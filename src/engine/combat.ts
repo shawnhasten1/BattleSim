@@ -1,4 +1,4 @@
-import { combatantsInArea } from "./areas";
+import { cellIntersectsArea, combatantsInArea } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
@@ -7,6 +7,7 @@ import type {
   ActionDefinition,
   ActionRider,
   ActivateFeatureActionDefinition,
+  ActiveZone,
   AreaSaveActionDefinition,
   AttackActionDefinition,
   CombatLogEvent,
@@ -36,7 +37,8 @@ import type {
   RiderDuration,
   RiderGate,
   SaveActionDefinition,
-  UtilityActionDefinition
+  UtilityActionDefinition,
+  ZoneTrigger
 } from "./types";
 
 export interface EngineState {
@@ -389,6 +391,7 @@ export function moveCombatant(
     cells: movedCells,
     interrupted: combatant.state !== "active" && !pointsEqual(combatant.position, destination)
   }));
+  checkZoneOnEnter(state, combatant, movedCells);
   return movedCells;
 }
 
@@ -983,9 +986,21 @@ export function resolveAreaSaveAction(
     return { targets: [] };
   }
 
+  const dc = resolveSaveDc(action, attackerDefinition);
+
+  // A persistent zone spell (Insect Plague, Web) usually only settles onto the
+  // board — it doesn't also blast everyone standing there at cast time, unlike
+  // an instant area-save. `applyOnCast` opts a zone spell into doing both.
+  if (action.zone && !action.zone.applyOnCast) {
+    createZone(state, attacker, action, origin, dc);
+    state.log.push(event(state, "AreaSaveResolved", `${attacker.displayName} settles ${action.name} at (${origin.x}, ${origin.y})`, {
+      attackerId, actionId, origin, aim, targets: []
+    }));
+    return { targets: [] };
+  }
+
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const onSuccess = resolveOnSuccess(action);
-  const dc = resolveSaveDc(action, attackerDefinition);
   const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
   const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
     ? coverBetween(
@@ -1064,6 +1079,9 @@ export function resolveAreaSaveAction(
     aim,
     targets
   }));
+  if (action.zone?.applyOnCast) {
+    createZone(state, attacker, action, origin, dc);
+  }
   return { targets };
 }
 
@@ -1304,6 +1322,191 @@ export function expireConditions(state: EngineState, timing: "start" | "end"): v
     });
     combatant.conditions = remaining;
   }
+}
+
+/* ─── Persistent zones ────────────────────────────────────────────────────────
+ * A standing `ActiveZone` created from an `AreaSaveActionDefinition.zone`
+ * (Insect Plague, Web) — reuses the action's own damage / save / riders for
+ * each trigger firing instead of a bespoke effect shape. See `ZonePersistence`.
+ */
+
+/**
+ * Resolve a spell's `zone` config into a live `ActiveZone` and log
+ * `ZoneCreated`. Links the caster's concentration directly — a zone has no
+ * condition rider of its own to carry that link the way `applyConditionRider` does.
+ */
+function createZone(
+  state: EngineState,
+  source: CombatantState,
+  action: AreaSaveActionDefinition,
+  origin: Point,
+  dc: number
+): void {
+  const zone = action.zone;
+  if (!zone) {
+    return;
+  }
+  const concentration = zone.duration.kind === "concentration";
+  const expiresAtRound = zone.duration.kind === "rounds"
+    ? state.snapshot.round + Math.max(0, zone.duration.rounds)
+    : undefined;
+  const instance: ActiveZone = {
+    id: `zone-${action.id}-${source.id}-${state.log.length}`,
+    name: action.name,
+    sourceCombatantId: source.id,
+    sourceActionId: action.id,
+    origin,
+    area: action.area,
+    affects: action.affects,
+    trigger: zone.trigger,
+    saveAbility: action.saveAbility,
+    dc,
+    damage: action.damage.length ? action.damage : undefined,
+    onSuccess: resolveOnSuccess(action),
+    riders: action.riders,
+    concentration,
+    expiresAtRound,
+    createdRound: state.snapshot.round,
+    color: zone.color
+  };
+  state.snapshot.activeZones = [...(state.snapshot.activeZones ?? []), instance];
+  if (concentration) {
+    source.concentration = { sourceConditionId: source.concentration?.sourceConditionId };
+  }
+  state.log.push(event(state, "ZoneCreated", `${source.displayName}'s ${action.name} settles at (${origin.x}, ${origin.y})`, {
+    zone: instance
+  }));
+}
+
+/**
+ * Re-apply an `ActiveZone`'s save/damage/riders to one combatant currently in
+ * it. Dedupes on `zone.appliedRounds` so a combatant that both enters and
+ * starts its turn in the same zone the same round is only hit once (5e:
+ * "when it enters the area or starts its turn there").
+ */
+function applyZoneEffect(state: EngineState, zone: ActiveZone, target: CombatantState): void {
+  if (target.state !== "active" || zone.appliedRounds?.[target.id] === state.snapshot.round) {
+    return;
+  }
+  const source = state.snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId) ?? target;
+  if (zone.affects === "hostile" && source.faction === target.faction) {
+    return;
+  }
+  const sourceDefinition = getDefinition(state.snapshot, source);
+  const targetDefinition = getDefinition(state.snapshot, target);
+
+  let success: boolean | null = null;
+  let dealsDamage = true;
+  let halve = false;
+  if (zone.saveAbility && zone.dc != null) {
+    const saveBonus = (targetDefinition.saves?.[zone.saveAbility]
+      ?? abilityModifier(targetDefinition.abilities[zone.saveAbility]))
+      + conditionSaveModifier(target, zone.saveAbility);
+    const featureSaveBonus = featureSaveModifier(targetDefinition, target, zone.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, zone.saveAbility);
+    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
+      advantage: featureSaveAdvantage.applied
+    });
+    success = saveRoll.total >= zone.dc;
+    dealsDamage = !(success && (zone.onSuccess === "none" || zone.onSuccess === "negates"));
+    halve = success === true && zone.onSuccess === "half";
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${zone.saveAbility.toUpperCase()} save against ${zone.name}`, {
+      attackerId: source.id,
+      targetId: target.id,
+      actionId: zone.sourceActionId,
+      saveRoll,
+      total: saveRoll.total,
+      dc: zone.dc,
+      featureSaveBonus: featureSaveBonus.total,
+      appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
+      success,
+      viaZone: true
+    }));
+  }
+
+  if (dealsDamage && zone.damage?.length) {
+    applyDamageComponents(state, target, zone.damage, sourceDefinition, false, { halve }, source.id);
+  }
+  if (!(success && zone.onSuccess === "negates")) {
+    applyActionRiders(state, source, target, sourceDefinition, zone.riders, {
+      actionId: zone.sourceActionId,
+      landed: true,
+      saved: success,
+      saveAbility: zone.saveAbility,
+      fallbackDc: zone.dc ?? 10,
+      concentrating: zone.concentration,
+      origin: zone.origin
+    });
+  }
+
+  zone.appliedRounds = { ...(zone.appliedRounds ?? {}), [target.id]: state.snapshot.round };
+}
+
+/**
+ * `on-enter` zones for cells a combatant just moved through. Checks every
+ * step of the path (skipping the starting cell — that's where they already
+ * were, not somewhere they just entered), not just the final position, so a
+ * creature that passes through a zone without stopping in it still triggers
+ * the zone once. Called from `moveCombatant` after the move lands.
+ */
+function checkZoneOnEnter(state: EngineState, combatant: CombatantState, cells: Point[]): void {
+  const zones = state.snapshot.activeZones;
+  if (!zones?.length || combatant.state !== "active" || cells.length < 2) {
+    return;
+  }
+  const distancePerSquare = state.snapshot.map.grid.distancePerSquare;
+  for (const zone of zones) {
+    if (!zone.trigger.includes("on-enter")) {
+      continue;
+    }
+    const entered = cells.slice(1).some((cell) => cellIntersectsArea(cell, zone.origin, zone.area, distancePerSquare));
+    if (entered) {
+      applyZoneEffect(state, zone, combatant);
+    }
+  }
+}
+
+/**
+ * `start-of-turn-in-zone` / `end-of-turn-in-zone` zones for the combatant
+ * whose turn boundary this is. Call alongside `expireConditions` /
+ * `applyTimedFeatureEffects` in the turn loop.
+ */
+export function applyZoneTriggers(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
+  const combatant = state.snapshot.combatants.find((candidate) => candidate.id === combatantId);
+  const zones = state.snapshot.activeZones;
+  if (!combatant || combatant.state !== "active" || !zones?.length) {
+    return;
+  }
+  const trigger: ZoneTrigger = timing === "turn-start" ? "start-of-turn-in-zone" : "end-of-turn-in-zone";
+  const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
+  for (const zone of zones) {
+    if (!zone.trigger.includes(trigger)) {
+      continue;
+    }
+    if (combatantsInArea(state.snapshot.map, zone.origin, zone.area, [combatant], definitionsById).length > 0) {
+      applyZoneEffect(state, zone, combatant);
+    }
+  }
+}
+
+/**
+ * Expire round-limited zones at the round boundary. Concentration zones are
+ * torn down by `breakConcentration` instead; permanent zones never expire
+ * here. Call alongside `admitReinforcements` when a new round starts.
+ */
+export function tickZones(state: EngineState): void {
+  const zones = state.snapshot.activeZones;
+  if (!zones?.length) {
+    return;
+  }
+  const remaining = zones.filter((zone) => {
+    const expired = zone.expiresAtRound != null && state.snapshot.round >= zone.expiresAtRound;
+    if (expired) {
+      state.log.push(event(state, "ZoneExpired", `${zone.name} fades away`, { zone, concentrationEnded: false }));
+    }
+    return !expired;
+  });
+  state.snapshot.activeZones = remaining;
 }
 
 export function activeFactions(snapshot: EncounterSnapshot): Set<string> {
@@ -2159,7 +2362,8 @@ function stampSpellContext(
   const stamped = {
     ...action,
     spellLevel: action.spellLevel ?? spell.level,
-    upcast: action.upcast ?? spell.upcast
+    upcast: action.upcast ?? spell.upcast,
+    ...(action.kind === "area-save" && spell.zone && !action.zone ? { zone: spell.zone } : {})
   };
   if (action.kind !== "healing" && spell.concentration && !action.concentration) {
     return { ...stamped, concentration: true } as ActionDefinition;
@@ -2874,6 +3078,17 @@ function applyActionRiders(
  * `ConcentrationChecked` (with the roll) is the caller's job.
  */
 function breakConcentration(state: EngineState, casterId: Id): void {
+  const zonesBefore = state.snapshot.activeZones ?? [];
+  const zonesAfter = zonesBefore.filter((zone) => !(zone.concentration && zone.sourceCombatantId === casterId));
+  if (zonesAfter.length !== zonesBefore.length) {
+    for (const removed of zonesBefore) {
+      if (!zonesAfter.includes(removed)) {
+        state.log.push(event(state, "ZoneExpired", `${removed.name} dissipates`, { zone: removed, concentrationEnded: true }));
+      }
+    }
+    state.snapshot.activeZones = zonesAfter;
+  }
+
   const caster = state.snapshot.combatants.find((combatant) => combatant.id === casterId);
   if (!caster?.concentration) {
     return;
