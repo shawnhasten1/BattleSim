@@ -698,18 +698,20 @@ export interface ZoneMovementDamage {
  * into a runtime `ActiveZone` by `resolveAreaSaveAction`. The zone reuses the
  * action's own `damage` / `saveAbility` / `dc` / `riders` / `affects` /
  * `restrictToCreatureTypes` for each trigger firing — no separate effect
- * authoring. `anchor: "fixed"` — the zone doesn't recenter on the caster
- * (Spirit Guardians-style auras are a separate, later mechanic); `movement`
- * optionally drifts a fixed-anchor zone away from the caster each of the
- * caster's turns.
+ * authoring. `anchor: "fixed"` plants the zone at the cast location, same as
+ * Insect Plague/Cloudkill; `anchor: "self"` instead re-centers the zone on
+ * `sourceCombatantId`'s live position every time they move (Spirit
+ * Guardians-style auras) — see `recenterSelfAnchoredZones` in combat.ts.
+ * `movement`/`repositionable` are only meaningful on an `anchor: "fixed"`
+ * zone (a `"self"`-anchored zone already follows its caster continuously).
  */
 export interface ZonePersistence {
   duration: ZoneDuration;
   trigger: ZoneTrigger[];
-  anchor: "fixed";
-  /** Cloudkill-style automatic drift away from the caster. Absent = stays put. */
+  anchor: "fixed" | "self";
+  /** Cloudkill-style automatic drift away from the caster. Only meaningful with `anchor: "fixed"`. Absent = stays put. */
   movement?: ZoneMovement;
-  /** Moonbeam-style caster-chosen repositioning (a bonus action). Absent = the caster can't move it. */
+  /** Moonbeam-style caster-chosen repositioning (a bonus action). Only meaningful with `anchor: "fixed"`. Absent = the caster can't move it. */
   repositionable?: ZoneReposition;
   /** Spike Growth-style automatic per-step movement damage. Independent of `trigger` — no save. */
   movementDamage?: ZoneMovementDamage;
@@ -743,6 +745,8 @@ export interface ActiveZone {
   sourceActionId: Id;
   origin: Point;
   area: AreaTemplate;
+  /** `"fixed"` stays where it was cast; `"self"` is kept re-centered on `sourceCombatantId`'s live position by `recenterSelfAnchoredZones` (combat.ts) every time that combatant moves. */
+  anchor: "fixed" | "self";
   affects: "hostile" | "all";
   trigger: ZoneTrigger[];
   movement?: ZoneMovement;
@@ -1004,6 +1008,26 @@ export interface FeatureDefinition {
     armorClass?: NumericFormula;
     attackRoll?: NumericFormula;
     savingThrows?: Partial<Record<Ability, NumericFormula>>;
+  };
+  /**
+   * Marks this feature as radiating its `effects` to OTHER nearby combatants
+   * (in addition to any self-only reading `featureSources` already does) —
+   * Aura of Protection, Aura of Courage. Distance is bearer-to-target via
+   * `gridDistance` (footprint-agnostic, same simplification Pack Tactics'
+   * `ally-adjacent-to-target` proximity check already makes). Gathered live
+   * by `auraSources` every time a save/AC is computed — there is no
+   * persisted "am I buffed" state, matching how zone membership is also
+   * recomputed live rather than stored. Currently only merged into the
+   * save-bonus/save-advantage/armor-class family (`featureSaveModifier`,
+   * `featureSaveAdvantageModifier`, `effectiveArmorClass`) — the
+   * attack-roll family doesn't read auras yet (no SRD aura needs it).
+   */
+  aura?: {
+    /** Feet. */
+    range: number;
+    affects: "allies" | "all" | "hostile";
+    /** Bearer must be `state === "active"` (conscious) for the aura to apply. Default `true`. */
+    requiresConscious?: boolean;
   };
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }

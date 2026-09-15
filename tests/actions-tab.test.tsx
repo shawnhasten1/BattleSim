@@ -144,4 +144,32 @@ describe("ActionsTab", () => {
       expect(ma.attacks[0]?.count).toBe(2);
     }
   });
+
+  it("shows Spirit Guardians' zone as following the caster, and hides drift/reposition for a self-anchored zone", async () => {
+    useEncounterStore.getState().attachSrdSpell("def-fighter", "srd:spell:spirit-guardians");
+    renderTab();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Spirit Guardians" }));
+
+    expect((screen.getByLabelText("Follows") as HTMLSelectElement).value).toBe("self");
+    expect(screen.queryByLabelText("Drifts away from the caster")).toBeNull();
+    expect(screen.queryByLabelText("Caster can reposition it")).toBeNull();
+  });
+
+  it("a fresh area spell's zone hides drift/reposition once set to follow the caster", async () => {
+    renderTab();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
+    await userEvent.click(screen.getByRole("button", { name: "Spell" }));
+    await userEvent.selectOptions(screen.getByLabelText("What it does"), "area");
+    await userEvent.click(screen.getByLabelText("Leaves a persistent zone"));
+
+    expect(screen.getByLabelText("Follows")).toBeTruthy();
+    expect(screen.getByLabelText("Drifts away from the caster")).toBeTruthy();
+
+    await userEvent.selectOptions(screen.getByLabelText("Follows"), "self");
+    expect(screen.queryByLabelText("Drifts away from the caster")).toBeNull();
+    expect(screen.queryByLabelText("Caster can reposition it")).toBeNull();
+  });
 });

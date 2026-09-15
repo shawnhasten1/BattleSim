@@ -153,6 +153,19 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     effects: [{ kind: "attack-advantage", condition: "ally-adjacent-to-target" }]
   },
   {
+    id: "srd:feature:aura-of-protection",
+    name: "Aura of Protection",
+    category: "trait",
+    automationSupport: "full",
+    description: "You and friendly creatures within 10 feet of you gain a bonus to saving throws equal to your Charisma modifier (no minimum-of-+1 floor modeled).",
+    // `aura` radiates `effects` outward (see `FeatureDefinition.aura`) instead
+    // of only affecting this feature's own bearer — `auraSources` in
+    // combat.ts gathers it live for anyone within range, gated on the
+    // bearer being conscious (`requiresConscious`, default true).
+    aura: { range: 10, affects: "allies", requiresConscious: true },
+    effects: [{ kind: "save-bonus", bonus: { ability: "cha" } }]
+  },
+  {
     id: "srd:feature:dueling",
     name: "Dueling Fighting Style",
     category: "feature",

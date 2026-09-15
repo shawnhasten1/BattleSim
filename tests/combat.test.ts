@@ -2312,6 +2312,7 @@ describe("combat engine", () => {
         sourceActionId: "fog-spell",
         origin: { x: 5, y: 1 },
         area: { type: "circle", size: 10 },
+        anchor: "fixed",
         affects: "all",
         trigger: [],
         concentration: false,

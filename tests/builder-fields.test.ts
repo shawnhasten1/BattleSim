@@ -514,3 +514,68 @@ describe("zone trigger toggles", () => {
     expect(back.zone?.trigger).toEqual(expect.arrayContaining(["on-enter", "start-of-turn-in-zone"]));
   });
 });
+
+describe("aura builder support", () => {
+  it("Spirit Guardians round-trips its self-anchored zone", () => {
+    const spiritGuardians = findSrdSpell("srd:spell:spirit-guardians")!;
+    const draft = spellDraftFromDefinition(spiritGuardians);
+    expect(draft.zoneAnchor).toBe("self");
+
+    const back = spellFromDraft(draft);
+    const action = back.action;
+    if (action?.kind !== "area-save") throw new Error("expected area-save");
+    expect(action.zone?.anchor).toBe("self");
+    expect(action.targeting?.origin).toBe("self");
+  });
+
+  it("forces self-origin targeting when a fresh zone is set to follow the caster", () => {
+    const source = {
+      kind: "area-save" as const, id: "a", name: "Test Aura", actionType: "action" as const,
+      saveAbility: "con" as const, dc: 12, range: 30,
+      area: { type: "circle" as const, size: 15 },
+      targeting: { origin: "point" as const, range: 30 },
+      damage: [{ dice: "1d6", damageType: "fire" as const }],
+      halfDamageOnSuccess: true, onSuccess: "half" as const, affects: "hostile" as const,
+      automationSupport: "full" as const
+      // no `zone` yet — authoring a brand-new one, still origin: "point"
+    };
+    const draft = effectDraftFromAction(source);
+    expect(draft.areaOrigin).toBe("point");
+    draft.zoneEnabled = true;
+    draft.zoneAnchor = "self";
+
+    const back = actionFromEffectDraft(draft);
+    if (back.kind !== "area-save") throw new Error("expected area-save");
+    expect(back.targeting?.origin).toBe("self");
+    expect(back.zone?.anchor).toBe("self");
+  });
+
+  it("Aura of Protection round-trips its aura range/affects", () => {
+    const auraOfProtection = findSrdFeature("srd:feature:aura-of-protection")!;
+    const draft = featureDraftFromDefinition(auraOfProtection);
+    expect(draft.auraEnabled).toBe(true);
+    expect(draft.auraRange).toBe(10);
+    expect(draft.auraAffects).toBe("allies");
+    expect(draft.auraRequiresConscious).toBe(true);
+
+    const back = featureFromDraft(draft);
+    expect(back.aura).toEqual({ range: 10, affects: "allies", requiresConscious: undefined });
+  });
+
+  it("compiles a fresh passive feature into a hostile-affecting aura with no minimum-conscious gate", () => {
+    const draft: BuilderDraft = {
+      name: "Fear Aura", category: "trait", featureShape: "passive",
+      effects: [{ kind: "save-advantage" as const, ability: "wis" as const, condition: "always" as const }],
+      auraEnabled: true, auraRange: 15, auraAffects: "hostile", auraRequiresConscious: false
+    };
+    const feature = featureFromDraft(draft);
+    expect(feature.aura).toEqual({ range: 15, affects: "hostile", requiresConscious: false });
+  });
+
+  it("does not offer the aura toggle on activated or grants-bonus feature shapes", () => {
+    const activated = visibleKeys(featureFieldSchema({ featureShape: "activated" }), { featureShape: "activated" }, "advanced");
+    const grantsBonus = visibleKeys(featureFieldSchema({ featureShape: "grants-bonus" }), { featureShape: "grants-bonus" }, "advanced");
+    expect(activated).not.toContain("auraEnabled");
+    expect(grantsBonus).not.toContain("auraEnabled");
+  });
+});

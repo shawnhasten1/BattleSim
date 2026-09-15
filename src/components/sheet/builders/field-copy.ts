@@ -75,6 +75,10 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "feature.category": { label: "Kind" },
   "feature.shape": { label: "What it does" },
   "feature.effects": { label: "Effects", hint: "Add one or more — each fires while the feature is active" },
+  "feature.auraEnabled": { label: "Radiates as an aura", hint: "Also applies these effects to other nearby combatants, not just the bearer — Aura of Protection-style" },
+  "feature.auraRange": { label: "Range (ft)" },
+  "feature.auraAffects": { label: "Affects" },
+  "feature.auraRequiresConscious": { label: "Stops if the bearer is knocked out or killed", hint: "Unchecking lets the aura keep working even while the bearer is unconscious or dead — uncommon, most auras (Aura of Protection) require the bearer conscious" },
   "feature.activateAs": { label: "Activate as" },
   "feature.resourceId": { label: "Spends resource", hint: 'e.g. "rage", "action-surge" — a pool is seeded for you' },
   "feature.durationRounds": { label: "Lasts (rounds)" },
@@ -101,6 +105,7 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
 
   // persistent zone
   "zone.enabled": { label: "Leaves a persistent zone", hint: "Settles onto the board instead of (or as well as) resolving once — Insect Plague, Web, Cloudkill" },
+  "zone.anchor": { label: "Follows", hint: "Spirit Guardians-style: re-centers on the caster every time they move, instead of staying where it was cast" },
   "zone.durationKind": { label: "Lasts" },
   "zone.durationRounds": { label: "Rounds" },
   "zone.applyOnCast": { label: "Also resolves immediately on cast", hint: "Most persistent zones (Insect Plague, Web) don't hit anyone the instant they're cast — only later, when a creature triggers them" },

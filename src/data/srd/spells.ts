@@ -713,6 +713,14 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     }
   },
   {
+    // Emanates from the caster and follows them for as long as concentration
+    // holds — see `zone.anchor: "self"` below, which keeps `ActiveZone.origin`
+    // pinned to the caster's live position (`recenterSelfAnchoredZones` in
+    // combat.ts) instead of the cast location. Known simplifications vs RAW:
+    // damage type is hardcoded radiant (5e ties it to the caster's alignment
+    // — this engine doesn't model alignment anywhere else either); radius
+    // doesn't shrink to 10 ft for a Small/Tiny caster; the caster can't
+    // exclude chosen creatures from the effect.
     id: "srd:spell:spirit-guardians", name: "Spirit Guardians", level: 3, school: "conjuration", castingTime: "action", range: "self", concentration: true,
     resourceCost: { resourceId: "slot-3", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
     action: {
@@ -721,6 +729,18 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       area: { type: "circle", size: 15 }, targeting: { origin: "self", range: 0 },
       damage: [{ dice: "3d8", damageType: "radiant", magical: true }],
       halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile", concentration: true,
+      riders: [{
+        kind: "condition",
+        when: "on-save-fail",
+        condition: { custom: "spirit-guardians-slowed" },
+        // RAW ties this to "the start of your [the caster's] next turn" —
+        // this engine's duration vocabulary only expresses "until the
+        // target's own next turn" (see README.md), a reasonable
+        // approximation for an aura whose damage re-triggers every round anyway.
+        duration: { kind: "until-start-of-next-turn" },
+        modifiers: { movementMultiplier: 2 }
+      }],
+      zone: { duration: { kind: "concentration" }, trigger: ["on-enter"], anchor: "self" },
       resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
     }
   },

@@ -313,6 +313,9 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "affects", copy: "area.affects", control: "select", advanced: true, options: [{ value: "hostile", label: "Enemies only" }, { value: "all", label: "Everyone in the area" }], visibleWhen: () => shape === "area" },
 
     { key: "zoneEnabled", copy: "zone.enabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" },
+    { key: "zoneAnchor", copy: "zone.anchor", control: "select", advanced: true,
+      options: [{ value: "fixed", label: "Stays where it's cast" }, { value: "self", label: "Follows the caster" }],
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneDurationKind", copy: "zone.durationKind", control: "select", advanced: true,
       options: [{ value: "rounds", label: "A number of rounds" }, { value: "concentration", label: "As long as concentrating" }, { value: "permanent", label: "Until dismissed" }],
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
@@ -322,9 +325,10 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneTriggerEnter", copy: "zone.triggerEnter", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneTriggerStart", copy: "zone.triggerStart", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneTriggerEnd", copy: "zone.triggerEnd", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
-    { key: "zoneDrifts", copy: "zone.drifts", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneDrifts", copy: "zone.drifts", control: "toggle", advanced: true,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneAnchor ?? "fixed") === "fixed" },
     { key: "zoneDriftFeet", copy: "zone.driftFeet", control: "number", advanced: true, min: 5, step: 5,
-      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneDrifts) },
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneAnchor ?? "fixed") === "fixed" && Boolean(draft.zoneDrifts) },
     { key: "zoneMovementDamageEnabled", copy: "zone.movementDamageEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
     { key: "zoneMovementDamageDice", copy: "zone.movementDamage", control: "dice", advanced: true,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneMovementDamageEnabled) },
@@ -335,9 +339,10 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneTerrainMultiplier", copy: "zone.terrainMultiplier", control: "number", advanced: true, min: 1, step: 1,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneTerrainEnabled) && (draft.zoneTerrainType ?? "difficult") === "difficult" },
     { key: "zoneBlocksSight", copy: "zone.blocksSight", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
-    { key: "zoneRepositionable", copy: "zone.repositionable", control: "toggle", advanced: true, visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) },
+    { key: "zoneRepositionable", copy: "zone.repositionable", control: "toggle", advanced: true,
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneAnchor ?? "fixed") === "fixed" },
     { key: "zoneRepositionFeet", copy: "zone.repositionFeet", control: "number", advanced: true, min: 5, step: 5,
-      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && Boolean(draft.zoneRepositionable) },
+      visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneAnchor ?? "fixed") === "fixed" && Boolean(draft.zoneRepositionable) },
 
     { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
@@ -523,6 +528,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
         areaAimed: Boolean(action.targeting?.aimedFromSelf),
         affects: action.affects === "all" ? "all" : undefined,
         zoneEnabled: Boolean(action.zone),
+        zoneAnchor: action.zone?.anchor ?? "fixed",
         zoneDurationKind: action.zone?.duration.kind ?? "rounds",
         zoneDurationRounds: action.zone?.duration.kind === "rounds" ? action.zone.duration.rounds : 10,
         zoneApplyOnCast: Boolean(action.zone?.applyOnCast),
@@ -596,7 +602,7 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
   return {
     duration,
     trigger,
-    anchor: "fixed",
+    anchor: (draft.zoneAnchor as "fixed" | "self") ?? "fixed",
     movement: draft.zoneDrifts ? { driftFeetPerCasterTurn: Math.max(5, Number(draft.zoneDriftFeet) || 10) } : undefined,
     repositionable: draft.zoneRepositionable ? { maxFeetPerCasterTurn: Math.max(5, Number(draft.zoneRepositionFeet) || 60) } : undefined,
     movementDamage,
@@ -665,7 +671,10 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       dc: Number.isFinite(dcValue) && dcValue > 0 ? dcValue : undefined,
       dcFormula: Number.isFinite(dcValue) && dcValue > 0 ? undefined : dcFormula,
       area,
-      targeting: { origin: draft.areaOrigin === "self" ? "self" : "point", aimedFromSelf: draft.areaAimed ? true : undefined, range },
+      // A self-anchored zone recenters on the caster regardless of where it's
+      // aimed (`recenterSelfAnchoredZones` in combat.ts) — force self-origin
+      // so the initial placement matches where it'll actually settle.
+      targeting: { origin: (draft.areaOrigin === "self" || draft.zoneAnchor === "self") ? "self" : "point", aimedFromSelf: draft.areaAimed ? true : undefined, range },
       damage,
       halfDamageOnSuccess: onSuccess === "half",
       onSuccess,
@@ -805,6 +814,14 @@ export function featureFieldSchema(draft: BuilderDraft): FieldSpec[] {
     { key: "resourceId", copy: "feature.resourceId", control: "text", advanced: true, placeholder: "rage", visibleWhen: () => shape === "activated" },
     { key: "reactionTrigger", copy: "feature.reactionTrigger", control: "reaction-trigger", visibleWhen: (d) => shape === "activated" && d.activateAs === "reaction" },
     { key: "effects", copy: "feature.effects", control: "feature-effects", visibleWhen: () => shape === "passive" || shape === "activated" },
+    { key: "auraEnabled", copy: "feature.auraEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "passive" },
+    { key: "auraRange", copy: "feature.auraRange", control: "number", advanced: true, min: 5, step: 5,
+      visibleWhen: () => shape === "passive" && Boolean(draft.auraEnabled) },
+    { key: "auraAffects", copy: "feature.auraAffects", control: "select", advanced: true,
+      options: [{ value: "allies", label: "Allies only" }, { value: "all", label: "Everyone in range" }, { value: "hostile", label: "Enemies only" }],
+      visibleWhen: () => shape === "passive" && Boolean(draft.auraEnabled) },
+    { key: "auraRequiresConscious", copy: "feature.auraRequiresConscious", control: "toggle", advanced: true,
+      visibleWhen: () => shape === "passive" && Boolean(draft.auraEnabled) },
     { key: "grantsDash", copy: "feature.grantsDash", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
     { key: "grantsDisengage", copy: "feature.grantsDisengage", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
     { key: "grantsHide", copy: "feature.grantsHide", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
@@ -837,6 +854,10 @@ export function featureDraftFromDefinition(feature: FeatureDefinition): BuilderD
     durationRounds: activate?.condition?.durationRounds ?? undefined,
     resourceId: activate?.resourceCost?.resourceId ?? "",
     reactionTrigger: activate?.reaction?.trigger,
+    auraEnabled: Boolean(feature.aura),
+    auraRange: feature.aura?.range ?? 10,
+    auraAffects: feature.aura?.affects ?? "allies",
+    auraRequiresConscious: feature.aura?.requiresConscious !== false,
     grantsDash: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "dash"),
     grantsDisengage: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "disengage"),
     grantsHide: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "hide"),
@@ -896,9 +917,17 @@ export function featureFromDraft(draft: BuilderDraft): FeatureDefinition {
   }
 
   // passive
+  const aura = draft.auraEnabled
+    ? {
+      range: Math.max(5, Number(draft.auraRange) || 10),
+      affects: (draft.auraAffects as "allies" | "all" | "hostile") ?? "allies",
+      requiresConscious: draft.auraRequiresConscious === false ? false : undefined
+    }
+    : undefined;
   return {
     id: "", name, category, description,
     effects: allEffects.length ? allEffects : undefined,
+    aura,
     automationSupport: allEffects.length ? "full" : "manual-only"
   };
 }

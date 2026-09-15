@@ -76,6 +76,45 @@ describe("Abilities tab — feature building", () => {
     expect((def().traits ?? []).some((f) => f.name === "Wolf Pack")).toBe(true);
     expect(useEncounterStore.getState().undoStack.length).toBe(undoBefore + 1);
   });
+
+  it("shows the attached Aura of Protection's aura fields, and hides the aura toggle on an activated feature", async () => {
+    useEncounterStore.getState().attachSrdFeature("def-fighter", "srd:feature:aura-of-protection");
+    renderTab();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    const group = screen.getByText("Features & traits").closest("div")!;
+    await userEvent.click(within(group).getByRole("button", { name: "Edit Aura of Protection" }));
+
+    const auraToggle = screen.getByLabelText("Radiates as an aura") as HTMLInputElement;
+    expect(auraToggle.checked).toBe(true);
+    expect((screen.getByLabelText("Range (ft)") as HTMLInputElement).value).toBe("10");
+    expect((screen.getByLabelText("Affects") as HTMLSelectElement).value).toBe("allies");
+
+    // Switching to an activated shape drops the aura fields entirely — an
+    // aura is always-on, it doesn't fit the "spend a resource to trigger"
+    // activated shape's instant/lingering effect split.
+    await userEvent.selectOptions(screen.getByLabelText("What it does"), "activated");
+    expect(screen.queryByLabelText("Radiates as an aura")).toBeNull();
+  });
+
+  it("a fresh passive feature can enable a hostile-affecting aura through the builder", async () => {
+    renderTab();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
+    await userEvent.click(screen.getByRole("button", { name: "Feature / trait" }));
+
+    expect(screen.queryByLabelText("Range (ft)")).toBeNull();
+    await userEvent.click(screen.getByLabelText("Radiates as an aura"));
+    expect(screen.getByLabelText("Range (ft)")).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText("Affects"), "hostile");
+    const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Fear Aura");
+    await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+
+    const feature = (def().features ?? []).find((f) => f.name === "Fear Aura");
+    expect(feature?.aura).toEqual({ range: 10, affects: "hostile", requiresConscious: undefined });
+  });
 });
 
 describe("SRD feature attach — engine effects", () => {

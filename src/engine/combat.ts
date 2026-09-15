@@ -398,6 +398,7 @@ export function moveCombatant(
     interrupted: combatant.state !== "active" && !pointsEqual(combatant.position, destination)
   }));
   checkZoneOnEnter(state, combatant, movedCells);
+  recenterSelfAnchoredZones(state, combatant);
   return movedCells;
 }
 
@@ -791,7 +792,7 @@ function resolveAttackCore(
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
   const total = d20.total + attackBonus + conditionAttackModifier(attacker)
     + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
-  const targetAc = effectiveArmorClass(targetDefinition, target) + cover.acBonus;
+  const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
   const natural = d20.total;
   const critical = natural === 20;
   const hit = critical || (natural !== 1 && total >= targetAc);
@@ -918,8 +919,8 @@ function resolveSaveAgainstTarget(
   const saveBonus = (targetDefinition.saves?.[action.saveAbility]
     ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
     + conditionSaveModifier(target, action.saveAbility);
-  const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
-  const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
+  const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
+  const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
   const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
     advantage: featureSaveAdvantage.applied
   });
@@ -1042,8 +1043,8 @@ export function resolveAreaSaveAction(
     const saveBonus = (targetDefinition.saves?.[action.saveAbility]
       ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
       + conditionSaveModifier(target, action.saveAbility);
-    const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
+    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
     const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
       advantage: featureSaveAdvantage.applied
     });
@@ -1096,6 +1097,14 @@ function normalizeVector(vector: { x: number; y: number }): { x: number; y: numb
   return length === 0 ? { x: 1, y: 0 } : { x: vector.x / length, y: vector.y / length };
 }
 
+/** A creature's own footprint-centred origin — shared by self-targeted area templates (`resolveAreaTargeting`) and self-anchored zone recentering (`recenterSelfAnchoredZones`). */
+function selfOriginFor(position: Point, footprint: number): Point {
+  return {
+    x: Math.floor(position.x + (footprint - 1) / 2),
+    y: Math.floor(position.y + (footprint - 1) / 2)
+  };
+}
+
 /**
  * Where an area action's template sits and which way it points, given the
  * caster's chosen `aim` point. Single source of truth shared by
@@ -1109,11 +1118,7 @@ export function resolveAreaTargeting(
   action: AreaSaveActionDefinition,
   aim: Point
 ): { origin: Point; aimVector?: { x: number; y: number }; fromSelf: boolean } {
-  const footprint = sizeFootprint(attackerDefinition.size);
-  const selfOrigin: Point = {
-    x: Math.floor(attacker.position.x + (footprint - 1) / 2),
-    y: Math.floor(attacker.position.y + (footprint - 1) / 2)
-  };
+  const selfOrigin = selfOriginFor(attacker.position, sizeFootprint(attackerDefinition.size));
   const fromSelf = action.targeting?.origin === "self";
   return {
     origin: fromSelf ? selfOrigin : aim,
@@ -1363,6 +1368,7 @@ function createZone(
     sourceActionId: action.id,
     origin,
     area: action.area,
+    anchor: zone.anchor,
     affects: action.affects,
     trigger: zone.trigger,
     movement: zone.movement,
@@ -1413,8 +1419,8 @@ function applyZoneEffect(state: EngineState, zone: ActiveZone, target: Combatant
     const saveBonus = (targetDefinition.saves?.[zone.saveAbility]
       ?? abilityModifier(targetDefinition.abilities[zone.saveAbility]))
       + conditionSaveModifier(target, zone.saveAbility);
-    const featureSaveBonus = featureSaveModifier(targetDefinition, target, zone.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, zone.saveAbility);
+    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, zone.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, zone.saveAbility);
     const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
       advantage: featureSaveAdvantage.applied
     });
@@ -1474,6 +1480,49 @@ function checkZoneOnEnter(state: EngineState, combatant: CombatantState, cells: 
     if (entered) {
       applyZoneEffect(state, zone, combatant);
     }
+  }
+}
+
+/**
+ * Re-center every `anchor: "self"` zone `combatant` sources on their latest
+ * position (Spirit Guardians-style) and sweep it for newly-covered targets.
+ * Called from `moveCombatant` right after `checkZoneOnEnter`, which handles
+ * the opposite direction (the mover's own path against zones that haven't
+ * moved) — this handles the zone itself moving over everyone else.
+ */
+function recenterSelfAnchoredZones(state: EngineState, combatant: CombatantState): void {
+  const zones = state.snapshot.activeZones;
+  if (!zones?.length) {
+    return;
+  }
+  const footprint = sizeFootprint(getDefinition(state.snapshot, combatant).size);
+  const newOrigin = selfOriginFor(combatant.position, footprint);
+  for (const zone of zones) {
+    if (zone.sourceCombatantId !== combatant.id || zone.anchor !== "self") {
+      continue;
+    }
+    zone.origin = newOrigin;
+    sweepSelfAnchoredZoneOnMove(state, zone);
+  }
+}
+
+/**
+ * A self-anchored zone sweeping over other combatants as its source moves
+ * counts as those combatants being entered by the zone (5e: spirits sweeping
+ * into a creature's space damage it), not just them walking into it — so
+ * this re-checks every other combatant against the zone's new position
+ * rather than relying on their own (unchanged) path. `applyZoneEffect`'s
+ * existing `appliedRounds` dedup keeps this from double-hitting a target
+ * that was already covered before this move.
+ */
+function sweepSelfAnchoredZoneOnMove(state: EngineState, zone: ActiveZone): void {
+  if (!zone.trigger.includes("on-enter")) {
+    return;
+  }
+  const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
+  const others = state.snapshot.combatants.filter((candidate) => candidate.id !== zone.sourceCombatantId);
+  for (const target of combatantsInArea(state.snapshot.map, zone.origin, zone.area, others, definitionsById)) {
+    applyZoneEffect(state, zone, target);
   }
 }
 
@@ -1577,6 +1626,42 @@ export function repositionZone(state: EngineState, casterId: Id, zoneId: Id, des
   caster.actionEconomy.bonus = false;
   zone.origin = destination;
   state.log.push(event(state, "ZoneMoved", `${caster.displayName} moves ${zone.name}`, { zone }));
+}
+
+/**
+ * Everything that happens at the start of `actor`'s turn, before an AI (or a
+ * manual driver) picks an action: refresh their own action economy first,
+ * then anything that reacts to conditions/effects already on them, then
+ * anything that reacts to where they're standing (zone triggers), then
+ * anything that moves because their turn started (zone drift). Only call
+ * this for an actor already confirmed `state === "active"` — callers are
+ * responsible for handling downed/reserve combatants separately (death
+ * saves, admitting reinforcements, etc.) before reaching this.
+ *
+ * Shared by `runAutomatedEncounter` (Auto Run) and the Step button's
+ * `advanceTurn` — previously each hand-rolled this sequence separately,
+ * which let their orderings drift (Step mode used to reset the action
+ * economy *last* instead of first).
+ */
+export function runTurnStart(state: EngineState, actor: CombatantState): void {
+  resetActionEconomy(actor);
+  expireConditions(state, "start");
+  applyTimedFeatureEffects(state, actor.id, "turn-start");
+  runRepeatedSaves(state, actor.id, "turn-start");
+  applyZoneTriggers(state, actor.id, "turn-start");
+  driftZones(state, actor.id);
+}
+
+/**
+ * Everything that happens at the end of `actorId`'s turn. Shared by
+ * `runAutomatedEncounter` and `advanceTurn` for the same reason as
+ * `runTurnStart` — see its doc comment.
+ */
+export function runTurnEnd(state: EngineState, actorId: Id): void {
+  applyTimedFeatureEffects(state, actorId, "turn-end");
+  runRepeatedSaves(state, actorId, "turn-end");
+  applyZoneTriggers(state, actorId, "turn-end");
+  expireConditions(state, "end");
 }
 
 export function activeFactions(snapshot: EncounterSnapshot): Set<string> {
@@ -2087,8 +2172,8 @@ function resolveOneDeathEffect(
     const saveBonus = (targetDefinition.saves?.[action.saveAbility]
       ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
       + conditionSaveModifier(target, action.saveAbility);
-    const featureSaveBonus = featureSaveModifier(targetDefinition, target, action.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, action.saveAbility);
+    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
     const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
       advantage: featureSaveAdvantage.applied
     });
@@ -2164,11 +2249,16 @@ function damageAdjustmentsFor(definition: CreatureDefinition, combatant: Combata
   return [...(definition.damageAdjustments ?? []), ...conditionAdjustments, ...effectAdjustments];
 }
 
-function effectiveArmorClass(definition: CreatureDefinition, combatant: CombatantState): number {
-  const featureBonus = featureSources(definition, combatant).reduce((sum, feature) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
-    return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, definition) : effectSum;
-  }, 0), 0);
-  return definition.armorClass + featureBonus + (combatant.conditions ?? [])
+function effectiveArmorClass(state: EngineState, definition: CreatureDefinition, combatant: CombatantState): number {
+  const ownFeatureBonus = featureSources(definition, combatant)
+    .reduce((sum, feature) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
+      return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, definition) : effectSum;
+    }, 0), 0);
+  const auraFeatureBonus = auraSources(state, combatant)
+    .reduce((sum, { feature, sourceDefinition }) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
+      return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, sourceDefinition) : effectSum;
+    }, 0), 0);
+  return definition.armorClass + ownFeatureBonus + auraFeatureBonus + (combatant.conditions ?? [])
     .reduce((sum, condition) => sum + (condition.modifiers?.armorClass ?? 0), 0);
 }
 
@@ -2569,6 +2659,49 @@ function featureSources(definition: CreatureDefinition, combatant?: CombatantSta
 }
 
 type FeatureDefinitionSource = NonNullable<CreatureDefinition["features"]>[number];
+
+/** An aura-tagged feature paired with ITS bearer's own definition — a `NumericFormula` like `{ ability: "cha" }` on an aura effect must resolve against the aura's source, not whoever it's currently buffing. */
+interface AuraContribution {
+  feature: FeatureDefinitionSource;
+  sourceDefinition: CreatureDefinition;
+}
+
+/**
+ * Passive buffs radiating onto `target` from OTHER combatants' `aura`-tagged
+ * features/traits (Aura of Protection). Recomputed fresh on every call — the
+ * `bearer.state !== "active"` check is the entire lifecycle story for a
+ * buff aura (no concentration link, no teardown hook): the instant a
+ * bearer goes down, the very next call simply stops finding their aura.
+ * Skips `bearer.id === target.id`: RAW ("You and friendly creatures...")
+ * reads as the bearer benefiting too, but they already do — `featureSources`
+ * reads a combatant's own `traits` unconditionally, aura-tagged or not — so
+ * radiating the aura back onto its own source here would double-count it.
+ */
+function auraSources(state: EngineState, target: CombatantState): AuraContribution[] {
+  const contributions: AuraContribution[] = [];
+  for (const bearer of state.snapshot.combatants) {
+    if (bearer.id === target.id || bearer.state !== "active") {
+      continue;
+    }
+    const bearerDefinition = getDefinition(state.snapshot, bearer);
+    for (const feature of [...(bearerDefinition.features ?? []), ...(bearerDefinition.traits ?? [])]) {
+      if (!feature.aura) {
+        continue;
+      }
+      if (feature.aura.affects === "hostile" && bearer.faction === target.faction) {
+        continue;
+      }
+      if (feature.aura.affects === "allies" && bearer.faction !== target.faction) {
+        continue;
+      }
+      if (gridDistance(bearer.position, target.position, state.snapshot.map.grid) > feature.aura.range) {
+        continue;
+      }
+      contributions.push({ feature, sourceDefinition: bearerDefinition });
+    }
+  }
+  return contributions;
+}
 
 function featureAttackAdvantage(
   state: EngineState,
@@ -3224,6 +3357,7 @@ function resolveOnSuccess(action: SaveActionDefinition | AreaSaveActionDefinitio
 }
 
 function featureSaveModifier(
+  state: EngineState,
   definition: CreatureDefinition,
   combatant: CombatantState,
   ability: keyof CreatureDefinition["abilities"]
@@ -3238,16 +3372,25 @@ function featureSaveModifier(
       }
     }
   }
+  for (const { feature, sourceDefinition } of auraSources(state, combatant)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind === "save-bonus" && (!effect.ability || effect.ability === ability)) {
+        total += resolveNumericFormula(effect.bonus, sourceDefinition);
+        sources.push(feature.name);
+      }
+    }
+  }
   return { total, sources };
 }
 
 function featureSaveAdvantageModifier(
+  state: EngineState,
   definition: CreatureDefinition,
   combatant: CombatantState,
   ability: keyof CreatureDefinition["abilities"]
 ): { applied: boolean; sources: string[] } {
   const sources: string[] = [];
-  for (const feature of featureSources(definition, combatant)) {
+  for (const feature of [...featureSources(definition, combatant), ...auraSources(state, combatant).map((contribution) => contribution.feature)]) {
     for (const effect of feature.effects ?? []) {
       if (effect.kind === "save-advantage"
         && (!effect.ability || effect.ability === ability)
@@ -3297,8 +3440,8 @@ function resolveFeatureEffectSave(
   const saveBonus = (targetDefinition.saves?.[saveAbility]
     ?? abilityModifier(targetDefinition.abilities[saveAbility]))
     + conditionSaveModifier(target, saveAbility);
-  const featureSaveBonus = featureSaveModifier(targetDefinition, target, saveAbility);
-  const featureSaveAdvantage = featureSaveAdvantageModifier(targetDefinition, target, saveAbility);
+  const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, saveAbility);
+  const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, saveAbility);
   const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
     advantage: featureSaveAdvantage.applied
   });
@@ -3495,8 +3638,8 @@ function resolveConcentration(state: EngineState, combatant: CombatantState, dam
   }
   const definition = getDefinition(state.snapshot, combatant);
   const conBonus = definition.saves?.con ?? abilityModifier(definition.abilities.con);
-  const featureSaveBonus = featureSaveModifier(definition, combatant, "con");
-  const featureSaveAdvantage = featureSaveAdvantageModifier(definition, combatant, "con");
+  const featureSaveBonus = featureSaveModifier(state, definition, combatant, "con");
+  const featureSaveAdvantage = featureSaveAdvantageModifier(state, definition, combatant, "con");
   const dc = Math.max(10, Math.floor(damageTaken / 2));
   const roll = rollD20WithBonus(state.rng, conBonus + featureSaveBonus.total, {
     advantage: featureSaveAdvantage.applied

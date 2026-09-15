@@ -7,22 +7,18 @@ import {
   admitReinforcements,
   createEngineState,
   applyCondition,
-  applyTimedFeatureEffects,
-  applyZoneTriggers,
   defaultConditionModifiers,
-  driftZones,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   event,
-  expireConditions,
   getDefinition,
   getExecutableActions,
   resolveDeathSave,
-  resetActionEconomy,
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
-  runRepeatedSaves,
+  runTurnEnd,
+  runTurnStart,
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
@@ -670,12 +666,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const turnHasStarted = hadInitiative && encounter.round > 0;
         const currentActor = turnHasStarted ? encounter.combatants[encounter.turnIndex] : undefined;
         if (currentActor && hasOpenActionEconomy(currentActor)) {
-          if (currentActor.state === "active") {
-            applyTimedFeatureEffects(engine, currentActor.id, "turn-end");
-            runRepeatedSaves(engine, currentActor.id, "turn-end");
-            applyZoneTriggers(engine, currentActor.id, "turn-end");
-          }
-          expireConditions(engine, "end");
+          runTurnEnd(engine, currentActor.id);
           closeActionEconomy(currentActor);
         }
 
@@ -716,21 +707,13 @@ export const useEncounterStore = create<EncounterStore>()(
             return;
           }
 
-          expireConditions(engine, "start");
-          applyTimedFeatureEffects(engine, combatant.id, "turn-start");
-          runRepeatedSaves(engine, combatant.id, "turn-start");
-          applyZoneTriggers(engine, combatant.id, "turn-start");
-          driftZones(engine, combatant.id);
-          resetActionEconomy(combatant);
+          runTurnStart(engine, combatant);
           try {
             takeAutomatedTurn(engine, combatant);
           } catch (error) {
             engine.log.push(event(engine, "AutomationWarning", `${combatant.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
           }
-          applyTimedFeatureEffects(engine, combatant.id, "turn-end");
-          runRepeatedSaves(engine, combatant.id, "turn-end");
-          applyZoneTriggers(engine, combatant.id, "turn-end");
-          expireConditions(engine, "end");
+          runTurnEnd(engine, combatant.id);
           closeActionEconomy(combatant);
         }
         commitEncounter(encounter, {

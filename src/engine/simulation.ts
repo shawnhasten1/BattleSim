@@ -1,20 +1,15 @@
 import {
   activeFactions,
   admitReinforcements,
-  applyTimedFeatureEffects,
-  applyZoneTriggers,
   canAct,
   createEngineState,
   dashFactor,
-  driftZones,
   event,
-  expireConditions,
   getDefinition,
   getExecutableActions,
   moveCombatant,
   opportunityAttackThreats,
   repositionZone,
-  resetActionEconomy,
   resolveAreaSaveAction,
   resolveAreaTargeting,
   resolveAttackBonus,
@@ -29,7 +24,8 @@ import {
   resolveSaveDc,
   resolveSaveAction,
   resolveUtilityAction,
-  runRepeatedSaves,
+  runTurnEnd,
+  runTurnStart,
   spellSlotLevel,
   tickZones,
   type EngineState
@@ -203,12 +199,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       if (actor.state !== "active") {
         continue;
       }
-      resetActionEconomy(actor);
-      expireConditions(state, "start");
-      applyTimedFeatureEffects(state, actor.id, "turn-start");
-      runRepeatedSaves(state, actor.id, "turn-start");
-      applyZoneTriggers(state, actor.id, "turn-start");
-      driftZones(state, actor.id);
+      runTurnStart(state, actor);
       // A zone can down/kill an actor before its turn body runs (Insect Plague
       // on a low-HP combatant) — bail out the same way the pre-turn state check
       // above does, rather than letting `takeAutomatedTurn` act on a corpse.
@@ -234,10 +225,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       if (activeFactions(state.snapshot).size <= 1) {
         break;
       }
-      applyTimedFeatureEffects(state, actor.id, "turn-end");
-      runRepeatedSaves(state, actor.id, "turn-end");
-      applyZoneTriggers(state, actor.id, "turn-end");
-      expireConditions(state, "end");
+      runTurnEnd(state, actor.id);
     }
     nextIndex = 0;
   }
