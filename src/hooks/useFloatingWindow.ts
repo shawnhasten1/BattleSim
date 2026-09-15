@@ -45,7 +45,7 @@ export function useFloatingWindow(initial: Position, storageKey?: string): UseFl
 
   function onPointerDown(event: PointerEvent<HTMLElement>) {
     if (event.button !== 0) return;
-    if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+    if (event.target instanceof Element && event.target.closest("button")) return;
     dragRef.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX - position.x,
