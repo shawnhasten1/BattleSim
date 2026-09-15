@@ -577,15 +577,12 @@ img {
 
 /* A second, color-independent read on a hazard tile (see HAZARD_ICONS in
    SceneOverlays.tsx) — sits on top of the tile's fill, never intercepts
-   clicks (those go to the polygon underneath). */
+   clicks (those go to the polygon underneath). Plain lucide icons (stroke
+   only, fill: none by default) in one flat neutral tone, kept small so the
+   icon reads as a corner accent rather than the tile's main content. */
 .terrain-hazard-icon {
-  text-anchor: middle;
-  dominant-baseline: central;
-  font-size: 0.42px;
   pointer-events: none;
-  paint-order: stroke;
-  stroke: rgba(255, 255, 255, 0.7);
-  stroke-width: 0.02px;
+  color: rgba(20, 20, 20, 0.75);
 }
 
 .terrain.cover,

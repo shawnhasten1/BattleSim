@@ -1,20 +1,25 @@
 "use client";
 
+import { Droplet, Flame, Snowflake, TriangleAlert, type LucideIcon } from "lucide-react";
 import { cellsInArea, lineOfEffect, wallCover, type ActiveZone, type BattleMapState } from "@/engine";
 import { pointsMatch } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
 
-/** Glyph shown centered on a hazard tile, keyed by its discriminating tag — a
- * second, color-independent read on what a tile does (acid vs. lava vs. ice
- * all render as "hazard" fill-wise otherwise). Falls back to a generic
- * warning glyph for a hand-authored/homebrew hazard with no matching tag. */
-const HAZARD_ICONS: Record<string, string> = {
-  acid: "\u{1F9EA}",
-  lava: "\u{1F525}",
-  ice: "❄"
+/** Small monochrome glyph centered on a hazard tile, keyed by its
+ * discriminating tag — a second, color-independent read on what a tile does
+ * (acid vs. lava vs. ice all render as "hazard" fill-wise otherwise). Falls
+ * back to a generic warning glyph for a hand-authored/homebrew hazard with no
+ * matching tag. Plain lucide icons (stroke-only, no fill) rather than emoji —
+ * a single flat color instead of a full-color glyph. */
+const HAZARD_ICONS: Record<string, LucideIcon> = {
+  acid: Droplet,
+  lava: Flame,
+  ice: Snowflake
 };
-const DEFAULT_HAZARD_ICON = "☠";
+const DEFAULT_HAZARD_ICON: LucideIcon = TriangleAlert;
+/** Icon side length, in grid units (a fraction of one cell) — kept small so it reads as a corner accent, not the tile's main content. */
+const HAZARD_ICON_SIZE = 0.32;
 
 interface SceneOverlaysProps {
   scene: SceneInteraction;
@@ -97,16 +102,20 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           }}
         />
       ))}
-      {map.terrain.filter((zone) => zone.hazard && zone.cell).map((zone) => (
-        <text
-          key={`${zone.id}-icon`}
-          x={zone.cell!.x + 0.5}
-          y={zone.cell!.y + 0.5}
-          className="terrain-hazard-icon"
-        >
-          {HAZARD_ICONS[zone.tags?.[0] ?? ""] ?? DEFAULT_HAZARD_ICON}
-        </text>
-      ))}
+      {map.terrain.filter((zone) => zone.hazard && zone.cell).map((zone) => {
+        const Icon = HAZARD_ICONS[zone.tags?.[0] ?? ""] ?? DEFAULT_HAZARD_ICON;
+        return (
+          <Icon
+            key={`${zone.id}-icon`}
+            x={zone.cell!.x + 0.5 - HAZARD_ICON_SIZE / 2}
+            y={zone.cell!.y + 0.5 - HAZARD_ICON_SIZE / 2}
+            width={HAZARD_ICON_SIZE}
+            height={HAZARD_ICON_SIZE}
+            strokeWidth={2.5}
+            className="terrain-hazard-icon"
+          />
+        );
+      })}
       {tool === "terrain" && paintStroke ? (
         <g className="terrain-paint-preview">
           {paintStroke.map((cell) => (
