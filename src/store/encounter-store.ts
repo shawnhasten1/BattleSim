@@ -44,6 +44,7 @@ import {
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
+  type TerrainHazardEffect,
   type TerrainType,
   type TokenVisuals,
   type WeaponDefinition,
@@ -142,8 +143,8 @@ interface EncounterStore {
   deleteWallNodes: (points: Point[]) => void;
   cancelWallPlacement: () => void;
   toggleDoorState: (wallId: string) => void;
-  updateTerrain: (terrainId: string, updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
-  updateTerrainTiles: (terrainIds: string[], updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
+  updateTerrain: (terrainId: string, updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags" | "hazard">>) => void;
+  updateTerrainTiles: (terrainIds: string[], updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags" | "hazard">>) => void;
   removeTerrain: (terrainId: string) => void;
   removeTerrainTiles: (terrainIds: string[]) => void;
   /** Brush preset applied by the next tile the terrain tool paints/drags over. */
@@ -328,13 +329,43 @@ function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" 
   };
 }
 
-export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "eraser";
+export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "acid" | "lava" | "eraser";
+
+interface TerrainBrushPreset {
+  name: string;
+  type: TerrainType;
+  movementMultiplier?: number;
+  /** Discriminates same-`type` presets for rendering (e.g. "acid" vs "lava", both `type: "hazard"`) — see `.terrain.hazard-*` in globals.css. */
+  tags?: string[];
+  hazard?: TerrainHazardEffect;
+}
 
 /** Presets for the terrain paint brush. "eraser" removes a painted tile instead of writing one. */
-export const TERRAIN_BRUSH_PRESETS: Record<Exclude<TerrainBrushId, "eraser">, { name: string; type: TerrainType; movementMultiplier?: number }> = {
+export const TERRAIN_BRUSH_PRESETS: Record<Exclude<TerrainBrushId, "eraser">, TerrainBrushPreset> = {
   difficult: { name: "Difficult Terrain", type: "difficult", movementMultiplier: 2 },
   greaterDifficult: { name: "Greater Difficult Terrain", type: "difficult", movementMultiplier: 4 },
-  impassable: { name: "Impassable Terrain", type: "impassable" }
+  impassable: { name: "Impassable Terrain", type: "impassable" },
+  acid: {
+    name: "Acid Pool",
+    type: "hazard",
+    tags: ["acid"],
+    hazard: {
+      trigger: ["on-enter", "start-of-turn-in-zone"],
+      saveAbility: "dex",
+      dc: 12,
+      damage: [{ dice: "2d6", damageType: "acid" }],
+      onSuccess: "half"
+    }
+  },
+  lava: {
+    name: "Lava",
+    type: "hazard",
+    tags: ["lava"],
+    hazard: {
+      trigger: ["on-enter", "start-of-turn-in-zone"],
+      damage: [{ dice: "4d10", damageType: "fire" }]
+    }
+  }
 };
 
 function terrainTilePolygon(cell: Point): Point[] {
@@ -941,11 +972,15 @@ export const useEncounterStore = create<EncounterStore>()(
         if (terrainIds.length === 0) return;
         const ids = new Set(terrainIds);
         const encounter = get().encounter;
+        // Retyping a tile's hazard (including clearing it back to `undefined`
+        // for a non-hazard type) drops any stale per-round dedup state from
+        // whatever hazard identity was there before.
+        const patch = "hazard" in updates ? { ...updates, hazardAppliedRounds: undefined } : updates;
         commitEncounter({
           ...encounter,
           map: {
             ...encounter.map,
-            terrain: encounter.map.terrain.map((terrain) => ids.has(terrain.id) ? { ...terrain, ...updates } : terrain)
+            terrain: encounter.map.terrain.map((terrain) => ids.has(terrain.id) ? { ...terrain, ...patch } : terrain)
           }
         });
       },
@@ -975,9 +1010,19 @@ export const useEncounterStore = create<EncounterStore>()(
             continue;
           }
           const preset = TERRAIN_BRUSH_PRESETS[brushId];
+          const presetSignature = JSON.stringify([preset.name, preset.type, preset.movementMultiplier, preset.tags, preset.hazard]);
           if (existing) {
-            if (existing.type !== preset.type || existing.movementMultiplier !== preset.movementMultiplier || existing.name !== preset.name) {
-              const updated = { ...existing, name: preset.name, type: preset.type, movementMultiplier: preset.movementMultiplier };
+            const existingSignature = JSON.stringify([existing.name, existing.type, existing.movementMultiplier, existing.tags, existing.hazard]);
+            if (existingSignature !== presetSignature) {
+              const updated = {
+                ...existing,
+                name: preset.name,
+                type: preset.type,
+                movementMultiplier: preset.movementMultiplier,
+                tags: preset.tags,
+                hazard: preset.hazard,
+                hazardAppliedRounds: undefined
+              };
               terrain = terrain.map((tile) => (tile.id === existing.id ? updated : tile));
               byCellKey.set(key, updated);
               changed = true;
@@ -989,6 +1034,8 @@ export const useEncounterStore = create<EncounterStore>()(
             name: preset.name,
             type: preset.type,
             movementMultiplier: preset.movementMultiplier,
+            tags: preset.tags,
+            hazard: preset.hazard,
             polygon: terrainTilePolygon(cell),
             cell
           };

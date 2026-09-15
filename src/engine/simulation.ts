@@ -32,7 +32,7 @@ import {
 } from "./combat";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
-import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, wallCover, type ReachableCell } from "./geometry";
+import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
 import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -1345,22 +1345,30 @@ function predictedZoneApproachValue(
   return value;
 }
 
-/** Sum of enemy-sourced damaging/rider `ActiveZone`s covering `cell`, from `actor`'s perspective (an ally's own zone is never a hazard to them). */
+/**
+ * Sum of enemy-sourced damaging/rider `ActiveZone`s AND damaging/rider hazard
+ * terrain tiles (acid, lava, ...) covering `cell`, from `actor`'s perspective
+ * (an ally's own zone is never a hazard to them; terrain hazards have no
+ * caster/faction, so they count against everyone equally).
+ */
 function hazardAtCell(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point): number {
-  const zones = snapshot.activeZones;
-  if (!zones?.length) {
-    return 0;
-  }
   let hazard = 0;
-  for (const zone of zones) {
-    if (!zone.damage?.length && !zone.riders?.length) {
-      continue;
+  const zones = snapshot.activeZones;
+  if (zones?.length) {
+    for (const zone of zones) {
+      if (!zone.damage?.length && !zone.riders?.length) {
+        continue;
+      }
+      const source = snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId);
+      const harmsActor = !(zone.affects === "hostile" && source?.faction === actor.faction);
+      if (harmsActor && cellIntersectsArea(cell, zone.origin, zone.area, snapshot.map.grid.distancePerSquare)) {
+        hazard += 1;
+      }
     }
-    const source = snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId);
-    const harmsActor = !(zone.affects === "hostile" && source?.faction === actor.faction);
-    if (harmsActor && cellIntersectsArea(cell, zone.origin, zone.area, snapshot.map.grid.distancePerSquare)) {
-      hazard += 1;
-    }
+  }
+  const tile = terrainAtCell(snapshot.map.terrain, cell);
+  if (tile?.hazard && (tile.hazard.damage?.length || tile.hazard.riders?.length)) {
+    hazard += 1;
   }
   return hazard;
 }

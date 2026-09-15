@@ -27,7 +27,9 @@ const WALL_COVER_ITEMS: Array<{ cover: CoverLevel; label: string }> = [
 const TERRAIN_TYPE_ITEMS: Array<{ brush: Exclude<TerrainBrushId, "eraser">; label: string }> = [
   { brush: "difficult", label: "Difficult — ×2 move cost" },
   { brush: "greaterDifficult", label: "Greater difficult — ×4 move cost" },
-  { brush: "impassable", label: "Impassable — blocks movement" }
+  { brush: "impassable", label: "Impassable — blocks movement" },
+  { brush: "acid", label: "Acid — DC 12 Dex, 2d6 acid (half on save)" },
+  { brush: "lava", label: "Lava — 4d10 fire, no save" }
 ];
 
 interface SceneCanvasProps {
@@ -210,6 +212,12 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
     const every = (predicate: (tile: TerrainZone) => boolean) => tiles.every(predicate);
     const currentMultiplier = tiles[0].movementMultiplier ?? (tiles[0].type === "difficult" ? 2 : 1);
     const uniformMultiplier = every((tile) => (tile.movementMultiplier ?? (tile.type === "difficult" ? 2 : 1)) === currentMultiplier);
+    // Acid and lava share `type: "hazard"`, so matching on type alone can't
+    // tell them apart — compare the discriminating tag too.
+    const matchesPreset = (tile: TerrainZone, preset: (typeof TERRAIN_BRUSH_PRESETS)[Exclude<TerrainBrushId, "eraser">]) =>
+      tile.type === preset.type
+      && (tile.movementMultiplier ?? 1) === (preset.movementMultiplier ?? 1)
+      && (tile.tags?.[0] ?? null) === (preset.tags?.[0] ?? null);
 
     return [
       { heading: n === 1 ? "Terrain type" : `Terrain type — ${n} selected` },
@@ -217,8 +225,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         const preset = TERRAIN_BRUSH_PRESETS[entry.brush];
         return {
           label: entry.label,
-          checked: every((tile) => tile.type === preset.type && (tile.movementMultiplier ?? 1) === (preset.movementMultiplier ?? 1)),
-          onSelect: () => updateTerrainTiles(ids, { name: preset.name, type: preset.type, movementMultiplier: preset.movementMultiplier })
+          checked: every((tile) => matchesPreset(tile, preset)),
+          onSelect: () => updateTerrainTiles(ids, {
+            name: preset.name,
+            type: preset.type,
+            movementMultiplier: preset.movementMultiplier,
+            tags: preset.tags,
+            hazard: preset.hazard
+          })
         };
       }),
       { separator: true },

@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Blocks, BrickWall, Eraser, Fence, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, SquareDashed, User, Waypoints } from "lucide-react";
+import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, SquareDashed, User, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
 import { useEncounterStore, type EditorTool, type TerrainBrushId } from "@/store/encounter-store";
@@ -39,6 +39,8 @@ const TERRAIN_BRUSHES: Array<{ brush: TerrainBrushId; icon: ReactNode; label: st
   { brush: "difficult", icon: <Footprints size={15} />, label: "Difficult terrain — half speed (×2 move cost)" },
   { brush: "greaterDifficult", icon: <Mountain size={15} />, label: "Greater difficult terrain — quarter speed (×4 move cost)" },
   { brush: "impassable", icon: <Ban size={15} />, label: "Impassable — blocks movement entirely" },
+  { brush: "acid", icon: <Droplet size={15} />, label: "Acid — DC 12 Dex save, 2d6 acid damage (half on save)" },
+  { brush: "lava", icon: <Flame size={15} />, label: "Lava — 4d10 fire damage, no save" },
   { brush: "eraser", icon: <Eraser size={15} />, label: "Eraser — clear painted terrain" }
 ];
 

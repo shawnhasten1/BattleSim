@@ -1,6 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, type CoverBlocker } from "./geometry";
+import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, terrainAtCell, type CoverBlocker } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
@@ -37,6 +37,7 @@ import type {
   RiderDuration,
   RiderGate,
   SaveActionDefinition,
+  TerrainZone,
   UtilityActionDefinition,
   ZoneTrigger
 } from "./types";
@@ -398,6 +399,7 @@ export function moveCombatant(
     interrupted: combatant.state !== "active" && !pointsEqual(combatant.position, destination)
   }));
   checkZoneOnEnter(state, combatant, movedCells);
+  checkTerrainHazardOnEnter(state, combatant, movedCells);
   recenterSelfAnchoredZones(state, combatant);
   return movedCells;
 }
@@ -1395,6 +1397,83 @@ function createZone(
   }));
 }
 
+/** Shared shape between `ActiveZone` and a terrain tile's `hazard` — whatever `applySaveGatedEffect` needs to roll a save and apply damage/riders, independent of where those fields actually live. */
+interface SaveGatedEffectSpec {
+  name: string;
+  /** Combatant this effect is attributed to, for definition lookups (spell mod, resistances) and rider "source". Omitted for terrain hazards — the environment has no caster, so the target stands in as its own source. */
+  sourceId?: Id;
+  /** Rider gating/log attribution key. Zones use `sourceActionId`; terrain hazards have no action, so callers pass the tile's own id. */
+  actionId: Id;
+  saveAbility?: Ability;
+  dc?: number;
+  damage?: DamageComponent[];
+  onSuccess?: "half" | "none" | "negates";
+  riders?: ActionRider[];
+  concentration?: boolean;
+  origin?: Point;
+  /** Which `SaveRolled` log flag to set, purely for downstream log filtering/attribution. */
+  via: "zone" | "terrain";
+}
+
+/**
+ * Roll `target`'s save against `spec` (if it has one), apply damage — halved
+ * on a successful "half" save, skipped entirely on "none"/"negates" — and
+ * riders — skipped on a successful "negates" save. Shared by `applyZoneEffect`
+ * (spell/hazard zones) and `applyTerrainHazardEffect` (acid/lava/... tiles):
+ * the two differ only in what "source" means (a caster vs. the environment)
+ * and how they dedupe repeat triggers, which callers handle themselves.
+ */
+function applySaveGatedEffect(state: EngineState, spec: SaveGatedEffectSpec, target: CombatantState): void {
+  const source = (spec.sourceId ? state.snapshot.combatants.find((combatant) => combatant.id === spec.sourceId) : undefined) ?? target;
+  const sourceDefinition = getDefinition(state.snapshot, source);
+  const targetDefinition = getDefinition(state.snapshot, target);
+
+  let success: boolean | null = null;
+  let dealsDamage = true;
+  let halve = false;
+  if (spec.saveAbility && spec.dc != null) {
+    const saveBonus = (targetDefinition.saves?.[spec.saveAbility]
+      ?? abilityModifier(targetDefinition.abilities[spec.saveAbility]))
+      + conditionSaveModifier(target, spec.saveAbility);
+    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, spec.saveAbility);
+    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, spec.saveAbility);
+    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
+      advantage: featureSaveAdvantage.applied
+    });
+    success = saveRoll.total >= spec.dc;
+    dealsDamage = !(success && (spec.onSuccess === "none" || spec.onSuccess === "negates"));
+    halve = success === true && spec.onSuccess === "half";
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${spec.saveAbility.toUpperCase()} save against ${spec.name}`, {
+      attackerId: source.id,
+      targetId: target.id,
+      actionId: spec.actionId,
+      saveRoll,
+      total: saveRoll.total,
+      dc: spec.dc,
+      featureSaveBonus: featureSaveBonus.total,
+      appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
+      success,
+      viaZone: spec.via === "zone",
+      viaTerrain: spec.via === "terrain"
+    }));
+  }
+
+  if (dealsDamage && spec.damage?.length) {
+    applyDamageComponents(state, target, spec.damage, sourceDefinition, false, { halve }, source.id);
+  }
+  if (!(success && spec.onSuccess === "negates")) {
+    applyActionRiders(state, source, target, sourceDefinition, spec.riders, {
+      actionId: spec.actionId,
+      landed: true,
+      saved: success,
+      saveAbility: spec.saveAbility,
+      fallbackDc: spec.dc ?? 10,
+      concentrating: spec.concentration,
+      origin: spec.origin
+    });
+  }
+}
+
 /**
  * Re-apply an `ActiveZone`'s save/damage/riders to one combatant currently in
  * it. Dedupes on `zone.appliedRounds` so a combatant that both enters and
@@ -1409,54 +1488,46 @@ function applyZoneEffect(state: EngineState, zone: ActiveZone, target: Combatant
   if (zone.affects === "hostile" && source.faction === target.faction) {
     return;
   }
-  const sourceDefinition = getDefinition(state.snapshot, source);
-  const targetDefinition = getDefinition(state.snapshot, target);
-
-  let success: boolean | null = null;
-  let dealsDamage = true;
-  let halve = false;
-  if (zone.saveAbility && zone.dc != null) {
-    const saveBonus = (targetDefinition.saves?.[zone.saveAbility]
-      ?? abilityModifier(targetDefinition.abilities[zone.saveAbility]))
-      + conditionSaveModifier(target, zone.saveAbility);
-    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, zone.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, zone.saveAbility);
-    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
-      advantage: featureSaveAdvantage.applied
-    });
-    success = saveRoll.total >= zone.dc;
-    dealsDamage = !(success && (zone.onSuccess === "none" || zone.onSuccess === "negates"));
-    halve = success === true && zone.onSuccess === "half";
-    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${zone.saveAbility.toUpperCase()} save against ${zone.name}`, {
-      attackerId: source.id,
-      targetId: target.id,
-      actionId: zone.sourceActionId,
-      saveRoll,
-      total: saveRoll.total,
-      dc: zone.dc,
-      featureSaveBonus: featureSaveBonus.total,
-      appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
-      success,
-      viaZone: true
-    }));
-  }
-
-  if (dealsDamage && zone.damage?.length) {
-    applyDamageComponents(state, target, zone.damage, sourceDefinition, false, { halve }, source.id);
-  }
-  if (!(success && zone.onSuccess === "negates")) {
-    applyActionRiders(state, source, target, sourceDefinition, zone.riders, {
-      actionId: zone.sourceActionId,
-      landed: true,
-      saved: success,
-      saveAbility: zone.saveAbility,
-      fallbackDc: zone.dc ?? 10,
-      concentrating: zone.concentration,
-      origin: zone.origin
-    });
-  }
-
+  applySaveGatedEffect(state, {
+    name: zone.name,
+    sourceId: zone.sourceCombatantId,
+    actionId: zone.sourceActionId,
+    saveAbility: zone.saveAbility,
+    dc: zone.dc,
+    damage: zone.damage,
+    onSuccess: zone.onSuccess,
+    riders: zone.riders,
+    concentration: zone.concentration,
+    origin: zone.origin,
+    via: "zone"
+  }, target);
   zone.appliedRounds = { ...(zone.appliedRounds ?? {}), [target.id]: state.snapshot.round };
+}
+
+/**
+ * Re-apply a terrain tile's `hazard` save/damage/riders to one combatant
+ * standing in or entering it. Dedupes on `tile.hazardAppliedRounds`, the
+ * terrain equivalent of `zone.appliedRounds`. Unlike zones, a hazard tile has
+ * no caster and no faction filter — acid and lava burn everyone who steps in
+ * them, so `applySaveGatedEffect` gets no `sourceId` (the target stands in as
+ * its own "source" for definition lookups).
+ */
+function applyTerrainHazardEffect(state: EngineState, tile: TerrainZone, target: CombatantState): void {
+  const hazard = tile.hazard;
+  if (!hazard || target.state !== "active" || tile.hazardAppliedRounds?.[target.id] === state.snapshot.round) {
+    return;
+  }
+  applySaveGatedEffect(state, {
+    name: tile.name,
+    actionId: tile.id,
+    saveAbility: hazard.saveAbility,
+    dc: hazard.dc,
+    damage: hazard.damage,
+    onSuccess: hazard.onSuccess,
+    riders: hazard.riders,
+    via: "terrain"
+  }, target);
+  tile.hazardAppliedRounds = { ...(tile.hazardAppliedRounds ?? {}), [target.id]: state.snapshot.round };
 }
 
 /**
@@ -1480,6 +1551,44 @@ function checkZoneOnEnter(state: EngineState, combatant: CombatantState, cells: 
     if (entered) {
       applyZoneEffect(state, zone, combatant);
     }
+  }
+}
+
+/**
+ * `on-enter` hazard terrain tiles for cells a combatant just moved through —
+ * same "skip the starting cell, check every step" rule as `checkZoneOnEnter`
+ * (a creature that passes through a hazard tile without stopping still
+ * triggers it once). Called from `moveCombatant` alongside `checkZoneOnEnter`.
+ */
+function checkTerrainHazardOnEnter(state: EngineState, combatant: CombatantState, cells: Point[]): void {
+  const terrain = state.snapshot.map.terrain;
+  if (!terrain.length || combatant.state !== "active" || cells.length < 2) {
+    return;
+  }
+  const appliedTileIds = new Set<Id>();
+  for (const cell of cells.slice(1)) {
+    const tile = terrainAtCell(terrain, cell);
+    if (tile?.hazard?.trigger.includes("on-enter") && !appliedTileIds.has(tile.id)) {
+      appliedTileIds.add(tile.id);
+      applyTerrainHazardEffect(state, tile, combatant);
+    }
+  }
+}
+
+/**
+ * `start-of-turn-in-zone` / `end-of-turn-in-zone` hazard terrain for the
+ * combatant whose turn boundary this is — the terrain equivalent of
+ * `applyZoneTriggers`. Call alongside it in the turn loop.
+ */
+export function applyTerrainHazardTriggers(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
+  const combatant = state.snapshot.combatants.find((candidate) => candidate.id === combatantId);
+  if (!combatant || combatant.state !== "active") {
+    return;
+  }
+  const tile = terrainAtCell(state.snapshot.map.terrain, combatant.position);
+  const trigger: ZoneTrigger = timing === "turn-start" ? "start-of-turn-in-zone" : "end-of-turn-in-zone";
+  if (tile?.hazard?.trigger.includes(trigger)) {
+    applyTerrainHazardEffect(state, tile, combatant);
   }
 }
 
@@ -1649,6 +1758,7 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");
   applyZoneTriggers(state, actor.id, "turn-start");
+  applyTerrainHazardTriggers(state, actor.id, "turn-start");
   driftZones(state, actor.id);
 }
 
@@ -1661,6 +1771,7 @@ export function runTurnEnd(state: EngineState, actorId: Id): void {
   applyTimedFeatureEffects(state, actorId, "turn-end");
   runRepeatedSaves(state, actorId, "turn-end");
   applyZoneTriggers(state, actorId, "turn-end");
+  applyTerrainHazardTriggers(state, actorId, "turn-end");
   expireConditions(state, "end");
 }
 

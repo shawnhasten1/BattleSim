@@ -112,6 +112,25 @@ export function normalizeWall(wall: WallSegment): WallSegment {
   };
 }
 
+/**
+ * A damaging/status-inflicting terrain tile (acid, lava, ...). Deliberately
+ * mirrors `ActiveZone`'s own save/damage/rider fields so `combat.ts` can
+ * apply both through one shared helper (`applySaveGatedEffect`) — terrain
+ * hazards just have no caster (environmental: affects every faction, and
+ * `sourceId` is omitted so the target is its own "source" for definition
+ * lookups) and dedupe on the tile itself (`hazardAppliedRounds`) instead of
+ * an `ActiveZone`'s `appliedRounds`.
+ */
+export interface TerrainHazardEffect {
+  trigger: ZoneTrigger[];
+  saveAbility?: Ability;
+  /** Resolved to a concrete number — a terrain hazard's DC doesn't change round to round. */
+  dc?: number;
+  damage?: DamageComponent[];
+  onSuccess?: "half" | "none" | "negates";
+  riders?: ActionRider[];
+}
+
 export interface TerrainZone {
   id: Id;
   name: string;
@@ -124,6 +143,10 @@ export interface TerrainZone {
    * hand-drawn region polygons (predates the tile brush), which keep working
    * as arbitrary-shape terrain untouched by the tile tools. */
   cell?: Point;
+  /** Damage/status effect for hazard-type tiles (acid, lava, ice, ...). */
+  hazard?: TerrainHazardEffect;
+  /** Last round each combatant was hit by this tile's hazard, keyed by combatant id — dedupes on-enter + start-of-turn firing twice in the same round (same purpose as `ActiveZone.appliedRounds`). */
+  hazardAppliedRounds?: Record<Id, number>;
 }
 
 export interface GridConfig {

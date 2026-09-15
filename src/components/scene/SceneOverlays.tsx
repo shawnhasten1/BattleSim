@@ -72,7 +72,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
         <polygon
           key={zone.id}
           points={zone.polygon.map((point) => `${point.x},${point.y}`).join(" ")}
-          className={`terrain ${zone.type} ${zone.movementMultiplier === 4 ? "terrain-x4" : ""} ${selectedTerrainIds.includes(zone.id) ? "selected" : ""}`}
+          className={`terrain ${zone.type} ${zone.movementMultiplier === 4 ? "terrain-x4" : ""} ${zone.tags?.[0] ? `hazard-${zone.tags[0]}` : ""} ${selectedTerrainIds.includes(zone.id) ? "selected" : ""}`}
           onClick={(event) => {
             event.stopPropagation();
             selectTerrain(zone.id, event.shiftKey);
