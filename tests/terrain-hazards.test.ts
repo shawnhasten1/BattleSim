@@ -246,4 +246,36 @@ describe("terrain hazard tiles", () => {
     const finalPosition = state.snapshot.combatants.find((c) => c.id === "pc-archer")!.position;
     expect(finalPosition).not.toEqual({ x: 3, y: 1 });
   });
+
+  it("AI won't cut straight through a lava tile en route to a hazard-free destination, even when that destination itself is clear", () => {
+    // The two AI-avoidance tests above only prove the AI won't *rest* on a
+    // hazard tile — the destination itself was always hazard-free there, so
+    // they pass even without path-wide scoring (see movementPlanForCell in
+    // simulation.ts). This scenario specifically targets the gap: the lava
+    // tile sits on the *cheapest route* to an otherwise-fine destination, not
+    // at the destination — the archer's straight retreat north from (6,4)
+    // crosses lava at (6,3), while a diagonal retreat to (4,2) is the same
+    // Chebyshev distance from the hostile (6 squares either way) and the same
+    // movement cost (3 squares), but touches no hazard tile at all.
+    const e = encounter();
+    e.seed = "terrain-hazard-ai-avoid-path";
+    e.map.terrain = [lavaTile({ x: 6, y: 3 })];
+    const archer = e.combatants.find((c) => c.id === "pc-archer")!;
+    archer.position = { x: 6, y: 4 };
+    archer.tacticsProfile = "basic-ranged";
+    const fighter = e.combatants.find((c) => c.id === "pc-fighter")!;
+    fighter.state = "dead";
+    const goblin1 = e.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    goblin1.position = { x: 6, y: 7 };
+    const goblin2 = e.combatants.find((c) => c.id === "enemy-goblin-2")!;
+    goblin2.state = "dead";
+
+    const state = createEngineState(e);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
+
+    const moved = state.log.find((entry) => entry.type === "CombatantMoved" && entry.data?.combatantId === "pc-archer");
+    const path = (moved?.data?.cells as { x: number; y: number }[] | undefined) ?? [];
+    expect(path.some((step) => step.x === 6 && step.y === 3), `path ${JSON.stringify(path)} should route around the lava tile`).toBe(false);
+    expect(state.log.some((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-archer")).toBe(false);
+  });
 });

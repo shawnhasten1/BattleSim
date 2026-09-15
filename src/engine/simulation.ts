@@ -1391,7 +1391,16 @@ function movementPlanForCell(
   // A flat bump for being in *any* cover clears the reposition hysteresis; the
   // scaled term then rewards stronger cover.
   const coverScore = coverBonus > 0 ? coverBonus * tactics.coverWeight + 4 : 0;
-  const hazardPenalty = tactics.hazardWeight > 0 ? hazardAtCell(snapshot, actor, cell) * tactics.hazardWeight * 10 : 0;
+  // Every cell actually entered along the way, not just where the move ends —
+  // `cells[0]` is the start (already-occupied ground, not "entered" by this
+  // move), matching the on-enter convention `checkZoneOnEnter` /
+  // `checkTerrainHazardOnEnter` use for the real damage application.
+  // Without this, a destination that's itself hazard-free scored as "safe"
+  // even when the only path there cut straight through a lava tile.
+  const hazardExposure = tactics.hazardWeight > 0
+    ? cells.slice(1).reduce((total, step) => total + hazardAtCell(snapshot, actor, step), 0)
+    : 0;
+  const hazardPenalty = hazardExposure * tactics.hazardWeight * 10;
   const score = tactics.preferred === "melee"
     ? -targetDistance * 2 - cost - threats * tactics.reactionRiskWeight * 10 - hazardPenalty
     : distanceBandScore(targetDistance, tactics)

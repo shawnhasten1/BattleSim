@@ -83,7 +83,13 @@ describe("Step mode (advanceTurn) respects persistent zones", () => {
       useEncounterStore.getState().advanceTurn();
     }
 
-    expect(useEncounterStore.getState().encounter.activeZones?.length ?? 0).toBe(0);
+    // Not `activeZones.length === 0`: the caster keeps a target alive and
+    // free action economy, so it can (and, once hazard-aware pathing was
+    // added, reliably does) re-cast this concentration zone the instant the
+    // old one lapses — the list can legitimately read back to 1 the moment
+    // after `tickZones` cleared it. What this test actually guards
+    // (`advanceTurn` wiring `tickZones` in, per the file docblock) is that
+    // an expiry happened at all, not that no zone exists at this exact step.
     expect(useEncounterStore.getState().log.some((entry) => entry.type === "ZoneExpired")).toBe(true);
   });
 
