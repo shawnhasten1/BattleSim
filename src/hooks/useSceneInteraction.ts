@@ -54,6 +54,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const placeCombatant = useEncounterStore((state) => state.placeCombatant);
   const updateTemplate = useEncounterStore((state) => state.updateTemplate);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
+  const paintTerrainCells = useEncounterStore((state) => state.paintTerrainCells);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
   const grid = encounter.map.grid;
@@ -64,7 +65,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   // mutually exclusive selections.
   const [selectedWallNodes, setSelectedWallNodes] = useState<GridPoint[]>([]);
   const [selectedWallIds, setSelectedWallIds] = useState<string[]>([]);
-  const [selectedTerrainId, setSelectedTerrainId] = useState<string | null>(null);
+  // Multi-select: plain click replaces, Shift+click toggles (same rule as walls).
+  const [selectedTerrainIds, setSelectedTerrainIds] = useState<string[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [draggingWallNode, setDraggingWallNode] = useState(false);
   const [draggingTemplateId, setDraggingTemplateId] = useState<string | null>(null);
@@ -72,6 +74,12 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const [measureStart, setMeasureStart] = useState<GridPoint | null>(null);
   const [measureEnd, setMeasureEnd] = useState<GridPoint | null>(null);
   const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null);
+  const [terrainMenu, setTerrainMenu] = useState<{ x: number; y: number } | null>(null);
+  // In-progress terrain paint-brush drag: the ordered, deduped cells the
+  // cursor has crossed since pointer-down. Committed as one undo step on
+  // pointer-up (see paintTerrainCells) — nothing is written to the store
+  // mid-drag, so a preview render of this list is the only feedback.
+  const [paintStroke, setPaintStroke] = useState<GridPoint[] | null>(null);
   // Right-click-a-token menu. Carries the target id so the menu can act on it
   // even before a future multi-selection model exists.
   const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
@@ -134,6 +142,17 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     setSelectedWallNodes([]);
     setWallMenu(null);
   }, []);
+  const selectTerrain = useCallback((id: string, additive = false) => {
+    setSelectedTerrainIds((prev) =>
+      additive
+        ? (prev.includes(id) ? prev.filter((terrainId) => terrainId !== id) : [...prev, id])
+        : [id]
+    );
+  }, []);
+  const clearTerrainSelection = useCallback(() => {
+    setSelectedTerrainIds([]);
+    setTerrainMenu(null);
+  }, []);
 
   /**
    * Apply a board selection: keep the ref mirror in sync, push the newest member
@@ -174,6 +193,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
 
   // Back-compat single-selection views (ContextInspector node editor, ScenePanel).
   const selectedWallId = selectedWallIds[0] ?? null;
+  const selectedTerrainId = selectedTerrainIds[0] ?? null;
+  const setSelectedTerrainId = (id: string | null) => setSelectedTerrainIds(id ? [id] : []);
   const selectedWallNode = selectedWallNodes[0] ?? null;
   const setSelectedWallNode = (node: GridPoint | null) => setSelectedWallNodes(node ? [node] : []);
   const setSelectedWallId = (id: string | null) => {
@@ -200,8 +221,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const selectedWall = selectedWallIds.length === 1
     ? encounter.map.walls.find((wall) => wall.id === selectedWallIds[0]) ?? null
     : null;
-  const selectedTerrain = selectedTerrainId
-    ? encounter.map.terrain.find((terrain) => terrain.id === selectedTerrainId) ?? null
+  const selectedTerrain = selectedTerrainIds.length === 1
+    ? encounter.map.terrain.find((terrain) => terrain.id === selectedTerrainIds[0]) ?? null
     : null;
   const selectedTemplate = selectedTemplateId
     ? (encounter.map.templates ?? []).find((template) => template.id === selectedTemplateId) ?? null
@@ -292,6 +313,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     }
     setWallMenu(null);
     setTokenMenu(null);
+    setTerrainMenu(null);
+    setPaintStroke(null);
     setDraggedToken(null);
     setDroppingTokenId(null);
   }, [tool]);
@@ -316,6 +339,20 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       setWallMenu(null);
     }
   }, [wallMenu, selectedWallIds, selectedWallNodes]);
+
+  // Drop selected terrain tiles that no longer exist (deleted from the menu /
+  // undone), and close the menu once its target selection is empty.
+  useEffect(() => {
+    setSelectedTerrainIds((prev) => {
+      const live = prev.filter((id) => encounter.map.terrain.some((terrain) => terrain.id === id));
+      return live.length === prev.length ? prev : live;
+    });
+  }, [encounter.map.terrain]);
+  useEffect(() => {
+    if (terrainMenu && selectedTerrainIds.length === 0) {
+      setTerrainMenu(null);
+    }
+  }, [terrainMenu, selectedTerrainIds]);
 
   // Close the token menu / cancel a drag if the target combatant is gone
   // (deleted from the menu, undone, scene swap).
@@ -399,6 +436,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       }
       if (event.key === "Escape") {
         clearWallSelection();
+        clearTerrainSelection();
         if (selectedCombatantIdsRef.current.length > 1) {
           clearCombatantSelection();
         }
@@ -406,14 +444,15 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clearWallSelection, clearCombatantSelection]);
+  }, [clearWallSelection, clearTerrainSelection, clearCombatantSelection]);
 
   /** Right-click on empty canvas: never show the browser menu; dismiss any open wall menu, else end a wall chain. */
   function onMapContextMenu(event: MouseEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (wallMenu || tokenMenu) {
+    if (wallMenu || tokenMenu || terrainMenu) {
       setWallMenu(null);
       setTokenMenu(null);
+      setTerrainMenu(null);
       return;
     }
     const state = useEncounterStore.getState();
@@ -461,6 +500,25 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }, []);
 
   /**
+   * Right-click a terrain tile: if it's already in the selection the menu acts
+   * on the whole set; otherwise the selection is replaced with just this tile
+   * (same Foundry-style rule as walls/tokens).
+   */
+  function openTerrainMenu(terrainId: string, x: number, y: number) {
+    if (finishChainIfDrawing()) return;
+    setWallMenu(null);
+    setTokenMenu(null);
+    if (!selectedTerrainIds.includes(terrainId)) {
+      selectTerrain(terrainId, false);
+    }
+    setTerrainMenu({ x, y });
+  }
+
+  const closeTerrainMenu = useCallback(() => {
+    setTerrainMenu(null);
+  }, []);
+
+  /**
    * Right-click a token: finish an in-progress wall chain (parity with the wall
    * menu). If the token is already in the board selection the menu acts on the
    * whole set; otherwise the selection is replaced with just this token (Foundry
@@ -502,6 +560,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
         clearCombatantSelection();
       }
     }
+    if (tool !== "terrain" && !event.shiftKey && selectedTerrainIds.length > 0) {
+      clearTerrainSelection();
+    }
     const point =
       tool === "wall"
         ? getSnappedWallPoint(event.currentTarget, event.clientX, event.clientY, cellSize, grid.width, grid.height)
@@ -526,8 +587,46 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     handleMapClick(point);
   }
 
+  /**
+   * Press with the Terrain tool starts a paint-brush stroke; move/up below
+   * extend and commit it. Shift+press is reserved for toggling an existing
+   * tile into the multi-selection (handled by the tile's own onClick in
+   * SceneOverlays) rather than painting over it.
+   */
+  function onMapPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (isPanning || isPanningRef.current || tool !== "terrain" || event.button !== 0 || event.shiftKey) {
+      return;
+    }
+    // Unlike onMapClick's equivalent guard, this must also admit SVG targets
+    // (terrain tiles re-enable pointer-events on an otherwise inert overlay,
+    // see .terrain in globals.css) so pressing an existing tile still starts
+    // a paint stroke, not just presses on empty canvas.
+    if (!(event.target instanceof Element) || event.target.closest(".token")) {
+      return;
+    }
+    const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+    if (point.x < 0 || point.y < 0 || point.x >= grid.width || point.y >= grid.height) {
+      return;
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setPaintStroke([point]);
+  }
+
   function onMapPointerMove(event: PointerEvent<HTMLDivElement>) {
     if (isPanning || isPanningRef.current) {
+      return;
+    }
+    if (paintStroke) {
+      const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      if (point.x >= 0 && point.y >= 0 && point.x < grid.width && point.y < grid.height) {
+        setPaintStroke((prev) => {
+          if (!prev) return prev;
+          const last = prev[prev.length - 1];
+          if (last && pointsMatch(last, point)) return prev;
+          if (prev.some((cell) => pointsMatch(cell, point))) return prev;
+          return [...prev, point];
+        });
+      }
       return;
     }
     if (draggingTemplateId) {
@@ -576,6 +675,18 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }
 
   function onMapPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (paintStroke) {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      paintTerrainCells(paintStroke);
+      setPaintStroke(null);
+      suppressNextMapClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+      }, 50);
+      return;
+    }
     if (draggedToken) {
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -716,6 +827,16 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     selectedTerrain,
     selectedTemplate,
 
+    // terrain tiles
+    selectedTerrainIds,
+    selectedTerrainCount: selectedTerrainIds.length,
+    selectTerrain,
+    clearTerrainSelection,
+    terrainMenu,
+    openTerrainMenu,
+    closeTerrainMenu,
+    paintStroke,
+
     // walls
     displayWalls,
     wallNodes,
@@ -757,6 +878,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     // handlers for the .battlemap element
     onMapClick,
     onMapContextMenu,
+    onMapPointerDown,
     onMapPointerMove,
     onMapPointerLeave,
     onMapPointerUp,

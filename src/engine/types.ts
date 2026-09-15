@@ -119,6 +119,11 @@ export interface TerrainZone {
   polygon: Point[];
   movementMultiplier?: number;
   tags?: string[];
+  /** Set only for terrain painted with the tile brush: the exact grid cell this
+   * 1x1 tile occupies, used for O(1) paint/erase lookup. Undefined for
+   * hand-drawn region polygons (predates the tile brush), which keep working
+   * as arbitrary-shape terrain untouched by the tile tools. */
+  cell?: Point;
 }
 
 export interface GridConfig {

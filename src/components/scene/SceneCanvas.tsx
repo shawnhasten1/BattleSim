@@ -2,8 +2,8 @@
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
-import { cellIntersectsArea, getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type WallSegment } from "@/engine";
-import { isSurprised, useEncounterStore } from "@/store/encounter-store";
+import { cellIntersectsArea, getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
+import { isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
@@ -22,6 +22,12 @@ const WALL_COVER_ITEMS: Array<{ cover: CoverLevel; label: string }> = [
   { cover: "three-quarters", label: "High wall — ¾ cover" },
   { cover: "half", label: "Low wall — ½ cover" },
   { cover: "none", label: "Marker — no cover" }
+];
+
+const TERRAIN_TYPE_ITEMS: Array<{ brush: Exclude<TerrainBrushId, "eraser">; label: string }> = [
+  { brush: "difficult", label: "Difficult — ×2 move cost" },
+  { brush: "greaterDifficult", label: "Greater difficult — ×4 move cost" },
+  { brush: "impassable", label: "Impassable — blocks movement" }
 ];
 
 interface SceneCanvasProps {
@@ -59,6 +65,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const combatRound = useEncounterStore((state) => state.encounter.round);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
+  const updateTerrainTiles = useEncounterStore((state) => state.updateTerrainTiles);
+  const removeTerrainTiles = useEncounterStore((state) => state.removeTerrainTiles);
   const attachSrdWeapon = useEncounterStore((state) => state.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((state) => state.attachSrdSpell);
   const [srdDropTokenId, setSrdDropTokenId] = useState<string | null>(null);
@@ -186,6 +194,50 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         onSelect: () => {
           removeWalls(targetIds);
           scene.clearWallSelection();
+        }
+      }
+    ];
+  }
+
+  function terrainMenuItems(): ContextMenuItem[] {
+    const ids = scene.selectedTerrainIds;
+    const tiles = ids
+      .map((id) => map.terrain.find((tile) => tile.id === id))
+      .filter((tile): tile is TerrainZone => Boolean(tile));
+    if (tiles.length === 0) return [];
+
+    const n = tiles.length;
+    const every = (predicate: (tile: TerrainZone) => boolean) => tiles.every(predicate);
+    const currentMultiplier = tiles[0].movementMultiplier ?? (tiles[0].type === "difficult" ? 2 : 1);
+    const uniformMultiplier = every((tile) => (tile.movementMultiplier ?? (tile.type === "difficult" ? 2 : 1)) === currentMultiplier);
+
+    return [
+      { heading: n === 1 ? "Terrain type" : `Terrain type — ${n} selected` },
+      ...TERRAIN_TYPE_ITEMS.map((entry) => {
+        const preset = TERRAIN_BRUSH_PRESETS[entry.brush];
+        return {
+          label: entry.label,
+          checked: every((tile) => tile.type === preset.type && (tile.movementMultiplier ?? 1) === (preset.movementMultiplier ?? 1)),
+          onSelect: () => updateTerrainTiles(ids, { name: preset.name, type: preset.type, movementMultiplier: preset.movementMultiplier })
+        };
+      }),
+      { separator: true },
+      {
+        stepper: {
+          label: "Movement ×",
+          value: currentMultiplier,
+          steps: [-1, 1],
+          disabled: !uniformMultiplier || !every((tile) => tile.type === "difficult"),
+          onStep: (delta) => updateTerrainTiles(ids, { movementMultiplier: Math.max(1, currentMultiplier + delta) })
+        }
+      },
+      { separator: true },
+      {
+        label: n === 1 ? "Delete tile" : `Delete ${n} tiles`,
+        danger: true,
+        onSelect: () => {
+          removeTerrainTiles(ids);
+          scene.clearTerrainSelection();
         }
       }
     ];
@@ -346,6 +398,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         } as CSSProperties}
         onClick={replaying ? undefined : scene.onMapClick}
         onContextMenu={replaying ? undefined : scene.onMapContextMenu}
+        onPointerDown={replaying ? undefined : scene.onMapPointerDown}
         onPointerMove={replaying ? undefined : scene.onMapPointerMove}
         onPointerLeave={replaying ? undefined : scene.onMapPointerLeave}
         onPointerUp={replaying ? undefined : scene.onMapPointerUp}
@@ -476,6 +529,15 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           y={scene.tokenMenu.y}
           items={tokenMenuItems(scene.tokenMenu.combatantId)}
           onClose={scene.closeTokenMenu}
+        />
+      ) : null}
+
+      {scene.terrainMenu && !replaying ? (
+        <ContextMenu
+          x={scene.terrainMenu.x}
+          y={scene.terrainMenu.y}
+          items={terrainMenuItems()}
+          onClose={scene.closeTerrainMenu}
         />
       ) : null}
     </section>

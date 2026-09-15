@@ -36,11 +36,14 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
     nearestEnemy,
     selectedWallIds,
     selectedWallNodes,
-    selectedTerrainId,
+    selectedTerrainIds,
     selectedTemplateId,
     selectWall,
     clearWallSelection,
-    setSelectedTerrainId,
+    selectTerrain,
+    clearTerrainSelection,
+    openTerrainMenu,
+    paintStroke,
     setSelectedTemplateId,
     displayWalls,
     openWallMenu,
@@ -69,15 +72,27 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
         <polygon
           key={zone.id}
           points={zone.polygon.map((point) => `${point.x},${point.y}`).join(" ")}
-          className={`terrain ${zone.type} ${zone.id === selectedTerrainId ? "selected" : ""}`}
+          className={`terrain ${zone.type} ${zone.movementMultiplier === 4 ? "terrain-x4" : ""} ${selectedTerrainIds.includes(zone.id) ? "selected" : ""}`}
           onClick={(event) => {
             event.stopPropagation();
-            setSelectedTerrainId(zone.id);
+            selectTerrain(zone.id, event.shiftKey);
             clearWallSelection();
             setSelectedTemplateId(null);
           }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openTerrainMenu(zone.id, event.clientX, event.clientY);
+          }}
         />
       ))}
+      {tool === "terrain" && paintStroke ? (
+        <g className="terrain-paint-preview">
+          {paintStroke.map((cell) => (
+            <rect key={`${cell.x}-${cell.y}`} x={cell.x} y={cell.y} width="1" height="1" />
+          ))}
+        </g>
+      ) : null}
       {activeZones.map((zone) => (
         <g key={zone.id} className="active-zone">
           {cellsInArea(map, zone.origin, zone.area).map((cell) => (
@@ -131,7 +146,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
                 event.stopPropagation();
                 setSelectedTemplateId(template.id);
                 clearWallSelection();
-                setSelectedTerrainId(null);
+                clearTerrainSelection();
               }}
               onPointerDown={(event) => onTemplatePointerDown(event, template.id)}
             />

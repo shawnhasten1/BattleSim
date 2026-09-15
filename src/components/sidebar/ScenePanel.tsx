@@ -26,7 +26,7 @@ function toolReadout(
       : `${measuredDistance} ft direct, path blocked`;
   }
   if (tool === "wall") return "Click grid intersections to draw walls; drag nodes to reshape.";
-  if (tool === "terrain") return "Click the canvas to add a terrain zone, then edit it here.";
+  if (tool === "terrain") return "Click-and-drag to paint terrain tiles; right-click a tile to change or delete it.";
   if (tool === "select") return "Click or drag a token to select and move it.";
   return "Select a scene object or token to inspect.";
 }
@@ -91,7 +91,12 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
   }
 
   const templates = map.templates ?? [];
-  const nothingDrawn = map.walls.length === 0 && map.terrain.length === 0 && templates.length === 0;
+  // Tile-painted terrain (the brush tool) has its own dedicated paint/select/
+  // right-click workflow on the canvas and can easily number in the dozens —
+  // listing every tile here would flood this generic layer list, so it only
+  // shows hand-drawn region terrain (predates the tile brush).
+  const regionTerrain = map.terrain.filter((terrain) => terrain.cell == null);
+  const nothingDrawn = map.walls.length === 0 && regionTerrain.length === 0 && templates.length === 0;
 
   return (
     <div className={styles.panel}>
@@ -145,7 +150,7 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
 
       <section className={styles.section}>
         <h4>
-          <Layers size={13} /> Layers ({map.walls.length + map.terrain.length + templates.length})
+          <Layers size={13} /> Layers ({map.walls.length + regionTerrain.length + templates.length})
         </h4>
         {nothingDrawn ? (
           <p className={styles.readoutDim}>Draw walls, terrain, or templates to manage them here.</p>
@@ -160,7 +165,7 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
               <button type="button" onClick={() => removeWall(wall.id)} title="Remove wall"><Trash2 size={13} /></button>
             </li>
           ))}
-          {map.terrain.map((terrain, index) => (
+          {regionTerrain.map((terrain, index) => (
             <li key={terrain.id}>
               <button type="button" onClick={() => selectTerrain(terrain.id)}>
                 <strong>{terrain.name} {index + 1}</strong>

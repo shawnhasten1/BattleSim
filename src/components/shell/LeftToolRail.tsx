@@ -1,9 +1,9 @@
 "use client";
 
-import { Blocks, BrickWall, Fence, Grid3x3, HeartPulse, Ruler, SquareDashed, User, Waypoints } from "lucide-react";
+import { Ban, Blocks, BrickWall, Eraser, Fence, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, SquareDashed, User, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
-import { useEncounterStore, type EditorTool } from "@/store/encounter-store";
+import { useEncounterStore, type EditorTool, type TerrainBrushId } from "@/store/encounter-store";
 import styles from "./LeftToolRail.module.css";
 
 interface LeftToolRailProps {
@@ -34,13 +34,22 @@ const WALL_TYPES: Array<{ cover: CoverLevel; icon: ReactNode; label: string }> =
   { cover: "none", icon: <SquareDashed size={15} />, label: "Marker — no cover, blocks nothing" }
 ];
 
+/** Paint-brush preset for the terrain tool — the sub-group shown under "Terrain". */
+const TERRAIN_BRUSHES: Array<{ brush: TerrainBrushId; icon: ReactNode; label: string }> = [
+  { brush: "difficult", icon: <Footprints size={15} />, label: "Difficult terrain — half speed (×2 move cost)" },
+  { brush: "greaterDifficult", icon: <Mountain size={15} />, label: "Greater difficult terrain — quarter speed (×4 move cost)" },
+  { brush: "impassable", icon: <Ban size={15} />, label: "Impassable — blocks movement entirely" },
+  { brush: "eraser", icon: <Eraser size={15} />, label: "Eraser — clear painted terrain" }
+];
+
 /**
  * Left tool rail. Each tool owns its own layer of the scene — Select only
  * touches actor tokens, Wall only touches walls, Terrain only touches terrain
  * zones — mirroring Foundry's separate layers. Reads/writes the active tool
  * from the store; the grid/health-bar toggles below are view preferences owned
  * by the page. While the wall tool is active, an indented sub-group picks the
- * cover level for new walls.
+ * cover level for new walls; while the terrain tool is active, a sub-group
+ * picks the paint-brush preset for the click-and-drag terrain tile brush.
  */
 export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleHealthBars }: LeftToolRailProps) {
   const tool = useEncounterStore((state) => state.tool);
@@ -48,6 +57,8 @@ export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleH
   const pendingWallStart = useEncounterStore((state) => state.pendingWallStart);
   const wallCoverDraft = useEncounterStore((state) => state.wallCoverDraft);
   const setWallCoverDraft = useEncounterStore((state) => state.setWallCoverDraft);
+  const terrainBrush = useEncounterStore((state) => state.terrainBrush);
+  const setTerrainBrush = useEncounterStore((state) => state.setTerrainBrush);
 
   return (
     <div className={styles.rail} aria-label="Scene tools">
@@ -69,6 +80,20 @@ export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleH
                   active={wallCoverDraft === wallType.cover}
                   small
                   onClick={() => setWallCoverDraft(wallType.cover)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {entry.tool === "terrain" && tool === "terrain" ? (
+            <div className={styles.subGroup} role="group" aria-label="Terrain brush">
+              {TERRAIN_BRUSHES.map((terrainType) => (
+                <RailButton
+                  key={terrainType.brush}
+                  icon={terrainType.icon}
+                  label={terrainType.label}
+                  active={terrainBrush === terrainType.brush}
+                  small
+                  onClick={() => setTerrainBrush(terrainType.brush)}
                 />
               ))}
             </div>

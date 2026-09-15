@@ -44,6 +44,7 @@ import {
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
+  type TerrainType,
   type TokenVisuals,
   type WeaponDefinition,
   normalizeWall,
@@ -142,7 +143,14 @@ interface EncounterStore {
   cancelWallPlacement: () => void;
   toggleDoorState: (wallId: string) => void;
   updateTerrain: (terrainId: string, updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
+  updateTerrainTiles: (terrainIds: string[], updates: Partial<Pick<TerrainZone, "name" | "type" | "movementMultiplier" | "tags">>) => void;
   removeTerrain: (terrainId: string) => void;
+  removeTerrainTiles: (terrainIds: string[]) => void;
+  /** Brush preset applied by the next tile the terrain tool paints/drags over. */
+  terrainBrush: TerrainBrushId;
+  setTerrainBrush: (brush: TerrainBrushId) => void;
+  /** Paint (or erase, for the "eraser" brush) one 1x1 terrain tile per cell, as a single undo step — the terrain tool's click-and-drag brush stroke. */
+  paintTerrainCells: (cells: Point[]) => void;
   addTemplate: (template: Omit<PlacedTemplate, "id">) => string;
   updateTemplate: (templateId: string, updates: Partial<Omit<PlacedTemplate, "id">>) => void;
   removeTemplate: (templateId: string) => void;
@@ -318,6 +326,24 @@ function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" 
     blocksSight: cover === "total",
     blocksProjectiles: cover === "total"
   };
+}
+
+export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "eraser";
+
+/** Presets for the terrain paint brush. "eraser" removes a painted tile instead of writing one. */
+export const TERRAIN_BRUSH_PRESETS: Record<Exclude<TerrainBrushId, "eraser">, { name: string; type: TerrainType; movementMultiplier?: number }> = {
+  difficult: { name: "Difficult Terrain", type: "difficult", movementMultiplier: 2 },
+  greaterDifficult: { name: "Greater Difficult Terrain", type: "difficult", movementMultiplier: 4 },
+  impassable: { name: "Impassable Terrain", type: "impassable" }
+};
+
+function terrainTilePolygon(cell: Point): Point[] {
+  return [
+    { x: cell.x, y: cell.y },
+    { x: cell.x + 1, y: cell.y },
+    { x: cell.x + 1, y: cell.y + 1 },
+    { x: cell.x, y: cell.y + 1 }
+  ];
 }
 
 function hasOpenActionEconomy(combatant: CombatantState): boolean {
@@ -556,6 +582,8 @@ export const useEncounterStore = create<EncounterStore>()(
       pendingWallStart: null,
       wallCoverDraft: "total",
       setWallCoverDraft: (cover) => set({ wallCoverDraft: cover }),
+      terrainBrush: "difficult",
+      setTerrainBrush: (brush) => set({ terrainBrush: brush }),
       setTool: (tool) => set({ tool, pendingWallStart: null }),
       handleMapClick: (point) => {
         const state = get();
@@ -584,22 +612,9 @@ export const useEncounterStore = create<EncounterStore>()(
         }
 
         if (state.tool === "terrain") {
-          const terrain: TerrainZone = {
-            id: `terrain-${crypto.randomUUID()}`,
-            name: "Difficult Terrain",
-            type: "difficult",
-            movementMultiplier: 2,
-            polygon: [
-              { x: point.x, y: point.y },
-              { x: Math.min(state.encounter.map.grid.width, point.x + 3), y: point.y },
-              { x: Math.min(state.encounter.map.grid.width, point.x + 3), y: Math.min(state.encounter.map.grid.height, point.y + 3) },
-              { x: point.x, y: Math.min(state.encounter.map.grid.height, point.y + 3) }
-            ]
-          };
-          commitEncounter({
-            ...state.encounter,
-            map: { ...state.encounter.map, terrain: [...state.encounter.map.terrain, terrain] }
-          });
+          // Terrain tiles are painted via the click-and-drag brush (see
+          // onMapPointerDown/Move/Up in useSceneInteraction + paintTerrainCells
+          // below), not the plain click handler.
           return;
         }
 
@@ -911,22 +926,78 @@ export const useEncounterStore = create<EncounterStore>()(
           }
         });
       },
-      removeTerrain: (terrainId) => {
+      removeTerrain: (terrainId) => get().removeTerrainTiles([terrainId]),
+      removeTerrainTiles: (terrainIds) => {
+        if (terrainIds.length === 0) return;
+        const ids = new Set(terrainIds);
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
-          map: { ...encounter.map, terrain: encounter.map.terrain.filter((terrain) => terrain.id !== terrainId) }
+          map: { ...encounter.map, terrain: encounter.map.terrain.filter((terrain) => !ids.has(terrain.id)) }
         });
       },
-      updateTerrain: (terrainId, updates) => {
+      updateTerrain: (terrainId, updates) => get().updateTerrainTiles([terrainId], updates),
+      updateTerrainTiles: (terrainIds, updates) => {
+        if (terrainIds.length === 0) return;
+        const ids = new Set(terrainIds);
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
           map: {
             ...encounter.map,
-            terrain: encounter.map.terrain.map((terrain) => terrain.id === terrainId ? { ...terrain, ...updates } : terrain)
+            terrain: encounter.map.terrain.map((terrain) => ids.has(terrain.id) ? { ...terrain, ...updates } : terrain)
           }
         });
+      },
+      paintTerrainCells: (cells) => {
+        if (cells.length === 0) return;
+        const brushId = get().terrainBrush;
+        const encounter = get().encounter;
+        const { width, height } = encounter.map.grid;
+        const inBounds = (cell: Point) => cell.x >= 0 && cell.y >= 0 && cell.x < width && cell.y < height;
+        const byCellKey = new Map<string, TerrainZone>(
+          encounter.map.terrain
+            .filter((tile): tile is TerrainZone & { cell: Point } => tile.cell != null)
+            .map((tile) => [`${tile.cell.x},${tile.cell.y}`, tile])
+        );
+        let terrain = encounter.map.terrain;
+        let changed = false;
+        for (const cell of cells) {
+          if (!inBounds(cell)) continue;
+          const key = `${cell.x},${cell.y}`;
+          const existing = byCellKey.get(key);
+          if (brushId === "eraser") {
+            if (existing) {
+              terrain = terrain.filter((tile) => tile.id !== existing.id);
+              byCellKey.delete(key);
+              changed = true;
+            }
+            continue;
+          }
+          const preset = TERRAIN_BRUSH_PRESETS[brushId];
+          if (existing) {
+            if (existing.type !== preset.type || existing.movementMultiplier !== preset.movementMultiplier || existing.name !== preset.name) {
+              const updated = { ...existing, name: preset.name, type: preset.type, movementMultiplier: preset.movementMultiplier };
+              terrain = terrain.map((tile) => (tile.id === existing.id ? updated : tile));
+              byCellKey.set(key, updated);
+              changed = true;
+            }
+            continue;
+          }
+          const tile: TerrainZone = {
+            id: `terrain-${crypto.randomUUID()}`,
+            name: preset.name,
+            type: preset.type,
+            movementMultiplier: preset.movementMultiplier,
+            polygon: terrainTilePolygon(cell),
+            cell
+          };
+          terrain = [...terrain, tile];
+          byCellKey.set(key, tile);
+          changed = true;
+        }
+        if (!changed) return;
+        commitEncounter({ ...encounter, map: { ...encounter.map, terrain } });
       },
       addTemplate: (template) => {
         const encounter = get().encounter;

@@ -567,6 +567,28 @@ img {
   stroke-width: 0.08;
 }
 
+/* Greater difficult terrain (x4 move cost) reuses the difficult-terrain hue
+   at higher saturation so the two read as "more of the same", not unrelated
+   colors. */
+.terrain.difficult.terrain-x4 {
+  fill: rgba(212, 167, 44, 0.55);
+  stroke: rgba(139, 105, 22, 1);
+}
+
+/* Live cells under the terrain brush during a paint-drag — not yet committed
+   to the store (see paintStroke in useSceneInteraction), so this is the only
+   feedback while dragging. */
+.terrain-paint-preview {
+  pointer-events: none;
+}
+
+.terrain-paint-preview rect {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 0.05;
+  stroke-dasharray: 0.08 0.06;
+}
+
 .path-cell {
   fill: rgba(45, 111, 115, 0.22);
   stroke: rgba(45, 111, 115, 0.8);
