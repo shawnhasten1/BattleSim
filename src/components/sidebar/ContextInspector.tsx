@@ -23,9 +23,8 @@ interface ContextInspectorProps {
 
 /**
  * Contextual editors for whatever scene object is selected on the canvas: a
- * wall node, a wall, a terrain zone, or a template (plus the always-visible
- * template-draft controls). Renders nothing until something is selected except
- * the template tool block.
+ * wall node, a wall, a terrain zone, or a template. Renders nothing until
+ * something is selected.
  */
 export function ContextInspector({ scene }: ContextInspectorProps) {
   const grid = useEncounterStore((state) => state.encounter.map.grid);
@@ -58,10 +57,7 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
     selectedTerrain,
     setSelectedTerrainId,
     selectedTemplate,
-    setSelectedTemplateId,
-    templatePreview,
-    templateDraft,
-    setTemplateDraft
+    setSelectedTemplateId
   } = scene;
 
   const multiWalls = selectedWallCount > 1 ? walls.filter((wall) => selectedWallIds.includes(wall.id)) : [];
@@ -73,8 +69,6 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
   const patchTemplate = (patch: Partial<Omit<PlacedTemplate, "id">>) => {
     if (selectedTemplate) {
       updateTemplate(selectedTemplate.id, patch);
-    } else {
-      setTemplateDraft({ ...templateDraft, ...patch });
     }
   };
 
@@ -308,10 +302,10 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
         </section>
       ) : null}
 
-      <section className={styles.block}>
-        <header>
-          <h4>Template tool</h4>
-          {selectedTemplate ? (
+      {selectedTemplate ? (
+        <section className={styles.block}>
+          <header>
+            <h4>Template</h4>
             <button
               type="button"
               className={styles.danger}
@@ -323,90 +317,90 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
             >
               <Trash2 size={14} />
             </button>
-          ) : null}
-        </header>
-        <div className={styles.stack}>
-          <input
-            value={templatePreview.name}
-            aria-label="Template name"
-            onChange={(event) => patchTemplate({ name: event.target.value })}
-          />
-          <div className={styles.grid2}>
-            <select
-              value={templatePreview.area.type}
-              aria-label="Template shape"
-              onChange={(event) => patchTemplate({ area: { ...templatePreview.area, type: event.target.value as AreaTemplate["type"] } })}
-            >
-              {TEMPLATE_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-            <select
-              value={templatePreview.area.direction ?? "east"}
-              aria-label="Template direction"
-              onChange={(event) =>
-                patchTemplate({ area: { ...templatePreview.area, direction: event.target.value as NonNullable<AreaTemplate["direction"]> } })
-              }
-            >
-              {TEMPLATE_DIRECTIONS.map((direction) => (
-                <option key={direction} value={direction}>{direction}</option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.grid2}>
-            <label>
-              Size ft
-              <input
-                type="number"
-                min={5}
-                step={5}
-                value={templatePreview.area.size}
-                onChange={(event) => patchTemplate({ area: { ...templatePreview.area, size: Number(event.target.value) } })}
-              />
-            </label>
-            <label>
-              Width ft
-              <input
-                type="number"
-                min={5}
-                step={5}
-                value={templatePreview.area.width ?? 5}
-                onChange={(event) => patchTemplate({ area: { ...templatePreview.area, width: Number(event.target.value) } })}
-              />
-            </label>
-          </div>
-          <div className={styles.grid2}>
-            <label>
-              Origin X
-              <input
-                type="number"
-                value={templatePreview.origin.x}
-                onChange={(event) =>
-                  patchTemplate({ origin: { ...templatePreview.origin, x: clamp(Number(event.target.value), 0, grid.width - 1) } })
-                }
-              />
-            </label>
-            <label>
-              Origin Y
-              <input
-                type="number"
-                value={templatePreview.origin.y}
-                onChange={(event) =>
-                  patchTemplate({ origin: { ...templatePreview.origin, y: clamp(Number(event.target.value), 0, grid.height - 1) } })
-                }
-              />
-            </label>
-          </div>
-          <label className={styles.colorRow}>
-            Color
+          </header>
+          <div className={styles.stack}>
             <input
-              type="color"
-              value={templatePreview.color ?? "#287277"}
-              onChange={(event) => patchTemplate({ color: event.target.value })}
+              value={selectedTemplate.name}
+              aria-label="Template name"
+              onChange={(event) => patchTemplate({ name: event.target.value })}
             />
-          </label>
-        </div>
-      </section>
+            <div className={styles.grid2}>
+              <select
+                value={selectedTemplate.area.type}
+                aria-label="Template shape"
+                onChange={(event) => patchTemplate({ area: { ...selectedTemplate.area, type: event.target.value as AreaTemplate["type"] } })}
+              >
+                {TEMPLATE_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <select
+                value={selectedTemplate.area.direction ?? "east"}
+                aria-label="Template direction"
+                onChange={(event) =>
+                  patchTemplate({ area: { ...selectedTemplate.area, direction: event.target.value as NonNullable<AreaTemplate["direction"]> } })
+                }
+              >
+                {TEMPLATE_DIRECTIONS.map((direction) => (
+                  <option key={direction} value={direction}>{direction}</option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.grid2}>
+              <label>
+                Size ft
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={selectedTemplate.area.size}
+                  onChange={(event) => patchTemplate({ area: { ...selectedTemplate.area, size: Number(event.target.value) } })}
+                />
+              </label>
+              <label>
+                Width ft
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={selectedTemplate.area.width ?? 5}
+                  onChange={(event) => patchTemplate({ area: { ...selectedTemplate.area, width: Number(event.target.value) } })}
+                />
+              </label>
+            </div>
+            <div className={styles.grid2}>
+              <label>
+                Origin X
+                <input
+                  type="number"
+                  value={selectedTemplate.origin.x}
+                  onChange={(event) =>
+                    patchTemplate({ origin: { ...selectedTemplate.origin, x: clamp(Number(event.target.value), 0, grid.width - 1) } })
+                  }
+                />
+              </label>
+              <label>
+                Origin Y
+                <input
+                  type="number"
+                  value={selectedTemplate.origin.y}
+                  onChange={(event) =>
+                    patchTemplate({ origin: { ...selectedTemplate.origin, y: clamp(Number(event.target.value), 0, grid.height - 1) } })
+                  }
+                />
+              </label>
+            </div>
+            <label className={styles.colorRow}>
+              Color
+              <input
+                type="color"
+                value={selectedTemplate.color ?? "#287277"}
+                onChange={(event) => patchTemplate({ color: event.target.value })}
+              />
+            </label>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

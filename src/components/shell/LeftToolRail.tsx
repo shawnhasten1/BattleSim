@@ -1,6 +1,6 @@
 "use client";
 
-import { Blocks, BrickWall, Eraser, Fence, Grid3x3, HeartPulse, MousePointer2, Move, Ruler, Shapes, SquareDashed, Target, Waypoints } from "lucide-react";
+import { Blocks, BrickWall, Fence, Grid3x3, HeartPulse, Ruler, SquareDashed, User, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
 import { useEncounterStore, type EditorTool } from "@/store/encounter-store";
@@ -19,18 +19,11 @@ interface ToolDef {
   label: string;
 }
 
-const CORE_TOOLS: ToolDef[] = [
-  { tool: "select", icon: <MousePointer2 size={18} />, label: "Select" },
-  { tool: "move", icon: <Move size={18} />, label: "Move / place token" },
+const TOOLS: ToolDef[] = [
+  { tool: "select", icon: <User size={18} />, label: "Select / move actors" },
   { tool: "measure", icon: <Ruler size={18} />, label: "Measure" },
-  { tool: "wall", icon: <BrickWall size={18} />, label: "Draw walls" }
-];
-
-const SIM_TOOLS: ToolDef[] = [
-  { tool: "sight", icon: <Target size={18} />, label: "Line of sight / effect" },
-  { tool: "template", icon: <Shapes size={18} />, label: "Area template" },
-  { tool: "terrain", icon: <Waypoints size={18} />, label: "Terrain" },
-  { tool: "delete", icon: <Eraser size={18} />, label: "Erase" }
+  { tool: "wall", icon: <BrickWall size={18} />, label: "Walls — select, move, draw" },
+  { tool: "terrain", icon: <Waypoints size={18} />, label: "Terrain" }
 ];
 
 /** Cover level for newly drawn walls — the sub-group shown under "Draw walls". */
@@ -42,10 +35,12 @@ const WALL_TYPES: Array<{ cover: CoverLevel; icon: ReactNode; label: string }> =
 ];
 
 /**
- * Left tool rail. Core tools on top, simulation-specific tools below a divider,
- * then the view toggles (grid, health bars). Reads/writes the active tool from
- * the store; the toggles are view preferences owned by the page. While the wall
- * tool is active, an indented sub-group picks the cover level for new walls.
+ * Left tool rail. Each tool owns its own layer of the scene — Select only
+ * touches actor tokens, Wall only touches walls, Terrain only touches terrain
+ * zones — mirroring Foundry's separate layers. Reads/writes the active tool
+ * from the store; the grid/health-bar toggles below are view preferences owned
+ * by the page. While the wall tool is active, an indented sub-group picks the
+ * cover level for new walls.
  */
 export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleHealthBars }: LeftToolRailProps) {
   const tool = useEncounterStore((state) => state.tool);
@@ -56,7 +51,7 @@ export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleH
 
   return (
     <div className={styles.rail} aria-label="Scene tools">
-      {CORE_TOOLS.map((entry) => (
+      {TOOLS.map((entry) => (
         <Fragment key={entry.tool}>
           <RailButton
             icon={entry.icon}
@@ -79,18 +74,6 @@ export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleH
             </div>
           ) : null}
         </Fragment>
-      ))}
-
-      <div className={styles.divider} />
-
-      {SIM_TOOLS.map((entry) => (
-        <RailButton
-          key={entry.tool}
-          icon={entry.icon}
-          label={entry.label}
-          active={tool === entry.tool}
-          onClick={() => setTool(entry.tool)}
-        />
       ))}
 
       <div className={styles.divider} />

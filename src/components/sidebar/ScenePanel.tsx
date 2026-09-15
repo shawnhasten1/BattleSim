@@ -18,24 +18,16 @@ function toolReadout(
   tool: EditorTool,
   measuredDistance: number | null,
   measuredPathCostFeet: number | null,
-  measuredPathReachable: boolean | undefined,
-  sightResult: { sight: boolean; effect: boolean; cover: string; distance: number } | null
+  measuredPathReachable: boolean | undefined
 ): string {
   if (tool === "measure" && measuredDistance !== null) {
     return measuredPathReachable
       ? `${measuredDistance} ft direct, ${measuredPathCostFeet ?? 0} ft path`
       : `${measuredDistance} ft direct, path blocked`;
   }
-  if (tool === "sight" && sightResult) {
-    const coverNote = sightResult.cover === "none" ? "no cover"
-      : sightResult.cover === "half" ? "half cover"
-        : sightResult.cover === "three-quarters" ? "¾ cover"
-          : "total cover";
-    return `${sightResult.distance} ft · ${sightResult.sight ? "LOS clear" : "LOS blocked"} · ${sightResult.effect ? "LOE clear" : "LOE blocked"} · ${coverNote}`;
-  }
-  if (tool === "template") return "Click the canvas to place the configured template.";
   if (tool === "wall") return "Click grid intersections to draw walls; drag nodes to reshape.";
   if (tool === "terrain") return "Click the canvas to add a terrain zone, then edit it here.";
+  if (tool === "select") return "Click or drag a token to select and move it.";
   return "Select a scene object or token to inspect.";
 }
 
@@ -58,7 +50,6 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
     measuredDistance,
     measuredPath,
     measuredPathCostFeet,
-    sightResult,
     templateAffectedCombatants,
     selectedTemplateId,
     setSelectedWallId,
@@ -141,7 +132,7 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
           </button>
         </div>
         <p className={styles.readout}>
-          {toolReadout(tool, measuredDistance, measuredPathCostFeet, measuredPath?.reachable, sightResult)}
+          {toolReadout(tool, measuredDistance, measuredPathCostFeet, measuredPath?.reachable)}
         </p>
         <p className={styles.readoutDim}>
           {templateAffectedCombatants.length

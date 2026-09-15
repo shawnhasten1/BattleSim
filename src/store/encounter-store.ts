@@ -62,7 +62,7 @@ import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
-export type EditorTool = "select" | "move" | "measure" | "sight" | "wall" | "terrain" | "template" | "delete";
+export type EditorTool = "select" | "measure" | "wall" | "terrain";
 
 export type WallUpdate = Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>;
 
@@ -603,12 +603,8 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
 
-        if (state.tool === "delete") {
-          return;
-        }
-
         const selectedId = state.selectedCombatantId;
-        if (state.tool !== "move" || !selectedId) {
+        if (state.tool !== "select" || !selectedId) {
           return;
         }
         // Free placement: drop the token wherever clicked, no range / OA / cost.

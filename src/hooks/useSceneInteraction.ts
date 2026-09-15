@@ -9,18 +9,12 @@ import {
   type RefObject
 } from "react";
 import {
-  cellsInArea,
   combatantsInArea,
   DEFAULT_GRID_VISUALS,
   findPath,
   gridDistance,
-  coverBetween,
-  lineOfEffect,
-  lineOfSight,
   sizeFootprint,
-  zoneBlocksSightBetween,
-  zoneTerrainOverlay,
-  type PlacedTemplate
+  zoneTerrainOverlay
 } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
@@ -34,14 +28,6 @@ import {
   type GridPoint
 } from "@/components/scene/coords";
 
-const DEFAULT_TEMPLATE_DRAFT: Omit<PlacedTemplate, "id"> = {
-  name: "20 ft Circle",
-  origin: { x: 0, y: 0 },
-  area: { type: "circle", size: 20, direction: "east", width: 5 },
-  affects: "all",
-  color: "#287277"
-};
-
 interface UseSceneInteractionArgs {
   /** From `useViewport` — the map handlers no-op while a pan is happening. */
   isPanning: boolean;
@@ -50,10 +36,11 @@ interface UseSceneInteractionArgs {
 
 /**
  * All interactive scene-editing state: the active tool's transient state
- * (measure/sight endpoints, wall cursor, template draft), the selection of
- * walls / terrain / templates / nodes, the derived readouts (measured path,
- * line of sight, template targets, movement preview), and the pointer handlers
- * for the `.battlemap` element.
+ * (measure endpoints, wall cursor), the selection of walls / terrain /
+ * templates / nodes, the derived readouts (measured path, template targets,
+ * movement preview), and the pointer handlers for the `.battlemap` element.
+ * Each tool owns its own layer — Select only touches tokens, Wall only
+ * touches walls/nodes — so a tool's pointer handler no-ops outside its tool.
  *
  * Consumed by `SceneCanvas` (rendering) and, for now, by the legacy Scene
  * panel in the page component (inspectors). Phase 3 moves the panel side into a
@@ -65,7 +52,6 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const pendingWallStart = useEncounterStore((state) => state.pendingWallStart);
   const handleMapClick = useEncounterStore((state) => state.handleMapClick);
   const placeCombatant = useEncounterStore((state) => state.placeCombatant);
-  const addTemplate = useEncounterStore((state) => state.addTemplate);
   const updateTemplate = useEncounterStore((state) => state.updateTemplate);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
@@ -85,14 +71,11 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const [wallDragPoint, setWallDragPoint] = useState<GridPoint | null>(null);
   const [measureStart, setMeasureStart] = useState<GridPoint | null>(null);
   const [measureEnd, setMeasureEnd] = useState<GridPoint | null>(null);
-  const [sightStart, setSightStart] = useState<GridPoint | null>(null);
-  const [sightEnd, setSightEnd] = useState<GridPoint | null>(null);
-  const [templateDraft, setTemplateDraft] = useState<Omit<PlacedTemplate, "id">>(DEFAULT_TEMPLATE_DRAFT);
   const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null);
   // Right-click-a-token menu. Carries the target id so the menu can act on it
   // even before a future multi-selection model exists.
   const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
-  // A token being dragged with the Move tool. `pixel` is the live cursor-tracked
+  // A token being dragged with the Select tool. `pixel` is the live cursor-tracked
   // top-left (battlemap px) for a 1:1 feel; `cell` is where it will snap. The
   // move is committed to the store once, on pointer-up.
   const [draggedToken, setDraggedToken] = useState<
@@ -223,25 +206,22 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const selectedTemplate = selectedTemplateId
     ? (encounter.map.templates ?? []).find((template) => template.id === selectedTemplateId) ?? null
     : null;
-  const templatePreview = selectedTemplate ?? templateDraft;
   const definitionsById = useMemo(
     () => new Map(encounter.definitions.map((definition) => [definition.id, definition])),
     [encounter.definitions]
   );
-  const templatePreviewCells = useMemo(
-    () => cellsInArea(encounter.map, templatePreview.origin, templatePreview.area),
-    [encounter.map, templatePreview]
-  );
   const templateAffectedCombatants = useMemo(
     () =>
-      combatantsInArea(
-        encounter.map,
-        templatePreview.origin,
-        templatePreview.area,
-        encounter.combatants,
-        definitionsById
-      ),
-    [definitionsById, encounter.combatants, encounter.map, templatePreview]
+      selectedTemplate
+        ? combatantsInArea(
+            encounter.map,
+            selectedTemplate.origin,
+            selectedTemplate.area,
+            encounter.combatants,
+            definitionsById
+          )
+        : [],
+    [definitionsById, encounter.combatants, encounter.map, selectedTemplate]
   );
 
   const enemies = encounter.combatants.filter(
@@ -275,16 +255,6 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const measuredPathCostFeet = measuredPath?.reachable
     ? measuredPath.cost * encounter.map.grid.distancePerSquare
     : null;
-  const sightResult =
-    sightStart && sightEnd
-      ? {
-          sight: lineOfSight(encounter.map, sightStart, sightEnd)
-            && !zoneBlocksSightBetween(encounter.activeZones, sightStart, sightEnd, encounter.map.grid.distancePerSquare),
-          effect: lineOfEffect(encounter.map, sightStart, sightEnd),
-          cover: coverBetween(encounter.map, sightStart, 1, sightEnd, 1).level,
-          distance: gridDistance(sightStart, sightEnd, encounter.map.grid)
-        }
-      : null;
   const previewPath = useMemo(() => {
     if (!selectedCombatant || !nearestEnemy || !selectedDefinition) {
       return null;
@@ -319,10 +289,6 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (tool !== "measure") {
       setMeasureStart(null);
       setMeasureEnd(null);
-    }
-    if (tool !== "sight") {
-      setSightStart(null);
-      setSightEnd(null);
     }
     setWallMenu(null);
     setTokenMenu(null);
@@ -548,20 +514,6 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (!inBounds) {
       return;
     }
-    if (tool === "template") {
-      const id = addTemplate({ ...templateDraft, origin: point });
-      setSelectedTemplateId(id);
-      return;
-    }
-    if (tool === "sight") {
-      if (!sightStart) {
-        setSightStart(point);
-        setSightEnd(point);
-      } else {
-        setSightEnd(point);
-      }
-      return;
-    }
     if (tool === "measure") {
       if (!measureStart) {
         setMeasureStart(point);
@@ -607,22 +559,6 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (tool === "measure" && measureStart) {
       const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
       setMeasureEnd({ x: clamp(point.x, 0, grid.width - 1), y: clamp(point.y, 0, grid.height - 1) });
-      return;
-    }
-    if (tool === "sight" && sightStart) {
-      const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
-      setSightEnd({ x: clamp(point.x, 0, grid.width - 1), y: clamp(point.y, 0, grid.height - 1) });
-      return;
-    }
-    if (tool === "template" && !selectedTemplateId) {
-      const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
-      setTemplateDraft((current) => ({
-        ...current,
-        origin: {
-          x: clamp(point.x, 0, grid.width - 1),
-          y: clamp(point.y, 0, grid.height - 1)
-        }
-      }));
       return;
     }
     if (tool !== "wall") {
@@ -692,6 +628,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }
 
   function onWallNodePointerDown(event: PointerEvent<SVGCircleElement>, node: GridPoint) {
+    if (tool !== "wall") {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     suppressNextMapClickRef.current = true;
@@ -707,12 +646,12 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }
 
   /**
-   * Press a token with the Move tool to drag it. Shift+press instead toggles the
-   * token in the board multi-selection (no drag). Under every other tool this is
-   * a no-op and the button's own `onClick` handles select / delete.
+   * Press a token with the Select tool to select or drag it. Shift+press
+   * toggles the token in the board multi-selection (no drag). Under every
+   * other tool this is a no-op — walls / terrain each own their own layer.
    */
   function onTokenPointerDown(event: PointerEvent<HTMLButtonElement>, combatantId: string) {
-    if (tool !== "move" || event.button !== 0) {
+    if (tool !== "select" || event.button !== 0) {
       return;
     }
     event.stopPropagation();
@@ -803,21 +742,14 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     droppingTokenId,
 
     // templates
-    templateDraft,
-    setTemplateDraft,
-    templatePreview,
-    templatePreviewCells,
     templateAffectedCombatants,
 
-    // measure / sight
+    // measure
     measureStart,
     measureEnd,
-    sightStart,
-    sightEnd,
     measuredDistance,
     measuredPath,
     measuredPathCostFeet,
-    sightResult,
 
     // movement preview
     previewPath,

@@ -399,11 +399,11 @@ describe("store — placeCombatant (free placement)", () => {
   });
 });
 
-describe("store — handleMapClick move branch routes to placeCombatant", () => {
+describe("store — handleMapClick select branch routes to placeCombatant", () => {
   it("drops the selected token on any clicked cell with no reachability warning", () => {
     const store = useEncounterStore.getState();
     store.selectCombatant("pc-fighter");
-    store.setTool("move");
+    store.setTool("select");
     const logBefore = useEncounterStore.getState().log.length;
 
     useEncounterStore.getState().handleMapClick({ x: 9, y: 6 });
@@ -412,9 +412,9 @@ describe("store — handleMapClick move branch routes to placeCombatant", () => 
     expect(useEncounterStore.getState().log.length).toBe(logBefore);
   });
 
-  it("does nothing when the move tool is active but nothing is selected", () => {
+  it("does nothing when the select tool is active but nothing is selected", () => {
     const store = useEncounterStore.getState();
-    store.setTool("move");
+    store.setTool("select");
     store.selectCombatant(null);
     const before = useEncounterStore.getState().encounter;
     useEncounterStore.getState().handleMapClick({ x: 3, y: 3 });
@@ -442,10 +442,10 @@ const moveEvent = (clientX: number, clientY: number) =>
 const upEvent = () =>
   ({ pointerId: 1, currentTarget: { hasPointerCapture: () => false, releasePointerCapture: () => {} } }) as never;
 
-describe("useSceneInteraction — token drag (Move tool)", () => {
-  it("does nothing under a non-move tool (button onClick handles select)", () => {
+describe("useSceneInteraction — token drag (Select tool)", () => {
+  it("does nothing under a non-select tool (e.g. Wall)", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("select"));
+    act(() => useEncounterStore.getState().setTool("wall"));
 
     act(() => result.current.onTokenPointerDown(downEvent(), "enemy-goblin-1"));
     expect(result.current.draggedToken).toBeNull();
@@ -453,7 +453,7 @@ describe("useSceneInteraction — token drag (Move tool)", () => {
 
   it("starts a drag from the token's current cell and selects it", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
     const start = posOf("enemy-goblin-1")!;
 
     act(() => result.current.onTokenPointerDown(downEvent(), "enemy-goblin-1"));
@@ -465,7 +465,7 @@ describe("useSceneInteraction — token drag (Move tool)", () => {
 
   it("Shift+press toggles selection without starting a drag", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
 
     act(() => result.current.onTokenPointerDown(downEvent(), "enemy-goblin-1")); // [g1], drag
     act(() => result.current.onMapPointerUp(upEvent()));
@@ -477,14 +477,14 @@ describe("useSceneInteraction — token drag (Move tool)", () => {
 
   it("ignores non-left buttons (right-click opens the menu instead)", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
     act(() => result.current.onTokenPointerDown(downEvent({ button: 2 }), "enemy-goblin-1"));
     expect(result.current.draggedToken).toBeNull();
   });
 
   it("tracks the cursor pixel-for-pixel and commits the snapped cell on pointer-up", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
     const cs = result.current.cellSize;
     const undoBefore = useEncounterStore.getState().undoStack.length;
 
@@ -508,7 +508,7 @@ describe("useSceneInteraction — token drag (Move tool)", () => {
 
   it("a press with no move adds no undo entry and no settle tag", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
     const undoBefore = useEncounterStore.getState().undoStack.length;
 
     act(() => result.current.onTokenPointerDown(downEvent(), "enemy-goblin-1"));
@@ -521,11 +521,11 @@ describe("useSceneInteraction — token drag (Move tool)", () => {
 
   it("cancels an in-flight drag when the tool changes", () => {
     const { result } = renderHook(() => SceneHook());
-    act(() => useEncounterStore.getState().setTool("move"));
+    act(() => useEncounterStore.getState().setTool("select"));
     act(() => result.current.onTokenPointerDown(downEvent(), "enemy-goblin-1"));
     expect(result.current.draggedToken).not.toBeNull();
 
-    act(() => useEncounterStore.getState().setTool("select"));
+    act(() => useEncounterStore.getState().setTool("wall"));
     expect(result.current.draggedToken).toBeNull();
   });
 });

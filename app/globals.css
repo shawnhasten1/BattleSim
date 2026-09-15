@@ -420,8 +420,8 @@ img {
   box-shadow: 0 0 0 3px rgba(178, 137, 230, 0.9), 0 0 10px 2px rgba(130, 90, 180, 0.7);
 }
 
-/* Move tool: tokens read as draggable, and the one in hand lifts and fades. */
-.tool-move .token {
+/* Select tool: tokens read as draggable, and the one in hand lifts and fades. */
+.tool-select .token {
   cursor: grab;
 }
 

@@ -98,7 +98,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
 
   // One pass over the roster: everything the token, its HP bar, and any future
   // per-token overlay need, so the tokens and the overlay layer stay in sync.
-  // A token being dragged with the Move tool renders at the live cursor pixel
+  // A token being dragged with the Select tool renders at the live cursor pixel
   // (committed to the store only on drop) — both the token and its HP bar read
   // `x`/`y` from here, so they move together.
   const draggedToken = scene.draggedToken;
@@ -334,7 +334,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         <button type="button" onClick={viewport.resetViewport} title="Reset viewport"><Crosshair size={16} /></button>
       </div>
       <div
-        className={`battlemap scene-canvas ${tool === "move" && !replaying ? "tool-move" : ""}`}
+        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
@@ -407,17 +407,10 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
               onDragLeave={() => setSrdDropTokenId((current) => (current === combatant.id ? null : current))}
               onDrop={(event) => onTokenSrdDrop(event, combatant)}
               onPointerDown={replaying ? undefined : (event) => scene.onTokenPointerDown(event, combatant.id)}
-              onClick={(event) => {
-                if (replaying) return;
-                if (tool === "delete") {
-                  removeCombatant(combatant.id);
-                  return;
-                }
-                // The Move tool drives select / drag / place from the pointer
-                // handlers; its trailing click is inert here.
-                if (tool === "move") return;
-                scene.selectCombatantOnBoard(combatant.id, event.shiftKey);
-              }}
+              // The Select tool drives select / drag / place entirely from the
+              // pointer handlers above; every other tool owns a different layer
+              // (walls, terrain) and must not be able to select a token, so the
+              // click itself is always inert here.
               onContextMenu={
                 replaying
                   ? undefined
