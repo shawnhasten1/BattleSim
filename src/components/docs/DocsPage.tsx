@@ -36,7 +36,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong>Build the map</strong> — draw walls, paint terrain, drop in a background image (see{" "}
-            <a href="#walls">Walls &amp; the Battle Map</a>).
+            <a href="#walls">Walls &amp; Terrain</a>).
           </li>
           <li>
             <strong>Add actors</strong> to each side and fill out their sheets — stats, attacks, spells,
@@ -89,13 +89,36 @@ const SECTIONS: Section[] = [
     content: (
       <>
         <p>
-          Inside a campaign, create an encounter to get a fresh map and roster. Opening an encounter drops
-          you into the main editor, which is made up of a few areas:
+          Inside a campaign, click <strong>New Encounter</strong> to open the Create Encounter dialog:
+        </p>
+        <ul>
+          <li><strong>Encounter name</strong>.</li>
+          <li>
+            <strong>Grid size</strong> — pick a preset (Landscape 40×30, Portrait 30×40, Square 40×40) or hit{" "}
+            <strong>Custom…</strong> for exact columns, rows, pixels-per-square, and feet-per-square.
+          </li>
+          <li>
+            <strong>Background (optional)</strong> — upload an image now, or leave it blank and start with an
+            empty grid; you can always add or replace it later from Scene settings. When you upload one, the
+            canvas automatically resizes to match its shape rather than cropping it to a fixed size.
+          </li>
+        </ul>
+        <p>
+          The scene-switcher dropdown in the top bar has the same dialog under <strong>New scene</strong>,
+          with an extra choice: <strong>Clone current map</strong> (copies your walls/terrain/tokens into a
+          new scene, named "&lt;name&gt; Variant") or <strong>Start fresh</strong> to open the same
+          name/grid/background picker instead. Replacing an existing background image on a map that already
+          has walls, terrain, or tokens placed will warn you first if the new image's proportions don't match
+          the old one, since that can throw off everything already positioned.
+        </p>
+        <p>
+          Opening an encounter drops you into the main editor, which is made up of a few areas:
         </p>
         <ul>
           <li>
             <strong>Top bar</strong> — switch scenes, open the Encounter Builder, undo/redo, save, reset the
-            encounter, view the battle report, and scene settings.
+            encounter, view the battle report, and scene settings (grid size, background image, and{" "}
+            <strong>Padding (sq)</strong> — extra border around the map outside the grid, Foundry-VTT style).
           </li>
           <li>
             <strong>Left tool rail</strong> — the map-editing tools: draw walls, paint terrain, measure, place
@@ -134,13 +157,15 @@ const SECTIONS: Section[] = [
   },
   {
     id: "walls",
-    label: "Walls & the Battle Map",
+    label: "Walls & Terrain",
     content: (
       <>
         <p>
           The battle map is a grid you can drop a background image onto and then build out with walls and
           terrain using the left tool rail.
         </p>
+
+        <h3>Walls & cover</h3>
         <p>
           <strong>Walls</strong> are line segments you draw between grid points. Each wall can:
         </p>
@@ -161,11 +186,36 @@ const SECTIONS: Section[] = [
           to the corners and center of the target's square, and uses the strongest obstruction it finds (a
           wall or another creature standing in the way) to decide how much cover applies to that shot.
         </p>
+
+        <h3>Painting terrain</h3>
         <p>
-          Besides walls, you can paint <strong>terrain</strong> onto grid cells — normal, difficult (costs
-          extra movement), impassable, hazardous, or terrain that grants cover/elevation. Terrain painted this
-          way is permanent for the encounter, as opposed to the temporary zones spells create (see{" "}
-          <a href="#zones">Zones &amp; Persistent Effects</a>).
+          Select the <strong>Terrain</strong> tool in the left rail to reveal a brush sub-toolbar. Click a
+          cell to paint it, or click-and-drag to paint every cell the cursor crosses — the whole stroke undoes
+          in one step. Shift-click to multi-select painted tiles. The brush presets:
+        </p>
+        <ul>
+          <li><strong>Difficult terrain</strong> — half speed (×2 move cost).</li>
+          <li><strong>Greater difficult terrain</strong> — quarter speed (×4 move cost).</li>
+          <li><strong>Impassable</strong> — blocks movement entirely.</li>
+          <li><strong>Acid</strong> — DC 12 Dex save, 2d6 acid damage (half on a success), re-checked every round spent standing in it.</li>
+          <li><strong>Lava</strong> — 4d10 fire damage on entry or while standing in it, no save.</li>
+          <li><strong>Ice</strong> — DC 10 Dex save or fall prone on entry; no damage at all.</li>
+          <li><strong>Eraser</strong> — clears painted terrain instead of adding it.</li>
+        </ul>
+        <p>
+          Each hazard tile shows a small icon (a droplet, flame, or snowflake) so its type reads at a glance
+          regardless of color. The AI treats hazardous and difficult/impassable terrain as real danger and
+          cost when pathing — the same avoidance logic that steers it around a Spike Growth zone (see{" "}
+          <a href="#zones">Zones &amp; Persistent Effects</a>) applies here too.
+        </p>
+
+        <h3>Editing painted terrain</h3>
+        <p>
+          Right-click one or more selected tiles for a context menu: swap the terrain type for the whole
+          selection, step the movement-cost multiplier up/down, and — if every selected tile shares the same
+          hazard — fine-tune that hazard's own <strong>Save DC</strong> and <strong>damage dice</strong> count
+          beyond the three fixed presets (e.g. turn a DC 12 acid pool into a DC 15 one, or bump 2d6 up to
+          3d6). The same menu deletes the selection.
         </p>
       </>
     )
@@ -476,23 +526,6 @@ const SECTIONS: Section[] = [
         <p>
           While a token is standing inside an active zone, it gets a visible highlight on the map so it's
           obvious at a glance who's currently affected.
-        </p>
-      </>
-    )
-  },
-  {
-    id: "accounts",
-    label: "Accounts",
-    content: (
-      <>
-        <p>
-          BattleSim supports full multi-user accounts — sign up with an email and password (or another
-          supported sign-in method) from the login screen. Once you're signed in, every campaign, encounter,
-          and custom actor you create is scoped to your account and private to you.
-        </p>
-        <p>
-          You can sign out from the icon in the top bar of the editor or from the Campaigns page. There's
-          currently no sharing of campaigns between accounts — each user's content is their own.
         </p>
       </>
     )
