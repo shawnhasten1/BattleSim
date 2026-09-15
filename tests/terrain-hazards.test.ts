@@ -45,6 +45,34 @@ function acidTile(cell: { x: number; y: number }): TerrainZone {
   };
 }
 
+/** `dc` is a parameter so tests can force a guaranteed pass/fail without scripting the RNG. */
+function iceTile(cell: { x: number; y: number }, dc: number): TerrainZone {
+  return {
+    id: "terrain-ice",
+    name: "Ice",
+    type: "hazard",
+    tags: ["ice"],
+    polygon: [
+      { x: cell.x, y: cell.y },
+      { x: cell.x + 1, y: cell.y },
+      { x: cell.x + 1, y: cell.y + 1 },
+      { x: cell.x, y: cell.y + 1 }
+    ],
+    cell,
+    hazard: {
+      trigger: ["on-enter"],
+      saveAbility: "dex",
+      dc,
+      riders: [{
+        kind: "condition",
+        when: "on-save-fail",
+        condition: "prone",
+        duration: { kind: "until-start-of-next-turn" }
+      }]
+    }
+  };
+}
+
 function encounter(): EncounterSnapshot {
   const e = structuredClone(sampleEncounter);
   e.seed = "terrain-hazards";
@@ -139,6 +167,40 @@ describe("terrain hazard tiles", () => {
     expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(false);
   });
 
+  it("knocks a creature prone on a failed save against a damage-free hazard tile (ice)", () => {
+    const e = encounter();
+    // DC 999 is unreachable by any roll — guarantees a failed save without
+    // needing to script the RNG.
+    e.map.terrain = [iceTile({ x: 3, y: 1 }, 999)];
+    const enemy = e.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    enemy.position = { x: 1, y: 1 };
+    const state = createEngineState(e);
+
+    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+
+    const saveEvent = state.log.find((entry) => entry.type === "SaveRolled");
+    expect(saveEvent?.data?.success).toBe(false);
+    expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(false);
+    const combatant = state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    expect(combatant.conditions?.some((condition) => condition.name === "prone")).toBe(true);
+  });
+
+  it("does not knock a creature prone on a successful save against ice", () => {
+    const e = encounter();
+    // DC -999 is always beaten — guarantees a successful save.
+    e.map.terrain = [iceTile({ x: 3, y: 1 }, -999)];
+    const enemy = e.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    enemy.position = { x: 1, y: 1 };
+    const state = createEngineState(e);
+
+    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+
+    const saveEvent = state.log.find((entry) => entry.type === "SaveRolled");
+    expect(saveEvent?.data?.success).toBe(true);
+    const combatant = state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    expect(combatant.conditions?.some((condition) => condition.name === "prone") ?? false).toBe(false);
+  });
+
   it("AI avoids pathing an archer through a lava tile when an equally good route is open", () => {
     const e = encounter();
     e.seed = "terrain-hazard-ai-avoid";
@@ -162,5 +224,26 @@ describe("terrain hazard tiles", () => {
     const finalPosition = state.snapshot.combatants.find((c) => c.id === "pc-archer")!.position;
     expect(finalPosition).not.toEqual({ x: 3, y: 1 });
     expect(state.log.some((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-archer")).toBe(false);
+  });
+
+  it("AI avoids pathing through ice too, even though it deals no damage (rider-only hazards still count)", () => {
+    const e = encounter();
+    e.seed = "terrain-hazard-ai-avoid-ice";
+    e.map.terrain = [iceTile({ x: 3, y: 1 }, 999)];
+    const archer = e.combatants.find((c) => c.id === "pc-archer")!;
+    archer.position = { x: 1, y: 1 };
+    archer.tacticsProfile = "basic-ranged";
+    const fighter = e.combatants.find((c) => c.id === "pc-fighter")!;
+    fighter.state = "dead";
+    const goblin1 = e.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    goblin1.position = { x: 9, y: 1 };
+    const goblin2 = e.combatants.find((c) => c.id === "enemy-goblin-2")!;
+    goblin2.state = "dead";
+
+    const state = createEngineState(e);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
+
+    const finalPosition = state.snapshot.combatants.find((c) => c.id === "pc-archer")!.position;
+    expect(finalPosition).not.toEqual({ x: 3, y: 1 });
   });
 });

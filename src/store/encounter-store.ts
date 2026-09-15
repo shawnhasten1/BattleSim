@@ -329,7 +329,7 @@ function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" 
   };
 }
 
-export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "acid" | "lava" | "eraser";
+export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "acid" | "lava" | "ice" | "eraser";
 
 interface TerrainBrushPreset {
   name: string;
@@ -364,6 +364,28 @@ export const TERRAIN_BRUSH_PRESETS: Record<Exclude<TerrainBrushId, "eraser">, Te
     hazard: {
       trigger: ["on-enter", "start-of-turn-in-zone"],
       damage: [{ dice: "4d10", damageType: "fire" }]
+    }
+  },
+  ice: {
+    name: "Ice",
+    type: "hazard",
+    tags: ["ice"],
+    hazard: {
+      // Only checked on the step onto the ice, not every turn spent standing
+      // on it — you either catch your footing or you're already down.
+      trigger: ["on-enter"],
+      saveAbility: "dex",
+      dc: 10,
+      // No damage component at all — this is the pure "status effect, no
+      // damage" hazard shape the rider system needs to support (Phase 3).
+      // The "prone" rider gates on the hazard's own save result via
+      // `when: "on-save-fail"`, so it needs no separate `save` of its own.
+      riders: [{
+        kind: "condition",
+        when: "on-save-fail",
+        condition: "prone",
+        duration: { kind: "until-start-of-next-turn" }
+      }]
     }
   }
 };

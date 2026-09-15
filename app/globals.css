@@ -555,8 +555,8 @@ img {
   stroke-width: 0.04;
 }
 
-/* Acid/lava share `type: "hazard"` but read as distinct dangers: acid green
-   and corrosive, lava saturated orange-red and hot. */
+/* Acid/lava/ice share `type: "hazard"` but read as distinct dangers: acid
+   green and corrosive, lava saturated orange-red and hot, ice pale and cold. */
 .terrain.hazard-acid {
   fill: rgba(133, 191, 58, 0.38);
   stroke: rgba(94, 138, 30, 0.85);
@@ -567,6 +567,12 @@ img {
   fill: rgba(224, 86, 24, 0.48);
   stroke: rgba(158, 45, 10, 0.9);
   stroke-width: 0.05;
+}
+
+.terrain.hazard-ice {
+  fill: rgba(173, 216, 230, 0.45);
+  stroke: rgba(100, 170, 200, 0.85);
+  stroke-width: 0.04;
 }
 
 .terrain.cover,
