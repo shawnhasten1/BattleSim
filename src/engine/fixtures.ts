@@ -36,7 +36,8 @@ export const sampleEncounter: EncounterSnapshot = {
         end: { x: 5, y: 5 },
         blocksMovement: true,
         blocksSight: true,
-        blocksProjectiles: true
+        blocksProjectiles: true,
+        cover: "total"
       }
     ],
     terrain: [
@@ -60,10 +61,53 @@ export const sampleEncounter: EncounterSnapshot = {
       name: "Test Fighter",
       source: { provider: "homebrew" },
       size: "medium",
+      type: "humanoid",
       armorClass: 16,
       maxHp: 32,
       speed: 30,
       abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 10 },
+      resources: { "second-wind": 1, "action-surge": 1 },
+      features: [
+        {
+          id: "second-wind-feature",
+          name: "Second Wind",
+          category: "feature",
+          automationSupport: "full",
+          description: "Once per short rest: a bonus action to regain 1d10 + your level hit points.",
+          grantedActions: [
+            {
+              kind: "healing",
+              id: "second-wind",
+              name: "Second Wind",
+              actionType: "bonus",
+              range: 0,
+              healing: [{ dice: "1d10+5" }],
+              targeting: { target: "self" },
+              resourceCost: { resourceId: "second-wind", amount: 1 },
+              automationSupport: "full"
+            }
+          ]
+        },
+        {
+          id: "action-surge-feature",
+          name: "Action Surge",
+          category: "feature",
+          automationSupport: "full",
+          description: "Once per short rest: take one additional action on your turn.",
+          effects: [{ kind: "extra-action", slot: "action" }],
+          grantedActions: [
+            {
+              kind: "activate-feature",
+              id: "action-surge-activate",
+              name: "Action Surge",
+              actionType: "free",
+              featureId: "action-surge-feature",
+              resourceCost: { resourceId: "action-surge", amount: 1 },
+              automationSupport: "full"
+            }
+          ]
+        }
+      ],
       actions: [
         {
           kind: "attack",
@@ -85,6 +129,7 @@ export const sampleEncounter: EncounterSnapshot = {
       name: "Test Archer",
       source: { provider: "homebrew" },
       size: "medium",
+      type: "humanoid",
       armorClass: 14,
       maxHp: 24,
       speed: 30,
@@ -99,6 +144,7 @@ export const sampleEncounter: EncounterSnapshot = {
           ability: "dex",
           attackBonus: 5,
           range: 80,
+          longRange: 320,
           damage: [{ dice: "1d6", damageType: "piercing", abilityModifier: "dex" }],
           automationSupport: "full"
         }
@@ -115,10 +161,24 @@ export const sampleEncounter: EncounterSnapshot = {
         importedAt: "2026-09-06T00:00:00.000Z"
       },
       size: "small",
+      type: "humanoid",
       armorClass: 15,
       maxHp: 7,
       speed: 30,
       abilities: { str: 8, dex: 14, con: 10, int: 10, wis: 8, cha: 8 },
+      traits: [
+        {
+          id: "nimble-escape",
+          name: "Nimble Escape",
+          category: "trait",
+          automationSupport: "full",
+          description: "You can take the Disengage or Hide action as a bonus action on each of your turns.",
+          grantedActions: [
+            { kind: "utility", id: "nimble-escape-disengage", name: "Nimble Escape: Disengage", actionType: "bonus", mode: "disengage", automationSupport: "full" },
+            { kind: "utility", id: "nimble-escape-hide", name: "Nimble Escape: Hide", actionType: "bonus", mode: "hide", automationSupport: "partial" }
+          ]
+        }
+      ],
       actions: [
         {
           kind: "attack",
@@ -142,6 +202,7 @@ export const sampleEncounter: EncounterSnapshot = {
           ability: "dex",
           attackBonus: 4,
           range: 80,
+          longRange: 320,
           damage: [{ dice: "1d6", damageType: "piercing", abilityModifier: "dex" }],
           automationSupport: "full"
         }
@@ -159,7 +220,8 @@ export const sampleEncounter: EncounterSnapshot = {
       tempHp: 0,
       state: "active",
       tacticsProfile: "basic-melee",
-      resourceStance: "balanced"
+      resourceStance: "balanced",
+      resources: { "second-wind": 1, "action-surge": 1 }
     },
     {
       id: "pc-archer",
