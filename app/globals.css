@@ -575,6 +575,19 @@ img {
   stroke-width: 0.04;
 }
 
+/* A second, color-independent read on a hazard tile (see HAZARD_ICONS in
+   SceneOverlays.tsx) — sits on top of the tile's fill, never intercepts
+   clicks (those go to the polygon underneath). */
+.terrain-hazard-icon {
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-size: 0.42px;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 0.02px;
+}
+
 .terrain.cover,
 .terrain.elevation {
   fill: rgba(49, 95, 159, 0.22);

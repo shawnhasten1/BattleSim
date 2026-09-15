@@ -2,7 +2,7 @@
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
-import { cellIntersectsArea, getDefinition, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
+import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
 import { isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
@@ -220,6 +220,51 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       && (tile.movementMultiplier ?? 1) === (preset.movementMultiplier ?? 1)
       && (tile.tags?.[0] ?? null) === (preset.tags?.[0] ?? null);
 
+    // Fine-tune a uniform hazard selection's own DC/damage-dice, beyond just
+    // swapping between the 3 fixed presets — e.g. turn a DC 12 acid pool into
+    // a DC 15 one, or "3d6 acid" instead of "2d6". Only shown when every
+    // selected tile shares the same hazard (same tag), since editing DC on a
+    // mixed acid+lava selection (lava has none) wouldn't mean anything.
+    const uniformTag = every((tile) => (tile.tags?.[0] ?? null) === (tiles[0].tags?.[0] ?? null));
+    const hazard = tiles[0].hazard;
+    const uniformHazard = uniformTag && every((tile) => Boolean(tile.hazard)) && hazard;
+    const damageComponent = hazard?.damage?.[0];
+    const damageTerm = damageComponent ? parseDiceExpression(damageComponent.dice).terms[0] : undefined;
+    const hazardTuningItems: ContextMenuItem[] = uniformHazard
+      ? [
+        { separator: true },
+        { heading: "Hazard" },
+        ...(hazard.saveAbility && hazard.dc != null
+          ? [{
+            stepper: {
+              label: "Save DC",
+              value: hazard.dc,
+              steps: [-1, 1],
+              disabled: !every((tile) => tile.hazard?.dc === hazard.dc),
+              onStep: (delta: number) => updateTerrainTiles(ids, { hazard: { ...hazard, dc: Math.max(1, hazard.dc! + delta) } })
+            }
+          }]
+          : []),
+        ...(damageComponent && damageTerm
+          ? [{
+            stepper: {
+              label: "Damage dice",
+              value: damageTerm.count,
+              sub: `d${damageTerm.sides} ${damageComponent.damageType}`,
+              steps: [-1, 1],
+              disabled: !every((tile) => tile.hazard?.damage?.[0]?.dice === damageComponent.dice),
+              onStep: (delta: number) => updateTerrainTiles(ids, {
+                hazard: {
+                  ...hazard,
+                  damage: [{ ...damageComponent, dice: `${Math.max(1, damageTerm.count + delta)}d${damageTerm.sides}` }]
+                }
+              })
+            }
+          }]
+          : [])
+      ]
+      : [];
+
     return [
       { heading: n === 1 ? "Terrain type" : `Terrain type — ${n} selected` },
       ...TERRAIN_TYPE_ITEMS.map((entry) => {
@@ -246,6 +291,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           onStep: (delta) => updateTerrainTiles(ids, { movementMultiplier: Math.max(1, currentMultiplier + delta) })
         }
       },
+      ...hazardTuningItems,
       { separator: true },
       {
         label: n === 1 ? "Delete tile" : `Delete ${n} tiles`,

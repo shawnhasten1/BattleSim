@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { type AreaTemplate, type CoverLevel, type PlacedTemplate, type TerrainType } from "@/engine";
+import { type AreaTemplate, type CoverLevel, type PlacedTemplate, type TerrainHazardEffect, type TerrainType } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { clamp } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
@@ -16,6 +16,20 @@ const COVER_LEVELS: Array<{ value: CoverLevel; label: string }> = [
   { value: "half", label: "Half — +2 AC" },
   { value: "none", label: "None — marker only" }
 ];
+
+/** One-line summary of a terrain tile's hazard, for the read-only tile-editing panel. */
+function describeHazard(hazard: TerrainHazardEffect): string {
+  const save = hazard.saveAbility && hazard.dc != null ? `DC ${hazard.dc} ${hazard.saveAbility.toUpperCase()} save` : null;
+  const damage = hazard.damage?.length
+    ? `${hazard.damage.map((component) => `${component.dice} ${component.damageType}`).join(" + ")}${hazard.onSuccess === "half" ? " (half on success)" : ""}`
+    : null;
+  const conditionRider = hazard.riders?.find((rider) => rider.kind === "condition");
+  const status = conditionRider && conditionRider.kind === "condition"
+    ? `${typeof conditionRider.condition === "string" ? conditionRider.condition : "custom condition"}${conditionRider.when === "on-save-fail" ? " on a failed save" : ""}`
+    : null;
+  const parts = [save, damage, status].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(", ") : "No effect configured";
+}
 
 interface ContextInspectorProps {
   scene: SceneInteraction;
@@ -39,6 +53,7 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
   const toggleDoorState = useEncounterStore((state) => state.toggleDoorState);
   const updateTerrain = useEncounterStore((state) => state.updateTerrain);
   const removeTerrain = useEncounterStore((state) => state.removeTerrain);
+  const removeTerrainTiles = useEncounterStore((state) => state.removeTerrainTiles);
   const updateTemplate = useEncounterStore((state) => state.updateTemplate);
   const removeTemplate = useEncounterStore((state) => state.removeTemplate);
 
@@ -56,6 +71,9 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
     setSelectedWallId,
     selectedTerrain,
     setSelectedTerrainId,
+    selectedTerrainIds,
+    selectedTerrainCount,
+    clearTerrainSelection,
     selectedTemplate,
     setSelectedTemplateId
   } = scene;
@@ -257,49 +275,101 @@ export function ContextInspector({ scene }: ContextInspectorProps) {
         </section>
       ) : null}
 
-      {selectedTerrain ? (
+      {selectedTerrainCount > 1 ? (
         <section className={styles.block}>
           <header>
-            <h4>Terrain</h4>
+            <h4>Terrain ({selectedTerrainCount} selected)</h4>
             <button
               type="button"
               className={styles.danger}
-              title="Remove terrain"
+              title="Delete selected tiles"
               onClick={() => {
-                removeTerrain(selectedTerrain.id);
-                setSelectedTerrainId(null);
+                removeTerrainTiles(selectedTerrainIds);
+                clearTerrainSelection();
               }}
             >
               <Trash2 size={14} />
             </button>
           </header>
-          <div className={styles.stack}>
-            <input
-              value={selectedTerrain.name}
-              aria-label="Terrain name"
-              onChange={(event) => updateTerrain(selectedTerrain.id, { name: event.target.value })}
-            />
-            <select
-              value={selectedTerrain.type}
-              aria-label="Terrain type"
-              onChange={(event) => updateTerrain(selectedTerrain.id, { type: event.target.value as TerrainType })}
-            >
-              {TERRAIN_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-            <label>
-              Movement ×
-              <input
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={selectedTerrain.movementMultiplier ?? (selectedTerrain.type === "difficult" ? 2 : 1)}
-                onChange={(event) => updateTerrain(selectedTerrain.id, { movementMultiplier: Number(event.target.value) })}
-              />
-            </label>
-          </div>
+          <p className={styles.hint}>Right-click a tile on the map to change type or hazard for the whole selection.</p>
         </section>
+      ) : null}
+
+      {selectedTerrain && selectedTerrainCount === 1 ? (
+        selectedTerrain.cell ? (
+          // Tile-painted terrain: editing lives on the map's right-click menu
+          // (type + hazard + movement multiplier, single or multi-select) —
+          // this is a read-only summary so there's no second, inconsistent
+          // path that can leave `hazard` stale after a type change.
+          <section className={styles.block}>
+            <header>
+              <h4>Terrain tile</h4>
+              <button
+                type="button"
+                className={styles.danger}
+                title="Remove tile"
+                onClick={() => {
+                  removeTerrain(selectedTerrain.id);
+                  setSelectedTerrainId(null);
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </header>
+            <p className={styles.hint}>
+              <strong>{selectedTerrain.name}</strong> ({selectedTerrain.type})
+              {selectedTerrain.hazard ? ` — ${describeHazard(selectedTerrain.hazard)}` : null}
+              {!selectedTerrain.hazard && selectedTerrain.type === "difficult"
+                ? ` — ×${selectedTerrain.movementMultiplier ?? 2} move cost`
+                : null}
+              {selectedTerrain.type === "impassable" ? " — blocks movement" : null}
+            </p>
+            <p className={styles.hint}>Right-click the tile on the map to change it.</p>
+          </section>
+        ) : (
+          <section className={styles.block}>
+            <header>
+              <h4>Terrain</h4>
+              <button
+                type="button"
+                className={styles.danger}
+                title="Remove terrain"
+                onClick={() => {
+                  removeTerrain(selectedTerrain.id);
+                  setSelectedTerrainId(null);
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </header>
+            <div className={styles.stack}>
+              <input
+                value={selectedTerrain.name}
+                aria-label="Terrain name"
+                onChange={(event) => updateTerrain(selectedTerrain.id, { name: event.target.value })}
+              />
+              <select
+                value={selectedTerrain.type}
+                aria-label="Terrain type"
+                onChange={(event) => updateTerrain(selectedTerrain.id, { type: event.target.value as TerrainType })}
+              >
+                {TERRAIN_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <label>
+                Movement ×
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={selectedTerrain.movementMultiplier ?? (selectedTerrain.type === "difficult" ? 2 : 1)}
+                  onChange={(event) => updateTerrain(selectedTerrain.id, { movementMultiplier: Number(event.target.value) })}
+                />
+              </label>
+            </div>
+          </section>
+        )
       ) : null}
 
       {selectedTemplate ? (

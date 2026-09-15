@@ -5,6 +5,17 @@ import { pointsMatch } from "@/components/scene/coords";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
 
+/** Glyph shown centered on a hazard tile, keyed by its discriminating tag — a
+ * second, color-independent read on what a tile does (acid vs. lava vs. ice
+ * all render as "hazard" fill-wise otherwise). Falls back to a generic
+ * warning glyph for a hand-authored/homebrew hazard with no matching tag. */
+const HAZARD_ICONS: Record<string, string> = {
+  acid: "\u{1F9EA}",
+  lava: "\u{1F525}",
+  ice: "❄"
+};
+const DEFAULT_HAZARD_ICON = "☠";
+
 interface SceneOverlaysProps {
   scene: SceneInteraction;
   map: BattleMapState;
@@ -85,6 +96,16 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
             openTerrainMenu(zone.id, event.clientX, event.clientY);
           }}
         />
+      ))}
+      {map.terrain.filter((zone) => zone.hazard && zone.cell).map((zone) => (
+        <text
+          key={`${zone.id}-icon`}
+          x={zone.cell!.x + 0.5}
+          y={zone.cell!.y + 0.5}
+          className="terrain-hazard-icon"
+        >
+          {HAZARD_ICONS[zone.tags?.[0] ?? ""] ?? DEFAULT_HAZARD_ICON}
+        </text>
       ))}
       {tool === "terrain" && paintStroke ? (
         <g className="terrain-paint-preview">
