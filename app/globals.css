@@ -120,15 +120,27 @@ img {
   cursor: grabbing;
 }
 
-.battlemap.scene-canvas {
+/*
+ * The frame carries the pan/zoom transform and the visible "board" chrome
+ * (border/parchment/shadow), sized to the scene content plus scene padding
+ * on every side. `.battlemap.scene-canvas` inside it is the unpadded content
+ * box — its own size and (0,0) origin are unchanged by padding, so every
+ * pointer/grid coordinate calculation (coords.ts) keeps working untouched;
+ * only its inline top/left offset within the frame moves.
+ */
+.battlemap-frame {
   position: absolute;
   top: 0;
   left: 0;
-  overflow: hidden;
   transform-origin: 0 0;
   border: 1px solid #746b5b;
   background: #ded5c3;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.battlemap.scene-canvas {
+  position: absolute;
+  overflow: hidden;
 }
 
 /*
@@ -140,7 +152,7 @@ img {
  * drop it at rest so the browser re-rasterizes crisply for the settled
  * zoom level (see useViewport's `interacting`).
  */
-.battlemap.scene-canvas.interacting {
+.battlemap-frame.interacting {
   will-change: transform;
 }
 

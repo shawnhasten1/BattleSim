@@ -82,3 +82,16 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     image.src = src;
   });
 }
+
+/** Natural pixel dimensions of a data URL, or null if it can't be decoded. */
+export async function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number } | null> {
+  if (typeof document === "undefined" || !dataUrl.startsWith("data:image/")) {
+    return null;
+  }
+  try {
+    const image = await loadImage(dataUrl);
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  } catch {
+    return null;
+  }
+}

@@ -3,6 +3,7 @@
 import { Check, ChevronDown, Copy, FolderOpen, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useEncounterStore } from "@/store/encounter-store";
+import { CreateEncounterModal, type CreateEncounterResult } from "@/components/modals/CreateEncounterModal";
 import styles from "./SceneDropdown.module.css";
 
 /**
@@ -27,7 +28,7 @@ export function SceneDropdown() {
   const deleteEncounter = useEncounterStore((state) => state.deleteEncounter);
 
   const [open, setOpen] = useState(false);
-  const [newName, setNewName] = useState<string | null>(null);
+  const [creatingOpen, setCreatingOpen] = useState(false);
   const [rename, setRename] = useState<{ id: string; name: string } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,25 +65,9 @@ export function SceneDropdown() {
             </div>
           </div>
 
-          {newName === null ? (
-            <button type="button" className={styles.newBtn} onClick={() => setNewName(`${encounterName} Variant`)}>
-              <Plus size={13} /> New scene
-            </button>
-          ) : (
-            <form
-              className={styles.inlineForm}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void createEncounter(newName.trim() || "New Encounter");
-                setNewName(null);
-                setOpen(false);
-              }}
-            >
-              <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} />
-              <button type="submit" title="Create"><Check size={13} /></button>
-              <button type="button" title="Cancel" onClick={() => setNewName(null)}><X size={13} /></button>
-            </form>
-          )}
+          <button type="button" className={styles.newBtn} onClick={() => setCreatingOpen(true)}>
+            <Plus size={13} /> New scene
+          </button>
 
           <div className={styles.projects}>
             {projects.length === 0 ? <p className={styles.empty}>No saved projects.</p> : null}
@@ -142,6 +127,22 @@ export function SceneDropdown() {
 
           {projectStatus ? <p className={styles.status}>{projectStatus}</p> : null}
         </div>
+      ) : null}
+
+      {creatingOpen ? (
+        <CreateEncounterModal
+          onClose={() => setCreatingOpen(false)}
+          defaultName={`${encounterName} Variant`}
+          allowClone
+          cloneLabel="Clone current map"
+          onSubmit={async (result: CreateEncounterResult) => {
+            await createEncounter(
+              result.name,
+              result.mode === "fresh" ? { fresh: true, grid: result.grid, imageDataUrl: result.imageDataUrl } : undefined
+            );
+            setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

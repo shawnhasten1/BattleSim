@@ -59,12 +59,18 @@ import {
 } from "@/engine";
 import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { clampReplayIndex } from "@/lib/replay";
-import { downscaleDataUrl } from "@/lib/imageResize";
+import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain";
+
+/** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
+export interface NewMapOptions {
+  grid?: { width: number; height: number; distancePerSquare: number; squareSizePx: number };
+  imageDataUrl?: string | null;
+}
 
 export type WallUpdate = Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>;
 
@@ -162,8 +168,8 @@ interface EncounterStore {
   /** Creates a campaign with a single blank encounter, independent of whatever is currently open in the editor. Returns the new campaign id, or null on failure. */
   createCampaign: (name: string) => Promise<string | null>;
   /** Creates a blank encounter under an existing campaign without touching the editor's live state. Returns the new encounter id, or null on failure. */
-  createEncounterInCampaign: (campaignId: string, name: string) => Promise<string | null>;
-  createEncounter: (name: string) => Promise<void>;
+  createEncounterInCampaign: (campaignId: string, name: string, options?: NewMapOptions) => Promise<string | null>;
+  createEncounter: (name: string, options?: NewMapOptions & { fresh?: boolean }) => Promise<void>;
   saveCurrentEncounter: () => Promise<void>;
   loadEncounter: (encounterId: string) => Promise<void>;
   renameEncounter: (encounterId: string, name: string) => Promise<void>;
@@ -190,6 +196,7 @@ interface EncounterStore {
   updateGrid: (updates: Partial<EncounterSnapshot["map"]["grid"]>) => void;
   updateMapImageSettings: (updates: Partial<NonNullable<EncounterSnapshot["map"]["image"]>>) => void;
   updateMapCanvas: (updates: Partial<NonNullable<EncounterSnapshot["map"]["canvas"]>>) => void;
+  updateMapPadding: (paddingSquares: number) => void;
   updateHp: (combatantId: string, hp: number) => void;
   updateTactics: (combatantId: string, tactics: EncounterSnapshot["combatants"][number]["tacticsProfile"]) => void;
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
@@ -532,12 +539,42 @@ function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "emp
 }
 
 /**
+ * Downscale an upload and decode its stored pixel dimensions, for callers that
+ * need to bake a background straight into a snapshot being created (before any
+ * encounter id exists to key `setMapImage`'s state-driven flow off of).
+ */
+async function prepareMapImage(dataUrl: string): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number } | null> {
+  if (!dataUrl.startsWith("data:image/")) return null;
+  const resized = await downscaleDataUrl(dataUrl).catch(() => dataUrl);
+  const dims = await getImageDimensions(resized);
+  if (!dims) return null;
+  return { value: resized, naturalWidthPx: dims.width, naturalHeightPx: dims.height };
+}
+
+/**
  * IndexedDB key for a scene's background image: the saved DB encounter id once
  * the scene has been saved, otherwise the snapshot's own id while it is a draft.
  * The save flows migrate the draft key to the DB key.
  */
 function mapImageKey(state: Pick<EncounterStore, "currentEncounterId" | "encounter">): string {
   return state.currentEncounterId ?? state.encounter.id;
+}
+
+/**
+ * True when a replacement image's proportions differ enough from the map's
+ * previous background that resizing the canvas to fit it could visibly
+ * un-align walls/terrain/tokens that were placed against the old artwork.
+ * Silent for maps with nothing placed yet — there's nothing to misalign.
+ */
+export function shouldWarnBeforeReplacingImage(encounter: EncounterSnapshot, dims: { width: number; height: number }): boolean {
+  const map = encounter.map;
+  const prev = map.image;
+  if (!prev?.naturalWidthPx || !prev?.naturalHeightPx) return false;
+  const hasPlacedContent = map.walls.length > 0 || map.terrain.length > 0 || encounter.combatants.length > 0;
+  if (!hasPlacedContent) return false;
+  const prevRatio = prev.naturalWidthPx / prev.naturalHeightPx;
+  const newRatio = dims.width / dims.height;
+  return Math.abs(prevRatio - newRatio) / prevRatio > 0.02;
 }
 
 export const useEncounterStore = create<EncounterStore>()(
@@ -1213,9 +1250,31 @@ export const useEncounterStore = create<EncounterStore>()(
         const data = await response.json() as { project: { id: string } };
         return data.project.id;
       },
-      createEncounterInCampaign: async (campaignId, name) => {
+      createEncounterInCampaign: async (campaignId, name, options) => {
         const trimmedName = name.trim() || "Untitled Encounter";
         const snapshot = createSceneSnapshot(sampleEncounter, trimmedName, "empty");
+        if (options?.grid) {
+          const { width, height, distancePerSquare, squareSizePx } = options.grid;
+          snapshot.map = {
+            ...snapshot.map,
+            grid: { ...snapshot.map.grid, width, height, distancePerSquare, squareSizePx },
+            canvas: { widthPx: width * squareSizePx, heightPx: height * squareSizePx },
+            image: { ...DEFAULT_MAP_IMAGE_SETTINGS },
+            paddingSquares: 1,
+            walls: [],
+            terrain: [],
+            templates: []
+          };
+        }
+        const prepared = options?.imageDataUrl ? await prepareMapImage(options.imageDataUrl) : null;
+        if (prepared) {
+          snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
+          snapshot.map.image = {
+            ...DEFAULT_MAP_IMAGE_SETTINGS,
+            naturalWidthPx: prepared.naturalWidthPx,
+            naturalHeightPx: prepared.naturalHeightPx
+          };
+        }
         const response = await fetch("/api/encounters", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1223,9 +1282,13 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         if (!response.ok) return null;
         const data = await response.json() as { encounter: { id: string } };
+        if (prepared) {
+          void putMapImage(data.encounter.id, prepared.value);
+          syncMapImageToServer(data.encounter.id, prepared.value);
+        }
         return data.encounter.id;
       },
-      createEncounter: async (name) => {
+      createEncounter: async (name, options) => {
         const trimmedName = name.trim() || "Untitled Encounter";
         if (!get().currentProjectId) {
           await get().saveProject();
@@ -1235,7 +1298,30 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ projectStatus: "Create scene failed" });
           return;
         }
-        const snapshot = createSceneSnapshot(get().encounter, trimmedName, "empty");
+        const fresh = options?.fresh ?? false;
+        const snapshot = createSceneSnapshot(fresh ? sampleEncounter : get().encounter, trimmedName, "empty");
+        if (fresh && options?.grid) {
+          const { width, height, distancePerSquare, squareSizePx } = options.grid;
+          snapshot.map = {
+            ...snapshot.map,
+            grid: { ...snapshot.map.grid, width, height, distancePerSquare, squareSizePx },
+            canvas: { widthPx: width * squareSizePx, heightPx: height * squareSizePx },
+            image: { ...DEFAULT_MAP_IMAGE_SETTINGS },
+            paddingSquares: 1,
+            walls: [],
+            terrain: [],
+            templates: []
+          };
+        }
+        const prepared = fresh && options?.imageDataUrl ? await prepareMapImage(options.imageDataUrl) : null;
+        if (prepared) {
+          snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
+          snapshot.map.image = {
+            ...DEFAULT_MAP_IMAGE_SETTINGS,
+            naturalWidthPx: prepared.naturalWidthPx,
+            naturalHeightPx: prepared.naturalHeightPx
+          };
+        }
         const response = await fetch("/api/encounters", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1252,6 +1338,7 @@ export const useEncounterStore = create<EncounterStore>()(
           currentProjectId: projectId,
           currentEncounterId: data.encounter.id,
           encounter: normalizedSnapshot,
+          mapImageDataUrl: fresh ? (prepared?.value ?? null) : currentMapImage,
           selectedCombatantId: null,
           undoStack: [],
           redoStack: [],
@@ -1262,8 +1349,13 @@ export const useEncounterStore = create<EncounterStore>()(
           replayIndex: null,
           projectStatus: "Scene created"
         });
-        // A new scene keeps the carried-over map layout, so carry its background too.
-        if (currentMapImage) {
+        if (fresh) {
+          if (prepared) {
+            void putMapImage(data.encounter.id, prepared.value);
+            syncMapImageToServer(data.encounter.id, prepared.value);
+          }
+        } else if (currentMapImage) {
+          // A cloned scene keeps the carried-over map layout, so carry its background too.
           void putMapImage(mapImageKey(get()), currentMapImage);
           syncMapImageToServer(data.encounter.id, currentMapImage);
         }
@@ -1598,12 +1690,47 @@ export const useEncounterStore = create<EncounterStore>()(
           if (encounterId) syncMapImageToServer(encounterId, value);
         };
 
+        // Record the image's own pixel dimensions and auto-size the canvas to
+        // match, so the background is never silently cropped/stretched. Runs
+        // on every upload, including replacing an existing background.
+        const applyDims = (dims: { width: number; height: number }) => {
+          const encounter = get().encounter;
+          commitEncounter({
+            ...encounter,
+            map: {
+              ...encounter.map,
+              image: {
+                ...DEFAULT_MAP_IMAGE_SETTINGS,
+                ...encounter.map.image,
+                naturalWidthPx: dims.width,
+                naturalHeightPx: dims.height
+              },
+              canvas: { widthPx: dims.width, heightPx: dims.height }
+            }
+          });
+        };
+
+        if (!dataUrl) {
+          applyMapImage(null);
+          return;
+        }
+
         // A raw upload/import data URL can be many MB. Shrink it before it is
         // stored (IndexedDB) or sent anywhere. The decode is async; apply the
         // result once it's ready.
-        if (dataUrl && dataUrl.startsWith("data:image/")) {
+        if (dataUrl.startsWith("data:image/")) {
           void downscaleDataUrl(dataUrl)
-            .then((resized) => applyMapImage(resized))
+            .then(async (resized) => {
+              const dims = await getImageDimensions(resized);
+              if (dims && shouldWarnBeforeReplacingImage(get().encounter, dims)) {
+                const proceed = typeof window === "undefined" || window.confirm(
+                  "This image is a different shape than the current background. Resizing the canvas to fit it won't move any walls, terrain, or tokens, but they may no longer line up with the new artwork.\n\nReplace the background anyway?"
+                );
+                if (!proceed) return;
+              }
+              applyMapImage(resized);
+              if (dims) applyDims(dims);
+            })
             .catch(() => applyMapImage(dataUrl));
           return;
         }
@@ -1649,6 +1776,13 @@ export const useEncounterStore = create<EncounterStore>()(
               ...updates
             }
           }
+        });
+      },
+      updateMapPadding: (paddingSquares) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          map: { ...encounter.map, paddingSquares: Math.max(0, paddingSquares) }
         });
       },
       updateHp: (combatantId, hp) => {

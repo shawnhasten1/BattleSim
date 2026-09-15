@@ -447,11 +447,20 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         <button type="button" onClick={viewport.resetViewport} title="Reset viewport"><Crosshair size={16} /></button>
       </div>
       <div
-        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""} ${viewport.interacting ? "interacting" : ""}`}
+        className={`battlemap-frame ${viewport.interacting ? "interacting" : ""}`}
+        style={{
+          width: metrics.framePixelWidth,
+          height: metrics.framePixelHeight,
+          transform: viewport.transform
+        }}
+      >
+      <div
+        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
-          transform: viewport.transform,
+          top: metrics.paddingPx,
+          left: metrics.paddingPx,
           // Position tween + HP-bar drain share the same beat; both are 0ms
           // outside replay so live editing is instant.
           ["--token-move-ms" as string]: `${tokenMoveMs}ms`,
@@ -573,6 +582,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         ) : null}
 
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
+      </div>
       </div>
 
       {scene.wallMenu && !replaying ? (

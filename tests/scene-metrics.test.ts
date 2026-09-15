@@ -39,4 +39,23 @@ describe("deriveSceneMetrics", () => {
     expect(m.gridLineOpacity).toBe(1);
     expect(m.gridLineWidth).toBe(0.5);
   });
+
+  it("defaults padding to 0 for maps without paddingSquares set", () => {
+    const m = deriveSceneMetrics(map());
+    expect(m.paddingPx).toBe(0);
+    expect(m.framePixelWidth).toBe(m.scenePixelWidth);
+    expect(m.framePixelHeight).toBe(m.scenePixelHeight);
+  });
+
+  it("expands the frame by paddingSquares * cellSize on every side", () => {
+    const m = deriveSceneMetrics(map({ squareSizePx: 40 }, { paddingSquares: 1 }));
+    expect(m.paddingPx).toBe(40);
+    expect(m.framePixelWidth).toBe(m.scenePixelWidth + 80);
+    expect(m.framePixelHeight).toBe(m.scenePixelHeight + 80);
+  });
+
+  it("clamps a negative paddingSquares to 0", () => {
+    const m = deriveSceneMetrics(map({}, { paddingSquares: -2 }));
+    expect(m.paddingPx).toBe(0);
+  });
 });

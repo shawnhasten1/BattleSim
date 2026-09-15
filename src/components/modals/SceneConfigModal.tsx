@@ -15,10 +15,12 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
   const updateEncounterMetadata = useEncounterStore((s) => s.updateEncounterMetadata);
   const updateGrid = useEncounterStore((s) => s.updateGrid);
   const updateMapCanvas = useEncounterStore((s) => s.updateMapCanvas);
+  const updateMapPadding = useEncounterStore((s) => s.updateMapPadding);
   const updateMapImageSettings = useEncounterStore((s) => s.updateMapImageSettings);
 
   const grid = encounter.map.grid;
-  const { cellSize, gridLineWidth, gridLineColor, gridLineOpacity, canvasSettings, imageSettings } = deriveSceneMetrics(encounter.map);
+  const { cellSize, gridLineWidth, gridLineColor, gridLineOpacity, canvasSettings, imageSettings, paddingPx } = deriveSceneMetrics(encounter.map);
+  const paddingSquares = cellSize > 0 ? paddingPx / cellSize : 0;
 
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -65,6 +67,10 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
         <div className={styles.grid3}>
           <label className={styles.field}>Scene W<input type="number" value={Math.round(canvasSettings.widthPx)} min={120} max={8000} onChange={(e) => updateMapCanvas({ widthPx: Number(e.target.value) })} /></label>
           <label className={styles.field}>Scene H<input type="number" value={Math.round(canvasSettings.heightPx)} min={120} max={8000} onChange={(e) => updateMapCanvas({ heightPx: Number(e.target.value) })} /></label>
+          <label className={styles.field}>
+            Padding (sq)
+            <input type="number" value={paddingSquares} min={0} max={10} step={0.5} onChange={(e) => updateMapPadding(Number(e.target.value))} />
+          </label>
           <label className={styles.field}>Image X<input type="number" value={imageSettings.offsetX} min={-1000} max={1000} onChange={(e) => updateMapImageSettings({ offsetX: Number(e.target.value) })} /></label>
           <label className={styles.field}>Image Y<input type="number" value={imageSettings.offsetY} min={-1000} max={1000} onChange={(e) => updateMapImageSettings({ offsetY: Number(e.target.value) })} /></label>
           <label className={styles.field}>Opacity<input type="number" value={imageSettings.opacity} min={0} max={1} step={0.05} onChange={(e) => updateMapImageSettings({ opacity: Number(e.target.value) })} /></label>

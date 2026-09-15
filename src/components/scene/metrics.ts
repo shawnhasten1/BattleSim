@@ -9,6 +9,14 @@ export interface SceneMetrics {
   gridPixelHeight: number;
   scenePixelWidth: number;
   scenePixelHeight: number;
+  /** Visual buffer (Foundry-style scene padding) in px, one side. 0 for maps
+   * without `paddingSquares` set. */
+  paddingPx: number;
+  /** Outer frame size = scene pixels + padding on every side. What actually
+   * gets rendered/panned; `scenePixelWidth/Height` stays the unpadded content
+   * size so existing canvas-size consumers are unaffected. */
+  framePixelWidth: number;
+  framePixelHeight: number;
   imageSettings: MapImageSettings;
   canvasSettings: { widthPx: number; heightPx: number };
 }
@@ -31,6 +39,9 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
   const gridLineOpacity = Math.min(1, Math.max(0, gridSettings.lineOpacity ?? DEFAULT_GRID_VISUALS.lineOpacity));
   const gridPixelWidth = map.grid.width * cellSize;
   const gridPixelHeight = map.grid.height * cellSize;
+  const scenePixelWidth = Math.max(canvasSettings.widthPx, gridPixelWidth);
+  const scenePixelHeight = Math.max(canvasSettings.heightPx, gridPixelHeight);
+  const paddingPx = Math.max(0, map.paddingSquares ?? 0) * cellSize;
 
   return {
     cellSize,
@@ -39,8 +50,11 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
     gridLineOpacity,
     gridPixelWidth,
     gridPixelHeight,
-    scenePixelWidth: Math.max(canvasSettings.widthPx, gridPixelWidth),
-    scenePixelHeight: Math.max(canvasSettings.heightPx, gridPixelHeight),
+    scenePixelWidth,
+    scenePixelHeight,
+    paddingPx,
+    framePixelWidth: scenePixelWidth + paddingPx * 2,
+    framePixelHeight: scenePixelHeight + paddingPx * 2,
     imageSettings,
     canvasSettings
   };

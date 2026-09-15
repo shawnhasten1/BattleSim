@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { ArrowLeft, LogOut, Map, Plus, Trash2 } from "lucide-react";
 import { useEncounterStore } from "@/store/encounter-store";
+import { CreateEncounterModal, type CreateEncounterResult } from "@/components/modals/CreateEncounterModal";
 import styles from "./campaigns.module.css";
 
 interface EncounterSummary {
@@ -20,8 +21,7 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
   const [campaignName, setCampaignName] = useState("");
   const [encounters, setEncounters] = useState<EncounterSummary[]>([]);
   const [status, setStatus] = useState("Loading encounters…");
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
   const [entering, setEntering] = useState<string | null>(null);
 
   async function refresh() {
@@ -46,11 +46,12 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
     router.push(`/campaigns/${campaignId}/encounters/${encounterId}` as Route);
   }
 
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    setCreating(true);
-    const id = await useEncounterStore.getState().createEncounterInCampaign(campaignId, newName);
-    setCreating(false);
+  async function onCreate(result: CreateEncounterResult) {
+    const id = await useEncounterStore.getState().createEncounterInCampaign(
+      campaignId,
+      result.name,
+      result.mode === "fresh" ? { grid: result.grid, imageDataUrl: result.imageDataUrl } : undefined
+    );
     if (id) enterEncounter(id);
     else setStatus("Create encounter failed");
   }
@@ -77,18 +78,14 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
         </a>
         <div className={styles.heading}>
           <h2>{campaignName || "Campaign"}</h2>
-          <form className={styles.createForm} onSubmit={onCreate}>
-            <input
-              type="text"
-              placeholder="New encounter name"
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-            />
-            <button type="submit" className={styles.primary} disabled={creating}>
-              <Plus size={14} /> {creating ? "Creating…" : "New Encounter"}
-            </button>
-          </form>
+          <button type="button" className={styles.primary} onClick={() => setCreatingOpen(true)}>
+            <Plus size={14} /> New Encounter
+          </button>
         </div>
+
+        {creatingOpen ? (
+          <CreateEncounterModal onClose={() => setCreatingOpen(false)} onSubmit={onCreate} />
+        ) : null}
 
         {status ? <p className={styles.status}>{status}</p> : null}
 

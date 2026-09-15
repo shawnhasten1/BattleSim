@@ -165,6 +165,11 @@ export interface MapImageSettings {
   offsetY: number;
   scale: number;
   opacity: number;
+  /** Pixel dimensions of the uploaded background as actually stored (i.e. after
+   * any downscale re-encode), captured so the aspect ratio survives compression
+   * and canvas sizing can be derived from it without re-decoding the image. */
+  naturalWidthPx?: number;
+  naturalHeightPx?: number;
 }
 
 export interface MapCanvasSettings {
@@ -187,6 +192,10 @@ export interface BattleMapState {
   grid: GridConfig;
   image?: MapImageSettings;
   canvas?: MapCanvasSettings;
+  /** Visual buffer, in grid squares, rendered around the canvas/grid on every
+   * side (Foundry-style scene padding). Missing/undefined means 0 — only maps
+   * created after this field existed get a nonzero default. */
+  paddingSquares?: number;
   walls: WallSegment[];
   terrain: TerrainZone[];
   templates?: PlacedTemplate[];
@@ -1581,12 +1590,15 @@ export const encounterSnapshotSchema = z.object({
       offsetX: z.number().finite().default(DEFAULT_MAP_IMAGE_SETTINGS.offsetX),
       offsetY: z.number().finite().default(DEFAULT_MAP_IMAGE_SETTINGS.offsetY),
       scale: z.number().positive().default(DEFAULT_MAP_IMAGE_SETTINGS.scale),
-      opacity: z.number().min(0).max(1).default(DEFAULT_MAP_IMAGE_SETTINGS.opacity)
+      opacity: z.number().min(0).max(1).default(DEFAULT_MAP_IMAGE_SETTINGS.opacity),
+      naturalWidthPx: z.number().positive().optional(),
+      naturalHeightPx: z.number().positive().optional()
     }).default(DEFAULT_MAP_IMAGE_SETTINGS),
     canvas: z.object({
       widthPx: z.number().positive(),
       heightPx: z.number().positive()
     }).optional(),
+    paddingSquares: z.number().min(0).optional(),
     walls: z.array(
       z.object({
         id: z.string(),
