@@ -447,7 +447,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         <button type="button" onClick={viewport.resetViewport} title="Reset viewport"><Crosshair size={16} /></button>
       </div>
       <div
-        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""}`}
+        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""} ${viewport.interacting ? "interacting" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,

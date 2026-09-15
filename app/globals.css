@@ -126,10 +126,22 @@ img {
   left: 0;
   overflow: hidden;
   transform-origin: 0 0;
-  will-change: transform;
   border: 1px solid #746b5b;
   background: #ded5c3;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+/*
+ * `will-change: transform` promotes this element to its own GPU compositor
+ * layer, which gets rasterized once and then scaled by the GPU as the zoom
+ * transform changes — great for pan/zoom perf, but it means the map image
+ * and grid render blurry at any zoom other than the one the layer happened
+ * to be rasterized at. Only pay that cost while actively panning/zooming;
+ * drop it at rest so the browser re-rasterizes crisply for the settled
+ * zoom level (see useViewport's `interacting`).
+ */
+.battlemap.scene-canvas.interacting {
+  will-change: transform;
 }
 
 .map-image-layer {

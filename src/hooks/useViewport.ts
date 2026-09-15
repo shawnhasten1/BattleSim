@@ -18,6 +18,12 @@ export interface UseViewportResult {
   transform: string;
   /** True while a middle-drag or space-drag pan is in progress. */
   isPanning: boolean;
+  /**
+   * True while actively panning or mid-zoom (briefly, after the last wheel/
+   * button zoom). Drives `will-change: transform` on `.battlemap` — see the
+   * comment on that class in globals.css for why it's conditional.
+   */
+  interacting: boolean;
   /** Synchronous mirror of `isPanning` for use inside event handler guards. */
   isPanningRef: RefObject<boolean>;
   /** True while Space is held (pre-drag grab affordance). */
@@ -43,10 +49,23 @@ export function useViewport(): UseViewportResult {
   const [viewport, setViewport] = useState<ViewportState>(INITIAL_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const [spacePanning, setSpacePanning] = useState(false);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
   const panStartRef = useRef<PanStart | null>(null);
   const isPanningRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
+
+  // Mark a zoom as "in progress" for a beat after the last change, then drop
+  // it — see the `interacting` doc comment for why.
+  const markZooming = () => {
+    setIsZooming(true);
+    if (zoomIdleTimerRef.current) clearTimeout(zoomIdleTimerRef.current);
+    zoomIdleTimerRef.current = setTimeout(() => setIsZooming(false), 200);
+  };
+  useEffect(() => () => {
+    if (zoomIdleTimerRef.current) clearTimeout(zoomIdleTimerRef.current);
+  }, []);
 
   // Restore from localStorage after mount (not during render — avoids an SSR
   // hydration mismatch), then persist changes, coalesced. The `hydrated` gate
@@ -98,6 +117,7 @@ export function useViewport(): UseViewportResult {
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
       const factor = event.deltaY > 0 ? 0.9 : 1.1;
+      markZooming();
       setViewport((current) =>
         anchoredZoom(current, current.zoom * factor, stage!.getBoundingClientRect(), {
           x: event.clientX,
@@ -156,6 +176,7 @@ export function useViewport(): UseViewportResult {
     viewport,
     transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
     isPanning,
+    interacting: isPanning || isZooming,
     isPanningRef,
     spacePanning,
     stageRef,
@@ -165,8 +186,10 @@ export function useViewport(): UseViewportResult {
       onPointerUp: endPanning,
       onPointerCancel: endPanning
     },
-    zoomBy: (factor: number) =>
-      setViewport((current) => ({ ...current, zoom: clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM) })),
+    zoomBy: (factor: number) => {
+      markZooming();
+      setViewport((current) => ({ ...current, zoom: clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM) }));
+    },
     resetViewport: () => setViewport(INITIAL_VIEWPORT)
   };
 }
