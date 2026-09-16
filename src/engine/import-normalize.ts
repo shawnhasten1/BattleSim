@@ -253,6 +253,20 @@ function normalizeAction(
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
+  if (kind === "reposition") {
+    return {
+      ...input,
+      kind,
+      id: generatedId,
+      name,
+      actionType,
+      range: numberField(input, "range") ?? 30,
+      targeting: normalizeSelfTargeting(input.targeting),
+      requiresLineOfEffect: input.requiresLineOfEffect === true ? true : undefined,
+      concentration: input.concentration === true ? true : undefined,
+      automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
+    };
+  }
   if (kind === "multiattack") {
     return {
       ...input,

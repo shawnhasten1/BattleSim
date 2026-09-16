@@ -86,6 +86,9 @@ export function describeAction(action: ActionDefinition, definition: CreatureDef
   if (action.kind === "healing") {
     return `heal ${action.range} ft${action.targeting?.target === "self" ? " (self)" : ""}, ${action.healing.map((h) => h.dice).join(", ")}`;
   }
+  if (action.kind === "reposition") {
+    return `teleport ${action.range} ft${action.targeting?.target === "single" ? "" : " (self)"}`;
+  }
   if (action.kind === "unsupported") return "mapping required";
   if (action.kind === "activate-feature") {
     return action.actionType === "reaction"

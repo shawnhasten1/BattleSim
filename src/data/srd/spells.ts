@@ -447,6 +447,31 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       automationSupport: "full"
     }
   },
+  {
+    id: "srd:spell:misty-step",
+    name: "Misty Step",
+    level: 2,
+    school: "conjuration",
+    castingTime: "bonus",
+    // Cast on yourself — no targeting range. The spell's actual reach (how far
+    // you can blink) lives on the compiled action's own `range`, matching every
+    // other self-targeted spell in this file.
+    range: "self",
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "reposition",
+      id: "srd:spell:misty-step:action",
+      name: "Misty Step",
+      actionType: "bonus",
+      range: 30,
+      targeting: { target: "self" },
+      // Omitted (default false): a misty step bypasses normal sightline
+      // blocking, matching "surrounded by silvery mist" RAW.
+      resourceCost: { resourceId: "slot-2", amount: 1 },
+      automationSupport: "full"
+    }
+  },
   // ── Level 3 ───────────────────────────────────────────────────────────────
   {
     id: "srd:spell:fireball",

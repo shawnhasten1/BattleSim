@@ -46,6 +46,7 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   // spell / action
   "spell.level": { label: "Spell level", hint: "0 for a cantrip" },
   "spell.range": { label: "Range (ft)", hint: '"Self" and "Touch" are also accepted' },
+  "spell.repositionRange": { label: "Teleport range (ft)", hint: "How far the destination may be from wherever the caster is standing when this is cast — also how far away the creature being moved may be, in \"one creature\" mode" },
   "spell.shape": { label: "What it does" },
   "spell.attackAbility": { label: "Spell attack uses" },
   "spell.attackDelivery": { label: "Delivery" },
@@ -59,6 +60,8 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "spell.dealsDamage": { label: "Deals damage" },
   "spell.healDice": { label: "Healing" },
   "spell.healTarget": { label: "Heals" },
+  "spell.repositionTarget": { label: "Who teleports", hint: '"The caster" for a self-blink like Misty Step; "one creature" to also move a willing ally, like Dimension Door' },
+  "spell.repositionRequiresLos": { label: "Requires line of sight to destination", hint: "Off by default — most teleport spells bypass normal sightline blocking. Turn on for a spell that explicitly requires seeing the destination." },
   "spell.riders": { label: "Effects" },
   "spell.concentration": { label: "Concentration", hint: "Casting another concentration spell ends this one" },
   "spell.ritual": { label: "Ritual" },

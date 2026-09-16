@@ -86,7 +86,13 @@ const SHAPE_OPTIONS = [
   { value: "attack", label: "Attack roll" },
   { value: "save", label: "Saving throw (one target)" },
   { value: "area", label: "Saving throw (area)" },
-  { value: "healing", label: "Healing" }
+  { value: "healing", label: "Healing" },
+  { value: "reposition", label: "Teleport / reposition" }
+] as const;
+
+const REPOSITION_TARGET_OPTIONS = [
+  { value: "self", label: "The caster" },
+  { value: "single", label: "One creature" }
 ] as const;
 
 const AREA_OPTIONS = [
@@ -350,6 +356,10 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "healDice", copy: "spell.healDice", control: "dice", visibleWhen: () => shape === "healing" },
     { key: "healTarget", copy: "spell.healTarget", control: "select", options: [{ value: "single", label: "One creature" }, { value: "self", label: "The caster" }], visibleWhen: () => shape === "healing" },
 
+    // Range doubles as the teleport distance here (shared top-level field, no separate spec needed).
+    { key: "repositionTarget", copy: "spell.repositionTarget", control: "select", options: REPOSITION_TARGET_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "reposition" },
+    { key: "repositionRequiresLos", copy: "spell.repositionRequiresLos", control: "toggle", advanced: true, visibleWhen: () => shape === "reposition" },
+
     { key: "riders", copy: "spell.riders", control: "riders", riderContext: inSaveShape ? "save" : "weapon", visibleWhen: () => inDamageShape }
   ];
 }
@@ -373,7 +383,12 @@ export function spellFieldSchema(draft: BuilderDraft): FieldSpec[] {
     { key: "level", copy: "spell.level", control: "number", min: 0, max: 9, step: 1 },
     { key: "timing", copy: "timing", control: "select", options: TIMING_OPTIONS as unknown as FieldSpec["options"] },
     ...reactionBlockSpecs("spell.reactionTrigger", "spell.reactionTarget", "spell.reactionPriority", (d) => d.timing === "reaction"),
-    { key: "range", copy: "spell.range", control: "text", placeholder: "60" },
+    {
+      key: "range",
+      copy: draft.shape === "reposition" ? "spell.repositionRange" : "spell.range",
+      control: "text",
+      placeholder: draft.shape === "reposition" ? "30" : "60"
+    },
     ...effectShapeSpecs(draft),
     { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true },
     { key: "ritual", copy: "spell.ritual", control: "toggle", advanced: true },
@@ -440,7 +455,12 @@ export function actionFieldSchema(draft: BuilderDraft): FieldSpec[] {
     { key: "name", copy: "name", control: "text" },
     { key: "timing", copy: "timing", control: "select", options: TIMING_OPTIONS as unknown as FieldSpec["options"] },
     ...reactionBlockSpecs("spell.reactionTrigger", "spell.reactionTarget", "spell.reactionPriority", (d) => d.timing === "reaction"),
-    { key: "range", copy: "spell.range", control: "text", placeholder: "5" },
+    {
+      key: "range",
+      copy: draft.shape === "reposition" ? "spell.repositionRange" : "spell.range",
+      control: "text",
+      placeholder: draft.shape === "reposition" ? "30" : "5"
+    },
     ...effectShapeSpecs(draft),
     { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true }
   ];
@@ -453,6 +473,7 @@ function shapeOfAction(action: ActionDefinition): string {
   if (action.kind === "save") return "save";
   if (action.kind === "area-save") return "area";
   if (action.kind === "healing") return "healing";
+  if (action.kind === "reposition") return "reposition";
   return "attack";
 }
 
@@ -496,6 +517,8 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     dmg: parseDiceValue("2d6", "fire"),
     healDice: parseDiceValue("1d8"),
     healTarget: "single",
+    repositionTarget: "self",
+    repositionRequiresLos: false,
     riders: [],
     concentration: false,
     // Matches every zone-shaped SRD spell so far (Insect Plague, Cloudkill,
@@ -576,6 +599,15 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       healTarget: action.targeting?.target ?? "single"
     };
   }
+  if (action.kind === "reposition") {
+    return {
+      ...base,
+      range: rangeToDraft(action.range),
+      repositionTarget: action.targeting?.target === "single" ? "single" : "self",
+      repositionRequiresLos: Boolean(action.requiresLineOfEffect),
+      concentration: Boolean(action.concentration)
+    };
+  }
   return { ...base, range: "60" };
 }
 
@@ -619,7 +651,7 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
   };
 }
 
-type BuildableAction = Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" }>;
+type BuildableAction = Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" | "reposition" }>;
 
 /** Build an `ActionDefinition` skeleton from an effect draft (store normalization fills the rest). */
 export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: boolean } = {}): BuildableAction {
@@ -654,6 +686,15 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       kind: "healing", id: "", name, actionType, range,
       healing: [{ dice: diceValueToString(draft.healDice as DiceValue), abilityModifier: (draft.healDice as DiceValue)?.addAbility ? "wis" : undefined }],
       targeting: draft.healTarget === "self" ? { target: "self" } : { target: "single" },
+      automationSupport: "full"
+    };
+  }
+  if (shape === "reposition") {
+    return {
+      kind: "reposition", id: "", name, actionType, range,
+      targeting: draft.repositionTarget === "single" ? { target: "single" } : { target: "self" },
+      requiresLineOfEffect: draft.repositionRequiresLos ? true : undefined,
+      concentration: draft.concentration ? true : undefined,
       automationSupport: "full"
     };
   }
