@@ -135,6 +135,35 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   // ── Level 1 ───────────────────────────────────────────────────────────────
   {
+    id: "srd:spell:mage-armor",
+    name: "Mage Armor",
+    level: 1,
+    school: "abjuration",
+    castingTime: "action",
+    range: "touch",
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "buff",
+      id: "srd:spell:mage-armor:action",
+      name: "Mage Armor",
+      actionType: "action",
+      range: 5,
+      targeting: { target: "single" },
+      prepOnly: true,
+      // Real Mage Armor SETS AC to 13 + Dex mod (replacing unarmored 10 + Dex,
+      // for a creature wearing no armor and using no shield) — this engine
+      // only has an additive AC modifier, not a formula override, so this is
+      // approximated as a flat +3 (the typical net gain for that unarmored
+      // case). Authoring it for an already-armored target would overstate
+      // the bonus — same class of approximation as Bless's flat +2 and Aid's
+      // temp HP.
+      appliedCondition: { name: "custom", durationRounds: 100, modifiers: { armorClass: 3 } },
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
     id: "srd:spell:bless",
     name: "Bless",
     level: 1,
@@ -317,6 +346,33 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     }
   },
   // ── Level 2 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:aid",
+    name: "Aid",
+    level: 2,
+    school: "abjuration",
+    castingTime: "action",
+    range: 30,
+    resourceCost: { resourceId: "slot-2", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "buff",
+      id: "srd:spell:aid:action",
+      name: "Aid",
+      actionType: "action",
+      range: 30,
+      targeting: { target: "chosen", count: 3 },
+      prepOnly: true,
+      // Real Aid raises max AND current HP by 5 — no max-HP field exists on
+      // a condition (only flat AC/attack/save modifiers), so this is
+      // approximated as 5 temp HP instead, the same deliberate
+      // simplification the buff shape's own doc comment already earmarks
+      // "Aid-family effects" for.
+      appliedCondition: { name: "custom", durationRounds: 100 },
+      tempHp: [{ dice: "5" }],
+      automationSupport: "full"
+    }
+  },
   {
     id: "srd:spell:scorching-ray",
     name: "Scorching Ray",

@@ -2,7 +2,7 @@
 
 import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { getDefinition, type CombatantState, type Faction } from "@/engine";
+import { getDefinition, getExecutableActions, type ActionDefinition, type CombatantState, type Faction } from "@/engine";
 import { isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
@@ -67,6 +67,7 @@ export function CombatPanel() {
   const runBatch = useEncounterStore((state) => state.runBatch);
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
+  const togglePrepBuff = useEncounterStore((state) => state.togglePrepBuff);
   const updateFactionTactics = useEncounterStore((state) => state.updateFactionTactics);
   const updateFactionResourceStance = useEncounterStore((state) => state.updateFactionResourceStance);
   const setFactionSurprised = useEncounterStore((state) => state.setFactionSurprised);
@@ -227,6 +228,11 @@ export function CombatPanel() {
           const reserve = combatant.state === "reserve";
           const preCombat = displayEncounter.round <= 0 && !replaying;
           const arrivesRound = combatant.arrivesRound ?? 1;
+          const prepBuffs = preCombat
+            ? getExecutableActions(definition).filter(
+              (action): action is Extract<ActionDefinition, { kind: "buff" }> => action.kind === "buff" && Boolean(action.prepOnly)
+            )
+            : [];
           return (
             <li key={combatant.id}>
               <button
@@ -265,6 +271,32 @@ export function CombatPanel() {
                   >
                     +
                   </button>
+                </div>
+              ) : null}
+              {prepBuffs.length > 0 ? (
+                <div className={styles.prepBuffs} title="Spells cast before this fight — toggle which are already active">
+                  {prepBuffs.map((action) => {
+                    const conditionId = action.appliedCondition.id ?? action.id;
+                    const active = combatant.conditions?.some((condition) => condition.id === conditionId) ?? false;
+                    const resourceId = action.resourceCost?.resourceId;
+                    const canAfford = !resourceId || (combatant.resources?.[resourceId] ?? 0) >= (action.resourceCost?.amount ?? 0);
+                    const disabled = !active && !canAfford;
+                    return (
+                      <label
+                        key={action.id}
+                        className={active ? styles.prepBuffActive : undefined}
+                        title={disabled ? `${action.name}: not enough of its resource remaining` : action.name}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          disabled={disabled}
+                          onChange={() => togglePrepBuff(combatant.id, action.id)}
+                        />
+                        {action.name}
+                      </label>
+                    );
+                  })}
                 </div>
               ) : null}
             </li>

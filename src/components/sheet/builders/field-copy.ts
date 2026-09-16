@@ -72,6 +72,7 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "spell.buffTempHpEnabled": { label: "Also grants temporary hit points" },
   "spell.buffTempHpDice": { label: "Temporary hit points" },
   "spell.buffEffects": { label: "Other effects", hint: "Anything beyond the fields above — advantage, resistance, a custom bonus" },
+  "spell.prepOnly": { label: "Cast before combat only", hint: "Long-duration spells (Aid, Mage Armor) that are always cast ahead of time — never offered to the AI as an in-combat action. Toggled per combatant from their Tactics tab instead of spent here." },
   "spell.riders": { label: "Effects" },
   "spell.concentration": { label: "Concentration", hint: "Casting another concentration spell ends this one" },
   "spell.ritual": { label: "Ritual" },

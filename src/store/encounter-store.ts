@@ -14,6 +14,7 @@ import {
   getDefinition,
   getExecutableActions,
   resolveDeathSave,
+  rollDice,
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
@@ -212,6 +213,15 @@ interface EncounterStore {
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
   applyConditionToCombatant: (combatantId: string, condition: ConditionName) => void;
+  /**
+   * Toggle one `prepOnly` buff spell "already active" on a combatant, before
+   * combat starts — applies (or removes) its condition permanently (no
+   * `expiresAt`; cleared by `restartCombat` like everything else), spends
+   * (or refunds) its resource cost, and grants (never revokes) any temp HP.
+   * No-ops if `actionId` isn't a `prepOnly` buff the combatant's definition
+   * actually has.
+   */
+  togglePrepBuff: (combatantId: string, actionId: string) => void;
   clearConditions: (combatantId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
   addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
@@ -1928,6 +1938,74 @@ export const useEncounterStore = create<EncounterStore>()(
                 ? { movementMultiplier: 2 }
                 : undefined
         });
+        commitEncounter(engine.snapshot, { log: engine.log });
+      },
+      togglePrepBuff: (combatantId, actionId) => {
+        const state = get();
+        const encounter = state.encounter;
+        const combatant = encounter.combatants.find((candidate) => candidate.id === combatantId);
+        const definition = combatant && encounter.definitions.find((candidate) => candidate.id === combatant.definitionId);
+        if (!combatant || !definition) {
+          return;
+        }
+        const action = getExecutableActions(definition).find(
+          (candidate): candidate is Extract<ActionDefinition, { kind: "buff" }> =>
+            candidate.id === actionId && candidate.kind === "buff" && Boolean(candidate.prepOnly)
+        );
+        if (!action) {
+          return;
+        }
+        const conditionId = action.appliedCondition.id ?? action.id;
+        const alreadyActive = (combatant.conditions ?? []).some((condition) => condition.id === conditionId);
+
+        if (alreadyActive) {
+          // Toggle off: drop the condition, refund the resource. Temp HP is
+          // deliberately left alone — see the plan's "no auto-revert" note.
+          commitEncounter({
+            ...encounter,
+            combatants: encounter.combatants.map((candidate) => candidate.id !== combatantId ? candidate : {
+              ...candidate,
+              conditions: (candidate.conditions ?? []).filter((condition) => condition.id !== conditionId),
+              resources: action.resourceCost
+                ? {
+                  ...(candidate.resources ?? {}),
+                  [action.resourceCost.resourceId]: (candidate.resources?.[action.resourceCost.resourceId] ?? 0) + action.resourceCost.amount
+                }
+                : candidate.resources
+            })
+          });
+          return;
+        }
+
+        const engine = createEngineState(encounter);
+        engine.log = [...state.log];
+        applyCondition(engine, combatantId, {
+          id: conditionId,
+          name: action.appliedCondition.name ?? "custom",
+          sourceId: action.id,
+          sourceName: action.name,
+          sourceCombatantId: combatantId,
+          // Not `engine.snapshot.round` — a prep buff is toggled before
+          // initiative exists (round stays 0 until then) and is meant to
+          // last the whole encounter regardless, so no `expiresAt` at all.
+          startedRound: 0,
+          modifiers: action.appliedCondition.modifiers,
+          effects: action.appliedCondition.effects
+        });
+        const target = engine.snapshot.combatants.find((candidate) => candidate.id === combatantId);
+        if (target) {
+          if (action.resourceCost) {
+            const current = target.resources?.[action.resourceCost.resourceId] ?? 0;
+            target.resources = {
+              ...(target.resources ?? {}),
+              [action.resourceCost.resourceId]: Math.max(0, current - action.resourceCost.amount)
+            };
+          }
+          if (action.tempHp?.length) {
+            const amount = action.tempHp.reduce((sum, component) => sum + rollDice(component.dice, engine.rng).total, 0);
+            target.tempHp = Math.max(target.tempHp, amount);
+          }
+        }
         commitEncounter(engine.snapshot, { log: engine.log });
       },
       clearConditions: (combatantId) => {

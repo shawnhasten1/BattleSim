@@ -890,6 +890,16 @@ export interface BuffActionDefinition {
   concentration?: boolean;
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /**
+   * Conventionally always cast before combat for its long (8-24 hour) real
+   * duration rather than spent as an in-combat action (Aid, Mage Armor,
+   * Heroes' Feast) — never offered to the AI as an in-combat candidate
+   * (`selectBuffAction`/`selectBuffBurstAction` filter it out); applied
+   * instead via a DM toggle in the encounter setup UI
+   * (`togglePrepBuff`, `encounter-store.ts`), permanently (no `expiresAt`)
+   * until toggled off or the encounter restarts.
+   */
+  prepOnly?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 

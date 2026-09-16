@@ -268,6 +268,7 @@ function normalizeAction(
       appliedCondition: normalizeAppliedCondition(input.appliedCondition),
       tempHp: Array.isArray(input.tempHp) ? normalizeHealingComponents(input.tempHp) : undefined,
       concentration: input.concentration === true ? true : undefined,
+      prepOnly: input.prepOnly === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }

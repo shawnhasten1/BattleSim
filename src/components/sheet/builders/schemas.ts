@@ -396,6 +396,7 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "buffTempHpEnabled", copy: "spell.buffTempHpEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "buff" },
     { key: "buffTempHpDice", copy: "spell.buffTempHpDice", control: "dice", advanced: true, visibleWhen: () => shape === "buff" && Boolean(draft.buffTempHpEnabled) },
     { key: "buffEffects", copy: "spell.buffEffects", control: "feature-effects", advanced: true, visibleWhen: () => shape === "buff" },
+    { key: "prepOnly", copy: "spell.prepOnly", control: "toggle", advanced: true, visibleWhen: () => shape === "buff" },
 
     { key: "riders", copy: "spell.riders", control: "riders", riderContext: inSaveShape ? "save" : "weapon", visibleWhen: () => inDamageShape }
   ];
@@ -567,6 +568,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     buffTempHpEnabled: false,
     buffTempHpDice: parseDiceValue("2d4"),
     buffEffects: [],
+    prepOnly: false,
     riders: [],
     concentration: false,
     // Matches every zone-shaped SRD spell so far (Insect Plague, Cloudkill,
@@ -684,6 +686,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       buffTempHpEnabled: Boolean(primaryTempHp),
       buffTempHpDice: primaryTempHp ? parseDiceValue(primaryTempHp.dice, undefined, Boolean(primaryTempHp.abilityModifier)) : parseDiceValue("2d4"),
       buffEffects: action.appliedCondition.effects ?? [],
+      prepOnly: Boolean(action.prepOnly),
       concentration: Boolean(action.concentration)
     };
   }
@@ -832,6 +835,7 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       appliedCondition,
       tempHp: draft.buffTempHpEnabled && tempHpDice ? [{ dice: diceValueToString(tempHpDice) }] : undefined,
       concentration: draft.concentration ? true : undefined,
+      prepOnly: draft.prepOnly ? true : undefined,
       automationSupport: "full"
     };
   }

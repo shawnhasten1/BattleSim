@@ -211,6 +211,42 @@
   cursor: default;
 }
 
+/* Pre-combat: toggle which of this combatant's prepOnly buff spells are already active. */
+.prepBuffs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 6px 44px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.prepBuffs label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 3px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+.prepBuffs input {
+  margin: 0;
+  cursor: pointer;
+}
+.prepBuffs input:disabled {
+  cursor: default;
+}
+.prepBuffs label:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+.prepBuffActive {
+  border-color: var(--ui-accent) !important;
+  color: var(--ui-accent) !important;
+}
+
 .init {
   flex-shrink: 0;
   width: 24px;

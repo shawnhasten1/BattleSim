@@ -1423,6 +1423,9 @@ function selectBuffAction(
     .filter((action): action is BuffAction => action.kind === "buff"
       && action.actionType === slot
       && (action.targeting?.target ?? "single") !== "chosen"
+      // Prep-only buffs (Aid, Mage Armor) are DM-toggled before combat, not
+      // an in-combat option — never a candidate here.
+      && !action.prepOnly
       && action.automationSupport === "full"
       && canPayResource(actor, action));
   if (!buffActions.length) {
@@ -1471,6 +1474,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
     .filter((action): action is BuffAction => action.kind === "buff"
       && action.actionType === "action"
       && action.targeting?.target === "chosen"
+      && !action.prepOnly
       && action.automationSupport === "full"
       && canPayResource(actor, action));
   if (!buffActions.length) {
