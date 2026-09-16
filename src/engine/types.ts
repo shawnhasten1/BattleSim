@@ -822,6 +822,39 @@ export interface HealingActionDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/**
+ * Instantly moves a combatant to a chosen point within `range` — Misty Step,
+ * Dimension Door. Bypasses `moveCombatant`'s pathfinding, movement budget,
+ * and opportunity-attack scan entirely (that's the point of a teleport); the
+ * resolver still runs the same "arrival" side effects a normal step would
+ * (on-enter zone/terrain triggers, self-anchored zone recentering), just
+ * never the per-step ones (opportunity attacks, movement damage) since the
+ * mover never occupies the intervening squares.
+ */
+export interface RepositionActionDefinition {
+  kind: "reposition";
+  id: Id;
+  name: string;
+  actionType: ActionType;
+  /** Max feet from the caster to both the mover (in `"single"` mode) and the chosen destination. */
+  range: number;
+  /** `"self"` moves the actor. Default `"single"`. */
+  targeting?: { target: "single" | "self" };
+  /**
+   * Gate the destination behind `RuleProfile.requireLineOfEffect` like every
+   * other targeted action. Default/omitted = `false` — a teleport bypassing
+   * mundane sightline blocking is the point of the spell (Misty Step), so
+   * this is opt-in for the rare spell that should require seeing the
+   * destination, not opt-out.
+   */
+  requiresLineOfEffect?: boolean;
+  resourceCost?: ResourceCost;
+  concentration?: boolean;
+  spellLevel?: number;
+  upcast?: SpellUpcast;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
 export interface UnsupportedActionDefinition {
   kind: "unsupported";
   id: Id;
@@ -890,6 +923,7 @@ export type ActionDefinition =
   | SaveActionDefinition
   | AreaSaveActionDefinition
   | HealingActionDefinition
+  | RepositionActionDefinition
   | UnsupportedActionDefinition
   | ActivateFeatureActionDefinition
   | MultiattackActionDefinition
@@ -1193,6 +1227,8 @@ export interface TurnFlags {
   dashed?: boolean;
   /** Disengage was taken — movement provokes no opportunity attacks this turn. */
   disengaged?: boolean;
+  /** Movement already spent this turn, in grid squares (path-cost units). */
+  movementUsed?: number;
 }
 
 export interface CombatantState {
@@ -1693,7 +1729,8 @@ export const encounterSnapshotSchema = z.object({
       }).optional(),
       turnFlags: z.object({
         dashed: z.boolean().optional(),
-        disengaged: z.boolean().optional()
+        disengaged: z.boolean().optional(),
+        movementUsed: z.number().optional()
       }).optional(),
       initiative: z.number().optional(),
       state: z.union([

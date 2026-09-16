@@ -1,6 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, gridDistance, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, gridDistance, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
@@ -34,6 +34,7 @@ import type {
   Point,
   ReactionMeta,
   ReactionTrigger,
+  RepositionActionDefinition,
   ResourceCost,
   RiderDuration,
   RiderGate,
@@ -88,6 +89,12 @@ export interface AreaSaveResult {
 
 export interface HealingResult {
   healingApplied: number;
+}
+
+export interface RepositionResult {
+  moved: boolean;
+  from?: Point;
+  to?: Point;
 }
 
 export interface FeatureActivationResult {
@@ -398,8 +405,7 @@ export function moveCombatant(
   const routeMap = hazardPathingOverlay(map);
   const pathOptions = { allowOccupiedTransit: true, occupiedMovementMultiplier: 2 };
   const path = hazardAwarePath(map, routeMap, start, destination, footprint, occupied, pathOptions);
-  const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
-  const movementBudget = definition.speed / state.snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
+  const movementBudget = remainingMovementBudget(state.snapshot, combatant);
 
   if (!path.reachable || path.cost > movementBudget) {
     throw new Error(`Destination is not reachable with ${definition.speed} ft. of movement`);
@@ -411,6 +417,10 @@ export function moveCombatant(
   const actualPath = pointsEqual(combatant.position, destination)
     ? path
     : hazardAwarePath(map, routeMap, start, combatant.position, footprint, occupied, pathOptions);
+  combatant.turnFlags = {
+    ...(combatant.turnFlags ?? {}),
+    movementUsed: (combatant.turnFlags?.movementUsed ?? 0) + (actualPath.reachable ? actualPath.cost : 0)
+  };
   state.log.push(event(state, "CombatantMoved", `${combatant.displayName} moved`, {
     combatantId,
     destination: combatant.position,
@@ -703,6 +713,19 @@ export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: 
 /** Movement-budget multiplier from the Dash action (turn flag set by `resolveUtilityAction`). */
 export function dashFactor(combatant: CombatantState): number {
   return combatant.turnFlags?.dashed ? 2 : 1;
+}
+
+/**
+ * How much movement (in grid squares) `combatant` has left this turn — its full
+ * per-turn budget (speed, slowed/dashed as applicable) minus whatever `movementUsed`
+ * already tracked. Shared by `moveCombatant` and every movement-candidate search so
+ * a turn has one real movement pool instead of each caller granting a fresh full move.
+ */
+export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
+  const definition = getDefinition(snapshot, combatant);
+  const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
+  const fullBudget = definition.speed / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
+  return Math.max(0, fullBudget - (combatant.turnFlags?.movementUsed ?? 0));
 }
 
 function coverLabel(level: CoverLevel): string {
@@ -1213,6 +1236,86 @@ export function resolveHealingAction(
   });
 
   return { healingApplied };
+}
+
+/**
+ * Instantly moves `targetId` (or the actor, in `"self"` mode) to `destination`
+ * — Misty Step, Dimension Door. Deliberately does not call `moveCombatant`:
+ * no pathfinding, no movement budget, no per-step opportunity-attack scan or
+ * zone movement damage (those price *walking through* squares, which a
+ * teleport never does). Still runs the same "you've arrived" side effects a
+ * normal step would (on-enter zone/terrain triggers, self-anchored zone
+ * recentering) since those model standing in a place, not the act of
+ * traveling there.
+ */
+export function resolveRepositionAction(
+  state: EngineState,
+  actorId: Id,
+  targetId: Id,
+  destination: Point,
+  actionId: Id
+): RepositionResult {
+  const actor = findCombatant(state.snapshot, actorId);
+  const actorDefinition = getDefinition(state.snapshot, actor);
+  const action = findActionDefinition(actorDefinition, actionId);
+  if (!action || action.kind !== "reposition") {
+    throw new Error(`Reposition action ${actionId} is not available to ${actor.displayName}`);
+  }
+  const isSelf = action.targeting?.target !== "single";
+  const mover = findCombatant(state.snapshot, isSelf ? actorId : targetId);
+  validateRepositionTargeting(state.snapshot, actor, mover, destination, action);
+  validateAndSpendAction(actor, action);
+  declareAction(state, actor, action, { target: isSelf ? undefined : mover, origin: destination });
+  if (counterspellWindow(state, actor, action)) {
+    return { moved: false };
+  }
+
+  const from = { ...mover.position };
+  mover.position = { ...destination };
+  state.log.push(event(state, "CombatantMoved", `${mover.displayName} teleports away`, {
+    combatantId: mover.id,
+    from,
+    destination,
+    cells: [from, destination],
+    teleport: true,
+    actionId,
+    casterId: actor.id
+  }));
+
+  checkZoneOnEnter(state, mover, [from, destination]);
+  checkTerrainHazardOnEnter(state, mover, [from, destination]);
+  recenterSelfAnchoredZones(state, mover);
+
+  return { moved: true, from, to: destination };
+}
+
+function validateRepositionTargeting(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  mover: CombatantState,
+  destination: Point,
+  action: RepositionActionDefinition
+): void {
+  if (mover.state !== "active") {
+    throw new Error(`${mover.displayName} cannot be repositioned`);
+  }
+  const moverDistance = gridDistance(actor.position, mover.position, snapshot.map.grid);
+  if (moverDistance > action.range) {
+    throw new Error(`${mover.displayName} is ${moverDistance} ft. away, beyond ${action.range} ft. range`);
+  }
+  const destinationDistance = gridDistance(actor.position, destination, snapshot.map.grid);
+  if (destinationDistance > action.range) {
+    throw new Error(`Destination is ${destinationDistance} ft. away, beyond ${action.range} ft. range`);
+  }
+  const moverDefinition = getDefinition(snapshot, mover);
+  const footprint = sizeFootprint(moverDefinition.size);
+  if (!isFootprintLegal(snapshot.map, destination, footprint, occupiedCells(snapshot, mover.id))) {
+    throw new Error("Destination is occupied or impassable");
+  }
+  if (action.requiresLineOfEffect && snapshot.rules.requireLineOfEffect
+    && !lineOfEffect(snapshot.map, actor.position, destination)) {
+    throw new Error("Line of effect to destination is blocked");
+  }
 }
 
 export function resolveActivateFeatureAction(
@@ -2652,7 +2755,7 @@ function stampSpellContext(
   action: ActionDefinition,
   spell: NonNullable<CreatureDefinition["spells"]>[number]
 ): ActionDefinition {
-  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing") {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition") {
     return action;
   }
   const stamped = {
@@ -2676,7 +2779,7 @@ function stampSpellContext(
  * (and only spending) the slot it upcasts to.
  */
 function spellUpcastVariants(definition: CreatureDefinition, action: ActionDefinition): ActionDefinition[] {
-  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing") {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition") {
     return [];
   }
   if (!action.resourceCost || action.spellLevel == null || !action.upcast?.perSlotAboveBase) {

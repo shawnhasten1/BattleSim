@@ -3,7 +3,6 @@ import {
   admitReinforcements,
   canAct,
   createEngineState,
-  dashFactor,
   event,
   getDefinition,
   getExecutableActions,
@@ -15,12 +14,14 @@ import {
   resolveAttackBonus,
   resolveBeamCount,
   rollInitiative,
+  remainingMovementBudget,
   resolveAttack,
   resolveDeathSave,
   resolveHealingAction,
   resolveActivateFeatureAction,
   resolveMultiattackAction,
   resolveNumericFormula,
+  resolveRepositionAction,
   resolveSaveDc,
   resolveSaveAction,
   resolveUtilityAction,
@@ -32,10 +33,11 @@ import {
 } from "./combat";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
-import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
+import { coverBetween, findPath, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
 import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
+type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
 type OffensiveAction =
   | Extract<ActionDefinition, { kind: "attack" }>
@@ -50,6 +52,14 @@ interface HealingPlan {
   reasons: string[];
   /** The heal can land this turn without moving (target in range, or a self-heal). */
   reachable: boolean;
+}
+
+interface RepositionPlan {
+  action: RepositionAction;
+  mover: CombatantState;
+  destination: Point;
+  score: number;
+  reasons: string[];
 }
 
 interface OffensivePlan {
@@ -364,32 +374,93 @@ function resolveDodgeIfThreatened(state: EngineState, actor: CombatantState): bo
   }
 }
 
+type BonusPick =
+  | { kind: "heal"; plan: HealingPlan }
+  | { kind: "offense"; plan: OffensivePlan };
+
+/** Target/range a `BonusPick` needs in reach, regardless of whether it's a heal or an attack. */
+function bonusPickTargetRange(pick: BonusPick): { target: CombatantState; range: number } {
+  return pick.kind === "heal"
+    ? { target: pick.plan.target, range: pick.plan.action.range }
+    : { target: pick.plan.target, range: pick.plan.range };
+}
+
 /**
- * After the main action, spend a still-open bonus action: a bonus-action heal or
- * the best bonus-action offensive plan (Spiritual Weapon, an off-hand bite,
- * Healing Word). Only targets already in reach count.
+ * Best bonus-action candidate: a bonus-action heal or the best bonus-action
+ * offensive plan (Spiritual Weapon, an off-hand bite, Healing Word), same
+ * heal-favoring tie-break used everywhere else. `relaxReachability` widens the
+ * offense side to targets only reachable via movement — used by
+ * `selectJointTurnPlan`, which plans that movement itself; the default (used by
+ * `maybeSpendBonusAction`) only weighs what's reachable from where the actor
+ * already stands.
  */
-function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
-  if (actor.state !== "active" || !canAct(actor, "bonus")) {
-    return;
-  }
-  const heal = selectHealingAction(state.snapshot, actor, "bonus");
-  const offense = selectOffensivePlan(state.snapshot, actor, tactics, "bonus");
+function selectBonusCandidate(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  tactics: TacticsSettings,
+  options: { relaxReachability?: boolean } = {}
+): BonusPick | undefined {
+  const heal = selectHealingAction(snapshot, actor, "bonus");
+  const offense = selectOffensivePlan(snapshot, actor, tactics, "bonus", options);
   if (heal && (!offense || heal.score >= offense.score)) {
+    return { kind: "heal", plan: heal };
+  }
+  return offense ? { kind: "offense", plan: offense } : undefined;
+}
+
+/** Log and resolve a `BonusPick`. Returns false (and does nothing) if its target stopped being valid. */
+function resolveBonusPick(state: EngineState, actor: CombatantState, pick: BonusPick): boolean {
+  if (pick.kind === "heal") {
+    const heal = pick.plan;
     state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action to heal`, {
       combatantId: actor.id, actionId: heal.action.id, targetId: heal.target.id, slot: "bonus"
     }));
     try {
       resolveHealingAction(state, actor.id, heal.target.id, heal.action.id);
     } catch { /* map state moved on */ }
+    return true;
+  }
+  const offense = pick.plan;
+  if (offense.target.state !== "active") {
+    return false;
+  }
+  state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action (${offense.action.name})`, {
+    combatantId: actor.id, actionId: offense.action.id, targetId: offense.target.id, slot: "bonus"
+  }));
+  try {
+    executeOffensivePlan(state, actor, offense);
+  } catch { /* map state moved on */ }
+  return true;
+}
+
+/** After the main action, spend a still-open bonus action. Only targets already in reach count. */
+function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
+  if (actor.state !== "active" || !canAct(actor, "bonus")) {
     return;
   }
-  if (offense && offense.target.state === "active") {
-    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action (${offense.action.name})`, {
-      combatantId: actor.id, actionId: offense.action.id, targetId: offense.target.id, slot: "bonus"
+  const pick = selectBonusCandidate(state.snapshot, actor, tactics);
+  if (pick) {
+    // A heal target can be `canMoveIntoRange` without being `reachable` yet — close
+    // the gap first, mirroring the main-action heal short-circuit above.
+    if (pick.kind === "heal" && !pick.plan.reachable) {
+      const move = bestDestinationTowardTarget(state.snapshot, actor, pick.plan.target, pick.plan.action.range, tactics);
+      if (move) {
+        try {
+          moveCombatant(state, actor.id, move.cell);
+        } catch { /* map state moved on */ }
+      }
+    }
+    if (resolveBonusPick(state, actor, pick)) {
+      return;
+    }
+  }
+  const reposition = selectRepositionAction(state.snapshot, actor, "bonus");
+  if (reposition) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} blinks away with ${reposition.action.name}`, {
+      combatantId: actor.id, actionId: reposition.action.id, targetId: reposition.mover.id, destination: reposition.destination, slot: "bonus"
     }));
     try {
-      executeOffensivePlan(state, actor, offense);
+      resolveRepositionAction(state, actor.id, reposition.mover.id, reposition.destination, reposition.action.id);
     } catch { /* map state moved on */ }
     return;
   }
@@ -443,6 +514,168 @@ function maybeRepositionZone(state: EngineState, actor: CombatantState): void {
       combatantId: actor.id, zoneId: zone.id, targetId: nearest.id, slot: "bonus"
     }));
   } catch { /* not actually repositionable right now */ }
+}
+
+interface JointTurnPlan {
+  order: "main-first" | "bonus-first";
+  mainPlan: OffensivePlan;
+  bonusPick: BonusPick;
+  /** Movement to reach the first slot's target, if it isn't already in range. */
+  leg1: MovementPlan | undefined;
+  /** Movement to reach the second slot's target from leg 1's landing spot, if needed. */
+  leg2: MovementPlan | undefined;
+}
+
+/** Movement (if any) to bring `target` into `range`, or `undefined` if nothing in the remaining budget reaches it. */
+function planLegTowardTarget(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  target: CombatantState,
+  range: number,
+  tactics: TacticsSettings
+): { move: MovementPlan | undefined; feasible: boolean } {
+  if (isValidTarget(snapshot, actor, target, range)) {
+    return { move: undefined, feasible: true };
+  }
+  const move = bestDestinationTowardTarget(snapshot, actor, target, range, tactics);
+  return { move, feasible: move != null };
+}
+
+/**
+ * Whether `first`'s target then `second`'s target can both be reached this turn,
+ * in that order, out of one shared movement budget. Scores leg 2 from leg 1's
+ * landing cell by temporarily relocating `actor` there (same save/mutate/restore
+ * idiom `dashDestinationTowardTarget` uses to score a hypothetical Dash) — never
+ * leaves `actor` mutated on return.
+ */
+function twoLegOrder(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  first: { target: CombatantState; range: number },
+  second: { target: CombatantState; range: number },
+  tactics: TacticsSettings
+): { leg1: MovementPlan | undefined; leg2: MovementPlan | undefined } | undefined {
+  const leg1Result = planLegTowardTarget(snapshot, actor, first.target, first.range, tactics);
+  if (!leg1Result.feasible) {
+    return undefined;
+  }
+  if (!leg1Result.move) {
+    const leg2Result = planLegTowardTarget(snapshot, actor, second.target, second.range, tactics);
+    return leg2Result.feasible ? { leg1: undefined, leg2: leg2Result.move } : undefined;
+  }
+
+  const savedPosition = actor.position;
+  const savedFlags = actor.turnFlags;
+  actor.position = leg1Result.move.cell;
+  actor.turnFlags = { ...(savedFlags ?? {}), movementUsed: (savedFlags?.movementUsed ?? 0) + leg1Result.move.pathCost };
+  try {
+    const leg2Result = planLegTowardTarget(snapshot, actor, second.target, second.range, tactics);
+    return leg2Result.feasible ? { leg1: leg1Result.move, leg2: leg2Result.move } : undefined;
+  } finally {
+    actor.position = savedPosition;
+    actor.turnFlags = savedFlags;
+  }
+}
+
+/**
+ * Weighs the already-chosen main-action plan against the best bonus-action
+ * candidate and, if both targets fit in one shared movement budget in either
+ * visiting order, returns the plan to execute both this turn. Ties (both orders
+ * feasible — the combined score is the same either way, since neither action's
+ * value depends on which happens first) favor main-first to minimize churn from
+ * today's default ordering. Returns `undefined` when no joint plan is feasible —
+ * callers fall back to the legacy single-slot flow.
+ */
+function selectJointTurnPlan(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  mainPlan: OffensivePlan,
+  tactics: TacticsSettings
+): JointTurnPlan | undefined {
+  if (!canAct(actor, "bonus")) {
+    return undefined;
+  }
+  const bonusPick = selectBonusCandidate(snapshot, actor, tactics, { relaxReachability: true });
+  if (!bonusPick) {
+    return undefined;
+  }
+  const mainTarget = { target: mainPlan.target, range: mainPlan.range };
+  const bonusTarget = bonusPickTargetRange(bonusPick);
+  if (mainTarget.target.id === bonusTarget.target.id) {
+    // Same target for both slots — one leg (or none) already covers both; no
+    // ordering ambiguity for the legacy flow to get wrong.
+    return undefined;
+  }
+
+  const mainFirst = twoLegOrder(snapshot, actor, mainTarget, bonusTarget, tactics);
+  if (mainFirst) {
+    return { order: "main-first", mainPlan, bonusPick, leg1: mainFirst.leg1, leg2: mainFirst.leg2 };
+  }
+  const bonusFirst = twoLegOrder(snapshot, actor, bonusTarget, mainTarget, tactics);
+  if (bonusFirst) {
+    return { order: "bonus-first", mainPlan, bonusPick, leg1: bonusFirst.leg1, leg2: bonusFirst.leg2 };
+  }
+  return undefined;
+}
+
+/** Log and resolve `plan` as the main action — the exact steps `takeAutomatedTurn`'s own tail uses. */
+function resolveMainOffensivePlan(state: EngineState, actor: CombatantState, plan: OffensivePlan): void {
+  state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${plan.action.name}`, {
+    combatantId: actor.id,
+    actionId: plan.action.id,
+    targetId: plan.target.id,
+    score: plan.score,
+    expectedDamage: plan.expectedDamage,
+    distance: plan.distance,
+    reachableNow: plan.reachableNow,
+    canMoveIntoRange: plan.canMoveIntoRange,
+    reasons: plan.reasons
+  }));
+  executeOffensivePlan(state, actor, plan);
+}
+
+/**
+ * Executes a `JointTurnPlan`: move → resolve slot 1 → move → resolve slot 2, in
+ * the planned order. Each leg is re-planned against the live board right before
+ * it's spent (not reused from planning time) — the first action landing (e.g. a
+ * multiattack spilling onto and killing the second target) can change what the
+ * second leg actually needs.
+ */
+function executeJointTurnPlan(state: EngineState, actor: CombatantState, joint: JointTurnPlan, tactics: TacticsSettings): void {
+  const bonusTarget = bonusPickTargetRange(joint.bonusPick);
+  const steps: Array<{ slot: "action" | "bonus"; target: CombatantState; range: number }> = joint.order === "main-first"
+    ? [
+        { slot: "action", target: joint.mainPlan.target, range: joint.mainPlan.range },
+        { slot: "bonus", target: bonusTarget.target, range: bonusTarget.range }
+      ]
+    : [
+        { slot: "bonus", target: bonusTarget.target, range: bonusTarget.range },
+        { slot: "action", target: joint.mainPlan.target, range: joint.mainPlan.range }
+      ];
+
+  for (const step of steps) {
+    if (actor.state !== "active") {
+      return;
+    }
+    if (!isValidTarget(state.snapshot, actor, step.target, step.range)) {
+      const move = bestDestinationTowardTarget(state.snapshot, actor, step.target, step.range, tactics);
+      if (move) {
+        try {
+          moveCombatant(state, actor.id, move.cell);
+        } catch { /* map state moved on */ }
+      }
+    }
+    if (actor.state !== "active") {
+      return;
+    }
+    if (step.slot === "action") {
+      if (isValidTarget(state.snapshot, actor, joint.mainPlan.target, joint.mainPlan.range) && joint.mainPlan.target.state === "active") {
+        resolveMainOffensivePlan(state, actor, joint.mainPlan);
+      }
+    } else {
+      resolveBonusPick(state, actor, joint.bonusPick);
+    }
+  }
 }
 
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
@@ -528,17 +761,52 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
   }
 
+  // Before committing to "move fully toward the main action, then see what's left
+  // for the bonus action," check whether the main and bonus actions are better
+  // planned together — same shared movement budget, but weighing which is worth
+  // moving for and in which order. Only attempted when the main target is
+  // reachable by an ordinary move (already in range, or `canMoveIntoRange`) — a
+  // target that needs Dash or a bonus-action gap-closer just to be reached at all
+  // leaves no budget to jointly plan around, so that harder-to-reach branch below
+  // is left untouched.
+  if (actor.state === "active" && (isValidTarget(state.snapshot, actor, plan.target, plan.range) || plan.canMoveIntoRange)) {
+    const joint = selectJointTurnPlan(state.snapshot, actor, plan, tactics);
+    if (joint) {
+      executeJointTurnPlan(state, actor, joint, tactics);
+      if (actor.state === "active") {
+        maybeSpendBonusAction(state, actor, tactics);
+      }
+      return undefined;
+    }
+  }
+
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
     // No options ⇒ only cells already within attack range come back.
     const movement = bestDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics);
     const normalReaches = movement != null;
+    // A melee actor with a bonus-action self-teleport available gets first
+    // refusal on closing a gap a plain move can't — it lands a guaranteed
+    // attack with the action instead of spending the whole turn on Dash with
+    // nothing to show for it. Tried before Dash; a free move that already
+    // reaches is still preferred (no reason to burn the spell for that).
+    const gapCloser = !normalReaches
+      ? selectMeleeGapCloserReposition(state.snapshot, actor, plan.target, plan.range, tactics)
+      : undefined;
     // A single move can't close the gap; if a doubled (Dash) move would, spend
     // the action on Dash instead of half-closing and standing idle.
-    const dashMove = !normalReaches && canAct(actor, "action")
+    const dashMove = !normalReaches && !gapCloser && canAct(actor, "action")
       ? dashDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics)
       : undefined;
 
-    if (dashMove) {
+    if (gapCloser) {
+      try {
+        resolveRepositionAction(state, actor.id, actor.id, gapCloser.destination, gapCloser.action.id);
+        movedThisTurn = true;
+        state.log.push(event(state, "AiDecision", `${actor.displayName} blinks into range with ${gapCloser.action.name}`, {
+          combatantId: actor.id, actionId: gapCloser.action.id, targetId: plan.target.id, destination: gapCloser.destination, slot: "bonus"
+        }));
+      } catch { /* map state moved on */ }
+    } else if (dashMove) {
       const dashId = utilityActionId(state.snapshot, actor, "dash", "action");
       if (dashId) {
         try {
@@ -573,7 +841,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       } catch {
         // Candidate generation should avoid illegal moves; if map state changed, skip movement.
       }
-    } else {
+    } else if (!gapCloser) {
       // Can't get within range this turn, even with a Dash. Close the distance
       // instead of standing still: Dash toward the target if that covers more
       // ground (the action would go unused anyway), otherwise just move — and
@@ -941,6 +1209,154 @@ function selectHealingAction(
   return { action: best.action, target: best.target, score: best.score, reasons: best.reasons, reachable: best.reachable };
 }
 
+/** Score a single candidate cell for a teleporting `mover` — no target/direction, just "is this a good place to be." */
+function teleportDestinationScore(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point, tactics: TacticsSettings): number {
+  const nearestHostile = nearestHostileDistanceFrom(snapshot, actor, cell);
+  const threatPenalty = isThreatenedAt(snapshot, actor, cell) ? -40 : 0;
+  const hazardPenalty = hazardAtCell(snapshot, actor, cell) * tactics.hazardWeight * 10;
+  const coverBonus = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
+    ? coverFromHostilesAt(snapshot, actor, cell) * tactics.coverWeight
+    : 0;
+  return distanceBandScore(nearestHostile, tactics) + threatPenalty - hazardPenalty + coverBonus;
+}
+
+/**
+ * Best legal cell within `action.range` of `actor` for `mover` to blink to —
+ * reuses the same spacing/hazard/cover scoring `movementPlanForCell` builds
+ * normal movement plans from, just with no path/budget/OA constraint since a
+ * teleport ignores all three. Enumerated via `cellsInArea` (a plain circle
+ * scan, the same primitive area-save AI scoring already uses), not
+ * `findReachableCells` (which is pathfinding-bound and wrong here).
+ */
+function bestTeleportDestination(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  action: RepositionAction,
+  mover: CombatantState,
+  tactics: TacticsSettings
+): Point | undefined {
+  const moverDefinition = getDefinition(snapshot, mover);
+  const footprint = sizeFootprint(moverDefinition.size);
+  const occupied = occupiedCellsFor(snapshot, mover.id);
+  const currentScore = teleportDestinationScore(snapshot, actor, mover.position, tactics);
+  const candidates = cellsInArea(snapshot.map, actor.position, { type: "circle", size: action.range })
+    .filter((cell) => isFootprintLegal(snapshot.map, cell, footprint, occupied)
+      && (!action.requiresLineOfEffect || !snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, actor.position, cell)))
+    .map((cell) => ({ cell, score: teleportDestinationScore(snapshot, actor, cell, tactics) }))
+    .filter((candidate) => candidate.score > currentScore + 4);
+
+  candidates.sort((a, b) => b.score - a.score || a.cell.y - b.cell.y || a.cell.x - b.cell.x);
+  return candidates[0]?.cell;
+}
+
+/**
+ * Picks the best reposition (teleport) spell/target/destination combo for
+ * `slot`, mirroring `selectHealingAction`'s shape/scoring conventions. v1
+ * scope: only ever reached for the `"bonus"` slot (see `maybeSpendBonusAction`)
+ * — an action-cost reposition spell (Dimension Door) can call this the same
+ * way once it's worth wiring into the main-action decision tree.
+ */
+function selectRepositionAction(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  slot: "action" | "bonus" = "bonus"
+): RepositionPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const tactics = tacticsSettings(actor.tacticsProfile);
+  const repositionActions = getExecutableActions(definition)
+    .filter((action): action is RepositionAction => action.kind === "reposition"
+      && action.actionType === slot
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  if (!repositionActions.length) {
+    return undefined;
+  }
+  const movers = snapshot.combatants.filter((combatant) =>
+    combatant.faction === actor.faction && combatant.state === "active");
+
+  const candidates = repositionActions.flatMap((action) => {
+    const eligibleMovers = action.targeting?.target === "single"
+      ? movers.filter((mover) => isValidTarget(snapshot, actor, mover, action.range))
+      : [actor];
+    return eligibleMovers.map((mover) => {
+      const destination = bestTeleportDestination(snapshot, actor, action, mover, tactics);
+      if (!destination) {
+        return undefined;
+      }
+      // A big, guaranteed-to-clear-the-bar floor when genuinely threatened (mirrors
+      // `selectHealingAction`'s "downed ally = 95" pattern) — v1 is an escape tool,
+      // not a general repositioning optimizer, so a merely-nicer, unthreatened spot
+      // should not be worth burning a spell slot over. Gated to a ranged posture:
+      // a melee actor being "threatened" (adjacent to a hostile) after its own
+      // action just closed the distance to attack is the intended outcome of its
+      // turn, not something to flee — a melee actor that wants to close the gap
+      // in the first place gets `selectMeleeGapCloserReposition` instead.
+      const urgency = tactics.preferred === "ranged" && isThreatenedAt(snapshot, actor, mover.position) ? 50 : 0;
+      const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+      const reasons = [urgency > 0 ? "escapes an immediate threat" : "improves position", `${action.name}`];
+      return { action, mover, destination, score: urgency - resourcePenalty + 10, reasons };
+    });
+  }).filter((candidate): candidate is RepositionPlan => candidate != null);
+
+  candidates.sort((a, b) => b.score - a.score || a.action.id.localeCompare(b.action.id));
+  const best = candidates[0];
+  return best && best.score >= 30 ? best : undefined;
+}
+
+interface GapCloserPlan {
+  action: RepositionAction;
+  destination: Point;
+}
+
+/**
+ * A melee actor's bonus-action self-teleport, used to CLOSE distance into
+ * attack range this turn — tried by `takeAutomatedTurn` before falling back
+ * to Dash when a plain move can't reach. Landing a guaranteed attack with
+ * the action beats spending the whole turn on Dash for nothing. Melee-only:
+ * a ranged actor wants distance from its targets, not less of it.
+ */
+function selectMeleeGapCloserReposition(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  target: CombatantState,
+  range: number,
+  tactics: TacticsSettings
+): GapCloserPlan | undefined {
+  if (tactics.preferred !== "melee" || !canAct(actor, "bonus")) {
+    return undefined;
+  }
+  const definition = getDefinition(snapshot, actor);
+  const repositionActions = getExecutableActions(definition)
+    .filter((action): action is RepositionAction => action.kind === "reposition"
+      && action.actionType === "bonus"
+      && (action.targeting?.target ?? "self") === "self"
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  if (!repositionActions.length) {
+    return undefined;
+  }
+  const footprint = sizeFootprint(definition.size);
+  const occupied = occupiedCellsFor(snapshot, actor.id);
+
+  let best: GapCloserPlan | undefined;
+  for (const action of repositionActions) {
+    const legalCells = cellsInArea(snapshot.map, actor.position, { type: "circle", size: action.range })
+      .filter((cell) => gridDistance(cell, target.position, snapshot.map.grid) <= range
+        && isFootprintLegal(snapshot.map, cell, footprint, occupied)
+        && (!action.requiresLineOfEffect || !snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, actor.position, cell))
+        && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, cell, target.position)));
+    if (!legalCells.length) {
+      continue;
+    }
+    legalCells.sort((a, b) => gridDistance(a, target.position, snapshot.map.grid) - gridDistance(b, target.position, snapshot.map.grid));
+    const destination = legalCells[0]!;
+    if (!best || resourceCostWeight(action) < resourceCostWeight(best.action)) {
+      best = { action, destination };
+    }
+  }
+  return best;
+}
+
 function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: CombatantState): FeatureActivationPlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
@@ -988,7 +1404,7 @@ function selectOffensivePlan(
   actor: CombatantState,
   tactics: TacticsSettings,
   slot: "action" | "bonus" = "action",
-  options: { mustReachNow?: boolean } = {}
+  options: { mustReachNow?: boolean; relaxReachability?: boolean } = {}
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
@@ -1102,10 +1518,14 @@ function selectOffensivePlan(
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
-    // A bonus action is a follow-up: the actor has already moved / acted, so only
-    // targets it can hit from where it stands count. `mustReachNow` applies the
-    // same rule after the action-phase move is already spent.
-    .filter((plan) => (slot === "action" && !options.mustReachNow) || plan.reachableNow);
+    // A bonus action is normally a follow-up: the actor has already moved / acted,
+    // so only targets it can hit from where it stands count. `mustReachNow` applies
+    // the same rule after the action-phase move is already spent. `relaxReachability`
+    // is the exception: it lets `selectJointTurnPlan` weigh a bonus-action target the
+    // actor hasn't moved toward yet, using the full remaining movement budget.
+    .filter((plan) => (slot === "action" && !options.mustReachNow)
+      || plan.reachableNow
+      || (options.relaxReachability && plan.canMoveIntoRange));
 
   candidates.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.target.id.localeCompare(b.target.id));
   return candidates[0];
@@ -1183,7 +1603,7 @@ function bestDestinationTowardTarget(
   const definition = getDefinition(snapshot, actor);
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
-  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
+  const movementBudget = remainingMovementBudget(snapshot, actor);
   const pathingMap = hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones));
   const plans = findReachableCells(pathingMap, actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
@@ -1243,7 +1663,7 @@ function bestRepositionAfterAction(
   const definition = getDefinition(snapshot, actor);
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
-  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
+  const movementBudget = remainingMovementBudget(snapshot, actor);
   const currentDistance = gridDistance(actor.position, target.position, snapshot.map.grid);
   const currentNearestHostile = nearestHostileDistanceFrom(snapshot, actor, actor.position);
   const currentCover = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
@@ -1374,6 +1794,7 @@ function hazardAtCell(snapshot: EncounterSnapshot, actor: CombatantState, cell: 
   return hazard;
 }
 
+
 function movementPlanForCell(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
@@ -1454,7 +1875,7 @@ function bestShotPositionAgainst(
   if (currentCover <= 0) return undefined; // already a clean shot
 
   const occupied = occupiedCellsFor(snapshot, actor.id);
-  const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
+  const movementBudget = remainingMovementBudget(snapshot, actor);
   const candidates = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
@@ -1833,7 +2254,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDefinition>): number {
-  if (action.kind === "healing" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
+  if (action.kind === "healing" || action.kind === "reposition" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
     return 0;
   }
   if (action.kind === "multiattack") {
