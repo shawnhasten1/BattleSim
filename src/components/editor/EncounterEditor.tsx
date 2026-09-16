@@ -90,7 +90,12 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
 
   const viewport = useViewport();
   const scene = useSceneInteraction({ isPanning: viewport.isPanning, isPanningRef: viewport.isPanningRef });
-  const compendium = useCompendium({ onCreatureImported: () => setModal(null) });
+  const compendium = useCompendium({
+    onCreatureImported: () => {
+      setModal(null);
+      setSheetOpen(true);
+    }
+  });
 
   const cellSize = useMemo(() => deriveSceneMetrics(encounter.map).cellSize, [encounter.map]);
   const savedDefinitionIds = useMemo(
@@ -218,6 +223,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
         <CreateTokenModal
           compendium={compendium}
           targetFolderId={createFolderId}
+          onCreated={() => setSheetOpen(true)}
           onClose={() => {
             setModal(null);
             setCreateFolderId(null);

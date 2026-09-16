@@ -12,6 +12,36 @@
   color: var(--ui-text-dim);
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--ui-border);
+  margin: 0 0 4px;
+}
+
+.tabs button {
+  flex: 1;
+  min-width: 25%;
+  padding: 8px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabs button:hover {
+  color: var(--ui-text);
+}
+
+.tabs button.active {
+  color: var(--ui-accent);
+  border-bottom-color: var(--ui-accent);
+}
+
 .grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

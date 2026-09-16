@@ -34,6 +34,7 @@ import {
   type Ability,
   type ActionDefinition,
   type CreatureDefinition,
+  type CreatureType,
   type DamageType,
   type DeathEffectDefinition,
   type EncounterSnapshot,
@@ -41,6 +42,7 @@ import {
   type FeatureDefinition,
   type PlacedTemplate,
   type Point,
+  type SizeCategory,
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
@@ -214,8 +216,7 @@ interface EncounterStore {
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
   addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
   importCombatantPackage: (input: CombatantExportPackage) => string;
-  addCustomPc: (input: { name: string; ac: number; hp: number; speed: number; attackBonus: number; damageDice: string }) => string;
-  addCustomToken: (input: { name: string; faction: "party" | "enemy"; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"]; attackName: string; attackType: "melee" | "ranged"; attackAbility: Ability; damageDice: string; damageType: DamageType }) => string;
+  addBlankToken: (input: { name: string; faction: "party" | "enemy"; size: SizeCategory; type: CreatureType | undefined; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"] }) => string;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
   /** Bench one or more tokens as reinforcements arriving on a given round (≤ 1 / undefined = on the board). */
   setArrivesRound: (combatantIds: string[], arrivesRound: number | undefined) => void;
@@ -2026,50 +2027,21 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         return definition.id;
       },
-      addCustomPc: (input) => {
-        return get().addCustomToken({
-          name: input.name,
-          faction: "party",
-          ac: input.ac,
-          hp: input.hp,
-          speed: input.speed,
-          proficiencyBonus: Math.max(2, input.attackBonus - 2),
-          abilities: { str: 14, dex: 14, con: 14, int: 10, wis: 10, cha: 10 },
-          attackName: "Primary Attack",
-          attackType: "melee",
-          attackAbility: "str",
-          damageDice: input.damageDice,
-          damageType: "slashing"
-        });
-      },
-      addCustomToken: (input) => {
+      addBlankToken: (input) => {
         const id = `def-${crypto.randomUUID()}`;
         get().addCreatureDefinition({
           id,
           name: input.name,
           source: { provider: "homebrew" },
-          size: "medium",
+          size: input.size,
+          type: input.type,
           armorClass: input.ac,
           maxHp: input.hp,
           speed: input.speed,
           proficiencyBonus: input.proficiencyBonus,
           character: input.faction === "party" ? { level: 1, classes: [{ name: "Adventurer", level: 1 }] } : undefined,
           abilities: input.abilities,
-          actions: [
-            {
-              kind: "attack",
-              id: `attack-${id}`,
-              name: input.attackName,
-              actionType: "action",
-              attackType: input.attackType,
-              ability: input.attackAbility,
-              attackBonusFormula: { ability: input.attackAbility, proficiency: true },
-              range: input.attackType === "ranged" ? 80 : 5,
-              reach: input.attackType === "melee" ? 5 : undefined,
-              damage: [{ dice: input.damageDice, damageType: input.damageType, abilityModifier: input.attackAbility }],
-              automationSupport: "full"
-            }
-          ]
+          actions: []
         }, input.faction);
         return id;
       },
