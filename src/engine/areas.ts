@@ -192,6 +192,37 @@ export function zoneTerrainOverlay(map: BattleMapState, zones: ActiveZone[] | un
   return { ...map, terrain: [...map.terrain, ...zoneTerrain] };
 }
 
+/**
+ * A hazard tile's *real* movement cost is normal ground — only difficult/
+ * impassable terrain slows anyone down — deliberately, so a creature can
+ * choose to eat the risk without it also costing extra movement. But that
+ * means plain pathfinding has no reason to route around one: it commits to
+ * the single cheapest path through every cell it explores, so a hazard
+ * sitting on the direct line gets baked into every route through that area
+ * with nothing to prefer a detour.
+ *
+ * Feed this overlay's output into `findPath` / `findReachableCells` /
+ * `pathCostField` to bias the *route those functions choose* toward
+ * detouring around hazard tiles when a comparably-priced alternative
+ * exists, without making a truly unavoidable crossing impossible — treat
+ * the resulting `cost` as planning-only, never as the real movement spent;
+ * recompute that separately (`pathCostAlong` in geometry.ts) against the
+ * real map once a route is chosen. Returns `map` unchanged when there's no
+ * hazard terrain to route around.
+ */
+export function hazardPathingOverlay(map: BattleMapState): BattleMapState {
+  if (!map.terrain.some((tile) => tile.hazard)) {
+    return map;
+  }
+  return {
+    ...map,
+    terrain: map.terrain.map((tile) => tile.hazard ? { ...tile, movementMultiplier: HAZARD_PATHING_MULTIPLIER } : tile)
+  };
+}
+
+/** How many times pricier than open ground a hazard tile is treated as, for `hazardPathingOverlay`'s route-selection purposes only. */
+const HAZARD_PATHING_MULTIPLIER = 10;
+
 /** Whether the segment `from`→`to` (grid coordinates) passes through any `blocksSight` zone, sampled along its length. */
 export function zoneBlocksSightBetween(zones: ActiveZone[] | undefined, from: Point, to: Point, distancePerSquare: number): boolean {
   const sightZones = zones?.filter((zone) => zone.blocksSight);

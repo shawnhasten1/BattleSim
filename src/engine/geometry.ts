@@ -442,6 +442,30 @@ function footprintMovementCost(
   return terrainCost * (options.occupiedMovementMultiplier ?? 2);
 }
 
+/**
+ * The real movement cost of an already-decided route (`cells`, start to
+ * finish) against `map`'s own terrain — the counterpart to a route chosen on
+ * a different, e.g. hazard-inflated, map (`hazardPathingOverlay` in
+ * areas.ts). Re-deriving the true cost this way keeps a route steered away
+ * from hazards on a planning-only map from ever leaking that map's inflated
+ * numbers into real movement-budget accounting.
+ */
+export function pathCostAlong(
+  map: BattleMapState,
+  cells: Point[],
+  footprint: number,
+  occupied: Point[] = [],
+  options: OccupancyMovementOptions = {}
+): number {
+  let total = 0;
+  for (let i = 1; i < cells.length; i += 1) {
+    const from = cells[i - 1] as Point;
+    const to = cells[i] as Point;
+    total += stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options);
+  }
+  return total;
+}
+
 function isTransitFootprintLegal(
   map: BattleMapState,
   position: Point,

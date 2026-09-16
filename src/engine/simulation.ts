@@ -30,7 +30,7 @@ import {
   tickZones,
   type EngineState
 } from "./combat";
-import { cellIntersectsArea, cellsInArea, combatantsInArea, zoneTerrainOverlay, type AimVector } from "./areas";
+import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findPath, findReachableCells, gridDistance, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
 import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
@@ -1184,7 +1184,8 @@ function bestDestinationTowardTarget(
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
-  const plans = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
+  const pathingMap = hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones));
+  const plans = findReachableCells(pathingMap, actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   }).map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable));
@@ -1207,7 +1208,7 @@ function bestDestinationTowardTarget(
   // much longer walk around. A single cost field rooted at the target gives every
   // candidate's true remaining path length in one pass (movement cost is
   // symmetric, so "cost from target to cell" == "cost from cell to target").
-  const routeField = pathCostField(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), target.position, footprint, occupied, {
+  const routeField = pathCostField(pathingMap, target.position, footprint, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   });
@@ -1251,7 +1252,7 @@ function bestRepositionAfterAction(
   const currentScore = distanceBandScore(currentDistance, tactics)
     + Math.min(currentNearestHostile, tactics.preferredMinDistance) / 5
     + (currentCover > 0 ? currentCover * tactics.coverWeight + 4 : 0);
-  const candidates = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
+  const candidates = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   })
@@ -1454,7 +1455,7 @@ function bestShotPositionAgainst(
 
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = definition.speed / snapshot.map.grid.distancePerSquare * dashFactor(actor);
-  const candidates = findReachableCells(zoneTerrainOverlay(snapshot.map, snapshot.activeZones), actor.position, footprint, movementBudget, occupied, {
+  const candidates = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint, movementBudget, occupied, {
     allowOccupiedTransit: true,
     occupiedMovementMultiplier: 2
   })

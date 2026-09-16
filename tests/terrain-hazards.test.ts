@@ -90,7 +90,12 @@ describe("terrain hazard tiles", () => {
     enemy.currentHp = 100; // survive the hit regardless of the roll
     const state = createEngineState(e);
 
-    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+    // Destination is the hazard tile itself, not a cell beyond it — since
+    // moveCombatant now detours around a hazard when a comparable route
+    // exists (see hazardPathingOverlay), landing *on* it is the only way to
+    // guarantee this move actually enters it, for a clean test of the damage
+    // mechanics in isolation from route selection (covered separately below).
+    moveCombatant(state, "enemy-goblin-1", { x: 3, y: 1 }, { provokeOpportunityAttacks: false });
 
     expect(state.log.some((entry) => entry.type === "DamageApplied")).toBe(true);
     expect(state.log.some((entry) => entry.type === "SaveRolled")).toBe(false);
@@ -106,7 +111,8 @@ describe("terrain hazard tiles", () => {
     enemy.currentHp = 100;
     const state = createEngineState(e);
 
-    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+    // Destination is the hazard tile itself — see the lava test above for why.
+    moveCombatant(state, "enemy-goblin-1", { x: 3, y: 1 }, { provokeOpportunityAttacks: false });
 
     const saveEvent = state.log.find((entry) => entry.type === "SaveRolled");
     expect(saveEvent, "should have rolled a save against the acid tile").toBeDefined();
@@ -176,7 +182,8 @@ describe("terrain hazard tiles", () => {
     enemy.position = { x: 1, y: 1 };
     const state = createEngineState(e);
 
-    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+    // Destination is the hazard tile itself — see the lava test above for why.
+    moveCombatant(state, "enemy-goblin-1", { x: 3, y: 1 }, { provokeOpportunityAttacks: false });
 
     const saveEvent = state.log.find((entry) => entry.type === "SaveRolled");
     expect(saveEvent?.data?.success).toBe(false);
@@ -193,7 +200,8 @@ describe("terrain hazard tiles", () => {
     enemy.position = { x: 1, y: 1 };
     const state = createEngineState(e);
 
-    moveCombatant(state, "enemy-goblin-1", { x: 4, y: 1 }, { provokeOpportunityAttacks: false });
+    // Destination is the hazard tile itself — see the lava test above for why.
+    moveCombatant(state, "enemy-goblin-1", { x: 3, y: 1 }, { provokeOpportunityAttacks: false });
 
     const saveEvent = state.log.find((entry) => entry.type === "SaveRolled");
     expect(saveEvent?.data?.success).toBe(true);
@@ -277,5 +285,45 @@ describe("terrain hazard tiles", () => {
     const path = (moved?.data?.cells as { x: number; y: number }[] | undefined) ?? [];
     expect(path.some((step) => step.x === 6 && step.y === 3), `path ${JSON.stringify(path)} should route around the lava tile`).toBe(false);
     expect(state.log.some((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-archer")).toBe(false);
+  });
+
+  it("a melee approach takes the costlier detour around lava instead of the cheapest route straight through it", () => {
+    // Even the path-summed scoring fix above isn't enough on its own: every
+    // reachable *destination* cell downstream of a hazard on the objectively
+    // cheapest route inherits a path that crosses it, because `findReachableCells`
+    // (plain Dijkstra) only ever keeps the single cheapest route to each cell —
+    // a costlier, hazard-free alternate route to that exact same cell is
+    // discarded before movementPlanForCell ever gets a chance to weigh it. Here
+    // the fighter's shortest line to melee range runs straight through lava;
+    // the equally-viable adjacent cell one row up is 0.5 squares more
+    // expensive (one diagonal step) precisely because it avoids the lava row
+    // entirely — proving pathfinding itself (hazardPathingOverlay in areas.ts,
+    // used by both the AI's candidate search and the real move in
+    // combat.ts's moveCombatant) now discovers and prefers that costlier-but-
+    // safer route, not just that the tactical destination score disfavors it.
+    const e = encounter();
+    e.seed = "terrain-hazard-melee-detour";
+    e.map.terrain = [lavaTile({ x: 4, y: 1 })];
+    const fighter = e.combatants.find((c) => c.id === "pc-fighter")!;
+    fighter.position = { x: 1, y: 1 };
+    fighter.tacticsProfile = "basic-melee";
+    const archer = e.combatants.find((c) => c.id === "pc-archer")!;
+    archer.state = "dead";
+    const goblin1 = e.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    goblin1.position = { x: 7, y: 1 };
+    const goblin2 = e.combatants.find((c) => c.id === "enemy-goblin-2")!;
+    goblin2.state = "dead";
+
+    const state = createEngineState(e);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-fighter")!);
+
+    const moved = state.log.find((entry) => entry.type === "CombatantMoved" && entry.data?.combatantId === "pc-fighter");
+    const path = (moved?.data?.cells as { x: number; y: number }[] | undefined) ?? [];
+    expect(path.some((step) => step.x === 4 && step.y === 1), `path ${JSON.stringify(path)} should detour around the lava tile`).toBe(false);
+    expect(state.log.some((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-fighter")).toBe(false);
+    // The real cost paid should reflect the true (detour) route, not the
+    // planning-only hazard-inflated one — 5.5 squares (4 orthogonal + one
+    // diagonal step), well within the fighter's 30 ft / 6-square budget.
+    expect(moved?.data?.cost).toBeCloseTo(5.5, 5);
   });
 });

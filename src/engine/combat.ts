@@ -1,6 +1,6 @@
-import { cellIntersectsArea, combatantsInArea, zoneTerrainOverlay } from "./areas";
+import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, gridDistance, lineOfEffect, findPath, sizeFootprint, terrainAtCell, type CoverBlocker } from "./geometry";
+import { coverBetween, gridDistance, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
@@ -10,6 +10,7 @@ import type {
   ActiveZone,
   AreaSaveActionDefinition,
   AttackActionDefinition,
+  BattleMapState,
   CombatLogEvent,
   CombatantState,
   ConditionInstance,
@@ -357,6 +358,31 @@ export function rollInitiative(state: EngineState): void {
   }));
 }
 
+/**
+ * Route `start` -> `goal` steered away from hazard terrain when a
+ * comparably-priced detour exists (`routeMap` — `map` run through
+ * `hazardPathingOverlay`), but costed against the real map afterward so the
+ * detour preference never leaks into real movement-budget accounting. Falls
+ * back to a plain route on `map` if the hazard-avoiding search can't reach
+ * the goal at all (walls/occupancy make it illegal outright — inflating a
+ * hazard tile's cost alone never does, since it stays finite).
+ */
+function hazardAwarePath(
+  map: BattleMapState,
+  routeMap: BattleMapState,
+  start: Point,
+  goal: Point,
+  footprint: number,
+  occupied: Point[],
+  options: OccupancyMovementOptions
+): PathResult {
+  const planned = findPath(routeMap, start, goal, footprint, occupied, options);
+  if (!planned.reachable) {
+    return findPath(map, start, goal, footprint, occupied, options);
+  }
+  return { reachable: true, cost: pathCostAlong(map, planned.cells, footprint, occupied, options), cells: planned.cells };
+}
+
 export function moveCombatant(
   state: EngineState,
   combatantId: Id,
@@ -369,10 +395,9 @@ export function moveCombatant(
   const occupied = occupiedCells(state.snapshot, combatantId);
   const start = combatant.position;
   const map = zoneTerrainOverlay(state.snapshot.map, state.snapshot.activeZones);
-  const path = findPath(map, start, destination, footprint, occupied, {
-    allowOccupiedTransit: true,
-    occupiedMovementMultiplier: 2
-  });
+  const routeMap = hazardPathingOverlay(map);
+  const pathOptions = { allowOccupiedTransit: true, occupiedMovementMultiplier: 2 };
+  const path = hazardAwarePath(map, routeMap, start, destination, footprint, occupied, pathOptions);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
   const movementBudget = definition.speed / state.snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
 
@@ -385,10 +410,7 @@ export function moveCombatant(
   const movedCells = moveAlongPath(state, combatant, path.cells, provoke);
   const actualPath = pointsEqual(combatant.position, destination)
     ? path
-    : findPath(map, start, combatant.position, footprint, occupied, {
-      allowOccupiedTransit: true,
-      occupiedMovementMultiplier: 2
-    });
+    : hazardAwarePath(map, routeMap, start, combatant.position, footprint, occupied, pathOptions);
   state.log.push(event(state, "CombatantMoved", `${combatant.displayName} moved`, {
     combatantId,
     destination: combatant.position,
