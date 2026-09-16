@@ -9,8 +9,11 @@ import type {
   ActivateFeatureActionDefinition,
   ActiveZone,
   AreaSaveActionDefinition,
+  AreaTargeting,
+  AreaTemplate,
   AttackActionDefinition,
   BattleMapState,
+  BuffActionDefinition,
   CombatLogEvent,
   CombatantState,
   ConditionInstance,
@@ -25,6 +28,7 @@ import type {
   EncounterSnapshot,
   FeatureCondition,
   FeatureEffect,
+  FeatureEffectConditionApplication,
   FeatureEffectSaveGate,
   HealingActionDefinition,
   HealingComponent,
@@ -95,6 +99,16 @@ export interface RepositionResult {
   moved: boolean;
   from?: Point;
   to?: Point;
+}
+
+export interface BuffResult {
+  targetIds: Id[];
+  tempHpApplied?: number;
+}
+
+export interface HealingBurstResult {
+  healingApplied: number;
+  targetIds: Id[];
 }
 
 export interface FeatureActivationResult {
@@ -1162,7 +1176,7 @@ function selfOriginFor(position: Point, footprint: number): Point {
 export function resolveAreaTargeting(
   attacker: CombatantState,
   attackerDefinition: CreatureDefinition,
-  action: AreaSaveActionDefinition,
+  action: { targeting?: AreaTargeting },
   aim: Point
 ): { origin: Point; aimVector?: { x: number; y: number }; fromSelf: boolean } {
   const selfOrigin = selfOriginFor(attacker.position, sizeFootprint(attackerDefinition.size));
@@ -1316,6 +1330,206 @@ function validateRepositionTargeting(
     && !lineOfEffect(snapshot.map, actor.position, destination)) {
     throw new Error("Line of effect to destination is blocked");
   }
+}
+
+/**
+ * Grants a beneficial condition (and optional temp HP) to one or more
+ * willing allies — Bless, Shield of Faith. `targetIds` is caller-resolved
+ * (the AI selector picks them; there's no manual targeting UI in this app)
+ * — `"self"` mode ignores it, `"single"` uses the first id, `"chosen"` takes
+ * up to `targeting.count` of them. No save: unlike `applyConditionRider`
+ * (adversarial, on-hit/on-save-fail gated), this mirrors
+ * `applyFeatureActivationCondition`'s simpler duration handling — a willing
+ * target has nothing to resist.
+ */
+export function resolveBuffAction(
+  state: EngineState,
+  actorId: Id,
+  actionId: Id,
+  targetIds: Id[]
+): BuffResult {
+  const actor = findCombatant(state.snapshot, actorId);
+  const actorDefinition = getDefinition(state.snapshot, actor);
+  const action = findActionDefinition(actorDefinition, actionId);
+  if (!action || action.kind !== "buff") {
+    throw new Error(`Buff action ${actionId} is not available to ${actor.displayName}`);
+  }
+  const mode = action.targeting?.target ?? "single";
+  const resolvedIds = mode === "self"
+    ? [actorId]
+    : mode === "chosen"
+      ? targetIds.slice(0, action.targeting?.count ?? targetIds.length)
+      : [targetIds[0] as Id];
+  const targets = resolvedIds.map((id) => findCombatant(state.snapshot, id));
+  for (const target of targets) {
+    if (target.id !== actorId) {
+      validateBuffTargeting(state.snapshot, actor, target, action);
+    }
+  }
+
+  validateAndSpendAction(actor, action);
+  if (action.concentration) {
+    breakConcentration(state, actorId);
+  }
+  declareAction(state, actor, action, { target: mode === "self" ? undefined : targets[0] });
+  if (counterspellWindow(state, actor, action)) {
+    return { targetIds: [] };
+  }
+
+  // Rolled once for the whole cast, applied identically to every target — same
+  // "roll once, reuse per target" convention `resolveAreaSaveAction` uses for
+  // its blast damage.
+  let tempHpAmount = 0;
+  for (const component of action.tempHp ?? []) {
+    const abilityBonus = component.abilityModifier ? abilityModifier(actorDefinition.abilities[component.abilityModifier]) : 0;
+    tempHpAmount += rollDice(withBonus(component.dice, abilityBonus), state.rng).total;
+  }
+
+  const conditionId = action.appliedCondition.id ?? action.id;
+  for (const target of targets) {
+    const instance: ConditionInstance = {
+      id: conditionId,
+      name: action.appliedCondition.name ?? "custom",
+      sourceId: action.id,
+      sourceName: action.name,
+      sourceCombatantId: actorId,
+      startedRound: state.snapshot.round,
+      expiresAt: action.appliedCondition.durationRounds
+        ? { round: state.snapshot.round + action.appliedCondition.durationRounds, turnIndex: state.snapshot.turnIndex, timing: "end" }
+        : undefined,
+      modifiers: action.appliedCondition.modifiers,
+      effects: action.appliedCondition.effects,
+      concentration: action.concentration || undefined
+    };
+    applyCondition(state, target.id, instance);
+    // Mirrors `applyConditionRider`'s own link-up — `breakConcentration` sweeps
+    // every combatant's conditions by `sourceCombatantId` + `concentration`,
+    // so one link on the caster tears down the condition on every target.
+    if (instance.concentration) {
+      actor.concentration = { sourceConditionId: actor.concentration?.sourceConditionId ?? conditionId };
+    }
+    if (tempHpAmount > 0) {
+      target.tempHp = Math.max(target.tempHp, tempHpAmount);
+      state.log.push(event(state, "FeatureEffectApplied", `${target.displayName} gains ${tempHpAmount} temporary hit points`, {
+        targetId: target.id, actionId, amount: tempHpAmount, tempHp: target.tempHp
+      }));
+    }
+  }
+
+  return { targetIds: targets.map((target) => target.id), tempHpApplied: tempHpAmount || undefined };
+}
+
+function validateBuffTargeting(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  target: CombatantState,
+  action: BuffActionDefinition
+): void {
+  if (target.state !== "active") {
+    throw new Error(`${target.displayName} cannot be buffed`);
+  }
+  const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
+  if (distance > action.range) {
+    throw new Error(`${target.displayName} is ${distance} ft. away, beyond ${action.range} ft. range`);
+  }
+  if (snapshot.rules.requireLineOfEffect && !lineOfEffect(snapshot.map, actor.position, target.position)) {
+    throw new Error("Line of effect is blocked");
+  }
+}
+
+/**
+ * Heals several targets at once — Prayer of Healing (`"chosen"`), Mass Cure
+ * Wounds (`"area"`). Deliberately a separate resolver from
+ * `resolveHealingAction`, not a widened version of it: `HealingPlan`/
+ * `resolveHealingAction` are consumed by the `BonusPick`/joint-turn-planning
+ * system as a strictly single-target shape — branching that resolver
+ * internally would force every one of those call sites to handle a plural
+ * result. `targetIds`/`aim` is caller-resolved, same reasoning as
+ * `resolveBuffAction`.
+ */
+export function resolveHealingBurstAction(
+  state: EngineState,
+  healerId: Id,
+  actionId: Id,
+  targetIds: Id[],
+  aim?: Point
+): HealingBurstResult {
+  const healer = findCombatant(state.snapshot, healerId);
+  const healerDefinition = getDefinition(state.snapshot, healer);
+  const action = findActionDefinition(healerDefinition, actionId);
+  if (!action || action.kind !== "healing") {
+    throw new Error(`Healing action ${actionId} is not available to ${healer.displayName}`);
+  }
+  const mode = action.targeting?.target;
+  if (mode !== "chosen" && mode !== "area") {
+    throw new Error(`${action.name} is not a multi-target healing action`);
+  }
+
+  let targets: CombatantState[];
+  let origin: Point | undefined;
+  if (mode === "chosen") {
+    targets = targetIds.slice(0, action.targeting?.count ?? targetIds.length).map((id) => findCombatant(state.snapshot, id));
+    for (const target of targets) {
+      validateHealingTargeting(state.snapshot, healer, target, action);
+    }
+  } else {
+    if (!action.area || !aim) {
+      throw new Error(`${action.name} has no area to place`);
+    }
+    const placement = resolveAreaTargeting(healer, healerDefinition, { targeting: action.areaTargeting }, aim);
+    origin = placement.origin;
+    if (!placement.fromSelf) {
+      const distance = gridDistance(healer.position, origin, state.snapshot.map.grid);
+      if (distance > (action.areaTargeting?.range ?? action.range)) {
+        throw new Error(`Origin is ${distance} ft. away, beyond range`);
+      }
+      if (state.snapshot.rules.requireLineOfEffect && !lineOfEffect(state.snapshot.map, healer.position, origin)) {
+        throw new Error("Line of effect to area origin is blocked");
+      }
+    }
+    const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
+    targets = combatantsInArea(
+      state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, placement.aimVector,
+      { includeDowned: true }
+    ).filter((target) => target.faction === healer.faction);
+  }
+
+  validateAndSpendAction(healer, action);
+  declareAction(state, healer, action, origin ? { origin } : { target: targets[0] });
+  if (counterspellWindow(state, healer, action)) {
+    return { healingApplied: 0, targetIds: [] };
+  }
+
+  // Rolled once for the whole cast — 5e RAW for both Prayer of Healing and
+  // Mass Cure Wounds, and matches `resolveAreaSaveAction`'s own roll-once
+  // convention for its blast damage.
+  let healingApplied = 0;
+  const rolls = action.healing.map((component) => {
+    const abilityBonus = component.abilityModifier ? abilityModifier(healerDefinition.abilities[component.abilityModifier]) : 0;
+    const roll = rollDice(withBonus(component.dice, abilityBonus), state.rng);
+    healingApplied += roll.total;
+    return roll;
+  });
+
+  for (const target of targets) {
+    const targetDefinition = getDefinition(state.snapshot, target);
+    target.currentHp = Math.min(targetDefinition.maxHp, target.currentHp + healingApplied);
+    if (target.currentHp > 0 && (target.state === "downed" || target.state === "defeated")) {
+      target.state = "active";
+      target.deathSaves = { successes: 0, failures: 0, stable: false };
+      target.conditions = (target.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+    }
+    state.log.push(event(state, "HealingApplied", `${target.displayName} regained ${healingApplied} HP`, {
+      healerId, targetId: target.id, actionId, rolls, healingApplied, currentHp: target.currentHp
+    }));
+    applyActionRiders(state, healer, target, healerDefinition, action.riders, {
+      actionId, landed: true, saved: null,
+      fallbackDc: 8 + (healerDefinition.proficiencyBonus ?? proficiencyFromDefinition(healerDefinition)),
+      origin: healer.position
+    });
+  }
+
+  return { healingApplied, targetIds: targets.map((target) => target.id) };
 }
 
 export function resolveActivateFeatureAction(
@@ -2755,7 +2969,7 @@ function stampSpellContext(
   action: ActionDefinition,
   spell: NonNullable<CreatureDefinition["spells"]>[number]
 ): ActionDefinition {
-  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition") {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition" && action.kind !== "buff") {
     return action;
   }
   const stamped = {
@@ -2779,7 +2993,7 @@ function stampSpellContext(
  * (and only spending) the slot it upcasts to.
  */
 function spellUpcastVariants(definition: CreatureDefinition, action: ActionDefinition): ActionDefinition[] {
-  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition") {
+  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition" && action.kind !== "buff") {
     return [];
   }
   if (!action.resourceCost || action.spellLevel == null || !action.upcast?.perSlotAboveBase) {

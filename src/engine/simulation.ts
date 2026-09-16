@@ -16,8 +16,10 @@ import {
   rollInitiative,
   remainingMovementBudget,
   resolveAttack,
+  resolveBuffAction,
   resolveDeathSave,
   resolveHealingAction,
+  resolveHealingBurstAction,
   resolveActivateFeatureAction,
   resolveMultiattackAction,
   resolveNumericFormula,
@@ -38,6 +40,7 @@ import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDe
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
+type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 type FeatureActivationAction = Extract<ActionDefinition, { kind: "activate-feature" }>;
 type OffensiveAction =
   | Extract<ActionDefinition, { kind: "attack" }>
@@ -58,6 +61,33 @@ interface RepositionPlan {
   action: RepositionAction;
   mover: CombatantState;
   destination: Point;
+  score: number;
+  reasons: string[];
+}
+
+/** Singular-target buff plan (self or one ally) — the shape `BonusPick`/`bonusPickTargetRange` need. */
+interface BuffPlan {
+  action: BuffAction;
+  target: CombatantState;
+  score: number;
+  reasons: string[];
+  /** The buff can land this turn without moving (target in range, or self). */
+  reachable: boolean;
+}
+
+/** `"chosen"`-mode buff plan (Bless-style, up to N allies) — deliberately NOT fed through `BonusPick`, see `selectBuffBurstAction`. */
+interface BuffBurstPlan {
+  action: BuffAction;
+  targets: CombatantState[];
+  score: number;
+  reasons: string[];
+}
+
+/** `"chosen"`/`"area"` healing plan — mirrors `HealingPlan`'s scoring but for `resolveHealingBurstAction`. Deliberately NOT fed through `BonusPick`, see `selectHealingBurstAction`. */
+interface HealingBurstPlan {
+  action: HealingAction;
+  targets: CombatantState[];
+  aim?: Point;
   score: number;
   reasons: string[];
 }
@@ -376,23 +406,26 @@ function resolveDodgeIfThreatened(state: EngineState, actor: CombatantState): bo
 
 type BonusPick =
   | { kind: "heal"; plan: HealingPlan }
+  | { kind: "buff"; plan: BuffPlan }
   | { kind: "offense"; plan: OffensivePlan };
 
-/** Target/range a `BonusPick` needs in reach, regardless of whether it's a heal or an attack. */
+/** Target/range a `BonusPick` needs in reach, regardless of whether it's a heal, a buff, or an attack. */
 function bonusPickTargetRange(pick: BonusPick): { target: CombatantState; range: number } {
-  return pick.kind === "heal"
-    ? { target: pick.plan.target, range: pick.plan.action.range }
-    : { target: pick.plan.target, range: pick.plan.range };
+  return pick.kind === "offense"
+    ? { target: pick.plan.target, range: pick.plan.range }
+    : { target: pick.plan.target, range: pick.plan.action.range };
 }
 
 /**
- * Best bonus-action candidate: a bonus-action heal or the best bonus-action
- * offensive plan (Spiritual Weapon, an off-hand bite, Healing Word), same
- * heal-favoring tie-break used everywhere else. `relaxReachability` widens the
- * offense side to targets only reachable via movement — used by
- * `selectJointTurnPlan`, which plans that movement itself; the default (used by
- * `maybeSpendBonusAction`) only weighs what's reachable from where the actor
- * already stands.
+ * Best bonus-action candidate: a bonus-action heal, buff (Shield of Faith —
+ * only the singular-target buff shape flows through here, see
+ * `selectBuffAction`), or the best bonus-action offensive plan (Spiritual
+ * Weapon, an off-hand bite, Healing Word) — tie-break order heal > buff >
+ * offense (staying alive still trumps a buff; a buff still edges out a
+ * marginal attack on ties). `relaxReachability` widens the offense side to
+ * targets only reachable via movement — used by `selectJointTurnPlan`, which
+ * plans that movement itself; the default (used by `maybeSpendBonusAction`)
+ * only weighs what's reachable from where the actor already stands.
  */
 function selectBonusCandidate(
   snapshot: EncounterSnapshot,
@@ -401,9 +434,13 @@ function selectBonusCandidate(
   options: { relaxReachability?: boolean } = {}
 ): BonusPick | undefined {
   const heal = selectHealingAction(snapshot, actor, "bonus");
+  const buff = selectBuffAction(snapshot, actor, "bonus");
   const offense = selectOffensivePlan(snapshot, actor, tactics, "bonus", options);
-  if (heal && (!offense || heal.score >= offense.score)) {
+  if (heal && (!buff || heal.score >= buff.score) && (!offense || heal.score >= offense.score)) {
     return { kind: "heal", plan: heal };
+  }
+  if (buff && (!offense || buff.score >= offense.score)) {
+    return { kind: "buff", plan: buff };
   }
   return offense ? { kind: "offense", plan: offense } : undefined;
 }
@@ -417,6 +454,16 @@ function resolveBonusPick(state: EngineState, actor: CombatantState, pick: Bonus
     }));
     try {
       resolveHealingAction(state, actor.id, heal.target.id, heal.action.id);
+    } catch { /* map state moved on */ }
+    return true;
+  }
+  if (pick.kind === "buff") {
+    const buff = pick.plan;
+    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action (${buff.action.name})`, {
+      combatantId: actor.id, actionId: buff.action.id, targetId: buff.target.id, slot: "bonus"
+    }));
+    try {
+      resolveBuffAction(state, actor.id, buff.action.id, [buff.target.id]);
     } catch { /* map state moved on */ }
     return true;
   }
@@ -440,9 +487,10 @@ function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactic
   }
   const pick = selectBonusCandidate(state.snapshot, actor, tactics);
   if (pick) {
-    // A heal target can be `canMoveIntoRange` without being `reachable` yet — close
-    // the gap first, mirroring the main-action heal short-circuit above.
-    if (pick.kind === "heal" && !pick.plan.reachable) {
+    // A heal/buff target can be `canMoveIntoRange` without being `reachable`
+    // yet — close the gap first, mirroring the main-action heal short-circuit
+    // above.
+    if ((pick.kind === "heal" || pick.kind === "buff") && !pick.plan.reachable) {
       const move = bestDestinationTowardTarget(state.snapshot, actor, pick.plan.target, pick.plan.action.range, tactics);
       if (move) {
         try {
@@ -694,7 +742,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
 
   let movedThisTurn = false;
   const healing = selectHealingAction(state.snapshot, actor);
-  if (healing) {
+  const healingBurst = selectHealingBurstAction(state.snapshot, actor);
+  if (healing && (!healingBurst || healing.score >= healingBurst.score)) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose healing`, {
       combatantId: actor.id,
       actionId: healing.action.id,
@@ -724,8 +773,68 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     maybeSpendBonusAction(state, actor, tactics);
     return undefined;
   }
+  if (healingBurst) {
+    const targetIds = healingBurst.targets.map((target) => target.id);
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${healingBurst.action.name}`, {
+      combatantId: actor.id,
+      actionId: healingBurst.action.id,
+      targetIds,
+      score: healingBurst.score,
+      reasons: healingBurst.reasons
+    }));
+    try {
+      resolveHealingBurstAction(state, actor.id, healingBurst.action.id, targetIds, healingBurst.aim);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${healingBurst.action.name} could not resolve`, {
+        combatantId: actor.id,
+        actionId: healingBurst.action.id,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+    maybeSpendBonusAction(state, actor, tactics);
+    return undefined;
+  }
 
   let plan = selectOffensivePlan(state.snapshot, actor, tactics);
+
+  // A buff (Bless, action-cost) competes on score against the chosen offensive
+  // plan rather than hard-preempting it the way healing does — there's no
+  // equivalent urgency to a buff, so it should lose to a genuinely good attack.
+  // When there's no offensive plan at all (nothing in range, or a pure support
+  // caster with no attack), any positive-scoring buff is free value — take it
+  // rather than falling through to "no fully automated action."
+  const buff = selectBuffAction(state.snapshot, actor, "action") ?? selectBuffBurstAction(state.snapshot, actor);
+  if (buff && (!plan || buff.score > plan.score)) {
+    const isBurst = "targets" in buff;
+    if (!isBurst && !buff.reachable) {
+      const move = bestDestinationTowardTarget(state.snapshot, actor, buff.target, buff.action.range, tactics);
+      if (move) {
+        try {
+          moveCombatant(state, actor.id, move.cell);
+        } catch { /* map state moved on */ }
+      }
+    }
+    const targetIds = isBurst ? buff.targets.map((target) => target.id) : [buff.target.id];
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${buff.action.name}`, {
+      combatantId: actor.id,
+      actionId: buff.action.id,
+      targetIds,
+      score: buff.score,
+      reasons: buff.reasons
+    }));
+    try {
+      resolveBuffAction(state, actor.id, buff.action.id, targetIds);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${buff.action.name} could not resolve`, {
+        combatantId: actor.id,
+        actionId: buff.action.id,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+    maybeSpendBonusAction(state, actor, tactics);
+    return undefined;
+  }
+
   if (!plan) {
     resolveDodgeIfThreatened(state, actor);
     maybeSpendBonusAction(state, actor, tactics);
@@ -1207,6 +1316,192 @@ function selectHealingAction(
     return undefined;
   }
   return { action: best.action, target: best.target, score: best.score, reasons: best.reasons, reachable: best.reachable };
+}
+
+/**
+ * `"chosen"` (Prayer of Healing) / `"area"` (Mass Cure Wounds) healing —
+ * mirrors `selectHealingAction`'s scoring terms (missing-HP%, downed bonus,
+ * clamped average healing, resource penalty) summed over the resolved
+ * target set, but stays a separate function/plan type rather than widening
+ * `HealingPlan` — that type is a `BonusPick` consumer (see `BonusPick`
+ * below) and this shape (plural targets, no single `range`-from-actor
+ * concept for area mode) doesn't fit it.
+ */
+function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantState): HealingBurstPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const burstActions = getExecutableActions(definition)
+    .filter((action): action is HealingAction => action.kind === "healing"
+      && (action.targeting?.target === "chosen" || action.targeting?.target === "area")
+      && action.actionType === "action"
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  if (!burstActions.length) {
+    return undefined;
+  }
+
+  const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
+  let best: HealingBurstPlan | undefined;
+
+  for (const action of burstActions) {
+    const average = averageHealing(action, definition);
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    const scoreFor = (target: CombatantState) => {
+      const targetDefinition = getDefinition(snapshot, target);
+      const missingHp = targetDefinition.maxHp - target.currentHp;
+      const missingHpRatio = missingHp / Math.max(1, targetDefinition.maxHp);
+      return (target.state === "downed" ? 95 : missingHpRatio * 45) + Math.min(average, missingHp);
+    };
+
+    if (action.targeting?.target === "chosen") {
+      const woundedAllies = snapshot.combatants
+        .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+        .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
+        .filter((combatant) => isValidTarget(snapshot, actor, combatant, action.range));
+      const scored = woundedAllies
+        .map((target) => ({ target, value: scoreFor(target) - gridDistance(actor.position, target.position, snapshot.map.grid) / 20 }))
+        .sort((a, b) => b.value - a.value);
+      const taken = scored.slice(0, action.targeting?.count ?? scored.length);
+      if (!taken.length) {
+        continue;
+      }
+      const score = taken.reduce((sum, candidate) => sum + candidate.value, 0) - resourcePenalty;
+      if (score > 0 && (!best || score > best.score)) {
+        best = { action, targets: taken.map((candidate) => candidate.target), score, reasons: [`heals ${taken.length} allies`] };
+      }
+      continue;
+    }
+
+    // "area" — try centering the burst on each wounded ally within range and
+    // keep whichever placement catches the most total value. A full grid
+    // search isn't needed: the best center is always at (or adjacent to) a
+    // cluster of wounded allies, and every wounded ally's own position is a
+    // candidate for "the center of its cluster."
+    if (!action.area) {
+      continue;
+    }
+    const rangeLimit = action.areaTargeting?.range ?? action.range;
+    const woundedInRange = snapshot.combatants
+      .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+      .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
+      .filter((combatant) => gridDistance(actor.position, combatant.position, snapshot.map.grid) <= rangeLimit);
+    let bestPlacement: { origin: Point; targets: CombatantState[]; value: number } | undefined;
+    for (const candidate of woundedInRange) {
+      const caught = combatantsInArea(snapshot.map, candidate.position, action.area, snapshot.combatants, definitionsById, undefined, { includeDowned: true })
+        .filter((target) => target.faction === actor.faction);
+      const value = caught.reduce((sum, target) => sum + scoreFor(target), 0);
+      if (!bestPlacement || value > bestPlacement.value) {
+        bestPlacement = { origin: candidate.position, targets: caught, value };
+      }
+    }
+    if (!bestPlacement || !bestPlacement.targets.length) {
+      continue;
+    }
+    const score = bestPlacement.value - resourcePenalty - gridDistance(actor.position, bestPlacement.origin, snapshot.map.grid) / 20;
+    if (score > 0 && (!best || score > best.score)) {
+      best = { action, targets: bestPlacement.targets, aim: bestPlacement.origin, score, reasons: [`heals ${bestPlacement.targets.length} allies in a burst`] };
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Singular-target buff (Shield of Faith) — mirrors `selectHealingAction`'s
+ * shape (candidates = actions × eligible allies, scored, sorted) minus the
+ * HP-missing terms, which have no buff analog. Hard-filters any ally who
+ * already carries this exact buff's condition id — structurally prevents
+ * recasting the same buff on an already-buffed party, not just a
+ * score-tuning hope.
+ */
+function selectBuffAction(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  slot: "action" | "bonus" = "action"
+): BuffPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const buffActions = getExecutableActions(definition)
+    .filter((action): action is BuffAction => action.kind === "buff"
+      && action.actionType === slot
+      && (action.targeting?.target ?? "single") !== "chosen"
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  if (!buffActions.length) {
+    return undefined;
+  }
+  const allies = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+
+  const candidates = buffActions.flatMap((action) => {
+    const mode = action.targeting?.target ?? "single";
+    const eligible = mode === "self" ? [actor] : allies;
+    const conditionId = action.appliedCondition.id ?? action.id;
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    return eligible
+      .filter((target) => !target.conditions?.some((condition) => condition.id === conditionId))
+      .map((target) => {
+        const distance = mode === "self" ? 0 : gridDistance(actor.position, target.position, snapshot.map.grid);
+        const reachable = mode === "self" || isValidTarget(snapshot, actor, target, action.range);
+        const canMoveIntoRange = reachable || Boolean(bestDestinationTowardTarget(snapshot, actor, target, action.range, tacticsSettings(actor.tacticsProfile)));
+        const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
+          + (target.tags?.includes("high-priority") ? 10 : 0)
+          + (target.tags?.includes("low-priority") ? -15 : 0);
+        const score = 15 + priorityBonus - resourcePenalty - distance / 20 + (reachable ? 10 : 2);
+        return { action, target, score, reasons: ["worth buffing"], reachable, canMoveIntoRange };
+      });
+  });
+
+  const viable = candidates.filter((candidate) => candidate.canMoveIntoRange);
+  viable.sort((a, b) => b.score - a.score || a.action.id.localeCompare(b.action.id));
+  const best = viable[0];
+  return best && best.score > 0
+    ? { action: best.action, target: best.target, score: best.score, reasons: best.reasons, reachable: best.reachable }
+    : undefined;
+}
+
+/**
+ * `"chosen"`-mode buff (Bless: "up to three creatures within range of you").
+ * Real 5e casting time for every such spell in this library is `"action"`,
+ * so unlike `selectBuffAction` this never needs a `slot` param or `BonusPick`
+ * wiring. Picks the top-`count` not-already-buffed allies by the same
+ * priority-tag/distance terms `selectBuffAction` uses (no HP term — that's
+ * healing's concern).
+ */
+function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantState): BuffBurstPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const buffActions = getExecutableActions(definition)
+    .filter((action): action is BuffAction => action.kind === "buff"
+      && action.actionType === "action"
+      && action.targeting?.target === "chosen"
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  if (!buffActions.length) {
+    return undefined;
+  }
+  const allies = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+
+  let best: BuffBurstPlan | undefined;
+  for (const action of buffActions) {
+    const conditionId = action.appliedCondition.id ?? action.id;
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    const scored = allies
+      .filter((target) => !target.conditions?.some((condition) => condition.id === conditionId))
+      .filter((target) => isValidTarget(snapshot, actor, target, action.range))
+      .map((target) => {
+        const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
+          + (target.tags?.includes("high-priority") ? 10 : 0)
+          + (target.tags?.includes("low-priority") ? -15 : 0);
+        return { target, value: 15 + priorityBonus - gridDistance(actor.position, target.position, snapshot.map.grid) / 20 };
+      })
+      .sort((a, b) => b.value - a.value);
+    const taken = scored.slice(0, action.targeting?.count ?? scored.length);
+    if (!taken.length) {
+      continue;
+    }
+    const score = taken.reduce((sum, candidate) => sum + candidate.value, 0) - resourcePenalty;
+    if (score > 0 && (!best || score > best.score)) {
+      best = { action, targets: taken.map((candidate) => candidate.target), score, reasons: [`buffs ${taken.length} allies`] };
+    }
+  }
+  return best;
 }
 
 /** Score a single candidate cell for a teleporting `mover` — no target/direction, just "is this a good place to be." */
@@ -2254,7 +2549,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDefinition>): number {
-  if (action.kind === "healing" || action.kind === "reposition" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
+  if (action.kind === "healing" || action.kind === "reposition" || action.kind === "buff" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
     return 0;
   }
   if (action.kind === "multiattack") {

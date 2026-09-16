@@ -7,12 +7,14 @@ import type {
   Ability,
   ActionDefinition,
   ActionRider,
+  AreaTargeting,
   AreaTemplate,
   DamageComponent,
   DamageType,
   DeathEffectDefinition,
   FeatureDefinition,
   FeatureEffect,
+  FeatureEffectConditionApplication,
   ReactionMeta,
   ReactionTrigger,
   SpellDefinition,
@@ -87,12 +89,26 @@ const SHAPE_OPTIONS = [
   { value: "save", label: "Saving throw (one target)" },
   { value: "area", label: "Saving throw (area)" },
   { value: "healing", label: "Healing" },
-  { value: "reposition", label: "Teleport / reposition" }
+  { value: "reposition", label: "Teleport / reposition" },
+  { value: "buff", label: "Beneficial condition (buff)" }
 ] as const;
 
 const REPOSITION_TARGET_OPTIONS = [
   { value: "self", label: "The caster" },
   { value: "single", label: "One creature" }
+] as const;
+
+const BUFF_TARGET_OPTIONS = [
+  { value: "self", label: "The caster" },
+  { value: "single", label: "One creature" },
+  { value: "chosen", label: "Several creatures you choose" }
+] as const;
+
+const HEAL_TARGET_OPTIONS = [
+  { value: "single", label: "One creature" },
+  { value: "self", label: "The caster" },
+  { value: "chosen", label: "Several creatures you choose" },
+  { value: "area", label: "Everyone in an area" }
 ] as const;
 
 const AREA_OPTIONS = [
@@ -311,11 +327,12 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "saveDc", copy: "spell.saveDc", control: "number", advanced: true, visibleWhen: () => inSaveShape },
     { key: "onSuccess", copy: "spell.onSuccess", control: "select", options: ON_SUCCESS_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => inSaveShape },
 
-    { key: "areaType", copy: "area.type", control: "select", options: AREA_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "area" },
-    { key: "areaSize", copy: "area.size", control: "number", min: 5, step: 5, visibleWhen: () => shape === "area" },
-    { key: "areaWidth", copy: "area.width", control: "number", min: 5, step: 5, visibleWhen: () => shape === "area" && (areaType === "line" || areaType === "rectangle") },
-    { key: "areaOrigin", copy: "area.origin", control: "select", options: [{ value: "point", label: "A point you choose" }, { value: "self", label: "The caster" }], visibleWhen: () => shape === "area" },
-    { key: "areaAimed", copy: "area.aimedFromSelf", control: "toggle", visibleWhen: () => shape === "area" && (areaType === "cone" || areaType === "line" || areaType === "rectangle") },
+    { key: "areaType", copy: "area.type", control: "select", options: AREA_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "area" || (shape === "healing" && draft.healTarget === "area") },
+    { key: "areaSize", copy: "area.size", control: "number", min: 5, step: 5, visibleWhen: () => shape === "area" || (shape === "healing" && draft.healTarget === "area") },
+    { key: "areaWidth", copy: "area.width", control: "number", min: 5, step: 5, visibleWhen: () => (shape === "area" || (shape === "healing" && draft.healTarget === "area")) && (areaType === "line" || areaType === "rectangle") },
+    { key: "areaOrigin", copy: "area.origin", control: "select", options: [{ value: "point", label: "A point you choose" }, { value: "self", label: "The caster" }], visibleWhen: () => shape === "area" || (shape === "healing" && draft.healTarget === "area") },
+    { key: "areaAimed", copy: "area.aimedFromSelf", control: "toggle", visibleWhen: () => (shape === "area" || (shape === "healing" && draft.healTarget === "area")) && (areaType === "cone" || areaType === "line" || areaType === "rectangle") },
+    // "Enemies only / everyone" has no healing analog — allies-only is implicit for a heal, so this stays area-save-only.
     { key: "affects", copy: "area.affects", control: "select", advanced: true, options: [{ value: "hostile", label: "Enemies only" }, { value: "all", label: "Everyone in the area" }], visibleWhen: () => shape === "area" },
 
     { key: "zoneEnabled", copy: "zone.enabled", control: "toggle", advanced: true, visibleWhen: () => shape === "area" },
@@ -354,11 +371,31 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
 
     { key: "healDice", copy: "spell.healDice", control: "dice", visibleWhen: () => shape === "healing" },
-    { key: "healTarget", copy: "spell.healTarget", control: "select", options: [{ value: "single", label: "One creature" }, { value: "self", label: "The caster" }], visibleWhen: () => shape === "healing" },
+    { key: "healTarget", copy: "spell.healTarget", control: "select", options: HEAL_TARGET_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "healing" },
+    { key: "healChosenCount", copy: "spell.healChosenCount", control: "number", min: 1, step: 1,
+      visibleWhen: () => shape === "healing" && draft.healTarget === "chosen" },
 
     // Range doubles as the teleport distance here (shared top-level field, no separate spec needed).
     { key: "repositionTarget", copy: "spell.repositionTarget", control: "select", options: REPOSITION_TARGET_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "reposition" },
     { key: "repositionRequiresLos", copy: "spell.repositionRequiresLos", control: "toggle", advanced: true, visibleWhen: () => shape === "reposition" },
+
+    // Buff — a curated flat subset of ConditionInstance.modifiers (AC / attack
+    // roll / a single save-bonus applied to all six abilities) covering Bless
+    // and Shield of Faith exactly; `buffEffects` (full FeatureEffect[], reusing
+    // the same "feature-effects" control the feature builder already uses) is
+    // the escape hatch for anything beyond that. No condition-name field —
+    // always authored as "custom", since neither worked example needs a real
+    // ConditionName.
+    { key: "buffTarget", copy: "spell.buffTarget", control: "select", options: BUFF_TARGET_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "buff" },
+    { key: "buffChosenCount", copy: "spell.buffChosenCount", control: "number", min: 1, step: 1,
+      visibleWhen: () => shape === "buff" && draft.buffTarget === "chosen" },
+    { key: "buffDurationRounds", copy: "spell.buffDurationRounds", control: "number", min: 1, step: 1, visibleWhen: () => shape === "buff" },
+    { key: "buffAcBonus", copy: "spell.buffAcBonus", control: "number", advanced: true, visibleWhen: () => shape === "buff" },
+    { key: "buffAttackRollBonus", copy: "spell.buffAttackRollBonus", control: "number", advanced: true, visibleWhen: () => shape === "buff" },
+    { key: "buffSaveBonus", copy: "spell.buffSaveBonus", control: "number", advanced: true, visibleWhen: () => shape === "buff" },
+    { key: "buffTempHpEnabled", copy: "spell.buffTempHpEnabled", control: "toggle", advanced: true, visibleWhen: () => shape === "buff" },
+    { key: "buffTempHpDice", copy: "spell.buffTempHpDice", control: "dice", advanced: true, visibleWhen: () => shape === "buff" && Boolean(draft.buffTempHpEnabled) },
+    { key: "buffEffects", copy: "spell.buffEffects", control: "feature-effects", advanced: true, visibleWhen: () => shape === "buff" },
 
     { key: "riders", copy: "spell.riders", control: "riders", riderContext: inSaveShape ? "save" : "weapon", visibleWhen: () => inDamageShape }
   ];
@@ -474,6 +511,7 @@ function shapeOfAction(action: ActionDefinition): string {
   if (action.kind === "area-save") return "area";
   if (action.kind === "healing") return "healing";
   if (action.kind === "reposition") return "reposition";
+  if (action.kind === "buff") return "buff";
   return "attack";
 }
 
@@ -517,8 +555,18 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     dmg: parseDiceValue("2d6", "fire"),
     healDice: parseDiceValue("1d8"),
     healTarget: "single",
+    healChosenCount: 3,
     repositionTarget: "self",
     repositionRequiresLos: false,
+    buffTarget: "single",
+    buffChosenCount: 3,
+    buffDurationRounds: 10,
+    buffAcBonus: 0,
+    buffAttackRollBonus: 0,
+    buffSaveBonus: 0,
+    buffTempHpEnabled: false,
+    buffTempHpDice: parseDiceValue("2d4"),
+    buffEffects: [],
     riders: [],
     concentration: false,
     // Matches every zone-shaped SRD spell so far (Insect Plague, Cloudkill,
@@ -596,7 +644,11 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       ...base,
       range: rangeToDraft(action.range),
       healDice: parseDiceValue(primary?.dice, undefined, Boolean(primary?.abilityModifier)),
-      healTarget: action.targeting?.target ?? "single"
+      healTarget: action.targeting?.target ?? "single",
+      healChosenCount: action.targeting?.count ?? 3,
+      areaType: action.area?.type ?? "circle",
+      areaSize: action.area?.size ?? 20,
+      areaWidth: action.area?.width ?? 5
     };
   }
   if (action.kind === "reposition") {
@@ -605,6 +657,33 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       range: rangeToDraft(action.range),
       repositionTarget: action.targeting?.target === "single" ? "single" : "self",
       repositionRequiresLos: Boolean(action.requiresLineOfEffect),
+      concentration: Boolean(action.concentration)
+    };
+  }
+  if (action.kind === "buff") {
+    const modifiers = action.appliedCondition.modifiers;
+    const savingThrows = modifiers?.savingThrows;
+    // The builder's `buffSaveBonus` is a single flat number applied to all six
+    // abilities (curated v1 field) — decompile it from whichever ability the
+    // authored condition happens to carry (they're all authored equal by this
+    // same builder), falling back to 0 for a hand-authored asymmetric bonus
+    // the flat field can't represent (edits via `buffEffects` instead).
+    const flatSaveBonus = savingThrows
+      ? Object.values(savingThrows).find((value): value is number => typeof value === "number") ?? 0
+      : 0;
+    const primaryTempHp = action.tempHp?.[0];
+    return {
+      ...base,
+      range: rangeToDraft(action.range),
+      buffTarget: action.targeting?.target ?? "single",
+      buffChosenCount: action.targeting?.count ?? 3,
+      buffDurationRounds: action.appliedCondition.durationRounds ?? 10,
+      buffAcBonus: modifiers?.armorClass ?? 0,
+      buffAttackRollBonus: modifiers?.attackRoll ?? 0,
+      buffSaveBonus: flatSaveBonus,
+      buffTempHpEnabled: Boolean(primaryTempHp),
+      buffTempHpDice: primaryTempHp ? parseDiceValue(primaryTempHp.dice, undefined, Boolean(primaryTempHp.abilityModifier)) : parseDiceValue("2d4"),
+      buffEffects: action.appliedCondition.effects ?? [],
       concentration: Boolean(action.concentration)
     };
   }
@@ -651,7 +730,30 @@ function zoneFromDraft(draft: BuilderDraft): ZonePersistence {
   };
 }
 
-type BuildableAction = Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" | "reposition" }>;
+type BuildableAction = Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" | "reposition" | "buff" }>;
+
+/** Shared by the `"area"` shape and `"healing"` shape's own area sub-mode — avoids constructing the same `AreaTemplate` twice. */
+function areaTemplateFromDraft(draft: BuilderDraft): AreaTemplate {
+  return {
+    type: (draft.areaType as AreaTemplate["type"]) ?? "circle",
+    size: Math.max(5, Number(draft.areaSize) || 20),
+    width: (draft.areaType === "line" || draft.areaType === "rectangle") ? Math.max(5, Number(draft.areaWidth) || 5) : undefined
+  };
+}
+
+/** Shared by the `"area"` shape and `"healing"` shape's own area sub-mode — avoids constructing the same `AreaTargeting` twice. */
+function areaTargetingFromDraft(draft: BuilderDraft, range: number): AreaTargeting {
+  return {
+    // A self-anchored zone recenters on the caster regardless of where it's
+    // aimed (`recenterSelfAnchoredZones` in combat.ts) — force self-origin so
+    // the initial placement matches where it'll actually settle. (Only
+    // meaningful for the `"area"` shape's own zone feature; `draft.zoneAnchor`
+    // is simply absent for a healing draft.)
+    origin: (draft.areaOrigin === "self" || draft.zoneAnchor === "self") ? "self" : "point",
+    aimedFromSelf: draft.areaAimed ? true : undefined,
+    range
+  };
+}
 
 /** Build an `ActionDefinition` skeleton from an effect draft (store normalization fills the rest). */
 export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: boolean } = {}): BuildableAction {
@@ -682,10 +784,17 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
     };
   }
   if (shape === "healing") {
+    const healTarget = draft.healTarget as string | undefined;
+    const targeting = healTarget === "self" ? { target: "self" as const }
+      : healTarget === "chosen" ? { target: "chosen" as const, count: Math.max(1, Number(draft.healChosenCount) || 3) }
+        : healTarget === "area" ? { target: "area" as const }
+          : { target: "single" as const };
     return {
       kind: "healing", id: "", name, actionType, range,
       healing: [{ dice: diceValueToString(draft.healDice as DiceValue), abilityModifier: (draft.healDice as DiceValue)?.addAbility ? "wis" : undefined }],
-      targeting: draft.healTarget === "self" ? { target: "self" } : { target: "single" },
+      targeting,
+      area: healTarget === "area" ? areaTemplateFromDraft(draft) : undefined,
+      areaTargeting: healTarget === "area" ? areaTargetingFromDraft(draft, range) : undefined,
       automationSupport: "full"
     };
   }
@@ -698,24 +807,44 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       automationSupport: "full"
     };
   }
+  if (shape === "buff") {
+    const buffTarget = draft.buffTarget as string | undefined;
+    const targeting = buffTarget === "self" ? { target: "self" as const }
+      : buffTarget === "chosen" ? { target: "chosen" as const, count: Math.max(1, Number(draft.buffChosenCount) || 3) }
+        : { target: "single" as const };
+    const savingThrows = Number(draft.buffSaveBonus) || 0
+      ? { str: Number(draft.buffSaveBonus), dex: Number(draft.buffSaveBonus), con: Number(draft.buffSaveBonus), int: Number(draft.buffSaveBonus), wis: Number(draft.buffSaveBonus), cha: Number(draft.buffSaveBonus) }
+      : undefined;
+    const appliedCondition: FeatureEffectConditionApplication = {
+      name: "custom",
+      durationRounds: Math.max(1, Number(draft.buffDurationRounds) || 10),
+      modifiers: {
+        armorClass: Number(draft.buffAcBonus) || undefined,
+        attackRoll: Number(draft.buffAttackRollBonus) || undefined,
+        savingThrows
+      },
+      effects: (draft.buffEffects as FeatureEffect[])?.length ? (draft.buffEffects as FeatureEffect[]) : undefined
+    };
+    const tempHpDice = draft.buffTempHpDice as DiceValue | undefined;
+    return {
+      kind: "buff", id: "", name, actionType, range,
+      targeting,
+      appliedCondition,
+      tempHp: draft.buffTempHpEnabled && tempHpDice ? [{ dice: diceValueToString(tempHpDice) }] : undefined,
+      concentration: draft.concentration ? true : undefined,
+      automationSupport: "full"
+    };
+  }
   const onSuccess = (draft.onSuccess as "half" | "none" | "negates") ?? "half";
   const damage = draft.dealsDamage === false ? [] : [dmg];
   if (shape === "area") {
-    const area: AreaTemplate = {
-      type: (draft.areaType as AreaTemplate["type"]) ?? "circle",
-      size: Math.max(5, Number(draft.areaSize) || 20),
-      width: (draft.areaType === "line" || draft.areaType === "rectangle") ? Math.max(5, Number(draft.areaWidth) || 5) : undefined
-    };
     return {
       kind: "area-save", id: "", name, actionType, range, reaction,
       saveAbility: (draft.saveAbility as Ability) ?? "dex",
       dc: Number.isFinite(dcValue) && dcValue > 0 ? dcValue : undefined,
       dcFormula: Number.isFinite(dcValue) && dcValue > 0 ? undefined : dcFormula,
-      area,
-      // A self-anchored zone recenters on the caster regardless of where it's
-      // aimed (`recenterSelfAnchoredZones` in combat.ts) — force self-origin
-      // so the initial placement matches where it'll actually settle.
-      targeting: { origin: (draft.areaOrigin === "self" || draft.zoneAnchor === "self") ? "self" : "point", aimedFromSelf: draft.areaAimed ? true : undefined, range },
+      area: areaTemplateFromDraft(draft),
+      targeting: areaTargetingFromDraft(draft, range),
       damage,
       halfDamageOnSuccess: onSuccess === "half",
       onSuccess,

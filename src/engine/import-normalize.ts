@@ -18,6 +18,7 @@ import {
   type DeathEffectDefinition,
   type FeatureDefinition,
   type FeatureEffect,
+  type FeatureEffectConditionApplication,
   type HealingComponent,
   type NumericFormula,
   type ReactionMeta,
@@ -248,8 +249,25 @@ function normalizeAction(
       actionType,
       range: numberField(input, "range") ?? 60,
       healing: normalizeHealingComponents(Array.isArray(input.healing) ? input.healing : (stringField(input, "healing") ?? "1")),
-      targeting: normalizeSelfTargeting(input.targeting),
+      targeting: normalizeHealingTargeting(input.targeting),
+      area: isRecord(input.area) ? normalizeAreaTemplate(input.area) : undefined,
+      areaTargeting: isRecord(input.areaTargeting) ? normalizeAreaTargeting(input.areaTargeting) : undefined,
       riders: normalizeRiders(input.riders, "always"),
+      automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
+    };
+  }
+  if (kind === "buff") {
+    return {
+      ...input,
+      kind,
+      id: generatedId,
+      name,
+      actionType,
+      range: numberField(input, "range") ?? 30,
+      targeting: normalizeBuffTargeting(input.targeting),
+      appliedCondition: normalizeAppliedCondition(input.appliedCondition),
+      tempHp: Array.isArray(input.tempHp) ? normalizeHealingComponents(input.tempHp) : undefined,
+      concentration: input.concentration === true ? true : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
@@ -842,6 +860,40 @@ function normalizeSelfTargeting(input: unknown): { target: "single" | "self" } |
     return undefined;
   }
   return { target: input.target === "self" ? "self" : "single" };
+}
+
+function normalizeHealingTargeting(input: unknown): { target: "single" | "self" | "chosen" | "area"; count?: number } | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const target = input.target === "self" ? "self"
+    : input.target === "chosen" ? "chosen"
+      : input.target === "area" ? "area"
+        : "single";
+  return { target, count: numberField(input, "count") };
+}
+
+function normalizeBuffTargeting(input: unknown): { target: "self" | "single" | "chosen"; count?: number } | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const target = input.target === "self" ? "self" : input.target === "chosen" ? "chosen" : "single";
+  return { target, count: numberField(input, "count") };
+}
+
+/** No existing normalizer covers this shape (the `activate-feature` kind's identical `condition` field is passed through unnormalized via its own `...input` spread) — kept minimal, matching that precedent, rather than deep-validating `modifiers`/`effects`. */
+function normalizeAppliedCondition(input: unknown): FeatureEffectConditionApplication {
+  if (!isRecord(input)) {
+    return { name: "custom" };
+  }
+  const name = CONDITION_NAMES.includes(input.name as ConditionName) ? (input.name as ConditionName) : "custom";
+  return {
+    id: stringField(input, "id"),
+    name,
+    durationRounds: numberField(input, "durationRounds"),
+    modifiers: isRecord(input.modifiers) ? (input.modifiers as ConditionInstance["modifiers"]) : undefined,
+    effects: Array.isArray(input.effects) ? (input.effects as FeatureEffect[]) : undefined
+  };
 }
 
 function normalizeAreaTargeting(input: unknown): AreaTargeting | undefined {

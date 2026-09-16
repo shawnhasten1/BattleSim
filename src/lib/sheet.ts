@@ -84,10 +84,20 @@ export function describeAction(action: ActionDefinition, definition: CreatureDef
     return base + describeRiders(action.riders) + describeReaction(action);
   }
   if (action.kind === "healing") {
-    return `heal ${action.range} ft${action.targeting?.target === "self" ? " (self)" : ""}, ${action.healing.map((h) => h.dice).join(", ")}`;
+    const mode = action.targeting?.target;
+    const who = mode === "self" ? " (self)"
+      : mode === "chosen" ? ` (up to ${action.targeting?.count ?? 1} chosen)`
+        : mode === "area" ? ` (${action.area?.type ?? "area"} ${action.area?.size ?? "?"}ft)`
+          : "";
+    return `heal ${action.range} ft${who}, ${action.healing.map((h) => h.dice).join(", ")}`;
   }
   if (action.kind === "reposition") {
     return `teleport ${action.range} ft${action.targeting?.target === "single" ? "" : " (self)"}`;
+  }
+  if (action.kind === "buff") {
+    const mode = action.targeting?.target ?? "single";
+    const who = mode === "self" ? "self" : mode === "chosen" ? `up to ${action.targeting?.count ?? 1} allies` : "one ally";
+    return `buff ${action.range} ft (${who})${action.concentration ? ", concentration" : ""}`;
   }
   if (action.kind === "unsupported") return "mapping required";
   if (action.kind === "activate-feature") {

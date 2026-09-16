@@ -23,12 +23,14 @@ export function combatantsInArea(
   template: AreaTemplate,
   combatants: CombatantState[],
   definitionsById: Map<string, CreatureDefinition>,
-  aimVector?: AimVector
+  aimVector?: AimVector,
+  options: { includeDowned?: boolean } = {}
 ): CombatantState[] {
   const areaCellKeys = new Set(cellsInArea(map, origin, template, aimVector).map(cellKey));
   return combatants.filter((combatant) => {
     const definition = definitionsById.get(combatant.definitionId);
-    if (!definition || combatant.state !== "active") {
+    const eligible = combatant.state === "active" || (options.includeDowned && combatant.state === "downed");
+    if (!definition || !eligible) {
       return false;
     }
     return footprintCells(combatant.position, footprintForSize(definition.size)).some((cell) => areaCellKeys.has(cellKey(cell)));

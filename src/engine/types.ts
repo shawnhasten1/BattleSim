@@ -813,8 +813,18 @@ export interface HealingActionDefinition {
   actionType: ActionType;
   range: number;
   healing: HealingComponent[];
-  /** `"self"` targets the actor. Default `"single"`. */
-  targeting?: { target: "single" | "self" };
+  /**
+   * `"self"` targets the actor. `"chosen"` picks up to `count` allies within
+   * `range` of the caster (Prayer of Healing). `"area"` heals everyone
+   * caught in `area` (Mass Cure Wounds) — resolved via `resolveHealingBurstAction`,
+   * not this shape's own `resolveHealingAction`, which stays single-target
+   * only. Default `"single"`.
+   */
+  targeting?: { target: "single" | "self" | "chosen" | "area"; count?: number };
+  /** Only meaningful when `targeting.target === "area"`. */
+  area?: AreaTemplate;
+  /** Only meaningful when `targeting.target === "area"`. Placement/aim, same shape `area-save` actions use. */
+  areaTargeting?: AreaTargeting;
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
   spellLevel?: number;
@@ -848,6 +858,34 @@ export interface RepositionActionDefinition {
    * destination, not opt-out.
    */
   requiresLineOfEffect?: boolean;
+  resourceCost?: ResourceCost;
+  concentration?: boolean;
+  spellLevel?: number;
+  upcast?: SpellUpcast;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
+/**
+ * Grants a beneficial condition at range — Bless, Haste, Shield of Faith.
+ * Every other shape is adversarial (`attack`/`save`/`area-save` roll
+ * against a target) or self-only (a Feature's own bearer, `healing`'s
+ * `self` mode) — nothing else lets a spell target a willing ally with
+ * something good. No save: the target is always willing, so there's no
+ * gate to roll, unlike `ActionRider`'s `condition` kind.
+ */
+export interface BuffActionDefinition {
+  kind: "buff";
+  id: Id;
+  name: string;
+  actionType: ActionType;
+  /** Max feet from the caster to each target. Irrelevant (but still required — use 0) for `"self"`. */
+  range: number;
+  /** `"chosen"` picks up to `count` allies, each independently within `range` of the caster (Bless: "up to three creatures within range of you" — not an area template). Default `"single"`. */
+  targeting?: { target: "self" | "single" | "chosen"; count?: number };
+  /** The condition granted. Reuses the same shape `apply-condition-on-hit` already carries — no save block, matching `ActivateFeatureActionDefinition.condition`'s pattern rather than `ActionRider`'s (which has one, since a rider is adversarial). */
+  appliedCondition: FeatureEffectConditionApplication;
+  /** Temporary HP granted alongside the condition (Aid-style). Rolled once, applied identically to every resolved target via `Math.max` (5e: temp HP doesn't stack). */
+  tempHp?: HealingComponent[];
   resourceCost?: ResourceCost;
   concentration?: boolean;
   spellLevel?: number;
@@ -924,6 +962,7 @@ export type ActionDefinition =
   | AreaSaveActionDefinition
   | HealingActionDefinition
   | RepositionActionDefinition
+  | BuffActionDefinition
   | UnsupportedActionDefinition
   | ActivateFeatureActionDefinition
   | MultiattackActionDefinition

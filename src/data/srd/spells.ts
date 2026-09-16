@@ -135,6 +135,61 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   // ── Level 1 ───────────────────────────────────────────────────────────────
   {
+    id: "srd:spell:bless",
+    name: "Bless",
+    level: 1,
+    school: "enchantment",
+    castingTime: "action",
+    range: 30,
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    concentration: true,
+    automationSupport: "full",
+    action: {
+      kind: "buff",
+      id: "srd:spell:bless:action",
+      name: "Bless",
+      actionType: "action",
+      range: 30,
+      targeting: { target: "chosen", count: 3 },
+      appliedCondition: {
+        name: "custom",
+        durationRounds: 10,
+        // The real +1d4 can't be rolled from a condition — ConditionInstance's
+        // modifiers and NumericFormula are both flat-number-only, no RNG
+        // anywhere in that path. Approximated as a flat +2 (average-rounded),
+        // matching this codebase's existing precedent for the same tradeoff
+        // (see incoming-attack-modifier's own doc comment).
+        modifiers: { attackRoll: 2, savingThrows: { str: 2, dex: 2, con: 2, int: 2, wis: 2, cha: 2 } }
+      },
+      concentration: true,
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:shield-of-faith",
+    name: "Shield of Faith",
+    level: 1,
+    school: "abjuration",
+    castingTime: "bonus",
+    range: 60,
+    resourceCost: { resourceId: "slot-1", amount: 1 },
+    concentration: true,
+    automationSupport: "full",
+    action: {
+      kind: "buff",
+      id: "srd:spell:shield-of-faith:action",
+      name: "Shield of Faith",
+      actionType: "bonus",
+      range: 60,
+      targeting: { target: "single" },
+      appliedCondition: { name: "custom", durationRounds: 10, modifiers: { armorClass: 2 } },
+      concentration: true,
+      resourceCost: { resourceId: "slot-1", amount: 1 },
+      automationSupport: "full"
+    }
+  },
+  {
     id: "srd:spell:magic-missile",
     name: "Magic Missile",
     level: 1,
@@ -551,6 +606,29 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     }
   },
   // ── Level 5 ───────────────────────────────────────────────────────────────
+  {
+    id: "srd:spell:mass-cure-wounds",
+    name: "Mass Cure Wounds",
+    level: 5,
+    school: "conjuration",
+    castingTime: "action",
+    range: 60,
+    resourceCost: { resourceId: "slot-5", amount: 1 },
+    automationSupport: "full",
+    action: {
+      kind: "healing",
+      id: "srd:spell:mass-cure-wounds:action",
+      name: "Mass Cure Wounds",
+      actionType: "action",
+      range: 60,
+      healing: [{ dice: "3d8" }],
+      targeting: { target: "area" },
+      area: { type: "circle", size: 30 },
+      areaTargeting: { origin: "point", range: 60 },
+      resourceCost: { resourceId: "slot-5", amount: 1 },
+      automationSupport: "full"
+    }
+  },
   {
     id: "srd:spell:cone-of-cold",
     name: "Cone of Cold",
