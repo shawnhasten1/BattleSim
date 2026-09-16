@@ -3,7 +3,7 @@
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
-import { isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
+import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
@@ -518,7 +518,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""} ${inActiveZone ? "in-active-zone" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${isDominated(combatant) ? "dominated" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""} ${inActiveZone ? "in-active-zone" : ""}`}
               style={{
                 left: x,
                 top: y,
@@ -543,7 +543,13 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                       scene.openTokenMenu(combatant.id, event.clientX, event.clientY);
                     }
               }
-              title={inActiveZone ? `${combatant.displayName} · in zone` : combatant.displayName}
+              title={
+                isDominated(combatant)
+                  ? `${combatant.displayName} · dominated`
+                  : inActiveZone
+                    ? `${combatant.displayName} · in zone`
+                    : combatant.displayName
+              }
             >
               {tokenImage ? (
                 <img

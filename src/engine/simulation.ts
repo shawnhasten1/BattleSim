@@ -3,6 +3,7 @@ import {
   admitReinforcements,
   canAct,
   createEngineState,
+  effectiveFaction,
   event,
   getDefinition,
   getExecutableActions,
@@ -332,7 +333,7 @@ function multiattackTargetIds(
     return Array.from({ length: Math.max(0, step.count) }, () => value);
   });
   const others = snapshot.combatants
-    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id
+    .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && c.state === "active" && c.id !== primary.id
       && isValidTarget(snapshot, actor, c, range))
     .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id));
   const targetIds = [primary.id, ...others.map((c) => c.id)];
@@ -533,7 +534,7 @@ function maybeRepositionZone(state: EngineState, actor: CombatantState): void {
   const definitionsById = new Map(snapshot.definitions.map((definition) => [definition.id, definition]));
   const caughtIds = new Set(combatantsInArea(snapshot.map, zone.origin, zone.area, snapshot.combatants, definitionsById).map((combatant) => combatant.id));
   const uncaught = snapshot.combatants.filter((combatant) =>
-    combatant.faction !== actor.faction && combatant.state === "active" && !caughtIds.has(combatant.id));
+    effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active" && !caughtIds.has(combatant.id));
   if (!uncaught.length) {
     return;
   }
@@ -740,6 +741,13 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     return undefined;
   }
 
+  // Confusion et al: the bearer's turn is overridden by a random roll instead
+  // of the normal decision tree. Checked after the cannot-act early return so
+  // a confused-and-also-stunned creature still just loses its turn.
+  if (actor.conditions?.some((condition) => condition.modifiers?.forcesRandomAction)) {
+    return resolveConfusedTurn(state, actor);
+  }
+
   let movedThisTurn = false;
   const healing = selectHealingAction(state.snapshot, actor);
   const healingBurst = selectHealingBurstAction(state.snapshot, actor);
@@ -841,10 +849,10 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     // No target because the only opposition left is a reinforcement that hasn't
     // arrived — hold position quietly rather than raising an automation warning.
     const awaitingReinforcements = state.snapshot.combatants.some(
-      (other) => other.faction !== actor.faction && other.state === "reserve"
+      (other) => effectiveFaction(state.snapshot, other) !== effectiveFaction(state.snapshot, actor) && other.state === "reserve"
     );
     const noVisibleEnemies = !state.snapshot.combatants.some(
-      (other) => other.faction !== actor.faction && other.state === "active"
+      (other) => effectiveFaction(state.snapshot, other) !== effectiveFaction(state.snapshot, actor) && other.state === "active"
     );
     if (awaitingReinforcements && noVisibleEnemies) {
       state.log.push(event(state, "AiDecision", `${actor.displayName} holds position — no enemies in sight`, {
@@ -1125,6 +1133,86 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   return undefined;
 }
 
+/**
+ * Confusion (and any other `forcesRandomAction` condition): the bearer's turn
+ * is overridden by a random roll instead of the normal decision tree —
+ * simplified to 3 outcomes (RAW's real d10 table condensed, same "approximate
+ * and document it" precedent as Bless's flat +2). Faction-agnostic on
+ * purpose: this is about the bearer's own scrambled turn, not which side it's
+ * fighting for, so it never touches `effectiveFaction`.
+ */
+function resolveConfusedTurn(state: EngineState, actor: CombatantState): string | undefined {
+  const snapshot = state.snapshot;
+  const definition = getDefinition(snapshot, actor);
+  const outcome = state.rng.nextInt(1, 3);
+
+  if (outcome === 1) {
+    const meleeActions = getExecutableActions(definition).filter(
+      (action): action is Extract<ActionDefinition, { kind: "attack" }> =>
+        action.kind === "attack" && action.attackType === "melee" && action.automationSupport === "full" && canPayResource(actor, action)
+    );
+    const candidates: { action: Extract<ActionDefinition, { kind: "attack" }>; target: CombatantState }[] = [];
+    for (const action of meleeActions) {
+      const reach = action.reach ?? action.range;
+      for (const other of snapshot.combatants) {
+        if (other.id === actor.id || other.state !== "active") {
+          continue;
+        }
+        if (isValidTarget(snapshot, actor, other, reach)) {
+          candidates.push({ action, target: other });
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      const pick = candidates[state.rng.nextInt(0, candidates.length - 1)]!;
+      state.log.push(event(state, "AiDecision", `${actor.displayName} is confused and attacks ${pick.target.displayName}`, {
+        combatantId: actor.id,
+        actionId: pick.action.id,
+        targetId: pick.target.id,
+        reason: "confused"
+      }));
+      try {
+        resolveAttack(state, actor.id, pick.target.id, pick.action.id);
+      } catch (error) {
+        state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s confused attack could not resolve`, {
+          combatantId: actor.id,
+          actionId: pick.action.id,
+          targetId: pick.target.id,
+          error: error instanceof Error ? error.message : String(error)
+        }));
+      }
+      return undefined;
+    }
+    // No melee target in reach — RAW has the creature wander; simplified down to "do nothing" (outcome 3).
+  }
+
+  if (outcome === 2) {
+    const footprint = sizeFootprint(definition.size);
+    const occupied = occupiedCellsFor(snapshot, actor.id);
+    const pathingMap = hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones));
+    const reachable = findReachableCells(pathingMap, actor.position, footprint, snapshot.map.grid.distancePerSquare, occupied)
+      .filter((candidate) => candidate.cell.x !== actor.position.x || candidate.cell.y !== actor.position.y);
+    if (reachable.length > 0) {
+      const destination = reachable[state.rng.nextInt(0, reachable.length - 1)]!.cell;
+      state.log.push(event(state, "AiDecision", `${actor.displayName} is confused and stumbles to a random square`, {
+        combatantId: actor.id,
+        destination,
+        reason: "confused"
+      }));
+      try {
+        moveCombatant(state, actor.id, destination);
+      } catch { /* map state moved on */ }
+      return undefined;
+    }
+  }
+
+  state.log.push(event(state, "AiDecision", `${actor.displayName} is confused and does nothing`, {
+    combatantId: actor.id,
+    reason: "confused"
+  }));
+  return undefined;
+}
+
 function rollIfNeeded(state: EngineState): void {
   if (state.snapshot.combatants.every((combatant) => typeof combatant.initiative === "number")) {
     state.snapshot.combatants.sort((a, b) => (b.initiative ?? 0) - (a.initiative ?? 0) || a.id.localeCompare(b.id));
@@ -1135,7 +1223,7 @@ function rollIfNeeded(state: EngineState): void {
 
 function selectNearestHostile(snapshot: EncounterSnapshot, actor: CombatantState): CombatantState | undefined {
   return snapshot.combatants
-    .filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active")
+    .filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active")
     .sort((a, b) => gridDistance(actor.position, a.position, snapshot.map.grid) - gridDistance(actor.position, b.position, snapshot.map.grid)
       || a.currentHp - b.currentHp
       || a.id.localeCompare(b.id))[0];
@@ -1143,7 +1231,7 @@ function selectNearestHostile(snapshot: EncounterSnapshot, actor: CombatantState
 
 function selectWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState): CombatantState | undefined {
   return snapshot.combatants
-    .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
     .filter((combatant) => {
       const definition = getDefinition(snapshot, combatant);
       return combatant.currentHp < definition.maxHp;
@@ -1266,7 +1354,7 @@ function selectHealingAction(
 ): HealingPlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const woundedAllies = snapshot.combatants
-    .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
     .filter((combatant) => {
       const allyDefinition = getDefinition(snapshot, combatant);
       return combatant.currentHp < allyDefinition.maxHp;
@@ -1354,7 +1442,7 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
 
     if (action.targeting?.target === "chosen") {
       const woundedAllies = snapshot.combatants
-        .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+        .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
         .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
         .filter((combatant) => isValidTarget(snapshot, actor, combatant, action.range));
       const scored = woundedAllies
@@ -1381,13 +1469,13 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
     }
     const rangeLimit = action.areaTargeting?.range ?? action.range;
     const woundedInRange = snapshot.combatants
-      .filter((combatant) => combatant.faction === actor.faction && (combatant.state === "active" || combatant.state === "downed"))
+      .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
       .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
       .filter((combatant) => gridDistance(actor.position, combatant.position, snapshot.map.grid) <= rangeLimit);
     let bestPlacement: { origin: Point; targets: CombatantState[]; value: number } | undefined;
     for (const candidate of woundedInRange) {
       const caught = combatantsInArea(snapshot.map, candidate.position, action.area, snapshot.combatants, definitionsById, undefined, { includeDowned: true })
-        .filter((target) => target.faction === actor.faction);
+        .filter((target) => effectiveFaction(snapshot, target) === effectiveFaction(snapshot, actor));
       const value = caught.reduce((sum, target) => sum + scoreFor(target), 0);
       if (!bestPlacement || value > bestPlacement.value) {
         bestPlacement = { origin: candidate.position, targets: caught, value };
@@ -1431,7 +1519,7 @@ function selectBuffAction(
   if (!buffActions.length) {
     return undefined;
   }
-  const allies = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+  const allies = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && combatant.state === "active");
 
   const candidates = buffActions.flatMap((action) => {
     const mode = action.targeting?.target ?? "single";
@@ -1480,7 +1568,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
   if (!buffActions.length) {
     return undefined;
   }
-  const allies = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+  const allies = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && combatant.state === "active");
 
   let best: BuffBurstPlan | undefined;
   for (const action of buffActions) {
@@ -1571,7 +1659,7 @@ function selectRepositionAction(
     return undefined;
   }
   const movers = snapshot.combatants.filter((combatant) =>
-    combatant.faction === actor.faction && combatant.state === "active");
+    effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && combatant.state === "active");
 
   const candidates = repositionActions.flatMap((action) => {
     const eligibleMovers = action.targeting?.target === "single"
@@ -1658,7 +1746,7 @@ function selectMeleeGapCloserReposition(
 
 function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: CombatantState): FeatureActivationPlan | undefined {
   const definition = getDefinition(snapshot, actor);
-  const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
+  const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active");
   if (hostiles.length === 0) {
     return undefined;
   }
@@ -1706,7 +1794,7 @@ function selectOffensivePlan(
   options: { mustReachNow?: boolean; relaxReachability?: boolean } = {}
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
-  const hostiles = snapshot.combatants.filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active");
+  const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active");
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
   const candidates = getExecutableActions(definition)
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === slot && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
@@ -1784,7 +1872,7 @@ function selectOffensivePlan(
         const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
           // A self-origin blast never catches its own caster (matches resolution).
           .filter((combatant) => !(fromSelf && combatant.id === actor.id));
-        const hostiles = affected.filter((combatant) => combatant.faction !== actor.faction);
+        const hostiles = affected.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
         const hostileValue = hostiles.reduce((sum, combatant) => {
           const combatantDefinition = getDefinition(snapshot, combatant);
           return sum
@@ -1793,7 +1881,7 @@ function selectOffensivePlan(
             + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
         }, 0);
         const friendlyRisk = affected
-          .filter((combatant) => combatant.faction === actor.faction)
+          .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor))
           .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant)), 0);
         score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
         reasons.push(`${hostiles.length} hostile targets`);
@@ -1853,7 +1941,7 @@ function beamTargets(
     return [primary.id];
   }
   const ranked = snapshot.combatants
-    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
+    .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
     .map((c) => ({ combatant: c, value: expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, c)) }))
     .sort((a, b) => b.value - a.value)
     .map((entry) => entry.combatant);
@@ -1885,7 +1973,7 @@ function saveBonusTargetIds(
     return [];
   }
   return snapshot.combatants
-    .filter((c) => c.faction !== actor.faction && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
+    .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
     .sort((a, b) => gridDistance(actor.position, a.position, snapshot.map.grid) - gridDistance(actor.position, b.position, snapshot.map.grid))
     .slice(0, capacity)
     .map((c) => c.id);
@@ -1996,7 +2084,7 @@ function coverPhrase(coverBonus: number): string {
 function coverFromHostilesAt(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point): number {
   const actorFootprint = sizeFootprint(getDefinition(snapshot, actor).size);
   const hostiles = snapshot.combatants.filter(
-    (combatant) => combatant.faction !== actor.faction && combatant.state === "active"
+    (combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active"
   );
   if (hostiles.length === 0) {
     return 0;
@@ -2037,13 +2125,13 @@ function predictedZoneApproachValue(
   if (zoneCellKeys.size === 0) {
     return 0;
   }
-  const alliesOfCaster = snapshot.combatants.filter((combatant) => combatant.faction === actor.faction && combatant.state === "active");
+  const alliesOfCaster = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && combatant.state === "active");
   if (alliesOfCaster.length === 0) {
     return 0;
   }
   const caughtIds = new Set(alreadyCaught.map((combatant) => combatant.id));
   const otherHostiles = snapshot.combatants.filter((combatant) =>
-    combatant.faction !== actor.faction && combatant.state === "active" && !caughtIds.has(combatant.id));
+    effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active" && !caughtIds.has(combatant.id));
 
   let value = 0;
   for (const hostile of otherHostiles) {
@@ -2080,7 +2168,7 @@ function hazardAtCell(snapshot: EncounterSnapshot, actor: CombatantState, cell: 
         continue;
       }
       const source = snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId);
-      const harmsActor = !(zone.affects === "hostile" && source?.faction === actor.faction);
+      const harmsActor = !(zone.affects === "hostile" && source && effectiveFaction(snapshot, source) === effectiveFaction(snapshot, actor));
       if (harmsActor && cellIntersectsArea(cell, zone.origin, zone.area, snapshot.map.grid.distancePerSquare)) {
         hazard += 1;
       }
@@ -2228,14 +2316,14 @@ function occupiedCellsFor(snapshot: EncounterSnapshot, movingCombatantId: string
 
 function nearestHostileDistanceFrom(snapshot: EncounterSnapshot, actor: CombatantState, position: Point): number {
   const distances = snapshot.combatants
-    .filter((combatant) => combatant.faction !== actor.faction && combatant.state === "active")
+    .filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && combatant.state === "active")
     .map((combatant) => gridDistance(position, combatant.position, snapshot.map.grid));
   return Math.min(Number.POSITIVE_INFINITY, ...distances);
 }
 
 function isThreatenedAt(snapshot: EncounterSnapshot, actor: CombatantState, position: Point): boolean {
   return snapshot.combatants.some((hostile) => {
-    if (hostile.faction === actor.faction || hostile.state !== "active") {
+    if (effectiveFaction(snapshot, hostile) === effectiveFaction(snapshot, actor) || hostile.state !== "active") {
       return false;
     }
     const definition = getDefinition(snapshot, hostile);
@@ -2252,7 +2340,7 @@ function isThreatenedAt(snapshot: EncounterSnapshot, actor: CombatantState, posi
 
 function threatensWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState, hostile: CombatantState): boolean {
   return snapshot.combatants.some((ally) => {
-    if (ally.faction !== actor.faction || ally.id === actor.id || ally.state !== "active") {
+    if (effectiveFaction(snapshot, ally) !== effectiveFaction(snapshot, actor) || ally.id === actor.id || ally.state !== "active") {
       return false;
     }
     const definition = getDefinition(snapshot, ally);
@@ -2454,9 +2542,11 @@ function conditionSeverity(name: ConditionName): number {
     case "paralyzed":
     case "stunned":
     case "unconscious":
+    case "dominated":
       return 1;
     case "incapacitated":
     case "restrained":
+    case "confused":
       return 0.65;
     case "frightened":
     case "blinded":

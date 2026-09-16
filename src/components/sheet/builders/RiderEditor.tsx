@@ -67,7 +67,7 @@ const DURATION_HELP = (
 );
 
 const CONDITIONS: ConditionName[] = [
-  "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated",
+  "blinded", "charmed", "confused", "deafened", "dominated", "frightened", "grappled", "incapacitated",
   "invisible", "paralyzed", "poisoned", "prone", "restrained", "stunned", "unconscious"
 ];
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];

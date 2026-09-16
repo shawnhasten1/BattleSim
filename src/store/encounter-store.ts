@@ -304,6 +304,11 @@ export function isSurprised(combatant: CombatantState): boolean {
   return (combatant.conditions ?? []).some((condition) => condition.name === "surprised");
 }
 
+/** Currently fighting for its dominator's side (Dominate Person/Beast, Planar Binding). */
+export function isDominated(combatant: CombatantState): boolean {
+  return (combatant.conditions ?? []).some((condition) => condition.name === "dominated");
+}
+
 /** A fresh "surprised" condition: denies the bearer's first turn, then self-expires at the start of round 2. */
 function surprisedCondition(encounter: EncounterSnapshot): ConditionInstance {
   return {

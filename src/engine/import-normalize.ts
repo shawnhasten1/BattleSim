@@ -12,6 +12,7 @@ import {
   type ConditionInstance,
   type ConditionName,
   type CreatureDefinition,
+  type CreatureType,
   type DamageComponent,
   type DamageScaling,
   type DamageType,
@@ -679,9 +680,22 @@ function normalizeAreaTemplate(input: unknown): AreaTemplate {
 
 const RIDER_GATES: RiderGate[] = ["always", "on-hit", "on-miss", "on-crit", "on-save-fail", "on-save-success"];
 const CONDITION_NAMES: ConditionName[] = [
-  "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated",
+  "blinded", "charmed", "confused", "deafened", "dominated", "frightened", "grappled", "incapacitated",
   "invisible", "paralyzed", "poisoned", "prone", "restrained", "stunned", "unconscious", "custom"
 ];
+const CREATURE_TYPES: CreatureType[] = [
+  "aberration", "beast", "celestial", "construct", "dragon",
+  "elemental", "fey", "fiend", "giant", "humanoid",
+  "monstrosity", "ooze", "plant", "undead"
+];
+
+function normalizeCreatureTypes(input: unknown): CreatureType[] | undefined {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+  const types = input.filter((entry): entry is CreatureType => typeof entry === "string" && CREATURE_TYPES.includes(entry as CreatureType));
+  return types.length ? types : undefined;
+}
 
 function normalizeRiders(input: unknown, defaultGate: RiderGate): ActionRider[] | undefined {
   if (!Array.isArray(input)) {
@@ -707,7 +721,8 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
   const when = normalizeRiderGate(input.when) ?? defaultGate;
   const resourceCost = normalizeResourceCost(input.resourceCost);
   const activation: "optional" | undefined = input.activation === "optional" ? "optional" : undefined;
-  const base = { id, oncePerTurn, when, resourceCost, activation };
+  const restrictToCreatureTypes = normalizeCreatureTypes(input.restrictToCreatureTypes);
+  const base = { id, oncePerTurn, when, resourceCost, activation, restrictToCreatureTypes };
 
   if (input.kind === "damage") {
     return { ...base, kind: "damage", components: normalizeDamageComponents(input.components, input.damageType) };

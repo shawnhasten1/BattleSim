@@ -26,6 +26,7 @@ import type {
   DamageTypeReference,
   DeathEffectDefinition,
   EncounterSnapshot,
+  Faction,
   FeatureCondition,
   FeatureEffect,
   FeatureEffectConditionApplication,
@@ -450,6 +451,30 @@ export function moveCombatant(
   return movedCells;
 }
 
+/**
+ * A combatant's current fighting side, accounting for domination (Dominate
+ * Person/Beast, Planar Binding). Live-derived, never stored: the moment the
+ * bearer's `"dominated"` condition is gone (expiry, a broken concentration,
+ * a shaken-off save, or a DM clearing conditions), this reverts on its own —
+ * mirrors how aura/zone membership is also recomputed live rather than
+ * persisted. `depth` guards against a pathological dominator-of-a-dominator
+ * cycle; real content should never chain more than one deep.
+ */
+export function effectiveFaction(snapshot: EncounterSnapshot, combatant: CombatantState, depth = 0): Faction {
+  if (depth >= 4) {
+    return combatant.faction;
+  }
+  const dominated = combatant.conditions?.find((condition) => condition.name === "dominated");
+  if (!dominated?.sourceCombatantId) {
+    return combatant.faction;
+  }
+  const dominator = snapshot.combatants.find((c) => c.id === dominated.sourceCombatantId);
+  if (!dominator || dominator.id === combatant.id) {
+    return combatant.faction;
+  }
+  return effectiveFaction(snapshot, dominator, depth + 1);
+}
+
 export function opportunityAttackThreats(snapshot: EncounterSnapshot, moverId: Id, cells: Point[]): OpportunityThreat[] {
   const mover = findCombatant(snapshot, moverId);
   if (mover.state !== "active" || cells.length < 2 || moverAvoidsOpportunityAttacks(snapshot, mover)) {
@@ -461,7 +486,7 @@ export function opportunityAttackThreats(snapshot: EncounterSnapshot, moverId: I
     const from = cells[index] as Point;
     const to = cells[index + 1] as Point;
     for (const reactor of snapshot.combatants) {
-      if (committedReactors.has(reactor.id) || reactor.id === mover.id || reactor.faction === mover.faction || reactor.state !== "active") {
+      if (committedReactors.has(reactor.id) || reactor.id === mover.id || effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || reactor.state !== "active") {
         continue;
       }
       const action = findLeaveReachReaction(snapshot, reactor, mover, from, to);
@@ -1081,7 +1106,7 @@ export function resolveAreaSaveAction(
     )
     : null;
   const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, aimVector)
-    .filter((target) => action.affects === "all" || target.faction !== attacker.faction)
+    .filter((target) => action.affects === "all" || effectiveFaction(state.snapshot, target) !== effectiveFaction(state.snapshot, attacker))
     // A self-origin template (cone / line / burst centred on the caster) emanates
     // *from* the caster — it never catches them, even when `affects: "all"`.
     .filter((target) => !(placement.fromSelf && target.id === attacker.id))
@@ -1491,7 +1516,7 @@ export function resolveHealingBurstAction(
     targets = combatantsInArea(
       state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, placement.aimVector,
       { includeDowned: true }
-    ).filter((target) => target.faction === healer.faction);
+    ).filter((target) => effectiveFaction(state.snapshot, target) === effectiveFaction(state.snapshot, healer));
   }
 
   validateAndSpendAction(healer, action);
@@ -1824,7 +1849,7 @@ function applyZoneEffect(state: EngineState, zone: ActiveZone, target: Combatant
     return;
   }
   const source = state.snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId) ?? target;
-  if (zone.affects === "hostile" && source.faction === target.faction) {
+  if (zone.affects === "hostile" && effectiveFaction(state.snapshot, source) === effectiveFaction(state.snapshot, target)) {
     return;
   }
   applySaveGatedEffect(state, {
@@ -2608,7 +2633,7 @@ function resolveOneDeathEffect(
   // default) — the same fallback `cellIntersectsArea` already applies when a
   // template carries no `aimVector`.
   const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById)
-    .filter((target) => action.affects === "all" || target.faction !== deceased.faction)
+    .filter((target) => action.affects === "all" || effectiveFaction(state.snapshot, target) !== effectiveFaction(state.snapshot, deceased))
     .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
 
   const blastRoll = action.damage.length
@@ -3138,10 +3163,10 @@ function auraSources(state: EngineState, target: CombatantState): AuraContributi
       if (!feature.aura) {
         continue;
       }
-      if (feature.aura.affects === "hostile" && bearer.faction === target.faction) {
+      if (feature.aura.affects === "hostile" && effectiveFaction(state.snapshot, bearer) === effectiveFaction(state.snapshot, target)) {
         continue;
       }
-      if (feature.aura.affects === "allies" && bearer.faction !== target.faction) {
+      if (feature.aura.affects === "allies" && effectiveFaction(state.snapshot, bearer) !== effectiveFaction(state.snapshot, target)) {
         continue;
       }
       if (gridDistance(bearer.position, target.position, state.snapshot.map.grid) > feature.aura.range) {
@@ -4012,7 +4037,7 @@ function featureConditionMet(
   if (condition === "attack-has-no-disadvantage") return context.rollMode !== "disadvantage";
   if (condition === "ally-adjacent-to-target") {
     return state.snapshot.combatants.some((combatant) => combatant.id !== attacker.id
-      && combatant.faction === attacker.faction
+      && effectiveFaction(state.snapshot, combatant) === effectiveFaction(state.snapshot, attacker)
       && combatant.state === "active"
       && gridDistance(combatant.position, target.position, state.snapshot.map.grid) <= 5);
   }
@@ -4171,7 +4196,7 @@ function applyZoneMovementDamage(state: EngineState, mover: CombatantState, to: 
       continue;
     }
     const source = state.snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId) ?? mover;
-    if (zone.affects === "hostile" && source.faction === mover.faction) {
+    if (zone.affects === "hostile" && effectiveFaction(state.snapshot, source) === effectiveFaction(state.snapshot, mover)) {
       continue;
     }
     const sourceDefinition = getDefinition(state.snapshot, source);
@@ -4225,7 +4250,7 @@ function findLeaveReachReaction(
   from: Point,
   to: Point
 ): AttackActionDefinition | undefined {
-  if (reactor.faction === mover.faction || !canAct(reactor, "reaction")) {
+  if (effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || !canAct(reactor, "reaction")) {
     return undefined;
   }
   const definition = getDefinition(snapshot, reactor);
@@ -4327,7 +4352,7 @@ function reactionTriggerPasses(
         return false;
       }
       const ally = state.snapshot.combatants.find((c) => c.id === event.targetId);
-      if (!ally || ally.faction !== reactor.faction) {
+      if (!ally || effectiveFaction(state.snapshot, ally) !== effectiveFaction(state.snapshot, reactor)) {
         return false;
       }
       // `gridDistance` already returns feet.
@@ -4335,7 +4360,7 @@ function reactionTriggerPasses(
     }
     case "enemy-casts-spell": {
       const caster = state.snapshot.combatants.find((c) => c.id === event.sourceId);
-      if (!caster || caster.faction === reactor.faction || event.spellLevel == null || event.origin === undefined) {
+      if (!caster || effectiveFaction(state.snapshot, caster) === effectiveFaction(state.snapshot, reactor) || event.spellLevel == null || event.origin === undefined) {
         return false;
       }
       if (trigger.maxSpellLevel != null && event.spellLevel > trigger.maxSpellLevel) {

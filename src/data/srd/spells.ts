@@ -927,6 +927,79 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
     }
   },
+  // ── Mind control spells (phase 7) ────────────────────────────────────────
+  {
+    id: "srd:spell:dominate-person", name: "Dominate Person", level: 5, school: "enchantment", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    description: "WIS save or a humanoid target is dominated: it fights for the caster's side until the spell ends.",
+    action: {
+      kind: "save", id: "srd:spell:dominate-person:action", name: "Dominate Person", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: "dominated",
+        duration: { kind: "save-ends", saveAt: "turn-end" },
+        save: { ability: "wis", onSuccess: "negates" },
+        restrictToCreatureTypes: ["humanoid"]
+      }],
+      resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:dominate-beast", name: "Dominate Beast", level: 4, school: "enchantment", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    description: "WIS save or a beast target is dominated: it fights for the caster's side until the spell ends.",
+    action: {
+      kind: "save", id: "srd:spell:dominate-beast:action", name: "Dominate Beast", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: "dominated",
+        duration: { kind: "save-ends", saveAt: "turn-end" },
+        save: { ability: "wis", onSuccess: "negates" },
+        restrictToCreatureTypes: ["beast"]
+      }],
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:planar-binding", name: "Planar Binding", level: 5, school: "abjuration", castingTime: "action", range: 90,
+    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    description: "CHA save or a celestial, elemental, fey, or fiend target is bound to service, fighting for the caster's side for the rest of the encounter.",
+    action: {
+      kind: "save", id: "srd:spell:planar-binding:action", name: "Planar Binding", actionType: "action",
+      saveAbility: "cha", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 90,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates",
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: "dominated",
+        // No repeat save, matching RAW ("no ongoing save once bound"); 100 rounds is
+        // this library's established "lasts the rest of the encounter" convention
+        // (same choice already used for Aid/Mage Armor's prep durations), not a
+        // literal reading of the spell's real 24-hour/10-day/30-day duration tiers.
+        duration: { kind: "rounds", rounds: 100 },
+        restrictToCreatureTypes: ["celestial", "elemental", "fey", "fiend"]
+      }],
+      resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:confusion", name: "Confusion", level: 4, school: "enchantment", castingTime: "action", range: 90, concentration: true,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    description: "WIS save or each creature in the area acts randomly each turn (attacks a random creature, wanders, or does nothing) until it saves. Condensed from the SRD's full d10 behavior table to a 3-outcome roll.",
+    action: {
+      kind: "area-save", id: "srd:spell:confusion:action", name: "Confusion", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 90,
+      area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 90 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: "confused",
+        duration: { kind: "save-ends", saveAt: "turn-end" },
+        save: { ability: "wis", onSuccess: "negates" },
+        modifiers: { forcesRandomAction: true }
+      }],
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
   // ── Reaction spells (phase 6) ─────────────────────────────────────────────
   {
     id: "srd:spell:hellish-rebuke", name: "Hellish Rebuke", level: 1, school: "evocation", castingTime: "reaction", range: 60,

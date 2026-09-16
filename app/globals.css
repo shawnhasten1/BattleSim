@@ -424,6 +424,15 @@ img {
   outline-offset: 2px;
 }
 
+/* Dominated: fighting for its dominator's side (Dominate Person/Beast, Planar
+   Binding) — a distinct magenta ring so a flipped token reads at a glance,
+   independent of the surprised/selected/zone rings above. */
+.token.dominated {
+  outline: 2px solid #c23fd9;
+  outline-offset: 2px;
+  box-shadow: 0 0 10px 2px rgba(194, 63, 217, 0.65);
+}
+
 /* Scheduled reinforcement not yet on the board: a ghosted preview at its staging
    cell so you can see where it will enter. Still selectable for setup. */
 .token.reserve {

@@ -3,7 +3,7 @@
 import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { getDefinition, getExecutableActions, type ActionDefinition, type CombatantState, type Faction } from "@/engine";
-import { isSurprised, useEncounterStore } from "@/store/encounter-store";
+import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
@@ -249,6 +249,7 @@ export function CombatPanel() {
                 <span className={styles.init}>{combatant.initiative ?? "-"}</span>
                 <span className={styles.name}>{combatant.displayName}</span>
                 {isSurprised(combatant) ? <span className={styles.surprised}>Surprised</span> : null}
+                {isDominated(combatant) ? <span className={styles.dominated}>Dominated</span> : null}
                 <span className={styles.hp}>
                   {reserve ? `arrives R${combatant.arrivesRound ?? "?"}` : `${combatant.currentHp}/${definition.maxHp}`}
                 </span>

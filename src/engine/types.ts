@@ -42,7 +42,9 @@ export type ActorTag = "high-priority" | "low-priority" | "protected";
 export type ConditionName =
   | "blinded"
   | "charmed"
+  | "confused"
   | "deafened"
+  | "dominated"
   | "frightened"
   | "grappled"
   | "incapacitated"
@@ -1235,6 +1237,8 @@ export interface ConditionInstance {
      * negative = harder (Dodge). Summed across the bearer's conditions.
      */
     incomingAttackRoll?: number;
+    /** Confusion: the bearer's turn is overridden by a random attack/move/do-nothing roll instead of normal AI decisions. */
+    forcesRandomAction?: boolean;
   };
   effects?: FeatureEffect[];
   /**
