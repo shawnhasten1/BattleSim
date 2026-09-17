@@ -2,20 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CombatLogEvent, EncounterSnapshot, Point } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useIsReplaying } from "@/hooks/useDisplayEncounter";
-import { areaFlashForEvent, combatTextForEvent, type FeedbackKind } from "@/lib/combatFeedback";
+import { areaFlashForEvent, combatTextForEvent, selectStepBatchCues, type FeedbackKind } from "@/lib/combatFeedback";
 
 const TTL_MS = 1300;
 const AREA_FLASH_TTL_MS = 1500;
-/** Cap on how many cues one Step (a whole automated turn) may raise at once. */
+/**
+ * Cap on how many roll/damage/heal cues one Step (a whole automated turn) may
+ * raise at once — `ActionDeclared` cues are exempt, see `selectStepBatchCues`.
+ */
 const STEP_BATCH_CAP = 6;
 /** Stagger between cues raised in the same batch, so they don't perfectly overlap. */
 const BATCH_STAGGER_MS = 90;
-
-const CUE_TYPES: ReadonlySet<CombatLogEvent["type"]> = new Set([
-  "ActionDeclared",
-  "DamageApplied",
-  "HealingApplied"
-]);
 
 export interface ActiveFloatie {
   id: string;
@@ -134,7 +131,7 @@ export function useSceneFeedback(encounter: EncounterSnapshot): {
     const prevLen = prevLenRef.current;
     prevLenRef.current = log.length;
     if (replaying || log.length <= prevLen) return;
-    const fresh = log.slice(prevLen).filter((event) => CUE_TYPES.has(event.type)).slice(-STEP_BATCH_CAP);
+    const fresh = selectStepBatchCues(log.slice(prevLen), STEP_BATCH_CAP);
     if (fresh.length) spawn(fresh, true);
   }, [log, replaying, spawn]);
 

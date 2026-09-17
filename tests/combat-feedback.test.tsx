@@ -2,7 +2,7 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { sampleEncounter, type CombatLogEvent } from "@/engine";
-import { areaFlashForEvent, combatTextForEvent, hpTone } from "@/lib/combatFeedback";
+import { areaFlashForEvent, combatTextForEvent, hpTone, selectStepBatchCues } from "@/lib/combatFeedback";
 import { TokenHealthBar } from "@/components/scene/TokenHealthBar";
 
 afterEach(() => {
@@ -11,6 +11,10 @@ afterEach(() => {
 
 function ev(type: CombatLogEvent["type"], data: Record<string, unknown>): CombatLogEvent {
   return { id: `${type}-1`, round: 1, turnIndex: 0, type, message: "", data };
+}
+
+function evId(id: string, type: CombatLogEvent["type"], data: Record<string, unknown> = {}): CombatLogEvent {
+  return { id, round: 1, turnIndex: 0, type, message: "", data };
 }
 
 describe("hpTone", () => {
@@ -61,6 +65,102 @@ describe("combatTextForEvent", () => {
     expect(combatTextForEvent(ev("DamageApplied", { totalApplied: 7 }))).toBeNull();
     expect(combatTextForEvent(ev("CombatantMoved", { combatantId: "c1" }))).toBeNull();
     expect(combatTextForEvent(ev("TurnStarted", { combatantId: "c1" }))).toBeNull();
+  });
+
+  function attackRolled(overrides: Record<string, unknown>) {
+    return ev("AttackRolled", {
+      targetId: "t1",
+      attackRoll: { expression: "1d20", rolls: [{ sides: 20, value: 17, sign: 1 }], modifier: 0, total: 17 },
+      total: 22,
+      targetAc: 15,
+      hit: true,
+      critical: false,
+      ...overrides
+    });
+  }
+
+  it("formats an attack roll vs AC, labeling hit / crit / miss", () => {
+    expect(combatTextForEvent(attackRolled({}))).toEqual({ anchorId: "t1", text: "17 + 5 = 22 vs AC 15 — HIT", kind: "attack-hit" });
+
+    expect(combatTextForEvent(attackRolled({
+      attackRoll: { expression: "1d20", rolls: [{ sides: 20, value: 20, sign: 1 }], modifier: 0, total: 20 },
+      total: 25, hit: true, critical: true
+    }))).toEqual({ anchorId: "t1", text: "20 + 5 = 25 vs AC 15 — CRIT!", kind: "attack-crit" });
+
+    // natural 1 always misses (5e auto-fail) — called out distinctly from an ordinary low roll
+    expect(combatTextForEvent(attackRolled({
+      attackRoll: { expression: "1d20", rolls: [{ sides: 20, value: 1, sign: 1 }], modifier: 0, total: 1 },
+      total: 6, hit: false, critical: false
+    }))).toEqual({ anchorId: "t1", text: "1 + 5 = 6 vs AC 15 — MISS (1)", kind: "attack-miss" });
+
+    expect(combatTextForEvent(attackRolled({
+      attackRoll: { expression: "1d20", rolls: [{ sides: 20, value: 10, sign: 1 }], modifier: 0, total: 10 },
+      total: 15, targetAc: 18, hit: false, critical: false
+    }))).toEqual({ anchorId: "t1", text: "10 + 5 = 15 vs AC 18 — MISS", kind: "attack-miss" });
+  });
+
+  it("omits the modifier when the roll had none, and skips auto-hit / malformed attack events", () => {
+    expect(combatTextForEvent(attackRolled({
+      attackRoll: { expression: "1d20", rolls: [{ sides: 20, value: 17, sign: 1 }], modifier: 0, total: 17 },
+      total: 17
+    }))).toEqual({ anchorId: "t1", text: "17 vs AC 15 — HIT", kind: "attack-hit" });
+
+    expect(combatTextForEvent(ev("AttackRolled", { targetId: "t1", autoHit: true, hit: true, critical: false }))).toBeNull();
+    expect(combatTextForEvent(ev("AttackRolled", { targetId: "t1" }))).toBeNull();
+  });
+
+  it("formats a saving throw vs DC, labeling save / fail", () => {
+    const saveRoll = { expression: "1d20+5", rolls: [{ sides: 20, value: 13, sign: 1 }], modifier: 5, total: 18 };
+    expect(combatTextForEvent(ev("SaveRolled", { targetId: "t1", saveRoll, total: 18, dc: 15, success: true })))
+      .toEqual({ anchorId: "t1", text: "13 + 5 = 18 vs DC 15 — SAVE", kind: "save-pass" });
+    expect(combatTextForEvent(ev("SaveRolled", { targetId: "t1", saveRoll, total: 18, dc: 20, success: false })))
+      .toEqual({ anchorId: "t1", text: "13 + 5 = 18 vs DC 20 — FAIL", kind: "save-fail" });
+    expect(combatTextForEvent(ev("SaveRolled", { targetId: "t1" }))).toBeNull();
+  });
+});
+
+describe("selectStepBatchCues", () => {
+  it("never drops an ActionDeclared even when the cap would otherwise trim it away", () => {
+    // A 4-target spell: 1 declare + (save, damage) per target = 9 cue-worthy
+    // events, well past a cap of 6. The declare is the oldest event, so a
+    // naive "keep the last N" would drop exactly the one cue that announces
+    // what's happening.
+    const turn = [
+      evId("d1", "ActionDeclared", { actorId: "caster", actionName: "Fireball", actionKind: "area-save" }),
+      evId("s1", "SaveRolled", { targetId: "t1" }),
+      evId("dmg1", "DamageApplied", { targetId: "t1", totalApplied: 9 }),
+      evId("s2", "SaveRolled", { targetId: "t2" }),
+      evId("dmg2", "DamageApplied", { targetId: "t2", totalApplied: 9 }),
+      evId("s3", "SaveRolled", { targetId: "t3" }),
+      evId("dmg3", "DamageApplied", { targetId: "t3", totalApplied: 9 }),
+      evId("s4", "SaveRolled", { targetId: "t4" }),
+      evId("dmg4", "DamageApplied", { targetId: "t4", totalApplied: 9 })
+    ];
+    const kept = selectStepBatchCues(turn, 6);
+    // The declare survives, and the cap trims only the oldest non-declare
+    // pair (t1's save + damage), keeping the most recent 6 of the rest —
+    // both in original chronological order.
+    expect(kept.map((event) => event.id)).toEqual(["d1", "s2", "dmg2", "s3", "dmg3", "s4", "dmg4"]);
+  });
+
+  it("keeps everything when the turn is within the cap", () => {
+    const turn = [
+      evId("d1", "ActionDeclared", { actorId: "a1", actionName: "Longsword", actionKind: "attack" }),
+      evId("a1", "AttackRolled", { targetId: "t1" }),
+      evId("dmg1", "DamageApplied", { targetId: "t1", totalApplied: 5 })
+    ];
+    expect(selectStepBatchCues(turn, 6).map((event) => event.id)).toEqual(["d1", "a1", "dmg1"]);
+  });
+
+  it("drops non-cue event types entirely, without counting them against the cap", () => {
+    const turn = [
+      evId("t1", "TurnStarted", { combatantId: "a1" }),
+      evId("m1", "CombatantMoved", { combatantId: "a1" }),
+      evId("ai1", "AiDecision", { actorId: "a1" }),
+      evId("d1", "ActionDeclared", { actorId: "a1", actionName: "Fireball", actionKind: "area-save" }),
+      evId("s1", "SaveRolled", { targetId: "t1" })
+    ];
+    expect(selectStepBatchCues(turn, 6).map((event) => event.id)).toEqual(["d1", "s1"]);
   });
 });
 

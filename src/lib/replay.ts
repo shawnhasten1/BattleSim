@@ -236,10 +236,17 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
   switch (entry.type) {
     case "AiDecision":
       return 950;
+    case "ActionDeclared":
+      // A beat to register "casts Fireball" before the first roll fires,
+      // instead of falling into the 160ms default (DICE_ROLL_FEEDBACK_PLAN.md).
+      return 500;
     case "CombatantMoved":
       return 750;
     case "AttackRolled":
     case "SaveRolled":
+      // Longer than a plain damage/heal tick — there's a "17 + 5 = 22 vs AC 15"
+      // roll cue to read before the damage number lands (DICE_ROLL_FEEDBACK_PLAN.md).
+      return 950;
     case "AreaSaveResolved":
     case "MultiattackResolved":
     case "DamageApplied":

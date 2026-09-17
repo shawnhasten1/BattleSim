@@ -488,21 +488,25 @@ img {
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
-  /* legible on the light battlemap and on dark token discs alike */
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.9), 0 1px 2px rgba(0, 0, 0, 0.45);
+  /* Thick dark outline (not a soft blur) so the glyph reads as one solid
+     shape against both the light battlemap and colored token discs — fill
+     colors below are picked bright/light enough to stay legible inside it. */
+  -webkit-text-stroke: 2px rgba(12, 9, 7, 0.92);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
   animation: feedback-float 1300ms ease-out forwards;
 }
 
 .feedback-damage {
-  color: var(--ui-hp-low);
+  color: #ef6259;
 }
 
 .feedback-heal {
-  color: var(--ui-hp-high);
+  color: #6bcf7a;
 }
 
 .feedback-action {
-  color: #2b2620;
+  color: #f3ead4;
   font-size: 12px;
   font-weight: 700;
 }
@@ -510,9 +514,31 @@ img {
 /* Off-turn reactions (opportunity attacks, Shield, Counterspell, …) — violet so
    they read as an interruption, not a normal action. */
 .feedback-reaction {
-  color: #6d28d9;
+  color: #b794f6;
   font-size: 12px;
   font-weight: 800;
+}
+
+/* Attack-roll / saving-throw cues (see DICE_ROLL_FEEDBACK_PLAN.md, Phase D):
+   the raw d20 (+ bonus) vs AC/DC, so a hit/miss/save reads without the log.
+   Miss/fail stay neutral — red is reserved for the damage number that follows
+   a hit, not for "nothing happened". */
+.feedback-attack-hit,
+.feedback-save-pass {
+  color: #6bcf7a;
+  font-size: 12px;
+}
+
+.feedback-attack-miss,
+.feedback-save-fail {
+  color: #c3cbd6;
+  font-size: 12px;
+}
+
+.feedback-attack-crit {
+  color: #f0c95e;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 @keyframes feedback-float {

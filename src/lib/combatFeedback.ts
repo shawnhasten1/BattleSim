@@ -6,6 +6,8 @@ import { cellsInArea, type AreaTemplate, type BattleMapState, type CombatLogEven
  * - Phase A: `hpTone` — health-bar colour band.
  * - Phase B: `combatTextForEvent` — which log events raise a floating cue.
  * - Phase C: `areaFlashForEvent` — the cells an AoE just covered.
+ * - Phase D: `selectStepBatchCues` — trims a Step-mode turn's cues without
+ *   ever dropping the action's own announcement (DICE_ROLL_FEEDBACK_PLAN.md).
  *
  * All React-free and unit-tested; every scene feedback layer shares this module.
  */
@@ -24,7 +26,16 @@ export function hpTone(ratio: number): HpTone {
   return "low";
 }
 
-export type FeedbackKind = "action" | "reaction" | "damage" | "heal";
+export type FeedbackKind =
+  | "action"
+  | "reaction"
+  | "damage"
+  | "heal"
+  | "attack-hit"
+  | "attack-miss"
+  | "attack-crit"
+  | "save-pass"
+  | "save-fail";
 
 export interface CombatTextCue {
   /** Combatant the text floats from. */
@@ -35,6 +46,29 @@ export interface CombatTextCue {
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * The natural die face a `DiceRollResult`-shaped roll landed on, independent
+ * of whether the roll's own `modifier` is 0 (attack rolls, whose flat bonus
+ * is added separately into the event's `total`) or the full bonus (save
+ * rolls, which fold it into `rollD20WithBonus`) — in both cases
+ * `total - modifier` is the chosen d20 face, including whichever roll
+ * advantage/disadvantage kept.
+ */
+function rollNatural(roll: unknown): number | null {
+  if (typeof roll !== "object" || roll === null) return null;
+  const total = (roll as { total?: unknown }).total;
+  const modifier = (roll as { modifier?: unknown }).modifier;
+  if (typeof total !== "number" || typeof modifier !== "number") return null;
+  return total - modifier;
+}
+
+/** `"17"` when unmodified, else `"17 + 5 = 22"` / `"17 - 2 = 15"`. */
+function rollLine(natural: number, total: number): string {
+  const mod = total - natural;
+  if (mod === 0) return `${natural}`;
+  return `${natural} ${mod > 0 ? "+" : "-"} ${Math.abs(mod)} = ${total}`;
 }
 
 function isPoint(value: unknown): value is Point {
@@ -59,6 +93,9 @@ function isAreaTemplate(value: unknown): value is AreaTemplate {
  *   easy to miss, so it always gets a label.
  * - `DamageApplied` → `-N` on the target (skips a 0).
  * - `HealingApplied` → `+N` on the target (skips a 0).
+ * - `AttackRolled` → the d20 (+ bonus) vs AC on the target, labeled
+ *   HIT / MISS / CRIT!. Skipped for auto-hit effects (no real roll).
+ * - `SaveRolled` → the d20 (+ bonus) vs DC on the target, labeled SAVE / FAIL.
  */
 export function combatTextForEvent(event: CombatLogEvent): CombatTextCue | null {
   const data = event.data ?? {};
@@ -84,6 +121,29 @@ export function combatTextForEvent(event: CombatLogEvent): CombatTextCue | null 
       const amount = Math.round(Number(data.healingApplied ?? 0));
       if (!targetId || !(amount > 0)) return null;
       return { anchorId: targetId, text: `+${amount}`, kind: "heal" };
+    }
+    case "AttackRolled": {
+      if (data.autoHit) return null; // no real roll to show (e.g. Magic Missile)
+      const targetId = str(data.targetId);
+      const natural = rollNatural(data.attackRoll);
+      const total = Number(data.total);
+      const targetAc = Number(data.targetAc);
+      if (!targetId || natural === null || !Number.isFinite(total) || !Number.isFinite(targetAc)) return null;
+      const critical = data.critical === true;
+      const hit = data.hit === true;
+      const label = critical ? "CRIT!" : hit ? "HIT" : natural === 1 ? "MISS (1)" : "MISS";
+      const kind: FeedbackKind = critical ? "attack-crit" : hit ? "attack-hit" : "attack-miss";
+      return { anchorId: targetId, text: `${rollLine(natural, total)} vs AC ${targetAc} — ${label}`, kind };
+    }
+    case "SaveRolled": {
+      const targetId = str(data.targetId);
+      const natural = rollNatural(data.saveRoll);
+      const total = Number(data.total);
+      const dc = Number(data.dc);
+      if (!targetId || natural === null || !Number.isFinite(total) || !Number.isFinite(dc)) return null;
+      const success = data.success === true;
+      const kind: FeedbackKind = success ? "save-pass" : "save-fail";
+      return { anchorId: targetId, text: `${rollLine(natural, total)} vs DC ${dc} — ${success ? "SAVE" : "FAIL"}`, kind };
     }
     default:
       return null;
@@ -119,4 +179,33 @@ export function areaFlashForEvent(event: CombatLogEvent, map: BattleMapState): A
     ? (data.damageType as DamageType)
     : null;
   return { origin: { x: origin.x, y: origin.y }, area, cells: cellsInArea(map, origin, area, aim), damageType };
+}
+
+/** Log event types that raise a floating cue — see `combatTextForEvent`. */
+const CUE_TYPES: ReadonlySet<CombatLogEvent["type"]> = new Set([
+  "ActionDeclared",
+  "DamageApplied",
+  "HealingApplied",
+  "AttackRolled",
+  "SaveRolled"
+]);
+
+/**
+ * Which of a turn's fresh log events (Step mode, which appends a whole
+ * automated turn at once) should raise a cue, trimmed to `cap`.
+ *
+ * `ActionDeclared` is exempt from the cap: it's always the earliest
+ * cue-worthy event for its action, so a naive "keep the last N" would drop
+ * it first — and for any 3+-target spell (1 declare + a roll and a number
+ * per target easily exceeds a small cap), that means the "casts Fireball"
+ * announcement would silently never show, leaving only rolls and damage
+ * with no context (see DICE_ROLL_FEEDBACK_PLAN.md). The cap instead bounds
+ * only the roll/damage/heal cues that follow the declare(s).
+ */
+export function selectStepBatchCues(events: CombatLogEvent[], cap: number): CombatLogEvent[] {
+  const cueEvents = events.filter((event) => CUE_TYPES.has(event.type));
+  const cappedRestIds = new Set(
+    cueEvents.filter((event) => event.type !== "ActionDeclared").slice(-cap).map((event) => event.id)
+  );
+  return cueEvents.filter((event) => event.type === "ActionDeclared" || cappedRestIds.has(event.id));
 }
