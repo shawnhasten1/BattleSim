@@ -1515,7 +1515,9 @@ function selectBuffAction(
       // an in-combat option — never a candidate here.
       && !action.prepOnly
       && action.automationSupport === "full"
-      && canPayResource(actor, action));
+      && canPayResource(actor, action)
+      // Don't trade a still-working concentration effect for a new one.
+      && (!action.concentration || !hasWorkingConcentrationEffect(snapshot, actor)));
   if (!buffActions.length) {
     return undefined;
   }
@@ -1564,7 +1566,9 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
       && action.targeting?.target === "chosen"
       && !action.prepOnly
       && action.automationSupport === "full"
-      && canPayResource(actor, action));
+      && canPayResource(actor, action)
+      // Don't trade a still-working concentration effect for a new one.
+      && (!action.concentration || !hasWorkingConcentrationEffect(snapshot, actor)));
   if (!buffActions.length) {
     return undefined;
   }
@@ -1798,6 +1802,8 @@ function selectOffensivePlan(
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
   const candidates = getExecutableActions(definition)
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === slot && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+    // Don't trade a still-working concentration effect for a new one.
+    .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
     .flatMap((action) => hostiles.map((target) => {
       const targetDefinition = getDefinition(snapshot, target);
       const range = actionRange(action, definition);
@@ -2560,6 +2566,32 @@ function conditionSeverity(name: ConditionName): number {
     default:
       return 0.2;
   }
+}
+
+/**
+ * Whether the actor's current concentration is still doing something — a
+ * live condition it's sourcing on an active combatant (Dominate Person/Beast,
+ * Hold Person, Bless...) or a zone it's sustaining (Cloudkill, Spike Growth,
+ * Moonbeam). Casting another concentration action would silently break it
+ * (`breakConcentration` in combat.ts sweeps it away the instant the new one
+ * resolves), so candidates flagged `concentration` are filtered out while
+ * this is true — recasting Dominate Person while an earlier target is still
+ * dominated, or a fresh Bless over one still buffing the party, is never
+ * worth the trade. Once the sustained effect ends on its own (save, death,
+ * a failed concentration check), this goes false and the AI is free to cast
+ * a new one.
+ */
+function hasWorkingConcentrationEffect(snapshot: EncounterSnapshot, actor: CombatantState): boolean {
+  if (!actor.concentration) {
+    return false;
+  }
+  const sustainsCondition = snapshot.combatants.some((combatant) =>
+    combatant.state === "active"
+    && (combatant.conditions ?? []).some((condition) => condition.concentration && condition.sourceCombatantId === actor.id));
+  if (sustainsCondition) {
+    return true;
+  }
+  return (snapshot.activeZones ?? []).some((zone) => zone.concentration && zone.sourceCombatantId === actor.id);
 }
 
 /** Best-guess ability driving a rider's save DC when it has none of its own — mirrors the parent action's own DC-driving ability. */

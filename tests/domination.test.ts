@@ -224,6 +224,49 @@ describe("domination — AI valuation", () => {
 
     expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.conditions?.some((c) => c.name === "dominated")).toBe(true);
   });
+
+  it("does not recast a concentration spell on a new target while an earlier domination is still live", () => {
+    const encounter = baseEncounter("domination-retention");
+    const archer = encounter.combatants.find((c) => c.id === "pc-archer")!;
+    archer.tacticsProfile = "controller";
+    archer.position = { x: 1, y: 1 };
+    archer.concentration = { sourceConditionId: "dominated-test" };
+
+    const goblin1 = encounter.combatants.find((c) => c.id === "enemy-goblin-1")!;
+    goblin1.position = { x: 1, y: 2 };
+    goblin1.conditions = [{ id: "dominated-test", name: "dominated", sourceCombatantId: "pc-archer", startedRound: 1, concentration: true }];
+
+    const goblin2 = encounter.combatants.find((c) => c.id === "enemy-goblin-2")!;
+    goblin2.position = { x: 1, y: 3 };
+
+    const archerDef = encounter.definitions.find((d) => d.id === "def-archer")!;
+    archerDef.actions = [
+      {
+        kind: "save", id: "dominate-test", name: "Dominate Person", actionType: "action",
+        saveAbility: "wis", dc: 15, range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+        riders: [{
+          kind: "condition", when: "on-save-fail", condition: "dominated",
+          duration: { kind: "save-ends", saveAt: "turn-end" },
+          save: { ability: "wis", onSuccess: "negates" }
+        }],
+        automationSupport: "full"
+      },
+      {
+        kind: "attack", id: "weak-attack-test", name: "Sling", actionType: "action", attackType: "ranged",
+        ability: "dex", attackBonus: 0, range: 80, damage: [{ dice: "1d4", damageType: "bludgeoning" }],
+        automationSupport: "full"
+      }
+    ];
+
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1] }); // the dominate save would fail if the AI (wrongly) recast it
+    takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
+
+    // goblin2 was never dominated — the AI didn't spend its turn recasting the concentration spell.
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-2")!.conditions?.some((c) => c.name === "dominated") ?? false).toBe(false);
+    // goblin1's domination survived the turn: concentration was never broken to cast something new.
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.conditions?.some((c) => c.name === "dominated")).toBe(true);
+  });
 });
 
 describe("domination — import normalization", () => {
