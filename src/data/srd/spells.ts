@@ -1000,6 +1000,343 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
     }
   },
+  // ── Broader SRD coverage pass — remaining attack/save/area-save spells ────
+  // A data-entry sweep of the SRD spell list for entries that fit shapes the
+  // engine already supports (attack, save, area-save + condition/push riders).
+  // Some are simplified from RAW where the real mechanic needs machinery this
+  // pass doesn't add (an ongoing per-round zone, a multi-cube freeform shape,
+  // a DM-choice branch table) — each such spell says so in its `description`.
+  {
+    id: "srd:spell:acid-splash", name: "Acid Splash", level: 0, school: "conjuration", castingTime: "action", range: 60, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:acid-splash:action", name: "Acid Splash", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "1d6", damageType: "acid", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d6" }, { atLevel: 11, dice: "3d6" }, { atLevel: 17, dice: "4d6" }] } }],
+      halfDamageOnSuccess: false, onSuccess: "negates", automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:produce-flame", name: "Produce Flame", level: 0, school: "conjuration", castingTime: "action", range: 30, automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:produce-flame:action", name: "Produce Flame", actionType: "action", attackType: "ranged",
+      ability: "wis", range: 30,
+      damage: [{ dice: "1d8", damageType: "fire", magical: true, scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "2d8" }, { atLevel: 11, dice: "3d8" }, { atLevel: 17, dice: "4d8" }] } }],
+      automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:bane", name: "Bane", level: 1, school: "enchantment", castingTime: "action", range: 30, concentration: true,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    description: "Approximates the real -1d4 attack/save penalty as a flat -2, same simplification this library already uses for Bless's +2.",
+    action: {
+      kind: "save", id: "srd:spell:bane:action", name: "Bane", actionType: "action",
+      saveAbility: "cha", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 30,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: { custom: "bane" },
+        duration: { kind: "rounds", rounds: 10 },
+        save: { ability: "cha", onSuccess: "negates" },
+        modifiers: { attackRoll: -2, savingThrows: { str: -2, dex: -2, con: -2, int: -2, wis: -2, cha: -2 } }
+      }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:entangle", name: "Entangle", level: 1, school: "conjuration", castingTime: "action", range: 90, concentration: true,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:entangle:action", name: "Entangle", actionType: "action",
+      saveAbility: "str", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 90,
+      area: { type: "square", size: 20 }, targeting: { origin: "point", range: 90 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "restrained", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" }, save: { ability: "str", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:grease", name: "Grease", level: 1, school: "conjuration", castingTime: "action", range: 60, automationSupport: "full",
+    description: "The difficult-terrain half of Grease isn't modeled — only the initial knockdown.",
+    action: {
+      kind: "area-save", id: "srd:spell:grease:action", name: "Grease", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 60,
+      area: { type: "square", size: 10 }, targeting: { origin: "point", range: 60 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "prone", duration: { kind: "rounds", rounds: 1 }, save: { ability: "dex", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:hideous-laughter", name: "Hideous Laughter", level: 1, school: "enchantment", castingTime: "action", range: 30, concentration: true,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:hideous-laughter:action", name: "Hideous Laughter", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 30,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:blindness-deafness", name: "Blindness/Deafness", level: 2, school: "necromancy", castingTime: "action", range: 30,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    description: "Always blinds (the stronger of the spell's two options) rather than offering blinded-or-deafened.",
+    action: {
+      kind: "save", id: "srd:spell:blindness-deafness:action", name: "Blindness/Deafness", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 30,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "blinded", duration: { kind: "rounds", rounds: 10 }, save: { ability: "con", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:gust-of-wind", name: "Gust of Wind", level: 2, school: "evocation", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:gust-of-wind:action", name: "Gust of Wind", actionType: "action",
+      saveAbility: "str", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      area: { type: "rectangle", size: 60, width: 10 }, targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "push", when: "on-save-fail", distance: 15 }],
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:heat-metal", name: "Heat Metal", level: 2, school: "transmutation", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
+    description: "Simplified to a single burst on cast — RAW lets the caster re-scorch the object as a bonus action each later turn.",
+    action: {
+      kind: "save", id: "srd:spell:heat-metal:action", name: "Heat Metal", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "2d8", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", concentration: true,
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:shatter", name: "Shatter", level: 2, school: "evocation", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:shatter:action", name: "Shatter", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 60 },
+      damage: [{ dice: "3d8", damageType: "thunder", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:call-lightning", name: "Call Lightning", level: 3, school: "conjuration", castingTime: "action", range: 120, concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d10" } }, automationSupport: "full",
+    description: "Simplified to the initial strike on cast — RAW also lets the caster call down another bolt as an action on later turns.",
+    action: {
+      kind: "area-save", id: "srd:spell:call-lightning:action", name: "Call Lightning", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 120,
+      area: { type: "circle", size: 5 }, targeting: { origin: "point", range: 120 },
+      damage: [{ dice: "3d10", damageType: "lightning", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", concentration: true,
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:slow", name: "Slow", level: 3, school: "transmutation", castingTime: "action", range: 120, concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full",
+    description: "The real -1d4 to-hit/DEX-save penalty and halved speed are approximated as flat modifiers.",
+    action: {
+      kind: "area-save", id: "srd:spell:slow:action", name: "Slow", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 120,
+      area: { type: "square", size: 40 }, targeting: { origin: "point", range: 120 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{
+        kind: "condition", when: "on-save-fail", condition: { custom: "slowed" },
+        duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
+        save: { ability: "wis", onSuccess: "negates" },
+        modifiers: { armorClass: -2, savingThrows: { dex: -2 }, deniesReactions: true, movementMultiplier: 2 }
+      }],
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:stinking-cloud", name: "Stinking Cloud", level: 3, school: "conjuration", castingTime: "action", range: 90, concentration: true,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full",
+    description: "Simplified to a single cast-time application — RAW re-rolls the save for everyone still inside at the start of each of their turns.",
+    action: {
+      kind: "area-save", id: "srd:spell:stinking-cloud:action", name: "Stinking Cloud", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 90,
+      area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 90 },
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "poisoned", duration: { kind: "until-start-of-next-turn" }, save: { ability: "con", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:black-tentacles", name: "Black Tentacles", level: 4, school: "conjuration", castingTime: "action", range: 90, concentration: true,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    description: "Simplified to a single cast-time strike — RAW also damages anyone who starts their turn in the area or is already restrained.",
+    action: {
+      kind: "area-save", id: "srd:spell:black-tentacles:action", name: "Black Tentacles", actionType: "action",
+      saveAbility: "str", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 90,
+      area: { type: "square", size: 20 }, targeting: { origin: "point", range: 90 },
+      damage: [{ dice: "3d6", damageType: "bludgeoning", magical: true }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "restrained", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" }, save: { ability: "str", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:ice-storm", name: "Ice Storm", level: 4, school: "evocation", castingTime: "action", range: 300,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:ice-storm:action", name: "Ice Storm", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 300,
+      area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 300 },
+      damage: [{ dice: "2d8", damageType: "bludgeoning", magical: true }, { dice: "4d6", damageType: "cold", magical: true }],
+      halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:flame-strike", name: "Flame Strike", level: 5, school: "evocation", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:flame-strike:action", name: "Flame Strike", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 60 },
+      damage: [{ dice: "4d6", damageType: "fire", magical: true }, { dice: "4d6", damageType: "radiant", magical: true }],
+      halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:hold-monster", name: "Hold Monster", level: 5, school: "enchantment", castingTime: "action", range: 90, concentration: true,
+    resourceCost: { resourceId: "slot-5", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:hold-monster:action", name: "Hold Monster", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 90,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "paralyzed", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:chain-lightning", name: "Chain Lightning", level: 6, school: "evocation", castingTime: "action", range: 150,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full",
+    description: "The bolt's arc to three more targets within 30 ft of the first is approximated as one 30-ft blast radius.",
+    action: {
+      kind: "area-save", id: "srd:spell:chain-lightning:action", name: "Chain Lightning", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 150,
+      area: { type: "circle", size: 30 }, targeting: { origin: "point", range: 150 },
+      damage: [{ dice: "10d8", damageType: "lightning", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:circle-of-death", name: "Circle of Death", level: 6, school: "necromancy", castingTime: "action", range: 150,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "2d6" } }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:circle-of-death:action", name: "Circle of Death", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 150,
+      area: { type: "circle", size: 60 }, targeting: { origin: "point", range: 150 },
+      damage: [{ dice: "8d6", damageType: "necrotic", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:disintegrate", name: "Disintegrate", level: 6, school: "transmutation", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "3d6" } }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:disintegrate:action", name: "Disintegrate", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "10d6+40", damageType: "force", magical: true }], halfDamageOnSuccess: true, onSuccess: "half",
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:freezing-sphere", name: "Freezing Sphere", level: 6, school: "evocation", castingTime: "action", range: 300,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d6" } }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:freezing-sphere:action", name: "Freezing Sphere", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 300,
+      area: { type: "circle", size: 60 }, targeting: { origin: "point", range: 300 },
+      damage: [{ dice: "10d6", damageType: "cold", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:harm", name: "Harm", level: 6, school: "necromancy", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:harm:action", name: "Harm", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      damage: [{ dice: "14d6", damageType: "necrotic", magical: true }], halfDamageOnSuccess: true, onSuccess: "half",
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:sunbeam", name: "Sunbeam", level: 6, school: "evocation", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:sunbeam:action", name: "Sunbeam", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      area: { type: "rectangle", size: 60, width: 10 }, targeting: { origin: "self", aimedFromSelf: true, range: 0 },
+      damage: [{ dice: "6d8", damageType: "radiant", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "blinded", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" }, save: { ability: "con", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:fire-storm", name: "Fire Storm", level: 7, school: "evocation", castingTime: "action", range: 150,
+    resourceCost: { resourceId: "slot-7", amount: 1 }, automationSupport: "full",
+    description: "RAW lets the caster freely arrange up to ten 10-ft cubes; approximated here as one fixed square.",
+    action: {
+      kind: "area-save", id: "srd:spell:fire-storm:action", name: "Fire Storm", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 150,
+      area: { type: "square", size: 20 }, targeting: { origin: "point", range: 150 },
+      damage: [{ dice: "7d10", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-7", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:finger-of-death", name: "Finger of Death", level: 7, school: "necromancy", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-7", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:finger-of-death:action", name: "Finger of Death", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [{ dice: "7d8+30", damageType: "necrotic", magical: true }], halfDamageOnSuccess: true, onSuccess: "half",
+      resourceCost: { resourceId: "slot-7", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:dominate-monster", name: "Dominate Monster", level: 8, school: "enchantment", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full",
+    description: "Dominate Person/Beast without the creature-type restriction — works on anything.",
+    action: {
+      kind: "save", id: "srd:spell:dominate-monster:action", name: "Dominate Monster", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60,
+      damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "dominated", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:sunburst", name: "Sunburst", level: 8, school: "evocation", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "area-save", id: "srd:spell:sunburst:action", name: "Sunburst", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
+      area: { type: "circle", size: 60 }, targeting: { origin: "self", range: 0 },
+      damage: [{ dice: "12d6", damageType: "radiant", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "blinded", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" }, save: { ability: "con", onSuccess: "negates" } }],
+      resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:meteor-swarm", name: "Meteor Swarm", level: 9, school: "evocation", castingTime: "action", range: 5280,
+    resourceCost: { resourceId: "slot-9", amount: 1 }, automationSupport: "full",
+    description: "RAW drops four separate 40-ft-radius spheres at chosen points; approximated here as a single blast.",
+    action: {
+      kind: "area-save", id: "srd:spell:meteor-swarm:action", name: "Meteor Swarm", actionType: "action",
+      saveAbility: "dex", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 5280,
+      area: { type: "circle", size: 40 }, targeting: { origin: "point", range: 5280 },
+      damage: [{ dice: "20d6", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all",
+      resourceCost: { resourceId: "slot-9", amount: 1 }, automationSupport: "full"
+    }
+  },
   // ── Reaction spells (phase 6) ─────────────────────────────────────────────
   {
     id: "srd:spell:hellish-rebuke", name: "Hellish Rebuke", level: 1, school: "evocation", castingTime: "reaction", range: 60,
