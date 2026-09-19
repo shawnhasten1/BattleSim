@@ -491,6 +491,84 @@ describe("combat engine", () => {
     expect(state.snapshot.combatants.find((combatant) => combatant.id === "target")?.currentHp).toBe(17);
   });
 
+  describe("damageTypeOptions (Zealot Divine Fury)", () => {
+    function furyEncounter(targetAdjustments: NonNullable<EncounterSnapshot["definitions"][number]["damageAdjustments"]>): EncounterSnapshot {
+      const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
+      encounter.seed = "divine-fury";
+      encounter.map.walls = [];
+      encounter.definitions.push({
+        id: "def-dummy",
+        name: "Dummy",
+        source: { provider: "homebrew" },
+        size: "medium",
+        armorClass: 1,
+        maxHp: 200,
+        speed: 0,
+        abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+        damageAdjustments: targetAdjustments,
+        actions: []
+      });
+      encounter.combatants = [
+        { id: "attacker", definitionId: "def-fighter", displayName: "Attacker", faction: "party", position: { x: 1, y: 1 }, currentHp: 32, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" },
+        { id: "target", definitionId: "def-dummy", displayName: "Target", faction: "enemy", position: { x: 2, y: 1 }, currentHp: 200, tempHp: 0, state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced" }
+      ];
+      const action = encounter.definitions.find((definition) => definition.id === "def-fighter")?.actions[0];
+      if (action?.kind === "attack") {
+        action.attackBonus = 100;
+        action.damage = [{ dice: "1", damageType: "slashing" }];
+      }
+      const fighter = encounter.definitions.find((definition) => definition.id === "def-fighter");
+      if (fighter) {
+        fighter.features = [{
+          id: "divine-fury",
+          name: "Divine Fury",
+          category: "feature",
+          automationSupport: "full",
+          effects: [{
+            kind: "damage-bonus",
+            oncePerTurn: true,
+            attackTypes: ["melee", "ranged"],
+            damage: [{ dice: "1d6", damageType: "radiant", damageTypeOptions: ["radiant", "necrotic"] }]
+          }]
+        }];
+      }
+      return encounter;
+    }
+
+    function furyTypes(state: ReturnType<typeof createEngineState>): string[] {
+      return state.log
+        .filter((entry) => entry.type === "DamageApplied")
+        .flatMap((entry) => (entry.data?.components as Array<{ damageType: string; sourceFeatureId?: string }>)
+          .filter((component) => component.sourceFeatureId === "divine-fury")
+          .map((component) => component.damageType));
+    }
+
+    it("uses the first listed type when the target has no relevant resistance", () => {
+      const state = createEngineState(furyEncounter([]));
+      resolveAttack(state, "attacker", "target", "longsword");
+      expect(furyTypes(state)).toEqual(["radiant"]);
+    });
+
+    it("switches to the other type when the target resists the first", () => {
+      const state = createEngineState(furyEncounter([{ type: "resistance", damageType: "radiant" }]));
+      resolveAttack(state, "attacker", "target", "longsword");
+      expect(furyTypes(state)).toEqual(["necrotic"]);
+    });
+
+    it("prefers a vulnerable type, and fires only once per turn", () => {
+      const state = createEngineState(furyEncounter([{ type: "vulnerability", damageType: "necrotic" }]));
+      const fighter = state.snapshot.definitions.find((definition) => definition.id === "def-fighter");
+      const longsword = fighter?.actions.find((action) => action.id === "longsword");
+      if (fighter && longsword?.kind === "attack") {
+        fighter.actions.push({ ...structuredClone(longsword), id: "offhand", name: "Offhand", actionType: "bonus" });
+      }
+      resolveAttack(state, "attacker", "target", "longsword");
+      resolveAttack(state, "attacker", "target", "offhand");
+      expect(state.log.filter((entry) => entry.type === "DamageApplied")).toHaveLength(2);
+      expect(furyTypes(state)).toEqual(["necrotic"]);
+    });
+  });
+
   it("declares the selected action before resolving attack results", () => {
     const encounter: EncounterSnapshot = structuredClone(sampleEncounter);
     encounter.seed = "action-log";

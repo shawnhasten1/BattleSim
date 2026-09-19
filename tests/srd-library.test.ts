@@ -135,7 +135,7 @@ describe("SRD library — lookup & search", () => {
     expect(weaponsOnly).toContain("srd:weapon:dagger-of-venom");
 
     const featuresOnly = searchSrd("rage", "feature").map((result) => result.id);
-    expect(featuresOnly).toEqual(["srd:feature:rage"]);
+    expect(featuresOnly).toEqual(["srd:feature:rage", "srd:feature:rage-bear-totem", "srd:feature:rage-zealot"]);
     expect(findSrdFeature("srd:feature:cunning-action")?.name).toBe("Cunning Action");
 
     expect(searchSrd("").length).toBe(SRD_WEAPONS.length + SRD_SPELLS.length + SRD_FEATURES.length);

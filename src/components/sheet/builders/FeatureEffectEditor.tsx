@@ -233,6 +233,27 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
           </select>
         </div>
         <div className={styles.riderRow}>
+          <span className={styles.fieldInlineLabel}>Or choose per hit (the type the target resists least)</span>
+          <div className={styles.damageAmount}>
+            {DAMAGE_TYPES.map((t) => {
+              const options = first.damageTypeOptions ?? [];
+              return (
+                <label key={t} className={styles.fieldInlineLabel}>
+                  <input
+                    type="checkbox"
+                    checked={options.includes(t)}
+                    onChange={(e) => {
+                      const next = e.target.checked ? [...options, t] : options.filter((o) => o !== t);
+                      set({ ...effect, damage: [{ ...first, damageTypeOptions: next.length > 1 ? next : undefined }] });
+                    }}
+                  />
+                  {t}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div className={styles.riderRow}>
           <ScopeSelect value={effect.attackTypes} onChange={(attackTypes) => set({ ...effect, attackTypes })} />
           <label className={styles.fieldInlineLabel}>
             Ability

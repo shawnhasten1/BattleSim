@@ -2404,11 +2404,14 @@ function applyDamageEntries(
     // `component.dice` is canonical and already carries any flat "+K" (mirrored by `flatBonus`), so it is not added again here.
     const formulaBonus = resolveNumericFormula(component.bonusFormula, damageSource);
     const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
-    const damageType = resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
+    const targetAdjustments = damageAdjustmentsFor(targetDefinition, target);
+    const damageType = component.damageTypeOptions?.length
+      ? bestDamageTypeOption(component.damageTypeOptions, targetAdjustments, component.magical === true)
+      : resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
     const adjusted = adjustDamage(
       roll.total + formulaBonus,
       damageType,
-      damageAdjustmentsFor(targetDefinition, target),
+      targetAdjustments,
       component.magical === true
     );
     const finalAmount = entry.halve ? Math.floor(adjusted / 2) : adjusted;
@@ -2709,6 +2712,24 @@ function adjustDamage(
     return amount * 2;
   }
   return amount;
+}
+
+/** Of the wielder's damage-type choices, the one that gets through `adjustments` best; ties go to the first listed. */
+function bestDamageTypeOption(
+  options: DamageType[],
+  adjustments: CreatureDefinition["damageAdjustments"],
+  isMagical: boolean
+): DamageType {
+  let best = options[0];
+  let bestAmount = adjustDamage(1000, best, adjustments, isMagical);
+  for (const option of options.slice(1)) {
+    const amount = adjustDamage(1000, option, adjustments, isMagical);
+    if (amount > bestAmount) {
+      best = option;
+      bestAmount = amount;
+    }
+  }
+  return best;
 }
 
 function resolveDamageTypeReference(damageType: DamageTypeReference, triggerDamageType: DamageType | undefined): DamageType {

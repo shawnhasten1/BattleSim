@@ -49,6 +49,73 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     ]
   },
   {
+    id: "srd:feature:rage-bear-totem",
+    name: "Rage (Totem Warrior: Bear)",
+    category: "feature",
+    automationSupport: "full",
+    description:
+      "Bonus action: rage for 1 minute — advantage on Strength checks and saves, +2 damage on Strength melee attacks, and (Bear Totem Spirit) resistance to every damage type except psychic.",
+    grantedActions: [
+      {
+        kind: "activate-feature",
+        id: "activate",
+        name: "Rage (Bear)",
+        actionType: "bonus",
+        featureId: "srd:feature:rage-bear-totem",
+        resourceCost: { resourceId: "rage", amount: 1 },
+        condition: {
+          id: "rage-active",
+          name: "custom",
+          durationRounds: 10,
+          effects: [
+            { kind: "damage-bonus", attackTypes: ["melee"], abilities: ["str"], damage: [{ dice: "2", damageType: "same-as-attack" }] },
+            ...(["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "radiant", "slashing", "thunder"] as const)
+              .map((damageType) => ({ kind: "damage-adjustment" as const, adjustment: { type: "resistance" as const, damageType } })),
+            { kind: "save-advantage", ability: "str" }
+          ]
+        },
+        automationSupport: "full"
+      }
+    ]
+  },
+  {
+    id: "srd:feature:rage-zealot",
+    name: "Rage (Zealot)",
+    category: "feature",
+    automationSupport: "full",
+    description:
+      "Bonus action: rage for 1 minute — advantage on Strength checks and saves, +2 damage on Strength melee attacks, and resistance to bludgeoning, piercing, and slashing. Divine Fury: once per turn, a weapon hit deals an extra 1d6+2 radiant or necrotic damage (the type that gets past the target's resistances).",
+    grantedActions: [
+      {
+        kind: "activate-feature",
+        id: "activate",
+        name: "Rage (Zealot)",
+        actionType: "bonus",
+        featureId: "srd:feature:rage-zealot",
+        resourceCost: { resourceId: "rage", amount: 1 },
+        condition: {
+          id: "rage-active",
+          name: "custom",
+          durationRounds: 10,
+          effects: [
+            { kind: "damage-bonus", attackTypes: ["melee"], abilities: ["str"], damage: [{ dice: "2", damageType: "same-as-attack" }] },
+            {
+              kind: "damage-bonus",
+              oncePerTurn: true,
+              attackTypes: ["melee", "ranged"],
+              damage: [{ dice: "1d6+2", damageType: "radiant", damageTypeOptions: ["radiant", "necrotic"] }]
+            },
+            { kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "bludgeoning" } },
+            { kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "piercing" } },
+            { kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "slashing" } },
+            { kind: "save-advantage", ability: "str" }
+          ]
+        },
+        automationSupport: "full"
+      }
+    ]
+  },
+  {
     id: "srd:feature:reckless-attack",
     name: "Reckless Attack",
     category: "feature",

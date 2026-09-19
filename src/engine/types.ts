@@ -261,6 +261,13 @@ export interface DamageComponent {
    */
   flatBonus?: number;
   damageType: DamageTypeReference;
+  /**
+   * The wielder picks one of these each time the component deals damage (Zealot's
+   * Divine Fury: radiant or necrotic). Resolved per target in `applyDamageEntries`
+   * — the type that gets through the target's resistances best, ties going to the
+   * earliest listed. `damageType` stays as the fallback / display type.
+   */
+  damageTypeOptions?: DamageType[];
   abilityModifier?: Ability;
   bonusFormula?: NumericFormula;
   /**
@@ -1442,6 +1449,7 @@ export const damageComponentSchema = z.object({
   diceSize: z.number().int().positive().optional(),
   flatBonus: z.number().optional(),
   damageType: z.string().min(1),
+  damageTypeOptions: z.array(z.string().min(1)).optional(),
   abilityModifier: abilitySchema.optional(),
   bonusFormula: numericFormulaSchema.optional(),
   magical: z.boolean().optional(),
