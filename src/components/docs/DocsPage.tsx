@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, LayoutGrid, Swords } from "lucide-react";
+import type { GuideSummary } from "@/lib/guides";
 import styles from "./docs.module.css";
 
 interface Section {
@@ -532,7 +533,7 @@ const SECTIONS: Section[] = [
   }
 ];
 
-export function DocsPage() {
+export function DocsPage({ guides = [] }: { guides?: GuideSummary[] }) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -576,6 +577,12 @@ export function DocsPage() {
               className={section.id === activeId ? styles.navItemActive : styles.navItem}
             >
               {section.label}
+            </a>
+          ))}
+          {guides.length > 0 && <span className={styles.navHeading}>Guides</span>}
+          {guides.map((g) => (
+            <a key={g.slug} href={`/docs/guides/${g.slug}`} className={styles.navItem}>
+              {g.title}
             </a>
           ))}
         </nav>
