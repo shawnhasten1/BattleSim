@@ -28,6 +28,9 @@ import {
   type GridPoint
 } from "@/components/scene/coords";
 
+/** Pointer travel (screen px) before a pressed wall node counts as a drag, not a click. */
+const NODE_DRAG_THRESHOLD_PX = 4;
+
 interface UseSceneInteractionArgs {
   /** From `useViewport` — the map handlers no-op while a pan is happening. */
   isPanning: boolean;
@@ -97,6 +100,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const dragGrabRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dropTimerRef = useRef<number | null>(null);
   const suppressNextMapClickRef = useRef(false);
+  // A wall node pressed with no chain in progress. It only becomes a node drag
+  // once the pointer travels past NODE_DRAG_THRESHOLD_PX; released before that,
+  // it's a click and starts a wall chain from the node.
+  const nodePressRef = useRef<{ node: GridPoint; clientX: number; clientY: number } | null>(null);
 
   // Board multi-selection of tokens. Plain click replaces, Shift+click toggles.
   // The store keeps a single `selectedCombatantId` (the "primary" — drives the
@@ -665,7 +672,14 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     }
     const point = getSnappedWallPoint(event.currentTarget, event.clientX, event.clientY, cellSize, grid.width, grid.height);
     setWallCursorPoint(point);
-    if (draggingWallNode) {
+    const press = nodePressRef.current;
+    const promoted =
+      draggingWallNode ||
+      (press != null && Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY) > NODE_DRAG_THRESHOLD_PX);
+    if (promoted && !draggingWallNode) {
+      setDraggingWallNode(true);
+    }
+    if (promoted) {
       setWallDragPoint(point);
     }
   }
@@ -723,6 +737,20 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       }, 50);
       return;
     }
+    const press = nodePressRef.current;
+    nodePressRef.current = null;
+    if (press && !draggingWallNode) {
+      // Released without dragging: a click on the node starts a chain from it.
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      setWallDragPoint(null);
+      handleMapClick(press.node);
+      window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+      }, 50);
+      return;
+    }
     if (!draggingWallNode || !selectedWallNode || !wallDragPoint) {
       return;
     }
@@ -739,7 +767,12 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   }
 
   function onWallNodePointerDown(event: PointerEvent<SVGCircleElement>, node: GridPoint) {
-    if (tool !== "wall") {
+    if (tool !== "wall" || event.button !== 0) {
+      return;
+    }
+    if (pendingWallStart && !event.shiftKey) {
+      // Mid-chain a node is just a snap point: let the press fall through so the
+      // map click connects the wall to it instead of grabbing the node.
       return;
     }
     event.preventDefault();
@@ -752,7 +785,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     }
     selectNode(node, false);
     event.currentTarget.ownerSVGElement?.parentElement?.setPointerCapture?.(event.pointerId);
-    setDraggingWallNode(true);
+    // Not a drag yet — see nodePressRef.
+    nodePressRef.current = { node, clientX: event.clientX, clientY: event.clientY };
     setWallDragPoint(node);
   }
 

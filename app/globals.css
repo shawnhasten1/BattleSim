@@ -589,6 +589,12 @@ img {
   pointer-events: all;
 }
 
+/* In the Wall tool terrain is just backdrop: picking it would swallow the
+   clicks that place / connect wall points over a painted tile. */
+.terrain.passive {
+  pointer-events: none;
+}
+
 .terrain.normal,
 .terrain.custom {
   fill: rgba(40, 114, 119, 0.18);
@@ -750,18 +756,32 @@ img {
   fill: #fff;
   stroke: #29251f;
   stroke-width: 0.045;
-  cursor: grab;
+  pointer-events: none;
+}
+
+/* Bigger invisible target; the visible dot above only reacts through its group. */
+.wall-node-hit {
+  fill: transparent;
+  cursor: pointer;
   pointer-events: all;
 }
 
-.wall-node:hover,
+.wall-node-group:hover .wall-node,
 .wall-node.selected {
   fill: var(--ui-accent-soft);
   stroke: #fff;
+  stroke-width: 0.06;
 }
 
-.wall-node:active {
+.wall-node-group:active .wall-node-hit {
   cursor: grabbing;
+}
+
+/* Mid-chain, nodes and wall bodies are plain snap points: clicks fall through
+   to the map so the segment connects instead of grabbing/selecting them. */
+.wall-node-group.drawing .wall-node-hit,
+.wall-hit.drawing {
+  pointer-events: none;
 }
 
 .target-line {

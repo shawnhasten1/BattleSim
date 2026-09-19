@@ -88,7 +88,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
         <polygon
           key={zone.id}
           points={zone.polygon.map((point) => `${point.x},${point.y}`).join(" ")}
-          className={`terrain ${zone.type} ${zone.movementMultiplier === 4 ? "terrain-x4" : ""} ${zone.tags?.[0] ? `hazard-${zone.tags[0]}` : ""} ${selectedTerrainIds.includes(zone.id) ? "selected" : ""}`}
+          className={`terrain ${tool === "wall" ? "passive" : ""} ${zone.type} ${zone.movementMultiplier === 4 ? "terrain-x4" : ""} ${zone.tags?.[0] ? `hazard-${zone.tags[0]}` : ""} ${selectedTerrainIds.includes(zone.id) ? "selected" : ""}`}
           onClick={(event) => {
             event.stopPropagation();
             selectTerrain(zone.id, event.shiftKey);
@@ -195,7 +195,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
               y1={wall.start.y}
               x2={wall.end.x}
               y2={wall.end.y}
-              className="wall-hit"
+              className={`wall-hit ${pendingWallStart ? "drawing" : ""}`}
               onClick={(event) => {
                 event.stopPropagation();
                 selectWall(wall.id, event.shiftKey);
@@ -232,19 +232,22 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           selectedWallNodes.some((selected) => pointsMatch(selected, node)) ||
           (draggingWallNode && wallDragPoint != null && pointsMatch(wallDragPoint, node));
         return (
-          <circle
-            key={`${node.x}-${node.y}`}
-            cx={node.x}
-            cy={node.y}
-            r="0.11"
-            className={`wall-node ${nodeSelected ? "selected" : ""}`}
-            onPointerDown={(event) => onWallNodePointerDown(event, node)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              openNodeMenu(node, event.clientX, event.clientY);
-            }}
-          />
+          <g key={`${node.x}-${node.y}`} className={`wall-node-group ${pendingWallStart ? "drawing" : ""}`}>
+            <circle cx={node.x} cy={node.y} r="0.11" className={`wall-node ${nodeSelected ? "selected" : ""}`} />
+            {/* Oversized transparent target so branching off a node is easy to hit. */}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r="0.25"
+              className="wall-node-hit"
+              onPointerDown={(event) => onWallNodePointerDown(event, node)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openNodeMenu(node, event.clientX, event.clientY);
+              }}
+            />
+          </g>
         );
       })}
       {!replaying && selectedCombatant && nearestEnemy ? (

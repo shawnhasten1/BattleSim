@@ -136,6 +136,11 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
             <Trash2 size={13} /> Last terrain
           </button>
         </div>
+        {tool === "wall" ? (
+          <p className={styles.readoutDim}>
+            Click a node to start or connect a wall. Drag a node to move it. Enter or right-click to finish.
+          </p>
+        ) : null}
         <p className={styles.readout}>
           {toolReadout(tool, measuredDistance, measuredPathCostFeet, measuredPath?.reachable)}
         </p>

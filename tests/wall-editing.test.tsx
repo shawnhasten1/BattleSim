@@ -223,6 +223,87 @@ describe("multi-select — selectWall / selectNode / clearWallSelection", () => 
   });
 });
 
+describe("wall tool — click a node to connect / branch, drag to move", () => {
+  const cell = 70; // DEFAULT_GRID_VISUALS.squareSizePx fallback is read from the encounter grid
+  const mapEl = (): any => ({
+    clientWidth: 1000,
+    clientHeight: 1000,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 1000 }),
+    hasPointerCapture: () => false,
+    releasePointerCapture: () => {}
+  });
+  const nodeDown = (x = 100, y = 100, extra: object = {}) => ({
+    button: 0,
+    shiftKey: false,
+    clientX: x,
+    clientY: y,
+    pointerId: 1,
+    preventDefault: () => {},
+    stopPropagation: vi.fn(),
+    currentTarget: { ownerSVGElement: null },
+    ...extra
+  });
+  const wallCount = () => useEncounterStore.getState().encounter.map.walls.length;
+
+  it("click on a node with no chain starts a chain from it (no wall, no move)", () => {
+    const { result } = renderHook(() => SceneHook());
+    act(() => useEncounterStore.setState({ tool: "wall", pendingWallStart: null }));
+    const before = wallCount();
+    const node = { x: 5, y: 1 };
+
+    act(() => result.current.onWallNodePointerDown(nodeDown() as any, node));
+    act(() => result.current.onMapPointerUp({ currentTarget: mapEl(), pointerId: 1 } as any));
+
+    expect(useEncounterStore.getState().pendingWallStart).toEqual(node);
+    expect(wallCount()).toBe(before);
+    expect(result.current.draggingWallNode).toBe(false);
+  });
+
+  it("mid-chain, pressing a node falls through so the map click can connect to it", () => {
+    const { result } = renderHook(() => SceneHook());
+    act(() => useEncounterStore.setState({ tool: "wall", pendingWallStart: { x: 1, y: 1 } }));
+    const down = nodeDown();
+
+    act(() => result.current.onWallNodePointerDown(down as any, { x: 5, y: 1 }));
+
+    expect(down.stopPropagation).not.toHaveBeenCalled();
+    expect(result.current.selectedWallNodes).toEqual([]);
+    expect(result.current.draggingWallNode).toBe(false);
+  });
+
+  it("dragging a node past the threshold still moves it", () => {
+    const { result } = renderHook(() => SceneHook());
+    act(() => useEncounterStore.setState({ tool: "wall", pendingWallStart: null }));
+    const grid = useEncounterStore.getState().encounter.map.grid;
+    const size = grid.squareSizePx || cell;
+
+    act(() => result.current.onWallNodePointerDown(nodeDown(100, 100) as any, { x: 5, y: 1 }));
+    act(() =>
+      result.current.onMapPointerMove({
+        currentTarget: mapEl(),
+        clientX: 100 + size * 2,
+        clientY: 100,
+        pointerId: 1
+      } as any)
+    );
+    expect(result.current.draggingWallNode).toBe(true);
+
+    act(() => result.current.onMapPointerUp({ currentTarget: mapEl(), pointerId: 1 } as any));
+    expect(useEncounterStore.getState().pendingWallStart).toBeNull();
+    expect(result.current.draggingWallNode).toBe(false);
+  });
+
+  it("Shift+press still toggles the node selection without starting anything", () => {
+    const { result } = renderHook(() => SceneHook());
+    act(() => useEncounterStore.setState({ tool: "wall", pendingWallStart: null }));
+
+    act(() => result.current.onWallNodePointerDown(nodeDown(100, 100, { shiftKey: true }) as any, { x: 5, y: 1 }));
+
+    expect(result.current.selectedWallNodes).toEqual([{ x: 5, y: 1 }]);
+    expect(useEncounterStore.getState().pendingWallStart).toBeNull();
+  });
+});
+
 describe("store — plural wall actions", () => {
   const pristine = useEncounterStore.getState();
   afterEach(() => useEncounterStore.setState(pristine, true));
