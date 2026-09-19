@@ -120,7 +120,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
   const libraryResults = useMemo(() => {
     const kind = libKind === "all" ? undefined : libKind;
-    return libQuery.trim() ? searchSrd(libQuery, kind) : searchSrd("", kind).slice(0, 24);
+    return searchSrd(libQuery, kind);
   }, [libQuery, libKind]);
 
   function openEdit(target: EditTarget, initialDraft: BuilderDraft) {
