@@ -196,6 +196,43 @@
   min-width: 120px;
 }
 
+/* Damage bonus amount: kind, sign, NdM, flat — fixed, readable widths on one wrapping line. */
+.damageAmount {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 100%;
+}
+
+.damageAmount select,
+.damageAmount input {
+  font-size: 13px;
+  padding: 6px 8px;
+  flex: 0 0 auto;
+}
+
+.damageAmount select[aria-label="Sign"] {
+  width: 56px;
+}
+
+.damageAmount input[type="number"] {
+  width: 68px;
+}
+
+.damageAmount select[aria-label="Die size"] {
+  width: 72px;
+}
+
+.damageAmount .damageAmountKind {
+  min-width: 140px;
+}
+
+.damageAmount > span {
+  color: var(--ui-text-dim);
+  font-size: 13px;
+}
+
 .fieldInlineLabel {
   display: flex;
   flex-direction: column;

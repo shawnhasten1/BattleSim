@@ -469,8 +469,8 @@ function DamageAmount({ value, onChange }: { value: string; onChange: (dice: str
   };
 
   return (
-    <div className={styles.riderRow}>
-      <select aria-label="Bonus kind" value={mode} onChange={(e) => emit({ mode: e.target.value as DamageMode })}>
+    <div className={styles.damageAmount}>
+      <select aria-label="Bonus kind" className={styles.damageAmountKind} value={mode} onChange={(e) => emit({ mode: e.target.value as DamageMode })}>
         <option value="flat">Flat amount</option>
         <option value="dice">Extra dice</option>
         <option value="dice-flat">Extra dice + flat</option>
@@ -481,7 +481,7 @@ function DamageAmount({ value, onChange }: { value: string; onChange: (dice: str
       </select>
       {mode !== "flat" ? (
         <>
-          <input aria-label="Dice count" type="number" min={1} style={{ width: 44 }} value={count || 1} onChange={(e) => emit({ count: Math.max(1, Number(e.target.value) || 1) })} />
+          <input aria-label="Dice count" type="number" min={1} value={count || 1} onChange={(e) => emit({ count: Math.max(1, Number(e.target.value) || 1) })} />
           <span>d</span>
           <select aria-label="Die size" value={die} onChange={(e) => emit({ die: Number(e.target.value) })}>
             {[4, 6, 8, 10, 12, 20].map((s) => <option key={s} value={s}>{s}</option>)}
@@ -489,7 +489,7 @@ function DamageAmount({ value, onChange }: { value: string; onChange: (dice: str
         </>
       ) : null}
       {mode !== "dice" ? (
-        <input aria-label="Flat amount" type="number" min={0} style={{ width: 48 }} value={mode === "flat" ? (flat || 2) : flat} onChange={(e) => emit({ flat: Math.abs(Number(e.target.value) || 0) })} />
+        <input aria-label="Flat amount" type="number" min={0} value={mode === "flat" ? (flat || 2) : flat} onChange={(e) => emit({ flat: Math.abs(Number(e.target.value) || 0) })} />
       ) : null}
     </div>
   );
