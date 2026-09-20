@@ -1,6 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, gridDistance, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, footprintCells, gridDistance, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
@@ -1381,6 +1381,7 @@ export function resolveRepositionAction(
 
   const from = { ...mover.position };
   mover.position = { ...destination };
+  for (const inside of state.snapshot.combatants) if (inside.containedBy === mover.id) inside.position = { ...destination };
   state.log.push(event(state, "CombatantMoved", `${mover.displayName} teleports away`, {
     combatantId: mover.id,
     from,
@@ -2309,8 +2310,9 @@ function releaseHold(state: EngineState, victim: CombatantState, holderId: Id | 
 }
 
 /** Everyone a defeated / incapacitated holder was gripping is let go. */
-export function releaseHoldsBy(state: EngineState, holderId: Id): void {
+export function releaseHoldsBy(state: EngineState, holderId: Id, onlyVictimId?: Id): void {
   for (const victim of state.snapshot.combatants) {
+    if (onlyVictimId && victim.id !== onlyVictimId) continue;
     for (const condition of holdConditions(victim, holderId)) releaseHold(state, victim, holderId, condition.sourceId, "the holder let go");
   }
 }
@@ -2362,6 +2364,102 @@ function attemptEscape(state: EngineState, actor: CombatantState): void {
   if (success) releaseHold(state, actor, target.sourceCombatantId, target.sourceId, "escaped");
 }
 
+/* ─── Holds: swallowing ────────────────────────────────────────────────────── */
+
+const SWALLOW_SOURCE = "swallowed";
+
+/** A free cell as close to `origin` as possible for a creature of this footprint (spiralling out), or `origin` itself. */
+function nearestFreeCell(state: EngineState, origin: Point, footprint: number, ignoreId: Id): Point {
+  const occupied = state.snapshot.combatants
+    .filter((candidate) => candidate.id !== ignoreId && candidate.state !== "defeated" && !candidate.containedBy)
+    .flatMap((candidate) => footprintCells(candidate.position, sizeFootprint(getDefinition(state.snapshot, candidate).size)));
+  for (let radius = 1; radius <= 6; radius += 1) {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const cell = { x: origin.x + dx, y: origin.y + dy };
+        if (isFootprintLegal(state.snapshot.map, cell, footprint, occupied)) return cell;
+      }
+    }
+  }
+  return origin;
+}
+
+/** Swallows `target` if it fits, isn't saved against and (when required) is already held. */
+function applySwallow(
+  state: EngineState,
+  holder: CombatantState,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition,
+  rider: Extract<ActionRider, { kind: "swallow" }>,
+  actionId: Id
+): boolean {
+  if (target.containedBy) return false;
+  if (rider.maxSize && SIZE_ORDER.indexOf(targetDefinition.size) > SIZE_ORDER.indexOf(rider.maxSize)) return false;
+  if (rider.requiresHeld && holdConditions(target, holder.id).length === 0) return false;
+  const inside = state.snapshot.combatants.filter((candidate) => candidate.containedBy === holder.id).length;
+  if (inside >= (rider.capacity ?? 1)) return false;
+  if (rider.save) {
+    const save = rollSavingThrow(state, target, { ability: rider.save.ability, dc: rider.save.dc, kind: "rider" });
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${rider.save.ability.toUpperCase()} save against being swallowed`, {
+      attackerId: holder.id, targetId: target.id, actionId, saveRoll: save.roll, total: save.roll.total, dc: rider.save.dc, success: save.success, viaRider: true
+    }));
+    if (save.success) return false;
+  }
+  releaseHoldsBy(state, holder.id, target.id);
+  target.containedBy = holder.id;
+  target.containment = { damage: rider.damage, regurgitate: rider.regurgitate };
+  target.position = { ...holder.position };
+  for (const name of ["blinded", "restrained"] as const) {
+    applyCondition(state, target.id, {
+      id: `${target.id}:${actionId}:swallowed-${name}`, name, sourceId: SWALLOW_SOURCE, sourceCombatantId: holder.id,
+      startedRound: state.snapshot.round, modifiers: defaultConditionModifiers(name)
+    }, { force: true });
+  }
+  state.log.push(event(state, "Swallowed", `${holder.displayName} swallows ${target.displayName}`, { holderId: holder.id, targetId: target.id, actionId }));
+  return true;
+}
+
+/** Spits one swallowed creature out, prone, next to the swallower. */
+function expel(state: EngineState, holder: CombatantState, inside: CombatantState, why: string): void {
+  inside.containedBy = undefined;
+  inside.containment = undefined;
+  inside.conditions = (inside.conditions ?? []).filter((condition) => !(condition.sourceId === SWALLOW_SOURCE && condition.sourceCombatantId === holder.id));
+  inside.position = nearestFreeCell(state, holder.position, sizeFootprint(getDefinition(state.snapshot, inside).size), inside.id);
+  if (inside.state !== "defeated") {
+    applyCondition(state, inside.id, { id: `${inside.id}:expelled-prone`, name: "prone", startedRound: state.snapshot.round, modifiers: defaultConditionModifiers("prone") }, { force: true });
+  }
+  state.log.push(event(state, "Regurgitated", `${inside.displayName} is expelled by ${holder.displayName} (${why})`, { holderId: holder.id, targetId: inside.id, position: inside.position }));
+}
+
+function expelAll(state: EngineState, holder: CombatantState, why: string): void {
+  for (const inside of state.snapshot.combatants) if (inside.containedBy === holder.id) expel(state, holder, inside, why);
+}
+
+/** At the start of the swallower's turn: a fresh damage count, and the acid (or whatever) inside hurts. */
+function runContainmentAtTurnStart(state: EngineState, holder: CombatantState): void {
+  holder.insideDamage = undefined;
+  const holderDefinition = getDefinition(state.snapshot, holder);
+  for (const inside of state.snapshot.combatants.filter((candidate) => candidate.containedBy === holder.id)) {
+    if (inside.containment?.damage?.length) applyDamageComponents(state, inside, inside.containment.damage, holderDefinition, false, {}, holder.id);
+  }
+}
+
+/** Damage dealt to a swallower by something inside it adds up; past the threshold it must save or spit them out. */
+function checkRegurgitation(state: EngineState, holder: CombatantState, sourceId: Id | undefined, dealt: number): void {
+  const source = state.snapshot.combatants.find((candidate) => candidate.id === sourceId);
+  const rule = source?.containedBy === holder.id ? source.containment?.regurgitate : undefined;
+  if (!rule) return;
+  holder.insideDamage = (holder.insideDamage ?? 0) + dealt;
+  if (holder.insideDamage < rule.damage) return;
+  holder.insideDamage = undefined;
+  const save = rollSavingThrow(state, holder, { ability: "con", dc: rule.dc, kind: "feature" });
+  state.log.push(event(state, "SaveRolled", `${holder.displayName} rolled a CON save against regurgitating`, {
+    targetId: holder.id, saveRoll: save.roll, total: save.roll.total, dc: rule.dc, success: save.success
+  }));
+  if (!save.success) expelAll(state, holder, "regurgitated");
+}
+
 /** A legendary creature's points come back at the start of its own turn (and start the fight full). */
 export function refillLegendaryPoints(state: EngineState, actor: CombatantState): void {
   const legendary = getDefinition(state.snapshot, actor).legendary;
@@ -2374,6 +2472,7 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
   applyRegeneration(state, actor);
   refillLegendaryPoints(state, actor);
   runHoldsAtTurnStart(state, actor);
+  runContainmentAtTurnStart(state, actor);
   expireConditions(state, "start");
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");
@@ -2512,6 +2611,13 @@ function validateTargeting(
 ): void {
   if (target.state !== "active" && target.state !== "downed") {
     throw new Error("Target is not a legal active combatant");
+  }
+  // Someone swallowed can be attacked only by the swallower, and can attack only it.
+  if ((target.containedBy && target.containedBy !== attacker.id) || (attacker.containedBy && attacker.containedBy !== target.id)) {
+    throw new Error("Target is inside another creature");
+  }
+  if (action.kind === "attack" && action.requiresHeld && holdConditions(target, attacker.id).length === 0) {
+    throw new Error(`${target.displayName} isn't grappled by ${attacker.displayName}`);
   }
   const distance = gridDistance(attacker.position, target.position, snapshot.map.grid);
   const range = action.kind === "attack"
@@ -2699,6 +2805,7 @@ function applyDamageEntries(
   }));
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
+    checkRegurgitation(state, target, sourceId, totalApplied);
   }
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, components.filter((c) => c.finalAmount > 0).map((c) => c.damageType), entries.some((entry) => entry.critical)));
   return totalApplied;
@@ -2886,6 +2993,7 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
   target.state = "defeated";
   target.downedRegen = undefined;
   releaseHoldsBy(state, target.id);
+  expelAll(state, target, "the swallower died");
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
   breakConcentration(state, target.id);
   resolveDeathEffect(state, target.id, killerId);
@@ -2983,7 +3091,7 @@ export function runDownedTurn(state: EngineState, combatant: CombatantState): "r
 
 /** A creature that can be attacked as an enemy: fighting, or down but about to get back up. */
 export function isTargetable(combatant: CombatantState): boolean {
-  return combatant.state === "active" || (combatant.state === "downed" && combatant.downedRegen === true);
+  return !combatant.containedBy && (combatant.state === "active" || (combatant.state === "downed" && combatant.downedRegen === true));
 }
 
 /**
@@ -4259,6 +4367,10 @@ function applyActionRiders(
       outcome.healing += applyRiderHealing(state, recipient, sourceDefinition, rider.components);
     } else if (rider.kind === "push") {
       pushCombatant(state, target, rider.distance, ctx.origin ?? source.position);
+    } else if (rider.kind === "swallow") {
+      if (!applySwallow(state, source, target, targetDefinition, rider, ctx.actionId)) {
+        return;
+      }
     } else if (rider.kind === "hold") {
       if (!applyHold(state, source, target, targetDefinition, rider, ctx.actionId)) {
         return;
@@ -4869,6 +4981,7 @@ function moveAlongPath(
   }
   const movedCells = [cells[0] as Point];
   combatant.position = cells[0] as Point;
+  for (const inside of state.snapshot.combatants) if (inside.containedBy === combatant.id) inside.position = { ...(cells[0] as Point) };
   for (let index = 1; index < cells.length; index += 1) {
     const from = cells[index - 1] as Point;
     const to = cells[index] as Point;
@@ -4880,6 +4993,7 @@ function moveAlongPath(
       }
     }
     combatant.position = to;
+    for (const inside of state.snapshot.combatants) if (inside.containedBy === combatant.id) inside.position = { ...to };
     movedCells.push(to);
     applyZoneMovementDamage(state, combatant, to);
     if (combatant.state !== "active") {

@@ -153,10 +153,13 @@ describe("attack parser", () => {
     expect(attack.riders).toMatchObject([{ kind: "hold", escapeDc: 15, restrained: true }]);
   });
 
-  it("leaves a swallow as a reference note", () => {
+  it("compiles a swallow inside a bite into a swallow rider", () => {
     const gaps = new GapLog();
-    parseAttack(entry("Bite", "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 23 (3d8 + 10) piercing damage. If the target is a Large or smaller creature grappled by the kraken, that creature is swallowed, and the grapple ends."), ctx({ gaps }));
-    expect(gaps.codes()).toContain("HOLD_SWALLOW");
+    const result = parseAttack(entry("Bite", "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 23 (3d8 + 10) piercing damage. If the target is a Large or smaller creature grappled by the kraken, that creature is swallowed, and the grapple ends. While swallowed, the creature is blinded and restrained, it has total cover against attacks and other effects outside the kraken, and it takes 42 (12d6) acid damage at the start of each of the kraken's turns. If the kraken takes 50 damage or more on a single turn from a creature inside it, the kraken must succeed on a DC 25 Constitution saving throw at the end of that turn or regurgitate all swallowed creatures, which fall prone in a space within 10 feet of the kraken."), ctx({ gaps }))!;
+    expect((result.actions[0] as AttackActionDefinition).riders).toEqual([
+      { kind: "swallow", when: "on-hit", maxSize: "large", requiresHeld: true, damage: [{ dice: "12d6", damageType: "acid" }], regurgitate: { damage: 50, dc: 25 } }
+    ]);
+    expect(gaps.codes()).not.toContain("HOLD_SWALLOW");
   });
 
   it("compiles an attack whose only damage is save-gated (Spit Poison)", () => {

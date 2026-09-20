@@ -202,6 +202,26 @@ function applyEvent(
       return;
     }
 
+    case "Swallowed": {
+      const inside = byId.get(String(data.targetId));
+      const holder = byId.get(String(data.holderId));
+      if (inside && holder) {
+        inside.containedBy = holder.id;
+        inside.position = { ...holder.position };
+      }
+      return;
+    }
+
+    case "Regurgitated": {
+      const inside = byId.get(String(data.targetId));
+      if (inside) {
+        inside.containedBy = undefined;
+        const position = data.position as { x: number; y: number } | undefined;
+        if (position) inside.position = { ...position };
+      }
+      return;
+    }
+
     case "Regenerated": {
       const combatant = byId.get(String(data.combatantId));
       if (!combatant) return;

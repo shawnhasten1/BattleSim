@@ -96,6 +96,8 @@ function blankRider(kind: RiderKind, context: RiderContext): ActionRider {
       return { kind: "push", when, distance: 10 };
     case "hold":
       return { kind: "hold", when: "on-hit", escapeDc: 13, restrained: true };
+    case "swallow":
+      return { kind: "swallow", when: "on-hit", requiresHeld: true, damage: [{ dice: "6d6", damageType: "acid" }] };
     case "note":
       return { kind: "note", text: "" };
     case "condition":
@@ -140,6 +142,7 @@ export function RiderEditor({
               <option value="damage">Extra damage</option>
               <option value="push">Push</option>
               <option value="hold">Grapple</option>
+              <option value="swallow">Swallow</option>
               <option value="note">Reference note</option>
             </select>
             <button type="button" className={styles.riderRemove} onClick={() => remove(index)} aria-label="Remove effect">×</button>
@@ -210,6 +213,41 @@ export function RiderEditor({
                 <label className={styles.fieldInlineLabel}>
                   Holds at once
                   <input type="number" min={1} value={rider.limit ?? 1} onChange={(e) => replace(index, { ...rider, limit: Math.max(1, Number(e.target.value) || 1) })} />
+                </label>
+              </div>
+            </>
+          ) : null}
+
+          {rider.kind === "swallow" ? (
+            <>
+              <div className={styles.riderRow}>
+                <label className={styles.fieldInlineLabel}>
+                  <input type="checkbox" checked={rider.requiresHeld === true} onChange={(e) => replace(index, { ...rider, requiresHeld: e.target.checked ? true : undefined })} />
+                  only a creature it is grappling
+                </label>
+                <label className={styles.fieldInlineLabel}>
+                  Up to size
+                  <select value={rider.maxSize ?? "any"} onChange={(e) => replace(index, { ...rider, maxSize: e.target.value === "any" ? undefined : e.target.value as SizeCategory })}>
+                    <option value="any">any</option>
+                    {(["tiny", "small", "medium", "large", "huge", "gargantuan"] as SizeCategory[]).map((size) => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className={styles.riderRow}>
+                <label className={styles.fieldInlineLabel}>
+                  Damage each of its turns
+                  <input
+                    type="text" aria-label="Damage inside" value={rider.damage?.[0]?.dice ?? ""}
+                    onChange={(e) => replace(index, { ...rider, damage: e.target.value ? [{ dice: e.target.value, damageType: rider.damage?.[0]?.damageType ?? "acid" }] : undefined })}
+                  />
+                </label>
+                <label className={styles.fieldInlineLabel}>
+                  Spits out after
+                  <input
+                    type="number" min={1} placeholder="never" aria-label="Regurgitate threshold" value={rider.regurgitate?.damage ?? ""}
+                    onChange={(e) => replace(index, { ...rider, regurgitate: e.target.value ? { damage: Number(e.target.value), dc: rider.regurgitate?.dc ?? 15 } : undefined })}
+                  />
+                  damage in a turn
                 </label>
               </div>
             </>

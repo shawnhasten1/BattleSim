@@ -49,3 +49,40 @@ export function withoutHoldSentences(text: string): string {
     .join(" ")
     .trim();
 }
+
+/**
+ * Reads a swallow: "…the target is swallowed, and the grapple ends. While swallowed, the target is blinded and
+ * restrained, it has total cover against attacks and other effects outside the behir, and it takes 21 (6d6) acid
+ * damage at the start of each of the behir's turns. If the behir takes 30 damage or more on a single turn from a
+ * creature inside it, the behir must succeed on a DC 14 Constitution saving throw at the end of that turn or
+ * regurgitate all swallowed creatures…"
+ */
+export function parseSwallow(text: string, full: string): Extract<ActionRider, { kind: "swallow" }> | null {
+  if (!/swallowed/i.test(text)) return null;
+  const size = new RegExp(`\\b(${SIZES}) or smaller\\b`, "i").exec(full);
+  const save = /must succeed on a DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw or be swallowed/i.exec(text);
+  const damage = /takes (\d+) \(([^)]+)\) ([a-z]+) damage at the start of each of/i.exec(text);
+  const regurgitate = /takes (\d+) damage or more on a single turn from a creature inside[\s\S]*?DC (\d+) Constitution/i.exec(text);
+  const abilities: Record<string, "str" | "dex" | "con" | "int" | "wis" | "cha"> = {
+    strength: "str", dexterity: "dex", constitution: "con", intelligence: "int", wisdom: "wis", charisma: "cha"
+  };
+  return {
+    kind: "swallow", when: "on-hit",
+    ...(size ? { maxSize: size[1]!.toLowerCase() as SizeCategory } : {}),
+    ...(/grappl(?:ing|ed by)/i.test(text) ? { requiresHeld: true } : {}),
+    ...(save ? { save: { ability: abilities[save[2]!.toLowerCase()]!, dc: Number(save[1]) } } : {}),
+    ...(damage && isDamageType(damage[3]!.toLowerCase())
+      ? { damage: [{ dice: compactDice(damage[2]!), damageType: damage[3]!.toLowerCase() as DamageComponent["damageType"] }] }
+      : {}),
+    ...(regurgitate ? { regurgitate: { damage: Number(regurgitate[1]), dc: Number(regurgitate[2]) } } : {})
+  };
+}
+
+/** Sentences that only restate a swallow the engine now handles. */
+export function withoutSwallowSentences(text: string): string {
+  return text
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => !/swallow|blinded and restrained|total cover|at the start of each of the \w+'s turns|regurgitate|damage or more on a single turn|no longer restrained|escape from the corpse/i.test(sentence))
+    .join(" ")
+    .trim();
+}

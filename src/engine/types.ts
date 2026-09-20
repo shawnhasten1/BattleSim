@@ -666,6 +666,25 @@ export type ActionRider =
   | (TriggeredRider & { kind: "push"; distance: number })
   | (TriggeredRider & {
       /**
+       * Swallows the target (a behir, a purple worm, a kraken): it is blinded and restrained inside, can't be reached
+       * from outside or caught in outside area effects, and can only attack the swallower. Any grapple on it ends.
+       */
+      kind: "swallow";
+      /** Only swallows a creature this size or smaller. */
+      maxSize?: SizeCategory;
+      /** Only swallows a creature the swallower is already grappling ("the target it is grappling"). */
+      requiresHeld?: boolean;
+      /** The target avoids being swallowed with this save (a purple worm's Dexterity save). */
+      save?: { ability: Ability; dc: number };
+      /** Damage the swallowed creature takes at the start of each of the swallower's turns. */
+      damage?: DamageComponent[];
+      /** If the swallower takes `damage` or more in one turn from creatures inside it, it makes a Constitution save or spits them out. */
+      regurgitate?: { damage: number; dc: number };
+      /** How many creatures it can hold inside at once. Default 1. */
+      capacity?: number;
+    })
+  | (TriggeredRider & {
+      /**
        * Grapples the target ("grappled (escape DC 13)"). The target stays held until it escapes with an
        * action, the holder is stopped (incapacitated, dead) or gets out of reach.
        */
@@ -721,6 +740,8 @@ export interface AttackActionDefinition {
   /** Its riders' saves count as saves against a magical effect. Implied by `attackType: "spell"` / `spellLevel`. */
   magical?: boolean;
   attackType: "melee" | "ranged" | "spell";
+  /** Can only target a creature this attacker is grappling (a swallow: "one bite attack against a target it is grappling"). */
+  requiresHeld?: boolean;
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
   grip?: "one-handed" | "two-handed";
@@ -1490,6 +1511,12 @@ export interface CombatantState {
   deathSaves?: DeathSaveState;
   /** `<attacker id>:<action id>` of every `immuneAfterSave` action this creature has made the save against. */
   savedAgainst?: string[];
+  /** Swallowed by this combatant: not on the board for anyone else, and can only act against the swallower. */
+  containedBy?: Id;
+  /** What swallowing does to the creature inside: recurring damage, and the swallower's regurgitation threshold. */
+  containment?: { damage?: DamageComponent[]; regurgitate?: { damage: number; dc: number } };
+  /** Damage this creature has taken from creatures it has swallowed since its turn started. */
+  insideDamage?: number;
   /** Damage types taken since this creature's last turn started — what switches a regeneration off. */
   recentDamageTypes?: DamageType[];
   /** Down at 0 HP but not dying: a regenerating monster (a troll) that stands up at its next turn unless it's stopped. */
@@ -1577,6 +1604,8 @@ export interface CombatLogEvent {
     | "AbilityRecharged"
     | "EscapeAttempted"
     | "HoldApplied"
+    | "Swallowed"
+    | "Regurgitated"
     | "LegendaryResistanceUsed"
     | "Regenerated"
     | "LegendaryActionUsed"

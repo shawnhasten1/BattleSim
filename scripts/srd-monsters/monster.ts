@@ -8,6 +8,7 @@ import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } from "./defenses";
 import { parseMultiattack } from "./multiattack";
 import { inferTactics } from "./tactics";
+import { parseSwallow } from "./holds";
 import { parseSaveAction, splitBoldVariants } from "./saves";
 import { grantsMagicalWeapons, parseTrait } from "./traits";
 import { applyUsage } from "./usage";
@@ -178,6 +179,7 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   const reactions: ActionDefinition[] = [];
   const legendaryRaw: RawEntry[] = [];
   const multiattackRaw: RawEntry[] = [];
+  const swallowRaw: RawEntry[] = [];
   const generatedFeatures: FeatureDefinition[] = [];
 
   for (const entry of rawActions) {
@@ -209,6 +211,10 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     }
     if (/^Multiattack$/i.test(entry.name)) {
       multiattackRaw.push(entry);
+      continue;
+    }
+    if (/^Swallow$/i.test(entry.name) && /makes one bite attack against/i.test(entry.desc)) {
+      swallowRaw.push(entry);
       continue;
     }
 
@@ -257,6 +263,25 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       gaps.add(specialActionGap(entry.name), entry.name);
     }
     actions.push(unsupportedAction(entry, ctx, "action"));
+  }
+
+  // ── "Swallow. The behir makes one bite attack against a Medium or smaller target it is grappling. If the attack hits…"
+  // A copy of its bite that can only target a creature it is grappling, with the swallow on top.
+  for (const entry of swallowRaw) {
+    const rider = parseSwallow(entry.desc, entry.desc);
+    const bite = actions.find((action): action is AttackActionDefinition => action.kind === "attack" && /bite/i.test(action.name) && !/swallow/i.test(action.name));
+    if (!rider || !bite) {
+      gaps.add("HOLD_SWALLOW", entry.name);
+      actions.push(unsupportedAction(entry, ctx, "action"));
+      continue;
+    }
+    actions.push({
+      ...bite,
+      id: uniqueId(ctx, "swallow"),
+      name: "Swallow",
+      requiresHeld: true,
+      riders: [...(bite.riders ?? []).filter((existing) => existing.kind !== "hold" && existing.kind !== "swallow"), { ...rider, requiresHeld: true }]
+    });
   }
 
   // ── Multiattack needs the creature's own attacks to point at.

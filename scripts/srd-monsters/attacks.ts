@@ -3,7 +3,7 @@ import type {
 } from "../../src/engine/types";
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { buildConditionRider, findConditionOnFail, findSaveClause, findSaveDamage } from "./riders";
-import { parseHold, withoutHoldSentences } from "./holds";
+import { parseHold, parseSwallow, withoutHoldSentences, withoutSwallowSentences } from "./holds";
 import { applyUsage } from "./usage";
 import { ABILITIES, abilityMod, compactDice, describesMagicalEffect, isDamageType, slugify } from "./util";
 
@@ -128,6 +128,14 @@ function parseTail(tailInput: string, action: AttackActionDefinition, entry: Raw
     }
     return { riders, features };
   };
+
+  // A swallow inside an attack (the kraken's and purple worm's bites) is a `swallow` rider.
+  const swallow = /engulf/i.test(tail) ? null : parseSwallow(tail, entry.desc);
+  if (swallow) {
+    riders.push(swallow);
+    tail = withoutSwallowSentences(tail);
+    if (!tail) return finish();
+  }
 
   // A grapple is a real `hold` rider; whatever else the text says is handled below.
   const hold = /swallow|engulf/i.test(tail) ? null : parseHold(tail, entry.desc);

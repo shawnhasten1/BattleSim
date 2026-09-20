@@ -53,6 +53,7 @@ function describeRiders(riders: unknown): string {
     if (rider.kind === "push") return `→ push ${rider.distance ?? 0}ft`;
     if (rider.kind === "damage") return "→ + damage";
     if (rider.kind === "note") return "→ note";
+    if (rider.kind === "swallow") return "→ swallow";
     if (rider.kind === "hold") return `→ grapple (escape DC ${(rider as { escapeDc?: number }).escapeDc ?? "?"})`;
     return "";
   }).filter(Boolean);

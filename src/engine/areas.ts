@@ -29,7 +29,8 @@ export function combatantsInArea(
   const areaCellKeys = new Set(cellsInArea(map, origin, template, aimVector).map(cellKey));
   return combatants.filter((combatant) => {
     const definition = definitionsById.get(combatant.definitionId);
-    const eligible = combatant.state === "active" || (options.includeDowned && combatant.state === "downed");
+    // A creature swallowed by another isn't in the area (it has total cover from outside effects).
+    const eligible = !combatant.containedBy && (combatant.state === "active" || (options.includeDowned && combatant.state === "downed"));
     if (!definition || !eligible) {
       return false;
     }

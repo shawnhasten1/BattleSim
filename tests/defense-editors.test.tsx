@@ -133,3 +133,20 @@ describe("grapple rider editor", () => {
     expect(seen[0]).toMatchObject([{ kind: "hold", escapeDc: 13, limit: 2 }]);
   });
 });
+
+describe("swallow rider editor", () => {
+  it("edits a swallow rider", async () => {
+    const { RiderEditor } = await import("@/components/sheet/builders/RiderEditor");
+    const seen: unknown[] = [];
+    const Wrapper = () => {
+      const [riders, setRiders] = useState<import("@/engine").ActionRider[]>([{ kind: "swallow", when: "on-hit", requiresHeld: true, damage: [{ dice: "6d6", damageType: "acid" }] }]);
+      seen[0] = riders;
+      return <RiderEditor value={riders} onChange={setRiders} context="weapon" hasActionSave={false} />;
+    };
+    render(<Wrapper />);
+    await userEvent.click(screen.getByLabelText(/only a creature it is grappling/));
+    await userEvent.type(screen.getByLabelText("Regurgitate threshold"), "30");
+    expect(seen[0]).toMatchObject([{ kind: "swallow", regurgitate: { damage: 30, dc: 15 } }]);
+    expect((seen[0] as Array<{ requiresHeld?: boolean }>)[0]!.requiresHeld).toBeUndefined();
+  });
+});

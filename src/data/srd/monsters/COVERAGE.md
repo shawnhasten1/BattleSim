@@ -29,8 +29,8 @@ A phase is done when its codes reach 0.
 | `MOVE_CLIMB` | 34 | Climb speed is not modelled. |
 | `MOVE_BURROW` | 21 | Burrow speed is not modelled. |
 | `MOVE_TRAIT` | 25 | A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only. |
-| `HOLD_GRAPPLE` | 13 | Grapple / restrain-while-held is reference-only (no escape mechanic yet). |
-| `HOLD_SWALLOW` | 10 | Swallow / engulf is reference-only. |
+| `HOLD_GRAPPLE` | 13 | A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only. |
+| `HOLD_SWALLOW` | 3 | Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated. |
 | `SPELLS` | 36 | Spellcasting is reference-only. |
 | `SPAWN` | 6 | Summoning / splitting is reference-only. |
 | `TRANSFORM` | 23 | Shapechanging is reference-only. |
@@ -118,7 +118,7 @@ A phase is done when its codes reach 0.
 | Basilisk | 3 | partial | TRAIT_UNMODELED |
 | Bat | 0 | partial | MOVE_FLY |
 | Bearded Devil | 3 | partial | RIDER_TEXT, TRAIT_UNMODELED |
-| Behir | 11 | partial | HOLD_SWALLOW, MOVE_CLIMB |
+| Behir | 11 | partial | MOVE_CLIMB |
 | Berserker | 2 | partial | TRAIT_UNMODELED |
 | Black Bear | 0.5 | partial | MOVE_CLIMB |
 | Black Dragon Wyrmling | 2 | partial | MOVE_FLY, MOVE_SWIM |
@@ -201,7 +201,7 @@ A phase is done when its codes reach 0.
 | Giant Eagle | 1 | partial | MOVE_FLY |
 | Giant Elk | 2 | partial | CHARGE_TRAIT |
 | Giant Fire Beetle | 0 | full |  |
-| Giant Frog | 0.25 | partial | HOLD_SWALLOW, MOVE_SWIM |
+| Giant Frog | 0.25 | partial | MOVE_SWIM |
 | Giant Goat | 0.5 | partial | CHARGE_TRAIT |
 | Giant Hyena | 1 | partial | CHARGE_TRAIT |
 | Giant Lizard | 0.25 | partial | MOVE_CLIMB, VARIANT |
@@ -214,7 +214,7 @@ A phase is done when its codes reach 0.
 | Giant Sea Horse | 0.5 | partial | CHARGE_TRAIT, MOVE_SWIM |
 | Giant Shark | 5 | partial | CHARGE_TRAIT, MOVE_SWIM |
 | Giant Spider | 1 | partial | HOLD_GRAPPLE, MOVE_CLIMB, MOVE_TRAIT |
-| Giant Toad | 1 | partial | HOLD_SWALLOW, MOVE_SWIM |
+| Giant Toad | 1 | partial | MOVE_SWIM |
 | Giant Vulture | 1 | partial | MOVE_FLY |
 | Giant Wasp | 0.5 | partial | MOVE_FLY |
 | Giant Weasel | 0.125 | full |  |
@@ -259,7 +259,7 @@ A phase is done when its codes reach 0.
 | Killer Whale | 3 | partial | MOVE_SWIM |
 | Knight | 3 | partial | SAVE_UNPARSED |
 | Kobold | 0.125 | full |  |
-| Kraken | 23 | partial | HOLD_GRAPPLE, HOLD_SWALLOW, LEGENDARY_ACTIONS, MOVE_SWIM, TRAIT_UNMODELED |
+| Kraken | 23 | partial | HOLD_GRAPPLE, LEGENDARY_ACTIONS, MOVE_SWIM, TRAIT_UNMODELED |
 | Lamia | 4 | partial | ATTACK_UNPARSED, SPELLS |
 | Lemure | 0 | partial | TRAIT_UNMODELED |
 | Lich | 21 | partial | LEGENDARY_ACTIONS, SPELLS |
@@ -306,7 +306,7 @@ A phase is done when its codes reach 0.
 | Pony | 0.125 | full |  |
 | Priest | 2 | partial | SPELLS, TRAIT_UNMODELED |
 | Pseudodragon | 0.25 | partial | MOVE_FLY, TRAIT_UNMODELED |
-| Purple Worm | 15 | partial | HOLD_SWALLOW, MOVE_BURROW, MOVE_TRAIT |
+| Purple Worm | 15 | partial | MOVE_BURROW, MOVE_TRAIT |
 | Quasit | 1 | partial | SPECIAL_ACTION, TRANSFORM |
 | Quipper | 0 | partial | CHARGE_TRAIT, MOVE_SWIM |
 | Rakshasa | 13 | partial | DEFENSE_TEXT, RIDER_TEXT, SPELLS, TRAIT_UNMODELED |
@@ -314,7 +314,7 @@ A phase is done when its codes reach 0.
 | Raven | 0 | partial | MOVE_FLY |
 | Red Dragon Wyrmling | 4 | partial | MOVE_CLIMB, MOVE_FLY |
 | Reef Shark | 0.5 | partial | MOVE_SWIM |
-| Remorhaz | 11 | partial | HOLD_SWALLOW, MOVE_BURROW, TRAIT_UNMODELED |
+| Remorhaz | 11 | partial | MOVE_BURROW, TRAIT_UNMODELED |
 | Rhinoceros | 2 | partial | CHARGE_TRAIT |
 | Riding Horse | 0.25 | full |  |
 | Roc | 11 | partial | MOVE_FLY |
@@ -357,7 +357,7 @@ A phase is done when its codes reach 0.
 | Swarm of Ravens | 0.25 | partial | MOVE_FLY, SWARM_DAMAGE |
 | Swarm of Spiders | 0.5 | partial | MOVE_CLIMB, MOVE_TRAIT, SWARM_DAMAGE |
 | Swarm of Wasps | 0.5 | partial | MOVE_FLY, SWARM_DAMAGE |
-| Tarrasque | 30 | partial | HOLD_SWALLOW, LEGENDARY_ACTIONS, MULTIATTACK_STEP, TRAIT_UNMODELED |
+| Tarrasque | 30 | partial | LEGENDARY_ACTIONS, MULTIATTACK_STEP, TRAIT_UNMODELED |
 | Thug | 0.5 | full |  |
 | Tiger | 1 | partial | CHARGE_TRAIT |
 | Treant | 9 | partial | SPAWN |
@@ -570,7 +570,6 @@ A phase is done when its codes reach 0.
 - `RIDER_TEXT` — Glaive: If the target is a creature other than an undead or a construct, it must succeed
 
 ### Behir
-- `HOLD_SWALLOW` — Swallow
 - `MOVE_CLIMB` — climb 40 ft.
 
 ### Berserker
@@ -847,7 +846,6 @@ A phase is done when its codes reach 0.
 - `CHARGE_TRAIT` — Charge
 
 ### Giant Frog
-- `HOLD_SWALLOW` — Swallow
 - `MOVE_SWIM` — swim 30 ft.
 
 ### Giant Goat
@@ -888,7 +886,6 @@ A phase is done when its codes reach 0.
 - `MOVE_CLIMB` — climb 30 ft.
 
 ### Giant Toad
-- `HOLD_SWALLOW` — Swallow
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Giant Vulture
@@ -1011,7 +1008,6 @@ A phase is done when its codes reach 0.
 
 ### Kraken
 - `TRAIT_UNMODELED` — Freedom of Movement
-- `HOLD_SWALLOW` — Bite: If the target is a Large or smaller creature grappled by the kraken, that creatu
 - `HOLD_GRAPPLE` — Fling
 - `LEGENDARY_ACTIONS` — Lightning Storm (cost 2)
 - `MOVE_SWIM` — swim 60 ft.
@@ -1184,7 +1180,6 @@ A phase is done when its codes reach 0.
 
 ### Purple Worm
 - `MOVE_TRAIT` — Tunneler
-- `HOLD_SWALLOW` — Bite: If the target is a Large or smaller creature, it must succeed on a DC 19 Dexteri
 - `MOVE_BURROW` — burrow 30 ft.
 
 ### Quasit
@@ -1213,7 +1208,6 @@ A phase is done when its codes reach 0.
 
 ### Remorhaz
 - `TRAIT_UNMODELED` — Heated Body
-- `HOLD_SWALLOW` — Swallow
 - `MOVE_BURROW` — burrow 20 ft.
 
 ### Rhinoceros
@@ -1394,7 +1388,6 @@ A phase is done when its codes reach 0.
 
 ### Tarrasque
 - `TRAIT_UNMODELED` — Reflective Carapace
-- `HOLD_SWALLOW` — Swallow
 - `MULTIATTACK_STEP` — Multiattack: It can use its Swallow instead of its bite.
 - `LEGENDARY_ACTIONS` — Move (cost 1)
 

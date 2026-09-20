@@ -30,8 +30,8 @@ export const GAP_CODES = {
   MOVE_BURROW: "Burrow speed is not modelled.",
   MOVE_TRAIT: "A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only.",
   // ── Phase 6: holds
-  HOLD_GRAPPLE: "Grapple / restrain-while-held is reference-only (no escape mechanic yet).",
-  HOLD_SWALLOW: "Swallow / engulf is reference-only.",
+  HOLD_GRAPPLE: "A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only.",
+  HOLD_SWALLOW: "Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated.",
   // ── Phase 7: spells
   SPELLS: "Spellcasting is reference-only.",
   // ── Phase 8: spawn / transform

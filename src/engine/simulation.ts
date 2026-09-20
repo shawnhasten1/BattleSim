@@ -1909,7 +1909,10 @@ function selectOffensivePlan(
   options: { mustReachNow?: boolean; relaxReachability?: boolean; actions?: OffensiveAction[] } = {}
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
-  const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
+  // Swallowed: the only thing it can act against is whatever swallowed it.
+  const hostiles = actor.containedBy
+    ? snapshot.combatants.filter((combatant) => combatant.id === actor.containedBy)
+    : snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
   const candidates = (options.actions ?? getExecutableActions(definition))
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
@@ -2022,6 +2025,8 @@ function selectOffensivePlan(
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
+    // A swallow only works on a creature the swallower is already grappling.
+    .filter((plan) => !(plan.action.kind === "attack" && plan.action.requiresHeld && !(plan.target.conditions ?? []).some((condition) => condition.hold && condition.sourceCombatantId === actor.id)))
     // Someone who already resisted an `immuneAfterSave` action (Frightful Presence) can't be affected by it again.
     .filter((plan) => plan.action.kind === "attack" || plan.action.kind === "multiattack" || !isImmuneAfterSave(actor, plan.target, plan.action))
     // A bonus action is normally a follow-up: the actor has already moved / acted,
