@@ -1,14 +1,19 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Copy, Folder, Lock, Swords, Users } from "lucide-react";
-import type { DragEvent } from "react";
+import { ChevronDown, ChevronRight, Copy, Folder, Lock, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
+import { useMemo, useState, type DragEvent } from "react";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
-import { GAP_CODES, type SrdMonsterIndexEntry } from "@/data/srd/monsters";
-import { formatChallengeRating, type SrdMonsterTree } from "@/lib/srd-monster-tree";
+import { Chip, ChipRow } from "@/components/ui/ChipRow";
+import { GAP_CODES, SRD_MONSTER_INDEX, type MonsterTier, type SrdMonsterIndexEntry } from "@/data/srd/monsters";
+import type { SizeCategory } from "@/engine";
+import {
+  EMPTY_SRD_FILTERS, SIZE_ORDER, SRD_CR_VALUES, SRD_ENVIRONMENTS,
+  activeSrdFilterCount, filterSrdMonsters, withCrRange, type SrdMonsterFilters
+} from "@/lib/srd-monster-filter";
+import { SRD_ROOT_FOLDER_ID, buildSrdMonsterTree, formatChallengeRating } from "@/lib/srd-monster-tree";
 import styles from "./ActorsPanel.module.css";
 
 interface SrdMonsterFoldersProps {
-  tree: SrdMonsterTree;
   expandedFolderIds: Set<string>;
   onToggleExpanded: (folderId: string) => void;
   onAdd: (monster: SrdMonsterIndexEntry, faction: "party" | "enemy") => void;
@@ -16,65 +21,221 @@ interface SrdMonsterFoldersProps {
   onDragStartMonster: (event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry) => void;
 }
 
+const TIER_LABELS: Array<{ tier: MonsterTier; label: string; hint: string }> = [
+  { tier: "full", label: "Full", hint: "Everything is automated" },
+  { tier: "partial", label: "Partial", hint: "Core attacks run; some traits are reference-only" },
+  { tier: "manual", label: "Manual", hint: "Actions aren't automated" }
+];
+
+function toggle<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
 /**
  * The permanent "SRD Monsters → Monster Type → monster" directory. It looks and behaves like the
  * user's own folders (same rows, same expand/collapse, same drag-to-map) but is read-only: no
- * rename, move, delete, context menu, or "create actor here".
+ * rename, move, delete, context menu, or "create actor here". A search box and filters narrow it;
+ * while any filter is on, the folders that still have matches open by themselves.
  */
-export function SrdMonsterFolders({ tree, expandedFolderIds, onToggleExpanded, onAdd, onCopyToLibrary, onDragStartMonster }: SrdMonsterFoldersProps) {
-  const rootExpanded = expandedFolderIds.has(tree.id);
+export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, onCopyToLibrary, onDragStartMonster }: SrdMonsterFoldersProps) {
+  const [filters, setFilters] = useState<SrdMonsterFilters>(EMPTY_SRD_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  // While filtering, folders default to open; this remembers the ones the user closed anyway.
+  const [collapsedWhileFiltering, setCollapsedWhileFiltering] = useState<Set<string>>(new Set());
+
+  const activeCount = activeSrdFilterCount(filters);
+  const filtering = activeCount > 0;
+  const total = SRD_MONSTER_INDEX.length;
+  const tree = useMemo(() => buildSrdMonsterTree(filterSrdMonsters(SRD_MONSTER_INDEX, filters)), [filters]);
+  const rootExpanded = expandedFolderIds.has(SRD_ROOT_FOLDER_ID);
+
+  function update(next: SrdMonsterFilters) {
+    setFilters(next);
+    setCollapsedWhileFiltering(new Set());
+  }
+
+  function isTypeOpen(folderId: string): boolean {
+    return filtering ? !collapsedWhileFiltering.has(folderId) : expandedFolderIds.has(folderId);
+  }
+
+  function toggleType(folderId: string) {
+    if (!filtering) {
+      onToggleExpanded(folderId);
+      return;
+    }
+    setCollapsedWhileFiltering((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  }
 
   return (
     <li className={styles.folderItem} data-testid="srd-monsters-root">
-      <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 10 }} onClick={() => onToggleExpanded(tree.id)}>
+      <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 10 }} onClick={() => onToggleExpanded(SRD_ROOT_FOLDER_ID)}>
         <button type="button" className={styles.folderToggle} aria-label={rootExpanded ? "Collapse SRD Monsters" : "Expand SRD Monsters"} aria-expanded={rootExpanded}>
           {rootExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         <Folder size={14} />
-        <span className={styles.folderName}>{tree.name}</span>
-        <span className={styles.folderCount}>{tree.count}</span>
+        <span className={styles.folderName}>SRD Monsters</span>
+        <span className={styles.folderCount}>{filtering ? `${tree.count} of ${total}` : total}</span>
         <span className={styles.folderLock} title="Permanent, read-only library folder" aria-label="Permanent folder">
           <Lock size={11} />
         </span>
       </div>
 
       {rootExpanded ? (
-        <ul className={styles.list}>
-          {tree.types.map((type) => {
-            const expanded = expandedFolderIds.has(type.id);
-            return (
-              <li className={styles.folderItem} key={type.id}>
-                <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 26 }} onClick={() => onToggleExpanded(type.id)}>
-                  <button type="button" className={styles.folderToggle} aria-label={expanded ? `Collapse ${type.label}` : `Expand ${type.label}`} aria-expanded={expanded}>
-                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </button>
-                  <Folder size={14} />
-                  <span className={styles.folderName}>{type.label}</span>
-                  <span className={styles.folderCount}>{type.monsters.length}</span>
+        <>
+          <div className={styles.srdFilterBar}>
+            <div className={styles.srdSearchRow}>
+              <Search size={13} className={styles.srdSearchIcon} />
+              <input
+                type="search"
+                className={styles.srdSearchInput}
+                placeholder="Search name, family or type…"
+                aria-label="Search SRD monsters"
+                value={filters.query}
+                onChange={(event) => update({ ...filters, query: event.target.value })}
+              />
+              <button
+                type="button"
+                className={`${styles.srdIconButton} ${showFilters ? styles.srdIconButtonActive : ""}`}
+                title="Filters"
+                aria-label="Filters"
+                aria-expanded={showFilters}
+                onClick={() => setShowFilters((open) => !open)}
+              >
+                <SlidersHorizontal size={14} />
+                {activeCount > 0 ? <span className={styles.srdBadge}>{activeCount}</span> : null}
+              </button>
+              {filtering ? (
+                <button type="button" className={styles.srdIconButton} title="Clear all filters" aria-label="Clear all filters" onClick={() => update(EMPTY_SRD_FILTERS)}>
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+
+            {showFilters ? (
+              <div className={styles.srdFilterPanel}>
+                <div className={styles.srdSelectRow}>
+                  <label className={styles.srdFilterLabel}>
+                    CR min
+                    <select
+                      className={styles.srdSelect}
+                      aria-label="Minimum challenge rating"
+                      value={filters.crMin === null ? "" : String(filters.crMin)}
+                      onChange={(event) => update(withCrRange(filters, { crMin: event.target.value === "" ? null : Number(event.target.value) }))}
+                    >
+                      <option value="">Any</option>
+                      {SRD_CR_VALUES.map((cr) => <option key={cr} value={String(cr)}>{formatChallengeRating(cr)}</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.srdFilterLabel}>
+                    CR max
+                    <select
+                      className={styles.srdSelect}
+                      aria-label="Maximum challenge rating"
+                      value={filters.crMax === null ? "" : String(filters.crMax)}
+                      onChange={(event) => update(withCrRange(filters, { crMax: event.target.value === "" ? null : Number(event.target.value) }))}
+                    >
+                      <option value="">Any</option>
+                      {SRD_CR_VALUES.map((cr) => <option key={cr} value={String(cr)}>{formatChallengeRating(cr)}</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.srdFilterLabel}>
+                    Environment
+                    <select
+                      className={styles.srdSelect}
+                      aria-label="Environment"
+                      value={filters.environment}
+                      onChange={(event) => update({ ...filters, environment: event.target.value })}
+                    >
+                      <option value="">Any</option>
+                      {SRD_ENVIRONMENTS.map((environment) => <option key={environment} value={environment}>{environment}</option>)}
+                    </select>
+                  </label>
                 </div>
-                {expanded ? (
-                  <ul className={styles.list}>
-                    {type.monsters.map((monster) => (
-                      <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster)} title={gapSummary(monster)}>
-                        <ActorThumbnail definition={{ name: monster.name }} />
-                        <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy")}>
-                          <strong>{monster.name}</strong>
-                          <span>
-                            CR {formatChallengeRating(monster.cr)} · HP {monster.hp} · AC {monster.ac}
-                            {monster.tier === "full" ? "" : ` · ${monster.tier === "partial" ? "Partial" : "Manual"}`}
-                          </span>
-                        </button>
-                        <button type="button" onClick={() => onAdd(monster, "party")} title="Add as party"><Users size={14} /></button>
-                        <button type="button" onClick={() => onAdd(monster, "enemy")} title="Add as enemy"><Swords size={14} /></button>
-                        <button type="button" onClick={() => onCopyToLibrary(monster)} title="Copy to my library (editable)"><Copy size={14} /></button>
-                      </li>
+
+                <div className={styles.srdFilterGroup}>
+                  <span className={styles.srdFilterCaption}>Size</span>
+                  <ChipRow>
+                    {SIZE_ORDER.map((size: SizeCategory) => (
+                      <Chip key={size} label={size[0]!.toUpperCase() + size.slice(1)} active={filters.sizes.includes(size)} onClick={() => update({ ...filters, sizes: toggle(filters.sizes, size) })} />
                     ))}
-                  </ul>
-                ) : null}
+                  </ChipRow>
+                </div>
+
+                <div className={styles.srdFilterGroup}>
+                  <span className={styles.srdFilterCaption}>Automation</span>
+                  <ChipRow>
+                    {TIER_LABELS.map(({ tier, label }) => (
+                      <Chip key={tier} label={label} active={filters.tiers.includes(tier)} onClick={() => update({ ...filters, tiers: toggle(filters.tiers, tier) })} />
+                    ))}
+                  </ChipRow>
+                </div>
+
+                <div className={styles.srdFilterGroup}>
+                  <span className={styles.srdFilterCaption}>Traits</span>
+                  <ChipRow>
+                    <Chip label="Legendary" active={filters.legendary} onClick={() => update({ ...filters, legendary: !filters.legendary })} />
+                    <Chip label="Flies" active={filters.flies} onClick={() => update({ ...filters, flies: !filters.flies })} />
+                    <Chip label="Spellcaster" active={filters.spellcaster} onClick={() => update({ ...filters, spellcaster: !filters.spellcaster })} />
+                  </ChipRow>
+                </div>
+              </div>
+            ) : null}
+
+            {filtering ? (
+              <p className={styles.srdResultCount} role="status">
+                {tree.count} of {total} monsters
+              </p>
+            ) : null}
+          </div>
+
+          <ul className={styles.list}>
+            {filtering && tree.count === 0 ? (
+              <li className={styles.empty}>
+                No monsters match these filters.{" "}
+                <button type="button" className={styles.srdLinkButton} onClick={() => update(EMPTY_SRD_FILTERS)}>Clear filters</button>
               </li>
-            );
-          })}
-        </ul>
+            ) : null}
+            {tree.types.map((type) => {
+              const expanded = isTypeOpen(type.id);
+              return (
+                <li className={styles.folderItem} key={type.id}>
+                  <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 26 }} onClick={() => toggleType(type.id)}>
+                    <button type="button" className={styles.folderToggle} aria-label={expanded ? `Collapse ${type.label}` : `Expand ${type.label}`} aria-expanded={expanded}>
+                      {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <Folder size={14} />
+                    <span className={styles.folderName}>{type.label}</span>
+                    <span className={styles.folderCount}>{type.monsters.length}</span>
+                  </div>
+                  {expanded ? (
+                    <ul className={styles.list}>
+                      {type.monsters.map((monster) => (
+                        <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster)} title={gapSummary(monster)}>
+                          <ActorThumbnail definition={{ name: monster.name }} />
+                          <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy")}>
+                            <strong>{monster.name}</strong>
+                            <span>
+                              CR {formatChallengeRating(monster.cr)} · HP {monster.hp} · AC {monster.ac}
+                              {monster.tier === "full" ? "" : ` · ${monster.tier === "partial" ? "Partial" : "Manual"}`}
+                            </span>
+                          </button>
+                          <button type="button" onClick={() => onAdd(monster, "party")} title="Add as party"><Users size={14} /></button>
+                          <button type="button" onClick={() => onAdd(monster, "enemy")} title="Add as enemy"><Swords size={14} /></button>
+                          <button type="button" onClick={() => onCopyToLibrary(monster)} title="Copy to my library (editable)"><Copy size={14} /></button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       ) : null}
     </li>
   );

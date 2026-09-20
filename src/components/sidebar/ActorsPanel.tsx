@@ -12,7 +12,6 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { defaultFactionForDefinition, downloadJson, safeFileName } from "@/lib/ui-helpers";
 import { buildFolderTree } from "@/lib/actor-folders";
 import type { SrdMonsterIndexEntry } from "@/data/srd/monsters";
-import { buildSrdMonsterTree } from "@/lib/srd-monster-tree";
 import { SrdMonsterFolders } from "./SrdMonsterFolders";
 import { ActorFolderNode, RenameInput, type FolderEditState } from "./ActorFolderNode";
 import styles from "./ActorsPanel.module.css";
@@ -68,8 +67,6 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [definitionsLibrary, encounter.definitions]);
   const folderTree = useMemo(() => buildFolderTree(actorFolders, directory), [actorFolders, directory]);
-  // Permanent and derived from the bundled index, so it never changes at runtime.
-  const srdTree = useMemo(() => buildSrdMonsterTree(), []);
 
   function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry) {
     event.dataTransfer.effectAllowed = "copy";
@@ -331,7 +328,6 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
           </li>
         ) : null}
         <SrdMonsterFolders
-          tree={srdTree}
           expandedFolderIds={expandedFolderIds}
           onToggleExpanded={toggleExpanded}
           onAdd={(monster, faction) => void addSrdMonster(monster.id, faction)}

@@ -299,3 +299,142 @@
   margin-right: 4px;
   color: var(--ui-text-dim);
 }
+
+/* SRD Monsters search + filters */
+.srdFilterBar {
+  padding: 8px 10px 6px 26px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.srdSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.srdSearchIcon {
+  position: absolute;
+  left: 8px;
+  color: var(--ui-text-dim);
+  pointer-events: none;
+}
+
+.srdSearchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px 5px 26px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.srdSearchInput:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+}
+
+.srdIconButton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.srdIconButton:hover,
+.srdIconButtonActive {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.srdBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--ui-accent);
+  color: var(--ui-panel);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.srdFilterPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.srdSelectRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.srdSelectRow > label:last-child {
+  grid-column: 1 / -1;
+}
+
+.srdFilterLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+.srdSelect {
+  padding: 4px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.srdFilterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.srdFilterGroup > div {
+  padding: 0;
+}
+
+.srdFilterCaption {
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+.srdResultCount {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.srdLinkButton {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
