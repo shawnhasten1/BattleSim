@@ -40,7 +40,7 @@ export const GAP_CODES = {
   // ── Phase 9: long tail
   CHARGE_TRAIT: "Movement-conditioned bonus (Charge, Pounce, Blood Frenzy…) is reference-only.",
   SWARM_DAMAGE: "Swarm rules are not modelled: reduced damage at half HP, and attacking a creature inside the swarm's own space (modelled as an adjacent attack).",
-  SAVE_IMMUNITY_AFTER: "Immunity after a successful save (e.g. Frightful Presence) is not modelled.",
+  SAVE_IMMUNITY_AFTER: "(Retired — now enforced.) Immunity after a successful save.",
   VARIANT: "An optional variant rule is reference-only.",
   // ── Parser gaps (fixed by improving the parser, not the engine)
   ATTACK_UNPARSED: "An attack line could not be parsed.",

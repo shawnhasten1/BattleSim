@@ -120,8 +120,10 @@ function parseSentence(sentence: string, own: Own[], ctx: MonsterContext, note: 
  * Anything that isn't a plain sequence of the creature's own attacks —
  * "can use its Frightful Presence", "casts a spell" — is reported, not guessed.
  */
-export function parseMultiattack(entry: RawEntry, own: Own[], ctx: MonsterContext): ActionDefinition[] {
+export function parseMultiattack(entry: RawEntry, own: Own[], ctx: MonsterContext, saves: Array<{ id: string; name: string }> = []): ActionDefinition[] {
   const text = entry.desc.replace(/\s+/g, " ").trim();
+  // "The dragon can use its Frightful Presence. It then makes three attacks…": one of its own save actions goes first.
+  const prefix = saves.filter((save) => new RegExp(`\\buses?\\s+(?:its\\s+)?${save.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(text));
   // "…makes two longsword attacks or two longbow attacks" is two alternatives in one sentence.
   const alternative = new RegExp(`,?\\s+or\\s+(?=(?:it\\s+|the\\s+[a-z' -]+?\\s+)?(?:makes?\\s+)?${COUNT}\\s+[a-z' -]+?\\s+attacks?\\b)`, "i");
   const sentences = text.split(/(?<=[.!])\s+/).flatMap((sentence) => {
@@ -134,6 +136,7 @@ export function parseMultiattack(entry: RawEntry, own: Own[], ctx: MonsterContex
   for (const sentence of sentences) {
     const parsed = parseSentence(sentence, own, ctx, entry.name);
     if (!parsed) {
+      if (prefix.some((save) => sentence.toLowerCase().includes(save.name.toLowerCase()))) continue;
       if (/frightful presence|can use|casts?\b|spell|replace|instead|in place of|drawn/i.test(sentence)) {
         ctx.gaps.add("MULTIATTACK_STEP", `${entry.name}: ${sentence.slice(0, 90)}`);
       }
@@ -164,7 +167,7 @@ export function parseMultiattack(entry: RawEntry, own: Own[], ctx: MonsterContex
     id: uniqueId(ctx, variants.length === 1 ? "multiattack" : `multiattack-${slugifyLabel(labels[index]!)}`),
     name: variants.length === 1 ? "Multiattack" : `Multiattack (${labels[index]})`,
     actionType: "action",
-    attacks: variant.attacks,
+    attacks: [...prefix.map((save) => ({ actionId: save.id, count: 1 })), ...variant.attacks],
     automationSupport: "full"
   }));
 }

@@ -749,6 +749,8 @@ export interface SaveActionDefinition {
   actionType: ActionType;
   /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
   magical?: boolean;
+  /** A creature that makes the save is immune to this creature's action afterwards ("…is immune to the dragon's Frightful Presence for the next 24 hours"). */
+  immuneAfterSave?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
@@ -780,6 +782,8 @@ export interface AreaSaveActionDefinition {
   actionType: ActionType;
   /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
   magical?: boolean;
+  /** A creature that makes the save is immune to this creature's action afterwards ("…is immune to the dragon's Frightful Presence for the next 24 hours"). */
+  immuneAfterSave?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
@@ -1462,6 +1466,8 @@ export interface CombatantState {
   currentHp: number;
   tempHp: number;
   deathSaves?: DeathSaveState;
+  /** `<attacker id>:<action id>` of every `immuneAfterSave` action this creature has made the save against. */
+  savedAgainst?: string[];
   /** Damage types taken since this creature's last turn started — what switches a regeneration off. */
   recentDamageTypes?: DamageType[];
   /** Down at 0 HP but not dying: a regenerating monster (a troll) that stands up at its next turn unless it's stopped. */

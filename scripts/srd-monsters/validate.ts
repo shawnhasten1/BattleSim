@@ -79,7 +79,7 @@ export function validateMonster(definition: CreatureDefinition): Validation {
     }
     if (action.kind === "multiattack") {
       for (const step of action.attacks) {
-        if (!definition.actions.some((candidate) => candidate.id === step.actionId && candidate.kind === "attack")) {
+        if (!definition.actions.some((candidate) => candidate.id === step.actionId && (candidate.kind === "attack" || candidate.kind === "save" || candidate.kind === "area-save"))) {
           errors.push(`${where}: multiattack "${action.name}" points at missing attack "${step.actionId}"`);
         }
       }

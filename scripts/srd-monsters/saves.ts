@@ -81,9 +81,7 @@ export function parseSaveAction(entry: RawEntry, ctx: MonsterContext, options: S
   const riders: ActionRider[] = [];
   if (condition) riders.push(buildConditionRider(condition, "on-save-fail"));
   if (pushed && !damage) riders.push({ kind: "push", when: "on-save-fail", distance: Number(pushed[1]) });
-  if (/is immune to .* for the next 24 hours/i.test(text)) {
-    ctx.gaps.add("SAVE_IMMUNITY_AFTER", name);
-  }
+  const immuneAfterSave = /is immune to .* for the next 24 hours/i.test(text);
 
   const onSuccess: "half" | "negates" = damage?.half ? "half" : "negates";
   const affects: "hostile" | "all" = /of the [\w ]+'s choice|aware of it/i.test(text) ? "hostile" : "all";
@@ -99,6 +97,7 @@ export function parseSaveAction(entry: RawEntry, ctx: MonsterContext, options: S
     onSuccess,
     ...(riders.length > 0 ? { riders } : {}),
     ...(describesMagicalEffect(text) ? { magical: true } : {}),
+    ...(immuneAfterSave ? { immuneAfterSave: true } : {}),
     automationSupport: "full" as const
   };
 

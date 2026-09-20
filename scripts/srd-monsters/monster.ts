@@ -248,7 +248,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
 
   // ── Multiattack needs the creature's own attacks to point at.
   const own = actions.filter((action): action is AttackActionDefinition => action.kind === "attack");
-  const multiattacks = multiattackRaw.flatMap((entry) => parseMultiattack(entry, own, ctx));
+  const saveActions = actions.filter((action) => action.kind === "save" || action.kind === "area-save");
+  const multiattacks = multiattackRaw.flatMap((entry) => parseMultiattack(entry, own, ctx, saveActions));
   actions.unshift(...multiattacks);
 
   // ── "Weapon attacks are magical"

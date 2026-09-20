@@ -37,6 +37,7 @@ import {
   resolveUtilityAction,
   runTurnEnd,
   LEGENDARY_POINTS,
+  isImmuneAfterSave,
   isLegendaryVariant,
   refillLegendaryPoints,
   runTurnStart,
@@ -2007,6 +2008,8 @@ function selectOffensivePlan(
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
+    // Someone who already resisted an `immuneAfterSave` action (Frightful Presence) can't be affected by it again.
+    .filter((plan) => plan.action.kind === "attack" || plan.action.kind === "multiattack" || !isImmuneAfterSave(actor, plan.target, plan.action))
     // A bonus action is normally a follow-up: the actor has already moved / acted,
     // so only targets it can hit from where it stands count. `mustReachNow` applies
     // the same rule after the action-phase move is already spent. `relaxReachability`

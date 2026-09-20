@@ -650,6 +650,19 @@ function isLiveTarget(target: CombatantState | undefined): target is CombatantSt
   return !!target && (target.state === "active" || target.state === "downed");
 }
 
+/**
+ * Whether a save step inside a multiattack has anyone left to affect: a hostile within its range who hasn't
+ * already made the save against it (`immuneAfterSave`) and doesn't already carry the condition it inflicts.
+ */
+function saveStepWorthTaking(state: EngineState, attacker: CombatantState, action: Extract<ActionDefinition, { kind: "save" | "area-save" }>): boolean {
+  const inflicted = conditionsOfRiders(action.riders);
+  return state.snapshot.combatants.some((candidate) => candidate.state === "active"
+    && effectiveFaction(state.snapshot, candidate) !== effectiveFaction(state.snapshot, attacker)
+    && gridDistance(attacker.position, candidate.position, state.snapshot.map.grid) <= action.range
+    && !isImmuneAfterSave(attacker, candidate, action)
+    && !(action.damage.length === 0 && inflicted.length > 0 && inflicted.every((name) => candidate.conditions?.some((condition) => condition.name === name))));
+}
+
 export function resolveMultiattackAction(
   state: EngineState,
   attackerId: Id,
@@ -699,6 +712,16 @@ export function resolveMultiattackAction(
   let flatIndex = 0;
   for (const step of action.attacks) {
     const child = findActionDefinition(attackerDefinition, step.actionId);
+    if (child && (child.kind === "area-save" || child.kind === "save")) {
+      // "It can use its Frightful Presence. It then makes three attacks": a save step, taken first when it would
+      // do something (someone in range who hasn't already resisted it or been affected).
+      const first = pickTarget(step.targetGroup ?? 0);
+      if (first && attacker.state === "active" && saveStepWorthTaking(state, attacker, child)) {
+        if (child.kind === "area-save") resolveAreaSaveAction(state, attackerId, child.targeting?.origin === "self" ? attacker.position : first.position, child.id, { embedded: true });
+        else resolveSaveAction(state, attackerId, first.id, child.id, { embedded: true });
+      }
+      continue;
+    }
     if (!child || child.kind !== "attack") {
       throw new Error(`Multiattack child action ${step.actionId} is not an attack`);
     }
@@ -985,7 +1008,7 @@ export function resolveSaveAction(
   attackerId: Id,
   targetId: Id,
   actionId: Id,
-  options: { slotLevel?: number; bonusTargetIds?: Id[] } = {}
+  options: { slotLevel?: number; bonusTargetIds?: Id[]; embedded?: boolean } = {}
 ): SaveResult {
   const attacker = findCombatant(state.snapshot, attackerId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
@@ -997,11 +1020,15 @@ export function resolveSaveAction(
   if (action.targeting?.target !== "self") {
     validateTargeting(state.snapshot, attacker, target, action);
   }
-  validateAndSpendAction(attacker, action);
+  if (!options.embedded) validateAndSpendAction(attacker, action);
   if (action.concentration) {
     breakConcentration(state, attackerId);
   }
   declareAction(state, attacker, action, { target });
+  if (isImmuneAfterSave(attacker, target, action)) {
+    state.log.push(event(state, "ConditionResisted", `${target.displayName} is immune to ${attacker.displayName}'s ${action.name}`, { attackerId, targetId: target.id, actionId }));
+    return { success: true, saveRoll: { expression: "immune", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
+  }
   if (counterspellWindow(state, attacker, action)) {
     return { success: true, saveRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
   }
@@ -1038,6 +1065,7 @@ function resolveSaveAgainstTarget(
     ability: action.saveAbility, dc, kind: "action", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
   });
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
+  if (success) recordSavedAgainst(attacker, target, action);
   const onSuccess = resolveOnSuccess(action);
   const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
   const damageApplied = dealsDamage
@@ -1078,7 +1106,7 @@ export function resolveAreaSaveAction(
   attackerId: Id,
   aim: Point,
   actionId: Id,
-  options: { slotLevel?: number } = {}
+  options: { slotLevel?: number; embedded?: boolean } = {}
 ): AreaSaveResult {
   const attacker = findCombatant(state.snapshot, attackerId);
   const attackerDefinition = getDefinition(state.snapshot, attacker);
@@ -1094,7 +1122,7 @@ export function resolveAreaSaveAction(
   if (!placement.fromSelf) {
     validateOriginTargeting(state.snapshot, attacker, origin, action);
   }
-  validateAndSpendAction(attacker, action);
+  if (!options.embedded) validateAndSpendAction(attacker, action);
   if (action.concentration) {
     breakConcentration(state, attackerId);
   }
@@ -1138,7 +1166,9 @@ export function resolveAreaSaveAction(
     // *from* the caster — it never catches them, even when `affects: "all"`.
     .filter((target) => !(placement.fromSelf && target.id === attacker.id))
     // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
-    .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting));
+    .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting))
+    // Someone who already made the save against this action is immune to it (Frightful Presence).
+    .filter((target) => !isImmuneAfterSave(attacker, target, action));
 
   // 5e: roll the blast's damage once — every creature takes the same numbers,
   // differing only by resistance / vulnerability and whether they saved.
@@ -1157,6 +1187,7 @@ export function resolveAreaSaveAction(
       ability: action.saveAbility, dc, kind: "area", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
+    if (success) recordSavedAgainst(attacker, target, action);
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
     const damageApplied = dealsDamage && blastRoll.length
       ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", attacker.id)
@@ -1198,6 +1229,19 @@ export function resolveAreaSaveAction(
     createZone(state, attacker, action, origin, dc);
   }
   return { targets };
+}
+
+const savedKey = (attackerId: Id, action: { id: Id }) => `${attackerId}:${action.id}`;
+
+/** Whether `target` already made the save against this `immuneAfterSave` action from `attacker`. */
+export function isImmuneAfterSave(attacker: { id: Id }, target: CombatantState, action: { id: Id; immuneAfterSave?: boolean }): boolean {
+  return action.immuneAfterSave === true && (target.savedAgainst ?? []).includes(savedKey(attacker.id, action));
+}
+
+function recordSavedAgainst(attacker: { id: Id }, target: CombatantState, action: { id: Id; immuneAfterSave?: boolean }): void {
+  if (action.immuneAfterSave !== true) return;
+  const key = savedKey(attacker.id, action);
+  if (!(target.savedAgainst ?? []).includes(key)) target.savedAgainst = [...(target.savedAgainst ?? []), key];
 }
 
 function normalizeVector(vector: { x: number; y: number }): { x: number; y: number } {
@@ -4191,6 +4235,11 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
       appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources]
     }));
     if (success) {
+      // Shaking the effect off also earns immunity to it ("�or the effect ends for it, the creature is immune").
+      if (conditionSource && condition.sourceId) {
+        const sourceAction = findActionDefinition(getDefinition(state.snapshot, conditionSource), condition.sourceId);
+        if (sourceAction && (sourceAction.kind === "save" || sourceAction.kind === "area-save")) recordSavedAgainst(conditionSource, combatant, sourceAction);
+      }
       state.log.push(event(state, "ConditionExpired", `${combatant.displayName} shook off ${condition.name}`, {
         combatantId, condition, viaSave: true
       }));
