@@ -280,3 +280,22 @@
   color: var(--ui-text-dim);
   list-style: none;
 }
+
+/* Permanent SRD Monsters directory: same rows as user folders, but not draggable or editable. */
+.folderRowStatic {
+  cursor: pointer;
+}
+
+.folderCount {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.folderLock {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--ui-text-dim);
+}

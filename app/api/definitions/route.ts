@@ -29,6 +29,12 @@ export async function POST(request: Request) {
   const body = definitionSchema.parse(await request.json()) as { definition: CreatureDefinition };
   const definition = body.definition;
 
+  // The bundled SRD library uses global ids (`srd:monster:goblin`); a row with one would collide across
+  // users. Callers copy a library actor (new id) before saving it.
+  if (typeof definition?.id === "string" && definition.id.startsWith("srd:")) {
+    return NextResponse.json({ error: "SRD library actors can't be saved directly — copy them first" }, { status: 400 });
+  }
+
   const existing = await prisma.creatureDefinition.findUnique({
     where: { id: definition.id },
     select: { ownerId: true }

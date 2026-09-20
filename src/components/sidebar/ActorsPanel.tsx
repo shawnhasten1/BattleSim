@@ -11,6 +11,9 @@ import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { defaultFactionForDefinition, downloadJson, safeFileName } from "@/lib/ui-helpers";
 import { buildFolderTree } from "@/lib/actor-folders";
+import type { SrdMonsterIndexEntry } from "@/data/srd/monsters";
+import { buildSrdMonsterTree } from "@/lib/srd-monster-tree";
+import { SrdMonsterFolders } from "./SrdMonsterFolders";
 import { ActorFolderNode, RenameInput, type FolderEditState } from "./ActorFolderNode";
 import styles from "./ActorsPanel.module.css";
 
@@ -29,6 +32,8 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
   const actorFolders = useEncounterStore((state) => state.actorFolders);
   const folderStatus = useEncounterStore((state) => state.folderStatus);
   const addCreatureDefinition = useEncounterStore((state) => state.addCreatureDefinition);
+  const addSrdMonster = useEncounterStore((state) => state.addSrdMonster);
+  const saveSrdMonsterCopy = useEncounterStore((state) => state.saveSrdMonsterCopy);
   const addLibraryDefinitionToEncounter = useEncounterStore((state) => state.addLibraryDefinitionToEncounter);
   const deleteLibraryDefinition = useEncounterStore((state) => state.deleteLibraryDefinition);
   const copyLibraryDefinition = useEncounterStore((state) => state.copyLibraryDefinition);
@@ -63,6 +68,14 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [definitionsLibrary, encounter.definitions]);
   const folderTree = useMemo(() => buildFolderTree(actorFolders, directory), [actorFolders, directory]);
+  // Permanent and derived from the bundled index, so it never changes at runtime.
+  const srdTree = useMemo(() => buildSrdMonsterTree(), []);
+
+  function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry) {
+    event.dataTransfer.effectAllowed = "copy";
+    // Same payload as any other actor; the SRD id is resolved (and loaded on demand) by the drop target.
+    event.dataTransfer.setData("application/x-battle-sim-actor", JSON.stringify({ definitionId: monster.id, faction: "enemy" }));
+  }
 
   function onActorDragStart(event: DragEvent<HTMLElement>, definition: CreatureDefinition) {
     event.dataTransfer.effectAllowed = "copy";
@@ -317,8 +330,16 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
             </div>
           </li>
         ) : null}
+        <SrdMonsterFolders
+          tree={srdTree}
+          expandedFolderIds={expandedFolderIds}
+          onToggleExpanded={toggleExpanded}
+          onAdd={(monster, faction) => void addSrdMonster(monster.id, faction)}
+          onCopyToLibrary={(monster) => void saveSrdMonsterCopy(monster.id)}
+          onDragStartMonster={onSrdMonsterDragStart}
+        />
         {folderTree.roots.length === 0 && folderTree.unfiled.length === 0 && editing?.mode !== "create" ? (
-          <li className={styles.empty}>No actors found.</li>
+          <li className={styles.empty}>No saved actors yet.</li>
         ) : null}
         {folderTree.roots.map((node) => (
           <ActorFolderNode

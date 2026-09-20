@@ -5,7 +5,8 @@ import { tokenVisualsFor } from "@/lib/ui-helpers";
 import styles from "./ActorThumbnail.module.css";
 
 interface ActorThumbnailProps {
-  definition: CreatureDefinition;
+  /** Only the name and token art are needed, so a library index row can stand in for a full definition. */
+  definition: Pick<CreatureDefinition, "name" | "tokenVisuals">;
   combatant?: CombatantState;
 }
 

@@ -156,3 +156,21 @@ This work includes material taken from the System Reference Document 5.1 ("SRD 5
 the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD
 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at
 https://creativecommons.org/licenses/by/4.0/legalcode.
+
+### Using the library at runtime
+
+- **Permanent directory.** The Actors panel shows **SRD Monsters → Monster Type → monster** above the
+  user's own folders. It is derived from the bundled index (`src/lib/srd-monster-tree.ts`), so it is
+  permanent and read-only: no rename, move, delete, context menu or "create actor here".
+- **API** (`@/data/srd/monsters`): `SRD_MONSTER_INDEX` (light, eager), `findSrdMonsterEntry(id)`,
+  `isSrdMonsterId(id)`, and `loadSrdMonster(id)` — lazily imports the creature's per-type chunk and
+  returns a private deep clone, so editing an actor can never change the library.
+- **Adding to a scene:** `addSrdMonster(id, faction?, position?)` in the encounter store (click, the
+  party/enemy buttons, or dragging a row onto the map — same `application/x-battle-sim-actor` payload as
+  any actor). If that monster is already in the scene it reuses the scene's definition rather than
+  replacing it, so a second goblin doesn't reset edits made to the first.
+- **Library ids are global, user actors are not.** `srd:monster:goblin` is the same string for every user
+  and the database id is a global primary key, so a library id must never be saved. Saving a scene
+  monster (`adoptSrdDefinition`), "Copy to my library" and dropping a row on a user folder
+  (`saveSrdMonsterCopy`) all mint a fresh `def-<uuid>` (and re-point the scene's tokens), and
+  `POST /api/definitions` rejects any `srd:` id.

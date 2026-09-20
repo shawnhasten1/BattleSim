@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import type { CompendiumDragPayload } from "@/lib/compendium";
 import { defaultFactionForDefinition } from "@/lib/ui-helpers";
+import { isSrdMonsterId } from "@/data/srd/monsters";
 import { readJson, writeJson } from "@/lib/persist";
 import { useEncounterStore } from "@/store/encounter-store";
 import { AppShell } from "@/components/shell/AppShell";
@@ -55,6 +56,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   const loadDefinitionsLibrary = useEncounterStore((s) => s.loadDefinitionsLibrary);
   const loadActorFolders = useEncounterStore((s) => s.loadActorFolders);
   const addCreatureDefinition = useEncounterStore((s) => s.addCreatureDefinition);
+  const addSrdMonster = useEncounterStore((s) => s.addSrdMonster);
   const addLibraryDefinitionToEncounter = useEncounterStore((s) => s.addLibraryDefinitionToEncounter);
 
   useSyncEncounterRoute(routeParams);
@@ -140,6 +142,11 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
       try {
         const payload = JSON.parse(actorRaw) as { definitionId?: string; faction?: "party" | "enemy" };
         if (!payload.definitionId) return;
+        if (isSrdMonsterId(payload.definitionId)) {
+          // Bundled library monster: loaded on demand, and the scene's copy is reused if it's already there.
+          void addSrdMonster(payload.definitionId, payload.faction ?? "enemy", cell);
+          return;
+        }
         const definition = directory.find((candidate) => candidate.id === payload.definitionId);
         if (!definition) return;
         const faction = payload.faction ?? defaultFactionForDefinition(definition);

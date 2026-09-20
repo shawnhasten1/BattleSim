@@ -21,7 +21,7 @@ export function defaultFactionForDefinition(definition: CreatureDefinition): "pa
 }
 
 /** Combatant-level token visuals win over definition-level defaults. */
-export function tokenVisualsFor(definition: CreatureDefinition, combatant?: CombatantState): TokenVisuals {
+export function tokenVisualsFor(definition: Pick<CreatureDefinition, "tokenVisuals">, combatant?: CombatantState): TokenVisuals {
   return { ...(definition.tokenVisuals ?? {}), ...(combatant?.tokenVisuals ?? {}) };
 }
 

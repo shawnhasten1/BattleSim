@@ -61,6 +61,7 @@ import {
   type WallSegment
 } from "@/engine";
 import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
@@ -182,6 +183,20 @@ interface EncounterStore {
   loadDefinitionsLibrary: () => Promise<void>;
   saveSelectedDefinition: () => Promise<void>;
   saveDefinition: (definitionId: string) => Promise<void>;
+  /**
+   * Adds an SRD library monster to the scene as a token. Loads its definition on demand and reuses
+   * the scene's copy if that monster is already there (so a second goblin shares — and doesn't
+   * reset — the first one's definition).
+   */
+  addSrdMonster: (monsterId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
+  /**
+   * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
+   * ids are global, so saving one would collide across users) on the definition and every token using
+   * it. Returns the new id, or undefined if there is nothing to adopt.
+   */
+  adoptSrdDefinition: (definitionId: string) => string | undefined;
+  /** Saves a private, editable copy of a library monster to the user's own library ("Customize"). */
+  saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<void>;
   addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => void;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
@@ -1559,10 +1574,15 @@ export const useEncounterStore = create<EncounterStore>()(
       saveSelectedDefinition: async () => {
         const state = get();
         const selected = state.encounter.combatants.find((combatant) => combatant.id === state.selectedCombatantId);
-        const definition = selected ? state.encounter.definitions.find((candidate) => candidate.id === selected.definitionId) : undefined;
+        let definition = selected ? state.encounter.definitions.find((candidate) => candidate.id === selected.definitionId) : undefined;
         if (!selected || !definition) {
           set({ definitionStatus: "No selected definition" });
           return;
+        }
+        if (isSrdMonsterId(definition.id)) {
+          // Library ids are global: saving one as-is would collide with every other user's copy.
+          const adoptedId = get().adoptSrdDefinition(definition.id);
+          definition = get().encounter.definitions.find((candidate) => candidate.id === adoptedId) ?? definition;
         }
         const definitionToSave: CreatureDefinition = selected.resources && !definition.resources
           ? { ...definition, resources: structuredClone(selected.resources) }
@@ -1579,11 +1599,15 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       saveDefinition: async (definitionId) => {
         const state = get();
-        const definition = state.encounter.definitions.find((candidate) => candidate.id === definitionId)
+        let definition = state.encounter.definitions.find((candidate) => candidate.id === definitionId)
           ?? state.definitionsLibrary.find((candidate) => candidate.id === definitionId);
         if (!definition) {
           set({ definitionStatus: "Definition not found" });
           return;
+        }
+        if (isSrdMonsterId(definition.id)) {
+          const adoptedId = get().adoptSrdDefinition(definition.id);
+          definition = get().encounter.definitions.find((candidate) => candidate.id === adoptedId) ?? definition;
         }
         const response = await fetch("/api/definitions", {
           method: "POST",
@@ -1591,6 +1615,64 @@ export const useEncounterStore = create<EncounterStore>()(
           body: JSON.stringify({ definition })
         });
         set({ definitionStatus: response.ok ? "Definition saved" : "Definition save failed" });
+        if (response.ok) {
+          await get().loadDefinitionsLibrary();
+        }
+      },
+      addSrdMonster: async (monsterId, faction = "enemy", position) => {
+        // Already in the scene: share that definition. Replacing it would silently reset any edits
+        // made to the monsters already placed.
+        const inScene = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
+        if (inScene) {
+          get().addCreatureDefinition(inScene, faction, position);
+          return;
+        }
+        let definition: CreatureDefinition | undefined;
+        try {
+          definition = await loadSrdMonster(monsterId);
+        } catch {
+          definition = undefined;
+        }
+        if (!definition) {
+          set({ definitionStatus: "Couldn't load that SRD monster" });
+          return;
+        }
+        // Another add may have landed while the chunk loaded.
+        const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
+        get().addCreatureDefinition(raced ?? definition, faction, position);
+      },
+      adoptSrdDefinition: (definitionId) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!definition || !isSrdMonsterId(definition.id)) {
+          return undefined;
+        }
+        const newId = `def-${crypto.randomUUID()}`;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId ? { ...candidate, id: newId } : candidate),
+          combatants: encounter.combatants.map((combatant) => combatant.definitionId === definitionId ? { ...combatant, definitionId: newId } : combatant)
+        });
+        return newId;
+      },
+      saveSrdMonsterCopy: async (monsterId, folderId = null) => {
+        let definition: CreatureDefinition | undefined;
+        try {
+          definition = await loadSrdMonster(monsterId);
+        } catch {
+          definition = undefined;
+        }
+        if (!definition) {
+          set({ definitionStatus: "Couldn't load that SRD monster" });
+          return;
+        }
+        const copy: CreatureDefinition = { ...definition, id: `def-${crypto.randomUUID()}`, folderId };
+        const response = await fetch("/api/definitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ definition: copy })
+        });
+        set({ definitionStatus: response.ok ? `${definition.name} copied to your library` : "Copy failed" });
         if (response.ok) {
           await get().loadDefinitionsLibrary();
         }
@@ -1660,6 +1742,19 @@ export const useEncounterStore = create<EncounterStore>()(
         await get().loadDefinitionsLibrary();
       },
       moveDefinitionToFolder: async (definitionId, folderId) => {
+        if (isSrdMonsterId(definitionId)) {
+          // SRD monsters live in a permanent read-only directory and can't be filed. Dropping one on a
+          // folder makes the user their own copy there — of the scene's edited version if it's on the map.
+          if (get().encounter.definitions.some((candidate) => candidate.id === definitionId)) {
+            const adoptedId = get().adoptSrdDefinition(definitionId);
+            if (adoptedId) {
+              await get().moveDefinitionToFolder(adoptedId, folderId);
+            }
+          } else {
+            await get().saveSrdMonsterCopy(definitionId, folderId);
+          }
+          return;
+        }
         const state = get();
         const definition = state.encounter.definitions.find((candidate) => candidate.id === definitionId)
           ?? state.definitionsLibrary.find((candidate) => candidate.id === definitionId);
