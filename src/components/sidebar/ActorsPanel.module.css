@@ -438,3 +438,16 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+.srdCreditLink {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.srdCreditLink:hover {
+  color: var(--ui-accent);
+}

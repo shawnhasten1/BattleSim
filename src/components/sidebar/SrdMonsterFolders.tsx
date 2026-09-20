@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Copy, Folder, Lock, Search, SlidersHorizonta
 import { useMemo, useState, type DragEvent } from "react";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { Chip, ChipRow } from "@/components/ui/ChipRow";
+import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { GAP_CODES, SRD_MONSTER_INDEX, type MonsterTier, type SrdMonsterIndexEntry } from "@/data/srd/monsters";
 import type { SizeCategory } from "@/engine";
 import {
@@ -191,6 +192,10 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                 {tree.count} of {total} monsters
               </p>
             ) : null}
+            {/* Opens in a new tab so the encounter being edited isn't left. */}
+            <a className={styles.srdCreditLink} href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">
+              SRD 5.1 credits · CC-BY-4.0
+            </a>
           </div>
 
           <ul className={styles.list}>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, LayoutGrid, Swords } from "lucide-react";
 import type { GuideSummary } from "@/lib/guides";
+import { SrdAttribution } from "./SrdAttribution";
 import styles from "./docs.module.css";
 
 interface Section {
@@ -528,6 +529,19 @@ const SECTIONS: Section[] = [
           While a token is standing inside an active zone, it gets a visible highlight on the map so it's
           obvious at a glance who's currently affected.
         </p>
+      </>
+    )
+  },
+  {
+    id: "credits",
+    label: "Credits & Licensing",
+    content: (
+      <>
+        <p>
+          The built-in library of monsters, spells, weapons and features is based on the System Reference
+          Document 5.1, which is provided under the Creative Commons Attribution 4.0 International License.
+        </p>
+        <SrdAttribution />
       </>
     )
   }
