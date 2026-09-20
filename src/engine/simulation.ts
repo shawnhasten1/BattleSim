@@ -3,6 +3,8 @@ import {
   admitReinforcements,
   canAct,
   createEngineState,
+  damageAdjustmentMultiplier,
+  damageAdjustmentsFor,
   effectiveFaction,
   event,
   getDefinition,
@@ -328,7 +330,7 @@ function multiattackTargetIds(
   const perAttackDamage = action.attacks.flatMap((step) => {
     const child = executables.find((candidate) => candidate.id === step.actionId);
     const value = child && child.kind === "attack"
-      ? Math.max(1, expectedDamageAgainst(child, definition, actor, primaryDefinition))
+      ? Math.max(1, expectedDamageAgainst(child, definition, actor, primaryDefinition, primary))
       : 1;
     return Array.from({ length: Math.max(0, step.count) }, () => value);
   });
@@ -1855,7 +1857,7 @@ function selectOffensivePlan(
       const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
       const reachableNow = isValidTarget(snapshot, actor, target, range);
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
-      const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition);
+      const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
       const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
@@ -1927,13 +1929,13 @@ function selectOffensivePlan(
         const hostileValue = hostiles.reduce((sum, combatant) => {
           const combatantDefinition = getDefinition(snapshot, combatant);
           return sum
-            + expectedDamageAgainst(action, definition, actor, combatantDefinition)
+            + expectedDamageAgainst(action, definition, actor, combatantDefinition, combatant)
             + expectedRiderControl(action, definition, combatantDefinition, tactics)
             + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
         }, 0);
         const friendlyRisk = affected
           .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor))
-          .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant)), 0);
+          .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant), combatant), 0);
         score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
         reasons.push(`${hostiles.length} hostile targets`);
         if (friendlyRisk > 0) reasons.push("friendly fire risk");
@@ -1993,14 +1995,14 @@ function beamTargets(
   }
   const ranked = snapshot.combatants
     .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && c.state === "active" && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
-    .map((c) => ({ combatant: c, value: expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, c)) }))
+    .map((c) => ({ combatant: c, value: expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, c), c) }))
     .sort((a, b) => b.value - a.value)
     .map((entry) => entry.combatant);
   const ordered = [primary, ...ranked];
   if (ordered.length === 1) {
     return Array.from({ length: beams }, () => primary.id);
   }
-  const perBeam = Math.max(1, expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, primary)) / beams);
+  const perBeam = Math.max(1, expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, primary), primary) / beams);
   const assigned: Record<string, number> = {};
   const result: string[] = [];
   for (let index = 0; index < beams; index += 1) {
@@ -2198,7 +2200,7 @@ function predictedZoneApproachValue(
     if (!path.reachable || !path.cells.some((cell) => zoneCellKeys.has(`${cell.x},${cell.y}`))) {
       continue;
     }
-    value += (expectedDamageAgainst(action, definition, actor, hostileDefinition)
+    value += (expectedDamageAgainst(action, definition, actor, hostileDefinition, hostile)
       + tagPriorityValue(hostile.tags) * tactics.priorityWeight) * ZONE_PREDICTIVE_APPROACH_DISCOUNT;
   }
   return value;
@@ -2495,17 +2497,21 @@ function expectedDamageAgainst(
   action: OffensiveAction,
   source: ReturnType<typeof getDefinition>,
   sourceCombatant: CombatantState,
-  target: ReturnType<typeof getDefinition>
+  target: ReturnType<typeof getDefinition>,
+  targetCombatant?: CombatantState
 ): number {
   const casterLevel = source.character?.level ?? 1;
+  // The target's resistances, immunities, vulnerabilities and absorption — with its live conditions and
+  // features when we have the combatant (a raging Barbarian resists), else just its definition.
+  const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
   if (action.kind === "attack") {
-    const perHit = averageDamage(action, source) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
+    const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
     const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass);
     return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
   if (action.kind === "save" || action.kind === "area-save") {
-    const average = averageDamage(action, source);
+    const average = averageDamage(action, source, adjustments);
     const failChance = chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]));
     const damageEv = average * (failChance + (saveOnSuccessIsHalf(action) ? (1 - failChance) * 0.5 : 0));
     return damageEv + expectedRiderDamage(action, source, target, { failChance });
@@ -2520,13 +2526,13 @@ function expectedDamageAgainst(
       }
       let childSum = 0;
       for (let index = 0; index < step.count; index += 1) {
-        const average = averageDamage(child, source) + averageAttackFeatureDamage(child, source, sourceCombatant, target, oncePerTurnEffects);
+        const average = averageDamage(child, source, adjustments) + averageAttackFeatureDamage(child, source, sourceCombatant, target, oncePerTurnEffects);
         childSum += average * chanceToHit(resolveAttackBonus(child, source), target.armorClass);
       }
       return sum + childSum;
     }, 0);
   }
-  return averageDamage(action, source);
+  return averageDamage(action, source, adjustments);
 }
 
 function chanceToHit(attackBonus: number, armorClass: number): number {
@@ -2719,7 +2725,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDefinition>): number {
+function averageDamage(
+  action: ActionDefinition,
+  source: ReturnType<typeof getDefinition>,
+  /** The target's defenses: each component's average is scaled by how much of that damage type gets through. */
+  targetAdjustments?: CreatureDefinition["damageAdjustments"]
+): number {
   if (action.kind === "healing" || action.kind === "reposition" || action.kind === "buff" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
     return 0;
   }
@@ -2727,10 +2738,10 @@ function averageDamage(action: ActionDefinition, source: ReturnType<typeof getDe
     const actions = getExecutableActions(source);
     return action.attacks.reduce((sum, step) => {
       const child = actions.find((candidate) => candidate.id === step.actionId);
-      return sum + (child ? averageDamage(child, source) * step.count : 0);
+      return sum + (child ? averageDamage(child, source, targetAdjustments) * step.count : 0);
     }, 0);
   }
-  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source), 0);
+  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source) * defenseMultiplier(component, targetAdjustments), 0);
   return base + averageUpcastDiceBonus(action);
 }
 
@@ -2825,6 +2836,25 @@ function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
   return required.every((condition) => condition === "always") && alternatives.length === 0;
+}
+
+/**
+ * How much of a damage component gets through the target's defenses (0 immune … −1 absorbed, which would
+ * heal it). For "choose one of these types" components the wielder picks the best. Types that depend on the
+ * attack ("same as attack") aren't known here and count as full.
+ */
+function defenseMultiplier(
+  component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number],
+  targetAdjustments: CreatureDefinition["damageAdjustments"]
+): number {
+  if (!targetAdjustments?.length) {
+    return 1;
+  }
+  const origin = { magical: component.magical === true, material: component.material };
+  if (component.damageTypeOptions?.length) {
+    return Math.max(...component.damageTypeOptions.map((type) => damageAdjustmentMultiplier(type, targetAdjustments, origin)));
+  }
+  return component.damageType === "same-as-attack" ? 1 : damageAdjustmentMultiplier(component.damageType, targetAdjustments, origin);
 }
 
 function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>): number {

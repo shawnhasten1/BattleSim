@@ -227,7 +227,11 @@ export const DEFAULT_MAP_IMAGE_SETTINGS: MapImageSettings = {
 };
 
 export interface DamageAdjustment {
-  type: "resistance" | "immunity" | "vulnerability";
+  /**
+   * `"absorb"`: damage of this type deals no damage and instead heals the creature by that much
+   * (a Flesh Golem vs lightning). It takes precedence over immunity.
+   */
+  type: "resistance" | "immunity" | "vulnerability" | "absorb";
   damageType: DamageType;
   /**
    * When true this adjustment only applies to non-magical damage — a
@@ -237,8 +241,8 @@ export interface DamageAdjustment {
   nonMagicalOnly?: boolean;
   /**
    * With `nonMagicalOnly`: weapons made of these materials bypass the adjustment
-   * too ("nonmagical attacks not made with silvered weapons"). Recorded by the SRD
-   * monster generator; enforcement arrives with the defenses phase.
+   * too ("nonmagical attacks not made with silvered weapons"). Damage dealt by a
+   * weapon of that material carries `DamageComponent.material`.
    */
   exceptMaterials?: Array<"silvered" | "adamantine">;
 }
@@ -333,6 +337,12 @@ export interface DamageComponent {
    * resistance / immunity — regardless of any `bonusFormula`.
    */
   magical?: boolean;
+  /**
+   * The weapon this damage comes from is silvered or adamantine, so it gets through "nonmagical … not made
+   * with silvered weapons" resistance (`DamageAdjustment.exceptMaterials`). Stamped from
+   * `WeaponDefinition.material`; natural attacks have none.
+   */
+  material?: "silvered" | "adamantine";
   /** Level-driven dice growth (cantrip scaling, per-slot upcast). Resolved by `resolveScaledDamage`. */
   scaling?: DamageScaling;
 }
@@ -1086,6 +1096,8 @@ export interface WeaponDefinition {
   proficient?: boolean;
   /** Damage counts as magical (bypasses non-magical resistance) even at +0. */
   magical?: boolean;
+  /** Silvered or adamantine: bypasses resistance to "nonmagical … not made with silvered / adamantine weapons". */
+  material?: "silvered" | "adamantine";
   /** Flat ± to the attack roll, independent of `magicBonus`. */
   toHitBonus?: number;
   range: number;

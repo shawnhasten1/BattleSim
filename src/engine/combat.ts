@@ -2380,6 +2380,7 @@ function applyDamageEntries(
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   let totalApplied = 0;
+  let totalAbsorbed = 0;
   const components = entries.map((entry) => {
     const component = entry.component;
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: entry.casterLevel });
@@ -2391,33 +2392,36 @@ function applyDamageEntries(
     const formulaBonus = resolveNumericFormula(component.bonusFormula, damageSource);
     const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
     const targetAdjustments = damageAdjustmentsFor(targetDefinition, target);
+    const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
     const damageType = component.damageTypeOptions?.length
-      ? bestDamageTypeOption(component.damageTypeOptions, targetAdjustments, component.magical === true)
+      ? bestDamageTypeOption(component.damageTypeOptions, targetAdjustments, origin)
       : resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
-    const adjusted = adjustDamage(
-      roll.total + formulaBonus,
-      damageType,
-      targetAdjustments,
-      component.magical === true
-    );
+    const resolved = resolveDamageAdjustment(roll.total + formulaBonus, damageType, targetAdjustments, origin);
+    const adjusted = resolved.amount;
     const finalAmount = entry.halve ? Math.floor(adjusted / 2) : adjusted;
+    const absorbed = entry.halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed;
     totalApplied += applyHpDamage(target, finalAmount);
+    totalAbsorbed += absorbed;
     return {
       damageType,
       roll,
       adjusted,
       finalAmount,
+      ...(absorbed > 0 ? { absorbed } : {}),
       sourceFeatureId: entry.sourceFeatureId,
       sourceFeatureName: entry.sourceFeatureName,
       sourceEffectKind: entry.sourceEffectKind
     };
   });
+  // Absorption (a Flesh Golem hit by lightning) heals instead. Done before the event so it records the new HP.
+  const healedByAbsorption = absorbHealing(target, targetDefinition, totalAbsorbed);
 
-  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
+  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
     targetId: target.id,
     sourceId,
     components,
     totalApplied,
+    ...(healedByAbsorption > 0 ? { absorbed: healedByAbsorption } : {}),
     currentHp: target.currentHp,
     tempHp: target.tempHp
   }));
@@ -2435,6 +2439,7 @@ interface RolledDamageComponent {
   /** `roll.total` plus any `bonusFormula` — before per-target resistance / vulnerability and any half-on-save. */
   base: number;
   magical: boolean;
+  material?: DamageComponent["material"];
 }
 
 /**
@@ -2458,7 +2463,8 @@ function rollAreaDamage(
       damageType: resolveDamageTypeReference(component.damageType, undefined),
       roll,
       base: roll.total + resolveNumericFormula(component.bonusFormula, source),
-      magical: component.magical === true
+      magical: component.magical === true,
+      material: component.material
     };
   });
 }
@@ -2473,19 +2479,25 @@ function applyRolledAreaDamage(
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   let totalApplied = 0;
+  let totalAbsorbed = 0;
   const components = rolled.map((entry) => {
-    const adjusted = adjustDamage(
+    const resolved = resolveDamageAdjustment(
       entry.base,
       entry.damageType,
       damageAdjustmentsFor(targetDefinition, target),
-      entry.magical
+      { magical: entry.magical, material: entry.material }
     );
+    const adjusted = resolved.amount;
     const finalAmount = halve ? Math.floor(adjusted / 2) : adjusted;
+    const absorbed = halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed;
     totalApplied += applyHpDamage(target, finalAmount);
-    return { damageType: entry.damageType, roll: entry.roll, adjusted, finalAmount };
+    totalAbsorbed += absorbed;
+    return { damageType: entry.damageType, roll: entry.roll, adjusted, finalAmount, ...(absorbed > 0 ? { absorbed } : {}) };
   });
+  const healedByAbsorption = absorbHealing(target, targetDefinition, totalAbsorbed);
 
-  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage`, {
+  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
+    ...(healedByAbsorption > 0 ? { absorbed: healedByAbsorption } : {}),
     targetId: target.id,
     sourceId,
     components,
@@ -2675,36 +2687,100 @@ function resolveOneDeathEffect(
   }));
 }
 
+/** What the damage being adjusted came from — decides whether "nonmagical … not silvered" resistance applies. */
+export interface DamageOrigin {
+  magical?: boolean;
+  material?: DamageComponent["material"];
+}
+
+/**
+ * Whether an adjustment applies to damage of `damageType` from `origin`. "Nonmagical" adjustments are
+ * bypassed by magical damage, and any adjustment listing `exceptMaterials` is bypassed by damage from a weapon
+ * of that material (silvered / adamantine).
+ */
+function adjustmentApplies(adjustment: DamageAdjustment, damageType: DamageType, origin: DamageOrigin): boolean {
+  if (adjustment.damageType !== damageType) {
+    return false;
+  }
+  if (adjustment.nonMagicalOnly && origin.magical) {
+    return false;
+  }
+  if (origin.material && adjustment.exceptMaterials?.includes(origin.material)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Applies a creature's absorption / immunity / resistance / vulnerability to one damage roll. Absorption
+ * takes precedence over immunity: the creature takes nothing and `absorbed` reports how much it heals by.
+ */
+export function resolveDamageAdjustment(
+  amount: number,
+  damageType: DamageType,
+  adjustments: CreatureDefinition["damageAdjustments"],
+  origin: DamageOrigin = {}
+): { amount: number; absorbed: number } {
+  const applies = (type: DamageAdjustment["type"]) =>
+    adjustments?.some((adjustment) => adjustment.type === type && adjustmentApplies(adjustment, damageType, origin)) ?? false;
+  if (applies("absorb")) {
+    return { amount: 0, absorbed: Math.max(0, amount) };
+  }
+  if (applies("immunity")) {
+    return { amount: 0, absorbed: 0 };
+  }
+  if (applies("resistance")) {
+    return { amount: Math.floor(amount / 2), absorbed: 0 };
+  }
+  if (applies("vulnerability")) {
+    return { amount: amount * 2, absorbed: 0 };
+  }
+  return { amount, absorbed: 0 };
+}
+
 function adjustDamage(
   amount: number,
   damageType: DamageType,
   adjustments: CreatureDefinition["damageAdjustments"],
-  isMagical = false
+  origin: DamageOrigin = {}
 ): number {
-  const applies = (adjustment: DamageAdjustment) =>
-    adjustment.damageType === damageType && !(adjustment.nonMagicalOnly && isMagical);
-  if (adjustments?.some((adjustment) => adjustment.type === "immunity" && applies(adjustment))) {
+  return resolveDamageAdjustment(amount, damageType, adjustments, origin).amount;
+}
+
+/**
+ * How much of a damage roll of this type survives the creature's defenses, as a multiplier: 0 immune,
+ * 0.5 resistant, 1 normal, 2 vulnerable, and −1 when it absorbs the type (the damage would heal it). The AI
+ * uses this so it doesn't throw fire at a fire-immune creature or lightning at a Flesh Golem.
+ */
+export function damageAdjustmentMultiplier(
+  damageType: DamageType,
+  adjustments: CreatureDefinition["damageAdjustments"],
+  origin: DamageOrigin = {}
+): number {
+  const resolved = resolveDamageAdjustment(1000, damageType, adjustments, origin);
+  return resolved.absorbed > 0 ? -resolved.absorbed / 1000 : resolved.amount / 1000;
+}
+
+/** Heals a creature by the damage it absorbed, up to its maximum. Returns how much it actually healed. */
+function absorbHealing(target: CombatantState, definition: CreatureDefinition, absorbed: number): number {
+  if (absorbed <= 0 || target.state !== "active") {
     return 0;
   }
-  if (adjustments?.some((adjustment) => adjustment.type === "resistance" && applies(adjustment))) {
-    return Math.floor(amount / 2);
-  }
-  if (adjustments?.some((adjustment) => adjustment.type === "vulnerability" && applies(adjustment))) {
-    return amount * 2;
-  }
-  return amount;
+  const healed = Math.max(0, Math.min(absorbed, definition.maxHp - target.currentHp));
+  target.currentHp += healed;
+  return healed;
 }
 
 /** Of the wielder's damage-type choices, the one that gets through `adjustments` best; ties go to the first listed. */
 function bestDamageTypeOption(
   options: DamageType[],
   adjustments: CreatureDefinition["damageAdjustments"],
-  isMagical: boolean
+  origin: DamageOrigin
 ): DamageType {
   let best = options[0];
-  let bestAmount = adjustDamage(1000, best, adjustments, isMagical);
+  let bestAmount = adjustDamage(1000, best, adjustments, origin);
   for (const option of options.slice(1)) {
-    const amount = adjustDamage(1000, option, adjustments, isMagical);
+    const amount = adjustDamage(1000, option, adjustments, origin);
     if (amount > bestAmount) {
       best = option;
       bestAmount = amount;
@@ -2717,7 +2793,7 @@ function resolveDamageTypeReference(damageType: DamageTypeReference, triggerDama
   return damageType === "same-as-attack" ? triggerDamageType ?? "slashing" : damageType;
 }
 
-function damageAdjustmentsFor(definition: CreatureDefinition, combatant: CombatantState): NonNullable<CreatureDefinition["damageAdjustments"]> {
+export function damageAdjustmentsFor(definition: CreatureDefinition, combatant: CombatantState): NonNullable<CreatureDefinition["damageAdjustments"]> {
   const effectAdjustments = featureSources(definition, combatant).flatMap((feature) => (feature.effects ?? [])
     .filter((effect): effect is Extract<FeatureEffect, { kind: "damage-adjustment" }> => effect.kind === "damage-adjustment")
     .filter((effect) => featureConditionsMetForSelf(definition, combatant, effect))
@@ -2901,6 +2977,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
     damage: damageSource.map((component) => ({
       ...component,
       magical: component.magical || isMagical || undefined,
+      material: component.material ?? weapon.material,
       bonusFormula: magicBonus
         ? { ...(component.bonusFormula ?? {}), base: (component.bonusFormula?.base ?? 0) + magicBonus }
         : component.bonusFormula
