@@ -2425,7 +2425,15 @@ function resourceCostWeight(action: ActionDefinition): number {
   if (!("resourceCost" in action) || !action.resourceCost) {
     return 0;
   }
-  return spellSlotLevel(action.resourceCost.resourceId) ?? action.resourceCost.amount;
+  const weight = spellSlotLevel(action.resourceCost.resourceId) ?? action.resourceCost.amount;
+  // A recharge ability comes back on its own (a Recharge 5-6 breath in ~3 turns), so spending it is cheap.
+  const usage = "usage" in action ? action.usage : undefined;
+  if (usage?.kind === "recharge" && usage.recharge) {
+    const die = usage.recharge.die ?? 6;
+    const chance = Math.min(1, (die - usage.recharge.min + 1) / die);
+    return weight * (1 - chance);
+  }
+  return weight;
 }
 
 /**

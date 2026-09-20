@@ -5,6 +5,7 @@ import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
   ActionDefinition,
+  ActionUsage,
   ActionRider,
   ActivateFeatureActionDefinition,
   ActiveZone,
@@ -2142,8 +2143,39 @@ export function repositionZone(state: EngineState, casterId: Id, zoneId: Id, des
  * which let their orderings drift (Step mode used to reset the action
  * economy *last* instead of first).
  */
+/** The hidden pool an action's `usage` spends from; actions sharing a `poolId` share it. */
+export function usagePoolId(action: { id: string; usage?: ActionUsage }): string {
+  return `usage:${action.usage?.poolId ?? action.id}`;
+}
+
+/**
+ * 5e "Recharge N–6": at the start of its turn a creature rolls a die for each spent recharge ability and
+ * regains it on N or higher. The pool is the same resource the action spends, so nothing else needs to know.
+ */
+export function rollRecharges(state: EngineState, actor: CombatantState): void {
+  const definition = getDefinition(state.snapshot, actor);
+  const seen = new Set<string>();
+  for (const action of getExecutableActions(definition)) {
+    const usage = "usage" in action ? action.usage : undefined;
+    if (usage?.kind !== "recharge" || !usage.recharge) continue;
+    const poolId = usagePoolId(action as { id: string; usage?: ActionUsage });
+    if (seen.has(poolId) || (actor.resources?.[poolId] ?? 0) >= 1) continue;
+    seen.add(poolId);
+    const die = usage.recharge.die ?? 6;
+    const roll = rollDice(`1d${die}`, state.rng);
+    const recharged = roll.total >= usage.recharge.min;
+    if (recharged) {
+      actor.resources = { ...(actor.resources ?? {}), [poolId]: 1 };
+    }
+    state.log.push(event(state, "AbilityRecharged", `${actor.displayName} ${recharged ? "recharged" : "failed to recharge"} ${action.name} (rolled ${roll.total}, needs ${usage.recharge.min}+)`, {
+      combatantId: actor.id, actionId: action.id, resourceId: poolId, roll: roll.total, min: usage.recharge.min, recharged
+    }));
+  }
+}
+
 export function runTurnStart(state: EngineState, actor: CombatantState): void {
   resetActionEconomy(actor);
+  rollRecharges(state, actor);
   expireConditions(state, "start");
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");

@@ -12,8 +12,8 @@ export const GAP_CODES = {
   MAGIC_RESISTANCE: "(Retired — now enforced.) Advantage on saves against magic / conditions.",
   DEFENSE_TEXT: "A resistance / immunity clause could not be parsed; see the description.",
   // ── Phase 3: limited use
-  RECHARGE: "Recharge is approximated as a single use per encounter (no recharge roll yet).",
-  LIMITED_USE: "Limited-use pool is approximated as a per-encounter count.",
+  RECHARGE: "(Retired — now rolled each turn.) Recharge abilities.",
+  LIMITED_USE: "(Retired — now enforced.) N/Day pools, one encounter = one day.",
   REGEN: "Regeneration is reference-only.",
   LEGENDARY_RESISTANCE: "Legendary Resistance is reference-only.",
   SURVIVE_ZERO: "Undead Fortitude / Relentless is reference-only.",

@@ -1506,6 +1506,7 @@ export interface CombatLogEvent {
     | "ConcentrationChecked"
     | "ConditionApplied"
     | "ConditionResisted"
+    | "AbilityRecharged"
     | "ConditionExpired"
     | "ZoneCreated"
     | "ZoneMoved"

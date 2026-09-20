@@ -200,6 +200,14 @@ function applyEvent(
       return;
     }
 
+    case "AbilityRecharged": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant && data.recharged === true && typeof data.resourceId === "string") {
+        combatant.resources = { ...(combatant.resources ?? {}), [data.resourceId]: 1 };
+      }
+      return;
+    }
+
     case "ActionDeclared": {
       const combatant = byId.get(String(data.actorId));
       const cost = data.resourceCost as { resourceId?: string; amount?: number } | undefined;
