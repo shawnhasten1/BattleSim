@@ -4235,7 +4235,7 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
       appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources]
     }));
     if (success) {
-      // Shaking the effect off also earns immunity to it ("…or the effect ends for it, the creature is immune").
+      // Shaking the effect off also earns immunity to it ("or the effect ends for it, the creature is immune").
       if (conditionSource && condition.sourceId) {
         const sourceAction = findActionDefinition(getDefinition(state.snapshot, conditionSource), condition.sourceId);
         if (sourceAction && (sourceAction.kind === "save" || sourceAction.kind === "area-save")) recordSavedAgainst(conditionSource, combatant, sourceAction);
