@@ -29,7 +29,45 @@ function meleeAttack(id: string, name: string, bonus: number, dice: string, dama
   };
 }
 
+/** Replace the condition-immunity trait the generator wrote with one for a corrected list. */
+function withConditionImmunities(definition: CreatureDefinition, conditionImmunities: NonNullable<CreatureDefinition["conditionImmunities"]>): CreatureDefinition {
+  const names = conditionImmunities.map((name) => `${name[0]!.toUpperCase()}${name.slice(1)}`).join(", ");
+  const trait = {
+    id: `${definition.id.replace("srd:monster:", "")}-trait-condition-immunities`,
+    name: `Condition ${conditionImmunities.length === 1 ? "Immunity" : "Immunities"}: ${names}`,
+    category: "trait" as const,
+    description: `Immune to: ${names.toLowerCase()}.`,
+    automationSupport: "manual-only" as const
+  };
+  return {
+    ...definition,
+    conditionImmunities,
+    traits: [...(definition.traits ?? []).filter((existing) => !existing.name.startsWith("Condition Immunit")), trait]
+  };
+}
+
 export const MONSTER_OVERRIDES: Record<string, MonsterOverride> = {
+  zombie: {
+    reason: "Source data error: the export omits the zombie's poison damage immunity (SRD 5.1: Damage Immunities poison). "
+      + "Confirmed against the hand-built zombie actor.",
+    patch: (definition) => ({ ...definition, damageAdjustments: [{ type: "immunity", damageType: "poison" }] })
+  },
+  wight: {
+    reason: "Source data error: the export lists the wight's necrotic and nonmagical-weapon resistances as immunities and omits "
+      + "poison immunity and exhaustion immunity. SRD 5.1: Resistances necrotic; bludgeoning, piercing, slashing from nonmagical "
+      + "attacks that aren't silvered. Immunities poison. Condition Immunities exhaustion, poisoned. Confirmed against the hand-built wight actor.",
+    clearGaps: ["DEFENSE_TEXT"],
+    patch: (definition) => withConditionImmunities({
+      ...definition,
+      damageAdjustments: [
+        { type: "resistance", damageType: "necrotic" },
+        ...(["bludgeoning", "piercing", "slashing"] as const).map((damageType) => ({
+          type: "resistance" as const, damageType, nonMagicalOnly: true, exceptMaterials: ["silvered" as const]
+        })),
+        { type: "immunity", damageType: "poison" }
+      ]
+    }, ["exhaustion", "poisoned"])
+  },
   donkey: {
     reason: "Source data error: the export lists walk speed 0 and no actions. SRD 5.1: Speed 40 ft.; Bite +2 to hit, 2 (1d4) bludgeoning.",
     patch: (definition) => ({

@@ -127,9 +127,16 @@ monsters/COVERAGE.md                    per-creature tier + gap codes, per-code 
 
 ### Conventions the generator relies on (each learned the hard way)
 
-- **Damage is exact statblock numbers**: `dice: "3d6+5"` with **no `abilityModifier`**. Don't run SRD
-  monsters through `normalizeCreatureDefinition` — it stamps the attack's ability onto every damage
-  component and would double-count the flat bonus.
+- **Built exactly like every other actor.** Attack damage is the dice plus the wielding ability's
+  modifier — `dice: "3d6"` + `abilityModifier: "str"`, not a baked-in `3d6+5` — so editing an
+  ability score changes the damage, as it does for a hand-built actor. The flat part is linked when it
+  equals that ability's modifier (a small magic surplus stays on the dice, `1d8+2` + `str`); otherwise
+  the exact dice are kept unlinked. Only the primary component is linked (a dragon's "plus 2d6 fire"
+  carries no modifier). `tests/srd-monsters-conventions.test.ts` proves every attack still reproduces
+  the statblock's average, and compares against the author's own exported actors when present.
+- Alternatives are named after their weapons ("Multiattack (Longsword)"), copies "(Two-Handed)", and
+  condition immunities also appear as a manual-only trait ("Condition Immunity: Poisoned") like a
+  hand-built actor; the `conditionImmunities` field is what the defenses phase will enforce.
 - **Never put a `note` rider on an action.** The engine treats a `note` rider as "needs a human",
   demotes the action to `partial`, and the AI stops using it (the creature stands idle). Un-automated
   text goes on a `manual-only` trait (`<Action> (not automated)`) plus a gap code.

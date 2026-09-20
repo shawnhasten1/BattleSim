@@ -67,13 +67,26 @@ describe("attack parser", () => {
     expect(attack.attackBonus).toBe(5);
     expect(attack.ability).toBe("str"); // +5 = proficiency 2 + STR mod 3
     expect(attack.reach).toBe(5);
-    expect(attack.damage.map((component) => [component.dice, component.damageType])).toEqual([["1d8+3", "slashing"], ["1d8", "fire"]]);
+    // Same convention as the other actors: dice + the wielding ability's modifier (the +3), no baked-in flat.
+    expect(attack.damage).toEqual([
+      { dice: "1d8", damageType: "slashing", abilityModifier: "str" },
+      { dice: "1d8", damageType: "fire" }
+    ]);
+  });
+
+  it("keeps exact dice when the flat bonus isn't an ability modifier, and keeps a small magic surplus", () => {
+    // +1 to damage with STR 16 (+3) is not a modifier we can express: exact dice, unlinked.
+    const odd = parseAttack(entry("Dagger", "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 4 (1d4 + 1) piercing damage."), ctx())!;
+    expect((odd.actions[0] as AttackActionDefinition).damage).toEqual([{ dice: "1d4+1", damageType: "piercing" }]);
+    // +5 damage with STR 16 (+3): the +2 surplus is a magic bonus kept on the dice.
+    const magic = parseAttack(entry("Flame Tongue", "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 10 (1d8 + 5) slashing damage."), ctx())!;
+    expect((magic.actions[0] as AttackActionDefinition).damage).toEqual([{ dice: "1d8+2", damageType: "slashing", abilityModifier: "str" }]);
   });
 
   it("emits a separate two-handed attack for the versatile damage", () => {
     const result = parseAttack(entry("Longsword", "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage, or 8 (1d10 + 3) slashing damage if used with two hands."), ctx())!;
     expect(result.actions.map((action) => action.name)).toEqual(["Longsword", "Longsword (Two-Handed)"]);
-    expect((result.actions[1] as AttackActionDefinition).damage[0]!.dice).toBe("1d10+3");
+    expect((result.actions[1] as AttackActionDefinition).damage[0]).toMatchObject({ dice: "1d10", abilityModifier: "str" });
   });
 
   it("splits Melee or Ranged into two actions with their own ranges", () => {
@@ -280,7 +293,7 @@ describe("hand-verified SRD statblocks", () => {
   it("Goblin", () => {
     const goblin = monster("goblin");
     expect(goblin).toMatchObject({ armorClass: 15, maxHp: 7, speed: 30, size: "small", type: "humanoid", challengeRating: 0.25, proficiencyBonus: 2 });
-    expect(attackOf(goblin, "scimitar")).toMatchObject({ attackBonus: 4, reach: 5, damage: [{ dice: "1d6+2", damageType: "slashing" }] });
+    expect(attackOf(goblin, "scimitar")).toMatchObject({ attackBonus: 4, reach: 5, damage: [{ dice: "1d6", damageType: "slashing", abilityModifier: "dex" }] });
     expect(attackOf(goblin, "shortbow")).toMatchObject({ attackBonus: 4, range: 80, longRange: 320 });
     expect(goblin.traits!.find((trait) => trait.name === "Nimble Escape")!.grantedActions).toHaveLength(2);
     expect(index.find((entry) => entry.slug === "goblin")!.tier).toBe("full");
@@ -290,15 +303,15 @@ describe("hand-verified SRD statblocks", () => {
     const wolf = monster("wolf");
     expect(wolf).toMatchObject({ armorClass: 13, maxHp: 11, speed: 40 });
     expect(wolf.traits!.find((trait) => trait.name === "Pack Tactics")!.effects).toEqual([{ kind: "attack-advantage", condition: "ally-adjacent-to-target" }]);
-    expect(attackOf(wolf, "bite")).toMatchObject({ attackBonus: 4, damage: [{ dice: "2d4+2" }] });
+    expect(attackOf(wolf, "bite")).toMatchObject({ attackBonus: 4, damage: [{ dice: "2d4", abilityModifier: "dex" }] });
     expect(attackOf(wolf, "bite").riders![0]).toMatchObject({ condition: "prone", save: { ability: "str", dc: 11 } });
   });
 
   it("Owlbear", () => {
     const owlbear = monster("owlbear");
     expect(owlbear).toMatchObject({ armorClass: 13, maxHp: 59, challengeRating: 3 });
-    expect(attackOf(owlbear, "beak")).toMatchObject({ attackBonus: 7, damage: [{ dice: "1d10+5", damageType: "piercing" }] });
-    expect(attackOf(owlbear, "claws")).toMatchObject({ attackBonus: 7, damage: [{ dice: "2d8+5", damageType: "slashing" }] });
+    expect(attackOf(owlbear, "beak")).toMatchObject({ attackBonus: 7, damage: [{ dice: "1d10", damageType: "piercing", abilityModifier: "str" }] });
+    expect(attackOf(owlbear, "claws")).toMatchObject({ attackBonus: 7, damage: [{ dice: "2d8", damageType: "slashing", abilityModifier: "str" }] });
     expect((owlbear.actions.find((action) => action.kind === "multiattack") as MultiattackActionDefinition).attacks).toEqual([
       { actionId: "beak", count: 1 }, { actionId: "claws", count: 1 }
     ]);
@@ -309,7 +322,10 @@ describe("hand-verified SRD statblocks", () => {
     expect(dragon).toMatchObject({ armorClass: 19, maxHp: 256, challengeRating: 17, proficiencyBonus: 6, speed: 40 });
     expect(dragon.movement).toEqual({ walk: 40, fly: 80, climb: 40 });
     expect(attackOf(dragon, "bite")).toMatchObject({ attackBonus: 14, reach: 10 });
-    expect(attackOf(dragon, "bite").damage.map((component) => [component.dice, component.damageType])).toEqual([["2d10+8", "piercing"], ["2d6", "fire"]]);
+    expect(attackOf(dragon, "bite").damage).toEqual([
+      { dice: "2d10", damageType: "piercing", abilityModifier: "str" },
+      { dice: "2d6", damageType: "fire" } // the extra fire damage carries no modifier
+    ]);
     const breath = dragon.actions.find((action) => action.id === "fire-breath") as AreaSaveActionDefinition;
     expect(breath).toMatchObject({ dc: 21, saveAbility: "dex", area: { type: "cone", size: 60 }, usage: { kind: "recharge", recharge: { min: 5 } } });
     expect(dragon.damageAdjustments).toEqual([{ type: "immunity", damageType: "fire" }]);
@@ -320,13 +336,13 @@ describe("hand-verified SRD statblocks", () => {
 
   it("Troll, Zombie, Aboleth, Giant Spider", () => {
     expect(monster("troll")).toMatchObject({ armorClass: 15, maxHp: 84 });
-    expect(attackOf(monster("troll"), "claw")).toMatchObject({ attackBonus: 7, damage: [{ dice: "2d6+4" }] });
-    expect(attackOf(monster("zombie"), "slam")).toMatchObject({ attackBonus: 3, damage: [{ dice: "1d6+1" }] });
+    expect(attackOf(monster("troll"), "claw")).toMatchObject({ attackBonus: 7, damage: [{ dice: "2d6", abilityModifier: "str" }] });
+    expect(attackOf(monster("zombie"), "slam")).toMatchObject({ attackBonus: 3, damage: [{ dice: "1d6", abilityModifier: "str" }] });
     expect(monster("zombie").conditionImmunities).toEqual(["poisoned"]);
-    expect(attackOf(monster("aboleth"), "tentacle")).toMatchObject({ attackBonus: 9, damage: [{ dice: "2d6+5" }] });
+    expect(attackOf(monster("aboleth"), "tentacle")).toMatchObject({ attackBonus: 9, damage: [{ dice: "2d6", abilityModifier: "str" }] });
     expect(monster("aboleth").traits!.some((trait) => trait.effects?.some((effect) => effect.kind === "save-gated-damage"))).toBe(false);
     const spider = monster("giant-spider");
-    expect(attackOf(spider, "bite")).toMatchObject({ attackBonus: 5, damage: [{ dice: "1d8+3" }] });
+    expect(attackOf(spider, "bite")).toMatchObject({ attackBonus: 5, damage: [{ dice: "1d8", abilityModifier: "dex" }] });
     expect(spider.traits!.find((trait) => trait.name === "Bite (save effect)")!.effects![0]).toMatchObject({ save: { ability: "con", dc: 11 }, damage: [{ dice: "2d8" }] });
   });
 

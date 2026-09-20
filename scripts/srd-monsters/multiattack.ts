@@ -1,7 +1,9 @@
 import type { ActionDefinition, AttackActionDefinition, MultiattackActionDefinition } from "../../src/engine/types";
 import type { MonsterContext, RawEntry } from "./context";
 import { uniqueId } from "./context";
-import { averageDice } from "./util";
+import { averageDice, slugify } from "./util";
+
+const slugifyLabel = slugify;
 
 const COUNT_WORDS: Record<string, number> = {
   a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10
@@ -152,10 +154,15 @@ export function parseMultiattack(entry: RawEntry, own: Own[], ctx: MonsterContex
     ctx.gaps.add("MULTIATTACK_PARSE", `${entry.name}: a variant used ${unresolved}, which isn't one of this creature's attacks`);
   }
 
+  // Existing actors name alternatives after their weapons: "Multiattack (Longsword)", "Multiattack (Longbow)".
+  const label = (variant: Variant): string => [...new Set(variant.attacks.map((step) =>
+    (own.find((action) => action.id === step.actionId)?.name ?? step.actionId).replace(/\s*\(.*?\)\s*/g, " ").trim()
+  ))].join(", ");
+  const labels = variants.map(label);
   return variants.map((variant, index): MultiattackActionDefinition => ({
     kind: "multiattack",
-    id: uniqueId(ctx, index === 0 ? "multiattack" : `multiattack-${index + 1}`),
-    name: index === 0 ? "Multiattack" : `Multiattack (option ${index + 1})`,
+    id: uniqueId(ctx, variants.length === 1 ? "multiattack" : `multiattack-${slugifyLabel(labels[index]!)}`),
+    name: variants.length === 1 ? "Multiattack" : `Multiattack (${labels[index]})`,
     actionType: "action",
     attacks: variant.attacks,
     automationSupport: "full"

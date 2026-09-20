@@ -183,6 +183,36 @@ function parseTail(tailInput: string, action: AttackActionDefinition, entry: Raw
   return finish();
 }
 
+/**
+ * Statblock damage reads "15 (3d6 + 5)". Actors in this app store the dice and the wielding
+ * ability separately (`3d6` + `abilityModifier: "str"`), so editing STR changes the damage. When the flat
+ * part equals that ability's modifier (or exceeds it by a small magic bonus) store it that way; otherwise
+ * keep the exact dice. Only the primary component is linked — "plus 2d6 fire" has no modifier.
+ */
+function linkAbilityDamage(damage: DamageComponent[], attackAbility: Ability, ctx: MonsterContext): DamageComponent[] {
+  const copies = damage.map((component) => ({ ...component }));
+  const primary = copies[0];
+  if (!primary) return copies;
+  const match = /^(\d*d\d+)([+-]\d+)?$/.exec(primary.dice);
+  if (!match) return copies;
+  const flat = match[2] ? Number(match[2]) : 0;
+
+  const candidates: Ability[] = [attackAbility, ...(["str", "dex"] as Ability[]).filter((ability) => ability !== attackAbility)];
+  let ability = candidates.find((candidate) => abilityMod(ctx.abilities[candidate]) === flat);
+  let residual = 0;
+  if (!ability) {
+    const surplus = flat - abilityMod(ctx.abilities[attackAbility]);
+    if (surplus > 0 && surplus <= 3) {
+      ability = attackAbility;
+      residual = surplus;
+    }
+  }
+  if (!ability) return copies;
+  primary.dice = residual > 0 ? `${match[1]}+${residual}` : match[1]!;
+  primary.abilityModifier = ability;
+  return copies;
+}
+
 /** Parses one `Melee/Ranged Weapon/Spell Attack` line into one or more attack actions. */
 export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseResult | null {
   const head = ATTACK_HEAD.exec(entry.desc.trim());
@@ -236,18 +266,20 @@ export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseRe
   for (const variant of variants) {
     const label = variant.suffix ? `${entry.name} (${variant.suffix})` : entry.name;
     const id = uniqueId(ctx, variant.suffix ? `${baseSlug}-${variant.suffix.toLowerCase()}` : baseSlug);
+    const ability = inferAbility(variant.kind, attackBonus, ctx);
     const build = (damage: DamageComponent[], name: string, actionId: string): AttackActionDefinition => ({
       kind: "attack",
       id: actionId,
       name,
       actionType: "action",
       attackType: variant.kind,
-      ability: inferAbility(variant.kind, attackBonus, ctx),
+      ability,
       attackBonus,
       range: variant.range,
       ...(variant.longRange ? { longRange: variant.longRange } : {}),
       ...(variant.reach !== undefined ? { reach: variant.reach } : {}),
-      damage,
+      // Spell attacks don't add an ability modifier to damage; everything else follows the actor convention.
+      damage: variant.kind === "spell" ? damage.map((component) => ({ ...component })) : linkAbilityDamage(damage, ability, ctx),
       automationSupport: "full"
     });
 

@@ -26,9 +26,11 @@ function checkDice(dice: string, where: string, errors: string[]): void {
   }
 }
 
-function attackDamage(action: ActionDefinition): number {
+function attackDamage(action: ActionDefinition, definition: CreatureDefinition): number {
   if (action.kind === "attack") {
-    return action.damage.reduce((sum, component) => sum + averageDice(component.dice), 0);
+    // Ability-linked damage: the modifier is added at resolve time, so count it here too.
+    return action.damage.reduce((sum, component) =>
+      sum + averageDice(component.dice) + (component.abilityModifier ? abilityMod(definition.abilities[component.abilityModifier]) : 0), 0);
   }
   if (action.kind === "save" || action.kind === "area-save") {
     return action.damage.reduce((sum, component) => sum + averageDice(component.dice), 0) * (action.halfDamageOnSuccess ? 0.75 : 0.5);
@@ -44,11 +46,11 @@ export function roundDamage(definition: CreatureDefinition): number {
     if (action.kind === "multiattack") {
       const total = action.attacks.reduce((sum, step) => {
         const child = byId.get(step.actionId);
-        return sum + (child ? attackDamage(child) * step.count : 0);
+        return sum + (child ? attackDamage(child, definition) * step.count : 0);
       }, 0);
       best = Math.max(best, total);
     } else if (!(action.kind === "attack" || action.kind === "save" || action.kind === "area-save") || !action.resourceCost) {
-      best = Math.max(best, attackDamage(action));
+      best = Math.max(best, attackDamage(action, definition));
     }
   }
   return best;

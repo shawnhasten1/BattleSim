@@ -292,6 +292,18 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     ...parseDamageAdjustments(row.damage_vulnerabilities_display ?? "", "vulnerability", gaps)
   ];
   const conditionImmunities = parseConditionImmunities(row.condition_immunities_display ?? "", gaps);
+  if (conditionImmunities.length > 0) {
+    // Existing actors show these in the sheet as a manual-only trait ("Condition Immunity: Poisoned");
+    // the `conditionImmunities` field is what the defenses phase will enforce.
+    const names = conditionImmunities.map((name) => `${name[0]!.toUpperCase()}${name.slice(1)}`).join(", ");
+    traits.push({
+      id: `${slug}-trait-condition-immunities`,
+      name: `Condition ${conditionImmunities.length === 1 ? "Immunity" : "Immunities"}: ${names}`,
+      category: "trait",
+      description: `Immune to: ${names.toLowerCase()}.`,
+      automationSupport: "manual-only"
+    });
+  }
 
   const saves: Partial<Record<Ability, number>> = {};
   for (const ability of ABILITIES) {
