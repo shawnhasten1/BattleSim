@@ -235,6 +235,64 @@ export interface DamageAdjustment {
    * nonmagical attacks"). Absent ⇒ applies to all damage of the type.
    */
   nonMagicalOnly?: boolean;
+  /**
+   * With `nonMagicalOnly`: weapons made of these materials bypass the adjustment
+   * too ("nonmagical attacks not made with silvered weapons"). Recorded by the SRD
+   * monster generator; enforcement arrives with the defenses phase.
+   */
+  exceptMaterials?: Array<"silvered" | "adamantine">;
+}
+
+/** Conditions a creature can be immune to — a `ConditionName` plus the two SRD-only ones. */
+export type ConditionImmunity = ConditionName | "exhaustion" | "petrified";
+
+/** Per-mode movement speeds in feet. `CreatureDefinition.speed` stays the walk speed. */
+export interface MovementProfile {
+  walk: number;
+  fly?: number;
+  swim?: number;
+  climb?: number;
+  burrow?: number;
+  hover?: boolean;
+}
+
+/** Ranges in feet. Informational until the engine models light and vision. */
+export interface CreatureSenses {
+  darkvision?: number;
+  blindsight?: number;
+  tremorsense?: number;
+  truesight?: number;
+}
+
+/**
+ * Limited use of an action: a recharge roll (`recharge: { min: 5 }` = "Recharge 5-6")
+ * or a per-encounter pool (`uses`, which is how X/day reads in a single-encounter sim).
+ * `poolId` shares one pool across several actions (a dragon's two breath weapons).
+ * Recorded now; the engine enforces it from the limited-use phase on.
+ */
+export interface ActionUsage {
+  kind: "recharge" | "uses";
+  recharge?: { min: number; die?: number };
+  uses?: number;
+  poolId?: string;
+}
+
+/** One legendary action a creature can take between other creatures' turns. */
+export interface LegendaryActionRef {
+  name: string;
+  /** Legendary action points it costs (1-3). */
+  cost: number;
+  description: string;
+  /** One of this creature's own actions it performs ("makes a Tail attack"). */
+  actionId?: Id;
+  /** A self-contained action when the text isn't just a reference to an existing one. */
+  action?: ActionDefinition;
+}
+
+export interface LegendaryConfig {
+  /** Legendary action points per round (5e default 3). */
+  pool: number;
+  actions: LegendaryActionRef[];
 }
 
 export interface NumericFormula {
@@ -612,6 +670,8 @@ export interface AttackActionDefinition {
   /** Base level of the spell this came from — stamped by `getExecutableActions`. Drives `upcast`. */
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -639,6 +699,8 @@ export interface SaveActionDefinition {
   concentration?: boolean;
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -667,6 +729,8 @@ export interface AreaSaveActionDefinition {
   upcast?: SpellUpcast;
   /** Leaves a standing `ActiveZone` on the board instead of (or alongside) resolving once at cast time — see `ZonePersistence`. */
   zone?: ZonePersistence;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -838,6 +902,8 @@ export interface HealingActionDefinition {
   resourceCost?: ResourceCost;
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -871,6 +937,8 @@ export interface RepositionActionDefinition {
   concentration?: boolean;
   spellLevel?: number;
   upcast?: SpellUpcast;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -972,6 +1040,8 @@ export interface MultiattackActionDefinition {
      */
     targetGroup?: number;
   }>;
+  /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
+  usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
@@ -1158,11 +1228,13 @@ export interface FeatureDefinition {
     /** Bearer must be `state === "active"` (conscious) for the aura to apply. Default `true`. */
     requiresConscious?: boolean;
   };
+  /** A variant / optional rule from the source text: shown as opt-in reference, not on by default. */
+  optional?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
 export interface SourceMetadata {
-  provider: "homebrew" | "open5e";
+  provider: "homebrew" | "open5e" | "srd";
   documentKey?: string;
   documentName?: string;
   slug?: string;
@@ -1179,7 +1251,24 @@ export interface CreatureDefinition {
   armorClass: number;
   maxHp: number;
   speed: number;
+  /** All movement modes. `speed` mirrors `movement.walk`. */
+  movement?: MovementProfile;
   proficiencyBonus?: number;
+  /** Challenge rating (0, 0.125, 0.25, 0.5, 1..30). Informational; derives `proficiencyBonus` when absent. */
+  challengeRating?: number;
+  alignment?: string;
+  environments?: string[];
+  senses?: CreatureSenses;
+  /** Total skill bonuses by lowercase skill name (SRD statblock values). Informational. */
+  skills?: Record<string, number>;
+  languages?: string;
+  conditionImmunities?: ConditionImmunity[];
+  /** Legendary actions (SRD). Recorded now; resolved by the legendary-actions phase. */
+  legendary?: LegendaryConfig;
+  /** A form-only actor (werewolf's wolf form): never listed in browsers, only a transform target. */
+  hidden?: boolean;
+  /** For a `hidden` form actor, the base actor it belongs to. */
+  formOf?: Id;
   resources?: Record<string, number>;
   /** Which ActorFolder this saved actor is filed under. Undefined/null = unfiled (root). */
   folderId?: Id | null;

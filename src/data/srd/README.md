@@ -99,3 +99,53 @@ spell's, and `priority: "worthwhile"` lets cantrips / 1st-level spells through).
 opportunity attack until its next turn. A `{ custom }` condition rider keeps
 `automationSupport: "full"` only when it carries explicit `modifiers`
 (`riderNeedsHuman`).
+
+## Monsters (`monsters/`)
+
+Whole `CreatureDefinition`s, one per SRD 5.1 creature (325), ids `srd:monster:<slug>`.
+Design of record: `SRD_MONSTER_LIBRARY_PLAN.md`. **These are generated — don't hand-edit
+`monsters/generated/`.**
+
+```
+srd_2014_monsters_full.csv          (local, gitignored — Open5e v2 export)
+        │  npm run srd:monsters      (scripts/build-srd-monsters.ts → scripts/srd-monsters/*)
+        ▼
+monsters/generated/chunks/<type>.json   full definitions, one file per creature type
+monsters/generated/monster-index.json   light list the browser loads eagerly
+monsters/COVERAGE.md                    per-creature tier + gap codes, per-code burn-down
+```
+
+- `npm run srd:monsters:check` regenerates in memory and fails if the committed files differ.
+  `tests/srd-monsters.test.ts` does the same when the CSV is present.
+- **Fixing a wrong statblock:** add an entry to `monsters/overrides.ts` (keyed by slug, with a
+  required `reason`). Never edit the generated JSON. Regenerating re-applies overrides.
+- **Gap codes** (`monsters/gaps.ts`): anything the engine can't execute is tagged, never dropped.
+  A creature with no gaps is tier `full`; gaps with runnable actions is `partial`; a phase is done
+  when its codes reach 0 in `COVERAGE.md`.
+- **Covering a new trait:** add one entry to `RECIPES` (or `GAPS` / `INFORMATIONAL`) in
+  `scripts/srd-monsters/traits.ts` plus a test. No parser change needed.
+
+### Conventions the generator relies on (each learned the hard way)
+
+- **Damage is exact statblock numbers**: `dice: "3d6+5"` with **no `abilityModifier`**. Don't run SRD
+  monsters through `normalizeCreatureDefinition` — it stamps the attack's ability onto every damage
+  component and would double-count the flat bonus.
+- **Never put a `note` rider on an action.** The engine treats a `note` rider as "needs a human",
+  demotes the action to `partial`, and the AI stops using it (the creature stands idle). Un-automated
+  text goes on a `manual-only` trait (`<Action> (not automated)`) plus a gap code.
+- **Limited use** is recorded as `usage` *and*, until the limited-use phase, approximated with a
+  one-use-per-encounter resource pool (`usage:<id>`) so a breath weapon isn't fired every round.
+- **A creature with walk speed 0 and a fly/swim speed** gets `speed` = that speed, otherwise the
+  engine would freeze it. `movement` keeps the true per-mode values for the movement phase.
+- **Swarm "reach 0 ft."** is modelled as an adjacent (5 ft) attack; the engine has no shared squares.
+- **Multiattack alternatives** ("or", "either … or", "only one of which can be a bite") become separate
+  multiattack actions the AI chooses between.
+- The CSV has source-data errors (a donkey with speed 0 and no attack, …). The validator warns on
+  any creature with speed 0; fix them with an override.
+
+### Attribution
+
+This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of
+the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD
+5.1 is licensed under the Creative Commons Attribution 4.0 International License available at
+https://creativecommons.org/licenses/by/4.0/legalcode.

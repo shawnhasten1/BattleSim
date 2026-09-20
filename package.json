@@ -16,7 +16,9 @@
     "db:init:sqlite": "node scripts/init-db.mjs",
     "db:seed-test-user": "node scripts/seed-test-user.mjs",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "srd:monsters": "tsx scripts/build-srd-monsters.ts",
+    "srd:monsters:check": "tsx scripts/build-srd-monsters.ts --check"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -48,6 +50,7 @@
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.14.0",
     "prisma": "6.12.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.2",
     "vite": "8.2.2",
     "vitest": "5.0.0"
