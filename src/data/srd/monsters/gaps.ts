@@ -19,10 +19,10 @@ export const GAP_CODES = {
   LEGENDARY_RESISTANCE: "(Retired — now enforced.) Legendary Resistance.",
   SURVIVE_ZERO: "(Retired — now enforced.) Undead Fortitude / Relentless.",
   // ── Phase 4: legendary actions, reactions
-  LEGENDARY_ACTIONS: "Legendary actions are recorded but not yet taken.",
+  LEGENDARY_ACTIONS: "A legendary action that is not an attack or save (Move, Teleport, Cast a Spell, Heal Self…) is reference-only; the rest are taken.",
   MULTIATTACK_PARSE: "Multiattack text could not be fully compiled.",
-  MULTIATTACK_STEP: "A Multiattack step is not an attack (e.g. Frightful Presence first) and is skipped.",
-  REACTION: "Reaction is reference-only.",
+  MULTIATTACK_STEP: "A Multiattack step is a spell, breath replacement or other non-attack and is skipped.",
+  REACTION: "A reaction other than Parry (Unnerving Mask, Rock Catching, a guardian's Shield) is reference-only.",
   // ── Phase 5: movement
   MOVE_FLY: "Flying is not modelled (no altitude); the creature moves as a walker.",
   MOVE_SWIM: "Swim speed is not modelled.",

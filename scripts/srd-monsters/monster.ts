@@ -185,6 +185,18 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       continue;
     }
     if (entry.action_type === "REACTION") {
+      // "Parry. The knight adds 2 to its AC against one melee attack that would hit it": a Shield-style
+      // reaction, taken when a melee attack targets it (the engine has no "would hit" window before the roll).
+      const parryBonus = /^Parry$/i.test(entry.name) ? Number(/adds (\d+) to its AC/i.exec(entry.desc)?.[1]) : NaN;
+      if (parryBonus > 0) {
+        reactions.push({
+          kind: "activate-feature", id: uniqueId(ctx, "parry"), name: "Parry", actionType: "reaction", featureId: "parry",
+          reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+          condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: parryBonus } },
+          automationSupport: "full"
+        });
+        continue;
+      }
       gaps.add(/split/i.test(entry.name) ? "SPAWN" : "REACTION", entry.name);
       reactions.push(unsupportedAction(entry, ctx, "reaction"));
       continue;
