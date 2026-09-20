@@ -6,7 +6,9 @@ import {
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   effectiveFaction,
+  featureSources,
   isImmuneToCondition,
+  saveAdvantageApplies,
   event,
   getDefinition,
   getExecutableActions,
@@ -2522,7 +2524,11 @@ function expectedDamageAgainst(
   }
   if (action.kind === "save" || action.kind === "area-save") {
     const average = averageDamage(action, source, adjustments);
-    const failChance = chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]));
+    const failChance = chanceToFailSave(
+      resolveSaveDc(action, source),
+      target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
+      targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action), targetCombatant)
+    );
     const damageEv = average * (failChance + (saveOnSuccessIsHalf(action) ? (1 - failChance) * 0.5 : 0));
     return damageEv + expectedRiderDamage(action, source, target, { failChance });
   }
@@ -2550,9 +2556,37 @@ function chanceToHit(attackBonus: number, armorClass: number): number {
   return clamp((21 - needed) / 20, 0.05, 0.95);
 }
 
-function chanceToFailSave(dc: number, saveBonus: number): number {
+/**
+ * Whether the target has advantage on the save this action forces — Magic Resistance against a spell, Fey
+ * Ancestry against a charm — judged from the target's own features (auras aside). Advantage roughly squares the
+ * chance of failing, which is how a control spell should be weighed against a creature that resists it.
+ */
+function targetHasSaveAdvantage(
+  target: ReturnType<typeof getDefinition>,
+  action: OffensiveAction,
+  ability: Ability,
+  conditions: ConditionName[],
+  targetCombatant?: CombatantState
+): boolean {
+  const sourceAction = {
+    spellLevel: "spellLevel" in action ? action.spellLevel : undefined,
+    magical: ("magical" in action && action.magical === true) || (action.kind === "attack" && action.attackType === "spell") || undefined
+  };
+  return featureSources(target, targetCombatant).some((feature) => (feature.effects ?? []).some(
+    (effect) => effect.kind === "save-advantage" && saveAdvantageApplies(effect, { ability, sourceAction, conditions })
+  ));
+}
+
+/** The named conditions an action's riders would inflict, for "advantage against being charmed" style checks. */
+function riderConditionNames(action: OffensiveAction): ConditionName[] {
+  const riders = "riders" in action ? action.riders ?? [] : [];
+  return riders.flatMap((rider) => (rider.kind === "condition" && typeof rider.condition === "string" ? [rider.condition] : []));
+}
+
+function chanceToFailSave(dc: number, saveBonus: number, advantage = false): number {
   const successChance = clamp((21 - (dc - saveBonus)) / 20, 0.05, 0.95);
-  return 1 - successChance;
+  const failChance = 1 - successChance;
+  return advantage ? failChance * failChance : failChance;
 }
 
 /** Chance a rider's gate passes, given the parent action's hit / save odds. */
@@ -2706,7 +2740,11 @@ function expectedRiderControl(
       pApplied = 1;
     } else if (rider.when === "on-save-fail") {
       pApplied = (action.kind === "save" || action.kind === "area-save")
-        ? chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]))
+        ? chanceToFailSave(
+          resolveSaveDc(action, source),
+          target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
+          targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action))
+        )
         : 0.5;
     } else if (rider.when === "on-hit") {
       const hitChance = action.kind === "attack"
@@ -2714,7 +2752,11 @@ function expectedRiderControl(
         : 1;
       // a rider that negates on its own save only lands when that save fails
       const negateChance = rider.save && rider.save.onSuccess === "negates"
-        ? 1 - chanceToFailSave(riderSaveDc(rider, source, riderFallbackAbility(action)), target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]))
+        ? 1 - chanceToFailSave(
+          riderSaveDc(rider, source, riderFallbackAbility(action)),
+          target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]),
+          targetHasSaveAdvantage(target, action, rider.save.ability, typeof rider.condition === "string" ? [rider.condition] : [])
+        )
         : 0;
       pApplied = hitChance * (1 - negateChance);
     } else {

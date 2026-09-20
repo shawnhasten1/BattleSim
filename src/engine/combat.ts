@@ -1003,7 +1003,7 @@ function resolveSaveAgainstTarget(
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
   const save = rollSavingThrow(state, target, {
-    ability: action.saveAbility, dc, kind: "action", sourceAction: action, situationalBonus: coverSaveBonus
+    ability: action.saveAbility, dc, kind: "action", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
   });
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   const onSuccess = resolveOnSuccess(action);
@@ -1122,7 +1122,7 @@ export function resolveAreaSaveAction(
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
     const save = rollSavingThrow(state, target, {
-      ability: action.saveAbility, dc, kind: "area", sourceAction: action, situationalBonus: coverSaveBonus
+      ability: action.saveAbility, dc, kind: "area", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
@@ -1824,7 +1824,10 @@ function applySaveGatedEffect(state: EngineState, spec: SaveGatedEffectSpec, tar
   let halve = false;
   if (spec.saveAbility && spec.dc != null) {
     const save = rollSavingThrow(state, target, {
-      ability: spec.saveAbility, dc: spec.dc, kind: spec.via === "terrain" ? "terrain" : "zone"
+      ability: spec.saveAbility, dc: spec.dc, kind: spec.via === "terrain" ? "terrain" : "zone",
+      // A zone is a spell's lingering effect, so Magic Resistance applies; a terrain hazard has no caster.
+      sourceAction: spec.via === "zone" ? saveSourceOf(findActionDefinition(sourceDefinition, spec.actionId)) : undefined,
+      conditions: conditionsOfRiders(spec.riders)
     });
     const { roll: saveRoll, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     success = save.success;
@@ -2683,7 +2686,7 @@ function resolveOneDeathEffect(
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
     const save = rollSavingThrow(state, target, {
-      ability: action.saveAbility, dc, kind: "death-effect", sourceAction: action, situationalBonus: coverSaveBonus
+      ability: action.saveAbility, dc, kind: "death-effect", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
@@ -3227,7 +3230,7 @@ function applyFeatureActivationCondition(
   return conditionId;
 }
 
-function featureSources(definition: CreatureDefinition, combatant?: CombatantState): FeatureDefinitionSource[] {
+export function featureSources(definition: CreatureDefinition, combatant?: CombatantState): FeatureDefinitionSource[] {
   const activeConditionSources = (combatant?.conditions ?? [])
     .filter((condition) => condition.effects?.length)
     .map((condition) => ({
@@ -3779,11 +3782,13 @@ function applyConditionRider(
     const dc = resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc);
     const save = rollSavingThrow(state, target, {
       ability: rider.save.ability, dc, kind: "rider",
-      condition: typeof rider.condition === "string" ? (rider.condition as ConditionName) : undefined
+      sourceAction: saveSourceOf(findActionDefinition(sourceDefinition, ctx.actionId)),
+      conditions: typeof rider.condition === "string" ? [rider.condition] : undefined
     });
     const { roll, success } = save;
     state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${rider.save.ability.toUpperCase()} save against ${ctx.actionId}`, {
       attackerId: source.id, targetId: target.id, actionId: ctx.actionId,
+      appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources],
       saveRoll: roll, total: roll.total, dc, success, viaRider: true
     }));
     if (success && rider.save.onSuccess === "negates") {
@@ -3942,10 +3947,22 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
       surviving.push(condition);
       continue;
     }
-    const save = rollSavingThrow(state, combatant, { ability: repeat.ability, dc: repeat.dc, kind: "repeat", condition: condition.name });
+    // A repeated save is against the same effect as the first: same source action (a spell's Magic Resistance
+    // still applies) and the condition being shaken off.
+    const conditionSource = condition.sourceCombatantId
+      ? state.snapshot.combatants.find((candidate) => candidate.id === condition.sourceCombatantId)
+      : undefined;
+    const save = rollSavingThrow(state, combatant, {
+      ability: repeat.ability, dc: repeat.dc, kind: "repeat",
+      sourceAction: conditionSource && condition.sourceId
+        ? saveSourceOf(findActionDefinition(getDefinition(state.snapshot, conditionSource), condition.sourceId))
+        : undefined,
+      conditions: [condition.name]
+    });
     const { roll, success } = save;
     state.log.push(event(state, "SaveRolled", `${combatant.displayName} repeated a ${repeat.ability.toUpperCase()} save vs ${condition.name}`, {
-      targetId: combatantId, conditionId: condition.id, saveRoll: roll, total: roll.total, dc: repeat.dc, success, repeatSave: true
+      targetId: combatantId, conditionId: condition.id, saveRoll: roll, total: roll.total, dc: repeat.dc, success, repeatSave: true,
+      appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources]
     }));
     if (success) {
       state.log.push(event(state, "ConditionExpired", `${combatant.displayName} shook off ${condition.name}`, {
@@ -3989,23 +4006,72 @@ function featureSaveModifier(
   return { total, sources };
 }
 
+/**
+ * Whether a `save-advantage` effect applies to this particular save: its ability filter, and its `against`
+ * scope — spells / magical effects (by the forcing action's spell level or magical flag) and "saves against
+ * being charmed / frightened / prone…" (by the condition the save is against). A save against being dominated
+ * also counts as one against being charmed.
+ */
+export function saveAdvantageApplies(effect: Extract<FeatureEffect, { kind: "save-advantage" }>, ctx: Pick<SaveContext, "ability" | "sourceAction" | "conditions">): boolean {
+  const hasAbilityFilter = effect.ability !== undefined || (effect.abilities?.length ?? 0) > 0;
+  if (hasAbilityFilter && effect.ability !== ctx.ability && !effect.abilities?.includes(ctx.ability)) {
+    return false;
+  }
+  const against = effect.against;
+  if (against?.source) {
+    const isSpell = ctx.sourceAction?.spellLevel !== undefined;
+    const isMagical = isSpell || ctx.sourceAction?.magical === true;
+    if (against.source === "spell" ? !isSpell : !isMagical) {
+      return false;
+    }
+  }
+  if (against?.conditions?.length) {
+    const forced = new Set<string>(ctx.conditions ?? []);
+    if (forced.has("dominated")) {
+      forced.add("charmed");
+    }
+    if (!against.conditions.some((condition) => forced.has(condition))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function featureSaveAdvantageModifier(
   state: EngineState,
   definition: CreatureDefinition,
   combatant: CombatantState,
-  ability: keyof CreatureDefinition["abilities"]
+  ctx: Pick<SaveContext, "ability" | "sourceAction" | "conditions">
 ): { applied: boolean; sources: string[] } {
   const sources: string[] = [];
   for (const feature of [...featureSources(definition, combatant), ...auraSources(state, combatant).map((contribution) => contribution.feature)]) {
     for (const effect of feature.effects ?? []) {
       if (effect.kind === "save-advantage"
-        && (!effect.ability || effect.ability === ability)
+        && saveAdvantageApplies(effect, ctx)
         && featureConditionsMetForSelf(definition, combatant, effect)) {
         sources.push(feature.name);
       }
     }
   }
   return { applied: sources.length > 0, sources };
+}
+
+/** The spell level / magical flag of an action, for judging whether a save against it is "against magic". */
+function saveSourceOf(action: ActionDefinition | undefined): SaveContext["sourceAction"] {
+  if (!action) {
+    return undefined;
+  }
+  return {
+    spellLevel: "spellLevel" in action ? action.spellLevel : undefined,
+    magical: ("magical" in action && action.magical === true) || (action.kind === "attack" && action.attackType === "spell") || undefined
+  };
+}
+
+/** The conditions a rider list would inflict on a failed save — what "advantage on saves against being charmed" is against. */
+function conditionsOfRiders(riders: ActionRider[] | undefined): ConditionName[] {
+  return (riders ?? [])
+    .filter((rider): rider is Extract<ActionRider, { kind: "condition" }> => rider.kind === "condition")
+    .flatMap((rider) => (typeof rider.condition === "string" ? [rider.condition] : []));
 }
 
 /** Where a saving throw comes from, so scoped effects (Magic Resistance, "advantage against being charmed") can tell. */
@@ -4017,8 +4083,8 @@ export interface SaveContext {
   kind: SaveKind;
   /** The action forcing the save — its spell level / magical flag decides whether Magic Resistance applies. */
   sourceAction?: { spellLevel?: number; magical?: boolean };
-  /** The condition the save is against being afflicted with (advantage on saves against being charmed). */
-  condition?: ConditionName;
+  /** The conditions this save is against being afflicted with (advantage on saves against being charmed). */
+  conditions?: ConditionName[];
   /** A flat situational bonus, e.g. cover on a Dexterity save. */
   situationalBonus?: number;
 }
@@ -4043,7 +4109,7 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
   const base = (definition.saves?.[ctx.ability] ?? abilityModifier(definition.abilities[ctx.ability]))
     + conditionSaveModifier(target, ctx.ability);
   const featureBonus = featureSaveModifier(state, definition, target, ctx.ability);
-  const featureAdvantage = featureSaveAdvantageModifier(state, definition, target, ctx.ability);
+  const featureAdvantage = featureSaveAdvantageModifier(state, definition, target, ctx);
   const roll = rollD20WithBonus(state.rng, base + featureBonus.total + (ctx.situationalBonus ?? 0), {
     advantage: featureAdvantage.applied
   });
@@ -4086,7 +4152,7 @@ function resolveFeatureEffectSave(
   const targetDefinition = getDefinition(state.snapshot, target);
   const saveAbility = effect.save.ability;
   const dc = resolveFeatureSaveDc(effect.save, definition);
-  const save = rollSavingThrow(state, target, { ability: saveAbility, dc, kind: "feature", sourceAction: action });
+  const save = rollSavingThrow(state, target, { ability: saveAbility, dc, kind: "feature", sourceAction: saveSourceOf(action) });
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
 
   state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${saveAbility.toUpperCase()} save against ${feature.name}`, {

@@ -380,6 +380,12 @@ export interface FeatureEffectConditions {
   anyConditions?: FeatureCondition[];
 }
 
+/** What kind of save a `save-advantage` effect applies to. See `FeatureEffect` "save-advantage". */
+export interface SaveScope {
+  source?: "spell" | "magical";
+  conditions?: ConditionName[];
+}
+
 export interface FeatureEffectSaveGate {
   ability: Ability;
   dc?: number;
@@ -447,7 +453,18 @@ export type FeatureEffect =
   } & FeatureEffectConditions)
   | ({
     kind: "save-advantage";
+    /** Only this ability's saves (omit for every save). */
     ability?: Ability;
+    /** Only these abilities' saves — for "Int, Wis and Cha saves against magic" (Gnome Cunning). Combined with `ability` it is either/or. */
+    abilities?: Ability[];
+    /**
+     * Narrows which saves this applies to. Every field given must hold; omit it for all saves.
+     * - `source: "spell"` — only saves forced by a spell;
+     * - `source: "magical"` — spells and other magical effects (Magic Resistance);
+     * - `conditions` — only saves against being afflicted with one of these ("advantage on saves against being
+     *   charmed" — Fey Ancestry, Brave, Dark Devotion; "…knocked prone" — Sure-Footed).
+     */
+    against?: SaveScope;
   } & FeatureEffectConditions)
   | ({
     kind: "swarm-damage";
@@ -651,6 +668,8 @@ export interface AttackActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** Its riders' saves count as saves against a magical effect. Implied by `attackType: "spell"` / `spellLevel`. */
+  magical?: boolean;
   attackType: "melee" | "ranged" | "spell";
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
@@ -694,6 +713,8 @@ export interface SaveActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
+  magical?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
@@ -723,6 +744,8 @@ export interface AreaSaveActionDefinition {
   id: Id;
   name: string;
   actionType: ActionType;
+  /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
+  magical?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
