@@ -15,7 +15,7 @@ export const GAP_CODES = {
   RECHARGE: "(Retired — now rolled each turn.) Recharge abilities.",
   LIMITED_USE: "(Retired — now enforced.) N/Day pools, one encounter = one day.",
   REGEN: "Regeneration is reference-only.",
-  LEGENDARY_RESISTANCE: "Legendary Resistance is reference-only.",
+  LEGENDARY_RESISTANCE: "(Retired — now enforced.) Legendary Resistance.",
   SURVIVE_ZERO: "Undead Fortitude / Relentless is reference-only.",
   // ── Phase 4: legendary actions, reactions
   LEGENDARY_ACTIONS: "Legendary actions are recorded but not yet taken.",

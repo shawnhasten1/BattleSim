@@ -87,6 +87,16 @@ const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
     })
   },
   {
+    // "Legendary Resistance (3/Day). If the dragon fails a saving throw, it can choose to succeed instead."
+    match: /^Legendary Resistance$/i,
+    build: (entry, ctx) => {
+      const uses = /(\d+)\/Day/i.exec(entry.name)?.[1];
+      if (!uses) return { automationSupport: "manual-only" };
+      ctx.resources["legendary-resistance"] = Number(uses);
+      return { automationSupport: "full", effects: [{ kind: "auto-succeed-save", resourceId: "legendary-resistance" }] };
+    }
+  },
+  {
     match: /^Flyby$/i,
     build: () => ({ automationSupport: "full", effects: [{ kind: "avoids-opportunity-attacks" }] })
   },
@@ -119,7 +129,6 @@ const INFORMATIONAL = new RegExp(
 
 /** Traits whose mechanics belong to a later engine phase. */
 const GAPS: Array<{ match: RegExp; code: GapCode }> = [
-  { match: /^Legendary Resistance/i, code: "LEGENDARY_RESISTANCE" },
   { match: /^Regeneration/i, code: "REGEN" },
   { match: /^(Undead Fortitude|Relentless|Rejuvenation)/i, code: "SURVIVE_ZERO" },
   { match: /^(Spellcasting|Innate Spellcasting)/i, code: "SPELLS" },

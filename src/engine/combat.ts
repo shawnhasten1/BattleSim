@@ -1004,7 +1004,7 @@ function resolveSaveAgainstTarget(
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
   const save = rollSavingThrow(state, target, {
-    ability: action.saveAbility, dc, kind: "action", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
+    ability: action.saveAbility, dc, kind: "action", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
   });
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   const onSuccess = resolveOnSuccess(action);
@@ -1123,7 +1123,7 @@ export function resolveAreaSaveAction(
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
     const save = rollSavingThrow(state, target, {
-      ability: action.saveAbility, dc, kind: "area", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
+      ability: action.saveAbility, dc, kind: "area", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
@@ -4119,6 +4119,8 @@ export interface SaveContext {
   conditions?: ConditionName[];
   /** A flat situational bonus, e.g. cover on a Dexterity save. */
   situationalBonus?: number;
+  /** Roughly how much damage failing would cost — lets a Legendary Resistance decide whether the save is worth it. */
+  expectedDamage?: number;
 }
 
 export interface SavingThrowResult {
@@ -4127,6 +4129,64 @@ export interface SavingThrowResult {
   dc: number;
   featureBonus: { total: number; sources: string[] };
   featureAdvantage: { applied: boolean; sources: string[] };
+  /** Set when the target failed the roll and a Legendary Resistance turned it into a success. */
+  legendaryResistance?: { feature: string; resourceId: string; remaining: number };
+}
+
+/** Relative disabling value of a condition, 0..1. */
+export function conditionSeverity(name: ConditionName): number {
+  switch (name) {
+    case "paralyzed":
+    case "stunned":
+    case "unconscious":
+    case "dominated":
+    case "petrified":
+      return 1;
+    case "incapacitated":
+    case "restrained":
+    case "confused":
+      return 0.65;
+    case "frightened":
+    case "blinded":
+    case "prone":
+    case "grappled":
+      return 0.45;
+    case "charmed":
+    case "poisoned":
+    case "deafened":
+      return 0.3;
+    default:
+      return 0.2;
+  }
+}
+
+/** Average of a dice expression, ignoring anything it can't parse. */
+function averageOfDice(expression: string): number {
+  try {
+    const parsed = parseDiceExpression(expression);
+    return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * (term.sides + 1) / 2, 0) + parsed.modifier;
+  } catch {
+    return 0;
+  }
+}
+
+/** What a save-forcing action would do on a failed save, on average — the "stakes" for a Legendary Resistance. */
+function expectedFailureDamage(action: { damage?: DamageComponent[] }): number {
+  return (action.damage ?? []).reduce((sum, component) => sum + averageOfDice(component.dice), 0);
+}
+
+/**
+ * Legendary Resistance policy. Severity thresholds by `resourceStance`: conservative keeps its uses for
+ * near-certain disablers (paralysis, stun) or a hit worth ~40% of its HP; balanced spends on real control
+ * (0.45+) or 25% of its HP; liberal spends on anything it fails.
+ */
+function wantsLegendaryResistance(target: CombatantState, ctx: SaveContext): boolean {
+  const stance = target.resourceStance ?? "balanced";
+  if (stance === "liberal") return true;
+  const [severityNeeded, damageShareNeeded] = stance === "conservative" ? [0.65, 0.4] : [0.45, 0.25];
+  const severity = Math.max(0, ...(ctx.conditions ?? []).map(conditionSeverity));
+  const damageShare = (ctx.expectedDamage ?? 0) / Math.max(1, target.currentHp);
+  return severity >= severityNeeded || damageShare >= damageShareNeeded;
 }
 
 /**
@@ -4145,7 +4205,36 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
   const roll = rollD20WithBonus(state.rng, base + featureBonus.total + (ctx.situationalBonus ?? 0), {
     advantage: featureAdvantage.applied
   });
-  return { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
+  const result: SavingThrowResult = { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
+  if (!result.success && ctx.kind !== "concentration") {
+    const resistance = legendaryResistanceFor(state, definition, target, ctx);
+    if (resistance && wantsLegendaryResistance(target, ctx)) {
+      const remaining = (target.resources?.[resistance.resourceId] ?? 0) - 1;
+      target.resources = { ...(target.resources ?? {}), [resistance.resourceId]: remaining };
+      result.success = true;
+      result.legendaryResistance = { feature: resistance.feature, resourceId: resistance.resourceId, remaining };
+      state.log.push(event(state, "LegendaryResistanceUsed", `${target.displayName} uses ${resistance.feature} and succeeds instead (${remaining} left)`, {
+        combatantId: target.id, resourceId: resistance.resourceId, next: remaining, roll: roll.total, dc: ctx.dc
+      }));
+    }
+  }
+  return result;
+}
+
+/** The first `auto-succeed-save` feature this creature can still pay for that covers this save. */
+function legendaryResistanceFor(
+  state: EngineState, definition: CreatureDefinition, target: CombatantState, ctx: SaveContext
+): { feature: string; resourceId: string } | undefined {
+  for (const feature of featureSources(definition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind === "auto-succeed-save"
+        && (target.resources?.[effect.resourceId] ?? 0) >= 1
+        && saveAdvantageApplies({ kind: "save-advantage", against: effect.against }, ctx)) {
+        return { feature: feature.name, resourceId: effect.resourceId };
+      }
+    }
+  }
+  return undefined;
 }
 
 function featureSaveDcModifier(

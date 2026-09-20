@@ -466,6 +466,16 @@ export type FeatureEffect =
      */
     against?: SaveScope;
   } & FeatureEffectConditions)
+  | {
+    /**
+     * Legendary Resistance: when this creature fails a saving throw it may spend one use of `resourceId`
+     * to succeed instead. Whether it bothers is up to its `resourceStance` and how bad the failure would be.
+     * `against` limits it to some saves, as for `save-advantage`.
+     */
+    kind: "auto-succeed-save";
+    resourceId: string;
+    against?: SaveScope;
+  }
   | ({
     kind: "swarm-damage";
     fullHpDamage: DamageComponent[];
@@ -1507,6 +1517,7 @@ export interface CombatLogEvent {
     | "ConditionApplied"
     | "ConditionResisted"
     | "AbilityRecharged"
+    | "LegendaryResistanceUsed"
     | "ConditionExpired"
     | "ZoneCreated"
     | "ZoneMoved"

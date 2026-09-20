@@ -6,6 +6,7 @@ import {
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   effectiveFaction,
+  conditionSeverity,
   featureSources,
   isImmuneToCondition,
   saveAdvantageApplies,
@@ -2643,32 +2644,6 @@ function expectedRiderDamage(
     total += average * triggerChance * multiplier;
   }
   return total;
-}
-
-/** Relative disabling value of a condition, 0..1. */
-function conditionSeverity(name: ConditionName): number {
-  switch (name) {
-    case "paralyzed":
-    case "stunned":
-    case "unconscious":
-    case "dominated":
-      return 1;
-    case "incapacitated":
-    case "restrained":
-    case "confused":
-      return 0.65;
-    case "frightened":
-    case "blinded":
-    case "prone":
-    case "grappled":
-      return 0.45;
-    case "charmed":
-    case "poisoned":
-    case "deafened":
-      return 0.3;
-    default:
-      return 0.2;
-  }
 }
 
 /**

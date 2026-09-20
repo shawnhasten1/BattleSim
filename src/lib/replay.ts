@@ -200,6 +200,14 @@ function applyEvent(
       return;
     }
 
+    case "LegendaryResistanceUsed": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant && typeof data.resourceId === "string" && typeof data.next === "number") {
+        combatant.resources = { ...(combatant.resources ?? {}), [data.resourceId]: data.next };
+      }
+      return;
+    }
+
     case "AbilityRecharged": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant && data.recharged === true && typeof data.resourceId === "string") {
