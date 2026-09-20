@@ -125,7 +125,7 @@ describe("grapple rider editor", () => {
     const Wrapper = () => {
       const [riders, setRiders] = useState<import("@/engine").ActionRider[]>([{ kind: "hold", when: "on-hit", escapeDc: 13 }]);
       seen[0] = riders;
-      return <RiderEditor value={riders} onChange={setRiders} context="weapon" />;
+      return <RiderEditor value={riders} onChange={setRiders} context="weapon" hasActionSave={false} />;
     };
     render(<Wrapper />);
     await userEvent.click(screen.getByLabelText(/also restrained/));
