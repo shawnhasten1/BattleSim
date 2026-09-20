@@ -8,7 +8,7 @@ import { parseAttack } from "../scripts/srd-monsters/attacks";
 import { buildMonsterLibrary } from "../scripts/srd-monsters/build";
 import { type MonsterContext, type RawEntry } from "../scripts/srd-monsters/context";
 import { parseCsv } from "../scripts/srd-monsters/csv";
-import { parseConditionImmunities, parseDamageAdjustments } from "../scripts/srd-monsters/defenses";
+import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } from "../scripts/srd-monsters/defenses";
 import { parseMultiattack } from "../scripts/srd-monsters/multiattack";
 import { parseSaveAction, splitBoldVariants } from "../scripts/srd-monsters/saves";
 import { GapLog } from "../scripts/srd-monsters/util";
@@ -266,7 +266,7 @@ describe("defense parser", () => {
       { type: "resistance", damageType: "cold" },
       ...(["bludgeoning", "piercing", "slashing"] as const).map((damageType) => ({ type: "resistance" as const, damageType, nonMagicalOnly: true, exceptMaterials: ["silvered"] }))
     ]);
-    expect(gaps.codes()).toEqual(["NONMAGIC_EXCEPTION"]);
+    expect(gaps.codes()).toEqual([]); // the engine enforces the exception now, so it is no longer a gap
     expect(parseDamageAdjustments("bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons", "immunity", new GapLog())[0]).toMatchObject({ exceptMaterials: ["adamantine"] });
   });
 
@@ -280,6 +280,14 @@ describe("defense parser", () => {
     expect(parseDamageAdjustments("damage from spells", "resistance", gaps)).toEqual([]);
     expect(parseDamageAdjustments("piercing from magic weapons wielded by good creatures", "vulnerability", gaps)).toEqual([]);
     expect(gaps.codes()).toEqual(["DEFENSE_TEXT"]);
+  });
+
+  it("reads absorption traits as absorb adjustments", () => {
+    const text = "Whenever the golem is subjected to lightning damage, it takes no damage and instead regains a number of hit points equal to the lightning damage dealt.";
+    expect(parseAbsorption("Lightning Absorption", text)).toEqual({ type: "absorb", damageType: "lightning" });
+    expect(parseAbsorption("Acid Absorption", text.replace(/lightning/g, "acid"))).toEqual({ type: "absorb", damageType: "acid" });
+    expect(parseAbsorption("Immutable Form", "The golem is immune to any spell or effect that would alter its form.")).toBeNull();
+    expect(parseAbsorption("Fire Absorption", "Something unrelated.")).toBeNull(); // must actually describe healing
   });
 
   it("reads condition immunities", () => {

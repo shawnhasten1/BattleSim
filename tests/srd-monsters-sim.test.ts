@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runAutomatedEncounter, sampleEncounter, type CombatantState, type CreatureDefinition, type EncounterSnapshot } from "@/engine";
+import { createEngineState, resolveAttack, runAutomatedEncounter, sampleEncounter, type CombatantState, type CreatureDefinition, type EncounterSnapshot } from "@/engine";
 
 /**
  * Schema validity doesn't prove the engine can *run* a creature. Put every one
@@ -66,5 +66,61 @@ describe("every SRD monster runs in the engine", () => {
     const result = runAutomatedEncounter(duel(dragon, "srd-breath-limit"), 8);
     const breaths = result.log.filter((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "enemy-monster" && entry.data?.actionName === "Fire Breath");
     expect(breaths.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("SRD defenses work in the engine", () => {
+  const fighterDef = sampleEncounter.definitions.find((definition) => definition.id === "def-fighter")!;
+  const monster = (slug: string) => monsters.find((definition) => definition.id === `srd:monster:${slug}`)!;
+
+  /** One attack of `damageType` (20 flat damage, always hits) against an SRD creature; returns what happened. */
+  function strike(slug: string, damageType: "slashing" | "lightning" | "fire", extra: Record<string, unknown> = {}, targetHp?: number) {
+    const target = monster(slug);
+    const attacker = {
+      ...fighterDef, id: "def-tester", actions: [{
+        kind: "attack" as const, id: "hit", name: "Hit", actionType: "action" as const, attackType: "melee" as const, ability: "str" as const,
+        attackBonus: 100, range: 5, reach: 5, damage: [{ dice: "20", damageType, ...extra }], automationSupport: "full" as const
+      }]
+    };
+    const token = (id: string, definition: CreatureDefinition, faction: "party" | "enemy", x: number, hp: number): CombatantState => ({
+      id, definitionId: definition.id, displayName: id, faction, position: { x, y: 4 }, currentHp: hp, tempHp: 0, state: "active",
+      tacticsProfile: "basic-melee", resourceStance: "balanced"
+    });
+    const base = structuredClone(sampleEncounter);
+    for (const seed of ["a", "b", "c", "d", "e", "f"]) {
+      const state = createEngineState({
+        ...base, seed, map: { ...base.map, walls: [], terrain: [] }, definitions: [attacker, target],
+        combatants: [token("attacker", attacker, "party", 3, 100), token("target", target, "enemy", 4, targetHp ?? target.maxHp)]
+      });
+      resolveAttack(state, "attacker", "target", "hit");
+      const hit = state.log.find((entry) => entry.type === "DamageApplied");
+      if (hit) return { applied: Number(hit.data?.totalApplied), absorbed: Number(hit.data?.absorbed ?? 0), hp: state.snapshot.combatants.find((entry) => entry.id === "target")!.currentHp, max: target.maxHp };
+    }
+    throw new Error("no hit");
+  }
+
+  it("a Werewolf ignores plain steel, but not silver (immune to nonmagical weapons not made with silver)", () => {
+    expect(strike("werewolf", "slashing").applied).toBe(0);
+    expect(strike("werewolf", "slashing", { material: "silvered" }).applied).toBe(20);
+    expect(strike("werewolf", "slashing", { magical: true }).applied).toBe(20);
+    expect(strike("werewolf", "slashing", { material: "adamantine" }).applied).toBe(0); // only silver counts for it
+  });
+
+  it("an Iron Golem (immune to nonmagical weapons not made with adamantine) is beaten by adamantine", () => {
+    expect(strike("iron-golem", "slashing").applied).toBe(0);
+    expect(strike("iron-golem", "slashing", { material: "adamantine" }).applied).toBe(20);
+    expect(strike("iron-golem", "slashing", { material: "silvered" }).applied).toBe(0);
+  });
+
+  it("a Flesh Golem is healed by lightning instead of hurt (and capped at its maximum)", () => {
+    const golem = monster("flesh-golem");
+    expect(strike("flesh-golem", "lightning", {}, 50)).toMatchObject({ applied: 0, absorbed: 20, hp: 70 });
+    expect(strike("flesh-golem", "lightning", {}, golem.maxHp - 5).hp).toBe(golem.maxHp);
+    expect(strike("flesh-golem", "fire", { magical: true }, 50)).toMatchObject({ applied: 20, absorbed: 0, hp: 30 });
+  });
+
+  it("an Iron Golem absorbs fire, a Clay Golem absorbs acid, a Shambling Mound absorbs lightning", () => {
+    expect(strike("iron-golem", "fire", {}, 100).hp).toBe(120);
+    expect(strike("shambling-mound", "lightning", {}, 60).hp).toBe(80);
   });
 });

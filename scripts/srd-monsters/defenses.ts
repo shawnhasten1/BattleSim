@@ -43,11 +43,22 @@ export function parseDamageAdjustments(
       if (exceptMaterials.length > 0) adjustment.exceptMaterials = [...exceptMaterials];
       out.push(adjustment);
     }
-    if (exceptMaterials.length > 0) {
-      gaps.add("NONMAGIC_EXCEPTION", `${type}: "${rawSegment.trim()}"`);
-    }
+    // Silvered / adamantine exceptions are enforced by the engine (DamageOrigin.material), so they are no
+    // longer a gap.
   }
   return out;
+}
+
+const ABSORPTION_TRAIT = /^(acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder) absorption$/i;
+
+/**
+ * "Lightning Absorption: Whenever the golem is subjected to lightning damage, it takes no damage and instead
+ * regains a number of hit points equal to the lightning damage dealt." → an `absorb` adjustment for that type.
+ */
+export function parseAbsorption(traitName: string, description: string): DamageAdjustment | null {
+  const match = ABSORPTION_TRAIT.exec(traitName.trim());
+  if (!match || !/regains? a number of hit points equal to/i.test(description)) return null;
+  return { type: "absorb", damageType: match[1]!.toLowerCase() as DamageType };
 }
 
 export function parseConditionImmunities(display: string, gaps: GapLog): ConditionImmunity[] {

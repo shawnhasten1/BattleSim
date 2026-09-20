@@ -11,7 +11,7 @@ A phase is done when its codes reach 0.
 | Code | Creatures | Meaning |
 |---|---:|---|
 | `COND_IMMUNITY` | 92 | Condition immunities are recorded but not yet enforced. |
-| `NONMAGIC_EXCEPTION` | 23 | Silvered / adamantine exceptions to nonmagical resistance are recorded but not yet enforced. |
+| `NONMAGIC_EXCEPTION` | 0 | (Retired — now enforced.) Silvered / adamantine exceptions to nonmagical resistance. |
 | `MAGIC_RESISTANCE` | 42 | Magic Resistance (advantage on saves against spells and magical effects) is reference-only. |
 | `DEFENSE_TEXT` | 2 | A resistance / immunity clause could not be parsed; see the description. |
 | `RECHARGE` | 47 | Recharge is approximated as a single use per encounter (no recharge roll yet). |
@@ -41,7 +41,7 @@ A phase is done when its codes reach 0.
 | `RIDER_TEXT` | 38 | Extra on-hit text is kept as a note and not automated. |
 | `SAVE_UNPARSED` | 18 | A saving-throw action could not be fully compiled. |
 | `SPECIAL_ACTION` | 22 | A special action is reference-only. |
-| `TRAIT_UNMODELED` | 73 | A trait with a mechanical effect is reference-only. |
+| `TRAIT_UNMODELED` | 71 | A trait with a mechanical effect is reference-only. |
 
 ## Parser warnings
 
@@ -113,10 +113,10 @@ A phase is done when its codes reach 0.
 | Balor | 19 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, RIDER_TEXT, SPECIAL_ACTION, TRAIT_UNMODELED, VARIANT |
 | Bandit | 0.125 | full |  |
 | Bandit Captain | 2 | partial | REACTION |
-| Barbed Devil | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MULTIATTACK_STEP, NONMAGIC_EXCEPTION, RIDER_TEXT, TRAIT_UNMODELED |
+| Barbed Devil | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MULTIATTACK_STEP, RIDER_TEXT, TRAIT_UNMODELED |
 | Basilisk | 3 | partial | TRAIT_UNMODELED |
 | Bat | 0 | partial | MOVE_FLY |
-| Bearded Devil | 3 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, RIDER_TEXT, TRAIT_UNMODELED |
+| Bearded Devil | 3 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, RIDER_TEXT, TRAIT_UNMODELED |
 | Behir | 11 | partial | HOLD_GRAPPLE, HOLD_SWALLOW, MOVE_CLIMB, RECHARGE |
 | Berserker | 2 | partial | TRAIT_UNMODELED |
 | Black Bear | 0.5 | partial | MOVE_CLIMB |
@@ -126,7 +126,7 @@ A phase is done when its codes reach 0.
 | Blood Hawk | 0.125 | partial | MOVE_FLY |
 | Blue Dragon Wyrmling | 3 | partial | MOVE_BURROW, MOVE_FLY, RECHARGE |
 | Boar | 0.25 | partial | CHARGE_TRAIT, SURVIVE_ZERO |
-| Bone Devil | 9 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, NONMAGIC_EXCEPTION |
+| Bone Devil | 9 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY |
 | Brass Dragon Wyrmling | 1 | partial | MOVE_BURROW, MOVE_FLY, RECHARGE |
 | Bronze Dragon Wyrmling | 2 | partial | MOVE_FLY, MOVE_SWIM, RECHARGE |
 | Brown Bear | 1 | partial | MOVE_CLIMB |
@@ -135,10 +135,10 @@ A phase is done when its codes reach 0.
 | Camel | 0.125 | full |  |
 | Cat | 0 | partial | MOVE_CLIMB |
 | Centaur | 2 | partial | CHARGE_TRAIT |
-| Chain Devil | 11 | partial | COND_IMMUNITY, HOLD_GRAPPLE, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, REACTION, SPAWN |
+| Chain Devil | 11 | partial | COND_IMMUNITY, HOLD_GRAPPLE, MAGIC_RESISTANCE, REACTION, SPAWN |
 | Chimera | 6 | partial | MOVE_FLY, MULTIATTACK_STEP, RECHARGE |
 | Chuul | 4 | partial | COND_IMMUNITY, HOLD_GRAPPLE, MOVE_SWIM |
-| Clay Golem | 9 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, RIDER_TEXT, SAVE_UNPARSED, TRAIT_UNMODELED |
+| Clay Golem | 9 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, RIDER_TEXT, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloaker | 8 | partial | HOLD_GRAPPLE, MOVE_FLY, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloud Giant | 9 | partial | SPELLS |
 | Cockatrice | 0.5 | partial | MOVE_FLY |
@@ -174,17 +174,17 @@ A phase is done when its codes reach 0.
 | Elephant | 4 | partial | CHARGE_TRAIT |
 | Elf, Drow | 0 | full |  |
 | Elk | 0.25 | partial | CHARGE_TRAIT |
-| Erinyes | 12 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, NONMAGIC_EXCEPTION, REACTION, VARIANT |
+| Erinyes | 12 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, REACTION, VARIANT |
 | Ettercap | 2 | partial | HOLD_GRAPPLE, MOVE_CLIMB, MOVE_TRAIT, VARIANT |
 | Ettin | 4 | partial | TRAIT_UNMODELED |
 | Fire Elemental | 5 | partial | COND_IMMUNITY, RIDER_TEXT, TRAIT_UNMODELED |
 | Fire Giant | 9 | full |  |
-| Flesh Golem | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, TRAIT_UNMODELED |
+| Flesh Golem | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, TRAIT_UNMODELED |
 | Flying Snake | 0.125 | partial | MOVE_FLY, MOVE_SWIM |
 | Flying Sword | 0.25 | partial | COND_IMMUNITY, MOVE_FLY, TRAIT_UNMODELED |
 | Frog | 0 | partial | MOVE_SWIM |
 | Frost Giant | 8 | full |  |
-| Gargoyle | 2 | partial | COND_IMMUNITY, MOVE_FLY, NONMAGIC_EXCEPTION |
+| Gargoyle | 2 | partial | COND_IMMUNITY, MOVE_FLY |
 | Gelatinous Cube | 2 | partial | COND_IMMUNITY, HOLD_SWALLOW, TRAIT_UNMODELED |
 | Ghast | 2 | partial | COND_IMMUNITY, TRAIT_UNMODELED |
 | Ghost | 4 | partial | COND_IMMUNITY, MOVE_FLY, MOVE_TRAIT, SAVE_IMMUNITY_AFTER, SPECIAL_ACTION |
@@ -245,15 +245,15 @@ A phase is done when its codes reach 0.
 | Hippogriff | 1 | partial | MOVE_FLY |
 | Hobgoblin | 0.5 | partial | TRAIT_UNMODELED |
 | Homunculus | 0 | partial | COND_IMMUNITY, MOVE_FLY |
-| Horned Devil | 11 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, MULTIATTACK_STEP, NONMAGIC_EXCEPTION, RIDER_TEXT |
+| Horned Devil | 11 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, MULTIATTACK_STEP, RIDER_TEXT |
 | Hunter Shark | 2 | partial | CHARGE_TRAIT, MOVE_SWIM |
 | Hydra | 8 | partial | MOVE_SWIM, TRAIT_UNMODELED |
 | Hyena | 0 | full |  |
-| Ice Devil | 14 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION |
+| Ice Devil | 14 | partial | COND_IMMUNITY, MAGIC_RESISTANCE |
 | Ice Mephit | 0.5 | partial | COND_IMMUNITY, MOVE_FLY, SPELLS, TRAIT_UNMODELED, VARIANT |
-| Imp | 1 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, NONMAGIC_EXCEPTION, SPECIAL_ACTION, TRANSFORM |
+| Imp | 1 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, SPECIAL_ACTION, TRANSFORM |
 | Invisible Stalker | 6 | partial | COND_IMMUNITY, MOVE_FLY, TRAIT_UNMODELED |
-| Iron Golem | 16 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, RECHARGE, TRAIT_UNMODELED |
+| Iron Golem | 16 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, RECHARGE |
 | Jackal | 0 | full |  |
 | Killer Whale | 3 | partial | MOVE_SWIM |
 | Knight | 3 | partial | MAGIC_RESISTANCE, REACTION, SAVE_UNPARSED |
@@ -282,7 +282,7 @@ A phase is done when its codes reach 0.
 | Mummy | 3 | partial | COND_IMMUNITY, RIDER_TEXT, SAVE_IMMUNITY_AFTER |
 | Mummy Lord | 15 | partial | COND_IMMUNITY, LEGENDARY_ACTIONS, MAGIC_RESISTANCE, RIDER_TEXT, SAVE_IMMUNITY_AFTER, SPELLS, SURVIVE_ZERO |
 | Nalfeshnee | 13 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, SAVE_IMMUNITY_AFTER, SPECIAL_ACTION, VARIANT |
-| Night Hag | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, SPECIAL_ACTION, SPELLS, TRAIT_UNMODELED, TRANSFORM |
+| Night Hag | 5 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, SPECIAL_ACTION, SPELLS, TRAIT_UNMODELED, TRANSFORM |
 | Nightmare | 3 | partial | MOVE_FLY, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Noble | 0.125 | partial | REACTION |
 | Ochre Jelly | 2 | partial | COND_IMMUNITY, MOVE_CLIMB, MOVE_TRAIT, SPAWN |
@@ -297,7 +297,7 @@ A phase is done when its codes reach 0.
 | Panther | 0.25 | partial | CHARGE_TRAIT, MOVE_CLIMB |
 | Pegasus | 2 | partial | MOVE_FLY |
 | Phase Spider | 3 | partial | MOVE_CLIMB, MOVE_TRAIT, TRAIT_UNMODELED |
-| Pit Fiend | 20 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, NONMAGIC_EXCEPTION, SPELLS, TRAIT_UNMODELED |
+| Pit Fiend | 20 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, MOVE_FLY, SPELLS, TRAIT_UNMODELED |
 | Planetar | 16 | partial | COND_IMMUNITY, LIMITED_USE, MAGIC_RESISTANCE, MOVE_FLY, SPELLS, TRAIT_UNMODELED |
 | Plesiosaurus | 2 | partial | MOVE_SWIM |
 | Poisonous Snake | 0.125 | partial | MOVE_SWIM |
@@ -329,7 +329,7 @@ A phase is done when its codes reach 0.
 | Sea Hag | 2 | partial | MOVE_SWIM, SAVE_UNPARSED, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Sea Horse | 0 | partial | MOVE_SWIM |
 | Shadow | 0.5 | partial | COND_IMMUNITY, MOVE_TRAIT, RIDER_TEXT, TRAIT_UNMODELED |
-| Shambling Mound | 5 | partial | COND_IMMUNITY, HOLD_SWALLOW, MOVE_SWIM, TRAIT_UNMODELED |
+| Shambling Mound | 5 | partial | COND_IMMUNITY, HOLD_SWALLOW, MOVE_SWIM |
 | Shield Guardian | 7 | partial | COND_IMMUNITY, REACTION, REGEN, TRAIT_UNMODELED |
 | Shrieker | 0 | manual | COND_IMMUNITY, SPECIAL_ACTION |
 | Silver Dragon Wyrmling | 2 | partial | MOVE_FLY, RECHARGE |
@@ -343,7 +343,7 @@ A phase is done when its codes reach 0.
 | Steam Mephit | 0.25 | partial | COND_IMMUNITY, MOVE_FLY, SPELLS, TRAIT_UNMODELED, VARIANT |
 | Stirge | 0.125 | partial | HOLD_GRAPPLE, MOVE_FLY |
 | Stone Giant | 7 | partial | REACTION |
-| Stone Golem | 10 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, NONMAGIC_EXCEPTION, SAVE_UNPARSED |
+| Stone Golem | 10 | partial | COND_IMMUNITY, MAGIC_RESISTANCE, SAVE_UNPARSED |
 | Storm Giant | 13 | partial | MOVE_SWIM, SPELLS |
 | Succubus/Incubus | 4 | partial | MOVE_FLY, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, SPECIAL_ACTION, TRANSFORM |
 | Swarm of Bats | 0.25 | partial | COND_IMMUNITY, MOVE_FLY, SWARM_DAMAGE |
@@ -375,20 +375,20 @@ A phase is done when its codes reach 0.
 | Warhorse Skeleton | 0.5 | partial | COND_IMMUNITY |
 | Water Elemental | 5 | partial | COND_IMMUNITY, HOLD_GRAPPLE, MOVE_SWIM, TRAIT_UNMODELED |
 | Weasel | 0 | full |  |
-| Werebear | 5 | partial | NONMAGIC_EXCEPTION, RIDER_TEXT, TRANSFORM |
-| Wereboar | 4 | partial | CHARGE_TRAIT, NONMAGIC_EXCEPTION, RIDER_TEXT, SURVIVE_ZERO, TRANSFORM |
-| Wererat | 2 | partial | NONMAGIC_EXCEPTION, RIDER_TEXT, TRANSFORM |
-| Weretiger | 4 | partial | CHARGE_TRAIT, NONMAGIC_EXCEPTION, RIDER_TEXT, TRANSFORM |
-| Werewolf | 3 | partial | NONMAGIC_EXCEPTION, RIDER_TEXT, TRANSFORM |
+| Werebear | 5 | partial | RIDER_TEXT, TRANSFORM |
+| Wereboar | 4 | partial | CHARGE_TRAIT, RIDER_TEXT, SURVIVE_ZERO, TRANSFORM |
+| Wererat | 2 | partial | RIDER_TEXT, TRANSFORM |
+| Weretiger | 4 | partial | CHARGE_TRAIT, RIDER_TEXT, TRANSFORM |
+| Werewolf | 3 | partial | RIDER_TEXT, TRANSFORM |
 | White Dragon Wyrmling | 2 | partial | MOVE_BURROW, MOVE_FLY, MOVE_SWIM, RECHARGE |
-| Wight | 3 | partial | COND_IMMUNITY, MULTIATTACK_STEP, NONMAGIC_EXCEPTION, RIDER_TEXT |
+| Wight | 3 | partial | COND_IMMUNITY, MULTIATTACK_STEP, RIDER_TEXT |
 | Will-o'-Wisp | 2 | partial | COND_IMMUNITY, MOVE_FLY, MOVE_TRAIT, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Winter Wolf | 3 | partial | RECHARGE, TRAIT_UNMODELED |
 | Wolf | 0.25 | full |  |
 | Worg | 0.5 | full |  |
-| Wraith | 5 | partial | COND_IMMUNITY, MOVE_FLY, MOVE_TRAIT, NONMAGIC_EXCEPTION, RIDER_TEXT, SPAWN |
+| Wraith | 5 | partial | COND_IMMUNITY, MOVE_FLY, MOVE_TRAIT, RIDER_TEXT, SPAWN |
 | Wyvern | 6 | partial | MOVE_FLY, MULTIATTACK_STEP |
-| Xorn | 5 | partial | MOVE_BURROW, MOVE_TRAIT, NONMAGIC_EXCEPTION, TRAIT_UNMODELED |
+| Xorn | 5 | partial | MOVE_BURROW, MOVE_TRAIT, TRAIT_UNMODELED |
 | Young Black Dragon | 7 | partial | MOVE_FLY, MOVE_SWIM, RECHARGE |
 | Young Blue Dragon | 9 | partial | MOVE_BURROW, MOVE_FLY, RECHARGE |
 | Young Brass Dragon | 6 | partial | MOVE_BURROW, MOVE_FLY, RECHARGE |
@@ -672,7 +672,6 @@ A phase is done when its codes reach 0.
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `RIDER_TEXT` — Hurl Flame: If the target is a flammable object that isn't being worn or carried, it also ca
 - `MULTIATTACK_STEP` — Multiattack: Alternatively, it can use Hurl Flame twice.
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 
 ### Basilisk
@@ -685,7 +684,6 @@ A phase is done when its codes reach 0.
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `TRAIT_UNMODELED` — Steadfast
 - `RIDER_TEXT` — Glaive: If the target is a creature other than an undead or a construct, it must succeed
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 
 ### Behir
@@ -731,7 +729,6 @@ A phase is done when its codes reach 0.
 
 ### Bone Devil
 - `MAGIC_RESISTANCE` — Magic Resistance
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 - `MOVE_FLY` — fly 40 ft.
 
@@ -767,7 +764,6 @@ A phase is done when its codes reach 0.
 - `REACTION` — Unnerving Mask
 - `HOLD_GRAPPLE` — Chain: The target is grappled (escape DC 14) if the devil isn't already grappling a cre
 - `SPAWN` — Animate Chains
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 
 ### Chimera
@@ -782,12 +778,10 @@ A phase is done when its codes reach 0.
 - `MOVE_SWIM` — swim 30 ft.
 
 ### Clay Golem
-- `TRAIT_UNMODELED` — Acid Absorption
 - `TRAIT_UNMODELED` — Berserk
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `RIDER_TEXT` — Slam: If the target is a creature, it must succeed on a DC 15 Constitution saving thro
 - `SAVE_UNPARSED` — Haste
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons"
 - `COND_IMMUNITY` — charmed, exhaustion, frightened, paralyzed, petrified, poisoned
 
 ### Cloaker
@@ -938,7 +932,6 @@ A phase is done when its codes reach 0.
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `REACTION` — Parry
 - `VARIANT` — Variant: Rope of Entanglement
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 - `MOVE_FLY` — fly 60 ft.
 
@@ -961,9 +954,7 @@ A phase is done when its codes reach 0.
 ### Flesh Golem
 - `TRAIT_UNMODELED` — Aversion of Fire
 - `TRAIT_UNMODELED` — Berserk
-- `TRAIT_UNMODELED` — Lightning Absorption
 - `MAGIC_RESISTANCE` — Magic Resistance
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons"
 - `COND_IMMUNITY` — charmed, exhaustion, frightened, paralyzed, petrified, poisoned
 
 ### Flying Snake
@@ -979,7 +970,6 @@ A phase is done when its codes reach 0.
 - `MOVE_SWIM` — swim 20 ft.
 
 ### Gargoyle
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons"
 - `COND_IMMUNITY` — exhaustion, petrified, poisoned
 - `MOVE_FLY` — fly 60 ft.
 
@@ -1205,7 +1195,6 @@ A phase is done when its codes reach 0.
 - `RIDER_TEXT` — Tail: If the target is a creature other than an undead or a construct, it must succeed
 - `RIDER_TEXT` — Hurl Flame: If the target is a flammable object that isn't being worn or carried, it also ca
 - `MULTIATTACK_STEP` — Multiattack: It can use Hurl Flame in place of any melee attack.
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 - `MOVE_FLY` — fly 60 ft.
 
@@ -1220,7 +1209,6 @@ A phase is done when its codes reach 0.
 
 ### Ice Devil
 - `MAGIC_RESISTANCE` — Magic Resistance
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 
 ### Ice Mephit
@@ -1234,7 +1222,6 @@ A phase is done when its codes reach 0.
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `TRANSFORM` — Shapechanger
 - `SPECIAL_ACTION` — Invisibility
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical/nonsilver weapons"
 - `COND_IMMUNITY` — poisoned
 - `MOVE_FLY` — fly 40 ft.
 
@@ -1244,10 +1231,8 @@ A phase is done when its codes reach 0.
 - `MOVE_FLY` — fly 50 ft. (hover)
 
 ### Iron Golem
-- `TRAIT_UNMODELED` — Fire Absorption
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `RECHARGE` — Poison Breath (Recharge 6-6)
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons"
 - `COND_IMMUNITY` — charmed, exhaustion, frightened, paralyzed, petrified, poisoned
 
 ### Killer Whale
@@ -1383,7 +1368,6 @@ A phase is done when its codes reach 0.
 - `TRANSFORM` — Change Shape
 - `SPECIAL_ACTION` — Etherealness
 - `SPECIAL_ACTION` — Nightmare Haunting
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — charmed
 
 ### Nightmare
@@ -1445,7 +1429,6 @@ A phase is done when its codes reach 0.
 - `TRAIT_UNMODELED` — Fear Aura
 - `SPELLS` — Innate Spellcasting
 - `MAGIC_RESISTANCE` — Magic Resistance
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 - `MOVE_FLY` — fly 60 ft.
 
@@ -1573,7 +1556,6 @@ A phase is done when its codes reach 0.
 - `COND_IMMUNITY` — exhaustion, frightened, grappled, paralyzed, petrified, poisoned, prone, restrained
 
 ### Shambling Mound
-- `TRAIT_UNMODELED` — Lightning Absorption
 - `HOLD_SWALLOW` — Engulf
 - `COND_IMMUNITY` — blinded, deafened, exhaustion
 - `MOVE_SWIM` — swim 20 ft.
@@ -1649,7 +1631,6 @@ A phase is done when its codes reach 0.
 ### Stone Golem
 - `MAGIC_RESISTANCE` — Magic Resistance
 - `SAVE_UNPARSED` — Slow: no damage or condition found
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with adamantine weapons"
 - `COND_IMMUNITY` — charmed, exhaustion, frightened, paralyzed, petrified, poisoned
 
 ### Storm Giant
@@ -1812,30 +1793,25 @@ A phase is done when its codes reach 0.
 ### Werebear
 - `TRANSFORM` — Shapechanger
 - `RIDER_TEXT` — Bite: If the target is a humanoid, it must succeed on a DC 14 Constitution saving thro
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 
 ### Wereboar
 - `CHARGE_TRAIT` — Charge (Boar or Hybrid Form Only)
 - `SURVIVE_ZERO` — Relentless (Recharges after a Short or Long Rest)
 - `TRANSFORM` — Shapechanger
 - `RIDER_TEXT` — Tusks: If the target is a humanoid, it must succeed on a DC 12 Constitution saving thro
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 
 ### Wererat
 - `TRANSFORM` — Shapechanger
 - `RIDER_TEXT` — Bite: If the target is a humanoid, it must succeed on a DC 11 Constitution saving thro
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 
 ### Weretiger
 - `CHARGE_TRAIT` — Pounce (Tiger or Hybrid Form Only)
 - `TRANSFORM` — Shapechanger
 - `RIDER_TEXT` — Bite: If the target is a humanoid, it must succeed on a DC 13 Constitution saving thro
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 
 ### Werewolf
 - `TRANSFORM` — Shapechanger
 - `RIDER_TEXT` — Bite: If the target is a humanoid, it must succeed on a DC 12 Constitution saving thro
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 
 ### White Dragon Wyrmling
 - `RECHARGE` — Cold Breath (Recharge 5-6)
@@ -1846,7 +1822,6 @@ A phase is done when its codes reach 0.
 ### Wight
 - `RIDER_TEXT` — Life Drain: The target must succeed on a DC 13 Constitution saving throw or its hit point ma
 - `MULTIATTACK_STEP` — Multiattack: It can use its Life Drain in place of one longsword attack.
-- `NONMAGIC_EXCEPTION` — immunity: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — poisoned
 
 ### Will-o'-Wisp
@@ -1866,7 +1841,6 @@ A phase is done when its codes reach 0.
 - `MOVE_TRAIT` — Incorporeal Movement
 - `RIDER_TEXT` — Life Drain: The target must succeed on a DC 14 Constitution saving throw or its hit point ma
 - `SPAWN` — Create Specter
-- `NONMAGIC_EXCEPTION` — resistance: "bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"
 - `COND_IMMUNITY` — charmed, exhaustion, grappled, paralyzed, petrified, poisoned, prone, restrained
 - `MOVE_FLY` — fly 60 ft. (hover)
 
@@ -1877,7 +1851,6 @@ A phase is done when its codes reach 0.
 ### Xorn
 - `MOVE_TRAIT` — Earth Glide
 - `TRAIT_UNMODELED` — Treasure Sense
-- `NONMAGIC_EXCEPTION` — resistance: "piercing and slashing from nonmagical attacks not made with adamantine weapons"
 - `MOVE_BURROW` — burrow 20 ft.
 
 ### Young Black Dragon

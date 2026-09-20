@@ -33,6 +33,11 @@ const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
     })
   },
   {
+    // Modelled as an `absorb` damage adjustment on the definition (see `parseAbsorption`); the trait is the label.
+    match: /^(Acid|Cold|Fire|Force|Lightning|Necrotic|Poison|Psychic|Radiant|Thunder) Absorption$/i,
+    build: () => ({ automationSupport: "full" })
+  },
+  {
     match: /^Flyby$/i,
     build: () => ({ automationSupport: "full", effects: [{ kind: "avoids-opportunity-attacks" }] })
   },

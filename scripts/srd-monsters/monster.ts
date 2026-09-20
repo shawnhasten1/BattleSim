@@ -5,7 +5,7 @@ import type {
 import type { GapCode, MonsterTier } from "../../src/data/srd/monsters/gaps";
 import { parseAttack } from "./attacks";
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
-import { parseConditionImmunities, parseDamageAdjustments } from "./defenses";
+import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } from "./defenses";
 import { parseMultiattack } from "./multiattack";
 import { parseSaveAction, splitBoldVariants } from "./saves";
 import { grantsMagicalWeapons, parseTrait } from "./traits";
@@ -289,7 +289,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   const adjustments: DamageAdjustment[] = [
     ...parseDamageAdjustments(row.damage_resistances_display ?? "", "resistance", gaps),
     ...parseDamageAdjustments(row.damage_immunities_display ?? "", "immunity", gaps),
-    ...parseDamageAdjustments(row.damage_vulnerabilities_display ?? "", "vulnerability", gaps)
+    ...parseDamageAdjustments(row.damage_vulnerabilities_display ?? "", "vulnerability", gaps),
+    ...rawTraits.flatMap((entry) => parseAbsorption(entry.name, entry.desc) ?? [])
   ];
   const conditionImmunities = parseConditionImmunities(row.condition_immunities_display ?? "", gaps);
   if (conditionImmunities.length > 0) {
