@@ -42,12 +42,17 @@ function srdActionsTaken(log: CombatLogEvent[], encounter: EncounterSnapshot) {
   return log.filter((entry) => entry.type === "ActionDeclared" && srdIds.has(String(entry.data?.actorId)));
 }
 
+/** Fire Breath uses per actor, minus the recharges that earned another one: what's left must be at most 1. */
 function breathsPerActor(log: CombatLogEvent[]) {
   const counts = new Map<string, number>();
   for (const entry of log) {
     if (entry.type === "ActionDeclared" && entry.data?.actionName === "Fire Breath") {
       const actor = String(entry.data.actorId);
       counts.set(actor, (counts.get(actor) ?? 0) + 1);
+    }
+    if (entry.type === "AbilityRecharged" && entry.data?.recharged === true && /breath/i.test(String(entry.data.actionId))) {
+      const actor = String(entry.data.combatantId);
+      counts.set(actor, (counts.get(actor) ?? 0) - 1);
     }
   }
   return counts;

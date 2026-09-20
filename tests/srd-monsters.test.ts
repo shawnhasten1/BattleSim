@@ -165,7 +165,7 @@ describe("attack parser", () => {
 describe("save-action parser", () => {
   const breath = "The dragon exhales fire in a 60-foot cone. Each creature in that area must make a DC 21 Dexterity saving throw, taking 63 (18d6) fire damage on a failed save, or half as much damage on a successful one.";
 
-  it("builds an area-save cone with half damage and a recharge (recorded + interim one-use pool)", () => {
+  it("builds an area-save cone with half damage and a recharge (recorded + a usage pool)", () => {
     const context = ctx();
     const action = parseSaveAction(entry("Fire Breath", breath, { usage_limits: { type: "RECHARGE_ON_ROLL", param: 5 } }), context) as AreaSaveActionDefinition;
     expect(action).toMatchObject({
@@ -174,7 +174,7 @@ describe("save-action parser", () => {
     });
     expect(action.damage).toEqual([{ dice: "18d6", damageType: "fire" }]);
     expect(context.resources["usage:fire-breath"]).toBe(1);
-    expect(context.gaps.codes()).toContain("RECHARGE");
+    expect(action.usage).toEqual({ kind: "recharge", recharge: { min: 5 } });
   });
 
   it("reads Frightful Presence as a hostile-only frightened aura with repeat saves", () => {

@@ -60,12 +60,13 @@ describe("every SRD monster runs in the engine", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps a recharge / per-day ability to its interim single-use pool", () => {
-    // Fire breath must not be fired every round: 1 use in a fight where nobody can rest.
+  it("a recharge ability is only used again after it recharges", () => {
+    // Fire breath must not be fired every round: one use, plus one more per successful recharge roll.
     const dragon = monsters.find((definition) => definition.id === "srd:monster:adult-red-dragon")!;
     const result = runAutomatedEncounter(duel(dragon, "srd-breath-limit"), 8);
     const breaths = result.log.filter((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "enemy-monster" && entry.data?.actionName === "Fire Breath");
-    expect(breaths.length).toBeLessThanOrEqual(1);
+    const recharges = result.log.filter((entry) => entry.type === "AbilityRecharged" && entry.data?.recharged === true).length;
+    expect(breaths.length).toBeLessThanOrEqual(1 + recharges);
   });
 });
 
