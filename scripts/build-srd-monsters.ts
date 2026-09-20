@@ -36,7 +36,8 @@ let stale = 0;
 for (const [name, content] of files) {
   const target = join(outDir, name);
   if (check) {
-    const current = existsSync(target) ? readFileSync(target, "utf8") : "";
+    // Git may check the files out with CRLF (autocrlf); compare content, not line endings.
+    const current = existsSync(target) ? readFileSync(target, "utf8").replace(/\r\n/g, "\n") : "";
     if (current !== content) {
       stale += 1;
       console.error(`stale: ${name}`);

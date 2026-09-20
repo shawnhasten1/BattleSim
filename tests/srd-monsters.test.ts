@@ -440,7 +440,8 @@ describe("generated library integrity", () => {
     expect(built.errors).toEqual([]);
     for (const [name, content] of built.files) {
       if (name.startsWith("..")) continue; // COVERAGE.md lives one directory up
-      expect(readFileSync(`${generatedDir}${name}`, "utf8") === content, `${name} is stale`).toBe(true);
+      // Git may check the files out with CRLF (autocrlf); compare content, not line endings.
+      expect(readFileSync(`${generatedDir}${name}`, "utf8").replace(/\r\n/g, "\n") === content, `${name} is stale`).toBe(true);
     }
   });
 });
