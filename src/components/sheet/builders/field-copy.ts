@@ -23,6 +23,7 @@ export const FIELD_COPY: Record<string, FieldCopy> = {
   "weapon.damage": { label: "Damage" },
   "weapon.magicBonus": { label: "Magic bonus", hint: "A +1 / +2 / +3 that adds to both the attack roll and every damage roll" },
   "weapon.magical": { label: "Magical", hint: "Damage counts as magical — it ignores resistance to non-magical attacks" },
+  "weapon.material": { label: "Material", hint: "Silvered or adamantine weapons get past \"nonmagical attacks not made with silvered weapons\" style resistances" },
   "weapon.toHitBonus": { label: "Extra to-hit", hint: "A flat bonus or penalty applied to the attack roll only" },
   "weapon.reach": { label: "Reach (ft)" },
   "weapon.range": { label: "Range (ft)" },

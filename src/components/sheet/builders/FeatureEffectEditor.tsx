@@ -1,12 +1,13 @@
 "use client";
 
-import type { Ability, DamageType, FeatureCondition, FeatureEffect, NumericFormula } from "@/engine";
+import type { Ability, ConditionName, DamageType, FeatureCondition, FeatureEffect, NumericFormula } from "@/engine";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { AdjustmentGroupEditor, DAMAGE_TYPES } from "./DamageAdjustmentGroup";
 import styles from "./builders.module.css";
 
-const DAMAGE_TYPES: DamageType[] = [
-  "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic",
-  "piercing", "poison", "psychic", "radiant", "slashing", "thunder"
+/** Conditions a save can be "against being …" (custom labels have no fixed name to match). */
+const SAVE_CONDITIONS: ConditionName[] = [
+  "blinded", "charmed", "deafened", "frightened", "grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"
 ];
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 
@@ -54,7 +55,7 @@ const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
   "incoming-attack-modifier": "Advantage or disadvantage on attack rolls made against this creature.",
   "armor-class-bonus": "A flat modifier to this creature's AC.",
   "save-bonus": "A flat modifier to this creature's saving throws.",
-  "save-advantage": "Advantage on this creature's saving throws.",
+  "save-advantage": "Advantage on this creature's saving throws — optionally only against spells and magic (Magic Resistance) or against being charmed, frightened, etc.",
   "save-dc-bonus": "A flat modifier to the save DC this creature imposes with its own saving-throw effects (a spellcasting focus boosting spell save DC, etc.).",
   "extra-action": "Regain a spent action, bonus action, or reaction so it can be used again this turn.",
   "resource-regain": "Refund some amount of a limited-use resource (a spell slot, a charge, etc.).",
@@ -136,7 +137,7 @@ function toCards(effects: FeatureEffect[]): EffectCard[] {
   const adjIndex = new Map<string, number>();
   for (const effect of effects) {
     if (effect.kind === "damage-adjustment") {
-      const key = `${effect.adjustment.type}|${effect.adjustment.nonMagicalOnly ? 1 : 0}`;
+      const key = `${effect.adjustment.type}|${effect.adjustment.nonMagicalOnly ? 1 : 0}|${[...(effect.adjustment.exceptMaterials ?? [])].sort().join(",")}`;
       const at = adjIndex.get(key);
       if (at != null) {
         cards[at]!.damageTypes!.push(effect.adjustment.damageType);
@@ -155,9 +156,9 @@ function fromCards(cards: EffectCard[]): FeatureEffect[] {
   return cards.flatMap((card): FeatureEffect[] => {
     if (card.effect.kind === "damage-adjustment") {
       const base = card.effect;
-      const { type, nonMagicalOnly } = base.adjustment;
+      const { type, nonMagicalOnly, exceptMaterials } = base.adjustment;
       const types = card.damageTypes?.length ? card.damageTypes : [base.adjustment.damageType];
-      return types.map((damageType) => ({ ...base, adjustment: { type, damageType, nonMagicalOnly } }));
+      return types.map((damageType) => ({ ...base, adjustment: { type, damageType, nonMagicalOnly, ...(exceptMaterials ? { exceptMaterials } : {}) } }));
     }
     return [card.effect];
   });
@@ -291,46 +292,25 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
   }
 
   if (effect.kind === "damage-adjustment") {
-    const selected = new Set(card.damageTypes ?? [effect.adjustment.damageType]);
     return (
-      <>
-        <div className={styles.riderRow}>
-          <select
-            aria-label="Adjustment"
-            value={effect.adjustment.type}
-            onChange={(e) => onChange({ ...card, effect: { ...effect, adjustment: { ...effect.adjustment, type: e.target.value as never } } })}
-          >
-            <option value="resistance">Resistance</option>
-            <option value="immunity">Immunity</option>
-            <option value="vulnerability">Vulnerability</option>
-          </select>
-          <label className={styles.fieldInlineLabel}>
-            <input
-              type="checkbox"
-              checked={Boolean(effect.adjustment.nonMagicalOnly)}
-              onChange={(e) => onChange({ ...card, effect: { ...effect, adjustment: { ...effect.adjustment, nonMagicalOnly: e.target.checked ? true : undefined } } })}
-            />
-            non-magical only
-          </label>
-          <button type="button" onClick={() => onChange({ ...card, damageTypes: [...DAMAGE_TYPES] })}>All</button>
-          <button type="button" onClick={() => onChange({ ...card, damageTypes: DAMAGE_TYPES.filter((t) => t !== "psychic") })}>All but psychic</button>
-        </div>
-        <div className={styles.chips}>
-          {DAMAGE_TYPES.map((t) => (
-            <button
-              key={t} type="button"
-              className={selected.has(t) ? styles.chipOn : undefined}
-              onClick={() => {
-                const next = new Set(selected);
-                next.has(t) ? next.delete(t) : next.add(t);
-                onChange({ ...card, damageTypes: [...next] });
-              }}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </>
+      <AdjustmentGroupEditor
+        group={{
+          type: effect.adjustment.type,
+          damageTypes: card.damageTypes ?? [effect.adjustment.damageType],
+          nonMagicalOnly: effect.adjustment.nonMagicalOnly,
+          exceptMaterials: effect.adjustment.exceptMaterials
+        }}
+        onChange={(group) => onChange({
+          damageTypes: group.damageTypes,
+          effect: {
+            ...effect,
+            adjustment: {
+              type: group.type, damageType: group.damageTypes[0] ?? effect.adjustment.damageType,
+              nonMagicalOnly: group.nonMagicalOnly, ...(group.exceptMaterials ? { exceptMaterials: group.exceptMaterials } : {})
+            }
+          }
+        })}
+      />
     );
   }
 
@@ -406,14 +386,56 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
   }
 
   if (effect.kind === "save-advantage") {
+    const abilities = new Set<Ability>([...(effect.ability ? [effect.ability] : []), ...(effect.abilities ?? [])]);
+    const conditions = new Set(effect.against?.conditions ?? []);
+    const setAbilities = (next: Set<Ability>) => set({ ...effect, ability: undefined, abilities: next.size ? ABILITIES.filter((a) => next.has(a)) : undefined });
+    const setAgainst = (against: { source?: "spell" | "magical"; conditions?: ConditionName[] }) =>
+      set({ ...effect, against: against.source || against.conditions?.length ? against : undefined });
     return (
-      <label className={styles.fieldInlineLabel}>
-        On saves
-        <select value={effect.ability ?? "any"} onChange={(e) => set({ ...effect, ability: e.target.value === "any" ? undefined : e.target.value as Ability })}>
-          <option value="any">all</option>
-          {ABILITIES.map((a) => <option key={a} value={a}>{a.toUpperCase()}</option>)}
-        </select>
-      </label>
+      <>
+        <div className={styles.riderRow}>
+          <span className={styles.fieldInlineLabel}>On saves (none selected = all)</span>
+        </div>
+        <div className={styles.chips}>
+          {ABILITIES.map((a) => (
+            <button
+              key={a} type="button" className={abilities.has(a) ? styles.chipOn : undefined}
+              onClick={() => { const next = new Set(abilities); next.has(a) ? next.delete(a) : next.add(a); setAbilities(next); }}
+            >
+              {a.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <label className={styles.fieldInlineLabel}>
+          Against
+          <select
+            aria-label="Save source"
+            value={effect.against?.source ?? "any"}
+            onChange={(e) => setAgainst({ ...effect.against, source: e.target.value === "any" ? undefined : e.target.value as "spell" | "magical" })}
+          >
+            <option value="any">any source</option>
+            <option value="magical">spells and other magical effects</option>
+            <option value="spell">spells only</option>
+          </select>
+        </label>
+        <div className={styles.riderRow}>
+          <span className={styles.fieldInlineLabel}>…and only against being (none selected = anything)</span>
+        </div>
+        <div className={styles.chips}>
+          {SAVE_CONDITIONS.map((c) => (
+            <button
+              key={c} type="button" className={conditions.has(c) ? styles.chipOn : undefined}
+              onClick={() => {
+                const next = new Set(conditions);
+                next.has(c) ? next.delete(c) : next.add(c);
+                setAgainst({ ...effect.against, conditions: next.size ? SAVE_CONDITIONS.filter((candidate) => next.has(candidate)) : undefined });
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </>
     );
   }
 

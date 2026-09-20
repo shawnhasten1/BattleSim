@@ -182,6 +182,10 @@ export function weaponFieldSchema(draft: BuilderDraft): FieldSpec[] {
     { key: "dmg", copy: "weapon.damage", control: "dice", visibleWhen: hasAttack },
     { key: "magicBonus", copy: "weapon.magicBonus", control: "number", min: 0, max: 3, step: 1, visibleWhen: hasAttack },
     { key: "magical", copy: "weapon.magical", control: "toggle", visibleWhen: hasAttack },
+    {
+      key: "material", copy: "weapon.material", control: "select", advanced: true, visibleWhen: hasAttack,
+      options: [{ value: "none", label: "Ordinary" }, { value: "silvered", label: "Silvered" }, { value: "adamantine", label: "Adamantine" }]
+    },
     { key: "onHit", copy: "weapon.onHit", control: "riders", riderContext: "weapon", visibleWhen: hasAttack },
     { key: "chargesEnabled", copy: "weapon.charges", control: "toggle" },
     { key: "chargesMax", copy: "weapon.chargesMax", control: "number", min: 1, max: 20, step: 1, visibleWhen: (d) => Boolean(d.chargesEnabled) },
@@ -217,6 +221,7 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     dmg: parseDiceValue(primary?.dice, primary?.damageType, Boolean(primary?.abilityModifier)),
     magicBonus: weapon.magicBonus ?? 0,
     magical: Boolean(weapon.magical),
+    material: weapon.material ?? "none",
     onHit: weapon.onHit ?? [],
     grantedActions: grantedDraftsFromActions(weapon.grantedActions),
     effects: weapon.effects ?? [],
@@ -286,6 +291,7 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
     ability,
     proficient: draft.nonProficient ? false : undefined,
     magical: draft.magical ? true : undefined,
+    material: draft.material === "silvered" || draft.material === "adamantine" ? draft.material : undefined,
     toHitBonus: Number(draft.toHitBonus) || undefined,
     magicBonus: Number(draft.magicBonus) || undefined,
     range: kind === "ranged" ? Number(draft.range) || 30 : Number(draft.reach) || 5,

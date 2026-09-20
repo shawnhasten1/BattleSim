@@ -2,7 +2,9 @@
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { abilityModifier, type Ability, type CombatantState, type CreatureDefinition, type CreatureType } from "@/engine";
+import { abilityModifier, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
+import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../builders/DamageAdjustmentGroup";
+import builderStyles from "../builders/builders.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
@@ -27,6 +29,19 @@ const CREATURE_TYPE_HELP = (
 );
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+const CONDITION_IMMUNITIES: ConditionImmunity[] = [
+  "blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "paralyzed",
+  "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"
+];
+
+const DEFENSES_HELP = (
+  <p>
+    Resistances, immunities, vulnerabilities and damage the creature absorbs (heals from) apply to every attack
+    and effect that damages it. A condition immunity stops the condition being applied at all — no save is
+    rolled. Effects granted by features (a Rage, a magic item) are edited on the feature itself.
+  </p>
+);
 
 export function StatsTab({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateCreatureDefinition = useEncounterStore((s) => s.updateCreatureDefinition);
@@ -140,6 +155,59 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
               <strong>{formatBonus(abilityModifier(definition.abilities[ability]))}</strong>
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.fieldLabel}>
+          Defenses
+          <InfoTooltip label="About defenses" content={DEFENSES_HELP} />
+        </h3>
+        <div className={builderStyles.riderList}>
+          {groupAdjustments(definition.damageAdjustments ?? []).map((group, index, groups) => (
+            <div key={index} className={builderStyles.riderCard}>
+              <div className={builderStyles.riderHead}>
+                <span>Damage</span>
+                <button
+                  type="button" className={builderStyles.riderRemove} aria-label="Remove damage defense"
+                  onClick={() => updateCreatureDefinition(definition.id, { damageAdjustments: flattenGroups(groups.filter((_, i) => i !== index)) })}
+                >
+                  ×
+                </button>
+              </div>
+              <AdjustmentGroupEditor
+                group={group}
+                onChange={(next) => updateCreatureDefinition(definition.id, { damageAdjustments: flattenGroups(groups.map((g, i) => (i === index ? next : g))) })}
+              />
+            </div>
+          ))}
+          <button
+            type="button" className={builderStyles.riderAdd}
+            onClick={() => updateCreatureDefinition(definition.id, {
+              damageAdjustments: [...(definition.damageAdjustments ?? []), { type: "resistance", damageType: "fire" }]
+            })}
+          >
+            + Add damage defense
+          </button>
+        </div>
+        <div className={styles.field}>Immune to being</div>
+        <div className={builderStyles.chips}>
+          {CONDITION_IMMUNITIES.map((condition) => {
+            const on = definition.conditionImmunities?.includes(condition) ?? false;
+            return (
+              <button
+                key={condition} type="button" aria-pressed={on}
+                className={on ? builderStyles.chipOn : undefined}
+                onClick={() => {
+                  const current = definition.conditionImmunities ?? [];
+                  const next = on ? current.filter((entry) => entry !== condition) : [...current, condition];
+                  updateCreatureDefinition(definition.id, { conditionImmunities: next.length ? next : undefined });
+                }}
+              >
+                {condition}
+              </button>
+            );
+          })}
         </div>
       </section>
 
