@@ -5,6 +5,7 @@ import {
   resolveSaveDc,
   riderNeedsHuman,
   type ActionDefinition,
+  type ActionUsage,
   type CombatantState,
   type CreatureDefinition,
   type SpellDefinition,
@@ -73,7 +74,21 @@ function describeReaction(action: ActionDefinition): string {
   return ` · reacts: ${REACTION_TRIGGER_TEXT[reaction.trigger.kind] ?? reaction.trigger.kind}`;
 }
 
+/** "Recharge 5–6", "3/day" or "shares a pool": how often a limited action can be used. */
+export function describeUsage(usage: ActionUsage | undefined): string {
+  if (!usage) return "";
+  if (usage.kind === "recharge") {
+    const min = usage.recharge?.min ?? 6;
+    return ` · Recharge ${min === 6 ? "6" : `${min}–6`}${usage.poolId ? " (shared)" : ""}`;
+  }
+  return ` · ${usage.uses ?? 1}/encounter${usage.poolId ? " (shared)" : ""}`;
+}
+
 export function describeAction(action: ActionDefinition, definition: CreatureDefinition): string {
+  return describeActionCore(action, definition) + describeUsage("usage" in action ? action.usage : undefined);
+}
+
+function describeActionCore(action: ActionDefinition, definition: CreatureDefinition): string {
   if (action.kind === "attack") {
     const beams = action.attackDelivery === "beams"
       ? `${action.beamCount ?? 1}${action.autoHit ? " auto-hit" : ""} beams, `

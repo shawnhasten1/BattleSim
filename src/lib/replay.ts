@@ -149,7 +149,9 @@ function applyEvent(
       const combatant = byId.get(String(data.combatantId));
       if (combatant) {
         combatant.state = "downed";
-        combatant.deathSaves ??= { successes: 0, failures: 0, stable: false };
+        // A regenerating monster is down but not dying: no death saves.
+        if (data.regenerating === true) combatant.downedRegen = true;
+        else combatant.deathSaves ??= { successes: 0, failures: 0, stable: false };
       }
       return;
     }
@@ -196,6 +198,27 @@ function applyEvent(
       const effect = data.effect as { resourceId?: string } | undefined;
       if (combatant && effect?.resourceId && typeof data.next === "number") {
         combatant.resources = { ...(combatant.resources ?? {}), [effect.resourceId]: data.next };
+      }
+      return;
+    }
+
+    case "Regenerated": {
+      const combatant = byId.get(String(data.combatantId));
+      if (!combatant) return;
+      if (data.standingUp === true) {
+        combatant.state = "active";
+        combatant.downedRegen = undefined;
+      }
+      if (typeof data.currentHp === "number") combatant.currentHp = data.currentHp;
+      return;
+    }
+
+    case "SurvivedLethal": {
+      const combatant = byId.get(String(data.combatantId));
+      if (!combatant) return;
+      combatant.currentHp = 1;
+      if (typeof data.resourceId === "string" && typeof data.next === "number") {
+        combatant.resources = { ...(combatant.resources ?? {}), [data.resourceId]: data.next };
       }
       return;
     }

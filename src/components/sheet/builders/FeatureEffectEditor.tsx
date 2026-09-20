@@ -30,7 +30,8 @@ const SCOPE_OPTIONS: Array<[string, string]> = [
 type EditorKind =
   | "damage-bonus" | "damage-adjustment" | "attack-bonus" | "attack-advantage"
   | "incoming-attack-modifier" | "armor-class-bonus" | "save-bonus" | "save-advantage"
-  | "save-dc-bonus" | "extra-action" | "resource-regain" | "avoids-opportunity-attacks";
+  | "save-dc-bonus" | "extra-action" | "resource-regain" | "avoids-opportunity-attacks"
+  | "hp-regen" | "survive-lethal" | "auto-succeed-save";
 
 const KIND_LABELS: Array<[EditorKind, string]> = [
   ["damage-bonus", "Bonus / penalty damage"],
@@ -44,7 +45,10 @@ const KIND_LABELS: Array<[EditorKind, string]> = [
   ["save-dc-bonus", "Save DC modifier (spell focus, etc.)"],
   ["extra-action", "Regain a spent action / bonus action / reaction"],
   ["resource-regain", "Regain a resource"],
-  ["avoids-opportunity-attacks", "Never provokes opportunity attacks"]
+  ["avoids-opportunity-attacks", "Never provokes opportunity attacks"],
+  ["hp-regen", "Regenerate hit points each turn"],
+  ["survive-lethal", "Drop to 1 HP instead of 0 (Undead Fortitude, Relentless)"],
+  ["auto-succeed-save", "Succeed on a failed save (Legendary Resistance)"]
 ];
 
 const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
@@ -59,7 +63,10 @@ const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
   "save-dc-bonus": "A flat modifier to the save DC this creature imposes with its own saving-throw effects (a spellcasting focus boosting spell save DC, etc.).",
   "extra-action": "Regain a spent action, bonus action, or reaction so it can be used again this turn.",
   "resource-regain": "Refund some amount of a limited-use resource (a spell slot, a charge, etc.).",
-  "avoids-opportunity-attacks": "This creature never provokes opportunity attacks by moving."
+  "avoids-opportunity-attacks": "This creature never provokes opportunity attacks by moving.",
+  "hp-regen": "Regains hit points at the start of its turn (a troll's Regeneration), optionally switched off for a turn by some damage types.",
+  "survive-lethal": "When damage would reduce it to 0 HP it stays at 1 HP instead — after a saving throw (Undead Fortitude) or once per encounter for a small enough hit (Relentless).",
+  "auto-succeed-save": "Spends one use of a resource pool to turn a failed saving throw into a success. The creature's resource stance decides when it's worth it."
 };
 
 const KIND_HELP = (
@@ -119,6 +126,12 @@ function blankEffect(kind: EditorKind): FeatureEffect {
       return { kind: "resource-regain", timing: "on-activate", resourceId: "", amount: { base: 1 } };
     case "avoids-opportunity-attacks":
       return { kind: "avoids-opportunity-attacks", condition: "always" };
+    case "hp-regen":
+      return { kind: "hp-regen", amount: 10 };
+    case "survive-lethal":
+      return { kind: "survive-lethal", save: { ability: "con", dcBase: 5 } };
+    case "auto-succeed-save":
+      return { kind: "auto-succeed-save", resourceId: "legendary-resistance" };
   }
 }
 
@@ -436,6 +449,118 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
           ))}
         </div>
       </>
+    );
+  }
+
+  if (effect.kind === "hp-regen") {
+    const suppressed = new Set(effect.suppressedByDamageTypes ?? []);
+    return (
+      <>
+        <div className={styles.riderRow}>
+          <label className={styles.fieldInlineLabel}>
+            Regains
+            <input type="number" min={1} value={effect.amount} onChange={(e) => set({ ...effect, amount: Math.max(1, Number(e.target.value) || 1) })} />
+            HP at the start of its turn
+          </label>
+          <label className={styles.fieldInlineLabel}>
+            <input type="checkbox" checked={effect.worksAtZero === true} onChange={(e) => set({ ...effect, worksAtZero: e.target.checked ? true : undefined })} />
+            even at 0 HP (stays down instead of dying)
+          </label>
+        </div>
+        <div className={styles.riderRow}>
+          <span className={styles.fieldInlineLabel}>Switched off for a turn by damage of type (none = never)</span>
+        </div>
+        <div className={styles.chips}>
+          {DAMAGE_TYPES.map((t) => (
+            <button
+              key={t} type="button" className={suppressed.has(t) ? styles.chipOn : undefined}
+              onClick={() => {
+                const next = new Set(suppressed);
+                next.has(t) ? next.delete(t) : next.add(t);
+                set({ ...effect, suppressedByDamageTypes: next.size ? DAMAGE_TYPES.filter((candidate) => next.has(candidate)) : undefined });
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (effect.kind === "survive-lethal") {
+    const excluded = new Set(effect.excludedDamageTypes ?? []);
+    return (
+      <>
+        <div className={styles.riderRow}>
+          <label className={styles.fieldInlineLabel}>
+            <input
+              type="checkbox" checked={Boolean(effect.save)}
+              onChange={(e) => set({ ...effect, save: e.target.checked ? { ability: "con", dcBase: 5 } : undefined })}
+            />
+            needs a saving throw
+          </label>
+          {effect.save ? (
+            <>
+              <select aria-label="Save ability" value={effect.save.ability} onChange={(e) => set({ ...effect, save: { ...effect.save!, ability: e.target.value as Ability } })}>
+                {ABILITIES.map((a) => <option key={a} value={a}>{a.toUpperCase()}</option>)}
+              </select>
+              <label className={styles.fieldInlineLabel}>
+                DC = <input type="number" aria-label="Base DC" value={effect.save.dcBase} onChange={(e) => set({ ...effect, save: { ...effect.save!, dcBase: Number(e.target.value) || 0 } })} /> + damage taken
+              </label>
+            </>
+          ) : null}
+        </div>
+        <div className={styles.riderRow}>
+          <label className={styles.fieldInlineLabel}>
+            Only if the hit is at most
+            <input
+              type="number" min={1} placeholder="any" aria-label="Largest hit covered" value={effect.maxDamage ?? ""}
+              onChange={(e) => set({ ...effect, maxDamage: e.target.value === "" ? undefined : Number(e.target.value) })}
+            />
+          </label>
+          <label className={styles.fieldInlineLabel}>
+            Uses (resource id)
+            <input type="text" placeholder="unlimited" aria-label="Uses pool" value={effect.resourceId ?? ""} onChange={(e) => set({ ...effect, resourceId: e.target.value || undefined })} />
+          </label>
+        </div>
+        <div className={styles.riderRow}>
+          <label className={styles.fieldInlineLabel}>
+            <input
+              type="checkbox" checked={excluded.has("radiant")}
+              onChange={(e) => set({ ...effect, excludedDamageTypes: e.target.checked ? ["radiant"] : undefined })}
+            />
+            not against radiant damage
+          </label>
+          <label className={styles.fieldInlineLabel}>
+            <input type="checkbox" checked={effect.excludeCritical === true} onChange={(e) => set({ ...effect, excludeCritical: e.target.checked ? true : undefined })} />
+            not against a critical hit
+          </label>
+        </div>
+      </>
+    );
+  }
+
+  if (effect.kind === "auto-succeed-save") {
+    return (
+      <div className={styles.riderRow}>
+        <label className={styles.fieldInlineLabel}>
+          Spends one use of
+          <input type="text" aria-label="Uses pool" value={effect.resourceId} onChange={(e) => set({ ...effect, resourceId: e.target.value })} />
+        </label>
+        <label className={styles.fieldInlineLabel}>
+          on saves against
+          <select
+            aria-label="Save source"
+            value={effect.against?.source ?? "any"}
+            onChange={(e) => set({ ...effect, against: e.target.value === "any" ? undefined : { source: e.target.value as "spell" | "magical" } })}
+          >
+            <option value="any">anything</option>
+            <option value="magical">spells and other magical effects</option>
+            <option value="spell">spells only</option>
+          </select>
+        </label>
+      </div>
     );
   }
 

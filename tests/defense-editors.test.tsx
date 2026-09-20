@@ -90,3 +90,30 @@ describe("weapon material", () => {
     expect(weaponFromDraft({ ...draft, material: "none" }).material).toBeUndefined();
   });
 });
+
+describe("limited-use effect editors", () => {
+  it("edits regeneration", async () => {
+    render(<Harness initial={[{ kind: "hp-regen", amount: 10 }]} />);
+    await userEvent.click(screen.getByLabelText(/even at 0 HP/));
+    await userEvent.click(screen.getByRole("button", { name: "acid" }));
+    await userEvent.click(screen.getByRole("button", { name: "fire" }));
+    expect(current()[0]).toEqual({ kind: "hp-regen", amount: 10, worksAtZero: true, suppressedByDamageTypes: ["acid", "fire"] });
+  });
+
+  it("edits Undead Fortitude and Relentless shapes", async () => {
+    render(<Harness initial={[{ kind: "survive-lethal", save: { ability: "con", dcBase: 5 } }]} />);
+    await userEvent.click(screen.getByLabelText(/not against radiant/));
+    await userEvent.click(screen.getByLabelText(/not against a critical/));
+    expect(current()[0]).toEqual({ kind: "survive-lethal", save: { ability: "con", dcBase: 5 }, excludedDamageTypes: ["radiant"], excludeCritical: true });
+    await userEvent.click(screen.getByLabelText(/needs a saving throw/));
+    await userEvent.type(screen.getByLabelText("Largest hit covered"), "7");
+    expect(current()[0]).toMatchObject({ maxDamage: 7 });
+    expect((current()[0] as { save?: unknown }).save).toBeUndefined();
+  });
+
+  it("edits Legendary Resistance", async () => {
+    render(<Harness initial={[{ kind: "auto-succeed-save", resourceId: "legendary-resistance" }]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Save source"), "magical");
+    expect(current()[0]).toEqual({ kind: "auto-succeed-save", resourceId: "legendary-resistance", against: { source: "magical" } });
+  });
+});

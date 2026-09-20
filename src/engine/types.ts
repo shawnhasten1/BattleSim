@@ -468,6 +468,30 @@ export type FeatureEffect =
   } & FeatureEffectConditions)
   | {
     /**
+     * Regains `amount` hit points at the start of the bearer's turn. `worksAtZero` (a troll) lets it work — and
+     * keeps the creature from dying — at 0 HP; without it the creature needs at least 1 HP. Damage of a type in
+     * `suppressedByDamageTypes` taken since its last turn switches it off for that turn (acid and fire vs a troll).
+     */
+    kind: "hp-regen";
+    amount: number;
+    worksAtZero?: boolean;
+    suppressedByDamageTypes?: DamageType[];
+  }
+  | {
+    /**
+     * Drops to 1 HP instead of 0 (Undead Fortitude, Relentless). `save` makes it a saving throw against
+     * `dcBase` + the damage taken; `maxDamage` only covers hits up to that size; `resourceId` limits it to the uses of
+     * a pool. It never covers damage of an `excludedDamageTypes` type, nor a critical hit with `excludeCritical`.
+     */
+    kind: "survive-lethal";
+    save?: { ability: Ability; dcBase: number };
+    maxDamage?: number;
+    excludedDamageTypes?: DamageType[];
+    excludeCritical?: boolean;
+    resourceId?: string;
+  }
+  | {
+    /**
      * Legendary Resistance: when this creature fails a saving throw it may spend one use of `resourceId`
      * to succeed instead. Whether it bothers is up to its `resourceStance` and how bad the failure would be.
      * `against` limits it to some saves, as for `save-advantage`.
@@ -1438,6 +1462,10 @@ export interface CombatantState {
   currentHp: number;
   tempHp: number;
   deathSaves?: DeathSaveState;
+  /** Damage types taken since this creature's last turn started — what switches a regeneration off. */
+  recentDamageTypes?: DamageType[];
+  /** Down at 0 HP but not dying: a regenerating monster (a troll) that stands up at its next turn unless it's stopped. */
+  downedRegen?: boolean;
   conditions?: ConditionInstance[];
   resources?: Record<string, number>;
   tokenVisuals?: TokenVisuals;
@@ -1480,6 +1508,8 @@ export interface RuleProfile {
   cover: boolean;
   /** Optional 5e rule: an intervening creature grants half cover. Off by default. */
   coverFromCreatures?: boolean;
+  /** 5e: damage left over after reaching 0 HP that is at least the creature's maximum HP kills it outright. Off when absent (older saves). */
+  massiveDamage?: boolean;
 }
 
 export interface EncounterSnapshot {
@@ -1518,6 +1548,9 @@ export interface CombatLogEvent {
     | "ConditionResisted"
     | "AbilityRecharged"
     | "LegendaryResistanceUsed"
+    | "Regenerated"
+    | "SurvivedLethal"
+    | "MassiveDamage"
     | "ConditionExpired"
     | "ZoneCreated"
     | "ZoneMoved"
@@ -1893,7 +1926,8 @@ export const encounterSnapshotSchema = z.object({
     enemiesDropAtZero: z.boolean(),
     requireLineOfEffect: z.boolean(),
     cover: z.boolean().default(true),
-    coverFromCreatures: z.boolean().optional()
+    coverFromCreatures: z.boolean().optional(),
+    massiveDamage: z.boolean().optional()
   }),
   definitions: z.array(z.any()),
   activeZones: z.array(z.any()).optional(),

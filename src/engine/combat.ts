@@ -2176,6 +2176,7 @@ export function rollRecharges(state: EngineState, actor: CombatantState): void {
 export function runTurnStart(state: EngineState, actor: CombatantState): void {
   resetActionEconomy(actor);
   rollRecharges(state, actor);
+  applyRegeneration(state, actor);
   expireConditions(state, "start");
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");
@@ -2204,6 +2205,7 @@ export function activeFactions(snapshot: EncounterSnapshot): Set<string> {
         // A scheduled reinforcement keeps its faction "in the fight" until it
         // arrives, so combat doesn't end in the empty rounds before it shows up.
         || combatant.state === "reserve"
+        || (combatant.state === "downed" && combatant.downedRegen === true)
         || (snapshot.rules.playerDeathSaves
           && combatant.faction === "party"
           && combatant.state === "downed"
@@ -2451,6 +2453,7 @@ function applyDamageEntries(
   sourceId?: Id
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
+  const hpBefore = target.currentHp + target.tempHp;
   let totalApplied = 0;
   let totalAbsorbed = 0;
   const components = entries.map((entry) => {
@@ -2500,8 +2503,25 @@ function applyDamageEntries(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
   }
-  updateDefeatState(state, target, sourceId);
+  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, components.filter((c) => c.finalAmount > 0).map((c) => c.damageType), entries.some((entry) => entry.critical)));
   return totalApplied;
+}
+
+/** What one instance of damage did, for the rules that care about more than the HP total. */
+interface HitInfo {
+  taken: number;
+  /** Damage left over after the target reached 0 HP. */
+  overkill: number;
+  damageTypes: DamageType[];
+  critical: boolean;
+}
+
+/** Notes the damage types on the target (regeneration switches off after acid / fire) and summarizes the hit. */
+function recordHit(target: CombatantState, hpBefore: number, taken: number, damageTypes: DamageType[], critical: boolean): HitInfo {
+  if (damageTypes.length > 0) {
+    target.recentDamageTypes = [...new Set([...(target.recentDamageTypes ?? []), ...damageTypes])];
+  }
+  return { taken, overkill: Math.max(0, taken - hpBefore), damageTypes, critical };
 }
 
 /** One component's dice rolled once, with no target — for area effects where every creature takes the same numbers. */
@@ -2550,6 +2570,7 @@ function applyRolledAreaDamage(
   sourceId?: Id
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
+  const hpBefore = target.currentHp + target.tempHp;
   let totalApplied = 0;
   let totalAbsorbed = 0;
   const components = rolled.map((entry) => {
@@ -2580,7 +2601,7 @@ function applyRolledAreaDamage(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
   }
-  updateDefeatState(state, target, sourceId);
+  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, components.filter((c) => c.finalAmount > 0).map((c) => c.damageType), false));
   return totalApplied;
 }
 
@@ -2600,8 +2621,42 @@ function applyHpDamage(target: CombatantState, amount: number): number {
  * to 0 outside of simulated combat) go through the same path as damage applied
  * during a simulated attack, rather than silently skipping death effects.
  */
-export function updateDefeatState(state: EngineState, target: CombatantState, killerId?: Id): void {
+export function updateDefeatState(state: EngineState, target: CombatantState, killerId?: Id, hit?: HitInfo): void {
   if (target.currentHp > 0) {
+    return;
+  }
+  const definition = getDefinition(state.snapshot, target);
+  // 5e massive damage: what's left after reaching 0 HP, if it's at least the creature's maximum, kills outright.
+  if (hit && state.snapshot.rules.massiveDamage && hit.overkill >= definition.maxHp && target.state !== "defeated") {
+    state.log.push(event(state, "MassiveDamage", `${target.displayName} takes massive damage (${hit.overkill} past 0) and dies outright`, {
+      combatantId: target.id, overkill: hit.overkill, maxHp: definition.maxHp
+    }));
+    defeatCombatant(state, target, killerId);
+    return;
+  }
+  if (target.state === "downed" && target.downedRegen) {
+    // Already down and waiting to regenerate: the thing that stops the regeneration finishes it.
+    const regen = downedRegeneration(state, target);
+    if (hit && regen && hit.damageTypes.some((type) => regen.suppressedByDamageTypes?.includes(type))) {
+      defeatCombatant(state, target, killerId);
+    }
+    return;
+  }
+  if (target.state === "active" && hit && survivesLethal(state, target, definition, hit)) {
+    return;
+  }
+  const activeRegen = target.state === "active" ? downedRegeneration(state, target) : undefined;
+  if (activeRegen && !(target.faction === "party" && state.snapshot.rules.playerDeathSaves)) {
+    if (hit && hit.damageTypes.some((type) => activeRegen.suppressedByDamageTypes?.includes(type))) {
+      // The blow that dropped it also shut its regeneration off, so it would die at the start of its turn: it dies now.
+      defeatCombatant(state, target, killerId);
+      return;
+    }
+    target.state = "downed";
+    target.downedRegen = true;
+    applyCondition(state, target.id, { id: `${target.id}-unconscious`, name: "unconscious", startedRound: state.snapshot.round }, { force: true });
+    state.log.push(event(state, "CombatantDowned", `${target.displayName} is down, but regenerating`, { combatantId: target.id, killerId, regenerating: true }));
+    breakConcentration(state, target.id);
     return;
   }
   if (target.faction === "party" && state.snapshot.rules.playerDeathSaves) {
@@ -2621,15 +2676,116 @@ export function updateDefeatState(state: EngineState, target: CombatantState, ki
     breakConcentration(state, target.id);
     return;
   }
+  defeatCombatant(state, target, killerId);
+}
+
+/** Marks a combatant defeated exactly once, ends its concentration and fires its death effects. */
+function defeatCombatant(state: EngineState, target: CombatantState, killerId?: Id): void {
   if (target.state === "defeated") {
     // Already defeated — further overkill damage doesn't re-trigger the transition
     // (and must not re-fire the death effect below).
     return;
   }
   target.state = "defeated";
+  target.downedRegen = undefined;
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
   breakConcentration(state, target.id);
   resolveDeathEffect(state, target.id, killerId);
+}
+
+/** The `hp-regen` effect that lets this creature keep going at 0 HP (a troll), if it has one. */
+function downedRegeneration(state: EngineState, target: CombatantState): Extract<FeatureEffect, { kind: "hp-regen" }> | undefined {
+  const definition = getDefinition(state.snapshot, target);
+  for (const feature of featureSources(definition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind === "hp-regen" && effect.worksAtZero) return effect;
+    }
+  }
+  return undefined;
+}
+
+/** Undead Fortitude / Relentless: drop to 1 HP instead of 0, when the hit qualifies. */
+function survivesLethal(state: EngineState, target: CombatantState, definition: CreatureDefinition, hit: HitInfo): boolean {
+  for (const feature of featureSources(definition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "survive-lethal") continue;
+      if (effect.excludeCritical && hit.critical) continue;
+      if (effect.excludedDamageTypes?.some((type) => hit.damageTypes.includes(type))) continue;
+      if (effect.maxDamage !== undefined && hit.taken > effect.maxDamage) continue;
+      if (effect.resourceId && (target.resources?.[effect.resourceId] ?? 0) < 1) continue;
+      if (effect.save) {
+        const dc = effect.save.dcBase + hit.taken;
+        const save = rollSavingThrow(state, target, { ability: effect.save.ability, dc, kind: "feature" });
+        state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${effect.save.ability.toUpperCase()} save against ${feature.name}`, {
+          targetId: target.id, saveRoll: save.roll, total: save.roll.total, dc, success: save.success, featureId: feature.id
+        }));
+        if (!save.success) continue;
+      }
+      if (effect.resourceId) {
+        target.resources = { ...(target.resources ?? {}), [effect.resourceId]: (target.resources?.[effect.resourceId] ?? 0) - 1 };
+      }
+      target.currentHp = 1;
+      state.log.push(event(state, "SurvivedLethal", `${target.displayName} refuses to fall (${feature.name}) and stays at 1 HP`, {
+        combatantId: target.id, featureId: feature.id, resourceId: effect.resourceId,
+        ...(effect.resourceId ? { next: target.resources?.[effect.resourceId] } : {})
+      }));
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * At the start of its turn a regenerating creature heals — unless something that switches it off (acid, fire
+ * for a troll) hit it since its last turn, or it's at 0 HP and the trait doesn't work there. Clears the record
+ * either way, so a suppression lasts exactly one turn.
+ */
+export function applyRegeneration(state: EngineState, actor: CombatantState): void {
+  const definition = getDefinition(state.snapshot, actor);
+  const recent = actor.recentDamageTypes ?? [];
+  actor.recentDamageTypes = undefined;
+  for (const feature of featureSources(definition, actor)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "hp-regen") continue;
+      if (effect.suppressedByDamageTypes?.some((type) => recent.includes(type))) {
+        state.log.push(event(state, "Regenerated", `${actor.displayName}'s ${feature.name} is switched off this turn`, { combatantId: actor.id, amount: 0, suppressed: true }));
+        continue;
+      }
+      if (actor.currentHp < 1 && !effect.worksAtZero) continue;
+      const healed = Math.min(effect.amount, definition.maxHp - actor.currentHp);
+      if (healed <= 0) continue;
+      actor.currentHp += healed;
+      state.log.push(event(state, "Regenerated", `${actor.displayName} regains ${healed} HP (${feature.name})`, { combatantId: actor.id, amount: healed, currentHp: actor.currentHp }));
+    }
+  }
+}
+
+/**
+ * A downed combatant's turn. A regenerating monster stands up (and regenerates in the normal turn start that
+ * follows) unless something already finished it; everyone else rolls a death save. Returns `"recovered"` when the
+ * caller should carry on with a full turn.
+ */
+export function runDownedTurn(state: EngineState, combatant: CombatantState): "recovered" | "done" {
+  if (combatant.downedRegen) {
+    const regen = downedRegeneration(state, combatant);
+    const suppressed = regen?.suppressedByDamageTypes?.some((type) => combatant.recentDamageTypes?.includes(type)) ?? false;
+    if (!regen || suppressed) {
+      defeatCombatant(state, combatant);
+      return "done";
+    }
+    combatant.downedRegen = undefined;
+    combatant.state = "active";
+    combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+    state.log.push(event(state, "Regenerated", `${combatant.displayName} gets back up`, { combatantId: combatant.id, amount: 0, standingUp: true }));
+    return "recovered";
+  }
+  resolveDeathSave(state, combatant.id);
+  return "done";
+}
+
+/** A creature that can be attacked as an enemy: fighting, or down but about to get back up. */
+export function isTargetable(combatant: CombatantState): boolean {
+  return combatant.state === "active" || (combatant.state === "downed" && combatant.downedRegen === true);
 }
 
 /**

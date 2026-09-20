@@ -14,9 +14,10 @@ export const GAP_CODES = {
   // ── Phase 3: limited use
   RECHARGE: "(Retired — now rolled each turn.) Recharge abilities.",
   LIMITED_USE: "(Retired — now enforced.) N/Day pools, one encounter = one day.",
-  REGEN: "Regeneration is reference-only.",
+  REGEN: "(Retired — now enforced.) Regeneration.",
+  REGEN_TERRAIN: "Regeneration that stops in sunlight or running water: the map has no such terrain tag yet, so it always works.",
   LEGENDARY_RESISTANCE: "(Retired — now enforced.) Legendary Resistance.",
-  SURVIVE_ZERO: "Undead Fortitude / Relentless is reference-only.",
+  SURVIVE_ZERO: "(Retired — now enforced.) Undead Fortitude / Relentless.",
   // ── Phase 4: legendary actions, reactions
   LEGENDARY_ACTIONS: "Legendary actions are recorded but not yet taken.",
   MULTIATTACK_PARSE: "Multiattack text could not be fully compiled.",

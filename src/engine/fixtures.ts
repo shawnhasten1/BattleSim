@@ -12,7 +12,8 @@ export const sampleEncounter: EncounterSnapshot = {
     playerDeathSaves: true,
     enemiesDropAtZero: true,
     requireLineOfEffect: true,
-    cover: true
+    cover: true,
+    massiveDamage: true
   },
   map: {
     id: "map-sample",

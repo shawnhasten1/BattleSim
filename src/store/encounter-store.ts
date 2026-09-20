@@ -19,6 +19,7 @@ import {
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
+  runDownedTurn,
   runTurnEnd,
   runTurnStart,
   sampleEncounter,
@@ -317,6 +318,7 @@ interface EncounterStore {
 
 function canTakeTurn(encounter: EncounterSnapshot, combatant: CombatantState): boolean {
   return combatant.state === "active"
+    || (combatant.state === "downed" && combatant.downedRegen === true)
     || (encounter.rules.playerDeathSaves
       && combatant.faction === "party"
       && combatant.state === "downed"
@@ -840,8 +842,8 @@ export const useEncounterStore = create<EncounterStore>()(
         const combatant = encounter.combatants[next];
         if (combatant) {
           engine.log.push(event(engine, "TurnStarted", `${combatant.displayName} started an automated turn`, { combatantId: combatant.id, mode: "automated" }));
-          if (combatant.state === "downed") {
-            resolveDeathSave(engine, combatant.id);
+          // A regenerating monster stands up and takes a normal turn; anyone else rolls a death save.
+          if (combatant.state === "downed" && runDownedTurn(engine, combatant) === "done") {
             closeActionEconomy(combatant);
             commitEncounter(encounter, { log: engine.log, selectedCombatantId: combatant.id, outcome: steppedOutcome(engine) });
             return;

@@ -29,6 +29,7 @@ async function buildMixedEncounter() {
   await state().addSrdMonster("srd:monster:ogre", "enemy", { x: 19, y: 10 });
   await state().addSrdMonster("srd:monster:ghoul", "enemy", { x: 16, y: 11 });
   await state().addSrdMonster("srd:monster:zombie", "enemy", { x: 15, y: 8 });
+  await state().addSrdMonster("srd:monster:troll", "enemy", { x: 18, y: 12 });
   await state().addSrdMonster("srd:monster:swarm-of-rats", "enemy", { x: 14, y: 5 });
   await state().addSrdMonster("srd:monster:young-red-dragon", "enemy", { x: 19, y: 2 });
   return state().encounter;
@@ -114,6 +115,16 @@ describe("a mixed SRD encounter runs the same in every mode", () => {
     expectSaneHp(auto.snapshot);
     expect(srdActionsTaken(auto.log, start).length).toBeGreaterThan(10);
     for (const [, breaths] of breathsPerActor(auto.log)) expect(breaths).toBeLessThanOrEqual(1);
+  });
+
+  it("a regenerating troll in the mix is never given death saves", () => {
+    for (const [mode, log] of [["auto", auto.log], ["step", step.log]] as const) {
+      // A downed troll is never given death saves, and never stays "downed" once the fight is over.
+      expect(log.filter((entry) => entry.type === "DeathSaveRolled" && /Troll/.test(entry.message)), mode).toEqual([]);
+    }
+    for (const combatant of [...auto.snapshot.combatants, ...step.encounter.combatants]) {
+      if (combatant.downedRegen) expect(combatant.state).toBe("downed");
+    }
   });
 
   it("Auto Run button and the engine agree exactly (deterministic)", () => {

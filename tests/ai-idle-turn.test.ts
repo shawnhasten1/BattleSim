@@ -70,9 +70,10 @@ describe("explainIdleTurn", () => {
 describe("a turn with nothing to do, in a fight", () => {
   it("creatures with good attacks aren't warned about once only downed characters remain", () => {
     // A 1-HP fighter is dropped by the first goblin; the other goblins then have no active target.
-    const frail: CreatureDefinition = { ...fighter, id: "def-frail", maxHp: 1 };
+    // 1 HP left of a healthy maximum: dropped by the first hit without being killed outright by massive damage.
+    const frail: CreatureDefinition = { ...fighter, id: "def-frail", maxHp: 30 };
     const goblins = [combatant("G1", goblin, "enemy", 2, 4), combatant("G2", goblin, "enemy", 2, 3), combatant("G3", goblin, "enemy", 2, 5)];
-    const result = runAutomatedEncounter(scene([frail, goblin], [combatant("Fighter", frail, "party", 1, 4), ...goblins]), 4);
+    const result = runAutomatedEncounter(scene([frail, goblin], [{ ...combatant("Fighter", frail, "party", 1, 4), currentHp: 1 }, ...goblins]), 4);
 
     expect(result.outcome.warnings.filter((warning) => /no fully automated action/.test(warning))).toEqual([]);
     expect(result.log.filter((entry) => entry.type === "AutomationWarning" && /no fully automated action/.test(entry.message))).toEqual([]);

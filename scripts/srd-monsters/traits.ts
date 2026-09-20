@@ -97,6 +97,46 @@ const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
     }
   },
   {
+    // "regains 10 hit points at the start of its turn [if it has at least 1 hit point]. If it takes acid or fire
+    // damage, this trait doesn't function at the start of its next turn. It dies only if it starts its turn with 0 hit points"
+    match: /^Regeneration$/i,
+    build: (entry, ctx) => {
+      const amount = Number(/regains (\d+) hit points/i.exec(entry.desc)?.[1]);
+      if (!amount) return { automationSupport: "manual-only" };
+      const worksAtZero = !/at least 1 hit/i.test(entry.desc);
+      const suppressed = /acid or fire/i.test(entry.desc) ? ["acid", "fire"] as const
+        : /radiant damage/i.test(entry.desc) ? ["radiant"] as const : undefined;
+      const needsTerrain = /sunlight or running water/i.test(entry.desc);
+      // Sunlight and running water have no terrain tag to check yet, so those regenerators stay "partial".
+      if (needsTerrain) ctx.gaps.add("REGEN_TERRAIN", entry.name);
+      return {
+        automationSupport: needsTerrain ? "partial" : "full",
+        effects: [{ kind: "hp-regen", amount, ...(worksAtZero ? { worksAtZero: true } : {}), ...(suppressed ? { suppressedByDamageTypes: [...suppressed] } : {}) }]
+      };
+    }
+  },
+  {
+    // Undead Fortitude: Con save, DC 5 + damage taken, not against radiant or a critical hit.
+    match: /^Undead Fortitude$/i,
+    build: (entry) => {
+      if (!/DC of 5\s*\+\s*the damage taken/i.test(entry.desc)) return { automationSupport: "manual-only" };
+      return {
+        automationSupport: "full",
+        effects: [{ kind: "survive-lethal", save: { ability: "con", dcBase: 5 }, excludedDamageTypes: ["radiant"], excludeCritical: true }]
+      };
+    }
+  },
+  {
+    // Relentless: "If it takes 7 damage or less that would reduce it to 0 hit points, it is reduced to 1 instead"; once per rest.
+    match: /^Relentless$/i,
+    build: (entry, ctx) => {
+      const max = Number(/takes (\d+) damage or less/i.exec(entry.desc)?.[1]);
+      if (!max) return { automationSupport: "manual-only" };
+      ctx.resources["relentless"] = 1;
+      return { automationSupport: "full", effects: [{ kind: "survive-lethal", maxDamage: max, resourceId: "relentless" }] };
+    }
+  },
+  {
     match: /^Flyby$/i,
     build: () => ({ automationSupport: "full", effects: [{ kind: "avoids-opportunity-attacks" }] })
   },
@@ -123,14 +163,12 @@ const INFORMATIONAL = new RegExp(
   + "Immutable Form|Telepathic Bond|Limited Telepathy|Divine Awareness|Wakeful|Sunlight Sensitivity|Light Sensitivity|"
   + "Ambusher|Faultless Tracker|Blind Senses|Ethereal Sight|Speak with|Hag Coven|Hag Eye|Shared Spellcasting|"
   + "Turn Immunity|Turn Resistance|Turn Defiance|Brute|Magic Weapons|Swarm|Probing Telepathy|Read Thoughts|"
-  + "Transparent|Sense Magic|Otherworldly)",
+  + "Transparent|Sense Magic|Otherworldly|Rejuvenation)",
   "i"
 );
 
 /** Traits whose mechanics belong to a later engine phase. */
 const GAPS: Array<{ match: RegExp; code: GapCode }> = [
-  { match: /^Regeneration/i, code: "REGEN" },
-  { match: /^(Undead Fortitude|Relentless|Rejuvenation)/i, code: "SURVIVE_ZERO" },
   { match: /^(Spellcasting|Innate Spellcasting)/i, code: "SPELLS" },
   { match: /^Shapechanger/i, code: "TRANSFORM" },
   { match: /^(Charge|Trampling Charge|Pounce|Rampage|Blood Frenzy|Surprise Attack)/i, code: "CHARGE_TRAIT" },
