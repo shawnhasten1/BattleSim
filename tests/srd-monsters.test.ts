@@ -133,12 +133,30 @@ describe("attack parser", () => {
     expect(gaps.codes()).toEqual(["RIDER_TEXT"]);
   });
 
-  it("keeps grapples as reference notes rather than an inescapable condition", () => {
+  it("compiles a grapple into a hold rider (not a bare condition), with size, restraint, limits and recurring damage", () => {
     const gaps = new GapLog();
-    const result = parseAttack(entry("Constrict", "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 6 (1d6 + 3) bludgeoning damage, and the target is grappled (escape DC 14)."), ctx({ gaps }))!;
+    const grab = (text: string) => (parseAttack(entry("Grab", text), ctx({ gaps }))!.actions[0] as AttackActionDefinition).riders?.find((rider) => rider.kind === "hold");
+    expect(grab("Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 6 (1d6 + 3) bludgeoning damage, and the target is grappled (escape DC 14).")).toMatchObject({ escapeDc: 14 });
+    expect(grab("Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 7 (1d10 + 2) piercing damage, and the target is grappled (escape DC 12). Until this grapple ends, the target is restrained, and the crocodile can't bite another target."))
+      .toEqual({ kind: "hold", when: "on-hit", escapeDc: 12, restrained: true });
+    expect(grab("Melee Weapon Attack: +9 to hit, reach 10 ft., one target. Hit: 16 (2d10 + 5) bludgeoning damage. If the target is a Medium or smaller creature, it is grappled (escape DC 15). The glabrezu has two pincers, each of which can grapple only one target."))
+      .toMatchObject({ escapeDc: 15, maxSize: "medium", limit: 2 });
+    expect(grab("Melee Weapon Attack: +8 to hit, reach 10 ft., one target. Hit: 11 (2d6 + 4) slashing damage. The target is grappled (escape DC 14) if the devil isn't already grappling a creature. Until this grapple ends, the target is restrained and takes 7 (2d6) piercing damage at the start of each of its turns."))
+      .toMatchObject({ restrained: true, recurringDamage: [{ dice: "2d6", damageType: "piercing" }] });
+    expect(gaps.codes()).not.toContain("HOLD_GRAPPLE");
+  });
+
+  it("a grapple-only hit (the roper's tendril) becomes an attack with just the hold", () => {
+    const result = parseAttack(entry("Tendril", "Melee Weapon Attack: +7 to hit, reach 50 ft., one creature. Hit: The target is grappled (escape DC 15). Until the grapple ends, the target is restrained and has disadvantage on Strength checks and Strength saving throws, and the roper can't use the same tendril on another target."), ctx())!;
     const attack = result.actions[0] as AttackActionDefinition;
-    expect(attack.riders?.some((rider) => rider.kind === "condition")).toBeFalsy();
-    expect(gaps.codes()).toContain("HOLD_GRAPPLE");
+    expect(attack.damage).toEqual([]);
+    expect(attack.riders).toMatchObject([{ kind: "hold", escapeDc: 15, restrained: true }]);
+  });
+
+  it("leaves a swallow as a reference note", () => {
+    const gaps = new GapLog();
+    parseAttack(entry("Bite", "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 23 (3d8 + 10) piercing damage. If the target is a Large or smaller creature grappled by the kraken, that creature is swallowed, and the grapple ends."), ctx({ gaps }));
+    expect(gaps.codes()).toContain("HOLD_SWALLOW");
   });
 
   it("compiles an attack whose only damage is save-gated (Spit Poison)", () => {

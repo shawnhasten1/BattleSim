@@ -6,6 +6,7 @@ import type {
   Ability,
   ActionDefinition,
   ActionUsage,
+  SizeCategory,
   ActionRider,
   ActivateFeatureActionDefinition,
   ActiveZone,
@@ -262,6 +263,7 @@ const STANDARD_UTILITY_MODES: ReadonlyArray<{
   { mode: "dash", name: "Dash", automationSupport: "full" },
   { mode: "disengage", name: "Disengage", automationSupport: "full" },
   { mode: "dodge", name: "Dodge", automationSupport: "full" },
+  { mode: "escape", name: "Escape a grapple", automationSupport: "full" },
   { mode: "hide", name: "Hide", automationSupport: "partial" },
   { mode: "help", name: "Help", automationSupport: "partial" }
 ];
@@ -793,6 +795,8 @@ export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: 
       // disadvantage" model is a later condition-interaction pass.
       modifiers: { incomingAttackRoll: -4, savingThrows: { dex: 2 } }
     });
+  } else if (action.mode === "escape") {
+    attemptEscape(state, actor);
   } else {
     state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${action.mode} action is not automated`, {
       combatantId: actorId, actionId, mode: action.mode
@@ -2248,6 +2252,116 @@ export function rollRecharges(state: EngineState, actor: CombatantState): void {
   }
 }
 
+/* ─── Holds: grapples ──────────────────────────────────────────────────────── */
+
+const SIZE_ORDER: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+
+/** The conditions that make up one creature's grapple on `victim`. */
+function holdConditions(victim: CombatantState, holderId?: Id): ConditionInstance[] {
+  return (victim.conditions ?? []).filter((condition) => condition.hold && (holderId === undefined || condition.sourceCombatantId === holderId));
+}
+
+/** Everything a holder can reach out to grip with: its longest melee reach (at least 5 ft). */
+function holdReach(definition: CreatureDefinition): number {
+  return Math.max(5, ...getExecutableActions(definition).map((action) => action.kind === "attack" && action.attackType === "melee" ? action.reach ?? action.range : 0));
+}
+
+/**
+ * Apply a `hold` rider: the target is grappled (and restrained, when the rider says so) by `holder`, if it is
+ * small enough and the holder still has a free grip. Returns whether anything was applied.
+ */
+function applyHold(
+  state: EngineState,
+  holder: CombatantState,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition,
+  rider: Extract<ActionRider, { kind: "hold" }>,
+  actionId: Id
+): boolean {
+  if (rider.maxSize && SIZE_ORDER.indexOf(targetDefinition.size) > SIZE_ORDER.indexOf(rider.maxSize)) return false;
+  if (holdConditions(target, holder.id).some((condition) => condition.sourceId === actionId)) return false;
+  const held = state.snapshot.combatants.filter((candidate) =>
+    holdConditions(candidate, holder.id).some((condition) => condition.sourceId === actionId && condition.name === "grappled")).length;
+  if (held >= (rider.limit ?? 1)) return false;
+  const base = { sourceId: actionId, sourceCombatantId: holder.id, startedRound: state.snapshot.round, hold: { escapeDc: rider.escapeDc, recurringDamage: rider.recurringDamage } };
+  const grappled = applyCondition(state, target.id, { ...base, id: `${target.id}:${actionId}:hold`, name: "grappled", modifiers: defaultConditionModifiers("grappled") });
+  if (!grappled) return false;
+  if (rider.restrained) {
+    applyCondition(state, target.id, {
+      ...base, id: `${target.id}:${actionId}:hold-restrained`, name: "restrained",
+      modifiers: { ...defaultConditionModifiers("restrained"), incomingAttackRoll: 5 }
+    });
+  }
+  state.log.push(event(state, "HoldApplied", `${holder.displayName} grapples ${target.displayName}${rider.restrained ? " (restrained)" : ""} (escape DC ${rider.escapeDc})`, {
+    holderId: holder.id, targetId: target.id, actionId, escapeDc: rider.escapeDc, restrained: rider.restrained === true
+  }));
+  return true;
+}
+
+/** Frees `victim` from one holder's grip (every condition that grip caused). */
+function releaseHold(state: EngineState, victim: CombatantState, holderId: Id | undefined, actionId: Id | undefined, why: string): void {
+  const freed = (victim.conditions ?? []).filter((condition) => condition.hold && condition.sourceCombatantId === holderId && condition.sourceId === actionId);
+  if (freed.length === 0) return;
+  victim.conditions = (victim.conditions ?? []).filter((condition) => !freed.includes(condition));
+  for (const condition of freed) {
+    state.log.push(event(state, "ConditionExpired", `${victim.displayName} is no longer ${condition.name} (${why})`, { combatantId: victim.id, condition, viaHold: true }));
+  }
+}
+
+/** Everyone a defeated / incapacitated holder was gripping is let go. */
+export function releaseHoldsBy(state: EngineState, holderId: Id): void {
+  for (const victim of state.snapshot.combatants) {
+    for (const condition of holdConditions(victim, holderId)) releaseHold(state, victim, holderId, condition.sourceId, "the holder let go");
+  }
+}
+
+/**
+ * At the start of a held creature's turn: a grip that can no longer be kept (holder down, incapacitated or out of
+ * reach) lets go; the ones that remain deal their recurring damage.
+ */
+function runHoldsAtTurnStart(state: EngineState, actor: CombatantState): void {
+  for (const condition of [...holdConditions(actor)]) {
+    const holder = state.snapshot.combatants.find((candidate) => candidate.id === condition.sourceCombatantId);
+    const holderDefinition = holder ? getDefinition(state.snapshot, holder) : undefined;
+    const keeps = holder && holderDefinition && holder.state === "active" && canAct(holder, "free")
+      && gridDistance(holder.position, actor.position, state.snapshot.map.grid) <= holdReach(holderDefinition) + state.snapshot.map.grid.distancePerSquare;
+    if (!keeps) {
+      releaseHold(state, actor, condition.sourceCombatantId, condition.sourceId, "the hold was broken");
+      continue;
+    }
+    if (condition.name === "grappled" && condition.hold?.recurringDamage?.length) {
+      applyDamageComponents(state, actor, condition.hold.recurringDamage, holderDefinition, false, {}, holder.id);
+    }
+  }
+}
+
+/** The bonus for an Athletics (Str) or Acrobatics (Dex) check: whichever is better. */
+function escapeBonus(definition: CreatureDefinition): number {
+  const skill = (name: string) => Object.entries(definition.skills ?? {}).find(([key]) => key.toLowerCase() === name)?.[1];
+  return Math.max(skill("athletics") ?? abilityModifier(definition.abilities.str), skill("acrobatics") ?? abilityModifier(definition.abilities.dex));
+}
+
+/** Chance that `combatant` breaks free of the easiest grip it is in with one check, or 0 if it isn't held. */
+export function escapeChance(definition: CreatureDefinition, combatant: CombatantState): number {
+  const dcs = holdConditions(combatant).map((condition) => condition.hold!.escapeDc);
+  if (dcs.length === 0) return 0;
+  return Math.min(0.95, Math.max(0.05, (21 - (Math.min(...dcs) - escapeBonus(definition))) / 20));
+}
+
+/** Spend the action to break free: an Athletics / Acrobatics check against the easiest grip's escape DC. */
+function attemptEscape(state: EngineState, actor: CombatantState): void {
+  const holds = holdConditions(actor).filter((condition) => condition.name === "grappled");
+  if (holds.length === 0) return;
+  const target = holds.reduce((easiest, condition) => (condition.hold!.escapeDc < easiest.hold!.escapeDc ? condition : easiest));
+  const definition = getDefinition(state.snapshot, actor);
+  const roll = rollDice(withBonus("1d20", escapeBonus(definition)), state.rng);
+  const success = roll.total >= target.hold!.escapeDc;
+  state.log.push(event(state, "EscapeAttempted", `${actor.displayName} ${success ? "breaks free" : "fails to break free"} (rolled ${roll.total} vs DC ${target.hold!.escapeDc})`, {
+    combatantId: actor.id, roll, dc: target.hold!.escapeDc, success
+  }));
+  if (success) releaseHold(state, actor, target.sourceCombatantId, target.sourceId, "escaped");
+}
+
 /** A legendary creature's points come back at the start of its own turn (and start the fight full). */
 export function refillLegendaryPoints(state: EngineState, actor: CombatantState): void {
   const legendary = getDefinition(state.snapshot, actor).legendary;
@@ -2259,6 +2373,7 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
   rollRecharges(state, actor);
   applyRegeneration(state, actor);
   refillLegendaryPoints(state, actor);
+  runHoldsAtTurnStart(state, actor);
   expireConditions(state, "start");
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");
@@ -2770,6 +2885,7 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
   }
   target.state = "defeated";
   target.downedRegen = undefined;
+  releaseHoldsBy(state, target.id);
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
   breakConcentration(state, target.id);
   resolveDeathEffect(state, target.id, killerId);
@@ -4143,6 +4259,10 @@ function applyActionRiders(
       outcome.healing += applyRiderHealing(state, recipient, sourceDefinition, rider.components);
     } else if (rider.kind === "push") {
       pushCombatant(state, target, rider.distance, ctx.origin ?? source.position);
+    } else if (rider.kind === "hold") {
+      if (!applyHold(state, source, target, targetDefinition, rider, ctx.actionId)) {
+        return;
+      }
     } else if (rider.kind === "condition") {
       const applied = applyConditionRider(state, source, target, sourceDefinition, targetDefinition, rider, ctx);
       if (applied) {

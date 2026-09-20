@@ -1,6 +1,6 @@
 "use client";
 
-import type { Ability, ActionRider, ConditionName, CreatureType, RiderDuration, RiderGate } from "@/engine";
+import type { Ability, ActionRider, ConditionName, CreatureType, RiderDuration, RiderGate, SizeCategory } from "@/engine";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { DiceInput } from "./BuilderForm";
@@ -73,6 +73,12 @@ const CONDITIONS: ConditionName[] = [
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 
 type RiderContext = "weapon" | "save" | "area";
+
+const HOLD_PRESETS: Array<{ label: string; fields: Partial<Extract<ActionRider, { kind: "hold" }>> }> = [
+  { label: "Grapple (escape DC 13)", fields: { escapeDc: 13, restrained: undefined, limit: undefined } },
+  { label: "Restraining grapple (constrict / bite)", fields: { escapeDc: 14, restrained: true, limit: 1 } },
+  { label: "Pincers (two at once)", fields: { escapeDc: 13, restrained: undefined, limit: 2 } }
+];
 type RiderKind = ActionRider["kind"];
 
 function defaultGate(context: RiderContext): RiderGate {
@@ -88,6 +94,8 @@ function blankRider(kind: RiderKind, context: RiderContext): ActionRider {
       return { kind: "healing", when, components: [{ dice: "1d4" }] };
     case "push":
       return { kind: "push", when, distance: 10 };
+    case "hold":
+      return { kind: "hold", when: "on-hit", escapeDc: 13, restrained: true };
     case "note":
       return { kind: "note", text: "" };
     case "condition":
@@ -131,6 +139,7 @@ export function RiderEditor({
               <option value="condition">Condition</option>
               <option value="damage">Extra damage</option>
               <option value="push">Push</option>
+              <option value="hold">Grapple</option>
               <option value="note">Reference note</option>
             </select>
             <button type="button" className={styles.riderRemove} onClick={() => remove(index)} aria-label="Remove effect">×</button>
@@ -165,6 +174,45 @@ export function RiderEditor({
               </label>
               <GateSelect context={context} value={rider.when} onChange={(when) => replace(index, { ...rider, when })} />
             </div>
+          ) : null}
+
+          {rider.kind === "hold" ? (
+            <>
+              <div className={styles.riderRow}>
+                <select
+                  aria-label="Grapple preset"
+                  value=""
+                  onChange={(e) => {
+                    const preset = HOLD_PRESETS.find((candidate) => candidate.label === e.target.value);
+                    if (preset) replace(index, { ...rider, ...preset.fields });
+                  }}
+                >
+                  <option value="">Preset…</option>
+                  {HOLD_PRESETS.map((preset) => <option key={preset.label} value={preset.label}>{preset.label}</option>)}
+                </select>
+                <label className={styles.fieldInlineLabel}>
+                  Escape DC
+                  <input type="number" min={1} value={rider.escapeDc} onChange={(e) => replace(index, { ...rider, escapeDc: Number(e.target.value) || 1 })} />
+                </label>
+                <label className={styles.fieldInlineLabel}>
+                  <input type="checkbox" checked={rider.restrained === true} onChange={(e) => replace(index, { ...rider, restrained: e.target.checked ? true : undefined })} />
+                  also restrained
+                </label>
+              </div>
+              <div className={styles.riderRow}>
+                <label className={styles.fieldInlineLabel}>
+                  Up to size
+                  <select value={rider.maxSize ?? "any"} onChange={(e) => replace(index, { ...rider, maxSize: e.target.value === "any" ? undefined : e.target.value as SizeCategory })}>
+                    <option value="any">any</option>
+                    {(["tiny", "small", "medium", "large", "huge", "gargantuan"] as SizeCategory[]).map((size) => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
+                <label className={styles.fieldInlineLabel}>
+                  Holds at once
+                  <input type="number" min={1} value={rider.limit ?? 1} onChange={(e) => replace(index, { ...rider, limit: Math.max(1, Number(e.target.value) || 1) })} />
+                </label>
+              </div>
+            </>
           ) : null}
 
           {rider.kind === "note" ? (

@@ -47,7 +47,7 @@ describe("synthesised standard actions", () => {
     const actions = getExecutableActions(bareDefinition());
     const utils = actions.filter((a): a is UtilityAction => a.kind === "utility");
     expect(utils.map((a) => a.id).sort()).toEqual([
-      "utility:dash", "utility:disengage", "utility:dodge", "utility:help", "utility:hide"
+      "utility:dash", "utility:disengage", "utility:dodge", "utility:escape", "utility:help", "utility:hide"
     ]);
     for (const u of utils) {
       expect(u.actionType).toBe("action");

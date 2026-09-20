@@ -117,3 +117,19 @@ describe("limited-use effect editors", () => {
     expect(current()[0]).toEqual({ kind: "auto-succeed-save", resourceId: "legendary-resistance", against: { source: "magical" } });
   });
 });
+
+describe("grapple rider editor", () => {
+  it("edits a hold rider", async () => {
+    const { RiderEditor } = await import("@/components/sheet/builders/RiderEditor");
+    const seen: unknown[] = [];
+    const Wrapper = () => {
+      const [riders, setRiders] = useState<import("@/engine").ActionRider[]>([{ kind: "hold", when: "on-hit", escapeDc: 13 }]);
+      seen[0] = riders;
+      return <RiderEditor value={riders} onChange={setRiders} context="weapon" />;
+    };
+    render(<Wrapper />);
+    await userEvent.click(screen.getByLabelText(/also restrained/));
+    await userEvent.selectOptions(screen.getByLabelText("Grapple preset"), "Pincers (two at once)");
+    expect(seen[0]).toMatchObject([{ kind: "hold", escapeDc: 13, limit: 2 }]);
+  });
+});

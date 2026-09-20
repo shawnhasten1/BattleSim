@@ -3,6 +3,7 @@ import type {
 } from "../../src/engine/types";
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { buildConditionRider, findConditionOnFail, findSaveClause, findSaveDamage } from "./riders";
+import { parseHold, withoutHoldSentences } from "./holds";
 import { applyUsage } from "./usage";
 import { ABILITIES, abilityMod, compactDice, describesMagicalEffect, isDamageType, slugify } from "./util";
 
@@ -128,7 +129,15 @@ function parseTail(tailInput: string, action: AttackActionDefinition, entry: Raw
     return { riders, features };
   };
 
-  // Holds and swallows are not automated yet (no escape mechanic) — keep them as reference notes.
+  // A grapple is a real `hold` rider; whatever else the text says is handled below.
+  const hold = /swallow|engulf/i.test(tail) ? null : parseHold(tail, entry.desc);
+  if (hold) {
+    riders.push(hold);
+    tail = withoutHoldSentences(tail);
+    if (!tail) return finish();
+  }
+
+  // Swallows are not automated yet — keep them as reference notes.
   if (/swallow/i.test(tail)) {
     note(tail, "HOLD_SWALLOW");
     return finish();
@@ -227,16 +236,21 @@ export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseRe
     // "Hit: The target must make a DC 15 Constitution saving throw, taking 45 (10d8) poison damage…" —
     // all of the damage is save-gated, so the attack itself carries none.
     const saveOnly = findSaveClause(hit) !== null && findSaveDamage(hit) !== null && /^The target must/i.test(hit.trim());
-    if (!saveOnly) {
-      // "Hit: The target is grappled / restrained by webbing" — a hold, not automated yet.
+    // "Hit: The target is grappled (escape DC 15)": no damage, just the grip.
+    const holdOnly = !saveOnly && !/swallow/i.test(hit) && !/\bdamage\b/i.test(hit) && parseHold(hit, entry.desc) !== null;
+    if (holdOnly) {
+      leading = { damage: [], swarmHalf: false, tail: hit };
+    } else if (!saveOnly) {
+      // A hold we can't read, or a swallow — not automated yet.
       if (/grappled|restrained|escape DC|swallow/i.test(hit)) {
         ctx.gaps.add(/swallow/i.test(hit) ? "HOLD_SWALLOW" : "HOLD_GRAPPLE", entry.name);
       } else {
         ctx.gaps.add("ATTACK_UNPARSED", entry.name);
       }
       return null;
+    } else {
+      leading = { damage: [], swarmHalf: false, tail: hit };
     }
-    leading = { damage: [], swarmHalf: false, tail: hit };
   }
 
   const reachMatch = /reach\s+(\d+)\s*(?:ft|feet)/i.exec(middle);

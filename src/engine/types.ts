@@ -664,6 +664,22 @@ export type ActionRider =
       effects?: FeatureEffect[];
     })
   | (TriggeredRider & { kind: "push"; distance: number })
+  | (TriggeredRider & {
+      /**
+       * Grapples the target ("grappled (escape DC 13)"). The target stays held until it escapes with an
+       * action, the holder is stopped (incapacitated, dead) or gets out of reach.
+       */
+      kind: "hold";
+      escapeDc: number;
+      /** Only holds a creature this size or smaller. */
+      maxSize?: SizeCategory;
+      /** The target is also restrained until the hold ends. */
+      restrained?: boolean;
+      /** How many creatures the holder can hold with this action at once (a crab's two claws: 2). Default 1. */
+      limit?: number;
+      /** Damage the held creature takes at the start of each of its turns (a chain devil's chains). */
+      recurringDamage?: DamageComponent[];
+    })
   | (ActionRiderCommon & { kind: "note"; text: string });
 
 /* ─── Reaction triggers ────────────────────────────────────────────────────────
@@ -1095,7 +1111,7 @@ export interface UtilityActionDefinition {
   id: Id;
   name: string;
   actionType: "action" | "bonus";
-  mode: "dash" | "disengage" | "dodge" | "hide" | "help";
+  mode: "dash" | "disengage" | "dodge" | "hide" | "help" | "escape";
   resourceCost?: ResourceCost;
   automationSupport: "full" | "partial";
 }
@@ -1392,6 +1408,8 @@ export interface ConditionInstance {
   sourceId?: Id;
   sourceName?: string;
   sourceCombatantId?: Id;
+  /** Set on the conditions of a grapple: the holder is `sourceCombatantId`. */
+  hold?: { escapeDc: number; recurringDamage?: DamageComponent[] };
   startedRound: number;
   expiresAt?: {
     round: number;
@@ -1557,6 +1575,8 @@ export interface CombatLogEvent {
     | "ConditionApplied"
     | "ConditionResisted"
     | "AbilityRecharged"
+    | "EscapeAttempted"
+    | "HoldApplied"
     | "LegendaryResistanceUsed"
     | "Regenerated"
     | "LegendaryActionUsed"

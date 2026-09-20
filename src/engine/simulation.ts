@@ -37,6 +37,7 @@ import {
   resolveUtilityAction,
   runTurnEnd,
   LEGENDARY_POINTS,
+  escapeChance,
   isImmuneAfterSave,
   isLegendaryVariant,
   refillLegendaryPoints,
@@ -832,6 +833,19 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   // a confused-and-also-stunned creature still just loses its turn.
   if (actor.conditions?.some((condition) => condition.modifiers?.forcesRandomAction)) {
     return resolveConfusedTurn(state, actor);
+  }
+
+  // Someone in a grapple spends the action breaking free when there's a fair chance of it (a restrained creature
+  // fights at a penalty and can't move, so it matters most then); otherwise it fights on from where it is.
+  const chanceToEscape = escapeChance(getDefinition(state.snapshot, actor), actor);
+  const restrainedByHold = (actor.conditions ?? []).some((condition) => condition.hold && condition.name === "restrained");
+  if (chanceToEscape >= (restrainedByHold ? 0.3 : 0.6) && canAct(actor, "action")) {
+    const escape = getExecutableActions(getDefinition(state.snapshot, actor)).find((candidate) => candidate.kind === "utility" && candidate.mode === "escape");
+    if (escape) {
+      state.log.push(event(state, "AiDecision", `${actor.displayName} tries to break free of a grapple`, { combatantId: actor.id, reason: "escape-hold" }));
+      resolveUtilityAction(state, actor.id, escape.id);
+      return undefined;
+    }
   }
 
   let movedThisTurn = false;
