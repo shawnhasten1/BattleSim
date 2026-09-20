@@ -614,6 +614,30 @@ img {
   stroke-width: 0.04;
 }
 
+/* Terrain that only some movement modes cross (tags read by `modeMultiplier` in geometry.ts). */
+.terrain.hazard-water {
+  fill: rgba(64, 140, 200, 0.4);
+  stroke: rgba(30, 90, 150, 0.85);
+  stroke-width: 0.04;
+}
+
+.terrain.hazard-water.terrain-deep {
+  fill: rgba(20, 60, 130, 0.55);
+}
+
+.terrain.hazard-solid {
+  fill: rgba(110, 100, 90, 0.6);
+  stroke: rgba(70, 62, 55, 0.9);
+  stroke-width: 0.04;
+}
+
+.terrain.hazard-climbable {
+  fill: rgba(150, 130, 100, 0.45);
+  stroke: rgba(100, 84, 60, 0.9);
+  stroke-width: 0.04;
+  stroke-dasharray: 0.12 0.08;
+}
+
 .terrain.hazard {
   fill: rgba(153, 76, 32, 0.3);
   stroke: rgba(153, 76, 32, 0.78);

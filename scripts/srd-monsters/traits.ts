@@ -163,7 +163,7 @@ const INFORMATIONAL = new RegExp(
   + "Immutable Form|Telepathic Bond|Limited Telepathy|Divine Awareness|Wakeful|Sunlight Sensitivity|Light Sensitivity|"
   + "Ambusher|Faultless Tracker|Blind Senses|Ethereal Sight|Speak with|Hag Coven|Hag Eye|Shared Spellcasting|"
   + "Turn Immunity|Turn Resistance|Turn Defiance|Brute|Magic Weapons|Swarm|Probing Telepathy|Read Thoughts|"
-  + "Transparent|Sense Magic|Otherworldly|Rejuvenation)",
+  + "Transparent|Sense Magic|Otherworldly|Rejuvenation|Spider Climb|Web Walker|Ice Walk|Earth Glide|Tunneler|Amorphous)",
   "i"
 );
 
@@ -172,7 +172,7 @@ const GAPS: Array<{ match: RegExp; code: GapCode }> = [
   { match: /^(Spellcasting|Innate Spellcasting)/i, code: "SPELLS" },
   { match: /^Shapechanger/i, code: "TRANSFORM" },
   { match: /^(Charge|Trampling Charge|Pounce|Rampage|Blood Frenzy|Surprise Attack)/i, code: "CHARGE_TRAIT" },
-  { match: /^(Spider Climb|Web Walker|Ice Walk|Earth Glide|Incorporeal Movement|Amorphous|Tree Stride|Tunneler)/i, code: "MOVE_TRAIT" }
+  { match: /^(Incorporeal Movement|Tree Stride)/i, code: "MOVE_TRAIT" }
 ];
 
 /** Variants that change nothing in combat stay quiet; the rest are opt-in reference with a gap code. */

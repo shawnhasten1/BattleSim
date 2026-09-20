@@ -28,6 +28,10 @@ const TERRAIN_TYPE_ITEMS: Array<{ brush: Exclude<TerrainBrushId, "eraser">; labe
   { brush: "difficult", label: "Difficult — ×2 move cost" },
   { brush: "greaterDifficult", label: "Greater difficult — ×4 move cost" },
   { brush: "impassable", label: "Impassable — blocks movement" },
+  { brush: "water", label: "Shallow water — walkers ×2, swimmers free" },
+  { brush: "deepWater", label: "Deep water — swimmers and fliers only" },
+  { brush: "rock", label: "Solid rock — burrowers only" },
+  { brush: "cliff", label: "Cliff face — climbers and fliers only" },
   { brush: "acid", label: "Acid — DC 12 Dex, 2d6 acid (half on save)" },
   { brush: "lava", label: "Lava — 4d10 fire, no save" },
   { brush: "ice", label: "Ice — DC 10 Dex save or prone, no damage" }

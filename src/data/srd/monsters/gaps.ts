@@ -24,10 +24,11 @@ export const GAP_CODES = {
   MULTIATTACK_STEP: "A Multiattack step is a spell, breath replacement or other non-attack and is skipped.",
   REACTION: "A reaction other than Parry (Unnerving Mask, Rock Catching, a guardian's Shield) is reference-only.",
   // ── Phase 5: movement
-  MOVE_FLY: "Flying is not modelled (no altitude); the creature moves as a walker.",
-  MOVE_SWIM: "Swim speed is not modelled.",
-  MOVE_CLIMB: "Climb speed is not modelled.",
-  MOVE_BURROW: "Burrow speed is not modelled.",
+  MOVE_FLY: "(Retired — see ALTITUDE.) Flying speed.",
+  MOVE_SWIM: "(Retired — now a movement mode.) Swim speed.",
+  MOVE_CLIMB: "(Retired — now a movement mode.) Climb speed.",
+  MOVE_BURROW: "(Retired — now a movement mode.) Burrow speed.",
+  ALTITUDE: "Flying moves fast and ignores ground terrain, but there is no altitude yet: a flier can still be meleed by everything and never falls.",
   MOVE_TRAIT: "A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only.",
   // ── Phase 6: holds
   HOLD_GRAPPLE: "A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only.",

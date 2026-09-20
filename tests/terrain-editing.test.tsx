@@ -28,12 +28,13 @@ describe("LeftToolRail — terrain brush sub-group", () => {
     expect(screen.queryByRole("group", { name: "Terrain brush" })).toBeNull();
   });
 
-  it("shows seven brush buttons (3 blocking + acid/lava/ice + eraser) with tooltips", () => {
+  it("shows eleven brush buttons (3 blocking + 4 movement-mode terrains + acid/lava/ice + eraser) with tooltips", () => {
     useEncounterStore.setState({ tool: "terrain" });
     render(<LeftToolRail {...railProps} />);
     const group = screen.getByRole("group", { name: "Terrain brush" });
     const buttons = group.querySelectorAll("button");
-    expect(buttons).toHaveLength(7);
+    expect(buttons).toHaveLength(11);
+    for (const label of ["Shallow water", "Deep water", "Solid rock", "Cliff face"]) expect(group.querySelector(`button[title^="${label}"]`), label).toBeTruthy();
     expect(group.querySelector('button[title^="Acid"]')).toBeTruthy();
     expect(group.querySelector('button[title^="Lava"]')).toBeTruthy();
     expect(group.querySelector('button[title^="Ice"]')).toBeTruthy();

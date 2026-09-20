@@ -63,10 +63,9 @@ const FULL_SUPPORT_KINDS = new Set(["attack", "save", "area-save", "multiattack"
 function movementGaps(definition: CreatureDefinition, gaps: GapLog): void {
   const m = definition.movement;
   if (!m) return;
-  if (m.fly) gaps.add("MOVE_FLY", `fly ${m.fly} ft.${m.hover ? " (hover)" : ""}`);
-  if (m.swim) gaps.add("MOVE_SWIM", `swim ${m.swim} ft.`);
-  if (m.climb) gaps.add("MOVE_CLIMB", `climb ${m.climb} ft.`);
-  if (m.burrow) gaps.add("MOVE_BURROW", `burrow ${m.burrow} ft.`);
+  // Swim, climb and burrow are real movement modes now (see `modeMultiplier` in geometry.ts). Flying is fast movement
+  // that ignores the ground, but with no altitude a flier can still be reached by everything.
+  if (m.fly) gaps.add("ALTITUDE", `fly ${m.fly} ft.${m.hover ? " (hover)" : ""}`);
 }
 
 function unsupportedAction(entry: RawEntry, ctx: MonsterContext, actionType: "action" | "reaction"): ActionDefinition {

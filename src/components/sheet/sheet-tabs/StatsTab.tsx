@@ -83,6 +83,19 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             Speed
             <input type="number" value={definition.speed} onChange={(e) => updateCreatureDefinition(definition.id, { speed: Number(e.target.value) })} />
           </label>
+          {(["fly", "swim", "climb", "burrow"] as const).map((mode) => (
+            <label key={mode} className={styles.field}>
+              {mode}
+              <input
+                type="number" min={0} step={5} aria-label={`${mode} speed`} value={definition.movement?.[mode] ?? 0}
+                onChange={(e) => {
+                  const feet = Math.max(0, Number(e.target.value) || 0);
+                  const { [mode]: _dropped, ...rest } = definition.movement ?? { walk: definition.speed };
+                  updateCreatureDefinition(definition.id, { movement: { ...rest, walk: definition.speed, ...(feet > 0 ? { [mode]: feet } : {}) } });
+                }}
+              />
+            </label>
+          ))}
           <label className={styles.field}>
             Prof
             <input type="number" value={definition.proficiencyBonus ?? 2} onChange={(e) => updateCreatureDefinition(definition.id, { proficiencyBonus: Number(e.target.value) })} />

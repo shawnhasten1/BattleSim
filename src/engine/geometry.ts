@@ -1,4 +1,4 @@
-import type { BattleMapState, CoverLevel, GridConfig, Point, SizeCategory, TerrainZone, WallSegment } from "./types";
+import type { BattleMapState, CoverLevel, CreatureDefinition, GridConfig, MovementProfile, Point, SizeCategory, TerrainZone, WallSegment } from "./types";
 
 export interface PathResult {
   reachable: boolean;
@@ -15,6 +15,27 @@ export interface ReachableCell {
 export interface OccupancyMovementOptions {
   allowOccupiedTransit?: boolean;
   occupiedMovementMultiplier?: number;
+  /**
+   * How the mover can travel. Omit for a plain walker (terrain costs are then exactly the painted multipliers).
+   * With several modes each cell costs whichever mode gets across it cheapest, in squares of the mover's fastest
+   * speed — so a turn's budget is `movementReference(profile)` / 5 squares whichever way it spends it.
+   */
+  movement?: MovementProfile;
+}
+
+/** A creature's movement modes; its `speed` is the walk speed (the sheet edits that, so it wins over a stale copy). */
+export function movementProfileOf(definition: Pick<CreatureDefinition, "speed" | "movement">): MovementProfile {
+  return { ...definition.movement, walk: definition.speed };
+}
+
+/** The speed a turn's movement budget is measured in: the fastest mode it has. */
+export function movementReference(profile: MovementProfile): number {
+  return Math.max(profile.walk, profile.fly ?? 0, profile.swim ?? 0, profile.climb ?? 0, profile.burrow ?? 0);
+}
+
+/** Path options for a creature: it can pass through allies at double cost and uses all its movement modes. */
+export function movementOptionsFor(definition: Pick<CreatureDefinition, "speed" | "movement">): OccupancyMovementOptions {
+  return { allowOccupiedTransit: true, occupiedMovementMultiplier: 2, movement: movementProfileOf(definition) };
 }
 
 const epsilon = 1e-9;
@@ -265,18 +286,53 @@ export function isFootprintLegal(
   });
 }
 
-export function movementCostForCell(terrain: TerrainZone[], cell: Point): number {
-  const zone = terrainAtCell(terrain, cell);
-  if (!zone) {
-    return 1;
-  }
-  if (zone.type === "impassable") {
+/** What crossing a cell costs a walker, in squares. */
+function walkMultiplier(zone: TerrainZone | undefined): number {
+  if (!zone) return 1;
+  const tags = zone.tags ?? [];
+  if (zone.type === "impassable" || tags.includes("solid") || tags.includes("deep") || tags.includes("climbable")) {
     return Number.POSITIVE_INFINITY;
   }
-  if (zone.type === "difficult") {
-    return zone.movementMultiplier ?? 2;
-  }
+  if (zone.type === "difficult") return zone.movementMultiplier ?? 2;
   return zone.movementMultiplier ?? 1;
+}
+
+/**
+ * The per-mode terrain rules — one row per mode, keyed on terrain type and tag:
+ * - `water` (shallow: walkers wade at its multiplier), `deep` (walkers can't cross), `solid` (rock / earth: only burrowers),
+ *   `climbable` (a cliff face: only climbers).
+ * - flying ignores everything on the ground except solid rock and impassable terrain;
+ * - swimming works only in water; burrowing only in solid ground; climbing works anywhere except water and rock.
+ */
+function modeMultiplier(zone: TerrainZone | undefined, mode: "walk" | "fly" | "swim" | "climb" | "burrow"): number {
+  const tags = zone?.tags ?? [];
+  const blocked = zone?.type === "impassable" || tags.includes("solid");
+  switch (mode) {
+    case "walk":
+      return walkMultiplier(zone);
+    case "fly":
+      return blocked ? Number.POSITIVE_INFINITY : 1;
+    case "swim":
+      return tags.includes("water") && !blocked ? 1 : Number.POSITIVE_INFINITY;
+    case "climb":
+      return blocked || tags.includes("water") ? Number.POSITIVE_INFINITY : 1;
+    case "burrow":
+      return tags.includes("solid") && zone?.type !== "impassable" ? 1 : Number.POSITIVE_INFINITY;
+  }
+}
+
+export function movementCostForCell(terrain: TerrainZone[], cell: Point, movement?: MovementProfile): number {
+  const zone = terrainAtCell(terrain, cell);
+  const reference = movement ? movementReference(movement) : 0;
+  if (!movement || reference <= 0) {
+    return walkMultiplier(zone);
+  }
+  let best = Number.POSITIVE_INFINITY;
+  for (const mode of ["walk", "fly", "swim", "climb", "burrow"] as const) {
+    const speed = movement[mode] ?? 0;
+    if (speed > 0) best = Math.min(best, modeMultiplier(zone, mode) * reference / speed);
+  }
+  return best;
 }
 
 export function terrainAtCell(terrain: TerrainZone[], cell: Point): TerrainZone | undefined {
@@ -435,7 +491,7 @@ function footprintMovementCost(
   occupied: Point[],
   options: OccupancyMovementOptions
 ): number {
-  const terrainCost = Math.max(...footprintCells(position, footprint).map((cell) => movementCostForCell(map.terrain, cell)));
+  const terrainCost = Math.max(...footprintCells(position, footprint).map((cell) => movementCostForCell(map.terrain, cell, options.movement)));
   if (!options.allowOccupiedTransit || !footprintOverlapsOccupied(position, footprint, occupied)) {
     return terrainCost;
   }

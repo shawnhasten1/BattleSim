@@ -377,7 +377,7 @@ function wallPresetFlags(cover: CoverLevel): Pick<WallSegment, "blocksMovement" 
   };
 }
 
-export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "acid" | "lava" | "ice" | "eraser";
+export type TerrainBrushId = "difficult" | "greaterDifficult" | "impassable" | "water" | "deepWater" | "rock" | "cliff" | "acid" | "lava" | "ice" | "eraser";
 
 interface TerrainBrushPreset {
   name: string;
@@ -393,6 +393,11 @@ export const TERRAIN_BRUSH_PRESETS: Record<Exclude<TerrainBrushId, "eraser">, Te
   difficult: { name: "Difficult Terrain", type: "difficult", movementMultiplier: 2 },
   greaterDifficult: { name: "Greater Difficult Terrain", type: "difficult", movementMultiplier: 4 },
   impassable: { name: "Impassable Terrain", type: "impassable" },
+  // Movement modes: see `modeMultiplier` in geometry.ts. Shallow water slows walkers; swimmers and fliers cross it freely.
+  water: { name: "Shallow Water", type: "custom", movementMultiplier: 2, tags: ["water"] },
+  deepWater: { name: "Deep Water", type: "custom", tags: ["water", "deep"] },
+  rock: { name: "Solid Rock", type: "custom", tags: ["solid"] },
+  cliff: { name: "Cliff Face", type: "custom", tags: ["climbable"] },
   acid: {
     name: "Acid Pool",
     type: "hazard",

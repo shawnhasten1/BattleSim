@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, Snowflake, SquareDashed, User, Waypoints } from "lucide-react";
+import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, Snowflake, SquareDashed, User, Waves, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
 import { useEncounterStore, type EditorTool, type TerrainBrushId } from "@/store/encounter-store";
@@ -39,6 +39,10 @@ const TERRAIN_BRUSHES: Array<{ brush: TerrainBrushId; icon: ReactNode; label: st
   { brush: "difficult", icon: <Footprints size={15} />, label: "Difficult terrain — half speed (×2 move cost)" },
   { brush: "greaterDifficult", icon: <Mountain size={15} />, label: "Greater difficult terrain — quarter speed (×4 move cost)" },
   { brush: "impassable", icon: <Ban size={15} />, label: "Impassable — blocks movement entirely" },
+  { brush: "water", icon: <Waves size={15} />, label: "Shallow water — walkers ×2 move cost; swimmers and fliers cross freely" },
+  { brush: "deepWater", icon: <Waves size={15} />, label: "Deep water — walkers can't cross; swimmers and fliers can" },
+  { brush: "rock", icon: <Mountain size={15} />, label: "Solid rock — only burrowers (and nothing else) pass" },
+  { brush: "cliff", icon: <Mountain size={15} />, label: "Cliff face — only climbers and fliers cross" },
   { brush: "acid", icon: <Droplet size={15} />, label: "Acid — DC 12 Dex save, 2d6 acid damage (half on save)" },
   { brush: "lava", icon: <Flame size={15} />, label: "Lava — 4d10 fire damage, no save" },
   { brush: "ice", icon: <Snowflake size={15} />, label: "Ice — DC 10 Dex save or fall prone, no damage" },

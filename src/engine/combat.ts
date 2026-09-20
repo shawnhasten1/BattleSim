@@ -1,6 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, footprintCells, gridDistance, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, footprintCells, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
 import type {
   Ability,
@@ -452,7 +452,7 @@ export function moveCombatant(
   const start = combatant.position;
   const map = zoneTerrainOverlay(state.snapshot.map, state.snapshot.activeZones);
   const routeMap = hazardPathingOverlay(map);
-  const pathOptions = { allowOccupiedTransit: true, occupiedMovementMultiplier: 2 };
+  const pathOptions = movementOptionsFor(definition);
   const path = hazardAwarePath(map, routeMap, start, destination, footprint, occupied, pathOptions);
   const movementBudget = remainingMovementBudget(state.snapshot, combatant);
 
@@ -822,7 +822,7 @@ export function dashFactor(combatant: CombatantState): number {
 export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
   const definition = getDefinition(snapshot, combatant);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
-  const fullBudget = definition.speed / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
+  const fullBudget = movementReference(movementProfileOf(definition)) / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
   return Math.max(0, fullBudget - (combatant.turnFlags?.movementUsed ?? 0));
 }
 
@@ -2054,6 +2054,10 @@ function checkTerrainHazardOnEnter(state: EngineState, combatant: CombatantState
 export function applyTerrainHazardTriggers(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
   const combatant = state.snapshot.combatants.find((candidate) => candidate.id === combatantId);
   if (!combatant || combatant.state !== "active") {
+    return;
+  }
+  // A creature that flies passes over acid, lava and ice rather than standing in it.
+  if (movementProfileOf(getDefinition(state.snapshot, combatant)).fly) {
     return;
   }
   const tile = terrainAtCell(state.snapshot.map.terrain, combatant.position);
