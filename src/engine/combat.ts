@@ -1002,15 +1002,10 @@ function resolveSaveAgainstTarget(
   const targetDefinition = getDefinition(state.snapshot, target);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
-  const saveBonus = (targetDefinition.saves?.[action.saveAbility]
-    ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
-    + conditionSaveModifier(target, action.saveAbility);
-  const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
-  const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
-  const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
-    advantage: featureSaveAdvantage.applied
+  const save = rollSavingThrow(state, target, {
+    ability: action.saveAbility, dc, kind: "action", sourceAction: action, situationalBonus: coverSaveBonus
   });
-  const success = saveRoll.total >= dc;
+  const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   const onSuccess = resolveOnSuccess(action);
   const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
   const damageApplied = dealsDamage
@@ -1126,15 +1121,10 @@ export function resolveAreaSaveAction(
     const targetDefinition = getDefinition(state.snapshot, target);
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
-    const saveBonus = (targetDefinition.saves?.[action.saveAbility]
-      ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
-      + conditionSaveModifier(target, action.saveAbility);
-    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
-    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
-      advantage: featureSaveAdvantage.applied
+    const save = rollSavingThrow(state, target, {
+      ability: action.saveAbility, dc, kind: "area", sourceAction: action, situationalBonus: coverSaveBonus
     });
-    const success = saveRoll.total >= dc;
+    const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
     const damageApplied = dealsDamage && blastRoll.length
       ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", attacker.id)
@@ -1796,15 +1786,11 @@ function applySaveGatedEffect(state: EngineState, spec: SaveGatedEffectSpec, tar
   let dealsDamage = true;
   let halve = false;
   if (spec.saveAbility && spec.dc != null) {
-    const saveBonus = (targetDefinition.saves?.[spec.saveAbility]
-      ?? abilityModifier(targetDefinition.abilities[spec.saveAbility]))
-      + conditionSaveModifier(target, spec.saveAbility);
-    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, spec.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, spec.saveAbility);
-    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
-      advantage: featureSaveAdvantage.applied
+    const save = rollSavingThrow(state, target, {
+      ability: spec.saveAbility, dc: spec.dc, kind: spec.via === "terrain" ? "terrain" : "zone"
     });
-    success = saveRoll.total >= spec.dc;
+    const { roll: saveRoll, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
+    success = save.success;
     dealsDamage = !(success && (spec.onSuccess === "none" || spec.onSuccess === "negates"));
     halve = success === true && spec.onSuccess === "half";
     state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${spec.saveAbility.toUpperCase()} save against ${spec.name}`, {
@@ -2647,15 +2633,10 @@ function resolveOneDeathEffect(
     const targetDefinition = getDefinition(state.snapshot, target);
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
-    const saveBonus = (targetDefinition.saves?.[action.saveAbility]
-      ?? abilityModifier(targetDefinition.abilities[action.saveAbility]))
-      + conditionSaveModifier(target, action.saveAbility);
-    const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, action.saveAbility);
-    const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, action.saveAbility);
-    const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total + coverSaveBonus, {
-      advantage: featureSaveAdvantage.applied
+    const save = rollSavingThrow(state, target, {
+      ability: action.saveAbility, dc, kind: "death-effect", sourceAction: action, situationalBonus: coverSaveBonus
     });
-    const success = saveRoll.total >= dc;
+    const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
     const damageApplied = dealsDamage && blastRoll.length
       ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", deceased.id)
@@ -3667,11 +3648,11 @@ function applyConditionRider(
   // gated the rider via its `when`, so the condition just lands.
   if (rider.save && ctx.saved === null) {
     const dc = resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc);
-    const saveBonus = (targetDefinition.saves?.[rider.save.ability]
-      ?? abilityModifier(targetDefinition.abilities[rider.save.ability]))
-      + conditionSaveModifier(target, rider.save.ability);
-    const roll = rollD20WithBonus(state.rng, saveBonus);
-    const success = roll.total >= dc;
+    const save = rollSavingThrow(state, target, {
+      ability: rider.save.ability, dc, kind: "rider",
+      condition: typeof rider.condition === "string" ? (rider.condition as ConditionName) : undefined
+    });
+    const { roll, success } = save;
     state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${rider.save.ability.toUpperCase()} save against ${ctx.actionId}`, {
       attackerId: source.id, targetId: target.id, actionId: ctx.actionId,
       saveRoll: roll, total: roll.total, dc, success, viaRider: true
@@ -3830,10 +3811,8 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
       surviving.push(condition);
       continue;
     }
-    const saveBonus = (definition.saves?.[repeat.ability] ?? abilityModifier(definition.abilities[repeat.ability]))
-      + conditionSaveModifier(combatant, repeat.ability);
-    const roll = rollD20WithBonus(state.rng, saveBonus);
-    const success = roll.total >= repeat.dc;
+    const save = rollSavingThrow(state, combatant, { ability: repeat.ability, dc: repeat.dc, kind: "repeat", condition: condition.name });
+    const { roll, success } = save;
     state.log.push(event(state, "SaveRolled", `${combatant.displayName} repeated a ${repeat.ability.toUpperCase()} save vs ${condition.name}`, {
       targetId: combatantId, conditionId: condition.id, saveRoll: roll, total: roll.total, dc: repeat.dc, success, repeatSave: true
     }));
@@ -3898,6 +3877,48 @@ function featureSaveAdvantageModifier(
   return { applied: sources.length > 0, sources };
 }
 
+/** Where a saving throw comes from, so scoped effects (Magic Resistance, "advantage against being charmed") can tell. */
+export type SaveKind = "action" | "area" | "zone" | "terrain" | "rider" | "repeat" | "concentration" | "feature" | "death-effect";
+
+export interface SaveContext {
+  ability: Ability;
+  dc: number;
+  kind: SaveKind;
+  /** The action forcing the save — its spell level / magical flag decides whether Magic Resistance applies. */
+  sourceAction?: { spellLevel?: number; magical?: boolean };
+  /** The condition the save is against being afflicted with (advantage on saves against being charmed). */
+  condition?: ConditionName;
+  /** A flat situational bonus, e.g. cover on a Dexterity save. */
+  situationalBonus?: number;
+}
+
+export interface SavingThrowResult {
+  roll: DiceRollResult;
+  success: boolean;
+  dc: number;
+  featureBonus: { total: number; sources: string[] };
+  featureAdvantage: { applied: boolean; sources: string[] };
+}
+
+/**
+ * The one place a saving throw is rolled: the target's own bonus (proficiency-inclusive `saves` or the raw
+ * modifier), condition modifiers, feature bonuses and aura bonuses, and advantage from features — for every
+ * kind of save (actions, areas, zones, terrain, riders, repeats, concentration). It used to be copied into
+ * eight places, two of which (rider saves and repeated saves) forgot the feature bonuses and advantage, so an
+ * Aura of Protection didn't apply to a Hold Person-style save.
+ */
+export function rollSavingThrow(state: EngineState, target: CombatantState, ctx: SaveContext): SavingThrowResult {
+  const definition = getDefinition(state.snapshot, target);
+  const base = (definition.saves?.[ctx.ability] ?? abilityModifier(definition.abilities[ctx.ability]))
+    + conditionSaveModifier(target, ctx.ability);
+  const featureBonus = featureSaveModifier(state, definition, target, ctx.ability);
+  const featureAdvantage = featureSaveAdvantageModifier(state, definition, target, ctx.ability);
+  const roll = rollD20WithBonus(state.rng, base + featureBonus.total + (ctx.situationalBonus ?? 0), {
+    advantage: featureAdvantage.applied
+  });
+  return { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
+}
+
 function featureSaveDcModifier(
   definition: CreatureDefinition,
   action: SaveActionDefinition | AreaSaveActionDefinition
@@ -3933,16 +3954,9 @@ function resolveFeatureEffectSave(
 ): { success: boolean; total: number; dc: number; saveRoll: DiceRollResult } {
   const targetDefinition = getDefinition(state.snapshot, target);
   const saveAbility = effect.save.ability;
-  const saveBonus = (targetDefinition.saves?.[saveAbility]
-    ?? abilityModifier(targetDefinition.abilities[saveAbility]))
-    + conditionSaveModifier(target, saveAbility);
-  const featureSaveBonus = featureSaveModifier(state, targetDefinition, target, saveAbility);
-  const featureSaveAdvantage = featureSaveAdvantageModifier(state, targetDefinition, target, saveAbility);
-  const saveRoll = rollD20WithBonus(state.rng, saveBonus + featureSaveBonus.total, {
-    advantage: featureSaveAdvantage.applied
-  });
   const dc = resolveFeatureSaveDc(effect.save, definition);
-  const success = saveRoll.total >= dc;
+  const save = rollSavingThrow(state, target, { ability: saveAbility, dc, kind: "feature", sourceAction: action });
+  const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
 
   state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${saveAbility.toUpperCase()} save against ${feature.name}`, {
     attackerId: attacker.id,
@@ -4133,14 +4147,9 @@ function resolveConcentration(state: EngineState, combatant: CombatantState, dam
     return;
   }
   const definition = getDefinition(state.snapshot, combatant);
-  const conBonus = definition.saves?.con ?? abilityModifier(definition.abilities.con);
-  const featureSaveBonus = featureSaveModifier(state, definition, combatant, "con");
-  const featureSaveAdvantage = featureSaveAdvantageModifier(state, definition, combatant, "con");
   const dc = Math.max(10, Math.floor(damageTaken / 2));
-  const roll = rollD20WithBonus(state.rng, conBonus + featureSaveBonus.total, {
-    advantage: featureSaveAdvantage.applied
-  });
-  const success = roll.total >= dc;
+  const save = rollSavingThrow(state, combatant, { ability: "con", dc, kind: "concentration" });
+  const { roll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   if (!success) {
     breakConcentration(state, combatant.id);
   }
