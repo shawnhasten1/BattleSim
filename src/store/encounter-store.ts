@@ -466,6 +466,7 @@ function closeActionEconomy(combatant: CombatantState): void {
 }
 
 function defaultTacticsForDefinition(definition: CreatureDefinition): CombatantState["tacticsProfile"] {
+  if (definition.defaultTactics) return definition.defaultTactics;
   const fullActions = getExecutableActions(definition).filter((action) => action.automationSupport === "full");
   return fullActions.some((action) => action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell"))
     ? "basic-ranged"
@@ -2166,7 +2167,7 @@ export const useEncounterStore = create<EncounterStore>()(
           resources: defaultResourcesForDefinition(definition),
           state: "active" as const,
           tacticsProfile: defaultTacticsForDefinition(definition),
-          resourceStance: "balanced" as const
+          resourceStance: definition.defaultResourceStance ?? ("balanced" as const)
         };
         commitEncounter({
           ...encounter,
@@ -2206,7 +2207,7 @@ export const useEncounterStore = create<EncounterStore>()(
             resources: defaultResourcesForDefinition(definition),
             state: "active",
             tacticsProfile: defaultTacticsForDefinition(definition),
-            resourceStance: "balanced"
+            resourceStance: definition.defaultResourceStance ?? "balanced"
           });
         }
         commitEncounter({

@@ -7,6 +7,7 @@ import { parseAttack } from "./attacks";
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } from "./defenses";
 import { parseMultiattack } from "./multiattack";
+import { inferTactics } from "./tactics";
 import { parseSaveAction, splitBoldVariants } from "./saves";
 import { grantsMagicalWeapons, parseTrait } from "./traits";
 import { applyUsage } from "./usage";
@@ -374,6 +375,9 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     ...(legendary ? { legendary } : {})
   };
   movementGaps(definition, gaps);
+  const tactics = inferTactics(definition, slug);
+  definition.defaultTactics = tactics.profile;
+  if (tactics.resourceStance !== "balanced") definition.defaultResourceStance = tactics.resourceStance;
 
   const compiled = actions.filter((action) => FULL_SUPPORT_KINDS.has(action.kind)).length;
   const codes = gaps.codes();

@@ -1325,6 +1325,10 @@ export interface CreatureDefinition {
   source?: SourceMetadata;
   size: SizeCategory;
   type?: CreatureType;
+  /** The tactics a token of this creature starts with (the DM can change it per token). Absent: derived from its attacks. */
+  defaultTactics?: TacticsProfile;
+  /** The resource stance a token of this creature starts with. Absent: balanced. */
+  defaultResourceStance?: ResourceStance;
   armorClass: number;
   maxHp: number;
   speed: number;
