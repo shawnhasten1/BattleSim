@@ -9,7 +9,7 @@ export const GAP_CODES = {
   // ── Phase 2: defenses
   COND_IMMUNITY: "(Retired — now enforced.) Condition immunities.",
   NONMAGIC_EXCEPTION: "(Retired — now enforced.) Silvered / adamantine exceptions to nonmagical resistance.",
-  MAGIC_RESISTANCE: "Magic Resistance (advantage on saves against spells and magical effects) is reference-only.",
+  MAGIC_RESISTANCE: "(Retired — now enforced.) Advantage on saves against magic / conditions.",
   DEFENSE_TEXT: "A resistance / immunity clause could not be parsed; see the description.",
   // ── Phase 3: limited use
   RECHARGE: "Recharge is approximated as a single use per encounter (no recharge roll yet).",

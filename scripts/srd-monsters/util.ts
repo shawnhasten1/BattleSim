@@ -37,6 +37,15 @@ export function proficiencyForCr(cr: number): number {
 }
 
 /** "3d6 + 5" / "1d8 - 1" / "7" → "3d6+5" / "1d8-1" / "7". */
+/**
+ * Whether an action's text calls its own effect magic ("…against this magic", "be magically charmed",
+ * "emits a magical roar") — so a target's Magic Resistance applies to the save. Curing/removal text
+ * ("removed by magic", "magical healing") does not count.
+ */
+export function describesMagicalEffect(text: string): boolean {
+  return /against this magic|\bmagically (?!gains|knows)|against being magically|\bmagical (?:roar|melody|utterance|lightning bolt|,)/i.test(text);
+}
+
 export function compactDice(text: string): string {
   return text.replace(/\s+/g, "").replace(/^\+/, "");
 }

@@ -4,7 +4,7 @@ import type {
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { buildConditionRider, findConditionOnFail, findSaveClause, findSaveDamage } from "./riders";
 import { applyUsage } from "./usage";
-import { ABILITIES, abilityMod, compactDice, isDamageType, slugify } from "./util";
+import { ABILITIES, abilityMod, compactDice, describesMagicalEffect, isDamageType, slugify } from "./util";
 
 export const ATTACK_HEAD =
   /^(Melee or Ranged|Melee|Ranged)\s+(Weapon|Spell)\s+Attack:\s*([+-]\d+)\s+to hit(?:\s*\([^)]*\))?,\s*([\s\S]*?)\s*Hit:\s*([\s\S]*)$/;
@@ -280,6 +280,8 @@ export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseRe
       ...(variant.reach !== undefined ? { reach: variant.reach } : {}),
       // Spell attacks don't add an ability modifier to damage; everything else follows the actor convention.
       damage: variant.kind === "spell" ? damage.map((component) => ({ ...component })) : linkAbilityDamage(damage, ability, ctx),
+      // "…saving throw against being magically petrified": the rider's save is against a magical effect.
+      ...(!isSpell && describesMagicalEffect(hit) ? { magical: true } : {}),
       automationSupport: "full"
     });
 

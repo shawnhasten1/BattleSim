@@ -1,4 +1,4 @@
-import type { DamageComponent, FeatureDefinition } from "../../src/engine/types";
+import type { Ability, ConditionName, DamageComponent, FeatureDefinition } from "../../src/engine/types";
 import type { GapCode } from "../../src/data/srd/monsters/gaps";
 import type { MonsterContext, RawEntry } from "./context";
 import { compactDice, isDamageType, slugify } from "./util";
@@ -13,6 +13,10 @@ import { compactDice, isDamageType, slugify } from "./util";
  */
 
 type Recipe = (entry: RawEntry, ctx: MonsterContext) => Partial<FeatureDefinition>;
+
+type SaveAdvantage = Extract<NonNullable<FeatureDefinition["effects"]>[number], { kind: "save-advantage" }>;
+const advantage = (effect: Omit<SaveAdvantage, "kind">): SaveAdvantage => ({ kind: "save-advantage", ...effect });
+const conditionAdvantage = (conditions: ConditionName[], abilities?: Ability[]) => advantage({ abilities, against: { conditions } });
 
 const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
   {
@@ -36,6 +40,51 @@ const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
     // Modelled as an `absorb` damage adjustment on the definition (see `parseAbsorption`); the trait is the label.
     match: /^(Acid|Cold|Fire|Force|Lightning|Necrotic|Poison|Psychic|Radiant|Thunder) Absorption$/i,
     build: () => ({ automationSupport: "full" })
+  },
+  {
+    // "…advantage on saving throws against spells and other magical effects"
+    match: /^Magic Resistance$/i,
+    build: () => ({ automationSupport: "full", effects: [advantage({ against: { source: "magical" } })] })
+  },
+  {
+    // "…advantage on saving throws against being charmed" (the drow's "magic can't put it to sleep" is not modelled)
+    match: /^Fey Ancestry$/i,
+    build: () => ({ automationSupport: "partial", effects: [conditionAdvantage(["charmed"])] })
+  },
+  {
+    match: /^Brave$/i,
+    build: () => ({ automationSupport: "full", effects: [conditionAdvantage(["frightened"])] })
+  },
+  {
+    match: /^Dark Devotion$/i,
+    build: () => ({ automationSupport: "full", effects: [conditionAdvantage(["charmed", "frightened"])] })
+  },
+  {
+    // "…advantage on Intelligence, Wisdom, and Charisma saving throws against magic"
+    match: /^Gnome Cunning$/i,
+    build: () => ({ automationSupport: "full", effects: [advantage({ abilities: ["int", "wis", "cha"], against: { source: "magical" } })] })
+  },
+  {
+    // "…advantage on Strength and Dexterity saving throws made against effects that would knock it prone"
+    match: /^Sure-Footed$/i,
+    build: () => ({ automationSupport: "full", effects: [conditionAdvantage(["prone"], ["str", "dex"])] })
+  },
+  {
+    // "…advantage on saving throws against being blinded, charmed, deafened, frightened, stunned, and knocked unconscious"
+    match: /^(Two-Headed|Two Heads|Multiple Heads)$/i,
+    build: () => ({
+      automationSupport: "full",
+      effects: [conditionAdvantage(["blinded", "charmed", "deafened", "frightened", "stunned", "unconscious"])]
+    })
+  },
+  {
+    // "…advantage on saving throws against poison, spells, and illusions, as well as to resist being charmed or paralyzed"
+    // Illusions that aren't spells are not modelled; poison covers the poisoned condition.
+    match: /^Duergar Resilience$/i,
+    build: () => ({
+      automationSupport: "partial",
+      effects: [advantage({ against: { source: "spell" } }), conditionAdvantage(["charmed", "paralyzed", "poisoned"])]
+    })
   },
   {
     match: /^Flyby$/i,
@@ -70,7 +119,6 @@ const INFORMATIONAL = new RegExp(
 
 /** Traits whose mechanics belong to a later engine phase. */
 const GAPS: Array<{ match: RegExp; code: GapCode }> = [
-  { match: /^(Magic Resistance|Fey Ancestry|Brave|Dark Devotion|Gnome Cunning|Duergar Resilience|Sure-Footed)/i, code: "MAGIC_RESISTANCE" },
   { match: /^Legendary Resistance/i, code: "LEGENDARY_RESISTANCE" },
   { match: /^Regeneration/i, code: "REGEN" },
   { match: /^(Undead Fortitude|Relentless|Rejuvenation)/i, code: "SURVIVE_ZERO" },

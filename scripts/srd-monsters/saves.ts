@@ -4,7 +4,7 @@ import type {
 import { type MonsterContext, type RawEntry, uniqueId } from "./context";
 import { buildConditionRider, findConditionOnFail, findSaveClause, findSaveDamage } from "./riders";
 import { applyUsage } from "./usage";
-import { slugify } from "./util";
+import { describesMagicalEffect, slugify } from "./util";
 
 const FT = "(?:ft\\.?|feet|foot)";
 
@@ -98,6 +98,7 @@ export function parseSaveAction(entry: RawEntry, ctx: MonsterContext, options: S
     halfDamageOnSuccess: onSuccess === "half",
     onSuccess,
     ...(riders.length > 0 ? { riders } : {}),
+    ...(describesMagicalEffect(text) ? { magical: true } : {}),
     automationSupport: "full" as const
   };
 
