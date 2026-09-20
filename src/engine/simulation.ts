@@ -2798,7 +2798,9 @@ function actionRange(action: OffensiveAction, source: ReturnType<typeof getDefin
       .map((step) => actions.find((candidate) => candidate.id === step.actionId))
       .filter((candidate): candidate is Extract<ActionDefinition, { kind: "attack" }> => candidate?.kind === "attack")
       .map((candidate) => candidate.attackType === "melee" ? candidate.reach ?? candidate.range : candidate.longRange ?? candidate.range);
-    return Math.max(0, ...ranges);
+    // Every step has to reach the target, so the multiattack is only in range at the *shortest* step's
+    // range — a 5 ft beard plus a 10 ft glaive can't be used from 10 ft away (the beard step would throw).
+    return ranges.length > 0 ? Math.min(...ranges) : 0;
   }
   return action.kind === "attack" && action.attackType === "melee" ? action.reach ?? action.range : action.kind === "attack" ? action.longRange ?? action.range : action.range;
 }
