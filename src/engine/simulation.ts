@@ -36,6 +36,9 @@ import {
   resolveSaveAction,
   resolveUtilityAction,
   runTurnEnd,
+  LEGENDARY_POINTS,
+  isLegendaryVariant,
+  refillLegendaryPoints,
   runTurnStart,
   spellSlotLevel,
   tickZones,
@@ -44,7 +47,7 @@ import {
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findPath, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Point, ResourceStance, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -275,7 +278,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       if (activeFactions(state.snapshot).size <= 1) {
         break;
       }
-      runTurnEnd(state, actor.id);
+      finishTurn(state, actor.id);
     }
     nextIndex = 0;
   }
@@ -297,6 +300,45 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       warnings
     }
   };
+}
+
+/**
+ * Everything that closes a creature's turn: the shared turn-end rules, then the legendary-action window —
+ * legendary creatures other than the one who just acted get to act. Auto Run and Step both end turns here.
+ */
+export function finishTurn(state: EngineState, actorId: Id): void {
+  runTurnEnd(state, actorId);
+  runLegendaryWindow(state, actorId);
+}
+
+/**
+ * At the end of another creature's turn each legendary creature may spend legendary points on ONE of its
+ * legendary actions. Points that aren't spent are lost when the creature's own turn comes round, so it takes
+ * the best affordable option that reaches a target — the cost only breaks ties.
+ */
+export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
+  for (const combatant of state.snapshot.combatants) {
+    if (combatant.id === endedActorId || combatant.state !== "active") continue;
+    const definition = getDefinition(state.snapshot, combatant);
+    if (!definition.legendary || !canAct(combatant, "free")) continue;
+    if (combatant.resources?.[LEGENDARY_POINTS] === undefined) refillLegendaryPoints(state, combatant);
+    if ((combatant.resources?.[LEGENDARY_POINTS] ?? 0) < 1) continue;
+    const options = getExecutableActions(definition).filter((action): action is OffensiveAction =>
+      isLegendaryVariant(action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"));
+    if (options.length === 0) continue;
+    const plan = selectOffensivePlan(state.snapshot, combatant, tacticsSettings(combatant.tacticsProfile), "action", { actions: options, mustReachNow: true });
+    if (!plan || plan.expectedDamage <= 0 && plan.score <= 0) continue;
+    const cost = "resourceCost" in plan.action ? plan.action.resourceCost?.amount ?? 1 : 1;
+    state.log.push(event(state, "LegendaryActionUsed", `${combatant.displayName} uses ${plan.action.name} (legendary, ${cost} point${cost === 1 ? "" : "s"})`, {
+      combatantId: combatant.id, actionId: plan.action.id, cost, after: endedActorId
+    }));
+    try {
+      executeOffensivePlan(state, combatant, plan);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${combatant.displayName}: legendary action failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
+    }
+    if (activeFactions(state.snapshot).size <= 1) return;
+  }
 }
 
 /** Resolve a chosen offensive plan through the right engine call, with beam / multiattack target spread. */
@@ -1849,13 +1891,13 @@ function selectOffensivePlan(
   actor: CombatantState,
   tactics: TacticsSettings,
   slot: "action" | "bonus" = "action",
-  options: { mustReachNow?: boolean; relaxReachability?: boolean } = {}
+  options: { mustReachNow?: boolean; relaxReachability?: boolean; actions?: OffensiveAction[] } = {}
 ): OffensivePlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
-  const candidates = getExecutableActions(definition)
-    .filter((action): action is OffensiveAction => action.automationSupport === "full" && action.actionType === slot && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+  const candidates = (options.actions ?? getExecutableActions(definition))
+    .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
     // Don't trade a still-working concentration effect for a new one.
     .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
     .flatMap((action) => hostiles.map((target) => {
@@ -2429,6 +2471,9 @@ function resourceCostWeight(action: ActionDefinition): number {
   if (!("resourceCost" in action) || !action.resourceCost) {
     return 0;
   }
+  // Legendary points are use-it-or-lose-it each round, so a point is worth little — just enough to prefer
+  // three 1-point attacks over one 3-point option that does no more.
+  if (action.resourceCost.resourceId === LEGENDARY_POINTS) return action.resourceCost.amount * 0.2;
   const weight = spellSlotLevel(action.resourceCost.resourceId) ?? action.resourceCost.amount;
   // A recharge ability comes back on its own (a Recharge 5-6 breath in ~3 turns), so spending it is cheap.
   const usage = "usage" in action ? action.usage : undefined;

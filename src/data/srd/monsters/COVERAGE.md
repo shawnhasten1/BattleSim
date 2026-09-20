@@ -20,7 +20,7 @@ A phase is done when its codes reach 0.
 | `REGEN_TERRAIN` | 2 | Regeneration that stops in sunlight or running water: the map has no such terrain tag yet, so it always works. |
 | `LEGENDARY_RESISTANCE` | 0 | (Retired — now enforced.) Legendary Resistance. |
 | `SURVIVE_ZERO` | 0 | (Retired — now enforced.) Undead Fortitude / Relentless. |
-| `LEGENDARY_ACTIONS` | 30 | Legendary actions are recorded but not yet taken. |
+| `LEGENDARY_ACTIONS` | 10 | Legendary actions are recorded but not yet taken. |
 | `MULTIATTACK_PARSE` | 1 | Multiattack text could not be fully compiled. |
 | `MULTIATTACK_STEP` | 27 | A Multiattack step is not an attack (e.g. Frightful Presence first) and is skipped. |
 | `REACTION` | 9 | Reaction is reference-only. |
@@ -78,27 +78,27 @@ A phase is done when its codes reach 0.
 |---|---:|---|---|
 | Aboleth | 10 | partial | LEGENDARY_ACTIONS, MOVE_SWIM, RIDER_TEXT, TRAIT_UNMODELED |
 | Acolyte | 0.25 | partial | SPELLS |
-| Adult Black Dragon | 14 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Adult Blue Dragon | 16 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Adult Brass Dragon | 13 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Adult Bronze Dragon | 15 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
-| Adult Copper Dragon | 14 | partial | LEGENDARY_ACTIONS, MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED |
-| Adult Gold Dragon | 17 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
-| Adult Green Dragon | 15 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Adult Red Dragon | 17 | partial | LEGENDARY_ACTIONS, MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Adult Silver Dragon | 16 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
-| Adult White Dragon | 13 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MOVE_SWIM, MOVE_TRAIT, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Black Dragon | 14 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Blue Dragon | 16 | partial | MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Brass Dragon | 13 | partial | MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Bronze Dragon | 15 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
+| Adult Copper Dragon | 14 | partial | MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED |
+| Adult Gold Dragon | 17 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
+| Adult Green Dragon | 15 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Red Dragon | 17 | partial | MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Adult Silver Dragon | 16 | partial | MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
+| Adult White Dragon | 13 | partial | MOVE_BURROW, MOVE_FLY, MOVE_SWIM, MOVE_TRAIT, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
 | Air Elemental | 5 | partial | MOVE_FLY, TRAIT_UNMODELED |
-| Ancient Black Dragon | 21 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Ancient Blue Dragon | 23 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Ancient Brass Dragon | 20 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
-| Ancient Bronze Dragon | 22 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
-| Ancient Copper Dragon | 21 | partial | LEGENDARY_ACTIONS, MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
-| Ancient Gold Dragon | 24 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
-| Ancient Green Dragon | 22 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Ancient Red Dragon | 24 | partial | LEGENDARY_ACTIONS, MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
-| Ancient Silver Dragon | 23 | partial | LEGENDARY_ACTIONS, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
-| Ancient White Dragon | 20 | partial | LEGENDARY_ACTIONS, MOVE_BURROW, MOVE_FLY, MOVE_SWIM, MOVE_TRAIT, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Ancient Black Dragon | 21 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Ancient Blue Dragon | 23 | partial | MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Ancient Brass Dragon | 20 | partial | MOVE_BURROW, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
+| Ancient Bronze Dragon | 22 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
+| Ancient Copper Dragon | 21 | partial | MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
+| Ancient Gold Dragon | 24 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, SAVE_UNPARSED, TRANSFORM |
+| Ancient Green Dragon | 22 | partial | MOVE_FLY, MOVE_SWIM, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Ancient Red Dragon | 24 | partial | MOVE_CLIMB, MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
+| Ancient Silver Dragon | 23 | partial | MOVE_FLY, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER, TRANSFORM |
+| Ancient White Dragon | 20 | partial | MOVE_BURROW, MOVE_FLY, MOVE_SWIM, MOVE_TRAIT, MULTIATTACK_STEP, SAVE_IMMUNITY_AFTER |
 | Androsphinx | 17 | partial | LEGENDARY_ACTIONS, MOVE_FLY, SPELLS |
 | Animated Armor | 1 | partial | TRAIT_UNMODELED |
 | Ankheg | 2 | partial | HOLD_GRAPPLE, MOVE_BURROW |
@@ -407,7 +407,7 @@ A phase is done when its codes reach 0.
 ### Aboleth
 - `TRAIT_UNMODELED` — Mucous Cloud
 - `RIDER_TEXT` — Tentacle: If the target is a creature, it must succeed on a DC 14 Constitution saving thro
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Psychic Drain (cost 2)
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Acolyte
@@ -416,21 +416,18 @@ A phase is done when its codes reach 0.
 ### Adult Black Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Adult Blue Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_BURROW` — burrow 30 ft.
 
 ### Adult Brass Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_BURROW` — burrow 40 ft.
 
@@ -438,7 +435,6 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
@@ -446,7 +442,6 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `SAVE_UNPARSED` — Slowing Breath: no damage or condition found
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_CLIMB` — climb 40 ft.
 
@@ -455,21 +450,18 @@ A phase is done when its codes reach 0.
 - `SAVE_UNPARSED` — Weakening Breath: no damage or condition found
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Adult Green Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Adult Red Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_CLIMB` — climb 40 ft.
 
@@ -477,14 +469,12 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 
 ### Adult White Dragon
 - `MOVE_TRAIT` — Ice Walk
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 - `MOVE_BURROW` — burrow 30 ft.
@@ -496,14 +486,12 @@ A phase is done when its codes reach 0.
 ### Ancient Black Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Ancient Blue Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_BURROW` — burrow 40 ft.
 
@@ -511,7 +499,6 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_BURROW` — burrow 40 ft.
 
@@ -519,7 +506,6 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
@@ -528,7 +514,6 @@ A phase is done when its codes reach 0.
 - `SAVE_UNPARSED` — Slowing Breath: no damage or condition found
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_CLIMB` — climb 40 ft.
 
@@ -537,21 +522,18 @@ A phase is done when its codes reach 0.
 - `SAVE_UNPARSED` — Weakening Breath: no damage or condition found
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Ancient Green Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 
 ### Ancient Red Dragon
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_CLIMB` — climb 40 ft.
 
@@ -559,21 +541,20 @@ A phase is done when its codes reach 0.
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `TRANSFORM` — Change Shape
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 
 ### Ancient White Dragon
 - `MOVE_TRAIT` — Ice Walk
 - `SAVE_IMMUNITY_AFTER` — Frightful Presence
 - `MULTIATTACK_STEP` — Multiattack: The dragon can use its Frightful Presence.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
 - `MOVE_FLY` — fly 80 ft.
 - `MOVE_SWIM` — swim 40 ft.
 - `MOVE_BURROW` — burrow 40 ft.
 
 ### Androsphinx
 - `SPELLS` — Spellcasting
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Teleport (cost 2)
+- `LEGENDARY_ACTIONS` — Cast a Spell (cost 3)
 - `MOVE_FLY` — fly 60 ft.
 
 ### Animated Armor
@@ -1037,7 +1018,8 @@ A phase is done when its codes reach 0.
 
 ### Gynosphinx
 - `SPELLS` — Spellcasting
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Teleport (cost 2)
+- `LEGENDARY_ACTIONS` — Cast a Spell (cost 3)
 - `MOVE_FLY` — fly 60 ft.
 
 ### Harpy
@@ -1101,7 +1083,7 @@ A phase is done when its codes reach 0.
 - `HOLD_SWALLOW` — Bite: If the target is a Large or smaller creature grappled by the kraken, that creatu
 - `HOLD_GRAPPLE` — Tentacle: and the target is grappled (escape DC 18). Until this grapple ends, the target i
 - `HOLD_GRAPPLE` — Fling
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Lightning Storm (cost 2)
 - `MOVE_SWIM` — swim 60 ft.
 
 ### Lamia
@@ -1113,7 +1095,7 @@ A phase is done when its codes reach 0.
 
 ### Lich
 - `SPELLS` — Spellcasting
-- `LEGENDARY_ACTIONS` — 4 legendary actions
+- `LEGENDARY_ACTIONS` — Cantrip (cost 1)
 
 ### Lion
 - `CHARGE_TRAIT` — Pounce
@@ -1188,7 +1170,8 @@ A phase is done when its codes reach 0.
 - `SPELLS` — Spellcasting
 - `RIDER_TEXT` — Rotting Fist: If the target is a creature, it must succeed on a DC 16 Constitution saving thro
 - `SAVE_IMMUNITY_AFTER` — Dreadful Glare
-- `LEGENDARY_ACTIONS` — 5 legendary actions
+- `LEGENDARY_ACTIONS` — Channel Negative Energy (cost 2)
+- `LEGENDARY_ACTIONS` — Whirlwind of Sand (cost 2)
 
 ### Nalfeshnee
 - `SAVE_IMMUNITY_AFTER` — Horror Nimbus
@@ -1389,7 +1372,7 @@ A phase is done when its codes reach 0.
 - `SPELLS` — Innate Spellcasting
 - `RIDER_TEXT` — Slaying Longbow: If the target is a creature that has 190 hit points or fewer, it must succeed on
 - `SPECIAL_ACTION` — Flying Sword
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Teleport (cost 1)
 - `MOVE_FLY` — fly 150 ft.
 
 ### Specter
@@ -1501,7 +1484,7 @@ A phase is done when its codes reach 0.
 - `HOLD_SWALLOW` — Swallow
 - `MULTIATTACK_STEP` — Multiattack: The tarrasque can use its Frightful Presence.
 - `MULTIATTACK_STEP` — Multiattack: It can use its Swallow instead of its bite.
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Move (cost 1)
 
 ### Tiger
 - `CHARGE_TRAIT` — Pounce
@@ -1522,7 +1505,8 @@ A phase is done when its codes reach 0.
 - `CHARGE_TRAIT` — Charge
 - `SPELLS` — Innate Spellcasting
 - `SPECIAL_ACTION` — Teleport
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Shimmering Shield (cost 2)
+- `LEGENDARY_ACTIONS` — Heal Self (cost 3)
 
 ### Vampire
 - `TRAIT_UNMODELED` — Misty Escape
@@ -1534,7 +1518,7 @@ A phase is done when its codes reach 0.
 - `HOLD_GRAPPLE` — Unarmed Strike: Instead of dealing damage, the vampire can grapple the target (escape DC 18).
 - `RIDER_TEXT` — Bite: The target's hit point maximum is reduced by an amount equal to the necrotic dam
 - `SPAWN` — Children of the Night
-- `LEGENDARY_ACTIONS` — 3 legendary actions
+- `LEGENDARY_ACTIONS` — Move (cost 1)
 
 ### Vampire Spawn
 - `REGEN_TERRAIN` — Regeneration

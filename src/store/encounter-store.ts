@@ -20,7 +20,7 @@ import {
   runAutomatedEncounter,
   runBatchSimulations,
   runDownedTurn,
-  runTurnEnd,
+  finishTurn,
   runTurnStart,
   sampleEncounter,
   sizeFootprint,
@@ -808,7 +808,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const turnHasStarted = hadInitiative && encounter.round > 0;
         const currentActor = turnHasStarted ? encounter.combatants[encounter.turnIndex] : undefined;
         if (currentActor && hasOpenActionEconomy(currentActor)) {
-          runTurnEnd(engine, currentActor.id);
+          finishTurn(engine, currentActor.id);
           closeActionEconomy(currentActor);
         }
 
@@ -855,7 +855,7 @@ export const useEncounterStore = create<EncounterStore>()(
           } catch (error) {
             engine.log.push(event(engine, "AutomationWarning", `${combatant.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
           }
-          runTurnEnd(engine, combatant.id);
+          finishTurn(engine, combatant.id);
           closeActionEconomy(combatant);
         }
         commitEncounter(encounter, {

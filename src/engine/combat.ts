@@ -218,8 +218,39 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
 
   return dedupeActionsById([
     ...declared,
-    ...synthesizeUtilityActions(declared)
+    ...synthesizeUtilityActions(declared),
+    ...legendaryVariants(definition, declared)
   ]).map(withEffectiveAutomationSupport);
+}
+
+/** The pool legendary actions spend from; refilled to `legendary.pool` at the start of the creature's own turn. */
+export const LEGENDARY_POINTS = "legendary-points";
+/** Legendary versions of an action carry this id suffix, so they can be told apart from the action they copy. */
+export const LEGENDARY_SUFFIX = ":legendary";
+
+export function isLegendaryVariant(action: { id: string }): boolean {
+  return action.id.endsWith(LEGENDARY_SUFFIX);
+}
+
+/**
+ * A legendary action is the creature's own action (or a self-contained one) taken between other turns for
+ * `cost` points. Each becomes a copy that spends no action / bonus action / reaction (`"free"`), so a normal
+ * turn never picks it, and pays its cost from the legendary pool.
+ */
+function legendaryVariants(definition: CreatureDefinition, declared: ActionDefinition[]): ActionDefinition[] {
+  const refs = definition.legendary?.actions ?? [];
+  return refs.flatMap((ref): ActionDefinition[] => {
+    const base = ref.action ?? declared.find((action) => action.id === ref.actionId);
+    if (!base || base.kind === "unsupported") return [];
+    const { usage: _usage, ...rest } = base as ActionDefinition & { usage?: ActionUsage };
+    return [{
+      ...rest,
+      id: `${base.id}${LEGENDARY_SUFFIX}`,
+      name: ref.name,
+      actionType: "free",
+      resourceCost: { resourceId: LEGENDARY_POINTS, amount: ref.cost }
+    } as ActionDefinition];
+  });
 }
 
 /** The standard non-attack actions every creature has, and whether the engine can drive them. */
@@ -2173,10 +2204,17 @@ export function rollRecharges(state: EngineState, actor: CombatantState): void {
   }
 }
 
+/** A legendary creature's points come back at the start of its own turn (and start the fight full). */
+export function refillLegendaryPoints(state: EngineState, actor: CombatantState): void {
+  const legendary = getDefinition(state.snapshot, actor).legendary;
+  if (legendary) actor.resources = { ...(actor.resources ?? {}), [LEGENDARY_POINTS]: legendary.pool };
+}
+
 export function runTurnStart(state: EngineState, actor: CombatantState): void {
   resetActionEconomy(actor);
   rollRecharges(state, actor);
   applyRegeneration(state, actor);
+  refillLegendaryPoints(state, actor);
   expireConditions(state, "start");
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   runRepeatedSaves(state, actor.id, "turn-start");

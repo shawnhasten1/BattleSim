@@ -1549,6 +1549,7 @@ export interface CombatLogEvent {
     | "AbilityRecharged"
     | "LegendaryResistanceUsed"
     | "Regenerated"
+    | "LegendaryActionUsed"
     | "SurvivedLethal"
     | "MassiveDamage"
     | "ConditionExpired"

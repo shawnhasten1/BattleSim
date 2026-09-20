@@ -262,14 +262,16 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   // ── Legendary actions
   let legendary: CreatureDefinition["legendary"];
   if (legendaryRaw.length > 0) {
-    gaps.add("LEGENDARY_ACTIONS", `${legendaryRaw.length} legendary actions`);
     const refs: LegendaryActionRef[] = legendaryRaw.map((entry) => {
       const ref: LegendaryActionRef = { name: entry.name, cost: entry.legendary_action_cost ?? 1, description: entry.desc };
+      const text = entry.desc.toLowerCase();
       const stem = entry.name.replace(/ Attack$/i, "").toLowerCase();
-      const referenced = own.find((action) => action.name.toLowerCase() === stem || action.name.toLowerCase().startsWith(stem))
-        ?? own.find((action) => new RegExp(`makes? an? ${action.name.toLowerCase()} attack`, "i").test(entry.desc));
-      const isPlainReference = /\b(?:makes|can make) (?:a|an|one)\b[^.]*\battack\b/i.test(entry.desc) && !/saving throw/i.test(entry.desc);
-      if (referenced && isPlainReference) {
+      const runnable = own.filter((action) => action.kind === "attack" || action.kind === "save" || action.kind === "area-save");
+      // "Tail Attack" → its Tail; "The lich uses its Paralyzing Touch", "makes one claw or tail attack" → the action the text names.
+      const referenced = runnable.find((action) => action.name.toLowerCase() === stem)
+        ?? runnable.find((action) => action.name.toLowerCase().startsWith(stem.split(" ")[0]!) && stem.length > 3)
+        ?? runnable.find((action) => text.includes(action.name.toLowerCase()));
+      if (referenced && !/saving throw/i.test(entry.desc)) {
         ref.actionId = referenced.id;
         return ref;
       }
@@ -277,10 +279,14 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       if (inline) {
         inline.actionType = "action";
         ref.action = inline;
+        return ref;
       }
+      // "Detect" is a Perception check: nothing to simulate. Move / Teleport / Cast a Spell wait for later phases.
+      if (!/^Detect$/i.test(entry.name)) gaps.add("LEGENDARY_ACTIONS", `${entry.name} (cost ${ref.cost})`);
       return ref;
     });
     legendary = { pool: 3, actions: refs };
+    ctx.resources["legendary-points"] = 3;
   }
 
   const spellcaster = traits.some((trait) => /^(Innate )?Spellcasting/i.test(trait.name));
