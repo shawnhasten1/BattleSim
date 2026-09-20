@@ -6,6 +6,7 @@ import {
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   effectiveFaction,
+  isImmuneToCondition,
   event,
   getDefinition,
   getExecutableActions,
@@ -1859,7 +1860,7 @@ function selectOffensivePlan(
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
-      const preferredBonus = actionMatchesPreference(action, definition, tactics) ? 8 : 0;
+      const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
         * optionalRiderCostDiscount(action, definition, targetDefinition);
       const targetHpRatio = clamp(target.currentHp / Math.max(1, targetDefinition.maxHp), 0, 1);
@@ -2454,9 +2455,15 @@ function optionalRiderCostDiscount(
   return riderTriggerChance(rider.when, { landChance, failChance });
 }
 
-function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typeof getDefinition>, tactics: TacticsSettings): boolean {
+function actionMatchesPreference(
+  action: OffensiveAction,
+  source: ReturnType<typeof getDefinition>,
+  tactics: TacticsSettings,
+  /** When known, condition riders it is immune to don't make an action "on-profile" for a controller. */
+  target?: ReturnType<typeof getDefinition>
+): boolean {
   // control-focused profiles treat a save-or-condition / rider action as on-profile.
-  if (tactics.controlWeight >= 15 && actionImposesConditions(action, source)) {
+  if (tactics.controlWeight >= 15 && actionImposesConditions(action, source, target)) {
     return true;
   }
   if (action.kind === "attack") {
@@ -2468,22 +2475,25 @@ function actionMatchesPreference(action: OffensiveAction, source: ReturnType<typ
     const actions = getExecutableActions(source);
     return action.attacks.some((step) => {
       const child = actions.find((candidate) => candidate.id === step.actionId);
-      return child?.kind === "attack" && actionMatchesPreference(child, source, tactics);
+      return child?.kind === "attack" && actionMatchesPreference(child, source, tactics, target);
     });
   }
   return tactics.preferred === "ranged";
 }
 
 /** True when the action (or a multiattack child) carries a `condition` rider. */
-function actionImposesConditions(action: OffensiveAction, source: ReturnType<typeof getDefinition>): boolean {
+function actionImposesConditions(action: OffensiveAction, source: ReturnType<typeof getDefinition>, target?: ReturnType<typeof getDefinition>): boolean {
+  // A condition rider counts unless the target is known to be immune to that condition.
+  const lands = (rider: ActionRider) => rider.kind === "condition"
+    && !(target && isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom));
   if (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") {
-    return (action.riders ?? []).some((rider) => rider.kind === "condition");
+    return (action.riders ?? []).some(lands);
   }
   if (action.kind === "multiattack") {
     const actions = getExecutableActions(source);
     return action.attacks.some((step) => {
       const child = actions.find((candidate) => candidate.id === step.actionId);
-      return child?.kind === "attack" && (child.riders ?? []).some((rider) => rider.kind === "condition");
+      return child?.kind === "attack" && (child.riders ?? []).some(lands);
     });
   }
   return false;
@@ -2685,6 +2695,10 @@ function expectedRiderControl(
       continue;
     }
     const name: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
+    // A Hold Person on something immune to paralysis is worth nothing.
+    if (isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom)) {
+      continue;
+    }
     const severity = conditionSeverity(name);
 
     let pApplied: number;

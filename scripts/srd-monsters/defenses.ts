@@ -72,7 +72,7 @@ export function parseConditionImmunities(display: string, gaps: GapLog): Conditi
       gaps.add("DEFENSE_TEXT", `condition immunity: "${name}"`);
     }
   }
-  if (out.length > 0) gaps.add("COND_IMMUNITY", out.join(", "));
+  // Enforced by the engine (isImmuneToCondition), so it is no longer a gap.
   return out;
 }
 

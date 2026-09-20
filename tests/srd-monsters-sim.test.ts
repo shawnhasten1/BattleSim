@@ -124,3 +124,40 @@ describe("SRD defenses work in the engine", () => {
     expect(strike("shambling-mound", "lightning", {}, 60).hp).toBe(80);
   });
 });
+
+describe("SRD condition immunities work in the engine", () => {
+  const byId = (slug: string) => monsters.find((definition) => definition.id === `srd:monster:${slug}`)!;
+
+  function clawAt(victimSlug: string, seed: string) {
+    const ghoul = byId("ghoul");
+    const victim = byId(victimSlug);
+    const token = (id: string, definition: CreatureDefinition, faction: "party" | "enemy", x: number): CombatantState => ({
+      id, definitionId: definition.id, displayName: id, faction, position: { x, y: 4 }, currentHp: definition.maxHp, tempHp: 0,
+      state: "active", tacticsProfile: "basic-melee", resourceStance: "balanced"
+    });
+    const base = structuredClone(sampleEncounter);
+    const state = createEngineState({
+      ...base, seed, map: { ...base.map, walls: [], terrain: [] }, definitions: [victim, ghoul],
+      combatants: [token("victim", victim, "party", 4), token("ghoul", ghoul, "enemy", 5)]
+    });
+    const claws = ghoul.actions.find((action) => action.name === "Claws")!;
+    resolveAttack(state, "ghoul", "victim", claws.id);
+    return state;
+  }
+
+  it("a Ghoul's paralysing claws can't paralyse a Ghost (immune), but can paralyse an Ogre", () => {
+    // One claw per seed. The ghoul's DC 10 save is easy and a claw can miss, so use plenty of seeds.
+    const seeds = Array.from({ length: 30 }, (_, i) => `s${i}`);
+    let ogreParalysed = 0;
+    let ghostResisted = 0;
+    for (const seed of seeds) {
+      const onGhost = clawAt("ghost", seed);
+      expect(onGhost.snapshot.combatants.find((c) => c.id === "victim")!.conditions?.some((c) => c.name === "paralyzed") ?? false, `ghost ${seed}`).toBe(false);
+      if (onGhost.log.some((entry) => entry.type === "ConditionResisted")) ghostResisted += 1;
+      const onOgre = clawAt("ogre", seed);
+      if (onOgre.snapshot.combatants.find((c) => c.id === "victim")!.conditions?.some((c) => c.name === "paralyzed")) ogreParalysed += 1;
+    }
+    expect(ogreParalysed).toBeGreaterThan(0);
+    expect(ghostResisted).toBeGreaterThan(0); // and when a claw hit, the ghost's immunity was reported
+  });
+});

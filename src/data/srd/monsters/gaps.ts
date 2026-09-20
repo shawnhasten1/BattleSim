@@ -7,7 +7,7 @@
  */
 export const GAP_CODES = {
   // ── Phase 2: defenses
-  COND_IMMUNITY: "Condition immunities are recorded but not yet enforced.",
+  COND_IMMUNITY: "(Retired — now enforced.) Condition immunities.",
   NONMAGIC_EXCEPTION: "(Retired — now enforced.) Silvered / adamantine exceptions to nonmagical resistance.",
   MAGIC_RESISTANCE: "Magic Resistance (advantage on saves against spells and magical effects) is reference-only.",
   DEFENSE_TEXT: "A resistance / immunity clause could not be parsed; see the description.",

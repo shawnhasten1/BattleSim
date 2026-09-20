@@ -50,6 +50,7 @@ export type ConditionName =
   | "incapacitated"
   | "invisible"
   | "paralyzed"
+  | "petrified"
   | "poisoned"
   | "prone"
   | "restrained"
@@ -247,8 +248,11 @@ export interface DamageAdjustment {
   exceptMaterials?: Array<"silvered" | "adamantine">;
 }
 
-/** Conditions a creature can be immune to — a `ConditionName` plus the two SRD-only ones. */
-export type ConditionImmunity = ConditionName | "exhaustion" | "petrified";
+/**
+ * Conditions a creature can be immune to — any `ConditionName`, plus `"exhaustion"`, which no effect in the
+ * engine applies (an immunity to it is recorded for the sheet and does nothing).
+ */
+export type ConditionImmunity = ConditionName | "exhaustion";
 
 /** Per-mode movement speeds in feet. `CreatureDefinition.speed` stays the walk speed. */
 export interface MovementProfile {
@@ -1478,6 +1482,7 @@ export interface CombatLogEvent {
     | "DeathSaveRolled"
     | "ConcentrationChecked"
     | "ConditionApplied"
+    | "ConditionResisted"
     | "ConditionExpired"
     | "ZoneCreated"
     | "ZoneMoved"

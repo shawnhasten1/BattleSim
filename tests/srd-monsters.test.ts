@@ -293,7 +293,7 @@ describe("defense parser", () => {
   it("reads condition immunities", () => {
     const gaps = new GapLog();
     expect(parseConditionImmunities("charmed, exhaustion, petrified", gaps)).toEqual(["charmed", "exhaustion", "petrified"]);
-    expect(gaps.codes()).toEqual(["COND_IMMUNITY"]);
+    expect(gaps.codes()).toEqual([]); // enforced by the engine now, so not a gap
   });
 });
 

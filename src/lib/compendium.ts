@@ -43,6 +43,7 @@ export const SUPPORTED_CONDITIONS: ConditionName[] = [
   "incapacitated",
   "invisible",
   "paralyzed",
+  "petrified",
   "poisoned",
   "prone",
   "restrained",

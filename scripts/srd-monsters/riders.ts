@@ -15,14 +15,11 @@ export function findSaveClause(text: string): SaveClause | null {
 
 const SUPPORTED_CONDITIONS = [
   "prone", "poisoned", "frightened", "paralyzed", "blinded", "stunned",
-  "restrained", "charmed", "deafened", "unconscious", "incapacitated"
+  "restrained", "charmed", "deafened", "unconscious", "incapacitated", "petrified"
 ] as const;
 
-/** Conditions the engine has no name for yet — carried as a `custom` condition with equivalent modifiers. */
-const CUSTOM_CONDITIONS = ["petrified"] as const;
-
 export interface ParsedCondition {
-  name: ConditionName | "petrified";
+  name: ConditionName;
   rounds?: number;
   saveEnds: boolean;
   /** "…charmed by the aboleth until the aboleth dies". */
@@ -31,7 +28,7 @@ export interface ParsedCondition {
 
 /** "…or be knocked prone" / "or become frightened for 1 minute" / "or fall unconscious for 10 minutes". */
 export function findConditionOnFail(text: string): ParsedCondition | null {
-  const all = [...SUPPORTED_CONDITIONS, ...CUSTOM_CONDITIONS].join("|");
+  const all = SUPPORTED_CONDITIONS.join("|");
   const match = new RegExp(`\\b(?:be|become|becomes|fall|falls|is|are)\\s+(?:magically\\s+)?(?:knocked\\s+)?(${all})\\b([^.]*)`, "i").exec(text);
   if (!match) return null;
   const name = match[1]!.toLowerCase() as ParsedCondition["name"];
@@ -67,17 +64,6 @@ export function riderDuration(parsed: ParsedCondition): RiderDuration {
   return { kind: "rounds", rounds: 10 };
 }
 
-/** A `custom` condition needs explicit modifiers; petrified acts as paralyzed for the engine. */
-function customModifiers(name: string) {
-  if (name === "petrified") {
-    return {
-      deniesActions: true, deniesBonusActions: true, deniesReactions: true,
-      movementMultiplier: 999, incomingAttackRoll: 5
-    };
-  }
-  return undefined;
-}
-
 /**
  * Builds a condition rider. In an attack context (`saveClause` given) the rider
  * rolls its own save; in a save / area-save context the parent action's save
@@ -88,18 +74,14 @@ export function buildConditionRider(
   when: "on-hit" | "on-save-fail",
   saveClause?: SaveClause
 ): ActionRider {
-  const custom = (CUSTOM_CONDITIONS as readonly string[]).includes(parsed.name);
   const rider: ActionRider = {
     kind: "condition",
     when,
-    condition: custom ? { custom: parsed.name } : (parsed.name as ConditionName),
+    condition: parsed.name,
     duration: riderDuration(parsed)
   };
   if (saveClause) {
     rider.save = { ability: saveClause.ability, dc: saveClause.dc, onSuccess: "negates" };
-  }
-  if (custom) {
-    rider.modifiers = customModifiers(parsed.name);
   }
   return rider;
 }

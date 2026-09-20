@@ -2049,7 +2049,7 @@ export const useEncounterStore = create<EncounterStore>()(
               : condition === "prone"
                 ? { movementMultiplier: 2 }
                 : undefined
-        });
+        }, { force: true }); // the DM's word beats a creature's immunity
         commitEncounter(engine.snapshot, { log: engine.log });
       },
       togglePrepBuff: (combatantId, actionId) => {

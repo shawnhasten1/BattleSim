@@ -1416,7 +1416,9 @@ export function resolveBuffAction(
       effects: action.appliedCondition.effects,
       concentration: action.concentration || undefined
     };
-    applyCondition(state, target.id, instance);
+    if (!applyCondition(state, target.id, instance)) {
+      continue; // an immune target never gets it, so it doesn't hold the caster's concentration either
+    }
     // Mirrors `applyConditionRider`'s own link-up — `breakConcentration` sweeps
     // every combatant's conditions by `sourceCombatantId` + `concentration`,
     // so one link on the caster tears down the condition on every target.
@@ -1657,8 +1659,35 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
   };
 }
 
-export function applyCondition(state: EngineState, targetId: Id, condition: ConditionInstance): void {
+const ALL_DAMAGE_TYPES: DamageType[] = [
+  "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"
+];
+
+/**
+ * Whether a creature can't be given this condition at all (its `conditionImmunities`). Being dominated is a
+ * form of being charmed, so a creature immune to charm is immune to domination too. `custom` conditions
+ * (labelled by their rider) are matched by that label, which callers pass as `name`.
+ */
+export function isImmuneToCondition(definition: CreatureDefinition, name: ConditionName | string): boolean {
+  const immunities = definition.conditionImmunities;
+  if (!immunities?.length) {
+    return false;
+  }
+  const label = String(name).toLowerCase();
+  return (immunities as string[]).includes(label) || (label === "dominated" && (immunities as string[]).includes("charmed"));
+}
+
+/**
+ * Gives a combatant a condition — unless it is immune, in which case nothing lands and a `ConditionResisted`
+ * event says so. Returns whether the condition was applied. The DM's manual apply passes `force` (a
+ * DM's word beats a creature's immunity).
+ */
+export function applyCondition(state: EngineState, targetId: Id, condition: ConditionInstance, options: { force?: boolean } = {}): boolean {
   const target = findCombatant(state.snapshot, targetId);
+  if (!options.force && isImmuneToCondition(getDefinition(state.snapshot, target), condition.name)) {
+    logConditionResisted(state, target, condition.name);
+    return false;
+  }
   target.conditions = [
     ...(target.conditions ?? []).filter((existing) => existing.id !== condition.id),
     condition
@@ -1666,6 +1695,14 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
   state.log.push(event(state, "ConditionApplied", `${target.displayName} gained ${condition.name}`, {
     targetId,
     condition
+  }));
+  return true;
+}
+
+function logConditionResisted(state: EngineState, target: CombatantState, name: string): void {
+  state.log.push(event(state, "ConditionResisted", `${target.displayName} is immune to ${name}`, {
+    targetId: target.id,
+    condition: name
   }));
 }
 
@@ -3638,6 +3675,14 @@ export function defaultConditionModifiers(name: ConditionName): ConditionInstanc
         deniesActions: true, deniesBonusActions: true, deniesReactions: true,
         movementMultiplier: 999, incomingAttackRoll: 5
       };
+    case "petrified":
+      // Turned to stone: incapacitated, can't move, attackers effectively have advantage, and resistant to
+      // all damage.
+      return {
+        deniesActions: true, deniesBonusActions: true, deniesReactions: true,
+        movementMultiplier: 999, incomingAttackRoll: 5,
+        damageAdjustments: ALL_DAMAGE_TYPES.map((damageType) => ({ type: "resistance" as const, damageType }))
+      };
     case "surprised":
       // Can't act, react, or move on this first turn of combat only (no
       // attacker advantage from this alone, unlike stunned/paralyzed).
@@ -3720,6 +3765,13 @@ function applyConditionRider(
   rider: Extract<ActionRider, { kind: "condition" }>,
   ctx: RiderContext
 ): string | null {
+  // An immune creature doesn't roll a save or take the condition at all — check before anything else.
+  const riderConditionName = typeof rider.condition === "string" ? rider.condition : rider.condition.custom;
+  if (isImmuneToCondition(targetDefinition, riderConditionName)) {
+    logConditionResisted(state, target, riderConditionName);
+    return null;
+  }
+
   // The rider rolls its own initial save only when the parent action had none
   // (an attack context). In a save / area context the action's save already
   // gated the rider via its `when`, so the condition just lands.
@@ -3760,7 +3812,9 @@ function applyConditionRider(
       : undefined,
     concentration: expiry.concentration || ctx.concentrating || undefined
   };
-  applyCondition(state, target.id, instance);
+  if (!applyCondition(state, target.id, instance)) {
+    return null; // immune after all (the label check above should have caught it) — nothing landed
+  }
 
   if (instance.concentration) {
     source.concentration = { sourceConditionId: source.concentration?.sourceConditionId ?? conditionId };

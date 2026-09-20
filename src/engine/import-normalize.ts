@@ -681,7 +681,7 @@ function normalizeAreaTemplate(input: unknown): AreaTemplate {
 const RIDER_GATES: RiderGate[] = ["always", "on-hit", "on-miss", "on-crit", "on-save-fail", "on-save-success"];
 const CONDITION_NAMES: ConditionName[] = [
   "blinded", "charmed", "confused", "deafened", "dominated", "frightened", "grappled", "incapacitated",
-  "invisible", "paralyzed", "poisoned", "prone", "restrained", "stunned", "unconscious", "custom"
+  "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "custom"
 ];
 const CREATURE_TYPES: CreatureType[] = [
   "aberration", "beast", "celestial", "construct", "dragon",
