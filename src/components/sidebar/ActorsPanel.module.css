@@ -451,3 +451,67 @@
 .srdCreditLink:hover {
   color: var(--ui-accent);
 }
+
+.srdQuantityRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.srdStepper {
+  display: flex;
+  align-items: stretch;
+}
+
+.srdStepper button,
+.srdStepper input {
+  height: 24px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.srdStepper button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.srdStepper button:first-child {
+  border-radius: var(--ui-radius) 0 0 var(--ui-radius);
+}
+
+.srdStepper button:last-child {
+  border-radius: 0 var(--ui-radius) var(--ui-radius) 0;
+}
+
+.srdStepper button:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.srdStepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.srdStepper input {
+  width: 38px;
+  border-left: none;
+  border-right: none;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.srdStepper input::-webkit-outer-spin-button,
+.srdStepper input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Copy, Folder, Lock, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Folder, Lock, Minus, Plus, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { Chip, ChipRow } from "@/components/ui/ChipRow";
@@ -12,14 +12,15 @@ import {
   activeSrdFilterCount, filterSrdMonsters, withCrRange, type SrdMonsterFilters
 } from "@/lib/srd-monster-filter";
 import { SRD_ROOT_FOLDER_ID, buildSrdMonsterTree, formatChallengeRating } from "@/lib/srd-monster-tree";
+import { MAX_TOKEN_BATCH } from "@/store/encounter-store";
 import styles from "./ActorsPanel.module.css";
 
 interface SrdMonsterFoldersProps {
   expandedFolderIds: Set<string>;
   onToggleExpanded: (folderId: string) => void;
-  onAdd: (monster: SrdMonsterIndexEntry, faction: "party" | "enemy") => void;
+  onAdd: (monster: SrdMonsterIndexEntry, faction: "party" | "enemy", quantity: number) => void;
   onCopyToLibrary: (monster: SrdMonsterIndexEntry) => void;
-  onDragStartMonster: (event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry) => void;
+  onDragStartMonster: (event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry, quantity: number) => void;
 }
 
 const TIER_LABELS: Array<{ tier: MonsterTier; label: string; hint: string }> = [
@@ -27,6 +28,17 @@ const TIER_LABELS: Array<{ tier: MonsterTier; label: string; hint: string }> = [
   { tier: "partial", label: "Partial", hint: "Core attacks run; some traits are reference-only" },
   { tier: "manual", label: "Manual", hint: "Actions aren't automated" }
 ];
+
+/** Whole number from 1 to MAX_TOKEN_BATCH; anything unreadable counts as 1. */
+function clampQuantity(text: string | number): number {
+  const value = Math.floor(Number(text));
+  return Number.isFinite(value) ? Math.max(1, Math.min(MAX_TOKEN_BATCH, value)) : 1;
+}
+
+/** "Add as party" / "Add 3 as party". */
+function addLabel(quantity: number, faction: "party" | "enemy"): string {
+  return quantity > 1 ? `Add ${quantity} as ${faction}` : `Add as ${faction}`;
+}
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -43,6 +55,9 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
   const [showFilters, setShowFilters] = useState(false);
   // While filtering, folders default to open; this remembers the ones the user closed anyway.
   const [collapsedWhileFiltering, setCollapsedWhileFiltering] = useState<Set<string>>(new Set());
+  // How many tokens each add / drag creates. The text box keeps what's being typed; `quantity` is always valid.
+  const [quantityDraft, setQuantityDraft] = useState("1");
+  const quantity = clampQuantity(quantityDraft);
 
   const activeCount = activeSrdFilterCount(filters);
   const filtering = activeCount > 0;
@@ -115,6 +130,24 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                   <X size={14} />
                 </button>
               ) : null}
+            </div>
+
+            <div className={styles.srdQuantityRow}>
+              <span className={styles.srdFilterCaption}>Quantity per add</span>
+              <div className={styles.srdStepper}>
+                <button type="button" aria-label="Decrease quantity" disabled={quantity <= 1} onClick={() => setQuantityDraft(String(quantity - 1))}><Minus size={12} /></button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={MAX_TOKEN_BATCH}
+                  aria-label="Quantity to add"
+                  value={quantityDraft}
+                  onChange={(event) => setQuantityDraft(event.target.value)}
+                  onBlur={() => setQuantityDraft(String(quantity))}
+                />
+                <button type="button" aria-label="Increase quantity" disabled={quantity >= MAX_TOKEN_BATCH} onClick={() => setQuantityDraft(String(quantity + 1))}><Plus size={12} /></button>
+              </div>
             </div>
 
             {showFilters ? (
@@ -220,17 +253,17 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                   {expanded ? (
                     <ul className={styles.list}>
                       {type.monsters.map((monster) => (
-                        <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster)} title={gapSummary(monster)}>
+                        <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster, quantity)} title={gapSummary(monster)}>
                           <ActorThumbnail definition={{ name: monster.name }} />
-                          <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy")}>
+                          <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy", quantity)}>
                             <strong>{monster.name}</strong>
                             <span>
                               CR {formatChallengeRating(monster.cr)} · HP {monster.hp} · AC {monster.ac}
                               {monster.tier === "full" ? "" : ` · ${monster.tier === "partial" ? "Partial" : "Manual"}`}
                             </span>
                           </button>
-                          <button type="button" onClick={() => onAdd(monster, "party")} title="Add as party"><Users size={14} /></button>
-                          <button type="button" onClick={() => onAdd(monster, "enemy")} title="Add as enemy"><Swords size={14} /></button>
+                          <button type="button" onClick={() => onAdd(monster, "party", quantity)} title={addLabel(quantity, "party")}><Users size={14} /></button>
+                          <button type="button" onClick={() => onAdd(monster, "enemy", quantity)} title={addLabel(quantity, "enemy")}><Swords size={14} /></button>
                           <button type="button" onClick={() => onCopyToLibrary(monster)} title="Copy to my library (editable)"><Copy size={14} /></button>
                         </li>
                       ))}

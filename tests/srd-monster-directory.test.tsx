@@ -226,7 +226,8 @@ describe("SRD Monsters directory in the Actors panel", () => {
     const row = within(root).getByText("Wolf").closest("li")!;
     const data: Record<string, string> = {};
     fireEvent.dragStart(row, { dataTransfer: { effectAllowed: "", setData: (type: string, value: string) => { data[type] = value; } } });
-    expect(JSON.parse(data["application/x-battle-sim-actor"]!)).toEqual({ definitionId: "srd:monster:wolf", faction: "enemy" });
+    // Same payload as any actor, plus how many the user's quantity stepper says to drop.
+    expect(JSON.parse(data["application/x-battle-sim-actor"]!)).toEqual({ definitionId: "srd:monster:wolf", faction: "enemy", count: 1 });
   });
 
   it("is permanent: no rename, delete, move or create affordances, and it can't be dragged", async () => {

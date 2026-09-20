@@ -140,11 +140,11 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
 
     if (actorRaw) {
       try {
-        const payload = JSON.parse(actorRaw) as { definitionId?: string; faction?: "party" | "enemy" };
+        const payload = JSON.parse(actorRaw) as { definitionId?: string; faction?: "party" | "enemy"; count?: number };
         if (!payload.definitionId) return;
         if (isSrdMonsterId(payload.definitionId)) {
           // Bundled library monster: loaded on demand, and the scene's copy is reused if it's already there.
-          void addSrdMonster(payload.definitionId, payload.faction ?? "enemy", cell);
+          void addSrdMonster(payload.definitionId, payload.faction ?? "enemy", cell, payload.count ?? 1);
           return;
         }
         const definition = directory.find((candidate) => candidate.id === payload.definitionId);

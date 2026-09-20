@@ -11,6 +11,7 @@ import {
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   event,
+  footprintCells,
   getDefinition,
   getExecutableActions,
   resolveDeathSave,
@@ -23,6 +24,7 @@ import {
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
+  terrainAtCell,
   tickZones,
   updateDefeatState,
   type BatchSimulationSummary,
@@ -188,7 +190,7 @@ interface EncounterStore {
    * the scene's copy if that monster is already there (so a second goblin shares — and doesn't
    * reset — the first one's definition).
    */
-  addSrdMonster: (monsterId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
+  addSrdMonster: (monsterId: string, faction?: "party" | "enemy", position?: Point, quantity?: number) => Promise<void>;
   /**
    * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
    * ids are global, so saving one would collide across users) on the definition and every token using
@@ -240,6 +242,12 @@ interface EncounterStore {
   clearConditions: (combatantId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
   addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
+  /**
+   * Adds `quantity` tokens of one definition in a single undo step, named "Goblin 3", "Goblin 4"… The
+   * first goes at `position` (or the first free cell); the rest fill the nearest free cells around it,
+   * respecting token size.
+   */
+  addCreatureTokens: (definition: CreatureDefinition, faction: "party" | "enemy", quantity: number, position?: Point) => void;
   importCombatantPackage: (input: CombatantExportPackage) => string;
   addBlankToken: (input: { name: string; faction: "party" | "enemy"; size: SizeCategory; type: CreatureType | undefined; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"] }) => string;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
@@ -1619,12 +1627,16 @@ export const useEncounterStore = create<EncounterStore>()(
           await get().loadDefinitionsLibrary();
         }
       },
-      addSrdMonster: async (monsterId, faction = "enemy", position) => {
+      addSrdMonster: async (monsterId, faction = "enemy", position, quantity = 1) => {
+        const place = (definition: CreatureDefinition) => {
+          if (quantity > 1) get().addCreatureTokens(definition, faction, quantity, position);
+          else get().addCreatureDefinition(definition, faction, position);
+        };
         // Already in the scene: share that definition. Replacing it would silently reset any edits
         // made to the monsters already placed.
         const inScene = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
         if (inScene) {
-          get().addCreatureDefinition(inScene, faction, position);
+          place(inScene);
           return;
         }
         let definition: CreatureDefinition | undefined;
@@ -1639,7 +1651,7 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         // Another add may have landed while the chunk loaded.
         const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
-        get().addCreatureDefinition(raced ?? definition, faction, position);
+        place(raced ?? definition);
       },
       adoptSrdDefinition: (definitionId) => {
         const encounter = get().encounter;
@@ -2146,7 +2158,7 @@ export const useEncounterStore = create<EncounterStore>()(
           definitionId: definition.id,
           displayName: `${definition.name} ${count}`,
           faction,
-          position: position ?? findOpenCell(encounter),
+          position: position ?? openCellFor(encounter, sizeFootprint(definition.size)),
           currentHp: definition.maxHp,
           tempHp: 0,
           resources: defaultResourcesForDefinition(definition),
@@ -2160,6 +2172,47 @@ export const useEncounterStore = create<EncounterStore>()(
           combatants: [...encounter.combatants, combatant]
         }, {
           selectedCombatantId: combatant.id
+        });
+      },
+      addCreatureTokens: (definition, faction, quantity, position) => {
+        if (!definition?.id) {
+          return;
+        }
+        const total = Math.max(1, Math.min(MAX_TOKEN_BATCH, Math.floor(Number(quantity)) || 1));
+        const encounter = get().encounter;
+        const definitions = [
+          ...encounter.definitions.filter((candidate) => candidate?.id && candidate.id !== definition.id),
+          definition
+        ];
+        const existing = encounter.combatants.filter((combatant) => combatant.definitionId === definition.id).length;
+        const footprint = sizeFootprint(definition.size);
+        const added: CombatantState[] = [];
+        for (let index = 0; index < total; index += 1) {
+          const working: EncounterSnapshot = { ...encounter, definitions, combatants: [...encounter.combatants, ...added] };
+          const origin = added[0]?.position ?? position;
+          const cell = index === 0
+            ? position ?? openCellFor(working, footprint)
+            : nearestOpenCell(working, origin ?? findOpenCell(working), footprint) ?? findOpenCell(working);
+          added.push({
+            id: `combatant-${crypto.randomUUID()}`,
+            definitionId: definition.id,
+            displayName: `${definition.name} ${existing + index + 1}`,
+            faction,
+            position: cell,
+            currentHp: definition.maxHp,
+            tempHp: 0,
+            resources: defaultResourcesForDefinition(definition),
+            state: "active",
+            tacticsProfile: defaultTacticsForDefinition(definition),
+            resourceStance: "balanced"
+          });
+        }
+        commitEncounter({
+          ...encounter,
+          definitions,
+          combatants: [...encounter.combatants, ...added]
+        }, {
+          selectedCombatantId: added[added.length - 1]?.id ?? null
         });
       },
       importCombatantPackage: (input) => {
@@ -2814,15 +2867,80 @@ export const useEncounterStore = create<EncounterStore>()(
 );
 
 function findOpenCell(encounter: EncounterSnapshot): Point {
+  // Counts every square a token covers, not just its top-left one: a Large token added earlier must not
+  // have a small one dropped into its body. (Identical to the old scan while every token is 1×1.)
+  const taken = occupiedCells(encounter);
   for (let y = 0; y < encounter.map.grid.height; y += 1) {
     for (let x = 0; x < encounter.map.grid.width; x += 1) {
-      const occupied = encounter.combatants.some((combatant) => combatant.position.x === x && combatant.position.y === y);
-      if (!occupied) {
+      if (!taken.has(`${x},${y}`)) {
         return { x, y };
       }
     }
   }
   return { x: 0, y: 0 };
+}
+
+/** Every square covered by an existing token, at that token's own size. */
+function occupiedCells(encounter: EncounterSnapshot): Set<string> {
+  const taken = new Set<string>();
+  for (const combatant of encounter.combatants) {
+    const owner = encounter.definitions.find((candidate) => candidate.id === combatant.definitionId);
+    for (const cell of footprintCells(combatant.position, owner ? sizeFootprint(owner.size) : 1)) {
+      taken.add(`${cell.x},${cell.y}`);
+    }
+  }
+  return taken;
+}
+
+/**
+ * Where a newly added token goes when nobody chose a square. A 1×1 token takes the first free square
+ * exactly as it always has; a bigger one (Large and up) needs a free footprint × footprint block, so a
+ * dragon or ogre can't land on top of the tokens already in the top-left corner.
+ */
+function openCellFor(encounter: EncounterSnapshot, footprint: number): Point {
+  if (footprint <= 1) {
+    return findOpenCell(encounter);
+  }
+  const grid = encounter.map.grid;
+  const taken = occupiedCells(encounter);
+  for (let y = 0; y + footprint <= grid.height; y += 1) {
+    for (let x = 0; x + footprint <= grid.width; x += 1) {
+      const cells = footprintCells({ x, y }, footprint);
+      if (!cells.some((cell) => taken.has(`${cell.x},${cell.y}`) || terrainAtCell(encounter.map.terrain, cell)?.type === "impassable")) {
+        return { x, y };
+      }
+    }
+  }
+  return findOpenCell(encounter);
+}
+
+/** Upper bound on tokens added in one go, so a stray click can't bury the map. */
+export const MAX_TOKEN_BATCH = 20;
+
+/**
+ * The free spot closest to `origin` for a token that covers `footprint` × `footprint` squares: in bounds,
+ * not overlapping any existing token (each at its own size) and not on impassable terrain. Ties break
+ * top-to-bottom, left-to-right so the result is deterministic.
+ */
+function nearestOpenCell(encounter: EncounterSnapshot, origin: Point, footprint: number): Point | undefined {
+  const grid = encounter.map.grid;
+  const taken = occupiedCells(encounter);
+  let best: Point | undefined;
+  let bestDistance = Infinity;
+  for (let y = 0; y + footprint <= grid.height; y += 1) {
+    for (let x = 0; x + footprint <= grid.width; x += 1) {
+      const cells = footprintCells({ x, y }, footprint);
+      if (cells.some((cell) => taken.has(`${cell.x},${cell.y}`) || terrainAtCell(encounter.map.terrain, cell)?.type === "impassable")) {
+        continue;
+      }
+      const distance = (x - origin.x) ** 2 + (y - origin.y) ** 2;
+      if (distance < bestDistance) {
+        best = { x, y };
+        bestDistance = distance;
+      }
+    }
+  }
+  return best;
 }
 
 function pointsMatch(a: Point, b: Point): boolean {

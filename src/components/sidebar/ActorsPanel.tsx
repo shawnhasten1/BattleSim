@@ -68,10 +68,10 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
   }, [definitionsLibrary, encounter.definitions]);
   const folderTree = useMemo(() => buildFolderTree(actorFolders, directory), [actorFolders, directory]);
 
-  function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry) {
+  function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry, quantity: number) {
     event.dataTransfer.effectAllowed = "copy";
     // Same payload as any other actor; the SRD id is resolved (and loaded on demand) by the drop target.
-    event.dataTransfer.setData("application/x-battle-sim-actor", JSON.stringify({ definitionId: monster.id, faction: "enemy" }));
+    event.dataTransfer.setData("application/x-battle-sim-actor", JSON.stringify({ definitionId: monster.id, faction: "enemy", count: quantity }));
   }
 
   function onActorDragStart(event: DragEvent<HTMLElement>, definition: CreatureDefinition) {
@@ -330,7 +330,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
         <SrdMonsterFolders
           expandedFolderIds={expandedFolderIds}
           onToggleExpanded={toggleExpanded}
-          onAdd={(monster, faction) => void addSrdMonster(monster.id, faction)}
+          onAdd={(monster, faction, quantity) => void addSrdMonster(monster.id, faction, undefined, quantity)}
           onCopyToLibrary={(monster) => void saveSrdMonsterCopy(monster.id)}
           onDragStartMonster={onSrdMonsterDragStart}
         />
