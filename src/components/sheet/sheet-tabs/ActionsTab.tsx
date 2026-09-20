@@ -13,6 +13,7 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, searchSrd, type SrdEntryKind } from "@/data/srd";
+import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { useEncounterStore } from "@/store/encounter-store";
 import { describeAction, spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
@@ -285,7 +286,11 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                   {libraryResults.length === 0 ? <span style={{ padding: 8, fontSize: 11, color: "var(--ui-text-dim)" }}>No matches</span> : null}
                 </div>
                 <p style={{ margin: 0, fontSize: 10.5, color: "var(--ui-text-dim)" }}>
-                  Click or drag onto the sheet. {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells, {SRD_FEATURES.length} features.
+                  Click or drag onto the sheet. {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells, {SRD_FEATURES.length} features.{" "}
+                  {/* Opens in a new tab so the sheet being edited isn't left. */}
+                  <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                    SRD 5.1 credits · CC-BY-4.0
+                  </a>
                 </p>
               </>
             ) : null}

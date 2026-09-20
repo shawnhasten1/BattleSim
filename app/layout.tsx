@@ -12,8 +12,8 @@ const signika = Signika({
 });
 
 export const metadata: Metadata = {
-  title: "D&D Battle Simulator",
-  description: "Deterministic map-aware D&D 5e encounter simulator"
+  title: "BattleSim — Encounter Simulator",
+  description: "Deterministic map-aware encounter simulator, compatible with fifth edition"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

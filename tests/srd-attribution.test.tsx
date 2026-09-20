@@ -73,6 +73,19 @@ describe("credits in the app", () => {
     expect(screen.getByRole("link", { name: "Credits & Licensing" }).getAttribute("href")).toBe("#credits");
   });
 
+  it("the spell / weapon / feature library browser links to it too", async () => {
+    const { useEncounterStore } = await import("@/store/encounter-store");
+    const { ActionsTab } = await import("@/components/sheet/sheet-tabs/ActionsTab");
+    const encounter = useEncounterStore.getState().encounter;
+    render(<ActionsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />);
+    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Library" }));
+    const link = screen.getByRole("link", { name: /SRD 5.1 credits/ });
+    expect(link.getAttribute("href")).toBe(SRD_CREDITS_PATH);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+  });
+
   it("the SRD Monsters folder links to it in a new tab", async () => {
     function Harness() {
       return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;

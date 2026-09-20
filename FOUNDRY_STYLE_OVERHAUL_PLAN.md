@@ -242,7 +242,7 @@ interface TokenVisuals {
 
 ### Goal
 
-Make D&D 5e SRD content searchable and draggable like a compendium.
+Make SRD 5.1 content searchable and draggable like a compendium.
 
 ### Tasks
 

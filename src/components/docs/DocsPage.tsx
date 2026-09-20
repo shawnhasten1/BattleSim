@@ -540,6 +540,7 @@ const SECTIONS: Section[] = [
         <p>
           The built-in library of monsters, spells, weapons and features is based on the System Reference
           Document 5.1, which is provided under the Creative Commons Attribution 4.0 International License.
+          BattleSim is compatible with fifth edition.
         </p>
         <SrdAttribution />
       </>

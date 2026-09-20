@@ -1,6 +1,6 @@
-# D&D Battle Simulator
+# BattleSim
 
-Local-first, map-aware D&D 5e encounter simulator. The current implementation establishes the project foundation and a deterministic engine slice that the UI consumes directly.
+Local-first, map-aware encounter simulator, compatible with fifth edition. The current implementation establishes the project foundation and a deterministic engine slice that the UI consumes directly.
 
 ## Scripts
 

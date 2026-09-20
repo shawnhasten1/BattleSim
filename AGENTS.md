@@ -1,8 +1,8 @@
-# D&D Battle Simulator
+# Battle Simulator
 
 > **AI Agent Development Specification**
 >
-> **Purpose:** Build a map-aware D&D 5e encounter simulator for testing combat difficulty, positioning, terrain, tactics, spells, and encounter balance.
+> **Purpose:** Build a map-aware encounter simulator (compatible with fifth edition) for testing combat difficulty, positioning, terrain, tactics, spells, and encounter balance.
 
 > **Primary Development Principle**
 >
@@ -12,7 +12,7 @@ Target: local-first web application with persistent encounter projects and optio
 
 # 1. Product Goal
 
-Create a battle simulator that lets a Dungeon Master import or build a battlemap, place player characters and enemies, define walls and terrain, and run a complete D&D 5e combat encounter. The system must support both manual turn-by-turn playtesting and automated simulations so encounter tuning can account for actual geometry instead of relying only on CR or encounter-budget math.
+Create a battle simulator that lets a Dungeon Master import or build a battlemap, place player characters and enemies, define walls and terrain, and run a complete fifth-edition combat encounter. The system must support both manual turn-by-turn playtesting and automated simulations so encounter tuning can account for actual geometry instead of relying only on CR or encounter-budget math.
 
 ## Core questions the application should answer
 
@@ -93,7 +93,7 @@ The map is part of the simulation rules, not decoration. Movement, range, line o
 - Upload PNG, JPG, or WebP battlemap images.
 - Support square grids first. Hex grids are out of scope for MVP.
 - Grid calibration: pixel size per grid square, grid offset X/Y, distance per square, and optional visible grid overlay.
-- Default D&D scale: 5 feet per square, but make scale configurable.
+- Default 5E scale: 5 feet per square, but make scale configurable.
 - Pan, zoom, snap-to-grid, token drag, and measurement ruler.
 - Token footprint sizes: Tiny, Small, Medium, Large, Huge, Gargantuan, plus custom footprint overrides.
 - Store coordinates in world/grid units rather than raw screen pixels.
@@ -224,7 +224,7 @@ Use an event-driven modifier/effect system rather than hardcoding every conditio
 
 # 10. Automated `Combatant` AI
 
-Automated simulations require tactical decision making, but the first version should use understandable heuristic scoring rather than machine learning. The goal is reproducibility and reasonable D&D behavior, not perfect play.
+Automated simulations require tactical decision making, but the first version should use understandable heuristic scoring rather than machine learning. The goal is reproducibility and reasonable fifth-edition behavior, not perfect play.
 
 ## Tactics profiles
 
