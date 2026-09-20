@@ -727,6 +727,40 @@ function executeJointTurnPlan(state: EngineState, actor: CombatantState, joint: 
   }
 }
 
+/**
+ * Why `selectOffensivePlan` found nothing for this turn:
+ * - `no-automated-action` — the creature has no fully automated attack / save / multiattack at all: a real
+ *   gap in what the engine can run, and the only case worth an automation warning;
+ * - `out-of-resources` — it has one, but every option is spent (slots, uses) or would break a concentration
+ *   effect that is still working;
+ * - `no-enemies` — there is nobody left to act against;
+ * - `no-reachable-target` — it could act, but can't reach or target anyone this turn (boxed in behind
+ *   allies or walls, no line of effect).
+ */
+export type IdleReason = "no-automated-action" | "out-of-resources" | "no-enemies" | "no-reachable-target";
+
+export function explainIdleTurn(snapshot: EncounterSnapshot, actor: CombatantState): { reason: IdleReason; message: string } {
+  const isOffensive = (action: ActionDefinition): action is OffensiveAction =>
+    action.automationSupport === "full"
+    && action.actionType === "action"
+    && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack");
+  const offensive = getExecutableActions(getDefinition(snapshot, actor)).filter(isOffensive);
+  if (offensive.length === 0) {
+    return { reason: "no-automated-action", message: "has no fully automated action" };
+  }
+  const concentrating = hasWorkingConcentrationEffect(snapshot, actor);
+  const usable = offensive.filter((action) => canPayResource(actor, action) && !("concentration" in action && action.concentration && concentrating));
+  if (usable.length === 0) {
+    return { reason: "out-of-resources", message: "has nothing left it can use this turn" };
+  }
+  const hasEnemy = snapshot.combatants.some(
+    (other) => effectiveFaction(snapshot, other) !== effectiveFaction(snapshot, actor) && other.state === "active"
+  );
+  return hasEnemy
+    ? { reason: "no-reachable-target", message: "couldn't reach or target anyone this turn" }
+    : { reason: "no-enemies", message: "has no enemies left to act against" };
+}
+
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   const tactics = tacticsSettings(actor.tacticsProfile);
 
@@ -810,7 +844,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   // equivalent urgency to a buff, so it should lose to a genuinely good attack.
   // When there's no offensive plan at all (nothing in range, or a pure support
   // caster with no attack), any positive-scoring buff is free value — take it
-  // rather than falling through to "no fully automated action."
+  // rather than falling through to an idle turn.
   const buff = selectBuffAction(state.snapshot, actor, "action") ?? selectBuffBurstAction(state.snapshot, actor);
   if (buff && (!plan || buff.score > plan.score)) {
     const isBurst = "targets" in buff;
@@ -861,9 +895,20 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       }));
       return undefined;
     }
-    const warning = `${actor.displayName} has no fully automated action`;
-    state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
-    return warning;
+    // "No plan" has several very different causes. Only a genuine gap in what the engine can run is an
+    // automation warning; the rest are ordinary tactical situations (a back-rank creature that can't
+    // reach anyone, a caster who has spent its slots) and are logged as decisions, not warnings.
+    const idle = explainIdleTurn(state.snapshot, actor);
+    if (idle.reason === "no-automated-action") {
+      const warning = `${actor.displayName} has no fully automated action`;
+      state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
+      return warning;
+    }
+    state.log.push(event(state, "AiDecision", `${actor.displayName} ${idle.message}`, {
+      combatantId: actor.id,
+      reason: idle.reason
+    }));
+    return undefined;
   }
 
   const activation = selectFeatureActivationAction(state.snapshot, actor);

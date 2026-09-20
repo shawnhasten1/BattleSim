@@ -102,6 +102,9 @@ describe("a mixed SRD encounter runs the same in every mode", () => {
   it("Auto Run: finishes without losing a turn", () => {
     expect(failures(auto.log)).toEqual([]);
     expect(auto.outcome.warnings.filter((warning) => /automated turn failed/.test(warning))).toEqual([]);
+    // Every creature here has real attacks, so "no fully automated action" must never be reported (it used to
+    // fire whenever only downed characters were left).
+    expect(auto.outcome.warnings.filter((warning) => /no fully automated action/.test(warning))).toEqual([]);
     expect(auto.outcome.winner).not.toBeNull();
     expectSaneHp(auto.snapshot);
     expect(srdActionsTaken(auto.log, start).length).toBeGreaterThan(10);
