@@ -9,6 +9,7 @@ import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } fro
 import { parseMultiattack } from "./multiattack";
 import { inferTactics } from "./tactics";
 import { parseSwallow } from "./holds";
+import { parseSpellcasting } from "./spellcasting";
 import { parseSaveAction, splitBoldVariants } from "./saves";
 import { grantsMagicalWeapons, parseTrait } from "./traits";
 import { applyUsage } from "./usage";
@@ -168,7 +169,25 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   // ── Traits first: they can change how actions are built (magical weapons).
   const rawTraits = jsonArray<RawEntry>(row.traits);
   const magicalWeapons = rawTraits.some(grantsMagicalWeapons);
-  const traits: FeatureDefinition[] = rawTraits.map((entry) => parseTrait(entry, ctx));
+  // Spellcasting: the spells the library can run become real spells; the rest stays as reference text.
+  const knownSpells: import("../../src/engine/types").SpellDefinition[] = [];
+  let casterLevel: number | undefined;
+  const traits: FeatureDefinition[] = rawTraits.map((entry) => {
+    if (!/^(Innate )?Spellcasting/i.test(entry.name)) return parseTrait(entry, ctx);
+    const casting = parseSpellcasting(entry, slug, Number(/\((\d+)\/Day\)/i.exec(entry.name)?.[1]) || undefined);
+    knownSpells.push(...casting.spells);
+    Object.assign(ctx.resources, casting.resources);
+    if (casting.level) casterLevel = Math.max(casterLevel ?? 0, casting.level);
+    if (casting.missing.length > 0) gaps.add("SPELLS", `${entry.name}: ${casting.missing.join(", ")}`);
+    if (casting.utility.length > 0) gaps.add("SPELL_UTILITY", `${entry.name}: ${casting.utility.join(", ")}`);
+    return {
+      id: `${ctx.slug}-trait-${slugify(entry.name)}`,
+      name: entry.name,
+      category: "trait" as const,
+      description: entry.desc,
+      automationSupport: casting.missing.length === 0 ? ("full" as const) : casting.modelled.length > 0 ? ("partial" as const) : ("manual-only" as const)
+    };
+  });
 
   // ── Actions
   const rawActions = jsonArray<RawEntry>(row.actions).sort(
@@ -302,6 +321,14 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   if (legendaryRaw.length > 0) {
     const refs: LegendaryActionRef[] = legendaryRaw.map((entry) => {
       const ref: LegendaryActionRef = { name: entry.name, cost: entry.legendary_action_cost ?? 1, description: entry.desc };
+      // "Cantrip: the lich casts a cantrip" — its best attack cantrip.
+      if (/^Cantrip$/i.test(entry.name)) {
+        const cantrip = knownSpells.find((spell) => spell.level === 0 && spell.action?.kind === "attack");
+        if (cantrip?.action) {
+          ref.actionId = cantrip.action.id;
+          return ref;
+        }
+      }
       const text = entry.desc.toLowerCase();
       const stem = entry.name.replace(/ Attack$/i, "").toLowerCase();
       const runnable = own.filter((action) => action.kind === "attack" || action.kind === "save" || action.kind === "area-save");
@@ -396,6 +423,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     traits: [...traits, ...generatedFeatures],
     actions,
     ...(reactions.length ? { reactions } : {}),
+    ...(knownSpells.length ? { spells: knownSpells } : {}),
+    ...(casterLevel ? { character: { level: casterLevel } } : {}),
     ...(legendary ? { legendary } : {})
   };
   movementGaps(definition, gaps);

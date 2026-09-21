@@ -415,8 +415,9 @@ describe("generated library integrity", () => {
 
   it("points every multiattack step, legendary reference and resource cost at something real", () => {
     for (const definition of definitions) {
-      const ids = new Set(definition.actions.map((action) => action.id));
-      for (const action of definition.actions) {
+      const spellActions = (definition.spells ?? []).flatMap((spell) => (spell.action ? [spell.action] : []));
+      const ids = new Set([...definition.actions, ...spellActions].map((action) => action.id));
+      for (const action of [...definition.actions, ...spellActions]) {
         if (action.kind === "multiattack") for (const step of action.attacks) expect(ids.has(step.actionId), `${definition.id} → ${step.actionId}`).toBe(true);
         if ("resourceCost" in action && action.resourceCost) expect(definition.resources?.[action.resourceCost.resourceId], `${definition.id} ${action.name}`).toBeGreaterThan(0);
       }

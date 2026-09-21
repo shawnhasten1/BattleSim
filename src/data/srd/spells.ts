@@ -1367,5 +1367,128 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       condition: { id: "shield-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 5 } },
       automationSupport: "full"
     }
+  },
+  // ── Combat spells monsters lean on (added for the SRD monster library) ─────
+  {
+    id: "srd:spell:inflict-wounds", name: "Inflict Wounds", level: 1, school: "necromancy", castingTime: "action", range: "touch",
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d10" } }, automationSupport: "full",
+    action: {
+      kind: "attack", id: "srd:spell:inflict-wounds:action", name: "Inflict Wounds", actionType: "action", attackType: "spell",
+      ability: "wis", attackBonusFormula: { ability: "wis", proficiency: true }, range: 5,
+      damage: [{ dice: "3d10", damageType: "necrotic", magical: true }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:acid-arrow", name: "Melf's Acid Arrow", level: 2, school: "evocation", castingTime: "action", range: 90,
+    resourceCost: { resourceId: "slot-2", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d4" } }, automationSupport: "full",
+    description: "The arrow's delayed second dose of acid is folded into the initial damage.",
+    action: {
+      kind: "attack", id: "srd:spell:acid-arrow:action", name: "Melf's Acid Arrow", actionType: "action", attackType: "spell",
+      ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 90,
+      damage: [{ dice: "4d4", damageType: "acid", magical: true }],
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:blight", name: "Blight", level: 4, school: "necromancy", castingTime: "action", range: 30,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:blight:action", name: "Blight", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "int", proficiency: true }, range: 30,
+      damage: [{ dice: "8d8", damageType: "necrotic", magical: true }], halfDamageOnSuccess: true, onSuccess: "half",
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:charm-person", name: "Charm Person", level: 1, school: "enchantment", castingTime: "action", range: 30,
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    action: {
+      kind: "save", id: "srd:spell:charm-person:action", name: "Charm Person", actionType: "action",
+      saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 30, damage: [],
+      halfDamageOnSuccess: false, onSuccess: "negates",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "charmed", duration: { kind: "rounds", rounds: 600 }, restrictToCreatureTypes: ["humanoid"] }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:banishment", name: "Banishment", level: 4, school: "abjuration", castingTime: "action", range: 60, concentration: true,
+    resourceCost: { resourceId: "slot-4", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    description: "A banished creature is removed from the fight; modelled as incapacitated for the spell's duration.",
+    action: {
+      kind: "save", id: "srd:spell:banishment:action", name: "Banishment", actionType: "action",
+      saveAbility: "cha", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60, damage: [],
+      halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 } }],
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:dimension-door", name: "Dimension Door", level: 4, school: "conjuration", castingTime: "action", range: "self",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    action: {
+      kind: "reposition", id: "srd:spell:dimension-door:action", name: "Dimension Door", actionType: "action", range: 500,
+      targeting: { target: "self" },
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:blur", name: "Blur", level: 2, school: "illusion", castingTime: "action", range: "self",
+    resourceCost: { resourceId: "slot-2", amount: 1 }, concentration: true, automationSupport: "full",
+    description: "Attackers have disadvantage against you; approximated as -4 to hit you (the same stand-in Dodge uses).",
+    action: {
+      kind: "buff", id: "srd:spell:blur:action", name: "Blur", actionType: "action", range: 5,
+      targeting: { target: "self" },
+      appliedCondition: { name: "custom", durationRounds: 10, modifiers: { incomingAttackRoll: -4 } },
+      concentration: true,
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:mirror-image", name: "Mirror Image", level: 2, school: "illusion", castingTime: "action", range: "self",
+    resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full",
+    description: "Three duplicates make attacks against you miss some of the time; approximated as -3 to hit you.",
+    action: {
+      kind: "buff", id: "srd:spell:mirror-image:action", name: "Mirror Image", actionType: "action", range: 5,
+      targeting: { target: "self" },
+      appliedCondition: { name: "custom", durationRounds: 10, modifiers: { incomingAttackRoll: -3 } },
+      resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:greater-invisibility", name: "Greater Invisibility", level: 4, school: "illusion", castingTime: "action", range: "self",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, concentration: true, automationSupport: "full",
+    description: "Attackers have disadvantage against you; approximated as -4 to hit you.",
+    action: {
+      kind: "buff", id: "srd:spell:greater-invisibility:action", name: "Greater Invisibility", actionType: "action", range: 5,
+      targeting: { target: "self" },
+      appliedCondition: { name: "custom", durationRounds: 10, modifiers: { incomingAttackRoll: -4 } },
+      concentration: true,
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:stoneskin", name: "Stoneskin", level: 4, school: "abjuration", castingTime: "action", range: "self",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, concentration: true, automationSupport: "full",
+    description: "Resistance to nonmagical bludgeoning, piercing and slashing damage.",
+    action: {
+      kind: "buff", id: "srd:spell:stoneskin:action", name: "Stoneskin", actionType: "action", range: 5,
+      targeting: { target: "self" },
+      appliedCondition: { name: "custom", durationRounds: 600, modifiers: { damageAdjustments: [{ type: "resistance", damageType: "bludgeoning", nonMagicalOnly: true }, { type: "resistance", damageType: "piercing", nonMagicalOnly: true }, { type: "resistance", damageType: "slashing", nonMagicalOnly: true }] } },
+      concentration: true,
+      resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:power-word-stun", name: "Power Word Stun", level: 8, school: "enchantment", castingTime: "action", range: 60,
+    resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full",
+    description: "RAW has no first save and works on a creature with 150 HP or fewer; modelled as a Constitution save against stunned that repeats each turn.",
+    action: {
+      kind: "save", id: "srd:spell:power-word-stun:action", name: "Power Word Stun", actionType: "action",
+      saveAbility: "con", dcFormula: { base: 8, ability: "cha", proficiency: true }, range: 60, damage: [],
+      halfDamageOnSuccess: false, onSuccess: "negates",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "stunned", duration: { kind: "save-ends", saveAt: "turn-end" } }],
+      resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full"
+    }
   }
 ];

@@ -20,7 +20,7 @@ A phase is done when its codes reach 0.
 | `REGEN_TERRAIN` | 2 | Regeneration that stops in sunlight or running water: the map has no such terrain tag yet, so it always works. |
 | `LEGENDARY_RESISTANCE` | 0 | (Retired — now enforced.) Legendary Resistance. |
 | `SURVIVE_ZERO` | 0 | (Retired — now enforced.) Undead Fortitude / Relentless. |
-| `LEGENDARY_ACTIONS` | 10 | A legendary action that is not an attack or save (Move, Teleport, Cast a Spell, Heal Self…) is reference-only; the rest are taken. |
+| `LEGENDARY_ACTIONS` | 9 | A legendary action that is not an attack or save (Move, Teleport, Cast a Spell, Heal Self…) is reference-only; the rest are taken. |
 | `MULTIATTACK_PARSE` | 1 | Multiattack text could not be fully compiled. |
 | `MULTIATTACK_STEP` | 7 | A Multiattack step is a spell, breath replacement or other non-attack and is skipped. |
 | `REACTION` | 3 | A reaction other than Parry (Unnerving Mask, Rock Catching, a guardian's Shield) is reference-only. |
@@ -32,7 +32,8 @@ A phase is done when its codes reach 0.
 | `MOVE_TRAIT` | 5 | A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only. |
 | `HOLD_GRAPPLE` | 13 | A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only. |
 | `HOLD_SWALLOW` | 3 | Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated. |
-| `SPELLS` | 36 | Spellcasting is reference-only. |
+| `SPELLS` | 23 | A combat spell this creature casts isn't in the spell library yet, so it is reference text. |
+| `SPELL_UTILITY` | 33 | Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate. |
 | `SPAWN` | 6 | Summoning / splitting is reference-only. |
 | `TRANSFORM` | 23 | Shapechanging is reference-only. |
 | `CHARGE_TRAIT` | 32 | Movement-conditioned bonus (Charge, Pounce, Blood Frenzy…) is reference-only. |
@@ -78,7 +79,7 @@ A phase is done when its codes reach 0.
 | Creature | CR | Tier | Gaps |
 |---|---:|---|---|
 | Aboleth | 10 | partial | LEGENDARY_ACTIONS, RIDER_TEXT, TRAIT_UNMODELED |
-| Acolyte | 0.25 | partial | SPELLS |
+| Acolyte | 0.25 | partial | SPELL_UTILITY |
 | Adult Black Dragon | 14 | partial | ALTITUDE |
 | Adult Blue Dragon | 16 | partial | ALTITUDE |
 | Adult Brass Dragon | 13 | partial | ALTITUDE |
@@ -100,11 +101,11 @@ A phase is done when its codes reach 0.
 | Ancient Red Dragon | 24 | partial | ALTITUDE |
 | Ancient Silver Dragon | 23 | partial | ALTITUDE, TRANSFORM |
 | Ancient White Dragon | 20 | partial | ALTITUDE |
-| Androsphinx | 17 | partial | ALTITUDE, LEGENDARY_ACTIONS, SPELLS |
+| Androsphinx | 17 | partial | ALTITUDE, LEGENDARY_ACTIONS, SPELLS, SPELL_UTILITY |
 | Animated Armor | 1 | partial | TRAIT_UNMODELED |
 | Ankheg | 2 | partial | HOLD_GRAPPLE |
 | Ape | 0.5 | full |  |
-| Archmage | 12 | partial | DEFENSE_TEXT, SPELLS |
+| Archmage | 12 | partial | DEFENSE_TEXT, SPELLS, SPELL_UTILITY |
 | Assassin | 8 | partial | TRAIT_UNMODELED |
 | Awakened Shrub | 0 | full |  |
 | Awakened Tree | 2 | full |  |
@@ -142,37 +143,37 @@ A phase is done when its codes reach 0.
 | Chuul | 4 | partial | HOLD_GRAPPLE |
 | Clay Golem | 9 | partial | RIDER_TEXT, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloaker | 8 | partial | ALTITUDE, HOLD_GRAPPLE, SAVE_UNPARSED, TRAIT_UNMODELED |
-| Cloud Giant | 9 | partial | SPELLS |
+| Cloud Giant | 9 | partial | SPELLS, SPELL_UTILITY |
 | Cockatrice | 0.5 | partial | ALTITUDE |
 | Commoner | 0 | full |  |
 | Constrictor Snake | 0.25 | full |  |
 | Copper Dragon Wyrmling | 1 | partial | ALTITUDE, SAVE_UNPARSED |
-| Couatl | 4 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, TRANSFORM |
+| Couatl | 4 | partial | ALTITUDE, SPELL_UTILITY, TRAIT_UNMODELED, TRANSFORM |
 | Crab | 0 | full |  |
 | Crocodile | 0.5 | full |  |
-| Cult Fanatic | 2 | partial | SPELLS |
+| Cult Fanatic | 2 | partial | SPELLS, SPELL_UTILITY |
 | Cultist | 0.125 | full |  |
 | Darkmantle | 0.5 | partial | ALTITUDE, HOLD_GRAPPLE, SPECIAL_ACTION |
 | Death Dog | 1 | partial | RIDER_TEXT |
-| Deep Gnome (Svirfneblin) | 0.5 | partial | SPELLS |
+| Deep Gnome (Svirfneblin) | 0.5 | partial | SPELL_UTILITY |
 | Deer | 0 | full |  |
-| Deva | 10 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, TRANSFORM |
+| Deva | 10 | partial | ALTITUDE, SPELL_UTILITY, TRAIT_UNMODELED, TRANSFORM |
 | Dire Wolf | 1 | full |  |
-| Djinni | 11 | partial | ALTITUDE, RIDER_TEXT, SPELLS, TRAIT_UNMODELED, VARIANT |
+| Djinni | 11 | partial | ALTITUDE, RIDER_TEXT, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED, VARIANT |
 | Donkey | 0 | full |  |
 | Doppelganger | 3 | partial | CHARGE_TRAIT, SPECIAL_ACTION, TRANSFORM |
 | Draft Horse | 0.25 | full |  |
 | Dragon Turtle | 17 | partial | RIDER_TEXT |
 | Dretch | 0.25 | full |  |
-| Drider | 6 | partial | MULTIATTACK_STEP, SPELLS, TRAIT_UNMODELED |
-| Drow | 0.25 | partial | SPELLS, TRAIT_UNMODELED |
-| Druid | 2 | partial | RIDER_TEXT, SPELLS |
-| Dryad | 1 | partial | MOVE_TRAIT, RIDER_TEXT, SPELLS |
+| Drider | 6 | partial | MULTIATTACK_STEP, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
+| Drow | 0.25 | partial | SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
+| Druid | 2 | partial | RIDER_TEXT, SPELL_UTILITY |
+| Dryad | 1 | partial | MOVE_TRAIT, RIDER_TEXT, SPELL_UTILITY |
 | Duergar | 1 | partial | RIDER_TEXT, SAVE_UNPARSED, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Dust Mephit | 0.5 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, VARIANT |
 | Eagle | 0 | partial | ALTITUDE |
 | Earth Elemental | 5 | full |  |
-| Efreeti | 11 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, VARIANT |
+| Efreeti | 11 | partial | ALTITUDE, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED, VARIANT |
 | Elephant | 4 | partial | CHARGE_TRAIT |
 | Elf, Drow | 0 | full |  |
 | Elk | 0.25 | partial | CHARGE_TRAIT |
@@ -221,7 +222,7 @@ A phase is done when its codes reach 0.
 | Giant Weasel | 0.125 | full |  |
 | Giant Wolf Spider | 0.25 | full |  |
 | Gibbering Mouther | 2 | partial | TRAIT_UNMODELED |
-| Glabrezu | 9 | partial | SPELLS, VARIANT |
+| Glabrezu | 9 | partial | SPELLS, SPELL_UTILITY, VARIANT |
 | Gladiator | 5 | full |  |
 | Gnoll | 0.5 | partial | CHARGE_TRAIT |
 | Gnome, Deep (Svirfneblin) | 0 | full |  |
@@ -231,13 +232,13 @@ A phase is done when its codes reach 0.
 | Gorgon | 5 | partial | CHARGE_TRAIT |
 | Gray Ooze | 0.5 | partial | RIDER_TEXT, TRAIT_UNMODELED |
 | Green Dragon Wyrmling | 2 | partial | ALTITUDE |
-| Green Hag | 3 | partial | SPECIAL_ACTION, SPELLS |
+| Green Hag | 3 | partial | SPECIAL_ACTION, SPELL_UTILITY |
 | Grick | 2 | full |  |
 | Griffon | 2 | partial | ALTITUDE |
 | Grimlock | 0.25 | full |  |
 | Guard | 0.125 | full |  |
-| Guardian Naga | 10 | partial | SPELLS |
-| Gynosphinx | 11 | partial | ALTITUDE, LEGENDARY_ACTIONS, SPELLS |
+| Guardian Naga | 10 | partial | SPELLS, SPELL_UTILITY |
+| Gynosphinx | 11 | partial | ALTITUDE, LEGENDARY_ACTIONS, SPELLS, SPELL_UTILITY |
 | Half-Red Dragon Veteran | 5 | full |  |
 | Harpy | 1 | partial | ALTITUDE |
 | Hawk | 0 | partial | ALTITUDE |
@@ -252,7 +253,7 @@ A phase is done when its codes reach 0.
 | Hydra | 8 | partial | TRAIT_UNMODELED |
 | Hyena | 0 | full |  |
 | Ice Devil | 14 | full |  |
-| Ice Mephit | 0.5 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, VARIANT |
+| Ice Mephit | 0.5 | partial | ALTITUDE, SPELL_UTILITY, TRAIT_UNMODELED, VARIANT |
 | Imp | 1 | partial | ALTITUDE, SPECIAL_ACTION, TRANSFORM |
 | Invisible Stalker | 6 | partial | ALTITUDE, TRAIT_UNMODELED |
 | Iron Golem | 16 | full |  |
@@ -261,14 +262,14 @@ A phase is done when its codes reach 0.
 | Knight | 3 | partial | SAVE_UNPARSED |
 | Kobold | 0.125 | full |  |
 | Kraken | 23 | partial | HOLD_GRAPPLE, LEGENDARY_ACTIONS, TRAIT_UNMODELED |
-| Lamia | 4 | partial | ATTACK_UNPARSED, SPELLS |
+| Lamia | 4 | partial | ATTACK_UNPARSED, SPELLS, SPELL_UTILITY |
 | Lemure | 0 | partial | TRAIT_UNMODELED |
-| Lich | 21 | partial | LEGENDARY_ACTIONS, SPELLS |
+| Lich | 21 | partial | SPELLS, SPELL_UTILITY |
 | Lion | 1 | partial | CHARGE_TRAIT, TRAIT_UNMODELED |
 | Lizard | 0 | full |  |
 | Lizardfolk | 0.5 | full |  |
-| Mage | 6 | partial | SPELLS |
-| Magma Mephit | 0.5 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, VARIANT |
+| Mage | 6 | partial | SPELLS, SPELL_UTILITY |
+| Magma Mephit | 0.5 | partial | ALTITUDE, TRAIT_UNMODELED, VARIANT |
 | Magmin | 0.5 | partial | RIDER_TEXT, TRAIT_UNMODELED |
 | Mammoth | 6 | partial | CHARGE_TRAIT |
 | Manticore | 3 | partial | ALTITUDE, TRAIT_UNMODELED |
@@ -282,16 +283,16 @@ A phase is done when its codes reach 0.
 | Minotaur Skeleton | 2 | partial | CHARGE_TRAIT |
 | Mule | 0.125 | partial | TRAIT_UNMODELED |
 | Mummy | 3 | partial | RIDER_TEXT |
-| Mummy Lord | 15 | partial | LEGENDARY_ACTIONS, RIDER_TEXT, SPELLS |
+| Mummy Lord | 15 | partial | LEGENDARY_ACTIONS, RIDER_TEXT, SPELLS, SPELL_UTILITY |
 | Nalfeshnee | 13 | partial | ALTITUDE, SPECIAL_ACTION, VARIANT |
-| Night Hag | 5 | partial | SPECIAL_ACTION, SPELLS, TRAIT_UNMODELED, TRANSFORM |
+| Night Hag | 5 | partial | SPECIAL_ACTION, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED, TRANSFORM |
 | Nightmare | 3 | partial | ALTITUDE, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Noble | 0.125 | full |  |
 | Ochre Jelly | 2 | partial | SPAWN |
 | Octopus | 0 | partial | SPECIAL_ACTION |
 | Ogre | 2 | full |  |
 | Ogre Zombie | 2 | full |  |
-| Oni | 7 | partial | ALTITUDE, RIDER_TEXT, SPELLS, TRANSFORM |
+| Oni | 7 | partial | ALTITUDE, RIDER_TEXT, SPELLS, SPELL_UTILITY, TRANSFORM |
 | Orc | 0.5 | partial | TRAIT_UNMODELED |
 | Otyugh | 5 | partial | HOLD_GRAPPLE, RIDER_TEXT |
 | Owl | 0 | partial | ALTITUDE |
@@ -299,18 +300,18 @@ A phase is done when its codes reach 0.
 | Panther | 0.25 | partial | CHARGE_TRAIT |
 | Pegasus | 2 | partial | ALTITUDE |
 | Phase Spider | 3 | partial | TRAIT_UNMODELED |
-| Pit Fiend | 20 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED |
-| Planetar | 16 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED |
+| Pit Fiend | 20 | partial | ALTITUDE, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
+| Planetar | 16 | partial | ALTITUDE, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
 | Plesiosaurus | 2 | full |  |
 | Poisonous Snake | 0.125 | full |  |
 | Polar Bear | 2 | full |  |
 | Pony | 0.125 | full |  |
-| Priest | 2 | partial | SPELLS, TRAIT_UNMODELED |
+| Priest | 2 | partial | SPELL_UTILITY, TRAIT_UNMODELED |
 | Pseudodragon | 0.25 | partial | ALTITUDE, TRAIT_UNMODELED |
 | Purple Worm | 15 | full |  |
 | Quasit | 1 | partial | SPECIAL_ACTION, TRANSFORM |
 | Quipper | 0 | partial | CHARGE_TRAIT |
-| Rakshasa | 13 | partial | DEFENSE_TEXT, RIDER_TEXT, SPELLS, TRAIT_UNMODELED |
+| Rakshasa | 13 | partial | DEFENSE_TEXT, RIDER_TEXT, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
 | Rat | 0 | full |  |
 | Raven | 0 | partial | ALTITUDE |
 | Red Dragon Wyrmling | 4 | partial | ALTITUDE |
@@ -336,17 +337,17 @@ A phase is done when its codes reach 0.
 | Shrieker | 0 | manual | SPECIAL_ACTION |
 | Silver Dragon Wyrmling | 2 | partial | ALTITUDE |
 | Skeleton | 0.25 | full |  |
-| Solar | 21 | partial | ALTITUDE, LEGENDARY_ACTIONS, RIDER_TEXT, SPECIAL_ACTION, SPELLS, TRAIT_UNMODELED |
+| Solar | 21 | partial | ALTITUDE, LEGENDARY_ACTIONS, RIDER_TEXT, SPECIAL_ACTION, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
 | Specter | 1 | partial | ALTITUDE, MOVE_TRAIT, RIDER_TEXT |
 | Spider | 0 | full |  |
-| Spirit Naga | 8 | partial | SPELLS |
+| Spirit Naga | 8 | partial | SPELLS, SPELL_UTILITY |
 | Sprite | 0.25 | partial | ALTITUDE, SAVE_UNPARSED, SPECIAL_ACTION |
 | Spy | 1 | partial | TRAIT_UNMODELED |
-| Steam Mephit | 0.25 | partial | ALTITUDE, SPELLS, TRAIT_UNMODELED, VARIANT |
+| Steam Mephit | 0.25 | partial | ALTITUDE, TRAIT_UNMODELED, VARIANT |
 | Stirge | 0.125 | partial | ALTITUDE, HOLD_GRAPPLE |
 | Stone Giant | 7 | partial | REACTION |
 | Stone Golem | 10 | partial | SAVE_UNPARSED |
-| Storm Giant | 13 | partial | SPELLS |
+| Storm Giant | 13 | partial | SPELL_UTILITY |
 | Succubus/Incubus | 4 | partial | ALTITUDE, SAVE_UNPARSED, SPECIAL_ACTION, TRANSFORM |
 | Swarm of Bats | 0.25 | partial | ALTITUDE, SWARM_DAMAGE |
 | Swarm of Beetles | 0.5 | partial | SWARM_DAMAGE |
@@ -366,7 +367,7 @@ A phase is done when its codes reach 0.
 | Triceratops | 5 | partial | CHARGE_TRAIT |
 | Troll | 5 | partial | VARIANT |
 | Tyrannosaurus Rex | 8 | full |  |
-| Unicorn | 5 | partial | CHARGE_TRAIT, LEGENDARY_ACTIONS, SPECIAL_ACTION, SPELLS |
+| Unicorn | 5 | partial | CHARGE_TRAIT, LEGENDARY_ACTIONS, SPECIAL_ACTION, SPELL_UTILITY |
 | Vampire | 13 | partial | HOLD_GRAPPLE, LEGENDARY_ACTIONS, REGEN_TERRAIN, RIDER_TEXT, SPAWN, TRAIT_UNMODELED, TRANSFORM |
 | Vampire Spawn | 5 | partial | HOLD_GRAPPLE, REGEN_TERRAIN, RIDER_TEXT, TRAIT_UNMODELED |
 | Veteran | 3 | full |  |
@@ -411,7 +412,7 @@ A phase is done when its codes reach 0.
 - `LEGENDARY_ACTIONS` — Psychic Drain (cost 2)
 
 ### Acolyte
-- `SPELLS` — Spellcasting
+- `SPELL_UTILITY` — Spellcasting: light, thaumaturgy, sanctuary
 
 ### Adult Black Dragon
 - `ALTITUDE` — fly 80 ft.
@@ -490,7 +491,8 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 80 ft.
 
 ### Androsphinx
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: command
+- `SPELL_UTILITY` — Spellcasting: spare the dying, thaumaturgy, detect evil and good, detect magic, lesser restoration, zone of truth, dispel magic, tongues, freedom of movement, greater restoration, heroes' feast
 - `LEGENDARY_ACTIONS` — Teleport (cost 2)
 - `LEGENDARY_ACTIONS` — Cast a Spell (cost 3)
 - `ALTITUDE` — fly 60 ft.
@@ -502,7 +504,8 @@ A phase is done when its codes reach 0.
 - `HOLD_GRAPPLE` — Acid Spray
 
 ### Archmage
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: fly, fire shield
+- `SPELL_UTILITY` — Spellcasting: light, mage hand, prestidigitation, detect magic, identify, detect thoughts, scrying, wall of force, globe of invulnerability, teleport, mind blank, time stop, disguise self, invisibility
 - `DEFENSE_TEXT` — resistance: "damage from spells"
 
 ### Assassin
@@ -602,7 +605,8 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 40 ft.
 
 ### Cloud Giant
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: fly
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic, fog cloud, light, feather fall, telekinesis, control weather, gaseous form
 
 ### Cockatrice
 - `ALTITUDE` — fly 40 ft.
@@ -612,13 +616,14 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 60 ft.
 
 ### Couatl
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, detect magic, detect thoughts, create food and water, lesser restoration, protection from poison, sanctuary, dream, greater restoration, scrying
 - `TRAIT_UNMODELED` — Shielded Mind
 - `TRANSFORM` — Change Shape
 - `ALTITUDE` — fly 90 ft.
 
 ### Cult Fanatic
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: command
+- `SPELL_UTILITY` — Spellcasting: light, thaumaturgy
 
 ### Darkmantle
 - `HOLD_GRAPPLE` — Crush: and the darkmantle attaches to the target. If the target is Medium or smaller an
@@ -629,17 +634,18 @@ A phase is done when its codes reach 0.
 - `RIDER_TEXT` — Bite: Every 24 hours that elapse, the creature must repeat the saving throw, reducing 
 
 ### Deep Gnome (Svirfneblin)
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: nondetection, disguise self
 
 ### Deva
 - `TRAIT_UNMODELED` — Angelic Weapons
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, commune, raise dead
 - `TRANSFORM` — Change Shape
 - `ALTITUDE` — fly 90 ft.
 
 ### Djinni
 - `TRAIT_UNMODELED` — Elemental Demise
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: conjure elemental
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, detect magic, create food and water, tongues, wind walk, creation, gaseous form, invisibility, major image, plane shift
 - `VARIANT` — Variant: Genie Powers
 - `RIDER_TEXT` — Scimitar: (djinni's choice).
 - `ALTITUDE` — fly 90 ft.
@@ -654,19 +660,21 @@ A phase is done when its codes reach 0.
 
 ### Drider
 - `TRAIT_UNMODELED` — Fey Ancestry
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: darkness
+- `SPELL_UTILITY` — Innate Spellcasting: dancing lights
 - `MULTIATTACK_STEP` — Multiattack: It can replace one of those attacks with a bite attack.
 
 ### Drow
 - `TRAIT_UNMODELED` — Fey Ancestry
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: darkness
+- `SPELL_UTILITY` — Innate Spellcasting: dancing lights
 
 ### Druid
-- `SPELLS` — Spellcasting
+- `SPELL_UTILITY` — Spellcasting: druidcraft, shillelagh, longstrider, speak with animals, animal messenger, barkskin
 - `RIDER_TEXT` — Quarterstaff: or 6 (1d8 + 2) bludgeoning damage with shillelagh or if wielded with two hands.
 
 ### Dryad
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: druidcraft, goodberry, barkskin, pass without trace, shillelagh
 - `MOVE_TRAIT` — Tree Stride
 - `RIDER_TEXT` — Club: or 8 (1d8 + 4) bludgeoning damage with shillelagh.
 
@@ -679,7 +687,7 @@ A phase is done when its codes reach 0.
 
 ### Dust Mephit
 - `TRAIT_UNMODELED` — Death Burst
-- `SPELLS` — Innate Spellcasting (1/Day)
+- `SPELLS` — Innate Spellcasting (1/Day): sleep
 - `VARIANT` — Variant: Summon Mephits
 - `ALTITUDE` — fly 30 ft.
 
@@ -688,7 +696,8 @@ A phase is done when its codes reach 0.
 
 ### Efreeti
 - `TRAIT_UNMODELED` — Elemental Demise
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: conjure elemental, wall of fire
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic, enlarge/reduce, tongues, gaseous form, invisibility, major image, plane shift
 - `VARIANT` — Variant: Genie Powers
 - `ALTITUDE` — fly 60 ft.
 
@@ -787,7 +796,8 @@ A phase is done when its codes reach 0.
 - `TRAIT_UNMODELED` — Gibbering
 
 ### Glabrezu
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: darkness, fly
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic, dispel magic
 - `VARIANT` — Variant: Summon Demon
 
 ### Gnoll
@@ -811,7 +821,7 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 60 ft.
 
 ### Green Hag
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: dancing lights, minor illusion
 - `SPECIAL_ACTION` — Illusory Appearance
 - `SPECIAL_ACTION` — Invisible Passage
 
@@ -819,10 +829,12 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 80 ft.
 
 ### Guardian Naga
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: command, bestow curse
+- `SPELL_UTILITY` — Spellcasting: mending, thaumaturgy, calm emotions, clairvoyance, freedom of movement, geas, true seeing
 
 ### Gynosphinx
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: darkness, suggestion
+- `SPELL_UTILITY` — Spellcasting: mage hand, minor illusion, prestidigitation, detect magic, identify, locate object, dispel magic, remove curse, tongues, legend lore
 - `LEGENDARY_ACTIONS` — Teleport (cost 2)
 - `LEGENDARY_ACTIONS` — Cast a Spell (cost 3)
 - `ALTITUDE` — fly 60 ft.
@@ -860,7 +872,7 @@ A phase is done when its codes reach 0.
 
 ### Ice Mephit
 - `TRAIT_UNMODELED` — Death Burst
-- `SPELLS` — Innate Spellcasting (1/Day)
+- `SPELL_UTILITY` — Innate Spellcasting (1/Day): fog cloud
 - `VARIANT` — Variant: Summon Mephits
 - `ALTITUDE` — fly 30 ft.
 
@@ -882,26 +894,27 @@ A phase is done when its codes reach 0.
 - `LEGENDARY_ACTIONS` — Lightning Storm (cost 2)
 
 ### Lamia
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: suggestion
+- `SPELL_UTILITY` — Innate Spellcasting: disguise self, major image, scrying, geas
 - `ATTACK_UNPARSED` — Intoxicating Touch
 
 ### Lemure
 - `TRAIT_UNMODELED` — Hellish Rejuvenation
 
 ### Lich
-- `SPELLS` — Spellcasting
-- `LEGENDARY_ACTIONS` — Cantrip (cost 1)
+- `SPELLS` — Spellcasting: animate dead, power word kill
+- `SPELL_UTILITY` — Spellcasting: mage hand, prestidigitation, detect magic, detect thoughts, invisibility, dispel magic, scrying, globe of invulnerability, plane shift
 
 ### Lion
 - `CHARGE_TRAIT` — Pounce
 - `TRAIT_UNMODELED` — Running Leap
 
 ### Mage
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: suggestion, fly
+- `SPELL_UTILITY` — Spellcasting: light, mage hand, prestidigitation, detect magic
 
 ### Magma Mephit
 - `TRAIT_UNMODELED` — Death Burst
-- `SPELLS` — Innate Spellcasting (1/Day)
 - `VARIANT` — Variant: Summon Mephits
 - `ALTITUDE` — fly 30 ft.
 
@@ -949,7 +962,8 @@ A phase is done when its codes reach 0.
 - `RIDER_TEXT` — Rotting Fist: If the target is a creature, it must succeed on a DC 12 Constitution saving thro
 
 ### Mummy Lord
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: command, animate dead
+- `SPELL_UTILITY` — Spellcasting: thaumaturgy, silence, dispel magic, divination, guardian of faith, contagion
 - `RIDER_TEXT` — Rotting Fist: If the target is a creature, it must succeed on a DC 16 Constitution saving thro
 - `LEGENDARY_ACTIONS` — Channel Negative Energy (cost 2)
 - `LEGENDARY_ACTIONS` — Whirlwind of Sand (cost 2)
@@ -960,7 +974,8 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 30 ft.
 
 ### Night Hag
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: ray of enfeeblement, sleep
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic, plane shift
 - `TRAIT_UNMODELED` — Night Hag Items
 - `TRANSFORM` — Change Shape
 - `SPECIAL_ACTION` — Etherealness
@@ -978,7 +993,8 @@ A phase is done when its codes reach 0.
 - `SPECIAL_ACTION` — Ink Cloud
 
 ### Oni
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: darkness, sleep
+- `SPELL_UTILITY` — Innate Spellcasting: invisibility, gaseous form
 - `RIDER_TEXT` — Glaive: or 9 (1d10 + 4) slashing damage in Small or Medium form.
 - `TRANSFORM` — Change Shape
 - `ALTITUDE` — fly 30 ft.
@@ -1004,17 +1020,19 @@ A phase is done when its codes reach 0.
 
 ### Pit Fiend
 - `TRAIT_UNMODELED` — Fear Aura
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: wall of fire
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic
 - `ALTITUDE` — fly 60 ft.
 
 ### Planetar
 - `TRAIT_UNMODELED` — Angelic Weapons
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: blade barrier
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, invisibility, dispel evil and good, raise dead, commune, control weather
 - `ALTITUDE` — fly 120 ft.
 
 ### Priest
 - `TRAIT_UNMODELED` — Divine Eminence
-- `SPELLS` — Spellcasting
+- `SPELL_UTILITY` — Spellcasting: light, thaumaturgy, sanctuary, lesser restoration, dispel magic
 
 ### Pseudodragon
 - `TRAIT_UNMODELED` — Keen Senses
@@ -1028,7 +1046,8 @@ A phase is done when its codes reach 0.
 - `CHARGE_TRAIT` — Blood Frenzy
 
 ### Rakshasa
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: suggestion, fly
+- `SPELL_UTILITY` — Innate Spellcasting: detect thoughts, disguise self, mage hand, minor illusion, detect magic, invisibility, major image, plane shift, true seeing
 - `TRAIT_UNMODELED` — Limited Magic Immunity
 - `RIDER_TEXT` — Claw: and the target is cursed if it is a creature. The magical curse takes effect whe
 - `DEFENSE_TEXT` — vulnerability: "piercing from magic weapons wielded by good creatures"
@@ -1102,7 +1121,8 @@ A phase is done when its codes reach 0.
 
 ### Solar
 - `TRAIT_UNMODELED` — Angelic Weapons
-- `SPELLS` — Innate Spellcasting
+- `SPELLS` — Innate Spellcasting: blade barrier
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, invisibility, dispel evil and good, resurrection, commune, control weather
 - `RIDER_TEXT` — Slaying Longbow: If the target is a creature that has 190 hit points or fewer, it must succeed on
 - `SPECIAL_ACTION` — Flying Sword
 - `LEGENDARY_ACTIONS` — Teleport (cost 1)
@@ -1114,7 +1134,8 @@ A phase is done when its codes reach 0.
 - `ALTITUDE` — fly 50 ft. (hover)
 
 ### Spirit Naga
-- `SPELLS` — Spellcasting
+- `SPELLS` — Spellcasting: sleep
+- `SPELL_UTILITY` — Spellcasting: mage hand, minor illusion, detect magic, detect thoughts, water breathing
 
 ### Sprite
 - `SAVE_UNPARSED` — Heart Sight: no damage or condition found
@@ -1127,7 +1148,6 @@ A phase is done when its codes reach 0.
 
 ### Steam Mephit
 - `TRAIT_UNMODELED` — Death Burst
-- `SPELLS` — Innate Spellcasting (1/Day)
 - `VARIANT` — Variant: Summon Mephits
 - `ALTITUDE` — fly 30 ft.
 
@@ -1142,7 +1162,7 @@ A phase is done when its codes reach 0.
 - `SAVE_UNPARSED` — Slow: no damage or condition found
 
 ### Storm Giant
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: detect magic, feather fall, levitate, light, control weather, water breathing
 
 ### Succubus/Incubus
 - `TRANSFORM` — Shapechanger
@@ -1213,7 +1233,7 @@ A phase is done when its codes reach 0.
 
 ### Unicorn
 - `CHARGE_TRAIT` — Charge
-- `SPELLS` — Innate Spellcasting
+- `SPELL_UTILITY` — Innate Spellcasting: detect evil and good, druidcraft, pass without trace, calm emotions, dispel evil and good
 - `SPECIAL_ACTION` — Teleport
 - `LEGENDARY_ACTIONS` — Shimmering Shield (cost 2)
 - `LEGENDARY_ACTIONS` — Heal Self (cost 3)

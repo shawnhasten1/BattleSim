@@ -97,7 +97,7 @@ export function validateMonster(definition: CreatureDefinition): Validation {
     }
   }
   for (const ref of definition.legendary?.actions ?? []) {
-    if (ref.actionId && !actionIds.has(ref.actionId)) errors.push(`${where}: legendary "${ref.name}" points at missing action "${ref.actionId}"`);
+    if (ref.actionId && !actionIds.has(ref.actionId) && !(definition.spells ?? []).some((spell) => spell.action?.id === ref.actionId)) errors.push(`${where}: legendary "${ref.name}" points at missing action "${ref.actionId}"`);
   }
 
   const featureIds = new Set<string>();

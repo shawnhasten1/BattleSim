@@ -34,7 +34,8 @@ export const GAP_CODES = {
   HOLD_GRAPPLE: "A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only.",
   HOLD_SWALLOW: "Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated.",
   // ── Phase 7: spells
-  SPELLS: "Spellcasting is reference-only.",
+  SPELLS: "A combat spell this creature casts isn't in the spell library yet, so it is reference text.",
+  SPELL_UTILITY: "Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate.",
   // ── Phase 8: spawn / transform
   SPAWN: "Summoning / splitting is reference-only.",
   TRANSFORM: "Shapechanging is reference-only.",
