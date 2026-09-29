@@ -33,6 +33,22 @@ describe("SummonEditor", () => {
     });
   });
 
+  it("reopens a saved summon filled in, and saves the changes under the same id", async () => {
+    let saved: SummonActionDefinition | undefined;
+    const initial: SummonActionDefinition = {
+      kind: "summon", id: "action-1", name: "Call Imps", actionType: "action", range: 60, choice: "pick", chance: 40, durationRounds: 5,
+      options: [{ id: "imp", definitionId: "srd:monster:imp", label: "Imp", count: { dice: "1d4" } }],
+      resourceCost: { resourceId: "usage:summon", amount: 1 }, usage: { kind: "uses", uses: 1 }, automationSupport: "full"
+    };
+    render(<SummonEditor ownerId="owner" sceneActors={[]} initial={initial} onSave={(action) => { saved = action; }} onCancel={() => {}} />);
+    expect((screen.getByLabelText("Chance") as HTMLInputElement).value).toBe("40");
+    expect((screen.getByLabelText("Count for Imp") as HTMLInputElement).value).toBe("1d4");
+    await userEvent.clear(screen.getByLabelText("Chance"));
+    await userEvent.type(screen.getByLabelText("Chance"), "75");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(saved).toMatchObject({ id: "action-1", name: "Call Imps", chance: 75, durationRounds: 5, resourceCost: { resourceId: "usage:summon" } });
+  });
+
   it("can't be saved with nothing to summon", () => {
     render(<SummonEditor ownerId="owner" sceneActors={[]} onSave={() => {}} onCancel={() => {}} />);
     expect((screen.getByRole("button", { name: "Add summon" }) as HTMLButtonElement).disabled).toBe(true);
@@ -88,6 +104,17 @@ describe("addSpawnAction", () => {
     useEncounterStore.setState({ encounter: { ...structuredClone(sampleEncounter), definitions: [self] } });
     const id = await store().addSpawnAction("def-self", summon("srd:monster:goblin"));
     expect(id).toBeTruthy();
+  });
+
+  it("editing replaces the action in place instead of adding a second one", async () => {
+    useEncounterStore.setState({ encounter: structuredClone(sampleEncounter) });
+    const id = (await store().addSpawnAction("def-fighter", summon("srd:monster:goblin")))!;
+    const again = await store().addSpawnAction("def-fighter", { ...summon("srd:monster:goblin"), name: "Renamed", chance: 20 }, id);
+    expect(again).toBe(id);
+    const owner = store().encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+    const summons = owner.actions.filter((action) => action.kind === "summon");
+    expect(summons).toHaveLength(1);
+    expect(summons[0]).toMatchObject({ id, name: "Renamed", chance: 20 });
   });
 
   it("gives every form a copy of the transform so it can always change again", async () => {

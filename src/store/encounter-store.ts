@@ -209,7 +209,7 @@ interface EncounterStore {
    * action so the creature can always change again. Returns the new action's id, or undefined if it was refused
    * (see `definitionStatus`).
    */
-  addSpawnAction: (definitionId: string, action: SummonActionDefinition | TransformActionDefinition) => Promise<string | undefined>;
+  addSpawnAction: (definitionId: string, action: SummonActionDefinition | TransformActionDefinition, replaceId?: string) => Promise<string | undefined>;
   /**
    * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
    * ids are global, so saving one would collide across users) on the definition and every token using
@@ -1708,7 +1708,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
         await place(raced ?? definition);
       },
-      addSpawnAction: async (definitionId, action) => {
+      addSpawnAction: async (definitionId, action, replaceId) => {
         const owner = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
         if (!owner) return undefined;
         const embedded = await loadDependencies({ ...owner, actions: [action] }, get().encounter.definitions);
@@ -1717,13 +1717,20 @@ export const useEncounterStore = create<EncounterStore>()(
           // Only a loop this action creates counts: a creature whose own variant already summons its kind (a hezrou
           // calling another hezrou) is bounded by `maxGeneration` and shouldn't block adding an unrelated summon.
           const others = get().encounter.definitions;
-          const loop = findSummonCycle([...others, { ...owner, actions: [...owner.actions, action] }], definitionId);
+          const loop = findSummonCycle([...others, { ...owner, actions: [...owner.actions.filter((existing) => existing.id !== replaceId), action] }], definitionId);
           if (loop && !findSummonCycle(others, definitionId)) {
             set({ definitionStatus: `That summon would loop back on itself (${loop.join(" → ")})` });
             return undefined;
           }
         }
-        const id = get().addActionV2(definitionId, action);
+        // Editing keeps the action's id (and so its place in the list); adding mints a new one.
+        let id: string;
+        if (replaceId) {
+          get().updateAction(definitionId, replaceId, action);
+          id = replaceId;
+        } else {
+          id = get().addActionV2(definitionId, action);
+        }
         if (action.kind === "summon" && action.resourceCost) {
           // A limited summon spends a pool; seed it on the definition and on tokens already on the map.
           const { resourceId, amount } = action.resourceCost;
@@ -1745,9 +1752,11 @@ export const useEncounterStore = create<EncounterStore>()(
           const formIds = new Set(action.forms.map((form) => form.definitionId));
           commitEncounter({
             ...encounter,
-            definitions: encounter.definitions.map((candidate) => formIds.has(candidate.id) && !candidate.actions.some((existing) => existing.id === id)
-              ? { ...candidate, actions: [...candidate.actions, copy] }
-              : candidate)
+            definitions: encounter.definitions.map((candidate) => {
+              if (!formIds.has(candidate.id)) return candidate;
+              const has = candidate.actions.some((existing) => existing.id === id);
+              return { ...candidate, actions: has ? candidate.actions.map((existing) => (existing.id === id ? copy : existing)) : [...candidate.actions, copy] };
+            })
           });
         }
         return id;

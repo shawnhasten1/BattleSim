@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import {
   getExecutableActions,
   type ActionDefinition,
+  type SummonActionDefinition,
+  type TransformActionDefinition,
   type CombatantState,
   type CreatureDefinition,
   type DeathEffectDefinition,
@@ -87,6 +89,8 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const definitionStatus = useEncounterStore((s) => s.definitionStatus);
   const sceneDefinitions = useEncounterStore((s) => s.encounter.definitions);
   const [spawnEditor, setSpawnEditor] = useState<"summon" | "transform" | null>(null);
+  // The existing summon / shapechange being edited, or none when adding a new one.
+  const [spawnEditing, setSpawnEditing] = useState<SummonActionDefinition | TransformActionDefinition | null>(null);
   const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const addMultiattack = useEncounterStore((s) => s.addMultiattack);
@@ -142,7 +146,17 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   function editWeapon(weapon: WeaponDefinition) { openEdit({ kind: "weapon", id: weapon.id }, weaponDraftFromDefinition(weapon)); }
   function editSpell(spell: SpellDefinition) { openEdit({ kind: "spell", id: spell.id }, spellDraftFromDefinition(spell)); }
   function editDeathEffect(deathEffect: DeathEffectDefinition) { openEdit({ kind: "deathEffect", id: deathEffect.id }, deathEffectDraftFromDefinition(deathEffect)); }
-  function editActionRecord(action: ActionDefinition) { openEdit({ kind: "action", id: action.id }, effectDraftFromAction(action)); }
+  function editActionRecord(action: ActionDefinition) {
+    // Summons and shapechanges have their own editors; the generic ability builder would turn them into an attack.
+    if (action.kind === "summon" || action.kind === "transform") {
+      setEdit(null);
+      setAddOpen(false);
+      setSpawnEditing(action);
+      setSpawnEditor(action.kind);
+      return;
+    }
+    openEdit({ kind: "action", id: action.id }, effectDraftFromAction(action));
+  }
   function editFeature(feature: FeatureDefinition) { openEdit({ kind: "feature", id: feature.id }, featureDraftFromDefinition(feature)); }
 
   function startNew(builderKind: BuilderKind, initial: BuilderDraft) {
@@ -321,8 +335,8 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                 <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
                 <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
-                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditor("summon"); }}>Summon</button>
-                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditor("transform"); }}>Shapechange</button>
+                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("summon"); }}>Summon</button>
+                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("transform"); }}>Shapechange</button>
               </div>
             ) : null}
 
@@ -353,14 +367,16 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
       ) : null}
         {spawnEditor === "summon" ? (
           <SummonEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
+            initial={spawnEditing?.kind === "summon" ? spawnEditing : undefined}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
           />
         ) : null}
         {spawnEditor === "transform" ? (
           <TransformEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
+            initial={spawnEditing?.kind === "transform" ? spawnEditing : undefined}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
           />
         ) : null}
         {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}

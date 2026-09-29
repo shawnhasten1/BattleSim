@@ -52,16 +52,16 @@ export function ActorPicker({
 const idOf = (actor: PickableActor) => actor.id.replace(/^srd:monster:/, "");
 
 export function SummonEditor({
-  ownerId, sceneActors, onSave, onCancel
-}: { ownerId: string; sceneActors: CreatureDefinition[]; onSave: (action: SummonActionDefinition) => void; onCancel: () => void }) {
-  const [name, setName] = useState("Summon");
-  const [options, setOptions] = useState<SummonOption[]>([]);
-  const [chance, setChance] = useState<number | "">("");
-  const [choice, setChoice] = useState<"pick" | "random">("pick");
-  const [duration, setDuration] = useState<number | "">(10);
-  const [concentration, setConcentration] = useState(false);
-  const [usesOnce, setUsesOnce] = useState(false);
-  const [actionType, setActionType] = useState<"action" | "bonus">("action");
+  ownerId, sceneActors, initial, onSave, onCancel
+}: { ownerId: string; sceneActors: CreatureDefinition[]; initial?: SummonActionDefinition; onSave: (action: SummonActionDefinition) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial?.name ?? "Summon");
+  const [options, setOptions] = useState<SummonOption[]>(initial?.options ?? []);
+  const [chance, setChance] = useState<number | "">(initial?.chance ?? "");
+  const [choice, setChoice] = useState<"pick" | "random">(initial?.choice ?? "pick");
+  const [duration, setDuration] = useState<number | "">(initial ? (initial.durationRounds ?? "") : 10);
+  const [concentration, setConcentration] = useState(initial?.concentration ?? false);
+  const [usesOnce, setUsesOnce] = useState(Boolean(initial?.resourceCost));
+  const [actionType, setActionType] = useState<"action" | "bonus">(initial?.actionType === "bonus" ? "bonus" : "action");
 
   const countText = (option: SummonOption) => (typeof option.count === "number" ? String(option.count) : option.count.dice);
   // What's typed in each count box, so clearing it to type "2d6" doesn't snap back to "1" mid-edit.
@@ -77,13 +77,13 @@ export function SummonEditor({
 
   function save() {
     if (options.length === 0) return;
-    const id = "summon";
+    const id = initial?.id ?? "summon";
     onSave({
       kind: "summon", id, name: name.trim() || "Summon", actionType, range: 60, options,
       choice, chance: chance === "" ? undefined : Math.min(100, Math.max(1, chance)),
       durationRounds: duration === "" ? undefined : Math.max(1, duration),
       concentration: concentration || undefined, maxGeneration: 1,
-      ...(usesOnce ? { resourceCost: { resourceId: `usage:${id}`, amount: 1 }, usage: { kind: "uses" as const, uses: 1 } } : {}),
+      ...(usesOnce ? { resourceCost: initial?.resourceCost ?? { resourceId: `usage:${id}`, amount: 1 }, usage: { kind: "uses" as const, uses: 1 } } : {}),
       automationSupport: "full"
     });
   }
@@ -140,7 +140,7 @@ export function SummonEditor({
         </label>
       </div>
       <div className={styles.riderRow}>
-        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={options.length === 0}>Add summon</button>
+        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={options.length === 0}>{initial ? "Save changes" : "Add summon"}</button>
         <button type="button" className={styles.spawnBtn} onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -148,15 +148,15 @@ export function SummonEditor({
 }
 
 export function TransformEditor({
-  ownerId, sceneActors, onSave, onCancel
-}: { ownerId: string; sceneActors: CreatureDefinition[]; onSave: (action: TransformActionDefinition) => void; onCancel: () => void }) {
-  const [name, setName] = useState("Shapechanger");
-  const [forms, setForms] = useState<TransformForm[]>([]);
-  const [revertOnDeath, setRevertOnDeath] = useState(true);
+  ownerId, sceneActors, initial, onSave, onCancel
+}: { ownerId: string; sceneActors: CreatureDefinition[]; initial?: TransformActionDefinition; onSave: (action: TransformActionDefinition) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial?.name ?? "Shapechanger");
+  const [forms, setForms] = useState<TransformForm[]>(initial?.forms ?? []);
+  const [revertOnDeath, setRevertOnDeath] = useState(initial?.revertOnDeath ?? true);
 
   function save() {
     if (forms.length === 0) return;
-    onSave({ kind: "transform", id: "shapechange", name: name.trim() || "Shapechanger", actionType: "action", forms, canRevert: true, revertOnDeath, automationSupport: "full" });
+    onSave({ kind: "transform", id: initial?.id ?? "shapechange", name: name.trim() || "Shapechanger", actionType: "action", forms, canRevert: true, revertOnDeath, automationSupport: "full" });
   }
 
   return (
@@ -179,7 +179,7 @@ export function TransformEditor({
         <input type="checkbox" checked={revertOnDeath} onChange={(e) => setRevertOnDeath(e.target.checked)} /> returns to its true form when it dies
       </label>
       <div className={styles.riderRow}>
-        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={forms.length === 0}>Add shapechange</button>
+        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={forms.length === 0}>{initial ? "Save changes" : "Add shapechange"}</button>
         <button type="button" className={styles.spawnBtn} onClick={onCancel}>Cancel</button>
       </div>
     </div>
