@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   activeFactions,
   admitReinforcements,
+  collectDependencies,
   compareInitiative,
   createEngineState,
   applyCondition,
@@ -195,6 +196,11 @@ interface EncounterStore {
    */
   addSrdMonster: (monsterId: string, faction?: "party" | "enemy", position?: Point, quantity?: number) => Promise<void>;
   /**
+   * Adds definitions to the encounter with no token, skipping ids it already has — the creatures a summon or
+   * transform names, which the engine can only use if they are embedded. One undo step.
+   */
+  embedDefinitions: (definitions: CreatureDefinition[]) => void;
+  /**
    * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
    * ids are global, so saving one would collide across users) on the definition and every token using
    * it. Returns the new id, or undefined if there is nothing to adopt.
@@ -202,7 +208,7 @@ interface EncounterStore {
   adoptSrdDefinition: (definitionId: string) => string | undefined;
   /** Saves a private, editable copy of a library monster to the user's own library ("Customize"). */
   saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<void>;
-  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => void;
+  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
   copyLibraryDefinition: (definitionId: string) => Promise<void>;
@@ -470,6 +476,31 @@ function closeActionEconomy(combatant: CombatantState): void {
   // refreshes it at the start of the creature's next turn.
   const current = combatant.actionEconomy ?? { action: true, bonus: true, reaction: true };
   combatant.actionEconomy = { ...current, action: false, bonus: false };
+}
+
+/**
+ * Every creature `definition` names (what it summons, what it changes into), and what those name in turn, that
+ * isn't in `known` yet. Library creatures are fetched; anything else can't be found here and is skipped (the
+ * engine reports it when the action is used).
+ */
+async function loadDependencies(definition: CreatureDefinition, known: CreatureDefinition[]): Promise<CreatureDefinition[]> {
+  const seen = new Set(known.map((candidate) => candidate.id));
+  seen.add(definition.id);
+  const loaded: CreatureDefinition[] = [];
+  const queue = [...collectDependencies(definition)];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (!isSrdMonsterId(id)) continue;
+    try {
+      const dependency = await loadSrdMonster(id);
+      if (!dependency) continue;
+      loaded.push(dependency);
+      queue.push(...collectDependencies(dependency));
+    } catch { /* an unloadable chunk just leaves that dependency out */ }
+  }
+  return loaded;
 }
 
 function defaultTacticsForDefinition(definition: CreatureDefinition): CombatantState["tacticsProfile"] {
@@ -1639,7 +1670,10 @@ export const useEncounterStore = create<EncounterStore>()(
         }
       },
       addSrdMonster: async (monsterId, faction = "enemy", position, quantity = 1) => {
-        const place = (definition: CreatureDefinition) => {
+        const place = async (definition: CreatureDefinition) => {
+          // The creatures it can summon or become come along, or the engine couldn't run those actions.
+          const embedded = await loadDependencies(definition, get().encounter.definitions);
+          if (embedded.length > 0) get().embedDefinitions(embedded);
           if (quantity > 1) get().addCreatureTokens(definition, faction, quantity, position);
           else get().addCreatureDefinition(definition, faction, position);
         };
@@ -1647,7 +1681,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // made to the monsters already placed.
         const inScene = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
         if (inScene) {
-          place(inScene);
+          await place(inScene);
           return;
         }
         let definition: CreatureDefinition | undefined;
@@ -1662,7 +1696,14 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         // Another add may have landed while the chunk loaded.
         const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
-        place(raced ?? definition);
+        await place(raced ?? definition);
+      },
+      embedDefinitions: (definitions) => {
+        const encounter = get().encounter;
+        const have = new Set(encounter.definitions.map((definition) => definition.id));
+        const fresh = definitions.filter((definition) => definition?.id && !have.has(definition.id));
+        if (fresh.length === 0) return;
+        commitEncounter({ ...encounter, definitions: [...encounter.definitions, ...fresh] });
       },
       adoptSrdDefinition: (definitionId) => {
         const encounter = get().encounter;
@@ -1700,9 +1741,11 @@ export const useEncounterStore = create<EncounterStore>()(
           await get().loadDefinitionsLibrary();
         }
       },
-      addLibraryDefinitionToEncounter: (definitionId, faction = "enemy", position) => {
+      addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position) => {
         const definition = get().definitionsLibrary.find((candidate) => candidate.id === definitionId);
         if (definition) {
+          const embedded = await loadDependencies(definition, get().encounter.definitions);
+          if (embedded.length > 0) get().embedDefinitions(embedded);
           get().addCreatureDefinition(definition, faction, position);
         }
       },

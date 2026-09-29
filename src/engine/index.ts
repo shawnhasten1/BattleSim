@@ -1,6 +1,7 @@
 export * from "./areas";
 export * from "./batch";
 export * from "./combat";
+export * from "./dependencies";
 export * from "./dice";
 export * from "./fixtures";
 export * from "./geometry";

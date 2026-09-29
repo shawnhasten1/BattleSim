@@ -385,11 +385,24 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
       <div className={styles.group}>
         <h4>Features &amp; traits</h4>
         {features.length === 0 && multiattacks.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
-        {features.map((feature) => row(
-          feature.id, feature.name, featureDetail(feature), feature.automationSupport,
-          () => editFeature(feature),
-          () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
-          edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
+        {features.map((feature) => (
+          <div key={feature.id}>
+            {row(
+              feature.id, feature.name, featureDetail(feature), feature.automationSupport,
+              () => editFeature(feature),
+              () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
+              edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
+            )}
+            {feature.optional && (feature.grantedActions?.length ?? 0) > 0 ? (
+              <label className={styles.fieldInlineLabel}>
+                <input
+                  type="checkbox" checked={feature.enabled === true}
+                  onChange={(e) => updateFeature(definition.id, feature.id, { enabled: e.target.checked ? true : undefined })}
+                />
+                Use this optional rule
+              </label>
+            ) : null}
+          </div>
         ))}
 
         {multiattacks.map((action) => row(

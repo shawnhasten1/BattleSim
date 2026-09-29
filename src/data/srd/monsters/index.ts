@@ -27,7 +27,10 @@ export const SRD_MONSTER_INDEX: readonly SrdMonsterIndexEntry[] = freeze(
   (indexFile as unknown as { monsters: SrdMonsterIndexEntry[] }).monsters.filter((entry) => !entry.hidden)
 );
 
-const ENTRIES_BY_ID: ReadonlyMap<string, SrdMonsterIndexEntry> = new Map(SRD_MONSTER_INDEX.map((entry) => [entry.id, entry]));
+// Hidden shapechanger forms are not browsable, but they are loadable: a werewolf embeds them as its transform targets.
+const ENTRIES_BY_ID: ReadonlyMap<string, SrdMonsterIndexEntry> = new Map(
+  (indexFile as unknown as { monsters: SrdMonsterIndexEntry[] }).monsters.map((entry) => [entry.id, entry])
+);
 
 export function isSrdMonsterId(id: string | undefined | null): boolean {
   return typeof id === "string" && id.startsWith(SRD_MONSTER_ID_PREFIX);

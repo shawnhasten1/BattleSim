@@ -1972,7 +1972,7 @@ function selectSummonAction(snapshot: EncounterSnapshot, actor: CombatantState, 
     const best = scored.reduce((top, candidate) => (candidate.value > top.value ? candidate : top), scored[0]!);
     const chanceFactor = (action.chance ?? 100) / 100;
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
-    const score = best.value * chanceFactor * 0.6 - resourcePenalty;
+    const score = best.value * chanceFactor - resourcePenalty;
     return {
       action, optionId: action.choice === "pick" ? best.optionId : undefined, score,
       reasons: [`summons ~${Math.round(best.value)} worth of allies`, ...(action.chance !== undefined ? [`${action.chance}% chance`] : [])]

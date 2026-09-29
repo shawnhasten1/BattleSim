@@ -40,8 +40,9 @@ function duel(monster: CreatureDefinition, seed: string): EncounterSnapshot {
 }
 
 describe("every SRD monster runs in the engine", () => {
-  it("has all 325 to test", () => {
-    expect(monsters).toHaveLength(325);
+  it("has all 325 to test (plus the 11 hidden shapechanger forms)", () => {
+    expect(monsters.filter((monster) => !monster.hidden)).toHaveLength(325);
+    expect(monsters).toHaveLength(336);
   });
 
   it("fights without crashing, losing turns to failures, or sitting idle when it has a runnable action", () => {

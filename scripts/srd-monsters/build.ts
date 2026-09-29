@@ -3,6 +3,7 @@ import { GAP_CODES } from "../../src/data/srd/monsters/gaps";
 import { MONSTER_OVERRIDES } from "../../src/data/srd/monsters/overrides";
 import type { SrdMonsterIndexEntry } from "../../src/data/srd/monsters/types";
 import { parseCsv } from "./csv";
+import { splitForms } from "./forms";
 import { parseMonster, type ParsedMonster } from "./monster";
 import { validateMonster } from "./validate";
 
@@ -34,10 +35,12 @@ export function buildMonsterLibrary(csvText: string): MonsterLibraryBuild {
       monster.gapNotes.push(...(override.addGaps ?? []));
       monster.gaps = [...new Set(monster.gapNotes.map((gap) => gap.code))].sort();
     }
-    const result = validateMonster(monster.definition);
-    errors.push(...result.errors);
-    warnings.push(...result.warnings);
-    parsed.push(monster);
+    for (const piece of splitForms(monster)) {
+      const result = validateMonster(piece.definition);
+      errors.push(...result.errors);
+      warnings.push(...result.warnings);
+      parsed.push(piece);
+    }
   }
   for (const slug of Object.keys(MONSTER_OVERRIDES)) {
     if (!parsed.some((monster) => monster.slug === slug)) errors.push(`override for unknown monster "${slug}"`);

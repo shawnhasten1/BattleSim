@@ -123,7 +123,7 @@ describe("SRD data", () => {
   const monsters = readdirSync(chunkDir).flatMap((file) => (JSON.parse(readFileSync(`${chunkDir}${file}`, "utf8")) as { definitions: CreatureDefinition[] }).definitions);
 
   it("every creature with Legendary Resistance has the effect and a pool of uses", () => {
-    const withTrait = monsters.filter((monster) => monster.traits?.some((trait) => /^Legendary Resistance/.test(trait.name)));
+    const withTrait = monsters.filter((monster) => !monster.hidden && monster.traits?.some((trait) => /^Legendary Resistance/.test(trait.name)));
     expect(withTrait.length).toBe(23);
     for (const monster of withTrait) {
       expect(monster.traits!.some((trait) => trait.effects?.some((effect) => effect.kind === "auto-succeed-save")), monster.name).toBe(true);

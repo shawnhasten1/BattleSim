@@ -202,10 +202,11 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
   const spellUpcastActions = spellActions.flatMap((action) => spellUpcastVariants(definition, action));
+  // An optional variant rule (a demon's Summon Demon) grants nothing until the DM switches it on.
   const grantedActions = [
     ...(definition.features ?? []),
     ...(definition.traits ?? [])
-  ].flatMap((feature) => feature.grantedActions ?? []);
+  ].filter((feature) => !feature.optional || feature.enabled).flatMap((feature) => feature.grantedActions ?? []);
   const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
 
   const declared = [

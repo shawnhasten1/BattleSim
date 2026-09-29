@@ -395,10 +395,12 @@ describe("hand-verified SRD statblocks", () => {
 
 describe("generated library integrity", () => {
   it("has every SRD creature exactly once, correctly namespaced", () => {
-    expect(definitions).toHaveLength(325);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(325);
+    // 325 creatures you can browse, plus 11 `hidden` shapechanger forms that exist only as transform targets.
+    expect(definitions.filter((definition) => !definition.hidden)).toHaveLength(325);
+    expect(definitions).toHaveLength(336);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(336);
     expect(definitions.every((definition) => definition.id.startsWith("srd:monster:"))).toBe(true);
-    expect(index).toHaveLength(325);
+    expect(index).toHaveLength(336);
     expect(index.map((entry) => entry.id).sort()).toEqual(definitions.map((definition) => definition.id).sort());
   });
 

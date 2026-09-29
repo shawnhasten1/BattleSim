@@ -1419,6 +1419,8 @@ export interface FeatureDefinition {
   };
   /** A variant / optional rule from the source text: shown as opt-in reference, not on by default. */
   optional?: boolean;
+  /** For an `optional` feature: the DM has switched it on, so the actions it grants are available. Off (absent) by default. */
+  enabled?: boolean;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 

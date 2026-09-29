@@ -38,7 +38,8 @@ export const GAP_CODES = {
   SPELL_UTILITY: "Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate.",
   // ── Phase 8: spawn / transform
   SPAWN: "Summoning / splitting is reference-only.",
-  TRANSFORM: "Shapechanging is reference-only.",
+  TRANSFORM: "Shapechanging is reference-only (open-ended Change Shape, Doppelganger, Mimic; the fixed-shape lycanthropes and the vampire are automated).",
+  FORM_STATS: "A shapechanger's forms differ in more than actions (AC, size, speed); only the actions are modelled.",
   // ── Phase 9: long tail
   CHARGE_TRAIT: "Movement-conditioned bonus (Charge, Pounce, Blood Frenzy…) is reference-only.",
   SWARM_DAMAGE: "Swarm rules are not modelled: reduced damage at half HP, and attacking a creature inside the swarm's own space (modelled as an adjacent attack).",

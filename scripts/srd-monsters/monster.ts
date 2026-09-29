@@ -1,5 +1,5 @@
 import type {
-  Ability, ActionDefinition, AttackActionDefinition, CreatureDefinition, CreatureType, DamageAdjustment,
+  Ability, ActionDefinition, AttackActionDefinition, CreatureDefinition, CreatureType, DamageAdjustment, DamageType,
   FeatureDefinition, HealingActionDefinition, LegendaryActionRef, MovementProfile, RepositionActionDefinition, SizeCategory
 } from "../../src/engine/types";
 import type { GapCode, MonsterTier } from "../../src/data/srd/monsters/gaps";
@@ -9,11 +9,12 @@ import { parseAbsorption, parseConditionImmunities, parseDamageAdjustments } fro
 import { parseMultiattack } from "./multiattack";
 import { inferTactics } from "./tactics";
 import { parseSwallow } from "./holds";
+import { parseSummonVariant } from "./summons";
 import { parseSpellcasting } from "./spellcasting";
 import { parseSaveAction, splitBoldVariants } from "./saves";
 import { grantsMagicalWeapons, parseTrait } from "./traits";
 import { applyUsage } from "./usage";
-import { ABILITIES, GapLog, proficiencyForCr, slugify } from "./util";
+import { ABILITIES, GapLog, isDamageType, proficiencyForCr, slugify } from "./util";
 
 const SIZES: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 const TYPES: CreatureType[] = [
@@ -32,6 +33,8 @@ export interface ParsedMonster {
     family?: string;
     spellcaster: boolean;
     legendary: boolean;
+    /** Actions the SRD limits to some shapes ("Wolf or Hybrid Form Only"): the raw action name and its tag. */
+    formTags: Array<{ name: string; tag: string }>;
   };
 }
 
@@ -206,6 +209,17 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       continue;
     }
     if (entry.action_type === "REACTION") {
+      // "When a pudding that is Medium or larger is subjected to lightning or slashing damage, it splits into two new
+      // puddings if it has at least 10 hit points": a trait the damage path checks, not a reaction anyone takes.
+      const split = /^Split$/i.test(entry.name)
+        ? /subjected to (\w+) or (\w+) damage[\s\S]*at least (\d+) hit points/i.exec(entry.desc) : null;
+      if (split && isDamageType(split[1]!.toLowerCase()) && isDamageType(split[2]!.toLowerCase())) {
+        traits.push({
+          id: `${ctx.slug}-trait-split`, name: "Split", category: "trait", description: entry.desc, automationSupport: "full",
+          effects: [{ kind: "split-on-damage", triggerDamageTypes: [split[1]!.toLowerCase() as DamageType, split[2]!.toLowerCase() as DamageType], minHp: Number(split[3]) }]
+        });
+        continue;
+      }
       // "Parry. The knight adds 2 to its AC against one melee attack that would hit it": a Shield-style
       // reaction, taken when a melee attack targets it (the engine has no "would hit" window before the roll).
       const parryBonus = /^Parry$/i.test(entry.name) ? Number(/adds (\d+) to its AC/i.exec(entry.desc)?.[1]) : NaN;
@@ -223,6 +237,12 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       continue;
     }
     if (/^Variant:/i.test(entry.name)) {
+      const summon = parseSummonVariant(entry, ctx);
+      if (summon) {
+        traits.push(summon.feature);
+        for (const name of summon.dropped) gaps.add("SPAWN", `${entry.name}: ${name} is not in the SRD, so that option was left out`);
+        continue;
+      }
       // Optional rule: reference text, off by default (see the plan's variant policy).
       traits.push(parseTrait(entry, ctx));
       continue;
@@ -450,7 +470,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
       xp: num(row.experience_points) ?? 0,
       family: row.subcategory || undefined,
       spellcaster,
-      legendary: legendary !== undefined
+      legendary: legendary !== undefined,
+      formTags: rawActions.filter((entry) => entry.limited_to_form).map((entry) => ({ name: entry.name, tag: entry.limited_to_form! }))
     }
   };
 }
