@@ -1,12 +1,14 @@
 import {
   activeFactions,
   admitReinforcements,
+  despawnExpiredSummons,
   canAct,
   createEngineState,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   effectiveFaction,
   conditionSeverity,
+  averageOfDice,
   featureSources,
   isImmuneToCondition,
   saveAdvantageApplies,
@@ -24,6 +26,7 @@ import {
   remainingMovementBudget,
   resolveAttack,
   resolveBuffAction,
+  resolveSummonAction,
   isTargetable,
   runDownedTurn,
   resolveHealingAction,
@@ -49,7 +52,7 @@ import {
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -135,6 +138,14 @@ interface MovementPlan {
 
 interface FeatureActivationPlan {
   action: FeatureActivationAction;
+  score: number;
+  reasons: string[];
+}
+
+interface SummonPlan {
+  action: SummonActionDefinition;
+  /** Which option to summon — only meaningful for `choice: "pick"`; `"random"` actions ignore it. */
+  optionId?: Id;
   score: number;
   reasons: string[];
 }
@@ -235,6 +246,7 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       state.snapshot.round += 1;
       admitReinforcements(state);
       tickZones(state);
+      despawnExpiredSummons(state);
     }
     // The update clause re-reads `state.snapshot.turnIndex` (rather than a plain `index += 1`) so a mid-turn
     // `insertIntoTurnOrder` (a summon, a split) that bumps it is picked up: every `continue`/fall-through jumps
@@ -915,6 +927,30 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   // caster with no attack), any positive-scoring buff is free value — take it
   // rather than falling through to an idle turn.
   const buff = selectBuffAction(state.snapshot, actor, "action") ?? selectBuffBurstAction(state.snapshot, actor);
+
+  // A summon is a standing investment (new allies for the rest of the fight), so it beats a comparable buff or
+  // attack when it scores higher than both — not merely "no offensive plan at all", the way a free buff does.
+  const summon = selectSummonAction(state.snapshot, actor, "action");
+  if (summon && (!plan || summon.score > plan.score) && (!buff || summon.score > buff.score)) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${summon.action.name}`, {
+      combatantId: actor.id,
+      actionId: summon.action.id,
+      score: summon.score,
+      reasons: summon.reasons
+    }));
+    try {
+      resolveSummonAction(state, actor.id, summon.action.id, summon.optionId);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${summon.action.name} could not resolve`, {
+        combatantId: actor.id,
+        actionId: summon.action.id,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+    maybeSpendBonusAction(state, actor, tactics);
+    return undefined;
+  }
+
   if (buff && (!plan || buff.score > plan.score)) {
     const isBurst = "targets" in buff;
     if (!isBurst && !buff.reachable) {
@@ -1902,6 +1938,50 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
 
 function hasActiveFeatureCondition(actor: CombatantState, featureId: string): boolean {
   return (actor.conditions ?? []).some((condition) => condition.sourceId === featureId);
+}
+
+/** Roughly how much a creature is worth having on the field as a fresh ally: its durability plus its best attack. */
+function allyValue(definition: CreatureDefinition): number {
+  const bestAttack = Math.max(0, ...getExecutableActions(definition)
+    .filter((action) => action.automationSupport === "full" && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+    .map((action) => averageDamage(action, definition)));
+  return Math.sqrt(Math.max(1, definition.maxHp)) * 3 + bestAttack;
+}
+
+/**
+ * Whether summoning is worth the action, and which option (for `choice: "pick"`) to take — the one whose
+ * `allyValue × count` is highest. `chance` (a balor's 50%) discounts the score, since the action can fizzle.
+ */
+function selectSummonAction(snapshot: EncounterSnapshot, actor: CombatantState, slot: "action" | "bonus" = "action"): SummonPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const actions = getExecutableActions(definition)
+    .filter((action): action is SummonActionDefinition => action.kind === "summon"
+      && action.actionType === slot
+      && action.automationSupport === "full"
+      && canPayResource(actor, action)
+      && (actor.summon?.generation ?? 0) + 1 <= (action.maxGeneration ?? 2));
+  if (actions.length === 0) return undefined;
+
+  const candidates = actions.map((action) => {
+    const scored = action.options.map((option) => {
+      const summonedDefinition = snapshot.definitions.find((candidate) => candidate.id === option.definitionId);
+      if (!summonedDefinition) return { optionId: option.id, value: 0 };
+      const count = typeof option.count === "number" ? option.count : Math.max(1, averageOfDice(option.count.dice));
+      return { optionId: option.id, value: allyValue(summonedDefinition) * count };
+    });
+    const best = scored.reduce((top, candidate) => (candidate.value > top.value ? candidate : top), scored[0]!);
+    const chanceFactor = (action.chance ?? 100) / 100;
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    const score = best.value * chanceFactor * 0.6 - resourcePenalty;
+    return {
+      action, optionId: action.choice === "pick" ? best.optionId : undefined, score,
+      reasons: [`summons ~${Math.round(best.value)} worth of allies`, ...(action.chance !== undefined ? [`${action.chance}% chance`] : [])]
+    };
+  });
+
+  candidates.sort((a, b) => b.score - a.score || a.action.id.localeCompare(b.action.id));
+  const top = candidates[0];
+  return top && top.score > 0 ? top : undefined;
 }
 
 function selectOffensivePlan(

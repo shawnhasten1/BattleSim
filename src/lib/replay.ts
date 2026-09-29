@@ -174,6 +174,36 @@ function applyEvent(
       return;
     }
 
+    case "CombatantSpawned": {
+      // The pre-run snapshot this replay starts from never had these combatants in it, so — unlike every other
+      // event here, which mutates an existing entry — this one inserts fresh ones from the logged data.
+      const combatants = Array.isArray(data.combatants) ? (data.combatants as CombatantState[]) : [];
+      if (combatants.length === 0) return;
+      const insertIndex = typeof data.insertIndex === "number" ? data.insertIndex : snapshot.combatants.length;
+      const fresh = combatants.map((combatant) => structuredClone(combatant));
+      snapshot.combatants.splice(insertIndex, 0, ...fresh);
+      for (const combatant of fresh) byId.set(combatant.id, combatant);
+      return;
+    }
+
+    case "CombatantSplit": {
+      const original = byId.get(String(data.originalId));
+      if (original && typeof data.originalHp === "number") original.currentHp = data.originalHp;
+      const copy = data.copy as CombatantState | undefined;
+      if (!copy) return;
+      const insertIndex = typeof data.insertIndex === "number" ? data.insertIndex : snapshot.combatants.length;
+      const fresh = structuredClone(copy);
+      snapshot.combatants.splice(insertIndex, 0, fresh);
+      byId.set(fresh.id, fresh);
+      return;
+    }
+
+    case "SummonExpired": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant) combatant.state = "fled";
+      return;
+    }
+
     case "CombatantStabilized": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant) {
@@ -318,6 +348,9 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
     case "DeathSaveRolled":
       return 800;
     case "ReinforcementArrived":
+    case "CombatantSpawned":
+    case "CombatantSplit":
+    case "SummonExpired":
       return 900;
     case "ZoneCreated":
     case "ZoneMoved":

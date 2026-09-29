@@ -2590,6 +2590,158 @@ export function insertIntoTurnOrder(state: EngineState, newCombatants: Combatant
   return { initiative: roll.total, insertIndex };
 }
 
+/* ─── Summoning ───────────────────────────────────────────────────────────── */
+
+/** How many "generations" of summon-of-a-summon are allowed before a spawned creature's own summon actions refuse. */
+const DEFAULT_SUMMON_GENERATION_CAP = 2;
+/** A hard ceiling on one encounter's combatant count, so a summon/split chain can't run away. */
+export const MAX_ENCOUNTER_COMBATANTS = 40;
+
+/** Up to `count` distinct free cells within `range` ft of `origin` for a footprint of `footprint` squares — nearest first, and never refuses outright (falls back past `range` into open ground, then to `origin` itself). */
+function summonCells(state: EngineState, origin: Point, footprint: number, range: number, count: number): Point[] {
+  const maxRadius = Math.max(6, Math.round(range / state.snapshot.map.grid.distancePerSquare));
+  const occupied = state.snapshot.combatants
+    .filter((candidate) => candidate.state !== "defeated" && !candidate.containedBy)
+    .flatMap((candidate) => footprintCells(candidate.position, sizeFootprint(getDefinition(state.snapshot, candidate).size)));
+  const placed: Point[] = [];
+  for (let index = 0; index < count; index += 1) {
+    let found: Point | undefined;
+    for (let radius = 1; radius <= maxRadius && !found; radius += 1) {
+      for (let dy = -radius; dy <= radius && !found; dy += 1) {
+        for (let dx = -radius; dx <= radius && !found; dx += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const cell = { x: origin.x + dx, y: origin.y + dy };
+          if (isFootprintLegal(state.snapshot.map, cell, footprint, occupied)) found = cell;
+        }
+      }
+    }
+    const cell = found ?? origin;
+    placed.push(cell);
+    occupied.push(...footprintCells(cell, footprint));
+  }
+  return placed;
+}
+
+/**
+ * Conjure Animals / Summon Demon / Animate Dead. Rolls the action's `chance` gate (if any), picks one option
+ * (the caller's `optionId` for `choice: "pick"`, or a uniform roll for `"random"`), rolls its count, places
+ * each new combatant near the caster and inserts the whole batch into the turn order on one shared roll
+ * (`insertIntoTurnOrder`). Returns the combatants actually produced — empty if the chance roll failed, the
+ * option/definition can't be resolved, or the encounter is already at `MAX_ENCOUNTER_COMBATANTS`.
+ */
+export function resolveSummonAction(state: EngineState, casterId: Id, actionId: Id, optionId?: Id): CombatantState[] {
+  const caster = findCombatant(state.snapshot, casterId);
+  const casterDefinition = getDefinition(state.snapshot, caster);
+  const action = findActionDefinition(casterDefinition, actionId);
+  if (!action || action.kind !== "summon") {
+    throw new Error(`Summon action ${actionId} is not available to ${caster.displayName}`);
+  }
+  const generation = (caster.summon?.generation ?? 0) + 1;
+  if (generation > (action.maxGeneration ?? DEFAULT_SUMMON_GENERATION_CAP)) {
+    throw new Error(`${caster.displayName} can't summon this many generations deep`);
+  }
+  validateAndSpendAction(caster, action);
+  if (action.concentration) {
+    breakConcentration(state, casterId);
+  }
+  declareAction(state, caster, action);
+
+  const succeeded = action.chance === undefined || state.rng.nextInt(1, 100) <= action.chance;
+  if (!succeeded) {
+    state.log.push(event(state, "CombatantSpawned", `${caster.displayName}'s ${action.name} fizzles`, {
+      combatantId: caster.id, actionId, summonerId: casterId, combatants: []
+    }));
+    return [];
+  }
+
+  const chosen = action.choice === "random"
+    ? action.options[state.rng.nextInt(0, action.options.length - 1)]
+    : action.options.find((option) => option.id === optionId) ?? action.options[0];
+  if (!chosen) {
+    return [];
+  }
+  const summonedDefinition = state.snapshot.definitions.find((definition) => definition.id === chosen.definitionId);
+  if (!summonedDefinition) {
+    throw new Error(`${caster.displayName}'s ${action.name} references an unknown creature "${chosen.definitionId}" — is it embedded in this encounter?`);
+  }
+
+  const requestedCount = typeof chosen.count === "number" ? chosen.count : Math.max(1, rollDice(chosen.count.dice, state.rng).total);
+  const count = Math.min(requestedCount, Math.max(0, MAX_ENCOUNTER_COMBATANTS - state.snapshot.combatants.length));
+  if (count < requestedCount) {
+    state.log.push(event(state, "AutomationWarning",
+      `${caster.displayName}'s ${action.name} is capped at ${MAX_ENCOUNTER_COMBATANTS} combatants in one encounter — only ${count} of ${requestedCount} appear`,
+      { combatantId: caster.id, actionId }));
+  }
+  if (count <= 0) {
+    return [];
+  }
+
+  const footprint = sizeFootprint(summonedDefinition.size);
+  const cells = summonCells(state, caster.position, footprint, action.range, count);
+  const alreadyNamed = state.snapshot.combatants.filter((combatant) => combatant.definitionId === summonedDefinition.id).length;
+  const created: CombatantState[] = cells.map((position, index) => ({
+    id: `combatant-summon-${casterId}-${state.snapshot.round}-${state.log.length}-${index}`,
+    definitionId: summonedDefinition.id,
+    displayName: `${summonedDefinition.name} ${alreadyNamed + index + 1}`,
+    faction: caster.faction,
+    position,
+    currentHp: summonedDefinition.maxHp,
+    tempHp: 0,
+    resources: summonedDefinition.resources ? { ...summonedDefinition.resources } : undefined,
+    state: "active",
+    tacticsProfile: summonedDefinition.defaultTactics ?? "basic-melee",
+    resourceStance: summonedDefinition.defaultResourceStance ?? "balanced",
+    summon: {
+      summonerId: casterId,
+      generation,
+      expiresRound: action.durationRounds ? state.snapshot.round + action.durationRounds : undefined,
+      concentrationSourceId: action.concentration ? casterId : undefined
+    }
+  }));
+
+  const { initiative, insertIndex } = insertIntoTurnOrder(state, created);
+  if (action.concentration) {
+    caster.concentration = { sourceConditionId: undefined };
+  }
+  state.log.push(event(state, "CombatantSpawned",
+    `${caster.displayName} summons ${created.length} ${summonedDefinition.name}${created.length === 1 ? "" : "s"} (initiative ${initiative})`, {
+      combatantId: caster.id, actionId, summonerId: casterId, definitionId: summonedDefinition.id, initiative, insertIndex,
+      // The full combatant objects, not just ids: replay reconstructs board state purely by folding the log
+      // forward over the pre-run snapshot, which never had these combatants in it.
+      combatants: created
+    }));
+  return created;
+}
+
+/** Every live combatant `summonerId` has out, optionally only the ones tied to its current concentration. */
+function summonsOf(state: EngineState, summonerId: Id, onlyConcentration: boolean): CombatantState[] {
+  return state.snapshot.combatants.filter((combatant) =>
+    combatant.summon?.summonerId === summonerId
+    && combatant.state !== "fled" && combatant.state !== "defeated" && combatant.state !== "dead"
+    && (!onlyConcentration || combatant.summon?.concentrationSourceId === summonerId));
+}
+
+/** Ends a batch of summoned creatures — `"fled"`, released from any hold/containment, logged once each. */
+function despawnSummons(state: EngineState, targets: CombatantState[], why: string): void {
+  for (const target of targets) {
+    target.state = "fled";
+    releaseHoldsBy(state, target.id);
+    expelAll(state, target, why);
+    state.log.push(event(state, "SummonExpired", `${target.displayName} ${why}`, {
+      combatantId: target.id, summonerId: target.summon?.summonerId
+    }));
+  }
+}
+
+/** Whoever's `summon.expiresRound` has come due leaves. Call once per round, alongside `tickZones`. */
+export function despawnExpiredSummons(state: EngineState): void {
+  const expired = state.snapshot.combatants.filter((combatant) =>
+    combatant.summon?.expiresRound != null
+    && state.snapshot.round >= combatant.summon.expiresRound
+    && combatant.state !== "fled" && combatant.state !== "defeated" && combatant.state !== "dead");
+  despawnSummons(state, expired, "vanishes — its duration ended");
+}
+
 export function firstUsableAction(definition: CreatureDefinition, preferred: "melee" | "ranged" | "any" = "any"): ActionDefinition | undefined {
   const actions = getExecutableActions(definition);
   return actions.find((action) => action.automationSupport === "full"
@@ -3048,6 +3200,7 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
   expelAll(state, target, "the swallower died");
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
   breakConcentration(state, target.id);
+  despawnSummons(state, summonsOf(state, target.id, false), "vanishes — its summoner died");
   resolveDeathEffect(state, target.id, killerId);
 }
 
@@ -4461,6 +4614,7 @@ function breakConcentration(state: EngineState, casterId: Id): void {
     }
     state.snapshot.activeZones = zonesAfter;
   }
+  despawnSummons(state, summonsOf(state, casterId, true), "vanishes — concentration ended");
 
   const caster = state.snapshot.combatants.find((combatant) => combatant.id === casterId);
   if (!caster?.concentration) {
@@ -4688,7 +4842,7 @@ export function conditionSeverity(name: ConditionName): number {
 }
 
 /** Average of a dice expression, ignoring anything it can't parse. */
-function averageOfDice(expression: string): number {
+export function averageOfDice(expression: string): number {
   try {
     const parsed = parseDiceExpression(expression);
     return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * (term.sides + 1) / 2, 0) + parsed.modifier;

@@ -1175,15 +1175,15 @@ export interface SummonOption {
   label: string;
   /** A flat count, or a dice expression rolled once per use ("2d4 dretches"). */
   count: number | { dice: string };
-  /** Out of 100 — this option is available at all only if a d100 roll comes in at or under it (a balor's 50%). Omit for "always available". */
-  chance?: number;
 }
 
 /**
- * Conjure Animals / Summon Demon / Animate Dead — produces new combatants allied with the caster. `options` are
- * offered in order; `choice: "random"` (an SRD "the demon chooses") picks uniformly among the ones whose `chance`
- * roll succeeds (falling back to the surest option if every roll fails), `"pick"` leaves it to the caller (the AI
- * takes the option with the best expected value; a human player is offered the list).
+ * Conjure Animals / Summon Demon / Animate Dead — produces new combatants allied with the caster.
+ * `chance` (a balor's "50 percent chance of summoning…", a mephit's 25%) gates the whole action: on failure
+ * the action is still spent but nothing is produced. Omit for "always works" (Animate Dead has no chance).
+ * Once it succeeds, `choice` decides which one of `options` is produced: `"random"` picks uniformly among
+ * them (matches a single-option list, e.g. the mephits); `"pick"` is the caster's own choice (an SRD "the
+ * demon chooses" — the AI picks the option with the best expected value; a human player is offered the list).
  */
 export interface SummonActionDefinition {
   kind: "summon";
@@ -1191,6 +1191,7 @@ export interface SummonActionDefinition {
   name: string;
   actionType: ActionType;
   range: number;
+  chance?: number;
   options: SummonOption[];
   choice: "pick" | "random";
   /** Omit for "lasts the rest of the encounter" (a permanent ally, e.g. Animate Dead). 1 minute = 10 rounds for spell-style summons. */

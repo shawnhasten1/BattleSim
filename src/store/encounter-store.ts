@@ -8,6 +8,7 @@ import {
   compareInitiative,
   createEngineState,
   applyCondition,
+  despawnExpiredSummons,
   defaultConditionModifiers,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
@@ -839,6 +840,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // expiresAtRound`), so — like `admitReinforcements` above — it's safe
         // to call on every step rather than only when `wrapped`.
         tickZones(engine);
+        despawnExpiredSummons(engine);
         turnIndexes = eligibleIndexes();
         if (turnIndexes.length === 0) return;
         const next = wrapped || !turnHasStarted
