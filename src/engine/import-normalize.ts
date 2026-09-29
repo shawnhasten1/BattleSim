@@ -326,6 +326,10 @@ function normalizeAction(
       automationSupport: normalizeAutomationSupport(input.automationSupport, "manual-only")
     };
   }
+  // Summon and transform are structured records with no legacy shapes to translate; keep them as authored.
+  if ((kind === "summon" && Array.isArray(input.options)) || (kind === "transform" && Array.isArray(input.forms))) {
+    return { ...input, kind, id: generatedId, name, actionType, automationSupport: normalizeAutomationSupport(input.automationSupport, "full") } as unknown as ActionDefinition;
+  }
   return unsupportedAction(generatedId, name, actionType, stringField(input, "description") ?? JSON.stringify(input));
 }
 
@@ -737,6 +741,13 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
   }
   if (input.kind === "push") {
     return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5 };
+  }
+  // Grapples and swallows are structured records with no legacy shapes to translate; keep them as authored.
+  if (input.kind === "hold" && numberField(input, "escapeDc") !== undefined) {
+    return { ...input, ...base, kind: "hold", escapeDc: numberField(input, "escapeDc")! } as ActionRider;
+  }
+  if (input.kind === "swallow") {
+    return { ...input, ...base, kind: "swallow" } as ActionRider;
   }
   if (input.kind === "condition") {
     const condition = isRecord(input.condition) && typeof input.condition.custom === "string"

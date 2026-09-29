@@ -6,6 +6,7 @@ import {
   activeFactions,
   admitReinforcements,
   collectDependencies,
+  findSummonCycle,
   compareInitiative,
   createEngineState,
   applyCondition,
@@ -50,6 +51,8 @@ import {
   type PlacedTemplate,
   type Point,
   type SizeCategory,
+  type SummonActionDefinition,
+  type TransformActionDefinition,
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
@@ -200,6 +203,13 @@ interface EncounterStore {
    * transform names, which the engine can only use if they are embedded. One undo step.
    */
   embedDefinitions: (definitions: CreatureDefinition[]) => void;
+  /**
+   * Adds a summon or transform action to a definition, embedding the creatures it names first (library creatures
+   * are fetched). A summon that would lead back to itself is refused; a transform's forms each get a copy of the
+   * action so the creature can always change again. Returns the new action's id, or undefined if it was refused
+   * (see `definitionStatus`).
+   */
+  addSpawnAction: (definitionId: string, action: SummonActionDefinition | TransformActionDefinition) => Promise<string | undefined>;
   /**
    * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
    * ids are global, so saving one would collide across users) on the definition and every token using
@@ -1697,6 +1707,47 @@ export const useEncounterStore = create<EncounterStore>()(
         // Another add may have landed while the chunk loaded.
         const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
         await place(raced ?? definition);
+      },
+      addSpawnAction: async (definitionId, action) => {
+        const owner = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!owner) return undefined;
+        const embedded = await loadDependencies({ ...owner, actions: [action] }, get().encounter.definitions);
+        if (embedded.length > 0) get().embedDefinitions(embedded);
+        if (action.kind === "summon") {
+          const loop = findSummonCycle([...get().encounter.definitions, { ...owner, actions: [...owner.actions, action] }], definitionId);
+          if (loop) {
+            set({ definitionStatus: `That summon would loop back on itself (${loop.join(" → ")})` });
+            return undefined;
+          }
+        }
+        const id = get().addActionV2(definitionId, action);
+        if (action.kind === "summon" && action.resourceCost) {
+          // A limited summon spends a pool; seed it on the definition and on tokens already on the map.
+          const { resourceId, amount } = action.resourceCost;
+          const encounter = get().encounter;
+          commitEncounter({
+            ...encounter,
+            definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+              ? { ...candidate, resources: { ...(candidate.resources ?? {}), [resourceId]: Math.max(candidate.resources?.[resourceId] ?? 0, amount) } }
+              : candidate),
+            combatants: encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...(combatant.resources ?? {}), [resourceId]: Math.max(combatant.resources?.[resourceId] ?? 0, amount) } }
+              : combatant)
+          });
+        }
+        if (action.kind === "transform") {
+          // Each form needs the same action, or a creature turned into a wolf could never turn back.
+          const copy = { ...action, id };
+          const encounter = get().encounter;
+          const formIds = new Set(action.forms.map((form) => form.definitionId));
+          commitEncounter({
+            ...encounter,
+            definitions: encounter.definitions.map((candidate) => formIds.has(candidate.id) && !candidate.actions.some((existing) => existing.id === id)
+              ? { ...candidate, actions: [...candidate.actions, copy] }
+              : candidate)
+          });
+        }
+        return id;
       },
       embedDefinitions: (definitions) => {
         const encounter = get().encounter;

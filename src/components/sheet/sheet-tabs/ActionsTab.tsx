@@ -21,6 +21,7 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
 import { BuilderForm } from "../builders/BuilderForm";
+import { SummonEditor, TransformEditor } from "../builders/SpawnEditors";
 import {
   actionFieldSchema,
   actionFromEffectDraft,
@@ -81,6 +82,9 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const updateSpell = useEncounterStore((s) => s.updateSpell);
   const updateAction = useEncounterStore((s) => s.updateAction);
   const updateFeature = useEncounterStore((s) => s.updateFeature);
+  const addSpawnAction = useEncounterStore((s) => s.addSpawnAction);
+  const sceneDefinitions = useEncounterStore((s) => s.encounter.definitions);
+  const [spawnEditor, setSpawnEditor] = useState<"summon" | "transform" | null>(null);
   const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const addMultiattack = useEncounterStore((s) => s.addMultiattack);
@@ -404,6 +408,23 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             ) : null}
           </div>
         ))}
+
+        <div className={styles.riderRow}>
+          <button type="button" className={styles.riderAdd} onClick={() => setSpawnEditor(spawnEditor === "summon" ? null : "summon")}>+ Summon</button>
+          <button type="button" className={styles.riderAdd} onClick={() => setSpawnEditor(spawnEditor === "transform" ? null : "transform")}>+ Shapechange</button>
+        </div>
+        {spawnEditor === "summon" ? (
+          <SummonEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+          />
+        ) : null}
+        {spawnEditor === "transform" ? (
+          <TransformEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+          />
+        ) : null}
 
         {multiattacks.map((action) => row(
           action.id, action.name, describeAction(action, definition), "full",

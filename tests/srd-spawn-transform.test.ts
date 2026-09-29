@@ -191,3 +191,19 @@ describe("in a fight", () => {
     }
   });
 });
+
+describe("normalizing keeps the structured records", () => {
+  it("summon and transform actions, and hold / swallow riders, survive an import round-trip", async () => {
+    const { normalizeActionDefinition } = await import("@/engine");
+    const summon = normalizeActionDefinition(JSON.parse(JSON.stringify(of("hezrou").traits!.flatMap((trait) => trait.grantedActions ?? [])[0])));
+    expect(summon.kind).toBe("summon");
+    expect((summon as SummonActionDefinition).options).toHaveLength(2);
+    const transform = normalizeActionDefinition(JSON.parse(JSON.stringify(of("werewolf").actions.find((action) => action.kind === "transform"))));
+    expect(transform.kind).toBe("transform");
+
+    const croc = normalizeActionDefinition(JSON.parse(JSON.stringify(of("crocodile").actions.find((action) => action.kind === "attack" && action.riders?.some((rider) => rider.kind === "hold")))));
+    expect(croc.kind === "attack" && croc.riders?.some((rider) => rider.kind === "hold")).toBe(true);
+    const bite = normalizeActionDefinition(JSON.parse(JSON.stringify(of("purple-worm").actions.find((action) => action.kind === "attack" && action.riders?.some((rider) => rider.kind === "swallow")))));
+    expect(bite.kind === "attack" && bite.riders?.some((rider) => rider.kind === "swallow")).toBe(true);
+  });
+});
