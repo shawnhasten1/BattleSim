@@ -387,6 +387,19 @@ export function applyTimedFeatureEffects(state: EngineState, combatantId: Id, ti
   }
 }
 
+/**
+ * The one turn-order comparator: initiative, then Dex modifier, then id. `rollInitiative`, the store's `advanceTurn`
+ * re-sort and `insertIntoTurnOrder`'s splice position all use this — they used to differ (the store's inline sort
+ * dropped the Dex tiebreak), which could reorder a tied pair between Step and Auto Run.
+ */
+export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState, b: CombatantState): number {
+  const aDefinition = getDefinition(snapshot, a);
+  const bDefinition = getDefinition(snapshot, b);
+  return (b.initiative ?? 0) - (a.initiative ?? 0)
+    || abilityModifier(bDefinition.abilities.dex) - abilityModifier(aDefinition.abilities.dex)
+    || a.id.localeCompare(b.id);
+}
+
 export function rollInitiative(state: EngineState): void {
   const rolls = state.snapshot.combatants.map((combatant) => {
     const definition = getDefinition(state.snapshot, combatant);
@@ -396,13 +409,7 @@ export function rollInitiative(state: EngineState): void {
     return { combatant, definition, roll };
   });
 
-  state.snapshot.combatants.sort((a, b) => {
-    const aDefinition = getDefinition(state.snapshot, a);
-    const bDefinition = getDefinition(state.snapshot, b);
-    return (b.initiative ?? 0) - (a.initiative ?? 0)
-      || abilityModifier(bDefinition.abilities.dex) - abilityModifier(aDefinition.abilities.dex)
-      || a.id.localeCompare(b.id);
-  });
+  state.snapshot.combatants.sort((a, b) => compareInitiative(state.snapshot, a, b));
 
   state.log.push(event(state, "InitiativeRolled", "Initiative order established", {
     rolls: rolls.map(({ combatant, roll }) => ({
@@ -2540,6 +2547,47 @@ export function admitReinforcements(state: EngineState): CombatantState[] {
     }
   }
   return arrived;
+}
+
+/**
+ * Adds `newCombatants` to the fight mid-encounter (a summon, a split) — rolls one shared initiative for the whole
+ * batch (5e: conjured creatures act as a group on one roll) and splices them into their correctly sorted turn-order
+ * position, which either lands later this round or, if it's at or before whoever is currently acting, next round:
+ *
+ * - If the splice position is at or before `state.snapshot.turnIndex` (the currently-acting combatant), the group
+ *   still goes in there — so a later re-sort (Step re-sorts on every call) finds them in the right place — but
+ *   `turnIndex` is bumped by the inserted count so "whoever's turn it is" doesn't silently change mid-turn, and the
+ *   group is skipped this pass (it acts starting next round, same as arriving after its own count already passed).
+ * - Existing `ConditionInstance.expiresAt.turnIndex` values (an array position captured when the condition was
+ *   applied) are remapped so the splice doesn't move an unrelated condition's expiry to the wrong turn.
+ *
+ * Mechanical only — logs nothing; the caller (a distinct `Summoned`/`CombatantSplit`-style event per mechanic)
+ * knows what to say. Safe to call mid-turn (a caster's own summon action) or between turns.
+ */
+export function insertIntoTurnOrder(state: EngineState, newCombatants: CombatantState[]): { initiative: number; insertIndex: number } {
+  const dex = abilityModifier(getDefinition(state.snapshot, newCombatants[0]!).abilities.dex);
+  const roll = rollDice(withBonus("1d20", dex), state.rng);
+  for (const combatant of newCombatants) combatant.initiative = roll.total;
+  // Tie-broken among themselves by the shared comparator (falls back to id) so the batch's internal order is
+  // deterministic and seed-reproducible.
+  const batch = [...newCombatants].sort((a, b) => compareInitiative(state.snapshot, a, b));
+
+  const combatants = state.snapshot.combatants;
+  let insertIndex = combatants.findIndex((existing) => compareInitiative(state.snapshot, batch[0]!, existing) < 0);
+  if (insertIndex === -1) insertIndex = combatants.length;
+
+  combatants.splice(insertIndex, 0, ...batch);
+  if (insertIndex <= state.snapshot.turnIndex) {
+    state.snapshot.turnIndex += batch.length;
+  }
+  for (const existing of combatants) {
+    for (const condition of existing.conditions ?? []) {
+      if (condition.expiresAt && condition.expiresAt.turnIndex >= insertIndex) {
+        condition.expiresAt = { ...condition.expiresAt, turnIndex: condition.expiresAt.turnIndex + batch.length };
+      }
+    }
+  }
+  return { initiative: roll.total, insertIndex };
 }
 
 export function firstUsableAction(definition: CreatureDefinition, preferred: "melee" | "ranged" | "any" = "any"): ActionDefinition | undefined {

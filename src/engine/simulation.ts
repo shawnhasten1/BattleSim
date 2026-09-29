@@ -236,7 +236,10 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       admitReinforcements(state);
       tickZones(state);
     }
-    for (let index = nextIndex; index < state.snapshot.combatants.length; index += 1) {
+    // The update clause re-reads `state.snapshot.turnIndex` (rather than a plain `index += 1`) so a mid-turn
+    // `insertIntoTurnOrder` (a summon, a split) that bumps it is picked up: every `continue`/fall-through jumps
+    // through this clause, and when nothing was inserted `turnIndex` still just equals `index`, so it's a no-op.
+    for (let index = nextIndex; index < state.snapshot.combatants.length; index = state.snapshot.turnIndex + 1) {
       state.snapshot.turnIndex = index;
       const actor = state.snapshot.combatants[index];
       if (!actor) {
@@ -2828,7 +2831,7 @@ function averageDamage(
   /** The target's defenses: each component's average is scaled by how much of that damage type gets through. */
   targetAdjustments?: CreatureDefinition["damageAdjustments"]
 ): number {
-  if (action.kind === "healing" || action.kind === "reposition" || action.kind === "buff" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility") {
+  if (action.kind === "healing" || action.kind === "reposition" || action.kind === "buff" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility" || action.kind === "summon" || action.kind === "transform") {
     return 0;
   }
   if (action.kind === "multiattack") {

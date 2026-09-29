@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   activeFactions,
   admitReinforcements,
+  compareInitiative,
   createEngineState,
   applyCondition,
   defaultConditionModifiers,
@@ -802,7 +803,7 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!hadInitiative) {
           rollInitiative(engine);
         } else {
-          engine.snapshot.combatants.sort((a, b) => (b.initiative ?? 0) - (a.initiative ?? 0) || a.id.localeCompare(b.id));
+          engine.snapshot.combatants.sort((a, b) => compareInitiative(engine.snapshot, a, b));
           const sortedCurrentIndex = engine.snapshot.round > 0
             ? engine.snapshot.combatants.findIndex((combatant) => combatant.id === previousActorId)
             : -1;

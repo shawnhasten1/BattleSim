@@ -500,6 +500,16 @@ export type FeatureEffect =
     resourceId: string;
     against?: SaveScope;
   }
+  | {
+    /**
+     * Ochre Jelly / Black Pudding: taking damage of one of `damageTypes` splits off a copy of itself next to it, at
+     * half its (post-damage) current HP each, as long as that would leave at least `minHp`. The copy shares this
+     * creature's definition and acts on its own initiative, right after the original this round.
+     */
+    kind: "split-on-damage";
+    triggerDamageTypes: DamageType[];
+    minHp: number;
+  }
   | ({
     kind: "swarm-damage";
     fullHpDamage: DamageComponent[];
@@ -1157,6 +1167,68 @@ export interface MultiattackActionDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/** One creature this summon can produce. */
+export interface SummonOption {
+  id: Id;
+  /** The `CreatureDefinition` id to spawn — an SRD monster or any of the caller's own saved actors. */
+  definitionId: Id;
+  label: string;
+  /** A flat count, or a dice expression rolled once per use ("2d4 dretches"). */
+  count: number | { dice: string };
+  /** Out of 100 — this option is available at all only if a d100 roll comes in at or under it (a balor's 50%). Omit for "always available". */
+  chance?: number;
+}
+
+/**
+ * Conjure Animals / Summon Demon / Animate Dead — produces new combatants allied with the caster. `options` are
+ * offered in order; `choice: "random"` (an SRD "the demon chooses") picks uniformly among the ones whose `chance`
+ * roll succeeds (falling back to the surest option if every roll fails), `"pick"` leaves it to the caller (the AI
+ * takes the option with the best expected value; a human player is offered the list).
+ */
+export interface SummonActionDefinition {
+  kind: "summon";
+  id: Id;
+  name: string;
+  actionType: ActionType;
+  range: number;
+  options: SummonOption[];
+  choice: "pick" | "random";
+  /** Omit for "lasts the rest of the encounter" (a permanent ally, e.g. Animate Dead). 1 minute = 10 rounds for spell-style summons. */
+  durationRounds?: number;
+  /** Ends when the caster's concentration ends, in addition to any `durationRounds`. */
+  concentration?: boolean;
+  /** How many summoned-of-summoned generations deep this can go before a spawned creature's own summon actions are refused. Default 2. */
+  maxGeneration?: number;
+  resourceCost?: ResourceCost;
+  usage?: ActionUsage;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
+/** One shape a `transform` action can put the bearer into. */
+export interface TransformForm {
+  id: Id;
+  label: string;
+  /** The `CreatureDefinition` id this form's stats/actions come from (a `hidden`, `formOf`-tagged actor). */
+  definitionId: Id;
+}
+
+/**
+ * Shapechanger (werewolf, vampire) / Change Shape — swaps which definition `getDefinition` resolves for this
+ * combatant. HP, conditions and position stay on the combatant; only AC/speed/actions/traits/type change.
+ */
+export interface TransformActionDefinition {
+  kind: "transform";
+  id: Id;
+  name: string;
+  actionType: ActionType;
+  forms: TransformForm[];
+  /** Drop back to the creature's own (non-`hidden`) base definition instead of one of `forms`. */
+  canRevert?: boolean;
+  /** Forced back to its base form if this transform's HP-holder dies in a non-base form (lycanthropes/vampires revert on death). */
+  revertOnDeath?: boolean;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
 export type ActionDefinition =
   | AttackActionDefinition
   | SaveActionDefinition
@@ -1167,7 +1239,9 @@ export type ActionDefinition =
   | UnsupportedActionDefinition
   | ActivateFeatureActionDefinition
   | MultiattackActionDefinition
-  | UtilityActionDefinition;
+  | UtilityActionDefinition
+  | SummonActionDefinition
+  | TransformActionDefinition;
 
 /** Limited-use pool backing a weapon's spell-like `onHit` riders. */
 export interface WeaponCharges {
@@ -1521,6 +1595,18 @@ export interface CombatantState {
   recentDamageTypes?: DamageType[];
   /** Down at 0 HP but not dying: a regenerating monster (a troll) that stands up at its next turn unless it's stopped. */
   downedRegen?: boolean;
+  /** Set on a creature that was summoned into the fight, not placed by the DM. */
+  summon?: {
+    summonerId: Id;
+    /** How many summons deep this is (the summoner's own `summon.generation`, or 0 for a DM-placed summoner). A summoned creature that itself summons is capped. */
+    generation: number;
+    /** Ends (goes `"fled"`) at the start of this round, if set. */
+    expiresRound?: number;
+    /** Ends when this combatant's concentration source loses concentration (set for a concentration summon). */
+    concentrationSourceId?: Id;
+  };
+  /** Currently wearing another of its own definitions (a werewolf in Hybrid Form). Resolved by `getDefinition`. */
+  activeForm?: { definitionId: Id };
   conditions?: ConditionInstance[];
   resources?: Record<string, number>;
   tokenVisuals?: TokenVisuals;
@@ -1621,6 +1707,10 @@ export interface CombatLogEvent {
     | "OpportunityAttackTriggered"
     | "ReactionTriggered"
     | "ReinforcementArrived"
+    | "CombatantSpawned"
+    | "CombatantSplit"
+    | "SummonExpired"
+    | "Transformed"
     | "SpellCountered"
     | "UtilityActionResolved"
     | "ActionEconomyRefreshed"
@@ -2040,7 +2130,23 @@ export const encounterSnapshotSchema = z.object({
       arrivesRound: z.number().int().min(1).optional(),
       tacticsProfile: tacticsProfileSchema,
       resourceStance: resourceStanceSchema,
-      tags: z.array(actorTagSchema).optional()
+      tags: z.array(actorTagSchema).optional(),
+      savedAgainst: z.array(z.string()).optional(),
+      containedBy: z.string().optional(),
+      containment: z.object({
+        damage: z.array(z.any()).optional(),
+        regurgitate: z.object({ damage: z.number(), dc: z.number() }).optional()
+      }).optional(),
+      insideDamage: z.number().optional(),
+      recentDamageTypes: z.array(z.any()).optional(),
+      downedRegen: z.boolean().optional(),
+      summon: z.object({
+        summonerId: z.string(),
+        generation: z.number().int().min(0),
+        expiresRound: z.number().int().optional(),
+        concentrationSourceId: z.string().optional()
+      }).optional(),
+      activeForm: z.object({ definitionId: z.string() }).optional()
     })
   )
 });
