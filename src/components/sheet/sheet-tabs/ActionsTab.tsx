@@ -64,6 +64,7 @@ function readMode(): "simple" | "advanced" {
 
 function featureDetail(feature: FeatureDefinition): string {
   const granted = feature.grantedActions ?? [];
+  if (feature.optional && granted.length) return `optional rule · adds ${granted.map((a) => a.name).join(", ")} (${feature.enabled ? "on" : "off"})`;
   const activate = granted.find((a) => a.kind === "activate-feature");
   if (activate) return `${activate.actionType} · activates ${feature.name}`;
   const utils = granted.filter((a) => a.kind === "utility");
@@ -118,6 +119,9 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const reactions = definition.reactions ?? [];
   const multiattacks = nativeActions.filter((a) => a.kind === "multiattack");
   const plainActions = nativeActions.filter((a) => a.kind !== "multiattack");
+  const optionalGrants = features
+    .filter((feature) => feature.optional)
+    .flatMap((feature) => (feature.grantedActions ?? []).map((action) => ({ feature, action })));
 
   const attackChoices = useMemo(
     () => getExecutableActions(definition).filter((a) => a.kind === "attack" && a.actionType === "action"),
@@ -529,7 +533,9 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
       {[["Actions", plainActions, "action"], ["Bonus actions", bonusActions, "bonusAction"], ["Reactions", reactions, "reaction"]].map(([title, list, itemType]) => {
         const actions = list as ActionDefinition[];
-        if (actions.length === 0) return null;
+        // An optional rule's action (a demon's Summon Demon) sits here too, switched off or on, so it is where the DM looks for it.
+        const granted = optionalGrants.filter(({ action }) => (itemType === "bonusAction" ? action.actionType === "bonus" : itemType === "reaction" ? action.actionType === "reaction" : action.actionType === "action"));
+        if (actions.length === 0 && granted.length === 0) return null;
         return (
           <div key={title as string} className={styles.group}>
             <h4>{title as string}</h4>
@@ -537,6 +543,24 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
               action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
               () => editActionRecord(action), () => removeDefinitionItem(definition.id, itemType as "action", action.id),
               edit?.kind === "action" && edit.id === action.id, { kind: "action", id: action.id }
+            ))}
+            {granted.map(({ feature, action }) => (
+              <div key={`${feature.id}:${action.id}`} className={styles.row} style={{ opacity: feature.enabled ? 1 : 0.6 }}>
+                <div className={styles.rowMain}>
+                  <strong>{action.name}</strong>
+                  <span>
+                    {describeAction(action, definition)} · optional rule ({feature.name}) — {feature.enabled ? "ON, the AI can use it" : "OFF, the AI ignores it"}
+                  </span>
+                  <AutomationBadge value={"automationSupport" in action ? action.automationSupport : "full"} />
+                </div>
+                <button
+                  type="button" className={styles.rowBtn} style={{ width: "auto", padding: "0 8px" }}
+                  aria-label={`${feature.enabled ? "Turn off" : "Turn on"} ${action.name}`}
+                  onClick={() => updateFeature(definition.id, feature.id, { enabled: feature.enabled ? undefined : true })}
+                >
+                  {feature.enabled ? "Turn off" : "Turn on"}
+                </button>
+              </div>
             ))}
           </div>
         );
