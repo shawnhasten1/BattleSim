@@ -170,7 +170,9 @@ export function createEngineState(snapshot: EncounterSnapshot): EngineState {
 }
 
 export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantState): CreatureDefinition {
-  const definition = snapshot.definitions.find((candidate) => candidate.id === combatant.definitionId);
+  // A shapechanger in another form resolves to that form's definition, so AC / speed / actions / traits swap
+  // everywhere at once. HP, position and conditions live on the combatant and are untouched.
+  const definition = snapshot.definitions.find((candidate) => candidate.id === (combatant.activeForm?.definitionId ?? combatant.definitionId));
   if (!definition) {
     throw new Error(`Missing creature definition for combatant ${combatant.id}`);
   }
@@ -2747,6 +2749,46 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
   return created;
 }
 
+/** Pass as the `formId` of `resolveTransformAction` to return to the creature's own (non-`hidden`) definition. */
+export const BASE_FORM_ID = "__base__";
+
+/**
+ * Shapechanger / Change Shape: puts the actor into one of the action's `forms` (or back to its true form with
+ * `BASE_FORM_ID`). Every form's definition must carry its own copy of the `transform` action — the actor's
+ * actions come from whichever form it is in, so a Wolf that couldn't transform would be stuck as a wolf.
+ * HP, position, conditions and resources stay on the combatant; only what `getDefinition` returns changes.
+ */
+export function resolveTransformAction(state: EngineState, actorId: Id, actionId: Id, formId: Id): void {
+  const actor = findCombatant(state.snapshot, actorId);
+  const action = findActionDefinition(getDefinition(state.snapshot, actor), actionId);
+  if (!action || action.kind !== "transform") {
+    throw new Error(`Transform action ${actionId} is not available to ${actor.displayName}`);
+  }
+  const target = formId === BASE_FORM_ID ? undefined : action.forms.find((form) => form.id === formId);
+  if (formId !== BASE_FORM_ID && !target) {
+    throw new Error(`${action.name} has no form "${formId}"`);
+  }
+  if (target && !state.snapshot.definitions.some((definition) => definition.id === target.definitionId)) {
+    throw new Error(`${action.name}'s ${target.label} form ("${target.definitionId}") isn't embedded in this encounter`);
+  }
+  if (!target && action.canRevert === false) {
+    throw new Error(`${actor.displayName} can't return to its true form with ${action.name}`);
+  }
+  validateAndSpendAction(actor, action);
+  declareAction(state, actor, action);
+  actor.activeForm = target ? { definitionId: target.definitionId } : undefined;
+  state.log.push(event(state, "Transformed", `${actor.displayName} ${target ? `becomes ${target.label}` : "returns to its true form"}`, {
+    combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null
+  }));
+}
+
+/** A shapechanger that dies "reverts to its true form" — only cosmetic, but the sheet and reports should show the real creature. */
+function revertFormOnDeath(state: EngineState, target: CombatantState): void {
+  if (!target.activeForm) return;
+  const reverts = getExecutableActions(getDefinition(state.snapshot, target)).some((action) => action.kind === "transform" && action.revertOnDeath);
+  if (reverts) target.activeForm = undefined;
+}
+
 /** Every live combatant `summonerId` has out, optionally only the ones tied to its current concentration. */
 function summonsOf(state: EngineState, summonerId: Id, onlyConcentration: boolean): CombatantState[] {
   return state.snapshot.combatants.filter((combatant) =>
@@ -3232,6 +3274,7 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
     // (and must not re-fire the death effect below).
     return;
   }
+  revertFormOnDeath(state, target);
   target.state = "defeated";
   target.downedRegen = undefined;
   releaseHoldsBy(state, target.id);

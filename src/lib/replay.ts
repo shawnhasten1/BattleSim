@@ -198,6 +198,15 @@ function applyEvent(
       return;
     }
 
+    case "Transformed": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant) {
+        const form = data.activeForm as { definitionId: string } | null | undefined;
+        combatant.activeForm = form ? { definitionId: form.definitionId } : undefined;
+      }
+      return;
+    }
+
     case "SummonExpired": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant) combatant.state = "fled";

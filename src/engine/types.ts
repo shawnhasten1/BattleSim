@@ -1462,6 +1462,11 @@ export interface CreatureDefinition {
   hidden?: boolean;
   /** For a `hidden` form actor, the base actor it belongs to. */
   formOf?: Id;
+  /**
+   * A shapechanger that starts the fight already transformed (a werewolf in Hybrid Form): the `definitionId` of
+   * the form a new token of this creature takes on when it's placed. Absent: it starts in its own (base) form.
+   */
+  defaultActiveForm?: Id;
   resources?: Record<string, number>;
   /** Which ActorFolder this saved actor is filed under. Undefined/null = unfiled (root). */
   folderId?: Id | null;

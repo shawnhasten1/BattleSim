@@ -2175,6 +2175,7 @@ export const useEncounterStore = create<EncounterStore>()(
           resources: defaultResourcesForDefinition(definition),
           state: "active" as const,
           tacticsProfile: defaultTacticsForDefinition(definition),
+          ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
           resourceStance: definition.defaultResourceStance ?? ("balanced" as const)
         };
         commitEncounter({
@@ -2215,6 +2216,7 @@ export const useEncounterStore = create<EncounterStore>()(
             resources: defaultResourcesForDefinition(definition),
             state: "active",
             tacticsProfile: defaultTacticsForDefinition(definition),
+            ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
             resourceStance: definition.defaultResourceStance ?? "balanced"
           });
         }
