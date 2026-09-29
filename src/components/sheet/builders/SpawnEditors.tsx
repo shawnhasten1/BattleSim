@@ -35,7 +35,7 @@ export function ActorPicker({
   return (
     <div>
       <input
-        type="search" aria-label={label} placeholder={`${label}…`} value={query}
+        className={styles.pickerSearch} type="search" aria-label={label} placeholder={`${label}…`} value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className={styles.chips}>
@@ -111,7 +111,7 @@ export function SummonEditor({
             How many
             <input aria-label={`Count for ${option.label}`} value={drafts[option.id] ?? countText(option)} placeholder="1 or 2d4" onChange={(e) => setCount(index, e.target.value)} />
           </label>
-          <button type="button" className={styles.riderRemove} aria-label={`Remove ${option.label}`} onClick={() => setOptions((rows) => rows.filter((_, i) => i !== index))}>×</button>
+          <button type="button" className={styles.riderRemove} style={{ flex: "0 0 auto", minWidth: 0 }} aria-label={`Remove ${option.label}`} onClick={() => setOptions((rows) => rows.filter((_, i) => i !== index))}>×</button>
         </div>
       ))}
       {options.length > 1 ? (
@@ -132,16 +132,16 @@ export function SummonEditor({
           Rounds they stay
           <input type="number" min={1} placeholder="whole fight" aria-label="Duration" value={duration} onChange={(e) => setDuration(e.target.value === "" ? "" : Number(e.target.value))} />
         </label>
-        <label className={styles.fieldInlineLabel}>
+        <label className={styles.checkLabel}>
           <input type="checkbox" checked={concentration} onChange={(e) => setConcentration(e.target.checked)} /> concentration
         </label>
-        <label className={styles.fieldInlineLabel}>
+        <label className={styles.checkLabel}>
           <input type="checkbox" checked={usesOnce} onChange={(e) => setUsesOnce(e.target.checked)} /> once per encounter
         </label>
       </div>
       <div className={styles.riderRow}>
-        <button type="button" onClick={save} disabled={options.length === 0}>Add summon</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={options.length === 0}>Add summon</button>
+        <button type="button" className={styles.spawnBtn} onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -172,15 +172,15 @@ export function TransformEditor({
             Form
             <input aria-label={`Label for ${form.label}`} value={form.label} onChange={(e) => setForms((rows) => rows.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))} />
           </label>
-          <button type="button" className={styles.riderRemove} aria-label={`Remove ${form.label}`} onClick={() => setForms((rows) => rows.filter((_, i) => i !== index))}>×</button>
+          <button type="button" className={styles.riderRemove} style={{ flex: "0 0 auto", minWidth: 0 }} aria-label={`Remove ${form.label}`} onClick={() => setForms((rows) => rows.filter((_, i) => i !== index))}>×</button>
         </div>
       ))}
-      <label className={styles.fieldInlineLabel}>
+      <label className={styles.checkLabel}>
         <input type="checkbox" checked={revertOnDeath} onChange={(e) => setRevertOnDeath(e.target.checked)} /> returns to its true form when it dies
       </label>
       <div className={styles.riderRow}>
-        <button type="button" onClick={save} disabled={forms.length === 0}>Add shapechange</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" className={styles.spawnBtnPrimary} onClick={save} disabled={forms.length === 0}>Add shapechange</button>
+        <button type="button" className={styles.spawnBtn} onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

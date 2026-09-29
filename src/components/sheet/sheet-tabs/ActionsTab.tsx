@@ -321,6 +321,8 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                 <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
                 <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
+                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditor("summon"); }}>Summon</button>
+                <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditor("transform"); }}>Shapechange</button>
               </div>
             ) : null}
 
@@ -349,6 +351,20 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           </div>
         </div>
       ) : null}
+        {spawnEditor === "summon" ? (
+          <SummonEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+          />
+        ) : null}
+        {spawnEditor === "transform" ? (
+          <TransformEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
+          />
+        ) : null}
+        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
+
 
       {edit?.kind === "new" ? builderFor(edit) : null}
 
@@ -413,24 +429,6 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             ) : null}
           </div>
         ))}
-
-        <div className={styles.riderRow}>
-          <button type="button" className={styles.riderAdd} onClick={() => setSpawnEditor(spawnEditor === "summon" ? null : "summon")}>+ Summon</button>
-          <button type="button" className={styles.riderAdd} onClick={() => setSpawnEditor(spawnEditor === "transform" ? null : "transform")}>+ Shapechange</button>
-        </div>
-        {spawnEditor === "summon" ? (
-          <SummonEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
-          />
-        ) : null}
-        {spawnEditor === "transform" ? (
-          <TransformEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => setSpawnEditor(null)}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
-          />
-        ) : null}
-        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
 
         {multiattacks.map((action) => row(
           action.id, action.name, describeAction(action, definition), "full",
