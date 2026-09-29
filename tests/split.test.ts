@@ -81,6 +81,14 @@ describe("split-on-damage", () => {
     expect(state.snapshot.combatants.length).toBeGreaterThan(2);
   });
 
+  it("splits even when it's immune to the damage (it's being subjected to it)", () => {
+    const immune = jelly({ maxHp: 40, damageAdjustments: [{ type: "immunity", damageType: "slashing" }] });
+    const state = createEngineState(scene(immune, striker("20", "slashing"), "f"));
+    strike(state);
+    expect(state.snapshot.combatants).toHaveLength(3);
+    expect(get(state, "target").currentHp).toBe(20); // untouched 40, halved
+  });
+
   it("a fight with a splitting jelly runs to a finish", () => {
     const result = runAutomatedEncounter(scene(jelly(), striker("8", "slashing", { maxHp: 400 }), "fight"), 20);
     expect(result.outcome.completed).toBe(true);

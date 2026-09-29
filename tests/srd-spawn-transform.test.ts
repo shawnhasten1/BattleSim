@@ -11,6 +11,7 @@ import { useEncounterStore } from "@/store/encounter-store";
 const chunkDir = fileURLToPath(new URL("../src/data/srd/monsters/generated/chunks/", import.meta.url));
 const all = readdirSync(chunkDir).flatMap((file) => (JSON.parse(readFileSync(`${chunkDir}${file}`, "utf8")) as { definitions: CreatureDefinition[] }).definitions);
 const of = (id: string) => all.find((monster) => monster.id === `srd:monster:${id}`)!;
+const pristineStore = useEncounterStore.getState();
 const store = () => useEncounterStore.getState();
 const names = (definition: CreatureDefinition) => getExecutableActions(definition).map((action) => action.name);
 
@@ -206,4 +207,32 @@ describe("normalizing keeps the structured records", () => {
     const bite = normalizeActionDefinition(JSON.parse(JSON.stringify(of("purple-worm").actions.find((action) => action.kind === "attack" && action.riders?.some((rider) => rider.kind === "swallow")))));
     expect(bite.kind === "attack" && bite.riders?.some((rider) => rider.kind === "swallow")).toBe(true);
   });
+});
+
+describe("Auto Run and Step agree on spawned combatants", () => {
+  it("a werewolf, an ochre jelly and a knight finish in both modes with no lost turns", async () => {
+    const pristine = pristineStore;
+    useEncounterStore.setState(pristine, true);
+    const s = () => useEncounterStore.getState();
+    s().updateGrid({ width: 20, height: 12 });
+    await s().addSrdMonster("srd:monster:knight", "party", { x: 2, y: 5 }, 2);
+    await s().addSrdMonster("srd:monster:werewolf", "enemy", { x: 12, y: 3 });
+    await s().addSrdMonster("srd:monster:ochre-jelly", "enemy", { x: 12, y: 8 });
+    const start = structuredClone(s().encounter);
+    const auto = runAutomatedEncounter(start, 40);
+    useEncounterStore.setState({ ...pristine, encounter: structuredClone(start), log: [], outcome: null, replayBase: null, replayIndex: null }, true);
+    s().rollInitiativeNow();
+    let steps = 0;
+    while (s().outcome === null && steps < 1500) {
+      s().advanceTurn();
+      steps += 1;
+    }
+    for (const [mode, log] of [["auto", auto.log], ["step", s().log]] as const) {
+      expect(log.filter((entry) => entry.type === "AutomationWarning" && /failed/.test(entry.message)), mode).toEqual([]);
+    }
+    expect(s().outcome, `still going after ${steps} steps`).not.toBeNull();
+    // The jelly splits when a knight's longsword slashes it, in both modes.
+    expect(auto.log.some((entry) => entry.type === "CombatantSplit")).toBe(true);
+    expect(s().log.some((entry) => entry.type === "CombatantSplit")).toBe(true);
+  }, 120_000);
 });

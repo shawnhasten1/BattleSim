@@ -2460,9 +2460,18 @@ function runContainmentAtTurnStart(state: EngineState, holder: CombatantState): 
 }
 
 /** Ochre Jelly / Black Pudding: taking damage of one of its trigger types splits it, if it's still big enough. */
+const splitCapableCache = new WeakMap<CreatureDefinition, boolean>();
+
 function checkSplit(state: EngineState, target: CombatantState, damageTypes: DamageType[]): void {
   if (target.state !== "active" || damageTypes.length === 0) return;
   const definition = getDefinition(state.snapshot, target);
+  // Runs on every instance of damage, so bail cheaply for the 99% of creatures that can't split.
+  let capable = splitCapableCache.get(definition);
+  if (capable === undefined) {
+    capable = [...(definition.traits ?? []), ...(definition.features ?? [])].some((feature) => feature.effects?.some((effect) => effect.kind === "split-on-damage"));
+    splitCapableCache.set(definition, capable);
+  }
+  if (!capable) return;
   for (const feature of featureSources(definition, target)) {
     const effect = (feature.effects ?? []).find((candidate): candidate is Extract<FeatureEffect, { kind: "split-on-damage" }> =>
       candidate.kind === "split-on-damage" && candidate.triggerDamageTypes.some((type) => damageTypes.includes(type)));
@@ -3088,8 +3097,9 @@ function applyDamageEntries(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
     checkRegurgitation(state, target, sourceId, totalApplied);
-    checkSplit(state, target, hitDamageTypes);
   }
+  // Split cares about being subjected to the damage, not about it getting through: a pudding is immune to slashing.
+  checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, hitDamageTypes, entries.some((entry) => entry.critical)));
   return totalApplied;
 }
@@ -3188,8 +3198,8 @@ function applyRolledAreaDamage(
   const areaHitDamageTypes = components.filter((c) => c.finalAmount > 0).map((c) => c.damageType);
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
-    checkSplit(state, target, areaHitDamageTypes);
   }
+  checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, areaHitDamageTypes, false));
   return totalApplied;
 }
