@@ -83,6 +83,13 @@ describe("addSpawnAction", () => {
     expect(store().encounter.definitions.find((definition) => definition.id === "def-a")!.actions.some((action) => action.kind === "summon")).toBe(false);
   });
 
+  it("still adds a summon to a creature whose own variant already summons its kind", async () => {
+    const self = { ...fighter, id: "def-self", name: "Self", actions: [{ ...summon("def-self"), id: "old" }] };
+    useEncounterStore.setState({ encounter: { ...structuredClone(sampleEncounter), definitions: [self] } });
+    const id = await store().addSpawnAction("def-self", summon("srd:monster:goblin"));
+    expect(id).toBeTruthy();
+  });
+
   it("gives every form a copy of the transform so it can always change again", async () => {
     useEncounterStore.setState({ encounter: structuredClone(sampleEncounter) });
     const id = await store().addSpawnAction("def-fighter", {

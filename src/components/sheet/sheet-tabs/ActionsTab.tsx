@@ -83,6 +83,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const updateAction = useEncounterStore((s) => s.updateAction);
   const updateFeature = useEncounterStore((s) => s.updateFeature);
   const addSpawnAction = useEncounterStore((s) => s.addSpawnAction);
+  const definitionStatus = useEncounterStore((s) => s.definitionStatus);
   const sceneDefinitions = useEncounterStore((s) => s.encounter.definitions);
   const [spawnEditor, setSpawnEditor] = useState<"summon" | "transform" | null>(null);
   const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
@@ -425,6 +426,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             onSave={async (action) => { if (await addSpawnAction(definition.id, action)) setSpawnEditor(null); }}
           />
         ) : null}
+        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
 
         {multiattacks.map((action) => row(
           action.id, action.name, describeAction(action, definition), "full",

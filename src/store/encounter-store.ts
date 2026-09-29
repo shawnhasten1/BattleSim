@@ -1714,8 +1714,11 @@ export const useEncounterStore = create<EncounterStore>()(
         const embedded = await loadDependencies({ ...owner, actions: [action] }, get().encounter.definitions);
         if (embedded.length > 0) get().embedDefinitions(embedded);
         if (action.kind === "summon") {
-          const loop = findSummonCycle([...get().encounter.definitions, { ...owner, actions: [...owner.actions, action] }], definitionId);
-          if (loop) {
+          // Only a loop this action creates counts: a creature whose own variant already summons its kind (a hezrou
+          // calling another hezrou) is bounded by `maxGeneration` and shouldn't block adding an unrelated summon.
+          const others = get().encounter.definitions;
+          const loop = findSummonCycle([...others, { ...owner, actions: [...owner.actions, action] }], definitionId);
+          if (loop && !findSummonCycle(others, definitionId)) {
             set({ definitionStatus: `That summon would loop back on itself (${loop.join(" → ")})` });
             return undefined;
           }
