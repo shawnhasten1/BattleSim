@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CreatureDefinition, SummonActionDefinition, SummonOption, TransformActionDefinition, TransformForm } from "@/engine";
 import { SRD_MONSTER_INDEX } from "@/data/srd/monsters";
 import styles from "./builders.module.css";
@@ -49,11 +49,21 @@ export function ActorPicker({
   );
 }
 
+/** Brings a freshly opened editor fully into view — it opens under a row that may sit near the bottom of the sheet. */
+function useRevealOnOpen() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, []);
+  return ref;
+}
+
 const idOf = (actor: PickableActor) => actor.id.replace(/^srd:monster:/, "");
 
 export function SummonEditor({
   ownerId, sceneActors, initial, onSave, onCancel
 }: { ownerId: string; sceneActors: CreatureDefinition[]; initial?: SummonActionDefinition; onSave: (action: SummonActionDefinition) => void; onCancel: () => void }) {
+  const revealRef = useRevealOnOpen();
   const [name, setName] = useState(initial?.name ?? "Summon");
   const [options, setOptions] = useState<SummonOption[]>(initial?.options ?? []);
   const [chance, setChance] = useState<number | "">(initial?.chance ?? "");
@@ -89,7 +99,7 @@ export function SummonEditor({
   }
 
   return (
-    <div className={styles.riderCard} aria-label="Summon editor">
+    <div ref={revealRef} className={styles.riderCard} aria-label="Summon editor">
       <div className={styles.riderRow}>
         <label className={styles.fieldInlineLabel}>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className={styles.fieldInlineLabel}>
@@ -150,6 +160,7 @@ export function SummonEditor({
 export function TransformEditor({
   ownerId, sceneActors, initial, onSave, onCancel
 }: { ownerId: string; sceneActors: CreatureDefinition[]; initial?: TransformActionDefinition; onSave: (action: TransformActionDefinition) => void; onCancel: () => void }) {
+  const revealRef = useRevealOnOpen();
   const [name, setName] = useState(initial?.name ?? "Shapechanger");
   const [forms, setForms] = useState<TransformForm[]>(initial?.forms ?? []);
   const [revertOnDeath, setRevertOnDeath] = useState(initial?.revertOnDeath ?? true);
@@ -160,7 +171,7 @@ export function TransformEditor({
   }
 
   return (
-    <div className={styles.riderCard} aria-label="Shapechange editor">
+    <div ref={revealRef} className={styles.riderCard} aria-label="Shapechange editor">
       <label className={styles.fieldInlineLabel}>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
       <ActorPicker
         sceneActors={sceneActors} excludeId={ownerId} label="Add a form to change into"

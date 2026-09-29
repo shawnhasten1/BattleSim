@@ -159,6 +159,29 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   }
   function editFeature(feature: FeatureDefinition) { openEdit({ kind: "feature", id: feature.id }, featureDraftFromDefinition(feature)); }
 
+  /** The summon / shapechange editor: under the Add button for a new one, or under the row of the one being edited. */
+  function spawnEditorNode() {
+    return (
+      <>
+        {spawnEditor === "summon" ? (
+          <SummonEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
+            initial={spawnEditing?.kind === "summon" ? spawnEditing : undefined}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
+          />
+        ) : null}
+        {spawnEditor === "transform" ? (
+          <TransformEditor
+            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
+            initial={spawnEditing?.kind === "transform" ? spawnEditing : undefined}
+            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
+          />
+        ) : null}
+        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
+      </>
+    );
+  }
+
   function startNew(builderKind: BuilderKind, initial: BuilderDraft) {
     openEdit({ kind: "new", builderKind }, initial);
   }
@@ -365,21 +388,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           </div>
         </div>
       ) : null}
-        {spawnEditor === "summon" ? (
-          <SummonEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
-            initial={spawnEditing?.kind === "summon" ? spawnEditing : undefined}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
-          />
-        ) : null}
-        {spawnEditor === "transform" ? (
-          <TransformEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
-            initial={spawnEditing?.kind === "transform" ? spawnEditing : undefined}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
-          />
-        ) : null}
-        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
+        {spawnEditor && !spawnEditing ? spawnEditorNode() : null}
 
 
       {edit?.kind === "new" ? builderFor(edit) : null}
@@ -553,10 +562,15 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         return (
           <div key={title as string} className={styles.group}>
             <h4>{title as string}</h4>
-            {actions.map((action) => row(
-              action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
-              () => editActionRecord(action), () => removeDefinitionItem(definition.id, itemType as "action", action.id),
-              edit?.kind === "action" && edit.id === action.id, { kind: "action", id: action.id }
+            {actions.map((action) => (
+              <div key={action.id}>
+                {row(
+                  action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
+                  () => editActionRecord(action), () => removeDefinitionItem(definition.id, itemType as "action", action.id),
+                  edit?.kind === "action" && edit.id === action.id, { kind: "action", id: action.id }
+                )}
+                {spawnEditor && spawnEditing?.id === action.id ? spawnEditorNode() : null}
+              </div>
             ))}
             {granted.map(({ feature, action }) => (
               <div key={`${feature.id}:${action.id}`} className={styles.row} style={{ opacity: feature.enabled ? 1 : 0.6 }}>
