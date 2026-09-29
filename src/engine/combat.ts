@@ -2456,6 +2456,40 @@ function runContainmentAtTurnStart(state: EngineState, holder: CombatantState): 
   }
 }
 
+/** Ochre Jelly / Black Pudding: taking damage of one of its trigger types splits it, if it's still big enough. */
+function checkSplit(state: EngineState, target: CombatantState, damageTypes: DamageType[]): void {
+  if (target.state !== "active" || damageTypes.length === 0) return;
+  const definition = getDefinition(state.snapshot, target);
+  for (const feature of featureSources(definition, target)) {
+    const effect = (feature.effects ?? []).find((candidate): candidate is Extract<FeatureEffect, { kind: "split-on-damage" }> =>
+      candidate.kind === "split-on-damage" && candidate.triggerDamageTypes.some((type) => damageTypes.includes(type)));
+    if (!effect || target.currentHp < effect.minHp) continue;
+    const half = Math.floor(target.currentHp / 2);
+    if (half < 1) return;
+    const footprint = sizeFootprint(definition.size);
+    const cell = nearestFreeCell(state, target.position, footprint, target.id);
+    const copy: CombatantState = {
+      id: `combatant-split-${target.id}-${state.snapshot.round}-${state.log.length}`,
+      definitionId: target.definitionId,
+      displayName: `${target.displayName} (split)`,
+      faction: target.faction,
+      position: cell,
+      currentHp: half,
+      tempHp: 0,
+      state: "active",
+      tacticsProfile: target.tacticsProfile,
+      resourceStance: target.resourceStance,
+      resources: target.resources ? { ...target.resources } : undefined
+    };
+    target.currentHp = half;
+    const { insertIndex } = insertIntoTurnOrder(state, [copy]);
+    state.log.push(event(state, "CombatantSplit", `${target.displayName} splits into two`, {
+      originalId: target.id, originalHp: target.currentHp, copy, insertIndex
+    }));
+    return;
+  }
+}
+
 /** Damage dealt to a swallower by something inside it adds up; past the threshold it must save or spit them out. */
 function checkRegurgitation(state: EngineState, holder: CombatantState, sourceId: Id | undefined, dealt: number): void {
   const source = state.snapshot.combatants.find((candidate) => candidate.id === sourceId);
@@ -3007,11 +3041,13 @@ function applyDamageEntries(
     currentHp: target.currentHp,
     tempHp: target.tempHp
   }));
+  const hitDamageTypes = components.filter((c) => c.finalAmount > 0).map((c) => c.damageType);
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
     checkRegurgitation(state, target, sourceId, totalApplied);
+    checkSplit(state, target, hitDamageTypes);
   }
-  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, components.filter((c) => c.finalAmount > 0).map((c) => c.damageType), entries.some((entry) => entry.critical)));
+  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, hitDamageTypes, entries.some((entry) => entry.critical)));
   return totalApplied;
 }
 
@@ -3106,10 +3142,12 @@ function applyRolledAreaDamage(
     currentHp: target.currentHp,
     tempHp: target.tempHp
   }));
+  const areaHitDamageTypes = components.filter((c) => c.finalAmount > 0).map((c) => c.damageType);
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
+    checkSplit(state, target, areaHitDamageTypes);
   }
-  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, components.filter((c) => c.finalAmount > 0).map((c) => c.damageType), false));
+  updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, areaHitDamageTypes, false));
   return totalApplied;
 }
 
