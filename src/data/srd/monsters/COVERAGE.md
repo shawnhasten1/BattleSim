@@ -34,7 +34,7 @@ A phase is done when its codes reach 0.
 | `HOLD_SWALLOW` | 3 | Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated. |
 | `SPELLS` | 23 | A combat spell this creature casts isn't in the spell library yet, so it is reference text. |
 | `SPELL_UTILITY` | 33 | Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate. |
-| `SPAWN` | 6 | Summoning / splitting is reference-only. |
+| `SPAWN` | 6 | Summoning that isn't automated: Create Specter (needs a corpse), Children of the Night, and summon options naming creatures outside the SRD (the balor's goristro). Split and the demon / mephit Summon variants are automated. |
 | `TRANSFORM` | 17 | Shapechanging is reference-only (open-ended Change Shape, Doppelganger, Mimic; the fixed-shape lycanthropes and the vampire are automated). |
 | `FORM_STATS` | 17 | A shapechanger's forms differ in more than actions (AC, size, speed); only the actions are modelled. |
 | `CHARGE_TRAIT` | 36 | Movement-conditioned bonus (Charge, Pounce, Blood Frenzy…) is reference-only. |

@@ -37,7 +37,7 @@ export const GAP_CODES = {
   SPELLS: "A combat spell this creature casts isn't in the spell library yet, so it is reference text.",
   SPELL_UTILITY: "Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate.",
   // ── Phase 8: spawn / transform
-  SPAWN: "Summoning / splitting is reference-only.",
+  SPAWN: "Summoning that isn't automated: Create Specter (needs a corpse), Children of the Night, and summon options naming creatures outside the SRD (the balor's goristro). Split and the demon / mephit Summon variants are automated.",
   TRANSFORM: "Shapechanging is reference-only (open-ended Change Shape, Doppelganger, Mimic; the fixed-shape lycanthropes and the vampire are automated).",
   FORM_STATS: "A shapechanger's forms differ in more than actions (AC, size, speed); only the actions are modelled.",
   // ── Phase 9: long tail
