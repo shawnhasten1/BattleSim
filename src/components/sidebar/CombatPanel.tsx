@@ -1,7 +1,7 @@
 "use client";
 
 import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { getDefinition, getExecutableActions, type ActionDefinition, type CombatantState, type Faction } from "@/engine";
 import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
@@ -57,6 +57,13 @@ export function CombatPanel() {
   const encounter = useEncounterStore((state) => state.encounter);
   const displayEncounter = useDisplayEncounter();
   const replaying = useIsReplaying();
+  // Who is fighting in a lair: the tracker shows where initiative 20 falls, and whose lair it is.
+  const lairOwners = displayEncounter.combatants.filter((combatant) => combatant.inLair && combatant.state === "active"
+    && (getDefinition(displayEncounter, combatant).lairActions?.length ?? 0) > 0);
+  const lairMarker = lairOwners.length === 0 ? ""
+    : lairOwners.length === 1 ? `${lairOwners[0]!.displayName}'s lair` : `${lairOwners.length} lairs`;
+  const firstBelow20 = displayEncounter.combatants.findIndex((combatant) => (combatant.initiative ?? Number.NEGATIVE_INFINITY) < 20);
+  const lairMarkerIndex = firstBelow20 < 0 ? displayEncounter.combatants.length : firstBelow20;
   const log = useEncounterStore((state) => state.log);
   const outcome = useEncounterStore((state) => state.outcome);
   const batchSummary = useEncounterStore((state) => state.batchSummary);
@@ -223,7 +230,7 @@ export function CombatPanel() {
       </div>
 
       <ul className={styles.initiative}>
-        {displayEncounter.combatants.map((combatant) => {
+        {displayEncounter.combatants.map((combatant, index) => {
           const definition = getDefinition(displayEncounter, combatant);
           const reserve = combatant.state === "reserve";
           const preCombat = displayEncounter.round <= 0 && !replaying;
@@ -233,8 +240,18 @@ export function CombatPanel() {
               (action): action is Extract<ActionDefinition, { kind: "buff" }> => action.kind === "buff" && Boolean(action.prepOnly)
             )
             : [];
+          // The lair acts on initiative 20, losing ties: its marker sits before the first creature below 20.
+          const lairHere = lairMarker && index === lairMarkerIndex;
           return (
-            <li key={combatant.id}>
+            <Fragment key={combatant.id}>
+            {lairHere ? (
+              <li className={styles.lairMarker} title="Lair actions happen on initiative 20, after anyone who rolled 20 or higher">
+                <span className={styles.init}>20</span>
+                <span className={styles.name}>Lair actions</span>
+                <span className={styles.hp}>{lairMarker}</span>
+              </li>
+            ) : null}
+            <li>
               <button
                 type="button"
                 className={[
@@ -301,8 +318,16 @@ export function CombatPanel() {
                 </div>
               ) : null}
             </li>
+            </Fragment>
           );
         })}
+        {lairMarker && lairMarkerIndex >= displayEncounter.combatants.length ? (
+          <li className={styles.lairMarker} title="Lair actions happen on initiative 20, after anyone who rolled 20 or higher">
+            <span className={styles.init}>20</span>
+            <span className={styles.name}>Lair actions</span>
+            <span className={styles.hp}>{lairMarker}</span>
+          </li>
+        ) : null}
       </ul>
 
       <details className={styles.section} open={Boolean(batchSummary)}>

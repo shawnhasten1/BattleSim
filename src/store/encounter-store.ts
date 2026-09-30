@@ -356,7 +356,12 @@ interface EncounterStore {
   updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
   /** Merge a partial patch into one death effect and re-normalize it. One undo step. */
   updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
-  removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "deathEffect" | "feature" | "trait" | "action" | "bonusAction" | "reaction", itemId: string) => void;
+  removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "deathEffect" | "feature" | "trait" | "action" | "bonusAction" | "reaction" | "lairAction", itemId: string) => void;
+  /** Add a lair action to a creature (taken on initiative 20 while a token of it is in its lair). Returns its id. */
+  addLairAction: (definitionId: string, action: ActionDefinition) => string;
+  updateLairAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
+  /** Mark tokens as fighting in (or out of) their lair. */
+  setInLair: (combatantIds: string[], inLair: boolean) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
   duplicateCombatant: (combatantId: string) => void;
   /** Clone whatever combatant is currently selected. Thin wrapper over `duplicateCombatant`. */
@@ -2854,6 +2859,50 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         return id;
       },
+      addLairAction: (definitionId, action) => {
+        const encounter = get().encounter;
+        const id = `lair-${crypto.randomUUID()}`;
+        // A lair action is resolved as a "free" action on initiative 20; authoring it as an ordinary action keeps the
+        // builder simple, and `lairVariants` in the engine does the rest.
+        const normalized = normalizeActionDefinition({ ...action, id, actionType: "action" } as ActionDefinition, "action");
+        normalized.id = id;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
+            ? { ...candidate, lairActions: [...(candidate.lairActions ?? []), normalized] }
+            : candidate)
+        });
+        return id;
+      },
+      updateLairAction: (definitionId, actionId, patch) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => definition.id === definitionId
+            ? {
+              ...definition,
+              lairActions: (definition.lairActions ?? []).map((action) => {
+                if (action.id !== actionId) return action;
+                const merged = normalizeActionDefinition({ ...action, ...patch, id: action.id, actionType: "action" } as ActionDefinition, "action");
+                merged.id = action.id;
+                return merged;
+              })
+            }
+            : definition)
+        });
+      },
+      setInLair: (combatantIds, inLair) => {
+        const encounter = get().encounter;
+        const ids = new Set(combatantIds);
+        let changed = false;
+        const combatants = encounter.combatants.map((combatant) => {
+          if (!ids.has(combatant.id) || Boolean(combatant.inLair) === inLair) return combatant;
+          changed = true;
+          return { ...combatant, inLair: inLair || undefined, lastLairActionId: undefined };
+        });
+        if (!changed) return;
+        commitEncounter({ ...encounter, combatants });
+      },
       addDeathEffectV2: (definitionId, deathEffect) => {
         const encounter = get().encounter;
         const id = `death-effect-${crypto.randomUUID()}`;
@@ -3007,6 +3056,7 @@ export const useEncounterStore = create<EncounterStore>()(
               weapons: itemType === "weapon" || weaponIdsFromAction.size > 0 ? (definition.weapons ?? []).filter((item) => item.id !== itemId && !weaponIdsFromAction.has(item.id)) : definition.weapons,
               spells: itemType === "spell" || spellIdsFromAction.size > 0 ? (definition.spells ?? []).filter((item) => item.id !== itemId && !spellIdsFromAction.has(item.id)) : definition.spells,
               deathEffects: itemType === "deathEffect" ? (definition.deathEffects ?? []).filter((item) => item.id !== itemId) : definition.deathEffects,
+              lairActions: itemType === "lairAction" ? (definition.lairActions ?? []).filter((item) => item.id !== itemId) : definition.lairActions,
               features: itemType === "feature" ? (definition.features ?? []).filter((item) => item.id !== itemId) : definition.features,
               traits: itemType === "trait" ? (definition.traits ?? []).filter((item) => item.id !== itemId) : definition.traits,
               actions: scrubbedActions,

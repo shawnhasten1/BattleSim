@@ -17,7 +17,7 @@ import {
 import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, searchSrd, type SrdEntryKind } from "@/data/srd";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { useEncounterStore } from "@/store/encounter-store";
-import { describeAction, spellAutomation, weaponAutomation } from "@/lib/sheet";
+import { describeAction, describeFeature, spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
@@ -52,7 +52,15 @@ type EditTarget =
   | { kind: "deathEffect"; id: string }
   | { kind: "action"; id: string }
   | { kind: "feature"; id: string }
-  | { kind: "new"; builderKind: BuilderKind };
+  | { kind: "lairAction"; id: string }
+  | { kind: "new"; builderKind: BuilderKind | "lairAction" };
+
+/** The starting point for "+ Lair action": an eruption somewhere it can see. */
+const NEW_LAIR_ACTION: ActionDefinition = {
+  kind: "area-save", id: "", name: "Lair action", actionType: "action", saveAbility: "dex", dc: 15, range: 120,
+  area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 120 }, damage: [{ dice: "3d6", damageType: "fire" }],
+  halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile", automationSupport: "full"
+};
 
 const MODE_KEY = "actions-builder-mode";
 
@@ -65,14 +73,7 @@ function readMode(): "simple" | "advanced" {
 }
 
 function featureDetail(feature: FeatureDefinition): string {
-  const granted = feature.grantedActions ?? [];
-  if (feature.optional && granted.length) return `optional rule · adds ${granted.map((a) => a.name).join(", ")} (${feature.enabled ? "on" : "off"})`;
-  const activate = granted.find((a) => a.kind === "activate-feature");
-  if (activate) return `${activate.actionType} · activates ${feature.name}`;
-  const utils = granted.filter((a) => a.kind === "utility");
-  if (utils.length) return `bonus · ${utils.map((a) => (a.kind === "utility" ? a.mode : "")).join(" / ")}`;
-  if (feature.effects?.length) return `passive · ${feature.effects.map((e) => e.kind).join(", ")}`;
-  return feature.category;
+  return describeFeature(feature);
 }
 
 export function ActionsTab({ definition, compendium }: { combatant: CombatantState; definition: CreatureDefinition; compendium?: Compendium }) {
@@ -92,6 +93,8 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   // The existing summon / shapechange being edited, or none when adding a new one.
   const [spawnEditing, setSpawnEditing] = useState<SummonActionDefinition | TransformActionDefinition | null>(null);
   const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
+  const addLairAction = useEncounterStore((s) => s.addLairAction);
+  const updateLairAction = useEncounterStore((s) => s.updateLairAction);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const addMultiattack = useEncounterStore((s) => s.addMultiattack);
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
@@ -121,6 +124,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const nativeActions = definition.actions ?? [];
   const bonusActions = definition.bonusActions ?? [];
   const reactions = definition.reactions ?? [];
+  const lairActions = definition.lairActions ?? [];
   const multiattacks = nativeActions.filter((a) => a.kind === "multiattack");
   const plainActions = nativeActions.filter((a) => a.kind !== "multiattack");
   const optionalGrants = features
@@ -187,7 +191,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     );
   }
 
-  function startNew(builderKind: BuilderKind, initial: BuilderDraft) {
+  function startNew(builderKind: BuilderKind | "lairAction", initial: BuilderDraft) {
     openEdit({ kind: "new", builderKind }, initial);
   }
 
@@ -198,11 +202,13 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     else if (edit.kind === "deathEffect") updateDeathEffect(definition.id, edit.id, deathEffectFromDraft(draft));
     else if (edit.kind === "action") updateAction(definition.id, edit.id, actionFromEffectDraft(draft));
     else if (edit.kind === "feature") updateFeature(definition.id, edit.id, featureFromDraft(draft, featureContext));
+    else if (edit.kind === "lairAction") updateLairAction(definition.id, edit.id, actionFromEffectDraft(draft));
     else if (edit.kind === "new") {
       if (edit.builderKind === "weapon") addWeaponV2(definition.id, weaponFromDraft(draft));
       else if (edit.builderKind === "spell") addSpellV2(definition.id, spellFromDraft(draft));
       else if (edit.builderKind === "deathEffect") addDeathEffectV2(definition.id, deathEffectFromDraft(draft));
       else if (edit.builderKind === "feature") addFeatureV2(definition.id, featureFromDraft(draft, featureContext));
+      else if (edit.builderKind === "lairAction") addLairAction(definition.id, actionFromEffectDraft(draft));
       else addActionV2(definition.id, actionFromEffectDraft(draft));
     }
     setEdit(null);
@@ -396,7 +402,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {spawnEditor && !spawnEditing ? spawnEditorNode() : null}
 
 
-      {edit?.kind === "new" ? builderFor(edit) : null}
+      {edit?.kind === "new" && edit.builderKind !== "lairAction" ? builderFor(edit) : null}
 
       <div className={styles.group}>
         <h4>Weapons</h4>
@@ -443,7 +449,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {features.map((feature) => (
           <div key={feature.id}>
             {row(
-              feature.id, feature.name, featureDetail(feature), feature.automationSupport,
+              feature.id, feature.name, featureDetail(feature), feature.informational ? "informational" : feature.automationSupport,
               () => editFeature(feature),
               () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
               edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
@@ -598,6 +604,29 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           </div>
         );
       })}
+
+      <div className={styles.group}>
+        <h4>
+          Lair actions{" "}
+          <InfoTooltip
+            label="About lair actions"
+            content="While a token of this creature is in its lair (right-click the token, or the Token tab), it takes one of these on initiative 20 each round — after anyone who rolled 20 or higher — and never the same one two rounds running. They cost none of its own actions. The SRD statblocks don't include lair actions, so write your own."
+          />
+        </h4>
+        {lairActions.length === 0 ? (
+          <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None — add one to make this creature's home fight back.</span>
+        ) : null}
+        {lairActions.map((action) => row(
+          action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
+          () => openEdit({ kind: "lairAction", id: action.id }, effectDraftFromAction(action)),
+          () => removeDefinitionItem(definition.id, "lairAction", action.id),
+          edit?.kind === "lairAction" && edit.id === action.id, { kind: "lairAction", id: action.id }
+        ))}
+        {edit?.kind === "new" && edit.builderKind === "lairAction" ? builderFor(edit) : null}
+        <div className={styles.riderRow}>
+          <button type="button" className={styles.riderAdd} onClick={() => startNew("lairAction", effectDraftFromAction(NEW_LAIR_ACTION))}>+ Lair action</button>
+        </div>
+      </div>
 
       <div className={styles.group}>
         <h4>Standard actions</h4>

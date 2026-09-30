@@ -72,6 +72,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const updateHp = useEncounterStore((state) => state.updateHp);
   const setAltitude = useEncounterStore((state) => state.setAltitude);
   const adjustAltitude = useEncounterStore((state) => state.adjustAltitude);
+  const setInLair = useEncounterStore((state) => state.setInLair);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const toggleCombatantSurprised = useEncounterStore((state) => state.toggleCombatantSurprised);
   const combatRound = useEncounterStore((state) => state.encounter.round);
@@ -421,6 +422,16 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         }
       },
       { label: "Land", disabled: (combatant.altitude ?? 0) <= 0, onSelect: () => setAltitude([combatant.id], 0) },
+      ...((getDefinition(encounter, combatant).lairActions?.length ?? 0) > 0
+        ? [
+            { separator: true } as ContextMenuItem,
+            {
+              label: "In its lair (lair actions on initiative 20)",
+              checked: Boolean(combatant.inLair),
+              onSelect: () => setInLair([combatant.id], !combatant.inLair)
+            } as ContextMenuItem
+          ]
+        : []),
       ...(canMarkSurprised
         ? [
             {

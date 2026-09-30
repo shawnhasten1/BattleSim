@@ -19,6 +19,8 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
   const applyConditionToCombatant = useEncounterStore((s) => s.applyConditionToCombatant);
   const clearConditions = useEncounterStore((s) => s.clearConditions);
   const setAltitude = useEncounterStore((s) => s.setAltitude);
+  const setInLair = useEncounterStore((s) => s.setInLair);
+  const hasLair = (definition.lairActions?.length ?? 0) > 0;
   const groundHeight = useEncounterStore((s) => s.encounter.map.elevation?.cells[`${combatant.position.x},${combatant.position.y}`] ?? 0);
   const canFly = Boolean(definition.movement?.fly);
 
@@ -86,6 +88,12 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
               <input type="number" value={combatant.position.y} onChange={(e) => updateCombatant(combatant.id, { position: { ...combatant.position, y: Number(e.target.value) } })} />
             </label>
           </div>
+          {hasLair ? (
+            <label className={styles.field} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={Boolean(combatant.inLair)} onChange={(e) => setInLair([combatant.id], e.target.checked)} />
+              <span>In its lair — takes a lair action on initiative 20 each round</span>
+            </label>
+          ) : null}
           <div className={styles.field}>
             <span className={styles.fieldLabel}>
               Altitude

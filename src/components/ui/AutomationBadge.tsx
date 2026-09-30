@@ -11,6 +11,7 @@ export type AutomationSupport = "full" | "partial" | "manual-only" | "unsupporte
 
 const TONE: Record<string, string> = {
   full: styles.full,
+  informational: styles.info,
   partial: styles.partial,
   unsupported: styles.unsupported
 };
@@ -20,6 +21,7 @@ function toneClass(value: string): string {
 }
 
 function label(value: string): string {
+  if (value === "informational") return "no combat effect";
   return value === "manual-only" ? "reference-only" : value;
 }
 

@@ -35,10 +35,11 @@ type EditorKind =
   | "damage-bonus" | "damage-adjustment" | "attack-bonus" | "attack-advantage"
   | "incoming-attack-modifier" | "armor-class-bonus" | "save-bonus" | "save-advantage"
   | "save-dc-bonus" | "extra-action" | "resource-regain" | "avoids-opportunity-attacks"
-  | "hp-regen" | "survive-lethal" | "auto-succeed-save";
+  | "hp-regen" | "survive-lethal" | "auto-succeed-save" | "apply-condition-on-hit";
 
 const KIND_LABELS: Array<[EditorKind, string]> = [
   ["damage-bonus", "Bonus / penalty damage"],
+  ["apply-condition-on-hit", "Condition on a hit (knock prone, poison…)"],
   ["damage-adjustment", "Resistance / immunity / vulnerability"],
   ["attack-bonus", "To-hit modifier"],
   ["attack-advantage", "Advantage / disadvantage on my attacks"],
@@ -57,6 +58,7 @@ const KIND_LABELS: Array<[EditorKind, string]> = [
 
 const KIND_DESCRIPTIONS: Record<EditorKind, string> = {
   "damage-bonus": "Extra (or reduced) damage added to a qualifying hit.",
+  "apply-condition-on-hit": "A qualifying hit also gives the target a condition — optionally only if it fails a saving throw (a charge's \"DC 13 Strength save or be knocked prone\").",
   "damage-adjustment": "Resistance, immunity, or vulnerability to a damage type.",
   "attack-bonus": "A flat modifier to this creature's attack rolls — pick \"spell attacks\" under Applies to for a spellcasting focus's bonus.",
   "attack-advantage": "Advantage or disadvantage on this creature's own attack rolls.",
@@ -140,6 +142,8 @@ function blankEffect(kind: EditorKind): FeatureEffect {
       return { kind: "survive-lethal", save: { ability: "con", dcBase: 5 } };
     case "auto-succeed-save":
       return { kind: "auto-succeed-save", resourceId: "legendary-resistance" };
+    case "apply-condition-on-hit":
+      return { kind: "apply-condition-on-hit", condition: "always", attackTypes: ["melee"], appliedCondition: { name: "prone" }, save: { ability: "str", dc: 13 } };
   }
 }
 
@@ -222,6 +226,16 @@ export function FeatureEffectEditor({
               >
                 {GATE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
+            </label>
+          ) : null}
+          {"condition" in card.effect && (card.effect as { condition?: FeatureCondition }).condition === "charged" ? (
+            <label className={styles.fieldInlineLabel}>
+              Charge distance (ft)
+              <input
+                type="number" min={5} step={5} style={{ width: 64 }} aria-label="Charge distance"
+                value={(card.effect as { chargeFeet?: number }).chargeFeet ?? 20}
+                onChange={(e) => replace(index, { ...card, effect: { ...card.effect, chargeFeet: Math.max(5, Number(e.target.value) || 20) } as FeatureEffect })}
+              />
             </label>
           ) : null}
         </div>
@@ -568,6 +582,43 @@ function EffectFields({ card, onChange }: { card: EffectCard; onChange: (next: E
             <option value="spell">spells only</option>
           </select>
         </label>
+      </div>
+    );
+  }
+
+  if (effect.kind === "apply-condition-on-hit") {
+    const save = effect.save;
+    return (
+      <div className={styles.riderRow}>
+        <label className={styles.fieldInlineLabel}>
+          Condition
+          <select
+            aria-label="Condition"
+            value={effect.appliedCondition.name ?? "prone"}
+            onChange={(e) => set({ ...effect, appliedCondition: { ...effect.appliedCondition, name: e.target.value as ConditionName } })}
+          >
+            {SAVE_CONDITIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
+        <label className={styles.fieldInlineLabel}>
+          Unless it saves
+          <select
+            aria-label="Save"
+            value={save?.ability ?? "none"}
+            onChange={(e) => set({ ...effect, save: e.target.value === "none" ? undefined : { ability: e.target.value as Ability, dc: save?.dc ?? 13 } })}
+          >
+            <option value="none">no save</option>
+            {ABILITIES.map((a) => <option key={a} value={a}>{a.toUpperCase()}</option>)}
+          </select>
+        </label>
+        {save ? (
+          <label className={styles.fieldInlineLabel}>
+            DC
+            <input type="number" min={1} max={30} style={{ width: 52 }} aria-label="Save DC" value={save.dc ?? 13}
+              onChange={(e) => set({ ...effect, save: { ...save, dc: Math.max(1, Number(e.target.value) || 13) } })} />
+          </label>
+        ) : null}
+        <ScopeSelect value={effect.attackTypes} onChange={(attackTypes) => set({ ...effect, attackTypes })} />
       </div>
     );
   }

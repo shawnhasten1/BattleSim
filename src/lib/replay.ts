@@ -368,6 +368,7 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
     case "CombatantStabilized":
     case "DeathSaveRolled":
       return 800;
+    case "LairAction":
     case "ReinforcementArrived":
     case "CombatantSpawned":
     case "CombatantSplit":

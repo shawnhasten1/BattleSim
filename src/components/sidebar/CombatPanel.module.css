@@ -435,3 +435,17 @@
   font-size: 10px;
   overflow-x: auto;
 }
+
+/* "Lair actions — initiative 20": a slot in the order, not a combatant, so it isn't a button. */
+.lairMarker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--ui-accent);
+  border-radius: var(--ui-radius);
+  color: var(--ui-accent);
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
