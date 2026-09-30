@@ -1,7 +1,8 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, footprintCells, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
+import { MAX_STEP_HEIGHT_FT } from "./types";
 import type {
   Ability,
   ActionDefinition,
@@ -449,11 +450,59 @@ function hazardAwarePath(
   return { reachable: true, cost: pathCostAlong(map, planned.cells, footprint, occupied, options), cells: planned.cells };
 }
 
+/**
+ * Height above the datum of `combatant` (or of where it would be at `position` / `altitude`): the ground under its
+ * footprint plus how far it is flying above it. A map with no ground heights skips the lookup.
+ */
+export function combatantHeight(
+  snapshot: EncounterSnapshot,
+  combatant: CombatantState,
+  at: { position?: Point; altitude?: number } = {}
+): number {
+  const altitude = at.altitude ?? combatant.altitude ?? 0;
+  if (!snapshot.map.elevation) return altitude;
+  const footprint = sizeFootprint(getDefinition(snapshot, combatant).size);
+  return footprintGroundHeight(snapshot.map, at.position ?? combatant.position, footprint) + altitude;
+}
+
+/**
+ * Feet between two combatants, height included — every reach, range, aura and hold check goes through this so a
+ * dragon 30 ft up is out of a spearman's reach but not a bowman's. `at` overrides where either one is standing
+ * (an opportunity attack asks about a cell the mover has not reached yet). On a flat map with nobody airborne this
+ * is exactly the old flat grid distance.
+ */
+export function spatialDistance(
+  snapshot: EncounterSnapshot,
+  a: CombatantState,
+  b: CombatantState,
+  at: { a?: Point; b?: Point; aAltitude?: number; bAltitude?: number } = {}
+): number {
+  const aPosition = at.a ?? a.position;
+  const bPosition = at.b ?? b.position;
+  const aAltitude = at.aAltitude ?? a.altitude ?? 0;
+  const bAltitude = at.bAltitude ?? b.altitude ?? 0;
+  if (!snapshot.map.elevation && aAltitude === 0 && bAltitude === 0) {
+    return gridDistance(aPosition, bPosition, snapshot.map.grid);
+  }
+  const vertical = combatantHeight(snapshot, a, { position: aPosition, altitude: aAltitude })
+    - combatantHeight(snapshot, b, { position: bPosition, altitude: bAltitude });
+  return distanceWithHeight(snapshot.map.grid, aPosition, bPosition, vertical);
+}
+
+/** Feet from a combatant to a point on the ground (an area's origin, a spell's aim point). */
+export function spatialDistanceToPoint(snapshot: EncounterSnapshot, from: CombatantState, point: Point): number {
+  if (!snapshot.map.elevation && !from.altitude) {
+    return gridDistance(from.position, point, snapshot.map.grid);
+  }
+  const vertical = combatantHeight(snapshot, from) - groundHeightAt(snapshot.map, point);
+  return distanceWithHeight(snapshot.map.grid, from.position, point, vertical);
+}
+
 export function moveCombatant(
   state: EngineState,
   combatantId: Id,
   destination: Point,
-  options: { provokeOpportunityAttacks?: boolean } = {}
+  options: { provokeOpportunityAttacks?: boolean; altitude?: number } = {}
 ): Point[] {
   const combatant = findCombatant(state.snapshot, combatantId);
   const definition = getDefinition(state.snapshot, combatant);
@@ -466,7 +515,16 @@ export function moveCombatant(
   const path = hazardAwarePath(map, routeMap, start, destination, footprint, occupied, pathOptions);
   const movementBudget = remainingMovementBudget(state.snapshot, combatant);
 
-  if (!path.reachable || path.cost > movementBudget) {
+  // Rising or dropping is flying, and costs movement like any other flying.
+  const startAltitude = combatant.altitude ?? 0;
+  const targetAltitude = options.altitude === undefined ? startAltitude : Math.max(0, options.altitude);
+  const verticalFt = Math.abs(targetAltitude - startAltitude);
+  if (verticalFt > 0 && !movementProfileOf(definition).fly) {
+    throw new Error(`${combatant.displayName} can't fly`);
+  }
+  const altitudeCost = altitudeMoveCost(state.snapshot, definition, verticalFt);
+
+  if (!path.reachable || path.cost + altitudeCost > movementBudget) {
     throw new Error(`Destination is not reachable with ${definition.speed} ft. of movement`);
   }
 
@@ -476,23 +534,54 @@ export function moveCombatant(
   const actualPath = pointsEqual(combatant.position, destination)
     ? path
     : hazardAwarePath(map, routeMap, start, combatant.position, footprint, occupied, pathOptions);
+
+  // The altitude change happens once it has arrived; rising out of a foe's reach provokes just like walking out of it.
+  let changedAltitude = false;
+  if (verticalFt > 0 && combatant.state === "active" && pointsEqual(combatant.position, destination)) {
+    if (provoke) {
+      runReactionWindow(state, {
+        kind: "enemy-leaves-reach", sourceId: combatant.id, from: combatant.position, to: combatant.position,
+        fromAltitude: startAltitude, toAltitude: targetAltitude
+      });
+    }
+    if (combatant.state === "active") {
+      combatant.altitude = targetAltitude > 0 ? targetAltitude : undefined;
+      changedAltitude = true;
+    }
+  }
+
   combatant.turnFlags = {
     ...(combatant.turnFlags ?? {}),
-    movementUsed: (combatant.turnFlags?.movementUsed ?? 0) + (actualPath.reachable ? actualPath.cost : 0)
+    movementUsed: (combatant.turnFlags?.movementUsed ?? 0) + (actualPath.reachable ? actualPath.cost : 0) + (changedAltitude ? altitudeCost : 0)
   };
-  state.log.push(event(state, "CombatantMoved", `${combatant.displayName} moved`, {
+  const walked = movedCells.length > 1;
+  const altitudePhrase = !changedAltitude ? ""
+    : targetAltitude === 0 ? "lands"
+      : targetAltitude > startAltitude ? `climbs to ${targetAltitude} ft` : `descends to ${targetAltitude} ft`;
+  state.log.push(event(state, "CombatantMoved",
+    walked ? `${combatant.displayName} moved${altitudePhrase ? ` and ${altitudePhrase}` : ""}` : altitudePhrase ? `${combatant.displayName} ${altitudePhrase}` : `${combatant.displayName} moved`, {
     combatantId,
     destination: combatant.position,
     requestedDestination: destination,
-    cost: actualPath.reachable ? actualPath.cost : 0,
-    requestedCost: path.cost,
+    cost: (actualPath.reachable ? actualPath.cost : 0) + (changedAltitude ? altitudeCost : 0),
+    requestedCost: path.cost + altitudeCost,
     cells: movedCells,
-    interrupted: combatant.state !== "active" && !pointsEqual(combatant.position, destination)
+    interrupted: combatant.state !== "active" && !pointsEqual(combatant.position, destination),
+    ...(changedAltitude ? { altitude: targetAltitude, fromAltitude: startAltitude } : {})
   }));
   checkZoneOnEnter(state, combatant, movedCells);
   checkTerrainHazardOnEnter(state, combatant, movedCells);
   recenterSelfAnchoredZones(state, combatant);
   return movedCells;
+}
+
+/** Movement (in squares of the creature's fastest speed) spent rising or dropping `feet` while flying. */
+export function altitudeMoveCost(snapshot: EncounterSnapshot, definition: CreatureDefinition, feet: number): number {
+  if (feet <= 0) return 0;
+  const profile = movementProfileOf(definition);
+  const fly = profile.fly ?? 0;
+  if (fly <= 0) return Number.POSITIVE_INFINITY;
+  return (feet / snapshot.map.grid.distancePerSquare) * (movementReference(profile) / fly);
 }
 
 /**
@@ -670,7 +759,7 @@ function saveStepWorthTaking(state: EngineState, attacker: CombatantState, actio
   const inflicted = conditionsOfRiders(action.riders);
   return state.snapshot.combatants.some((candidate) => candidate.state === "active"
     && effectiveFaction(state.snapshot, candidate) !== effectiveFaction(state.snapshot, attacker)
-    && gridDistance(attacker.position, candidate.position, state.snapshot.map.grid) <= action.range
+    && spatialDistance(state.snapshot, attacker, candidate) <= action.range
     && !isImmuneAfterSave(attacker, candidate, action)
     && !(action.damage.length === 0 && inflicted.length > 0 && inflicted.every((name) => candidate.conditions?.some((condition) => condition.name === name))));
 }
@@ -1419,11 +1508,11 @@ function validateRepositionTargeting(
   if (mover.state !== "active") {
     throw new Error(`${mover.displayName} cannot be repositioned`);
   }
-  const moverDistance = gridDistance(actor.position, mover.position, snapshot.map.grid);
+  const moverDistance = spatialDistance(snapshot, actor, mover);
   if (moverDistance > action.range) {
     throw new Error(`${mover.displayName} is ${moverDistance} ft. away, beyond ${action.range} ft. range`);
   }
-  const destinationDistance = gridDistance(actor.position, destination, snapshot.map.grid);
+  const destinationDistance = spatialDistanceToPoint(snapshot, actor, destination);
   if (destinationDistance > action.range) {
     throw new Error(`Destination is ${destinationDistance} ft. away, beyond ${action.range} ft. range`);
   }
@@ -1536,7 +1625,7 @@ function validateBuffTargeting(
   if (target.state !== "active") {
     throw new Error(`${target.displayName} cannot be buffed`);
   }
-  const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
+  const distance = spatialDistance(snapshot, actor, target);
   if (distance > action.range) {
     throw new Error(`${target.displayName} is ${distance} ft. away, beyond ${action.range} ft. range`);
   }
@@ -1587,7 +1676,7 @@ export function resolveHealingBurstAction(
     const placement = resolveAreaTargeting(healer, healerDefinition, { targeting: action.areaTargeting }, aim);
     origin = placement.origin;
     if (!placement.fromSelf) {
-      const distance = gridDistance(healer.position, origin, state.snapshot.map.grid);
+      const distance = spatialDistanceToPoint(state.snapshot, healer, origin);
       if (distance > (action.areaTargeting?.range ?? action.range)) {
         throw new Error(`Origin is ${distance} ft. away, beyond range`);
       }
@@ -1773,6 +1862,31 @@ export function isImmuneToCondition(definition: CreatureDefinition, name: Condit
  * event says so. Returns whether the condition was applied. The DM's manual apply passes `force` (a
  * DM's word beats a creature's immunity).
  */
+/** Conditions that leave a flying creature unable to stay up: knocked prone, or speed 0 / unable to move. */
+const GROUNDING_CONDITIONS = new Set(["prone", "restrained", "grappled", "paralyzed", "stunned", "unconscious", "petrified"]);
+
+/**
+ * A fall: 1d6 bludgeoning per 10 ft (up to 20d6), landing prone. `feet` is the drop, whether from flying height or a
+ * ledge. The creature is back on the ground before the damage and the prone condition are applied, so neither can
+ * start a second fall.
+ */
+export function fallCombatant(state: EngineState, combatant: CombatantState, feet: number, why: string): void {
+  if (feet <= 0 || combatant.state === "fled") return;
+  const fromAltitude = combatant.altitude ?? 0;
+  combatant.altitude = undefined;
+  const dice = Math.min(20, Math.floor(feet / 10));
+  state.log.push(event(state, "CombatantFell", `${combatant.displayName} falls ${feet} ft (${why})`, {
+    combatantId: combatant.id, feet, fromAltitude, damageDice: dice > 0 ? `${dice}d6` : undefined
+  }));
+  if (combatant.state === "defeated" || combatant.state === "dead") return;
+  if (dice > 0) {
+    applyDamageComponents(state, combatant, [{ dice: `${dice}d6`, damageType: "bludgeoning" }], getDefinition(state.snapshot, combatant), false, {}, combatant.id);
+  }
+  if (combatant.state === "active" || combatant.state === "downed") {
+    applyCondition(state, combatant.id, { id: `${combatant.id}-fall-prone-${state.log.length}`, name: "prone", startedRound: state.snapshot.round });
+  }
+}
+
 export function applyCondition(state: EngineState, targetId: Id, condition: ConditionInstance, options: { force?: boolean } = {}): boolean {
   const target = findCombatant(state.snapshot, targetId);
   if (!options.force && isImmuneToCondition(getDefinition(state.snapshot, target), condition.name)) {
@@ -1787,6 +1901,10 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
     targetId,
     condition
   }));
+  // A flier that can no longer move (or is knocked prone) drops, unless it can hover.
+  if ((target.altitude ?? 0) > 0 && GROUNDING_CONDITIONS.has(condition.name) && !movementProfileOf(getDefinition(state.snapshot, target)).hover) {
+    fallCombatant(state, target, target.altitude ?? 0, `it is ${condition.name}`);
+  }
   return true;
 }
 
@@ -2340,7 +2458,7 @@ function runHoldsAtTurnStart(state: EngineState, actor: CombatantState): void {
     const holder = state.snapshot.combatants.find((candidate) => candidate.id === condition.sourceCombatantId);
     const holderDefinition = holder ? getDefinition(state.snapshot, holder) : undefined;
     const keeps = holder && holderDefinition && holder.state === "active" && canAct(holder, "free")
-      && gridDistance(holder.position, actor.position, state.snapshot.map.grid) <= holdReach(holderDefinition) + state.snapshot.map.grid.distancePerSquare;
+      && spatialDistance(state.snapshot, holder, actor) <= holdReach(holderDefinition) + state.snapshot.map.grid.distancePerSquare;
     if (!keeps) {
       releaseHold(state, actor, condition.sourceCombatantId, condition.sourceId, "the hold was broken");
       continue;
@@ -2927,7 +3045,7 @@ function validateTargeting(
   if (action.kind === "attack" && action.requiresHeld && holdConditions(target, attacker.id).length === 0) {
     throw new Error(`${target.displayName} isn't grappled by ${attacker.displayName}`);
   }
-  const distance = gridDistance(attacker.position, target.position, snapshot.map.grid);
+  const distance = spatialDistance(snapshot, attacker, target);
   const range = action.kind === "attack"
     ? action.attackType === "melee"
       ? action.reach ?? action.range
@@ -2950,7 +3068,7 @@ function attackIsAtLongRange(
   if (action.attackType === "melee" || !action.longRange) {
     return false;
   }
-  const distance = gridDistance(attacker.position, target.position, snapshot.map.grid);
+  const distance = spatialDistance(snapshot, attacker, target);
   return distance > action.range && distance <= action.longRange;
 }
 
@@ -2960,7 +3078,7 @@ function validateOriginTargeting(
   origin: Point,
   action: AreaSaveActionDefinition
 ): void {
-  const distance = gridDistance(attacker.position, origin, snapshot.map.grid);
+  const distance = spatialDistanceToPoint(snapshot, attacker, origin);
   if (distance > action.range) {
     throw new Error(`Origin is ${distance} ft. away, beyond ${action.range} ft. range`);
   }
@@ -2978,7 +3096,7 @@ function validateHealingTargeting(
   if (target.state === "dead" || target.state === "fled") {
     throw new Error("Target cannot be healed");
   }
-  const distance = gridDistance(healer.position, target.position, snapshot.map.grid);
+  const distance = spatialDistance(snapshot, healer, target);
   if (distance > action.range) {
     throw new Error(`Target is ${distance} ft. away, beyond ${action.range} ft. range`);
   }
@@ -3309,6 +3427,9 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
   releaseHoldsBy(state, target.id);
   expelAll(state, target, "the swallower died");
   state.log.push(event(state, "CombatantDefeated", `${target.displayName} is defeated`, { combatantId: target.id, killerId }));
+  if ((target.altitude ?? 0) > 0) {
+    fallCombatant(state, target, target.altitude ?? 0, "it died in the air");
+  }
   breakConcentration(state, target.id);
   despawnSummons(state, summonsOf(state, target.id, false), "vanishes — its summoner died");
   resolveDeathEffect(state, target.id, killerId);
@@ -4097,7 +4218,7 @@ function auraSources(state: EngineState, target: CombatantState): AuraContributi
       if (feature.aura.affects === "allies" && effectiveFaction(state.snapshot, bearer) !== effectiveFaction(state.snapshot, target)) {
         continue;
       }
-      if (gridDistance(bearer.position, target.position, state.snapshot.map.grid) > feature.aura.range) {
+      if (spatialDistance(state.snapshot, bearer, target) > feature.aura.range) {
         continue;
       }
       contributions.push({ feature, sourceDefinition: bearerDefinition });
@@ -4509,7 +4630,7 @@ function clampToGrid(value: number, max: number): number {
 }
 
 /** Straight-line forced movement away from `origin`, stopping at a sight/effect-blocking wall. */
-function pushCombatant(state: EngineState, target: CombatantState, distanceFt: number, origin: Point): void {
+export function pushCombatant(state: EngineState, target: CombatantState, distanceFt: number, origin: Point): void {
   const grid = state.snapshot.map.grid;
   const cells = Math.round(distanceFt / grid.distancePerSquare);
   if (cells <= 0) {
@@ -4520,7 +4641,11 @@ function pushCombatant(state: EngineState, target: CombatantState, distanceFt: n
   const length = Math.hypot(dx, dy) || 1;
   const ux = dx / length;
   const uy = dy / length;
-  const footprint = sizeFootprint(getDefinition(state.snapshot, target).size);
+  const targetDefinition = getDefinition(state.snapshot, target);
+  const footprint = sizeFootprint(targetDefinition.size);
+  // Only someone standing on the ground can be shoved into a cliff face or off a ledge; a flier just gets carried.
+  const grounded = (target.altitude ?? 0) === 0 && !movementProfileOf(targetDefinition).fly;
+  let fallFt = 0;
   let position = { ...target.position };
   for (let step = 0; step < cells; step += 1) {
     const next = {
@@ -4533,14 +4658,26 @@ function pushCombatant(state: EngineState, target: CombatantState, distanceFt: n
     if (!lineOfEffect(state.snapshot.map, position, next)) {
       break;
     }
+    if (grounded && state.snapshot.map.elevation) {
+      const rise = footprintGroundHeight(state.snapshot.map, next, footprint) - footprintGroundHeight(state.snapshot.map, position, footprint);
+      if (rise > MAX_STEP_HEIGHT_FT) {
+        break;
+      }
+      if (-rise > MAX_STEP_HEIGHT_FT) {
+        fallFt += -rise;
+      }
+    }
     position = next;
   }
   if (position.x !== target.position.x || position.y !== target.position.y) {
     const from = target.position;
     target.position = position;
     state.log.push(event(state, "CombatantMoved", `${target.displayName} was pushed`, {
-      combatantId: target.id, from, to: position, forced: true
+      combatantId: target.id, from, to: position, destination: position, forced: true
     }));
+    if (fallFt > 0) {
+      fallCombatant(state, target, fallFt, "pushed off a ledge");
+    }
   }
 }
 
@@ -5183,7 +5320,7 @@ function featureConditionMet(
     return state.snapshot.combatants.some((combatant) => combatant.id !== attacker.id
       && effectiveFaction(state.snapshot, combatant) === effectiveFaction(state.snapshot, attacker)
       && combatant.state === "active"
-      && gridDistance(combatant.position, target.position, state.snapshot.map.grid) <= 5);
+      && spatialDistance(state.snapshot, combatant, target) <= 5);
   }
   if (condition === "target-bloodied") return isBloodied(state.snapshot, target);
   if (condition === "self-bloodied") return isBloodied(state.snapshot, attacker);
@@ -5389,7 +5526,8 @@ function findLeaveReachReaction(
   reactor: CombatantState,
   mover: CombatantState,
   from: Point,
-  to: Point
+  to: Point,
+  altitudes?: { from?: number; to?: number }
 ): AttackActionDefinition | undefined {
   if (effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || !canAct(reactor, "reaction")) {
     return undefined;
@@ -5410,8 +5548,8 @@ function findLeaveReachReaction(
       return false;
     }
     const reach = action.reach ?? action.range;
-    const wasInReach = gridDistance(reactor.position, from, snapshot.map.grid) <= reach;
-    const leavesReach = gridDistance(reactor.position, to, snapshot.map.grid) > reach;
+    const wasInReach = spatialDistance(snapshot, reactor, mover, { b: from, bAltitude: altitudes?.from }) <= reach;
+    const leavesReach = spatialDistance(snapshot, reactor, mover, { b: to, bAltitude: altitudes?.to }) > reach;
     return wasInReach && leavesReach
       && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, reactor.position, from));
   };
@@ -5442,6 +5580,9 @@ export interface ReactionEvent {
   /** Movement step, for `enemy-leaves-reach`. */
   from?: Point;
   to?: Point;
+  /** The mover's altitude before / after the step, when the step is (or includes) rising or dropping. */
+  fromAltitude?: number;
+  toAltitude?: number;
 }
 
 export interface ReactionWindowResult {
@@ -5497,7 +5638,7 @@ function reactionTriggerPasses(
         return false;
       }
       // `gridDistance` already returns feet.
-      return gridDistance(reactor.position, ally.position, state.snapshot.map.grid) <= trigger.withinFt;
+      return spatialDistance(state.snapshot, reactor, ally) <= trigger.withinFt;
     }
     case "enemy-casts-spell": {
       const caster = state.snapshot.combatants.find((c) => c.id === event.sourceId);
@@ -5507,7 +5648,7 @@ function reactionTriggerPasses(
       if (trigger.maxSpellLevel != null && event.spellLevel > trigger.maxSpellLevel) {
         return false;
       }
-      const withinRange = gridDistance(reactor.position, event.origin, state.snapshot.map.grid) <= trigger.withinFt;
+      const withinRange = spatialDistanceToPoint(state.snapshot, reactor, event.origin) <= trigger.withinFt;
       // v1 Counterspell: auto-succeeds only if the counter slot's level ≥ the spell's.
       const counterSlot = "resourceCost" in action ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
       return withinRange && counterSlot != null && counterSlot >= event.spellLevel;
@@ -5610,7 +5751,7 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
         if (source.state !== "active") {
           break;
         }
-        const action = findLeaveReachReaction(state.snapshot, reactor, source, ev.from, ev.to);
+        const action = findLeaveReachReaction(state.snapshot, reactor, source, ev.from, ev.to, { from: ev.fromAltitude, to: ev.toAltitude });
         if (!action) {
           continue;
         }

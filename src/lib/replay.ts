@@ -83,6 +83,15 @@ function applyEvent(
       if (combatant && destination) {
         combatant.position = { x: destination.x, y: destination.y };
       }
+      if (combatant && typeof data.altitude === "number") {
+        combatant.altitude = data.altitude > 0 ? data.altitude : undefined;
+      }
+      return;
+    }
+
+    case "CombatantFell": {
+      const combatant = byId.get(String(data.combatantId));
+      if (combatant) combatant.altitude = undefined;
       return;
     }
 
@@ -340,6 +349,8 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
       return 500;
     case "CombatantMoved":
       return 750;
+    case "CombatantFell":
+      return 800;
     case "AttackRolled":
     case "SaveRolled":
       // Longer than a plain damage/heal tick — there's a "17 + 5 = 22 vs AC 15"

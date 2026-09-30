@@ -1700,6 +1700,7 @@ export interface CombatLogEvent {
     | "InitiativeRolled"
     | "TurnStarted"
     | "CombatantMoved"
+    | "CombatantFell"
     | "ActionDeclared"
     | "AttackRolled"
     | "SaveRolled"
