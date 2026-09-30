@@ -2,29 +2,40 @@
  * Field schemas + draft <-> definition converters for the three guided builders.
  * Pure functions only (no JSX) so `builder-fields.test.tsx` can exercise the
  * progressive-disclosure logic directly.
+ *
+ * The converters rebuild a record from a draft, and a draft only holds what its
+ * form shows, so a rebuilt record is not a faithful copy. Saves therefore never
+ * write it as-is: `mergeDraftEdit` (save-delta.ts) writes only what changed. Where a
+ * converter rebuilds a list (damage components, granted spells), it passes the
+ * elements the form doesn't touch through unchanged.
  */
-import type {
-  Ability,
-  ActionDefinition,
-  ActionRider,
-  AreaTargeting,
-  AreaTemplate,
-  DamageComponent,
-  DamageType,
-  DeathEffectDefinition,
-  FeatureDefinition,
-  FeatureEffect,
-  FeatureEffectConditionApplication,
-  ReactionMeta,
-  ReactionTrigger,
-  SpellDefinition,
-  WeaponDefinition,
-  ZoneMovementDamage,
-  ZonePersistence,
-  ZoneTerrainEffect,
-  ZoneTrigger
+import {
+  getExecutableActions,
+  type Ability,
+  type ActionDefinition,
+  type ActionRider,
+  type AreaTargeting,
+  type AreaTemplate,
+  type CreatureDefinition,
+  type DamageComponent,
+  type DamageType,
+  type DeathEffectDefinition,
+  type FeatureDefinition,
+  type FeatureEffect,
+  type FeatureEffectConditionApplication,
+  type HealingComponent,
+  type ReactionMeta,
+  type ReactionTrigger,
+  type SpellDefinition,
+  type SpellUpcast,
+  type WeaponDefinition,
+  type ZoneMovementDamage,
+  type ZonePersistence,
+  type ZoneTerrainEffect,
+  type ZoneTrigger
 } from "@/engine";
 import type { BuilderDraft, FieldSpec } from "./field-spec";
+import { applyDraftDelta } from "./save-delta";
 
 export type { BuilderDraft } from "./field-spec";
 
@@ -36,39 +47,88 @@ export interface DiceValue {
   mod: number;
   type?: string;
   addAbility?: boolean;
+  /**
+   * Whose modifier `addAbility` adds, when the stored component names one. Absent: the roll's ability. Kept so an
+   * edit doesn't swap a claw's STR for a default.
+   */
+  ability?: Ability;
+  /**
+   * The stored expression when it isn't a plain `NdM(+K)`: a flat "1", "2d6+1d4". Edited as written, rather than
+   * shown (and saved) as the 1d6 default.
+   */
+  raw?: string;
 }
 
 const DEFAULT_DICE: DiceValue = { count: 1, die: 6, mod: 0, type: "bludgeoning" };
 
-export function parseDiceValue(dice: string | undefined, type?: string, addAbility?: boolean): DiceValue {
-  const match = /^\s*(\d+)d(\d+)\s*([+-]\s*\d+)?\s*$/i.exec(dice ?? "");
+export function parseDiceValue(dice: string | number | undefined, type?: string, addAbility?: boolean, ability?: Ability): DiceValue {
+  const text = dice == null ? "" : String(dice).trim();
+  const match = /^(\d+)d(\d+)\s*([+-]\s*\d+)?$/i.exec(text);
   if (!match) {
-    return { ...DEFAULT_DICE, type, addAbility };
+    return { ...DEFAULT_DICE, type, addAbility, ability, ...(text ? { raw: text } : {}) };
   }
   return {
     count: Number(match[1]),
     die: Number(match[2]),
     mod: match[3] ? Number(match[3].replace(/\s+/g, "")) : 0,
     type,
-    addAbility
+    addAbility,
+    ability
   };
 }
 
 export function diceValueToString(value: DiceValue | undefined): string {
   const v = value ?? DEFAULT_DICE;
+  if (v.raw !== undefined) return v.raw.replace(/\s+/g, "") || "0";
   const count = Math.max(1, Math.floor(v.count || 1));
   const die = Math.max(2, Math.floor(v.die || 6));
   const mod = Math.floor(v.mod || 0);
   return `${count}d${die}${mod ? (mod > 0 ? `+${mod}` : String(mod)) : ""}`;
 }
 
-function diceToComponent(value: DiceValue | undefined, fallbackAbility: Ability): DamageComponent {
+/** The `diceCount` / `diceSize` / `flatBonus` mirrors of a dice value, as the normalizer derives them from its expression. */
+function diceMirrors(value: DiceValue): Pick<DamageComponent, "diceCount" | "diceSize" | "flatBonus"> {
+  if (value.raw !== undefined) return {};
+  const mod = Math.floor(value.mod || 0);
+  return { diceCount: Math.max(1, Math.floor(value.count || 1)), diceSize: Math.max(2, Math.floor(value.die || 6)), ...(mod ? { flatBonus: mod } : {}) };
+}
+
+/** A stored component minus its dice mirrors, which go stale once the dice change. */
+function withoutDiceMirrors<T extends HealingComponent>(component: T | undefined): Omit<T, "diceCount" | "diceSize" | "flatBonus"> | undefined {
+  if (!component) return undefined;
+  const { diceCount: _count, diceSize: _size, flatBonus: _flat, ...rest } = component;
+  return rest;
+}
+
+/**
+ * A damage component from the dice control, laid over the stored component it was read from (`base`) so what the
+ * control doesn't show survives: `magical`, cantrip `scaling`, material, damage-type choices.
+ */
+export function diceToComponent(value: DiceValue | undefined, rollAbility: Ability | undefined, base?: DamageComponent): DamageComponent {
   const v = value ?? DEFAULT_DICE;
   return {
+    ...withoutDiceMirrors(base),
     dice: diceValueToString(v),
-    damageType: (v.type as DamageComponent["damageType"]) ?? "bludgeoning",
-    abilityModifier: v.addAbility ? fallbackAbility : undefined
+    ...diceMirrors(v),
+    damageType: (v.type as DamageComponent["damageType"] | undefined) ?? base?.damageType ?? "bludgeoning",
+    abilityModifier: v.addAbility ? (v.ability ?? rollAbility) : undefined
   };
+}
+
+/** The healing / temporary-HP counterpart of `diceToComponent`. */
+function diceToHealing(value: DiceValue | undefined, fallbackAbility: Ability, base?: HealingComponent): HealingComponent {
+  const v = value ?? DEFAULT_DICE;
+  return {
+    ...withoutDiceMirrors(base),
+    dice: diceValueToString(v),
+    ...diceMirrors(v),
+    abilityModifier: v.addAbility ? (v.ability ?? fallbackAbility) : undefined
+  };
+}
+
+/** The dice value for a stored component, remembering which ability's modifier it adds. */
+function diceOf(component: DamageComponent | HealingComponent): DiceValue {
+  return parseDiceValue(component.dice, "damageType" in component ? component.damageType : undefined, Boolean(component.abilityModifier), component.abilityModifier);
 }
 
 /* ─── option lists ────────────────────────────────────────────────────────── */
@@ -92,6 +152,18 @@ const SHAPE_OPTIONS = [
   { value: "reposition", label: "Teleport / reposition" },
   { value: "buff", label: "Beneficial condition (buff)" }
 ] as const;
+
+const REFERENCE_ONLY_LABEL = "Reference only (not simulated)";
+const KEEP_EFFECT_LABEL = "Keep its current effect (not editable here)";
+
+/**
+ * The shape choices for a draft. A record the builder has no shape for (a reference-only action, Shield's
+ * activate-feature) opens as "keep": saving leaves its effect alone, and picking a shape rebuilds it as that shape.
+ */
+function shapeOptions(draft: BuilderDraft): FieldSpec["options"] {
+  const keep = typeof draft.keepLabel === "string" ? [{ value: "keep", label: draft.keepLabel }] : [];
+  return [...keep, ...SHAPE_OPTIONS];
+}
 
 const REPOSITION_TARGET_OPTIONS = [
   { value: "self", label: "The caster" },
@@ -218,12 +290,15 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     name: weapon.name,
     weaponKind: weapon.attackType,
     ability: weapon.ability,
-    dmg: parseDiceValue(primary?.dice, primary?.damageType, Boolean(primary?.abilityModifier)),
+    dmg: primary ? diceOf(primary) : parseDiceValue(undefined),
+    // The stored components, so a save keeps what the dice control doesn't show and any second damage type.
+    dmgBase: primary,
+    dmgExtra: weapon.damage.slice(1),
     magicBonus: weapon.magicBonus ?? 0,
     magical: Boolean(weapon.magical),
     material: weapon.material ?? "none",
     onHit: weapon.onHit ?? [],
-    grantedActions: grantedDraftsFromActions(weapon.grantedActions),
+    grantedActions: grantedDraftsFromActions(weapon.grantedActions, weapon.charges ? "charge" : undefined),
     effects: weapon.effects ?? [],
     chargesEnabled: Boolean(weapon.charges),
     chargesMax: weapon.charges?.max ?? 1,
@@ -297,7 +372,10 @@ export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
     range: kind === "ranged" ? Number(draft.range) || 30 : Number(draft.reach) || 5,
     reach: kind === "melee" ? Number(draft.reach) || 5 : undefined,
     longRange: kind === "ranged" ? Number(draft.longRange) || undefined : undefined,
-    damage: [diceToComponent(draft.dmg as DiceValue, damageAbility)],
+    damage: [
+      diceToComponent(draft.dmg as DiceValue, damageAbility, draft.dmgBase as DamageComponent | undefined),
+      ...((draft.dmgExtra as DamageComponent[] | undefined) ?? [])
+    ],
     properties: (draft.properties as string[])?.length ? (draft.properties as string[]) : undefined,
     onHit: (draft.onHit as ActionRider[])?.length ? (draft.onHit as ActionRider[]) : undefined,
     charges,
@@ -318,7 +396,7 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
   const inSaveShape = shape === "save" || shape === "area";
   const inDamageShape = shape === "attack" || shape === "save" || shape === "area";
   return [
-    { key: "shape", copy: "spell.shape", control: "select", options: SHAPE_OPTIONS as unknown as FieldSpec["options"] },
+    { key: "shape", copy: "spell.shape", control: "select", options: shapeOptions(draft) },
 
     { key: "attackAbility", copy: "spell.attackAbility", control: "ability", visibleWhen: () => shape === "attack" },
     { key: "attackDelivery", copy: "spell.attackDelivery", control: "select", advanced: true, visibleWhen: () => shape === "attack",
@@ -373,8 +451,9 @@ function effectShapeSpecs(draft: BuilderDraft): FieldSpec[] {
     { key: "zoneRepositionFeet", copy: "zone.repositionFeet", control: "number", advanced: true, min: 5, step: 5,
       visibleWhen: () => shape === "area" && Boolean(draft.zoneEnabled) && (draft.zoneAnchor ?? "fixed") === "fixed" && Boolean(draft.zoneRepositionable) },
 
-    { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => shape === "save" || shape === "area" },
-    { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && (shape === "attack" || Boolean(draft.dealsDamage)) },
+    // Not every hit or failed save hurts: a roper's tendril only grapples, Hold Person only paralyzes.
+    { key: "dealsDamage", copy: "spell.dealsDamage", control: "toggle", visibleWhen: () => inDamageShape },
+    { key: "dmg", copy: "spell.damage", control: "dice", visibleWhen: () => inDamageShape && draft.dealsDamage !== false },
 
     { key: "healDice", copy: "spell.healDice", control: "dice", visibleWhen: () => shape === "healing" },
     { key: "healTarget", copy: "spell.healTarget", control: "select", options: HEAL_TARGET_OPTIONS as unknown as FieldSpec["options"], visibleWhen: () => shape === "healing" },
@@ -503,15 +582,18 @@ export function actionFieldSchema(draft: BuilderDraft): FieldSpec[] {
       key: "range",
       copy: draft.shape === "reposition" ? "spell.repositionRange" : "spell.range",
       control: "text",
-      placeholder: draft.shape === "reposition" ? "30" : "5"
+      placeholder: draft.shape === "reposition" ? "30" : "5",
+      // A kept effect isn't rebuilt, so these would do nothing.
+      visibleWhen: (d) => d.shape !== "keep"
     },
     ...effectShapeSpecs(draft),
-    { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true }
+    { key: "concentration", copy: "spell.concentration", control: "toggle", advanced: true, visibleWhen: (d) => d.shape !== "keep" }
   ];
 }
 
 /* ─── effect drafts <-> ActionDefinition ─────────────────────────────────── */
 
+/** The builder shape for an action, or "keep" for a kind it has no shape for (see `shapeOptions`). */
 function shapeOfAction(action: ActionDefinition): string {
   if (action.kind === "attack") return "attack";
   if (action.kind === "save") return "save";
@@ -519,7 +601,17 @@ function shapeOfAction(action: ActionDefinition): string {
   if (action.kind === "healing") return "healing";
   if (action.kind === "reposition") return "reposition";
   if (action.kind === "buff") return "buff";
-  return "attack";
+  return "keep";
+}
+
+/** An effect draft's damage fields: the dice control's value, plus the stored components it came from (see `actionFromEffectDraft`). */
+function damageDraft(damage: DamageComponent[]): BuilderDraft {
+  const primary = damage[0];
+  return {
+    ...(primary ? { dmg: diceOf(primary) } : {}),
+    dmgBase: primary,
+    dmgExtra: damage.slice(1)
+  };
 }
 
 function rangeToDraft(range: number | "self" | "touch" | undefined): string {
@@ -545,6 +637,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     reactionTarget: reaction?.target,
     reactionPriority: reaction?.priority,
     shape,
+    keepLabel: shape === "keep" ? (action.kind === "unsupported" ? REFERENCE_ONLY_LABEL : KEEP_EFFECT_LABEL) : undefined,
     attackAbility: "int",
     attackDelivery: undefined,
     beamCount: 1,
@@ -583,21 +676,22 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     zoneTriggerStart: true
   };
   if (action.kind === "attack") {
-    const primary = action.damage[0];
     return {
       ...base,
       range: rangeToDraft(action.range),
+      // Melee / ranged / spell, so a monster's claw stays a melee attack (the form has no control for it).
+      attackKind: action.attackType,
       attackAbility: action.ability,
       attackDelivery: action.attackDelivery === "beams" ? "beams" : undefined,
       beamCount: action.beamCount ?? 1,
       autoHit: Boolean(action.autoHit),
-      dmg: parseDiceValue(primary?.dice, primary?.damageType, Boolean(primary?.abilityModifier)),
+      dealsDamage: action.damage.length > 0,
+      ...damageDraft(action.damage),
       riders: action.riders ?? [],
       concentration: Boolean(action.concentration)
     };
   }
   if (action.kind === "save" || action.kind === "area-save") {
-    const primary = action.damage[0];
     const areaExtra = action.kind === "area-save"
       ? {
         areaType: action.area.type,
@@ -641,7 +735,7 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       saveDc: action.dc,
       onSuccess: action.onSuccess ?? (action.halfDamageOnSuccess ? "half" : "none"),
       dealsDamage: action.damage.length > 0,
-      dmg: parseDiceValue(primary?.dice, primary?.damageType, Boolean(primary?.abilityModifier)),
+      ...damageDraft(action.damage),
       riders: action.riders ?? [],
       concentration: Boolean(action.concentration)
     };
@@ -651,7 +745,9 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
     return {
       ...base,
       range: rangeToDraft(action.range),
-      healDice: parseDiceValue(primary?.dice, undefined, Boolean(primary?.abilityModifier)),
+      healDice: primary ? diceOf(primary) : base.healDice,
+      healBase: primary,
+      healExtra: action.healing.slice(1),
       healTarget: action.targeting?.target ?? "single",
       healChosenCount: action.targeting?.count ?? 3,
       areaType: action.area?.type ?? "circle",
@@ -690,7 +786,9 @@ export function effectDraftFromAction(action: ActionDefinition): BuilderDraft {
       buffAttackRollBonus: modifiers?.attackRoll ?? 0,
       buffSaveBonus: flatSaveBonus,
       buffTempHpEnabled: Boolean(primaryTempHp),
-      buffTempHpDice: primaryTempHp ? parseDiceValue(primaryTempHp.dice, undefined, Boolean(primaryTempHp.abilityModifier)) : parseDiceValue("2d4"),
+      buffTempHpDice: primaryTempHp ? diceOf(primaryTempHp) : base.buffTempHpDice,
+      tempHpBase: primaryTempHp,
+      tempHpExtra: action.tempHp?.slice(1),
       buffEffects: action.appliedCondition.effects ?? [],
       prepOnly: Boolean(action.prepOnly),
       concentration: Boolean(action.concentration)
@@ -764,29 +862,47 @@ function areaTargetingFromDraft(draft: BuilderDraft, range: number): AreaTargeti
   };
 }
 
-/** Build an `ActionDefinition` skeleton from an effect draft (store normalization fills the rest). */
+type AttackType = Extract<ActionDefinition, { kind: "attack" }>["attackType"];
+
+/**
+ * Build an `ActionDefinition` skeleton from an effect draft (store normalization fills the rest). For a "keep" draft
+ * (a kind the builder has no shape for) it builds only what the form shows — name and timing — for a save to merge
+ * onto the stored action, which keeps its kind and effect.
+ */
 export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: boolean } = {}): BuildableAction {
   const shape = draft.shape as string;
   const name = (draft.name as string) || "Ability";
   const actionType = (draft.timing as "action" | "bonus" | "reaction") ?? "action";
   const range = draftRangeToNumber(draft.range);
   const riders = ((draft.riders as ActionRider[]) ?? []).filter(Boolean);
-  const dmg = diceToComponent(draft.dmg as DiceValue, "int");
+  const attackAbility = (draft.attackAbility as Ability) ?? "int";
+  const castingAbility = (draft.castingAbility as Ability) ?? "int";
+  // The first component comes from the dice control; the rest pass through untouched. "+ mod" adds the roll's ability.
+  const damageFrom = (rollAbility: Ability): DamageComponent[] => [
+    diceToComponent(draft.dmg as DiceValue, rollAbility, draft.dmgBase as DamageComponent | undefined),
+    ...((draft.dmgExtra as DamageComponent[] | undefined) ?? [])
+  ];
   const dcValue = Number(draft.saveDc);
-  const dcFormula = { base: 8, ability: (draft.castingAbility as Ability) ?? "int", proficiency: true };
+  const dcFormula = { base: 8, ability: castingAbility, proficiency: true };
   const reaction = actionType === "reaction" ? reactionMetaFromDraft(draft) : undefined;
 
+  if (shape === "keep") {
+    return { name, actionType, reaction } as unknown as BuildableAction;
+  }
   if (shape === "attack") {
+    const attackType = (draft.attackKind as AttackType | undefined) ?? (options.spell ? "spell" : "ranged");
     return {
       kind: "attack", id: "", name, actionType, reaction,
-      attackType: options.spell ? "spell" : "ranged",
-      ability: (draft.attackAbility as Ability) ?? "int",
-      attackBonusFormula: { ability: (draft.attackAbility as Ability) ?? "int", proficiency: true },
+      attackType,
+      ability: attackAbility,
+      attackBonusFormula: { ability: attackAbility, proficiency: true },
       range,
+      // A melee attack's range is its reach.
+      reach: attackType === "melee" ? range : undefined,
       attackDelivery: draft.attackDelivery === "beams" ? "beams" : undefined,
       beamCount: draft.attackDelivery === "beams" ? Math.max(1, Number(draft.beamCount) || 1) : undefined,
       autoHit: draft.attackDelivery === "beams" && draft.autoHit ? true : undefined,
-      damage: [dmg],
+      damage: draft.dealsDamage === false ? [] : damageFrom(attackAbility),
       riders: riders.length ? riders : undefined,
       concentration: draft.concentration ? true : undefined,
       automationSupport: "full"
@@ -800,7 +916,10 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
           : { target: "single" as const };
     return {
       kind: "healing", id: "", name, actionType, range,
-      healing: [{ dice: diceValueToString(draft.healDice as DiceValue), abilityModifier: (draft.healDice as DiceValue)?.addAbility ? "wis" : undefined }],
+      healing: [
+        diceToHealing(draft.healDice as DiceValue, "wis", draft.healBase as HealingComponent | undefined),
+        ...((draft.healExtra as HealingComponent[] | undefined) ?? [])
+      ],
       targeting,
       area: healTarget === "area" ? areaTemplateFromDraft(draft) : undefined,
       areaTargeting: healTarget === "area" ? areaTargetingFromDraft(draft, range) : undefined,
@@ -839,14 +958,16 @@ export function actionFromEffectDraft(draft: BuilderDraft, options: { spell?: bo
       kind: "buff", id: "", name, actionType, range,
       targeting,
       appliedCondition,
-      tempHp: draft.buffTempHpEnabled && tempHpDice ? [{ dice: diceValueToString(tempHpDice) }] : undefined,
+      tempHp: draft.buffTempHpEnabled && tempHpDice
+        ? [diceToHealing(tempHpDice, "wis", draft.tempHpBase as HealingComponent | undefined), ...((draft.tempHpExtra as HealingComponent[] | undefined) ?? [])]
+        : undefined,
       concentration: draft.concentration ? true : undefined,
       prepOnly: draft.prepOnly ? true : undefined,
       automationSupport: "full"
     };
   }
   const onSuccess = (draft.onSuccess as "half" | "none" | "negates") ?? "half";
-  const damage = draft.dealsDamage === false ? [] : [dmg];
+  const damage = draft.dealsDamage === false ? [] : damageFrom(castingAbility);
   if (shape === "area") {
     return {
       kind: "area-save", id: "", name, actionType, range, reaction,
@@ -897,11 +1018,23 @@ export function blankGrantedDraft(): BuilderDraft {
   return { ...effectDraftFromAction(BLANK_GRANTED_ACTION), chargeCost: 0 };
 }
 
-export function grantedDraftsFromActions(actions: ActionDefinition[] | undefined): BuilderDraft[] {
-  return (actions ?? []).map((action) => ({
-    ...effectDraftFromAction(action),
-    chargeCost: "resourceCost" in action ? action.resourceCost?.amount ?? 0 : 0
-  }));
+/** The granted action a card was read from, the card as it opened, and the charge pool it opened with. */
+interface GrantedOrigin {
+  action: ActionDefinition;
+  draft: BuilderDraft;
+  chargeResourceId: string | undefined;
+}
+
+/** `chargeResourceId` is the pool the weapon's cards spend from as it opens (see `grantedActionFromDraft`). */
+export function grantedDraftsFromActions(actions: ActionDefinition[] | undefined, chargeResourceId?: string): BuilderDraft[] {
+  return (actions ?? []).map((action) => {
+    const draft: BuilderDraft = {
+      ...effectDraftFromAction(action),
+      chargeCost: "resourceCost" in action ? action.resourceCost?.amount ?? 0 : 0
+    };
+    const origin: GrantedOrigin = { action, draft, chargeResourceId };
+    return { ...draft, grantedOrigin: origin };
+  });
 }
 
 /**
@@ -909,8 +1042,19 @@ export function grantedDraftsFromActions(actions: ActionDefinition[] | undefined
  * `chargeResourceId` is the weapon's own charge-pool id — pass `undefined`
  * when the weapon has no pool enabled, which drops any charge cost the card
  * was showing (nothing to spend it from).
+ *
+ * A card read from an existing granted action writes only what changed on it
+ * onto that action (save-delta.ts), so editing one granted spell can't reset
+ * what its card doesn't show on another.
  */
 export function grantedActionFromDraft(draft: BuilderDraft, chargeResourceId: string | undefined): ActionDefinition {
+  const compiled = compileGrantedAction(draft, chargeResourceId);
+  const origin = draft.grantedOrigin as GrantedOrigin | undefined;
+  if (!origin) return compiled;
+  return applyDraftDelta(origin.action, compileGrantedAction(origin.draft, origin.chargeResourceId), compiled) as ActionDefinition;
+}
+
+function compileGrantedAction(draft: BuilderDraft, chargeResourceId: string | undefined): ActionDefinition {
   const action = actionFromEffectDraft(draft, { spell: true });
   const amount = Math.max(0, Number(draft.chargeCost) || 0);
   return {
@@ -925,10 +1069,17 @@ export function grantedActionFromDraft(draft: BuilderDraft, chargeResourceId: st
 
 /* ─── spell drafts <-> SpellDefinition ───────────────────────────────────── */
 
+/** Default shape fields for a spell with no action to read them from. */
+const FALLBACK_SPELL_ACTION: ActionDefinition = {
+  kind: "attack", id: "", name: "Spell", actionType: "action", attackType: "spell", ability: "int", range: 60,
+  damage: [{ dice: "1d10", damageType: "fire" }], automationSupport: "full"
+};
+
 export function spellDraftFromDefinition(spell: SpellDefinition): BuilderDraft {
-  const effect = spell.action ? effectDraftFromAction(spell.action) : { shape: "attack" };
+  // A spell with no action is reference text (an Open5e import, Counterspell): it opens as "keep" until a shape is picked.
+  const effect = spell.action ? effectDraftFromAction(spell.action) : { shape: "keep", keepLabel: REFERENCE_ONLY_LABEL };
   return {
-    ...effectDraftFromAction(spell.action ?? ({ kind: "attack", id: "", name: spell.name, actionType: "action", attackType: "spell", ability: "int", range: 60, damage: [{ dice: "1d10", damageType: "fire" }], automationSupport: "full" } as ActionDefinition)),
+    ...effectDraftFromAction(spell.action ?? FALLBACK_SPELL_ACTION),
     ...effect,
     name: spell.name,
     level: spell.level,
@@ -937,27 +1088,42 @@ export function spellDraftFromDefinition(spell: SpellDefinition): BuilderDraft {
     concentration: Boolean(spell.concentration),
     ritual: Boolean(spell.ritual),
     resourceId: spell.resourceCost?.resourceId ?? "",
-    upcastDamage: spell.upcast?.perSlotAboveBase?.damageDice ?? ""
+    upcastDamage: spell.upcast?.perSlotAboveBase?.damageDice ?? "",
+    // The upcast parts the form doesn't show, and what a kept effect keeps (see spellFromDraft).
+    upcastBase: spell.upcast,
+    keepHasAction: Boolean(spell.action),
+    keepAutomation: spell.automationSupport
   };
 }
 
 export function spellFromDraft(draft: BuilderDraft): SpellDefinition {
-  const action = actionFromEffectDraft(draft, { spell: true });
+  const name = (draft.name as string) || "Spell";
   const resourceId = String(draft.resourceId ?? "").trim();
-  const upcastDamage = String(draft.upcastDamage ?? "").trim();
+  const resourceCost = resourceId ? { resourceId, amount: 1 } : undefined;
+  const keep = draft.shape === "keep";
   return {
     id: "",
-    name: (draft.name as string) || "Spell",
+    name,
     level: Math.max(0, Number(draft.level) || 0),
     castingTime: (draft.timing as "action" | "bonus" | "reaction") ?? "action",
     range: rangeToSpellRange(draft.range),
     concentration: draft.concentration ? true : undefined,
     ritual: draft.ritual ? true : undefined,
-    resourceCost: resourceId ? { resourceId, amount: 1 } : undefined,
-    upcast: upcastDamage ? { perSlotAboveBase: { damageDice: upcastDamage } } : undefined,
-    action: { ...action, resourceCost: resourceId ? { resourceId, amount: 1 } : undefined },
-    automationSupport: "full"
+    resourceCost,
+    upcast: upcastFromDraft(draft.upcastBase as SpellUpcast | undefined, String(draft.upcastDamage ?? "").trim()),
+    // A kept effect (Shield's activate-feature, a reference-only spell) isn't rebuilt: only its name and cost
+    // follow the spell's, merged onto the stored action by the save.
+    action: keep
+      ? (draft.keepHasAction ? ({ name, resourceCost } as unknown as ActionDefinition) : undefined)
+      : { ...actionFromEffectDraft(draft, { spell: true }), resourceCost },
+    automationSupport: keep ? ((draft.keepAutomation as SpellDefinition["automationSupport"] | undefined) ?? "manual-only") : "full"
   };
+}
+
+/** The form's extra damage per slot, laid over the stored upcast so its extra beams / targets survive. */
+function upcastFromDraft(stored: SpellUpcast | undefined, damageDice: string): SpellUpcast | undefined {
+  const perSlotAboveBase = { ...stored?.perSlotAboveBase, damageDice: damageDice || undefined };
+  return Object.values(perSlotAboveBase).some((value) => value !== undefined) ? { ...stored, perSlotAboveBase } : undefined;
 }
 
 function rangeToSpellRange(value: unknown): SpellDefinition["range"] {
@@ -1008,6 +1174,15 @@ const DAMAGE_TYPE_SELECT = [
 /** What the feature builder needs to know about the creature it is editing: its attacks, to pick a follow-up from. */
 export interface FeatureBuilderContext {
   attacks: Array<Extract<ActionDefinition, { kind: "attack" }>>;
+}
+
+/** The feature builder's context for a creature: the attacks it makes with its action (not follow-ups themselves). */
+export function featureBuilderContext(definition: CreatureDefinition): FeatureBuilderContext {
+  return {
+    attacks: getExecutableActions(definition).filter(
+      (action): action is Extract<ActionDefinition, { kind: "attack" }> => action.kind === "attack" && action.actionType === "action" && !action.onlyAfter
+    )
+  };
 }
 
 /** "3d6" + "fire" → a damage component, or nothing for a blank / unreadable amount. */
@@ -1253,6 +1428,32 @@ function followUpFromDraft(draft: BuilderDraft, featureName: string, context?: F
   };
 }
 
+/* ─── linked fields ──────────────────────────────────────────────────────── */
+
+/**
+ * Apply one field change to a draft, plus the fields that follow it:
+ * - the damage "+ mod" follows the roll's ability when it was following it (a STR claw switched to DEX adds DEX);
+ * - a spell's slot follows its level when it was that level's slot (slot-2 → slot-3), or it was a cantrip with none.
+ */
+export function applyDraftChange(draft: BuilderDraft, key: string, value: unknown): BuilderDraft {
+  const next: BuilderDraft = { ...draft, [key]: value };
+  if (key === "ability" || key === "attackAbility" || key === "castingAbility") {
+    const dmg = draft.dmg as DiceValue | undefined;
+    if (dmg?.ability && dmg.ability === draft[key]) {
+      next.dmg = { ...dmg, ability: value === "finesse" ? undefined : (value as Ability) };
+    }
+  }
+  if (key === "level") {
+    const from = Math.max(0, Number(draft.level) || 0);
+    const to = Math.max(0, Number(value) || 0);
+    const slot = String(draft.resourceId ?? "").trim();
+    if (slot === `slot-${from}` || (from === 0 && slot === "")) {
+      next.resourceId = to > 0 ? `slot-${to}` : "";
+    }
+  }
+  return next;
+}
+
 /* ─── preset skeletons ───────────────────────────────────────────────────── */
 
 export type BuilderKind = "weapon" | "spell" | "deathEffect" | "action" | "feature";
@@ -1268,10 +1469,10 @@ export const PRESETS: PresetSkeleton[] = [
   { kind: "weapon", label: "Ranged weapon", draft: weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "ranged", ability: "dex", range: 80, longRange: 320, damage: [{ dice: "1d8", damageType: "piercing", abilityModifier: "dex" }] }) },
   { kind: "weapon", label: "Weapon with a rider", draft: weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "melee", ability: "str", range: 5, reach: 5, damage: [{ dice: "1d8", damageType: "slashing", abilityModifier: "str" }], onHit: [{ kind: "condition", when: "on-hit", condition: "frightened", save: { ability: "wis", onSuccess: "negates" }, duration: { kind: "rounds", rounds: 10 } }] }) },
   { kind: "spell", label: "Damage cantrip", draft: { ...spellDraftFromDefinition({ id: "", name: "New Cantrip", level: 0, castingTime: "action", range: 120, automationSupport: "full", action: { kind: "attack", id: "", name: "New Cantrip", actionType: "action", attackType: "spell", ability: "int", range: 120, damage: [{ dice: "1d10", damageType: "fire", magical: true }], automationSupport: "full" } }) } },
-  { kind: "spell", label: "Save-or-condition spell", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 2, castingTime: "action", range: 60, concentration: true, automationSupport: "full", action: { kind: "save", id: "", name: "New Spell", actionType: "action", saveAbility: "wis", range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates", riders: [{ kind: "condition", when: "on-save-fail", condition: "paralyzed", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }], automationSupport: "full" } }) } },
-  { kind: "spell", label: "Area blast", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 3, castingTime: "action", range: 150, automationSupport: "full", action: { kind: "area-save", id: "", name: "New Spell", actionType: "action", saveAbility: "dex", range: 150, area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 150 }, damage: [{ dice: "8d6", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", automationSupport: "full" } }) } },
-  { kind: "spell", label: "Healing", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: "touch", automationSupport: "full", action: { kind: "healing", id: "", name: "New Spell", actionType: "action", range: 5, healing: [{ dice: "1d8", abilityModifier: "wis" }], targeting: { target: "single" }, automationSupport: "full" } }) } },
-  { kind: "spell", label: "Reaction spell (Shield / Rebuke)", draft: { ...spellDraftFromDefinition({ id: "", name: "New Reaction", level: 1, castingTime: "reaction", range: 60, automationSupport: "full", action: { kind: "save", id: "", name: "New Reaction", actionType: "reaction", saveAbility: "dex", range: 60, damage: [{ dice: "2d10", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", reaction: { trigger: { kind: "hit-by-attack" }, target: "trigger-source", priority: "worthwhile" }, automationSupport: "full" } }) } },
+  { kind: "spell", label: "Save-or-condition spell", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 2, castingTime: "action", range: 60, concentration: true, resourceCost: { resourceId: "slot-2", amount: 1 }, automationSupport: "full", action: { kind: "save", id: "", name: "New Spell", actionType: "action", saveAbility: "wis", range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates", riders: [{ kind: "condition", when: "on-save-fail", condition: "paralyzed", duration: { kind: "save-ends", saveAt: "turn-end" }, save: { ability: "wis", onSuccess: "negates" } }], automationSupport: "full" } }) } },
+  { kind: "spell", label: "Area blast", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 3, castingTime: "action", range: 150, resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full", action: { kind: "area-save", id: "", name: "New Spell", actionType: "action", saveAbility: "dex", range: 150, area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 150 }, damage: [{ dice: "8d6", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "all", automationSupport: "full" } }) } },
+  { kind: "spell", label: "Healing", draft: { ...spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: "touch", resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full", action: { kind: "healing", id: "", name: "New Spell", actionType: "action", range: 5, healing: [{ dice: "1d8", abilityModifier: "wis" }], targeting: { target: "single" }, automationSupport: "full" } }) } },
+  { kind: "spell", label: "Reaction spell (Shield / Rebuke)", draft: { ...spellDraftFromDefinition({ id: "", name: "New Reaction", level: 1, castingTime: "reaction", range: 60, resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full", action: { kind: "save", id: "", name: "New Reaction", actionType: "reaction", saveAbility: "dex", range: 60, damage: [{ dice: "2d10", damageType: "fire", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", reaction: { trigger: { kind: "hit-by-attack" }, target: "trigger-source", priority: "worthwhile" }, automationSupport: "full" } }) } },
   {
     kind: "deathEffect", label: "Death explosion (Gas Spore-style)",
     draft: deathEffectDraftFromDefinition({

@@ -116,7 +116,8 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       </p>
 
       {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} /> : null}
-      {tab === "abilities" ? <ActionsTab combatant={combatant} definition={definition} compendium={compendium} /> : null}
+      {/* Keyed by creature: an ability being edited must not carry over to another creature when the selection changes. */}
+      {tab === "abilities" ? <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} /> : null}
       {tab === "tactics" ? <TacticsTab combatant={combatant} definition={definition} /> : null}
       {tab === "token" ? <TokenTab combatant={combatant} definition={definition} /> : null}
     </FloatingWindow>

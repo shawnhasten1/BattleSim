@@ -4,22 +4,28 @@ import { visibleSpecs, type BuilderDraft } from "@/components/sheet/builders/fie
 import {
   actionFieldSchema,
   actionFromEffectDraft,
+  applyDraftChange,
   deathEffectDraftFromDefinition,
   deathEffectFieldSchema,
   deathEffectFromDraft,
+  diceValueToString,
   effectDraftFromAction,
   featureDraftFromDefinition,
   featureFieldSchema,
   featureFromDraft,
+  parseDiceValue,
+  PRESETS,
   spellDraftFromDefinition,
   spellFieldSchema,
   spellFromDraft,
   weaponDraftFromDefinition,
   weaponFieldSchema,
-  weaponFromDraft
+  weaponFromDraft,
+  type DiceValue
 } from "@/components/sheet/builders/schemas";
+import { mergeDraftEdit } from "@/components/sheet/builders/save-delta";
 import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
-import type { WeaponDefinition } from "@/engine";
+import type { ActionDefinition, WeaponDefinition } from "@/engine";
 
 function visibleKeys(specs: ReturnType<typeof weaponFieldSchema>, draft: BuilderDraft, mode: "simple" | "advanced" = "simple") {
   return visibleSpecs(specs, draft, mode).map((s) => s.key);
@@ -577,5 +583,128 @@ describe("aura builder support", () => {
     const grantsBonus = visibleKeys(featureFieldSchema({ featureShape: "grants-bonus" }), { featureShape: "grants-bonus" }, "advanced");
     expect(activated).not.toContain("auraEnabled");
     expect(grantsBonus).not.toContain("auraEnabled");
+  });
+});
+
+describe("linked fields", () => {
+  it("a spell's slot follows its level when it was that level's slot", () => {
+    expect(applyDraftChange({ level: 2, resourceId: "slot-2" }, "level", 3).resourceId).toBe("slot-3");
+    expect(applyDraftChange({ level: 1, resourceId: "slot-1" }, "level", 0).resourceId).toBe("");
+    expect(applyDraftChange({ level: 0, resourceId: "" }, "level", 1).resourceId).toBe("slot-1");
+  });
+
+  it("a spell that spends something else (or nothing, like a 3/day innate spell) keeps it when the level changes", () => {
+    expect(applyDraftChange({ level: 3, resourceId: "" }, "level", 4).resourceId).toBe("");
+    expect(applyDraftChange({ level: 3, resourceId: "ki" }, "level", 4).resourceId).toBe("ki");
+  });
+
+  it("the damage modifier follows the attack's ability only when it was following it", () => {
+    const claw: ActionDefinition = {
+      kind: "attack", id: "claw", name: "Claw", actionType: "action", attackType: "melee", ability: "str", range: 5,
+      damage: [{ dice: "2d6", damageType: "slashing", abilityModifier: "str" }], automationSupport: "full"
+    };
+    const switched = applyDraftChange(effectDraftFromAction(claw), "attackAbility", "dex");
+    expect((switched.dmg as DiceValue).ability).toBe("dex");
+    const built = actionFromEffectDraft(switched);
+    if (built.kind !== "attack") throw new Error("not an attack");
+    expect(built.damage[0]?.abilityModifier).toBe("dex");
+
+    const odd = { ...claw, damage: [{ dice: "2d6", damageType: "slashing" as const, abilityModifier: "con" as const }] };
+    expect((applyDraftChange(effectDraftFromAction(odd), "attackAbility", "dex").dmg as DiceValue).ability).toBe("con");
+  });
+});
+
+describe("dice the count / die / bonus boxes can't hold", () => {
+  it("keep their expression instead of becoming 1d6", () => {
+    expect(parseDiceValue("1").raw).toBe("1");
+    expect(parseDiceValue("2d6+1d4").raw).toBe("2d6+1d4");
+    expect(parseDiceValue("2d6 + 3")).toMatchObject({ count: 2, die: 6, mod: 3 });
+    expect(parseDiceValue("2d6 + 3").raw).toBeUndefined();
+    expect(diceValueToString(parseDiceValue("2d6+1d4"))).toBe("2d6+1d4");
+  });
+
+  it("a flat-damage weapon keeps its damage through the builder", () => {
+    const blowgun = findSrdWeapon("srd:weapon:blowgun")!;
+    expect(weaponFromDraft(weaponDraftFromDefinition(blowgun)).damage[0]?.dice).toBe(blowgun.damage[0]!.dice);
+  });
+});
+
+describe("a spell made from a preset or blank costs a slot of its level", () => {
+  it.each(PRESETS.filter((preset) => preset.kind === "spell").map((preset) => [preset.label, preset] as const))("%s", (_label, preset) => {
+    const spell = spellFromDraft({ ...preset.draft });
+    expect(spell.resourceCost).toEqual(spell.level > 0 ? { resourceId: `slot-${spell.level}`, amount: 1 } : undefined);
+  });
+});
+
+describe("records the builder has no shape for", () => {
+  const slam: ActionDefinition = { kind: "unsupported", id: "slam", name: "Slam", actionType: "action", description: "Reference text", automationSupport: "unsupported" };
+
+  it("open as reference only, offering that as the first shape", () => {
+    const draft = effectDraftFromAction(slam);
+    expect(draft.shape).toBe("keep");
+    const shape = visibleSpecs(actionFieldSchema(draft), draft, "advanced").find((spec) => spec.key === "shape");
+    expect(shape?.options?.[0]).toEqual({ value: "keep", label: "Reference only (not simulated)" });
+    // Range and concentration would do nothing for an effect that isn't rebuilt.
+    expect(visibleKeys(actionFieldSchema(draft), draft, "advanced")).not.toContain("range");
+  });
+
+  it("build only what the form shows, for the save to merge onto the stored record", () => {
+    expect(actionFromEffectDraft(effectDraftFromAction(slam))).toEqual({ name: "Slam", actionType: "action", reaction: undefined });
+  });
+
+  it("an activated spell like Shield keeps its current effect", () => {
+    const shield = findSrdSpell("srd:spell:shield")!;
+    expect(shield.action?.kind).toBe("activate-feature");
+    const draft = spellDraftFromDefinition(shield);
+    expect(draft.shape).toBe("keep");
+    expect(draft.keepLabel).toBe("Keep its current effect (not editable here)");
+    expect(spellFromDraft(draft).automationSupport).toBe(shield.automationSupport);
+  });
+
+  it("a spell with no action opens as reference only", () => {
+    const draft = spellDraftFromDefinition({ id: "s", name: "Counter", level: 3, castingTime: "reaction", range: 60, automationSupport: "manual-only" });
+    expect(draft).toMatchObject({ shape: "keep", keepLabel: "Reference only (not simulated)" });
+    expect(spellFromDraft(draft)).toMatchObject({ action: undefined, automationSupport: "manual-only" });
+  });
+});
+
+describe("an attack that deals no damage", () => {
+  const tendril: ActionDefinition = {
+    kind: "attack", id: "tendril", name: "Tendril", actionType: "action", attackType: "melee", ability: "str", range: 50, reach: 50,
+    damage: [], riders: [{ kind: "hold", when: "on-hit", escapeDc: 15, restrained: true }], automationSupport: "full"
+  };
+
+  it("shows its Deals damage toggle off and no dice, and builds no damage", () => {
+    const draft = effectDraftFromAction(tendril);
+    expect(draft.dealsDamage).toBe(false);
+    const keys = visibleKeys(actionFieldSchema(draft), draft, "advanced");
+    expect(keys).toContain("dealsDamage");
+    expect(keys).not.toContain("dmg");
+    expect(actionFromEffectDraft(draft)).toMatchObject({ kind: "attack", attackType: "melee", reach: 50, damage: [] });
+  });
+});
+
+describe("an item's granted spells", () => {
+  it("editing one keeps what its card doesn't show on the others", () => {
+    const fireBolt = findSrdSpell("srd:spell:fire-bolt")!.action!;
+    const fireball = findSrdSpell("srd:spell:fireball")!.action!;
+    const staff: WeaponDefinition = {
+      id: "staff", name: "Staff of Fire", attackType: "focus", ability: "int", range: 0, damage: [],
+      charges: { id: "staff:charge", max: 10 },
+      grantedActions: [
+        { ...fireBolt, id: "bolt" },
+        { ...fireball, id: "ball", resourceCost: { resourceId: "staff:charge", amount: 3 } } as ActionDefinition
+      ]
+    };
+    const draft = weaponDraftFromDefinition(staff);
+    const cards = draft.grantedActions as BuilderDraft[];
+    const edited = { ...draft, grantedActions: [cards[0], applyDraftChange(cards[1]!, "saveDc", 17)] };
+    const { record } = mergeDraftEdit(staff, draft, edited, weaponFromDraft);
+    const [bolt, ball] = record.grantedActions!;
+    expect(bolt).toEqual({ ...fireBolt, id: "bolt" });
+    expect(ball).toMatchObject({ id: "ball", kind: "area-save", dc: 17, resourceCost: { resourceId: "staff:charge", amount: 3 } });
+    if (ball?.kind !== "area-save" || fireball.kind !== "area-save") throw new Error("not an area save");
+    expect(ball.damage).toEqual(fireball.damage);
+    expect(ball.upcast).toEqual(fireball.upcast);
   });
 });

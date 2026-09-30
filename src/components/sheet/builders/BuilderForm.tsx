@@ -44,18 +44,28 @@ export function DiceInput({
   const patch = (part: Partial<DiceValue>) => onChange({ ...v, ...part });
   return (
     <div className={styles.diceRow}>
-      <input
-        id={id} type="number" min={1} max={40} aria-label="Number of dice"
-        value={v.count} onChange={(e) => patch({ count: Math.max(1, Number(e.target.value) || 1) })}
-      />
-      <span>d</span>
-      <select aria-label="Die size" value={v.die} onChange={(e) => patch({ die: Number(e.target.value) })}>
-        {DICE_SIDES.map((sides) => <option key={sides} value={sides}>{sides}</option>)}
-      </select>
-      <input
-        type="number" aria-label="Flat bonus" placeholder="+0" style={{ width: 52 }}
-        value={v.mod || ""} onChange={(e) => patch({ mod: Number(e.target.value) || 0 })}
-      />
+      {v.raw !== undefined ? (
+        // An expression the count / die / bonus boxes can't hold (a flat "1", "2d6+1d4"): edit it as written.
+        <input
+          id={id} type="text" aria-label="Dice expression" style={{ width: 120 }}
+          value={v.raw} onChange={(e) => patch({ raw: e.target.value })}
+        />
+      ) : (
+        <>
+          <input
+            id={id} type="number" min={1} max={40} aria-label="Number of dice"
+            value={v.count} onChange={(e) => patch({ count: Math.max(1, Number(e.target.value) || 1) })}
+          />
+          <span>d</span>
+          <select aria-label="Die size" value={v.die} onChange={(e) => patch({ die: Number(e.target.value) })}>
+            {DICE_SIDES.map((sides) => <option key={sides} value={sides}>{sides}</option>)}
+          </select>
+          <input
+            type="number" aria-label="Flat bonus" placeholder="+0" style={{ width: 52 }}
+            value={v.mod || ""} onChange={(e) => patch({ mod: Number(e.target.value) || 0 })}
+          />
+        </>
+      )}
       {showType ? (
         <select aria-label="Damage type" value={v.type ?? "bludgeoning"} onChange={(e) => patch({ type: e.target.value })}>
           {DAMAGE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}

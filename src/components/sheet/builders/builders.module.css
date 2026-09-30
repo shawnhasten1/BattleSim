@@ -451,6 +451,64 @@
   border-color: var(--ui-accent);
 }
 
+/* Cancel and Save side by side under a builder. */
+.builderActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.builderActions > .builderSave {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+}
+
+.builderCancel {
+  padding: 7px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.builderCancel:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* "Delete Claws?": asked under a row whose deletion would change a multiattack. */
+.confirmRemove {
+  margin: 4px 0 8px;
+  padding: 10px;
+  border: 1px solid var(--ui-hp-red);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+  font-size: 11.5px;
+}
+
+.confirmRemove p {
+  margin: 6px 0 0;
+  color: var(--ui-text);
+}
+
+.confirmDelete {
+  flex: 1;
+  padding: 7px;
+  border: 1px solid var(--ui-hp-red);
+  border-radius: var(--ui-radius);
+  background: var(--ui-hp-red);
+  color: #fff;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ── + Add popover ── */
 
 .popover {
@@ -630,11 +688,11 @@
   gap: 6px;
 }
 
-/* header + each row share the same column template (set by the container) */
+/* header + each row share the same column template */
 .maStepHead,
 .maStep {
   display: grid;
-  grid-template-columns: var(--ma-cols, 1fr 88px 24px);
+  grid-template-columns: 1fr 92px 24px;
   gap: 8px;
   align-items: center;
 }
@@ -664,14 +722,6 @@
 
 .maStepCount > span {
   font-size: 10px;
-  color: var(--ui-text-dim);
-}
-
-.maSplitToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
   color: var(--ui-text-dim);
 }
 

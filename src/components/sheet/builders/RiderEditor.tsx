@@ -4,7 +4,7 @@ import type { Ability, ActionRider, ConditionName, CreatureType, RiderDuration, 
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { DiceInput } from "./BuilderForm";
-import { parseDiceValue, diceValueToString } from "./schemas";
+import { diceToComponent, parseDiceValue } from "./schemas";
 import styles from "./builders.module.css";
 
 const CREATURE_TYPE_FILTER_HELP = (
@@ -161,8 +161,9 @@ export function RiderEditor({
             <div className={styles.riderRow}>
               <DiceInput
                 id={`rider-dmg-${index}`}
-                value={parseDiceValue(rider.components[0]?.dice, rider.components[0]?.damageType)}
-                onChange={(dice) => replace(index, { ...rider, components: [{ dice: diceValueToString(dice), damageType: (dice.type as never) ?? "necrotic" }] })}
+                value={parseDiceValue(rider.components[0]?.dice, rider.components[0]?.damageType, Boolean(rider.components[0]?.abilityModifier), rider.components[0]?.abilityModifier)}
+                // The control shows the first component only: the others, and what it doesn't show on the first, are kept.
+                onChange={(dice) => replace(index, { ...rider, components: [diceToComponent(dice, undefined, rider.components[0]), ...rider.components.slice(1)] })}
                 showAbility={false}
               />
               <GateSelect context={context} value={rider.when} onChange={(when) => replace(index, { ...rider, when })} />

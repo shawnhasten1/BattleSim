@@ -76,6 +76,7 @@ import {
 import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
+import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
@@ -340,6 +341,8 @@ interface EncounterStore {
   /** Merge a partial patch into one feature / trait. One undo step. */
   updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
   addMultiattack: (definitionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
+  /** Replace an existing multiattack's name and steps, keeping its id (one undo step). */
+  updateMultiattack: (definitionId: string, actionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
   /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
   addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
   /** Add a fully-formed spell record from the guided builder. Returns its id. */
@@ -356,7 +359,8 @@ interface EncounterStore {
   updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
   /** Merge a partial patch into one death effect and re-normalize it. One undo step. */
   updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
-  removeDefinitionItem: (definitionId: string, itemType: "weapon" | "spell" | "deathEffect" | "feature" | "trait" | "action" | "bonusAction" | "reaction" | "lairAction", itemId: string) => void;
+  /** Delete a record from a creature, and what goes with it: its steps in any multiattack, and a multiattack left empty. */
+  removeDefinitionItem: (definitionId: string, itemType: DefinitionItemType, itemId: string) => void;
   /** Add a lair action to a creature (taken on initiative 20 while a token of it is in its lair). Returns its id. */
   addLairAction: (definitionId: string, action: ActionDefinition) => string;
   updateLairAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
@@ -2774,13 +2778,7 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       addMultiattack: (definitionId, input) => {
         const encounter = get().encounter;
-        const attacks = input.attacks
-          .filter((step) => step.actionId)
-          .map((step) => ({
-            actionId: step.actionId,
-            count: Math.max(1, Math.floor(step.count) || 1),
-            targetGroup: step.targetGroup && step.targetGroup > 0 ? Math.floor(step.targetGroup) : undefined
-          }));
+        const attacks = multiattackSteps(input.attacks);
         if (attacks.length === 0) return;
         commitEncounter({
           ...encounter,
@@ -2801,6 +2799,11 @@ export const useEncounterStore = create<EncounterStore>()(
             }
             : definition)
         });
+      },
+      updateMultiattack: (definitionId, actionId, input) => {
+        const attacks = multiattackSteps(input.attacks);
+        if (attacks.length === 0) return;
+        get().updateAction(definitionId, actionId, { name: input.name, attacks });
       },
       addWeaponV2: (definitionId, weaponInput) => {
         const encounter = get().encounter;
@@ -3020,50 +3023,9 @@ export const useEncounterStore = create<EncounterStore>()(
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            const removedActionIds = new Set<string>([itemId]);
-            if (itemType === "weapon") {
-              const weapon = (definition.weapons ?? []).find((item) => item.id === itemId);
-              if (weapon?.actionId) removedActionIds.add(weapon.actionId);
-              removedActionIds.add(`weapon:${itemId}`);
-            }
-            if (itemType === "spell") {
-              const spell = (definition.spells ?? []).find((item) => item.id === itemId);
-              if (spell?.action?.id) removedActionIds.add(spell.action.id);
-            }
-            const weaponIdsFromAction = itemType === "action"
-              ? new Set((definition.weapons ?? [])
-                .filter((weapon) => removedActionIds.has(weapon.actionId ?? `weapon:${weapon.id}`))
-                .map((weapon) => weapon.id))
-              : new Set<string>();
-            const spellIdsFromAction = itemType === "action"
-              ? new Set((definition.spells ?? [])
-                .filter((spell) => spell.action?.id && removedActionIds.has(spell.action.id))
-                .map((spell) => spell.id))
-              : new Set<string>();
-            const scrubbedActions = (definition.actions ?? [])
-              .filter((action) => itemType !== "action" || !removedActionIds.has(action.id))
-              .map((action) => action.kind === "multiattack"
-                ? {
-                  ...action,
-                  attacks: action.attacks.filter((step) => !removedActionIds.has(step.actionId))
-                }
-                : action)
-              .filter((action) => action.kind !== "multiattack" || action.attacks.length > 0);
-            return {
-              ...definition,
-              weapons: itemType === "weapon" || weaponIdsFromAction.size > 0 ? (definition.weapons ?? []).filter((item) => item.id !== itemId && !weaponIdsFromAction.has(item.id)) : definition.weapons,
-              spells: itemType === "spell" || spellIdsFromAction.size > 0 ? (definition.spells ?? []).filter((item) => item.id !== itemId && !spellIdsFromAction.has(item.id)) : definition.spells,
-              deathEffects: itemType === "deathEffect" ? (definition.deathEffects ?? []).filter((item) => item.id !== itemId) : definition.deathEffects,
-              lairActions: itemType === "lairAction" ? (definition.lairActions ?? []).filter((item) => item.id !== itemId) : definition.lairActions,
-              features: itemType === "feature" ? (definition.features ?? []).filter((item) => item.id !== itemId) : definition.features,
-              traits: itemType === "trait" ? (definition.traits ?? []).filter((item) => item.id !== itemId) : definition.traits,
-              actions: scrubbedActions,
-              bonusActions: itemType === "bonusAction" ? (definition.bonusActions ?? []).filter((item) => item.id !== itemId) : definition.bonusActions,
-              reactions: itemType === "reaction" ? (definition.reactions ?? []).filter((item) => item.id !== itemId) : definition.reactions
-            };
-          })
+          definitions: encounter.definitions.map((definition) => definition.id === definitionId
+            ? withoutDefinitionItem(definition, itemType, itemId)
+            : definition)
         });
       },
       duplicateCombatant: (combatantId) => {
@@ -3241,6 +3203,17 @@ function normalizeFeatureRecord(input: FeatureDefinition, id: string, srdSlug?: 
       : input.source,
     automationSupport: input.automationSupport ?? "manual-only"
   };
+}
+
+/** A multiattack's steps from the builder: steps with no attack dropped, counts at least 1, the default target group left unset. */
+function multiattackSteps(steps: Array<{ actionId: string; count: number; targetGroup?: number }>) {
+  return steps
+    .filter((step) => step.actionId)
+    .map((step) => ({
+      actionId: step.actionId,
+      count: Math.max(1, Math.floor(step.count) || 1),
+      targetGroup: step.targetGroup && step.targetGroup > 0 ? Math.floor(step.targetGroup) : undefined
+    }));
 }
 
 /** Resource pools a feature's granted actions spend, seeded to a sensible default when the definition lacks them. */

@@ -125,7 +125,10 @@ function describeActionCore(action: ActionDefinition, definition: CreatureDefini
       : `${action.actionType} activates ${action.featureId}`;
   }
   if (action.kind === "utility") return `${action.actionType} · ${action.mode}`;
-  if (action.kind === "multiattack") return action.attacks.map((step) => `${step.count} x ${step.actionId}`).join(", ");
+  if (action.kind === "multiattack") {
+    const names = new Map(getExecutableActions(definition).map((candidate) => [candidate.id, candidate.name]));
+    return action.attacks.map((step) => `${step.count > 1 ? `${step.count} × ` : ""}${names.get(step.actionId) ?? step.actionId}`).join(", ");
+  }
   if (action.kind === "summon") {
     const options = action.options.map((option) => `${typeof option.count === "number" ? option.count : option.count.dice} ${option.label}`).join(" or ");
     return `${action.actionType} · summons ${options}${action.chance !== undefined ? `, ${action.chance}% chance` : ""}${action.durationRounds ? `, ${action.durationRounds} rounds` : ""}${action.concentration ? ", concentration" : ""}`;

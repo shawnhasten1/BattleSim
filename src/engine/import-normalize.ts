@@ -577,9 +577,14 @@ function normalizeSaves(input: unknown, abilitiesInput: unknown, proficiencyBonu
   return Object.keys(saves).length > 0 ? saves : undefined;
 }
 
+/**
+ * `abilityModifierValue` is the attack's ability, added to legacy single-expression damage (`damage: "1d8"`). A list of
+ * components is kept as written: one without an `abilityModifier` adds none — a dragon bite's extra fire, a bat's flat
+ * 1, a "2d8+4" that already includes it.
+ */
 function normalizeDamageComponents(input: unknown, fallbackDamageType: unknown, abilityModifierValue?: Ability): DamageComponent[] {
   if (Array.isArray(input)) {
-    return input.map((component) => normalizeDamageComponent(component, fallbackDamageType, abilityModifierValue));
+    return input.map((component) => normalizeDamageComponent(component, fallbackDamageType));
   }
   return [normalizeDamageComponent({ dice: input }, fallbackDamageType, abilityModifierValue)];
 }

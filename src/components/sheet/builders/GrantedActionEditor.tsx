@@ -2,7 +2,7 @@
 
 import type { BuilderDraft } from "./field-spec";
 import { BuilderForm } from "./BuilderForm";
-import { actionFieldSchema, blankGrantedDraft } from "./schemas";
+import { actionFieldSchema, applyDraftChange, blankGrantedDraft } from "./schemas";
 import styles from "./builders.module.css";
 
 /** List editor for a weapon/focus's `grantedActions` — independent spells/effects it lets the wielder cast, each with its own timing and (optional) charge cost. Each card reuses the same attack/save/area/healing shape editor spells use. */
@@ -35,7 +35,7 @@ export function GrantedActionEditor({
             specs={actionFieldSchema(draft)}
             draft={draft}
             mode="simple"
-            onChange={(key, next) => replace(index, { ...draft, [key]: next })}
+            onChange={(key, next) => replace(index, applyDraftChange(draft, key, next))}
           />
         </div>
       ))}

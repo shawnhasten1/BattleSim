@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   getExecutableActions,
   type ActionDefinition,
+  type MultiattackActionDefinition,
   type SummonActionDefinition,
   type TransformActionDefinition,
   type CombatantState,
@@ -18,19 +19,23 @@ import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, searchSrd, type SrdEntryKind } f
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { useEncounterStore } from "@/store/encounter-store";
 import { describeAction, describeFeature, spellAutomation, weaponAutomation } from "@/lib/sheet";
+import { multiattackLosses, type DefinitionItemType } from "@/lib/definition-edits";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
 import { BuilderForm } from "../builders/BuilderForm";
 import { SummonEditor, TransformEditor } from "../builders/SpawnEditors";
+import { mergeDraftEdit } from "../builders/save-delta";
 import {
   actionFieldSchema,
   actionFromEffectDraft,
+  applyDraftChange,
   deathEffectDraftFromDefinition,
   deathEffectFieldSchema,
   deathEffectFromDraft,
   effectDraftFromAction,
+  featureBuilderContext,
   featureDraftFromDefinition,
   featureFieldSchema,
   featureFromDraft,
@@ -54,6 +59,12 @@ type EditTarget =
   | { kind: "feature"; id: string }
   | { kind: "lairAction"; id: string }
   | { kind: "new"; builderKind: BuilderKind | "lairAction" };
+
+interface PendingRemoval {
+  itemType: DefinitionItemType;
+  itemId: string;
+  name: string;
+}
 
 /** The starting point for "+ Lair action": an eruption somewhere it can see. */
 const NEW_LAIR_ACTION: ActionDefinition = {
@@ -97,6 +108,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const updateLairAction = useEncounterStore((s) => s.updateLairAction);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const addMultiattack = useEncounterStore((s) => s.addMultiattack);
+  const updateMultiattack = useEncounterStore((s) => s.updateMultiattack);
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
@@ -104,13 +116,18 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const [mode, setMode] = useState<"simple" | "advanced">(readMode);
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [draft, setDraft] = useState<BuilderDraft>({});
+  // The draft as the builder opened, so a save writes only what changed since (see save-delta.ts).
+  const [initialDraft, setInitialDraft] = useState<BuilderDraft>({});
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"library" | "preset" | "blank" | "import">("library");
   const [libKind, setLibKind] = useState<"all" | "weapon" | "spell" | "feature">("all");
   const [libQuery, setLibQuery] = useState("");
   const [maName, setMaName] = useState("Multiattack");
   const [maRows, setMaRows] = useState<Array<{ actionId: string; count: number; targetGroup: number }>>([]);
-  const [maSplit, setMaSplit] = useState(false);
+  // A delete waiting on "Delete Claws?" because a multiattack would change with it.
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
+  // The multiattack the form is editing, or null when it's building a new one.
+  const [maEditingId, setMaEditingId] = useState<string | null>(null);
 
   function setModePersisted(next: "simple" | "advanced") {
     setMode(next);
@@ -125,29 +142,28 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const bonusActions = definition.bonusActions ?? [];
   const reactions = definition.reactions ?? [];
   const lairActions = definition.lairActions ?? [];
-  const multiattacks = nativeActions.filter((a) => a.kind === "multiattack");
+  const multiattacks = nativeActions.filter((a): a is MultiattackActionDefinition => a.kind === "multiattack");
   const plainActions = nativeActions.filter((a) => a.kind !== "multiattack");
   const optionalGrants = features
     .filter((feature) => feature.optional)
     .flatMap((feature) => (feature.grantedActions ?? []).map((action) => ({ feature, action })));
 
+  const executableActions = useMemo(() => getExecutableActions(definition), [definition]);
   const attackChoices = useMemo(
-    () => getExecutableActions(definition).filter((a) => a.kind === "attack" && a.actionType === "action"),
-    [definition]
+    () => executableActions.filter((a) => a.kind === "attack" && a.actionType === "action"),
+    [executableActions]
   );
   // The feature builder picks a Pounce / Rampage follow-up from these.
-  const featureContext = useMemo(
-    () => ({ attacks: attackChoices.filter((a): a is Extract<ActionDefinition, { kind: "attack" }> => a.kind === "attack" && !a.onlyAfter) }),
-    [attackChoices]
-  );
+  const featureContext = useMemo(() => featureBuilderContext(definition), [definition]);
 
   const libraryResults = useMemo(() => {
     const kind = libKind === "all" ? undefined : libKind;
     return searchSrd(libQuery, kind);
   }, [libQuery, libKind]);
 
-  function openEdit(target: EditTarget, initialDraft: BuilderDraft) {
-    setDraft(initialDraft);
+  function openEdit(target: EditTarget, opened: BuilderDraft) {
+    setDraft(opened);
+    setInitialDraft(opened);
     setEdit(target);
     setAddOpen(false);
   }
@@ -195,15 +211,35 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     openEdit({ kind: "new", builderKind }, initial);
   }
 
+  /**
+   * Write an edit back. Only what the DM changed is written, so what the builder can't show survives the save; an
+   * edit that changes nothing writes nothing (and adds no undo step).
+   */
+  function commitEdit<T>(stored: T | undefined, convert: (edited: BuilderDraft) => unknown, write: (record: T) => void) {
+    if (!stored) return;
+    const result = mergeDraftEdit(stored, initialDraft, draft, convert);
+    if (result.changed) write(result.record);
+  }
+
   function save() {
     if (!edit) return;
-    if (edit.kind === "weapon") updateWeapon(definition.id, edit.id, weaponFromDraft(draft));
-    else if (edit.kind === "spell") updateSpell(definition.id, edit.id, spellFromDraft(draft));
-    else if (edit.kind === "deathEffect") updateDeathEffect(definition.id, edit.id, deathEffectFromDraft(draft));
-    else if (edit.kind === "action") updateAction(definition.id, edit.id, actionFromEffectDraft(draft));
-    else if (edit.kind === "feature") updateFeature(definition.id, edit.id, featureFromDraft(draft, featureContext));
-    else if (edit.kind === "lairAction") updateLairAction(definition.id, edit.id, actionFromEffectDraft(draft));
-    else if (edit.kind === "new") {
+    if (edit.kind === "weapon") {
+      commitEdit(weapons.find((weapon) => weapon.id === edit.id), weaponFromDraft, (record) => updateWeapon(definition.id, edit.id, record));
+    } else if (edit.kind === "spell") {
+      commitEdit(spells.find((spell) => spell.id === edit.id), spellFromDraft, (record) => updateSpell(definition.id, edit.id, record));
+    } else if (edit.kind === "deathEffect") {
+      commitEdit(deathEffects.find((effect) => effect.id === edit.id), deathEffectFromDraft, (record) => updateDeathEffect(definition.id, edit.id, record));
+    } else if (edit.kind === "action") {
+      commitEdit(
+        [...nativeActions, ...bonusActions, ...reactions].find((action) => action.id === edit.id),
+        (edited) => actionFromEffectDraft(edited),
+        (record) => updateAction(definition.id, edit.id, record)
+      );
+    } else if (edit.kind === "feature") {
+      commitEdit(features.find((feature) => feature.id === edit.id), (edited) => featureFromDraft(edited, featureContext), (record) => updateFeature(definition.id, edit.id, record));
+    } else if (edit.kind === "lairAction") {
+      commitEdit(lairActions.find((action) => action.id === edit.id), (edited) => actionFromEffectDraft(edited), (record) => updateLairAction(definition.id, edit.id, record));
+    } else if (edit.kind === "new") {
       if (edit.builderKind === "weapon") addWeaponV2(definition.id, weaponFromDraft(draft));
       else if (edit.builderKind === "spell") addSpellV2(definition.id, spellFromDraft(draft));
       else if (edit.builderKind === "deathEffect") addDeathEffectV2(definition.id, deathEffectFromDraft(draft));
@@ -234,18 +270,70 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             : actionFieldSchema(draft);
     return (
       <div className={styles.builder}>
-        <BuilderForm specs={specs} draft={draft} mode={mode} onChange={(key, value) => setDraft((d) => ({ ...d, [key]: value }))} />
-        <button type="button" className={styles.builderSave} onClick={save}>
-          {target.kind === "new" ? "Add to sheet" : "Save changes"}
-        </button>
+        <BuilderForm specs={specs} draft={draft} mode={mode} onChange={(key, value) => setDraft((d) => applyDraftChange(d, key, value))} />
+        <div className={styles.builderActions}>
+          <button type="button" className={styles.builderCancel} onClick={() => setEdit(null)}>
+            Cancel
+          </button>
+          <button type="button" className={styles.builderSave} onClick={save}>
+            {target.kind === "new" ? "Add to sheet" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** Delete a record, but ask first when a multiattack would lose a step (or be deleted) along with it. */
+  function requestRemove(itemType: DefinitionItemType, itemId: string, name: string) {
+    if (multiattackLosses(definition, itemType, itemId).length > 0) {
+      setPendingRemoval({ itemType, itemId, name });
+      return;
+    }
+    if (itemType === "action" && itemId === maEditingId) resetMultiattackForm();
+    removeDefinitionItem(definition.id, itemType, itemId);
+  }
+
+  /** "Delete Claws?", under a row whose deletion would change a multiattack. */
+  function removalPrompt({ itemType, itemId, name }: PendingRemoval) {
+    const losses = multiattackLosses(definition, itemType, itemId);
+    const deleted = losses.filter((loss) => !loss.after);
+    const confirmLabel = deleted.length === 0 ? `Delete ${name}`
+      : deleted.length === 1 ? `Delete ${name} and ${deleted[0]!.multiattack.name}`
+        : `Delete ${name} and ${deleted.length} multiattacks`;
+    return (
+      <div className={styles.confirmRemove} role="alertdialog" aria-label={`Delete ${name}?`}>
+        <strong>Delete {name}?</strong>
+        {losses.map((loss) => (
+          <p key={loss.multiattack.id}>
+            {loss.after
+              ? `${loss.multiattack.name} uses ${name}. Without it, ${loss.multiattack.name} will be: ${describeAction(loss.after, loss.definitionAfter)}.`
+              : `${loss.multiattack.name} uses only ${name}, so it will be deleted too.`}
+          </p>
+        ))}
+        <div className={styles.builderActions}>
+          <button type="button" className={styles.builderCancel} onClick={() => setPendingRemoval(null)}>
+            Cancel
+          </button>
+          <button
+            type="button" className={styles.confirmDelete}
+            onClick={() => {
+              setPendingRemoval(null);
+              if (maEditingId && losses.some((loss) => loss.multiattack.id === maEditingId)) resetMultiattackForm();
+              removeDefinitionItem(definition.id, itemType, itemId);
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     );
   }
 
   function row(
     key: string, name: string, detail: string, support: string | undefined,
-    onEdit: () => void, onRemove: () => void, isEditing: boolean, editTarget?: EditTarget
+    onEdit: () => void, itemType: DefinitionItemType, isEditing: boolean, editTarget?: EditTarget
   ) {
+    const confirming = pendingRemoval?.itemType === itemType && pendingRemoval.itemId === key;
     return (
       <div key={key}>
         <div className={styles.row}>
@@ -255,8 +343,9 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             {support ? <AutomationBadge value={support} /> : null}
           </div>
           <button type="button" className={styles.rowBtn} onClick={onEdit} aria-label={`Edit ${name}`}><Pencil size={13} /></button>
-          <button type="button" className={`${styles.rowBtn} ${styles.danger}`} onClick={onRemove} aria-label={`Remove ${name}`}><Trash2 size={13} /></button>
+          <button type="button" className={`${styles.rowBtn} ${styles.danger}`} onClick={() => requestRemove(itemType, key, name)} aria-label={`Remove ${name}`}><Trash2 size={13} /></button>
         </div>
+        {confirming ? removalPrompt(pendingRemoval) : null}
         {isEditing && editTarget ? builderFor(editTarget) : null}
       </div>
     );
@@ -273,13 +362,36 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     if (!primary) return;
     setMaName("Multiattack");
     setMaRows([{ actionId: primary, count: times, targetGroup: 0 }]);
-    setMaSplit(false);
   }
 
-  const maShowTargets = maSplit || maRows.some((r) => r.targetGroup > 0);
+  function editMultiattack(action: MultiattackActionDefinition) {
+    setEdit(null);
+    setMaName(action.name);
+    // A step's saved target group is kept as it is, though the form no longer offers it (it has no effect in play).
+    setMaRows(action.attacks.map((step) => ({ actionId: step.actionId, count: step.count, targetGroup: step.targetGroup ?? 0 })));
+    setMaEditingId(action.id);
+  }
+
+  function resetMultiattackForm() {
+    setMaName("Multiattack");
+    setMaRows([]);
+    setMaEditingId(null);
+  }
+
+  function saveMultiattack() {
+    if (maRows.length === 0) return;
+    if (maEditingId) updateMultiattack(definition.id, maEditingId, { name: maName, attacks: maRows });
+    else addMultiattack(definition.id, { name: maName, attacks: maRows });
+    resetMultiattackForm();
+  }
+
   const maTotal = maRows.reduce((sum, r) => sum + r.count, 0);
-  const attackName = (id: string) => attackChoices.find((a) => a.id === id)?.name ?? id;
-  const AIM_LABELS = ["the main target", "the 2nd target", "the 3rd target", "the 4th target"];
+  const attackName = (id: string) => executableActions.find((a) => a.id === id)?.name ?? id;
+  // A step can name something other than an attack (a dragon's Frightful Presence); keep it choosable while editing.
+  const stepChoices = [
+    ...attackChoices,
+    ...executableActions.filter((action) => !attackChoices.includes(action) && maRows.some((r) => r.actionId === action.id))
+  ];
 
   return (
     <div>
@@ -365,7 +477,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             {addTab === "blank" ? (
               <div className={styles.presetGrid}>
                 <button type="button" onClick={() => startNew("weapon", weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "melee", ability: "str", range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }] }))}>Weapon</button>
-                <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, automationSupport: "full" }))}>Spell</button>
+                <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full", action: { kind: "attack", id: "", name: "New Spell", actionType: "action", attackType: "spell", ability: "int", range: 60, damage: [{ dice: "1d10", damageType: "fire" }], automationSupport: "full" } }))}>Spell</button>
                 <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
                 <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
@@ -411,7 +523,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           weapon.id, weapon.name,
           `${weapon.attackType} ${String(weapon.ability).toUpperCase()} · ${weapon.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}${weapon.magical ? " · magical" : ""}${weapon.grip && weapon.grip !== "one-handed" ? ` · ${weapon.grip}` : ""}${weapon.powerAttack ? " · power attack" : ""}${weapon.charges ? ` · ${weapon.charges.max} charge${weapon.charges.max === 1 ? "" : "s"}` : ""}${weapon.onHit?.length ? ` · on-hit ${weapon.onHit.map((r) => r.kind === "condition" && typeof r.condition === "string" ? r.condition : r.kind).join(", ")}` : ""}`,
           weaponAutomation(weapon),
-          () => editWeapon(weapon), () => removeDefinitionItem(definition.id, "weapon", weapon.id),
+          () => editWeapon(weapon), "weapon",
           edit?.kind === "weapon" && edit.id === weapon.id, { kind: "weapon", id: weapon.id }
         ))}
       </div>
@@ -423,7 +535,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           spell.id, spell.name,
           `level ${spell.level} · ${spell.castingTime} · ${typeof spell.range === "number" ? `${spell.range} ft` : spell.range}${spell.concentration ? " · concentration" : ""}${spell.action ? ` · ${describeAction(spell.action, definition)}` : " · reference only"}`,
           spellAutomation(spell),
-          () => editSpell(spell), () => removeDefinitionItem(definition.id, "spell", spell.id),
+          () => editSpell(spell), "spell",
           edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
         ))}
       </div>
@@ -438,7 +550,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           deathEffect.id, deathEffect.name,
           describeAction(deathEffect.action, definition),
           deathEffect.automationSupport,
-          () => editDeathEffect(deathEffect), () => removeDefinitionItem(definition.id, "deathEffect", deathEffect.id),
+          () => editDeathEffect(deathEffect), "deathEffect",
           edit?.kind === "deathEffect" && edit.id === deathEffect.id, { kind: "deathEffect", id: deathEffect.id }
         ))}
       </div>
@@ -451,7 +563,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             {row(
               feature.id, feature.name, featureDetail(feature), feature.informational ? "informational" : feature.automationSupport,
               () => editFeature(feature),
-              () => removeDefinitionItem(definition.id, feature.category === "trait" ? "trait" : "feature", feature.id),
+              feature.category === "trait" ? "trait" : "feature",
               edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
             )}
             {feature.optional && (feature.grantedActions?.length ?? 0) > 0 ? (
@@ -468,13 +580,14 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
         {multiattacks.map((action) => row(
           action.id, action.name, describeAction(action, definition), "full",
-          () => { /* multiattack edits: remove + re-add */ }, () => removeDefinitionItem(definition.id, "action", action.id),
+          () => editMultiattack(action),
+          "action",
           false
         ))}
 
         {multiattacks.length > 0 || attackChoices.length >= 1 ? (
-          <div className={styles.maBuilder} style={{ ["--ma-cols" as string]: maShowTargets ? "1fr 92px 1fr 24px" : "1fr 92px 24px" }}>
-            <p className={styles.maSubHead}>Multiattack</p>
+          <div className={styles.maBuilder}>
+            <p className={styles.maSubHead}>{maEditingId ? "Edit multiattack" : "Multiattack"}</p>
             <p className={styles.maHint}>
               Make several attacks with one Attack action &mdash; a fighter&apos;s Extra Attack, or a
               monster&apos;s &ldquo;two claws and a bite&rdquo;. Choose each attack and how many times it&apos;s made.
@@ -497,7 +610,6 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                 <div className={styles.maStepHead}>
                   <span>Attack</span>
                   <span>How many</span>
-                  {maShowTargets ? <span>Aim at</span> : null}
                   <span />
                 </div>
                 {maRows.map((maRow, index) => (
@@ -507,7 +619,10 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                       value={maRow.actionId}
                       onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, actionId: e.target.value } : r)))}
                     >
-                      {attackChoices.map((action) => <option key={action.id} value={action.id}>{action.name}</option>)}
+                      {stepChoices.map((action) => <option key={action.id} value={action.id}>{action.name}</option>)}
+                      {executableActions.some((action) => action.id === maRow.actionId)
+                        ? null
+                        : <option value={maRow.actionId}>{maRow.actionId} (missing)</option>}
                     </select>
                     <div className={styles.maStepCount}>
                       <input
@@ -516,15 +631,6 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                       />
                       <span>{maRow.count === 1 ? "time" : "times"}</span>
                     </div>
-                    {maShowTargets ? (
-                      <select
-                        aria-label={`Attack ${index + 1} target`}
-                        value={maRow.targetGroup}
-                        onChange={(e) => setMaRows((rows) => rows.map((r, i) => (i === index ? { ...r, targetGroup: Number(e.target.value) || 0 } : r)))}
-                      >
-                        {AIM_LABELS.map((label, group) => <option key={group} value={group}>{label}</option>)}
-                      </select>
-                    ) : null}
                     <button type="button" className={styles.riderRemove} aria-label={`Remove attack ${index + 1}`} onClick={() => setMaRows((rows) => rows.filter((_, i) => i !== index))}>×</button>
                   </div>
                 ))}
@@ -533,11 +639,6 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
             <button type="button" className={styles.riderAdd} onClick={() => addMaRow()}>+ Add another attack</button>
 
-            <label className={styles.maSplitToggle}>
-              <input type="checkbox" checked={maShowTargets} onChange={(e) => setMaSplit(e.target.checked)} />
-              Send some attacks at a different enemy (like the Half-Red-Dragon Veteran)
-            </label>
-
             {maRows.length > 0 ? (
               <p className={styles.maPreview}>
                 This multiattack:{" "}
@@ -545,22 +646,22 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                   <span key={i}>
                     {i > 0 ? " + " : ""}
                     <strong>{r.count}×</strong> {attackName(r.actionId)}
-                    {maShowTargets && r.targetGroup > 0 ? ` → ${AIM_LABELS[r.targetGroup] ?? "another target"}` : ""}
                   </span>
                 ))}
                 {" "}({maTotal} attack{maTotal === 1 ? "" : "s"} total)
               </p>
             ) : null}
 
-            <button
-              type="button" className={styles.builderSave}
-              disabled={maRows.length === 0}
-              onClick={() => {
-                if (maRows.length) { addMultiattack(definition.id, { name: maName, attacks: maRows }); setMaRows([]); setMaSplit(false); }
-              }}
-            >
-              Create multiattack
-            </button>
+            <div className={styles.builderActions}>
+              {maEditingId ? (
+                <button type="button" className={styles.builderCancel} onClick={resetMultiattackForm}>
+                  Cancel
+                </button>
+              ) : null}
+              <button type="button" className={styles.builderSave} disabled={maRows.length === 0} onClick={saveMultiattack}>
+                {maEditingId ? "Save multiattack" : "Create multiattack"}
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -577,7 +678,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
               <div key={action.id}>
                 {row(
                   action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
-                  () => editActionRecord(action), () => removeDefinitionItem(definition.id, itemType as "action", action.id),
+                  () => editActionRecord(action), itemType as DefinitionItemType,
                   edit?.kind === "action" && edit.id === action.id, { kind: "action", id: action.id }
                 )}
                 {spawnEditor && spawnEditing?.id === action.id ? spawnEditorNode() : null}
@@ -619,7 +720,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {lairActions.map((action) => row(
           action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
           () => openEdit({ kind: "lairAction", id: action.id }, effectDraftFromAction(action)),
-          () => removeDefinitionItem(definition.id, "lairAction", action.id),
+          "lairAction",
           edit?.kind === "lairAction" && edit.id === action.id, { kind: "lairAction", id: action.id }
         ))}
         {edit?.kind === "new" && edit.builderKind === "lairAction" ? builderFor(edit) : null}
