@@ -2797,18 +2797,24 @@ export function resolveTransformAction(state: EngineState, actorId: Id, actionId
     throw new Error(`${actor.displayName} can't return to its true form with ${action.name}`);
   }
   validateAndSpendAction(actor, action);
-  declareAction(state, actor, action);
+  declareAction(state, actor, action, {
+    message: target ? `${actor.displayName} uses ${action.name} to change shape` : `${actor.displayName} uses ${action.name} to return to its true form`
+  });
   actor.activeForm = target ? { definitionId: target.definitionId } : undefined;
-  state.log.push(event(state, "Transformed", `${actor.displayName} ${target ? `becomes ${target.label}` : "returns to its true form"}`, {
-    combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null
+  state.log.push(event(state, "Transformed", `Success - ${action.name}: ${actor.displayName} ${target ? `becomes ${target.label}` : "returns to its true form"}`, {
+    combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null, success: true
   }));
 }
 
 /** A shapechanger that dies "reverts to its true form" — only cosmetic, but the sheet and reports should show the real creature. */
 function revertFormOnDeath(state: EngineState, target: CombatantState): void {
   if (!target.activeForm) return;
-  const reverts = getExecutableActions(getDefinition(state.snapshot, target)).some((action) => action.kind === "transform" && action.revertOnDeath);
-  if (reverts) target.activeForm = undefined;
+  const reverting = getExecutableActions(getDefinition(state.snapshot, target)).find((action) => action.kind === "transform" && action.revertOnDeath);
+  if (!reverting) return;
+  target.activeForm = undefined;
+  state.log.push(event(state, "Transformed", `${reverting.name}: ${target.displayName} reverts to its true form on death`, {
+    combatantId: target.id, actionId: reverting.id, formId: BASE_FORM_ID, activeForm: null
+  }));
 }
 
 /** Every live combatant `summonerId` has out, optionally only the ones tied to its current concentration. */

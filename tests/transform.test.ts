@@ -100,6 +100,25 @@ describe("resolveTransformAction", () => {
     expect(get(state, "were").state).toBe("defeated");
     expect(get(state, "were").activeForm).toBeUndefined();
   });
+
+  it("reads Success - ... in the log, for changing shape, changing back, and reverting on death", () => {
+    const state = createEngineState(scene());
+    resolveTransformAction(state, "were", "shift", "hybrid");
+    fresh(state);
+    resolveTransformAction(state, "were", "shift", BASE_FORM_ID);
+    fresh(state);
+    resolveTransformAction(state, "were", "shift", "wolf");
+    const lines = state.log.filter((entry) => entry.type === "Transformed").map((entry) => entry.message);
+    expect(lines[0]).toMatch(/^Success - Shapechanger: were becomes /);
+    expect(lines[1]).toBe("Success - Shapechanger: were returns to its true form");
+    expect(state.log.some((entry) => entry.type === "ActionDeclared" && entry.message === "were uses Shapechanger to change shape")).toBe(true);
+    expect(state.log.some((entry) => entry.type === "ActionDeclared" && entry.message === "were uses Shapechanger to return to its true form")).toBe(true);
+
+    get(state, "were").currentHp = 0;
+    updateDefeatState(state, get(state, "were"));
+    const last = state.log.filter((entry) => entry.type === "Transformed").at(-1)!;
+    expect(last.message).toBe("Shapechanger: were reverts to its true form on death");
+  });
 });
 
 describe("placing a shapechanger", () => {
