@@ -4140,8 +4140,10 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
     range: weapon.range,
     longRange: weapon.longRange,
     reach: weapon.reach,
-    damage: damageSource.map((component) => ({
+    damage: damageSource.map((component, index) => ({
       ...component,
+      // A finesse weapon's damage adds the ability its attack roll uses; the library leaves that to be resolved here.
+      abilityModifier: component.abilityModifier ?? (weapon.ability === "finesse" && index === 0 ? ability : undefined),
       magical: component.magical || isMagical || undefined,
       material: component.material ?? weapon.material,
       bonusFormula: magicBonus
@@ -5599,7 +5601,8 @@ function firstActionDamageType(action: AttackActionDefinition): DamageType | und
   return damageType === "same-as-attack" ? undefined : damageType;
 }
 
-function proficiencyFromDefinition(definition: CreatureDefinition): number {
+/** Proficiency bonus from a character's level (or 1): the fallback when a definition doesn't state one. */
+export function proficiencyFromDefinition(definition: CreatureDefinition): number {
   const level = definition.character?.level ?? definition.character?.classes?.reduce((sum, entry) => sum + entry.level, 0) ?? 1;
   if (level >= 17) return 6;
   if (level >= 13) return 5;

@@ -54,14 +54,8 @@ export function FloatingWindow({
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    const node = windowRef.current;
-    node?.focus({ preventScroll: true });
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCloseRef.current();
-    }
-    node?.addEventListener("keydown", onKeyDown);
+    windowRef.current?.focus({ preventScroll: true });
     return () => {
-      node?.removeEventListener("keydown", onKeyDown);
       previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, []);
@@ -74,6 +68,9 @@ export function FloatingWindow({
       style={{ left: position.x, top: position.y, width }}
       role="dialog"
       aria-label={ariaLabel ?? (typeof title === "string" ? title : "Window")}
+      // A React handler (not a native listener), so something inside that handles Escape itself — an open editor
+      // asking about unsaved changes, a menu — can stop it from closing the window.
+      onKeyDown={(event) => { if (event.key === "Escape") onCloseRef.current(); }}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -88,7 +85,8 @@ export function FloatingWindow({
           <X size={13} />
         </button>
       </header>
-      {minimized ? null : <div className={styles.body}>{children}</div>}
+      {/* Hidden, not unmounted: minimizing mustn't throw away what's open inside (an ability being edited). */}
+      <div className={styles.body} hidden={minimized}>{children}</div>
     </div>
   );
 }

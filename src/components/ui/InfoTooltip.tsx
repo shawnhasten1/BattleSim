@@ -48,7 +48,11 @@ export function InfoTooltip({ label, content }: InfoTooltipProps) {
       setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Opened from the keyboard, Escape only closes the bubble; it isn't also a "close" for the window or editor
+      // around it. (Opened by hovering, it closes the bubble and carries on as usual.)
+      if (triggerRef.current === document.activeElement) event.stopPropagation();
     }
     function onDismiss() {
       setOpen(false);

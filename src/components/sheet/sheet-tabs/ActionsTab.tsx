@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getExecutableActions,
   type ActionDefinition,
@@ -18,8 +18,12 @@ import {
 import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, searchSrd, type SrdEntryKind } from "@/data/srd";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { useEncounterStore } from "@/store/encounter-store";
-import { describeAction, describeFeature, spellAutomation, weaponAutomation } from "@/lib/sheet";
+import { spellAutomation, weaponAutomation } from "@/lib/sheet";
+import { actionStatblock, deathEffectStatblock, featureStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
 import { multiattackLosses, type DefinitionItemType } from "@/lib/definition-edits";
+import { blankAttack, blankWeapon, WEAPON_TEMPLATES } from "@/lib/ability-editor/templates";
+import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
+import { AbilityEditor, type AbilityEditorTarget } from "../ability-editor/AbilityEditor";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
@@ -83,10 +87,6 @@ function readMode(): "simple" | "advanced" {
   }
 }
 
-function featureDetail(feature: FeatureDefinition): string {
-  return describeFeature(feature);
-}
-
 export function ActionsTab({ definition, compendium }: { combatant: CombatantState; definition: CreatureDefinition; compendium?: Compendium }) {
   const addWeaponV2 = useEncounterStore((s) => s.addWeaponV2);
   const addSpellV2 = useEncounterStore((s) => s.addSpellV2);
@@ -128,6 +128,11 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
   const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
   // The multiattack the form is editing, or null when it's building a new one.
   const [maEditingId, setMaEditingId] = useState<string | null>(null);
+  // The new ability editor, open in place of the list (weapons and attacks for now; the rest use the builder below).
+  const [abilityEditor, setAbilityEditor] = useState<AbilityEditorTarget | null>(null);
+  // The row the editor was on, focused when the list comes back (and highlighted, when it was saved).
+  const [returnTo, setReturnTo] = useState<{ id: string; saved: boolean } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   function setModePersisted(next: "simple" | "advanced") {
     setMode(next);
@@ -168,7 +173,34 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     setAddOpen(false);
   }
 
-  function editWeapon(weapon: WeaponDefinition) { openEdit({ kind: "weapon", id: weapon.id }, weaponDraftFromDefinition(weapon)); }
+  function editWeapon(weapon: WeaponDefinition) {
+    // A spellcasting focus has no attack of its own; it stays with the builder until the editor handles what it grants.
+    if (weapon.attackType === "focus") openEdit({ kind: "weapon", id: weapon.id }, weaponDraftFromDefinition(weapon));
+    else openAbilityEditor({ mode: "edit", ref: { list: "weapons", id: weapon.id } });
+  }
+
+  function openAbilityEditor(target: AbilityEditorTarget) {
+    setEdit(null);
+    setAddOpen(false);
+    setSpawnEditor(null);
+    setSpawnEditing(null);
+    setAbilityEditor(target);
+  }
+
+  /** The list an action lives in, for the editor's ref. */
+  function actionRef(action: ActionDefinition): AbilityRef {
+    const list = bonusActions.includes(action) ? "bonusActions" : reactions.includes(action) ? "reactions" : "actions";
+    return { list, id: action.id };
+  }
+
+  /** From the new editor to the old builder, for what the editor doesn't cover yet (turning an attack into a save). */
+  function openClassic(ref: AbilityRef) {
+    setAbilityEditor(null);
+    const record = findAbility(useEncounterStore.getState().encounter.definitions.find((candidate) => candidate.id === definition.id) ?? definition, ref);
+    if (!record) return;
+    if (ref.list === "weapons") openEdit({ kind: "weapon", id: (record as WeaponDefinition).id }, weaponDraftFromDefinition(record as WeaponDefinition));
+    else openEdit({ kind: "action", id: (record as ActionDefinition).id }, effectDraftFromAction(record as ActionDefinition));
+  }
   function editSpell(spell: SpellDefinition) { openEdit({ kind: "spell", id: spell.id }, spellDraftFromDefinition(spell)); }
   function editDeathEffect(deathEffect: DeathEffectDefinition) { openEdit({ kind: "deathEffect", id: deathEffect.id }, deathEffectDraftFromDefinition(deathEffect)); }
   function editActionRecord(action: ActionDefinition) {
@@ -178,6 +210,10 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
       setAddOpen(false);
       setSpawnEditing(action);
       setSpawnEditor(action.kind);
+      return;
+    }
+    if (action.kind === "attack") {
+      openAbilityEditor({ mode: "edit", ref: actionRef(action) });
       return;
     }
     openEdit({ kind: "action", id: action.id }, effectDraftFromAction(action));
@@ -306,7 +342,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {losses.map((loss) => (
           <p key={loss.multiattack.id}>
             {loss.after
-              ? `${loss.multiattack.name} uses ${name}. Without it, ${loss.multiattack.name} will be: ${describeAction(loss.after, loss.definitionAfter)}.`
+              ? `${loss.multiattack.name} uses ${name}. Without it, ${loss.multiattack.name} will be: ${actionStatblock(loss.after, loss.definitionAfter).short}.`
               : `${loss.multiattack.name} uses only ${name}, so it will be deleted too.`}
           </p>
         ))}
@@ -329,14 +365,23 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     );
   }
 
+  useEffect(() => {
+    if (!returnTo || abilityEditor) return;
+    const node = listRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(returnTo.id)}"]`);
+    node?.scrollIntoView({ block: "nearest" });
+    node?.querySelector<HTMLButtonElement>('button[aria-label^="Edit "]')?.focus({ preventScroll: true });
+    const timer = window.setTimeout(() => setReturnTo(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [returnTo, abilityEditor]);
+
   function row(
     key: string, name: string, detail: string, support: string | undefined,
     onEdit: () => void, itemType: DefinitionItemType, isEditing: boolean, editTarget?: EditTarget
   ) {
     const confirming = pendingRemoval?.itemType === itemType && pendingRemoval.itemId === key;
     return (
-      <div key={key}>
-        <div className={styles.row}>
+      <div key={key} data-row-id={key}>
+        <div className={`${styles.row} ${returnTo?.saved && returnTo.id === key ? styles.rowFlash : ""}`}>
           <div className={styles.rowMain}>
             <strong>{name}</strong>
             <span>{detail}</span>
@@ -393,8 +438,24 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     ...executableActions.filter((action) => !attackChoices.includes(action) && maRows.some((r) => r.actionId === action.id))
   ];
 
+  if (abilityEditor) {
+    return (
+      <AbilityEditor
+        key={abilityEditor.mode === "edit" ? `${abilityEditor.ref.list}:${"id" in abilityEditor.ref ? abilityEditor.ref.id : ""}` : `new:${abilityEditor.list}`}
+        definition={definition}
+        target={abilityEditor}
+        onClose={({ savedRef }) => {
+          const back = savedRef ?? (abilityEditor.mode === "edit" ? abilityEditor.ref : undefined);
+          setAbilityEditor(null);
+          if (back && "id" in back) setReturnTo({ id: back.id, saved: Boolean(savedRef) });
+        }}
+        onOpenClassic={abilityEditor.mode === "edit" ? () => openClassic(abilityEditor.ref) : undefined}
+      />
+    );
+  }
+
   return (
-    <div>
+    <div ref={listRef}>
       <div className={styles.header}>
         <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
           <Plus size={14} /> Add
@@ -466,7 +527,12 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
             {addTab === "preset" ? (
               <div className={styles.presetGrid}>
-                {PRESETS.map((preset) => (
+                {WEAPON_TEMPLATES.map((template) => (
+                  <button key={template.label} type="button" title={template.hint} onClick={() => openAbilityEditor({ mode: "new", list: "weapons", record: structuredClone(template.record) })}>
+                    {template.label}
+                  </button>
+                ))}
+                {PRESETS.filter((preset) => preset.kind !== "weapon").map((preset) => (
                   <button key={preset.label} type="button" onClick={() => startNew(preset.kind, { ...preset.draft })}>
                     {preset.label}
                   </button>
@@ -476,10 +542,11 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
 
             {addTab === "blank" ? (
               <div className={styles.presetGrid}>
-                <button type="button" onClick={() => startNew("weapon", weaponDraftFromDefinition({ id: "", name: "New Weapon", attackType: "melee", ability: "str", range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }] }))}>Weapon</button>
+                <button type="button" onClick={() => openAbilityEditor({ mode: "new", list: "weapons", record: blankWeapon() })}>Weapon</button>
+                <button type="button" title="A claw, bite or slam: a natural attack" onClick={() => openAbilityEditor({ mode: "new", list: "actions", record: blankAttack() })}>Attack</button>
                 <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full", action: { kind: "attack", id: "", name: "New Spell", actionType: "action", attackType: "spell", ability: "int", range: 60, damage: [{ dice: "1d10", damageType: "fire" }], automationSupport: "full" } }))}>Spell</button>
                 <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
-                <button type="button" onClick={() => startNew("action", effectDraftFromAction({ kind: "attack", id: "", name: "New Ability", actionType: "action", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }], automationSupport: "full" }))}>Innate ability</button>
+                <button type="button" title="A save, an area, a heal, a buff or a teleport" onClick={() => startNew("action", effectDraftFromAction({ kind: "save", id: "", name: "New Ability", actionType: "action", saveAbility: "dex", range: 30, damage: [{ dice: "2d6", damageType: "fire" }], halfDamageOnSuccess: true, onSuccess: "half", automationSupport: "full" }))}>Other action</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
                 <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("summon"); }}>Summon</button>
                 <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("transform"); }}>Shapechange</button>
@@ -521,7 +588,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {weapons.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
         {weapons.map((weapon) => row(
           weapon.id, weapon.name,
-          `${weapon.attackType} ${String(weapon.ability).toUpperCase()} · ${weapon.damage.map((c) => `${c.dice} ${c.damageType}`).join(", ")}${weapon.magical ? " · magical" : ""}${weapon.grip && weapon.grip !== "one-handed" ? ` · ${weapon.grip}` : ""}${weapon.powerAttack ? " · power attack" : ""}${weapon.charges ? ` · ${weapon.charges.max} charge${weapon.charges.max === 1 ? "" : "s"}` : ""}${weapon.onHit?.length ? ` · on-hit ${weapon.onHit.map((r) => r.kind === "condition" && typeof r.condition === "string" ? r.condition : r.kind).join(", ")}` : ""}`,
+          weaponStatblock(weapon, definition).short,
           weaponAutomation(weapon),
           () => editWeapon(weapon), "weapon",
           edit?.kind === "weapon" && edit.id === weapon.id, { kind: "weapon", id: weapon.id }
@@ -533,7 +600,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {spells.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
         {spells.map((spell) => row(
           spell.id, spell.name,
-          `level ${spell.level} · ${spell.castingTime} · ${typeof spell.range === "number" ? `${spell.range} ft` : spell.range}${spell.concentration ? " · concentration" : ""}${spell.action ? ` · ${describeAction(spell.action, definition)}` : " · reference only"}`,
+          spellStatblock(spell, definition).short,
           spellAutomation(spell),
           () => editSpell(spell), "spell",
           edit?.kind === "spell" && edit.id === spell.id, { kind: "spell", id: spell.id }
@@ -548,7 +615,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {deathEffects.length === 0 ? <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None</span> : null}
         {deathEffects.map((deathEffect) => row(
           deathEffect.id, deathEffect.name,
-          describeAction(deathEffect.action, definition),
+          deathEffectStatblock(deathEffect, definition).short,
           deathEffect.automationSupport,
           () => editDeathEffect(deathEffect), "deathEffect",
           edit?.kind === "deathEffect" && edit.id === deathEffect.id, { kind: "deathEffect", id: deathEffect.id }
@@ -561,7 +628,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         {features.map((feature) => (
           <div key={feature.id}>
             {row(
-              feature.id, feature.name, featureDetail(feature), feature.informational ? "informational" : feature.automationSupport,
+              feature.id, feature.name, featureStatblock(feature, definition).short, feature.informational ? "informational" : feature.automationSupport,
               () => editFeature(feature),
               feature.category === "trait" ? "trait" : "feature",
               edit?.kind === "feature" && edit.id === feature.id, { kind: "feature", id: feature.id }
@@ -579,7 +646,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         ))}
 
         {multiattacks.map((action) => row(
-          action.id, action.name, describeAction(action, definition), "full",
+          action.id, action.name, actionStatblock(action, definition).short, "full",
           () => editMultiattack(action),
           "action",
           false
@@ -677,7 +744,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
             {actions.map((action) => (
               <div key={action.id}>
                 {row(
-                  action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
+                  action.id, action.name, actionStatblock(action, definition).short, "automationSupport" in action ? action.automationSupport : "full",
                   () => editActionRecord(action), itemType as DefinitionItemType,
                   edit?.kind === "action" && edit.id === action.id, { kind: "action", id: action.id }
                 )}
@@ -689,7 +756,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                 <div className={styles.rowMain}>
                   <strong>{action.name}</strong>
                   <span>
-                    {describeAction(action, definition)} · optional rule ({feature.name}) — {feature.enabled ? "ON, the AI can use it" : "OFF, the AI ignores it"}
+                    {actionStatblock(action, definition).short} · optional rule ({feature.name}) — {feature.enabled ? "ON, the AI can use it" : "OFF, the AI ignores it"}
                   </span>
                   <AutomationBadge value={"automationSupport" in action ? action.automationSupport : "full"} />
                 </div>
@@ -718,7 +785,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
           <span style={{ fontSize: 11, color: "var(--ui-text-dim)" }}>None — add one to make this creature's home fight back.</span>
         ) : null}
         {lairActions.map((action) => row(
-          action.id, action.name, describeAction(action, definition), "automationSupport" in action ? action.automationSupport : "full",
+          action.id, action.name, actionStatblock(action, definition).short, "automationSupport" in action ? action.automationSupport : "full",
           () => openEdit({ kind: "lairAction", id: action.id }, effectDraftFromAction(action)),
           "lairAction",
           edit?.kind === "lairAction" && edit.id === action.id, { kind: "lairAction", id: action.id }

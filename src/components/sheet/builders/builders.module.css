@@ -392,6 +392,27 @@
   border-bottom: 1px solid var(--ui-border);
 }
 
+/* The row an editor just saved: a brief highlight so the eye finds it. */
+.rowFlash {
+  animation: rowFlash 1.6s ease-out;
+}
+
+@keyframes rowFlash {
+  from {
+    background: rgba(217, 138, 61, 0.22);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rowFlash {
+    animation: none;
+    background: rgba(217, 138, 61, 0.12);
+  }
+}
+
 .row:last-child {
   border-bottom: none;
 }

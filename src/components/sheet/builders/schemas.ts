@@ -290,7 +290,8 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
     name: weapon.name,
     weaponKind: weapon.attackType,
     ability: weapon.ability,
-    dmg: primary ? diceOf(primary) : parseDiceValue(undefined),
+    // A finesse weapon always adds its ability (resolved when it attacks), so "+ mod" shows as on.
+    dmg: primary ? { ...diceOf(primary), addAbility: Boolean(primary.abilityModifier) || weapon.ability === "finesse" } : parseDiceValue(undefined),
     // The stored components, so a save keeps what the dice control doesn't show and any second damage type.
     dmgBase: primary,
     dmgExtra: weapon.damage.slice(1),
@@ -322,7 +323,8 @@ export function weaponDraftFromDefinition(weapon: WeaponDefinition): BuilderDraf
 export function weaponFromDraft(draft: BuilderDraft): WeaponDefinition {
   const kind: WeaponDefinition["attackType"] = draft.weaponKind === "focus" ? "focus" : draft.weaponKind === "ranged" ? "ranged" : "melee";
   const ability = (draft.ability as WeaponDefinition["ability"]) ?? "str";
-  const damageAbility: Ability = ability === "finesse" ? "str" : ability;
+  // A finesse weapon's damage modifier is left unnamed: the engine adds whichever of STR / DEX its attack uses.
+  const damageAbility: Ability | undefined = ability === "finesse" ? undefined : ability;
   const bonusOnly = Boolean(draft.bonusOnly);
   const reactionOn = kind === "melee" && !bonusOnly && draft.usableAsReaction !== false;
   const usableAs: Array<"action" | "bonus" | "reaction"> = bonusOnly

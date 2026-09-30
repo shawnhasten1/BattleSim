@@ -807,6 +807,8 @@ export interface AttackActionDefinition {
   kind: "attack";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** Its riders' saves count as saves against a magical effect. Implied by `attackType: "spell"` / `spellLevel`. */
   magical?: boolean;
@@ -865,6 +867,8 @@ export interface SaveActionDefinition {
   kind: "save";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
   magical?: boolean;
@@ -898,6 +902,8 @@ export interface AreaSaveActionDefinition {
   kind: "area-save";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** A magical effect (a spell, "against this magic"): Magic Resistance and similar effects apply to its save. Implied by `spellLevel`. */
   magical?: boolean;
@@ -1077,6 +1083,8 @@ export interface HealingActionDefinition {
   kind: "healing";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   range: number;
   healing: HealingComponent[];
@@ -1114,6 +1122,8 @@ export interface RepositionActionDefinition {
   kind: "reposition";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** Max feet from the caster to both the mover (in `"single"` mode) and the chosen destination. */
   range: number;
@@ -1148,6 +1158,8 @@ export interface BuffActionDefinition {
   kind: "buff";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** Max feet from the caster to each target. Irrelevant (but still required — use 0) for `"self"`. */
   range: number;
@@ -1187,6 +1199,8 @@ export interface ActivateFeatureActionDefinition {
   kind: "activate-feature";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   /** What makes this reaction available (only when `actionType === "reaction"`) — Shield, Counterspell. */
   reaction?: ReactionMeta;
@@ -1213,6 +1227,8 @@ export interface UtilityActionDefinition {
   kind: "utility";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: "action" | "bonus";
   mode: "dash" | "disengage" | "dodge" | "hide" | "help" | "escape";
   resourceCost?: ResourceCost;
@@ -1223,6 +1239,8 @@ export interface MultiattackActionDefinition {
   kind: "multiattack";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   attacks: Array<{
     actionId: Id;
@@ -1261,6 +1279,8 @@ export interface SummonActionDefinition {
   kind: "summon";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   range: number;
   chance?: number;
@@ -1293,6 +1313,8 @@ export interface TransformActionDefinition {
   kind: "transform";
   id: Id;
   name: string;
+  /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
+  description?: string;
   actionType: ActionType;
   forms: TransformForm[];
   /** Drop back to the creature's own (non-`hidden`) base definition instead of one of `forms`. */
@@ -1331,6 +1353,8 @@ export interface WeaponCharges {
 export interface WeaponDefinition {
   id: Id;
   name: string;
+  /** Reference text shown with the weapon. Not read by the simulator. */
+  description?: string;
   source?: SourceMetadata;
   category?: "simple" | "martial";
   /**

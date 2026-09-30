@@ -291,7 +291,7 @@ const SECTIONS: Section[] = [
             skills.
           </li>
           <li>
-            <strong>Actions</strong> — the attacks, spells, and features this actor can use in combat.
+            <strong>Abilities</strong> — the attacks, spells, and features this actor can use in combat.
           </li>
           <li>
             <strong>Tactics</strong> — the AI behavior profile that decides how this actor plays (who it
@@ -303,7 +303,20 @@ const SECTIONS: Section[] = [
           </li>
         </ul>
         <p>
-          You can build an actor by hand using the form-based builders on the Actions tab, or drop in a
+          Each row on the Abilities tab reads like a line from a statblock (<em>+6 to hit, reach 5 ft · 11 (2d6 + 4)
+          slashing</em>), worked out from the numbers the simulator actually rolls.
+        </p>
+        <p>
+          Weapons and attacks open in the <strong>ability editor</strong>, in place of the list. Its preview at the
+          top shows the ability as a statblock entry, with whether the simulator runs all of it, and any warnings
+          (a pool the creature doesn&apos;t have, a trigger that never fires) with a link to the section that fixes
+          them. Below, each section (Use &amp; cost, Target, Roll, Damage, Effects, Notes &amp; AI) shows a one-line
+          summary and opens to its settings, with the rarer ones under <strong>More options</strong>. Save is one
+          undo step and does nothing until something changes; Esc or leaving the sheet asks before throwing
+          changes away. Spells, features and other actions still open the builder form described below.
+        </p>
+        <p>
+          You can build an actor by hand on the Abilities tab, or drop in a
           ready-made creature from the SRD/Open5e compendium and adjust it from there. Actors also carry a{" "}
           <strong>creature type</strong> (beast, undead, fiend, etc.), which some spells and features key off
           of — see <a href="#spells">restrictions by creature type</a> below.

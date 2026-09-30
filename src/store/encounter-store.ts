@@ -52,6 +52,7 @@ import {
   type EncounterSnapshot,
   type FeatureEffect,
   type FeatureDefinition,
+  type LegendaryActionRef,
   type PlacedTemplate,
   type Point,
   type SizeCategory,
@@ -77,6 +78,9 @@ import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
+import { findAbility, withNewAbility, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
+import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
+import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
@@ -361,6 +365,16 @@ interface EncounterStore {
   updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
   /** Delete a record from a creature, and what goes with it: its steps in any multiattack, and a multiattack left empty. */
   removeDefinitionItem: (definitionId: string, itemType: DefinitionItemType, itemId: string) => void;
+  /**
+   * Put an edited ability back where `ref` points, whole: normalized for its list, keeping the ids of the record it
+   * replaces, and moved to the list its type belongs in (an action made a bonus action, a feature made a trait).
+   * Seeds any pool it needs that the creature lacks, and the `extras.pools` the editor created for it ("New pool…").
+   * One undo step, none when nothing changed. Returns where the ability ended up, or `undefined` when `ref` points at
+   * nothing.
+   */
+  replaceAbilityRecord: (definitionId: string, ref: AbilityRef, record: AbilityRecord, extras?: AbilityRecordExtras) => AbilityRef | undefined;
+  /** Add a new ability with fresh ids, its pools seeded (a weapon's charges, a feature's pools, `extras.pools`). One undo step. Returns where it went. */
+  insertAbilityRecord: (definitionId: string, where: AbilityInsertTarget, record: AbilityRecord, extras?: AbilityRecordExtras) => AbilityRef | undefined;
   /** Add a lair action to a creature (taken on initiative 20 while a token of it is in its lair). Returns its id. */
   addLairAction: (definitionId: string, action: ActionDefinition) => string;
   updateLairAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
@@ -773,6 +787,21 @@ export const useEncounterStore = create<EncounterStore>()(
         replayIndex: null,
         ...extras
       });
+
+      /** Commit a creature after an ability edit; tokens of it get any pool they lack (existing values are kept). */
+      const commitAbilityChange = (encounter: EncounterSnapshot, definitionId: string, next: CreatureDefinition, seeded: Record<string, number>) => {
+        const hasSeeds = Object.keys(seeded).length > 0;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)),
+          combatants: hasSeeds
+            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
+              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              : combatant)
+            : encounter.combatants
+        });
+      };
+
 
       return ({
       encounter: normalizeEncounterVisuals(structuredClone(sampleEncounter)),
@@ -2720,7 +2749,7 @@ export const useEncounterStore = create<EncounterStore>()(
 
         const featureId = `feature-${crypto.randomUUID()}`;
         const feature = normalizeFeatureRecord(structuredClone(source), featureId, srdId);
-        const seeded = seededResourcesForFeature(feature);
+        const seeded = featurePoolsToSeed(feature);
 
         const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
         commitEncounter({
@@ -2744,7 +2773,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const encounter = get().encounter;
         const id = `feature-${crypto.randomUUID()}`;
         const feature = normalizeFeatureRecord(structuredClone(input), id);
-        const seeded = seededResourcesForFeature(feature);
+        const seeded = featurePoolsToSeed(feature);
         const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
         commitEncounter({
           ...encounter,
@@ -3028,6 +3057,25 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
+      replaceAbilityRecord: (definitionId, ref, record, extras) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const replaced = definition ? withReplacedAbility(definition, ref, record) : undefined;
+        if (!definition || !replaced) return undefined;
+        const pooled = withNewPools(replaced.definition, extras?.pools);
+        if (deepEqual(pooled.definition, definition)) return replaced.ref;
+        commitAbilityChange(encounter, definitionId, pooled.definition, { ...replaced.seeded, ...pooled.added });
+        return replaced.ref;
+      },
+      insertAbilityRecord: (definitionId, where, record, extras) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const inserted = definition ? withInsertedAbility(definition, where, record) : undefined;
+        if (!inserted) return undefined;
+        const pooled = withNewPools(inserted.definition, extras?.pools);
+        commitAbilityChange(encounter, definitionId, pooled.definition, { ...inserted.seeded, ...pooled.added });
+        return inserted.ref;
+      },
       duplicateCombatant: (combatantId) => {
         const encounter = get().encounter;
         const source = encounter.combatants.find((combatant) => combatant.id === combatantId);
@@ -3185,6 +3233,76 @@ function pointsMatch(a: Point, b: Point): boolean {
  * this feature). `srdSlug` records provenance when the feature came from the
  * bundled library.
  */
+/** The creature with each of `pools` it doesn't have yet, at its starting size; `added` says which were new. */
+function withNewPools(definition: CreatureDefinition, pools: Record<string, number> | undefined): { definition: CreatureDefinition; added: Record<string, number> } {
+  const added = Object.fromEntries(Object.entries(pools ?? {}).filter(([id]) => id.trim() && definition.resources?.[id] === undefined));
+  if (Object.keys(added).length === 0) return { definition, added };
+  return { definition: { ...definition, resources: { ...(definition.resources ?? {}), ...added } }, added };
+}
+
+/**
+ * The creature with a new ability added the way the list's own add action adds one (fresh ids, the weapon's charge
+ * pool namespaced, a feature's granted actions pointed at it), plus the pools it spends that the creature lacks.
+ * Pools the creature has keep their values.
+ */
+function withInsertedAbility(
+  definition: CreatureDefinition,
+  where: AbilityInsertTarget,
+  record: AbilityRecord
+): { definition: CreatureDefinition; ref: AbilityRef; seeded: Record<string, number> } | undefined {
+  let placed: { definition: CreatureDefinition; ref: AbilityRef } | undefined;
+  let pools: Record<string, number> = {};
+  if (where === "legendary") {
+    placed = withNewLegendaryAction(definition, record as LegendaryActionRef, `legendary-${crypto.randomUUID()}`);
+  } else if (typeof where === "object") {
+    placed = withNewGrantedAction(definition, where.granted, record as ActionDefinition);
+  } else if (where === "weapons") {
+    const id = `weapon-${crypto.randomUUID()}`;
+    const normalized = normalizeWeaponDefinition({ ...(record as WeaponDefinition), id }, definition.abilities);
+    normalized.id = id;
+    normalized.actionId = `weapon-action-${id}`;
+    const { weapon, seeded } = prepareWeaponForAttach(normalized, id);
+    placed = withNewAbility(definition, "weapons", weapon);
+    pools = seeded ?? {};
+  } else if (where === "spells") {
+    const id = `spell-${crypto.randomUUID()}`;
+    const spell = normalizeSpellDefinition({ ...(record as SpellDefinition), id });
+    spell.id = id;
+    if (spell.action) spell.action = { ...spell.action, id: `spell-action-${id}` };
+    placed = withNewAbility(definition, "spells", spell);
+  } else if (where === "features" || where === "traits") {
+    const feature = normalizeFeatureRecord(structuredClone(record as FeatureDefinition), `feature-${crypto.randomUUID()}`);
+    placed = withNewAbility(definition, where, feature);
+    pools = featurePoolsToSeed(feature) ?? {};
+  } else if (where === "deathEffects") {
+    const id = `death-effect-${crypto.randomUUID()}`;
+    const effect = normalizeDeathEffectDefinition({ ...(record as DeathEffectDefinition), id });
+    effect.id = id;
+    if (effect.action) effect.action = { ...effect.action, id: `death-effect-action-${id}` };
+    placed = withNewAbility(definition, "deathEffects", effect);
+  } else if (where === "lairActions") {
+    const id = `lair-${crypto.randomUUID()}`;
+    const action = normalizeActionDefinition({ ...(record as ActionDefinition), id, actionType: "action" } as ActionDefinition, "action");
+    action.id = id;
+    placed = withNewAbility(definition, "lairActions", action);
+  } else {
+    const id = `action-${crypto.randomUUID()}`;
+    const input = record as ActionDefinition;
+    const fallback = input.actionType === "bonus" || input.actionType === "reaction" ? input.actionType : "action";
+    const action = normalizeActionDefinition({ ...input, id }, fallback);
+    action.id = id;
+    placed = withNewAbility(definition, where, action);
+  }
+  if (!placed) return undefined;
+  const added = findAbility(placed.definition, placed.ref);
+  if (added) for (const [id, size] of usagePools(added)) pools[id] = size;
+  const seeded = Object.fromEntries(Object.entries(pools).filter(([id]) => definition.resources?.[id] === undefined));
+  const next = Object.keys(seeded).length
+    ? { ...placed.definition, resources: { ...(definition.resources ?? {}), ...seeded } }
+    : placed.definition;
+  return { definition: next, ref: placed.ref, seeded };
+}
+
 function normalizeFeatureRecord(input: FeatureDefinition, id: string, srdSlug?: string): FeatureDefinition {
   const category: FeatureDefinition["category"] = input.category === "trait" ? "trait" : "feature";
   const grantedActions = (input.grantedActions ?? []).map((action, index) => {
@@ -3216,15 +3334,3 @@ function multiattackSteps(steps: Array<{ actionId: string; count: number; target
     }));
 }
 
-/** Resource pools a feature's granted actions spend, seeded to a sensible default when the definition lacks them. */
-function seededResourcesForFeature(feature: FeatureDefinition): Record<string, number> | undefined {
-  const defaults: Record<string, number> = { rage: 3, "action-surge": 1, "second-wind": 1, "bardic-inspiration": 3 };
-  const seeded: Record<string, number> = {};
-  for (const action of feature.grantedActions ?? []) {
-    const cost = "resourceCost" in action ? action.resourceCost : undefined;
-    if (cost?.resourceId && defaults[cost.resourceId] !== undefined) {
-      seeded[cost.resourceId] = defaults[cost.resourceId];
-    }
-  }
-  return Object.keys(seeded).length ? seeded : undefined;
-}

@@ -8,27 +8,15 @@
  * from the draft as it was when the builder opened, and from the draft now — and writes
  * only the difference onto the stored record. Whatever the DM didn't change can't change.
  */
+import { deepEqual } from "@/lib/deep-equal";
 import type { BuilderDraft } from "./field-spec";
+
+export { deepEqual };
 
 type PlainObject = Record<string, unknown>;
 
 function isPlainObject(value: unknown): value is PlainObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Structural equality in which a key holding `undefined` counts as absent, as it does once saved. */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => deepEqual(item, b[index]));
-  }
-  if (isPlainObject(a) && isPlainObject(b)) {
-    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-      if (!deepEqual(a[key], b[key])) return false;
-    }
-    return true;
-  }
-  return false;
 }
 
 /** Keys the converters mint afresh on every rebuild; they never say which stored element a rebuilt one came from. */

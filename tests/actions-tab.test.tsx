@@ -80,7 +80,7 @@ describe("ActionsTab", () => {
     expect(localStorage.getItem("actions-builder-mode")).toBe("simple");
   });
 
-  it("edits a weapon in place in a single undo step", async () => {
+  it("edits a weapon in the ability editor in a single undo step", async () => {
     renderTab();
     const undoDepthBefore = useEncounterStore.getState().undoStack.length;
     await userEvent.click(screen.getByRole("button", { name: "Edit Rapier" }));
@@ -89,7 +89,7 @@ describe("ActionsTab", () => {
     expect(nameInput.value).toBe("Rapier");
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, "Flametongue");
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const weapons = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.weapons ?? [];
     expect(weapons[0]?.name).toBe("Flametongue");
@@ -117,12 +117,14 @@ describe("ActionsTab", () => {
     expect(spells[0]?.action?.kind).toBe("save");
   });
 
-  it("shows only weapon fields when editing a weapon — no Save DC", async () => {
+  it("shows a weapon's own sections when editing one: no saving throw", async () => {
     renderTab();
     await userEvent.click(screen.getByRole("button", { name: "Edit Rapier" }));
-    expect(screen.getByLabelText("Attack roll uses")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByRole("radiogroup", { name: "Uses" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Magic bonus" })).toBeTruthy();
     expect(screen.queryByLabelText("Save DC")).toBeNull();
-    expect(screen.queryByLabelText("Shape")).toBeNull();
+    expect(screen.queryByLabelText("What it does")).toBeNull();
   });
 
   it("builds a multiattack from the Extra Attack quick-start, with no target split to offer", async () => {
@@ -199,11 +201,12 @@ describe("ActionsTab saves only what was edited", () => {
     expect(useEncounterStore.getState().undoStack.length).toBe(undoDepth);
   });
 
-  it("saving with nothing changed writes nothing, so it adds no undo step", async () => {
+  it("offers no save until something changes, so an untouched ability adds no undo step", async () => {
     renderTab();
     const undoDepth = useEncounterStore.getState().undoStack.length;
     await userEvent.click(screen.getByRole("button", { name: "Edit Rapier" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(useEncounterStore.getState().undoStack.length).toBe(undoDepth);
   });
@@ -214,7 +217,7 @@ describe("ActionsTab saves only what was edited", () => {
     await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
     await userEvent.clear(screen.getByLabelText("Name"));
     await userEvent.type(screen.getByLabelText("Name"), "Arming Sword");
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const after = fighterActions().find((a) => a.id === "longsword")!;
     expect(after).toMatchObject({ ...before, name: "Arming Sword" });

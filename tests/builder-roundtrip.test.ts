@@ -16,6 +16,10 @@ import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS } from "@/data/srd";
 import { useEncounterStore } from "@/store/encounter-store";
 import { visibleSpecs, type FieldSpec } from "@/components/sheet/builders/field-spec";
 import { deepEqual, mergeDraftEdit } from "@/components/sheet/builders/save-delta";
+import { pathBinding } from "@/lib/ability-editor/bindings";
+import { withReplacedAbility } from "@/lib/ability-editor/records";
+import { abilityRefs, findAbility, refKey, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
+import { statblockFor } from "@/lib/statblock";
 import {
   actionFieldSchema,
   actionFromEffectDraft,
@@ -363,5 +367,78 @@ describe("worked examples", () => {
     const saved = store().encounter.definitions.find((candidate) => candidate.id === "def-fighter")!.spells!.find((spell) => spell.id === spellId)!;
     if (saved.action?.kind !== "attack") throw new Error("not an attack");
     expect(saved.action.damage[0]).toMatchObject({ dice: "2d10", damageType: "fire", magical: true, scaling: { mode: "cantrip-by-level" } });
+  });
+});
+
+/* ─── the ability editor's save path ─────────────────────────────────────── */
+
+/**
+ * The redesigned editor (ABILITY_BUILDER_REDESIGN_PLAN.md §5.1) edits a working copy of the record through bindings
+ * and saves by putting the whole record back (`replaceAbilityRecord`, which normalizes with `withReplacedAbility`).
+ */
+describe("saving an SRD ability through the ability editor's model", () => {
+  interface Stored {
+    label: string;
+    definition: CreatureDefinition;
+    ref: AbilityRef;
+  }
+
+  /** The library attached to the sample fighter the way the sheet attaches it, then every ability on every SRD monster. */
+  function everyAbility(): Stored[] {
+    useEncounterStore.setState(pristine, true);
+    for (const weapon of SRD_WEAPONS) store().attachSrdWeapon("def-fighter", weapon.id);
+    for (const spell of SRD_SPELLS) store().attachSrdSpell("def-fighter", spell.id);
+    for (const feature of SRD_FEATURES) store().attachSrdFeature("def-fighter", feature.id);
+    const fighter = structuredClone(store().encounter.definitions.find((candidate) => candidate.id === "def-fighter")!);
+    useEncounterStore.setState(pristine, true);
+    return [fighter, ...MONSTERS].flatMap((definition) => abilityRefs(definition).map((ref) => ({ label: `${definition.name} ${refKey(ref)}`, definition, ref })));
+  }
+  const ABILITIES = everyAbility();
+
+  const save = (definition: CreatureDefinition, ref: AbilityRef, record: AbilityRecord) => {
+    const replaced = withReplacedAbility(definition, ref, record)!;
+    return { definition: replaced.definition, ref: replaced.ref, record: findAbility(replaced.definition, replaced.ref)! };
+  };
+
+  it("covers the whole library and every SRD monster ability", () => {
+    expect(ABILITIES.length).toBeGreaterThan(1900);
+  });
+
+  it("keeps everything a record says when it's saved unedited", () => {
+    const problems = ABILITIES.flatMap(({ label, definition, ref }) => {
+      const stored = findAbility(definition, ref)!;
+      const stray = changedPaths(stored, save(definition, ref, structuredClone(stored)).record);
+      return stray.length ? [`${label}: ${stray.join(", ")}`] : [];
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it("gives the same record however many times it's saved", () => {
+    const problems = ABILITIES.flatMap(({ label, definition, ref }) => {
+      const once = save(definition, ref, structuredClone(findAbility(definition, ref)!));
+      const twice = save(once.definition, once.ref, structuredClone(once.record));
+      return deepEqual(twice.definition, once.definition) ? [] : [label];
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it("reads the same in the statblock after a save", () => {
+    const problems = ABILITIES.flatMap(({ label, definition, ref }) => {
+      const saved = save(definition, ref, structuredClone(findAbility(definition, ref)!));
+      return deepEqual(statblockFor(saved.definition, saved.ref), statblockFor(definition, ref)) ? [] : [label];
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it("changes only the name when the name binding is edited", () => {
+    const name = pathBinding<AbilityRecord, string>(["name"]);
+    const problems = ABILITIES.flatMap(({ label, definition, ref }) => {
+      const stored = findAbility(definition, ref)!;
+      const unedited = save(definition, ref, structuredClone(stored)).record;
+      const renamed = save(definition, ref, name.set(structuredClone(stored), "Renamed")).record;
+      const stray = changedPaths(unedited, renamed).filter((path) => path !== "name");
+      return name.get(renamed) !== "Renamed" || stray.length ? [`${label}: ${stray.join(", ")}`] : [];
+    });
+    expect(problems).toEqual([]);
   });
 });

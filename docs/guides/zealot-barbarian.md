@@ -40,7 +40,7 @@ Click **Add**, stay on the **Library** tab, and choose the **Weapons** filter. S
 
 ![Searching the library for Greataxe](img/zealot-barbarian/03-library-greataxe.png)
 
-Click **Greataxe** to attach it. It shows up under **Weapons** as `melee STR · 1d12 slashing · two-handed`, with a green **FULL** badge meaning the simulator fully supports it.
+Click **Greataxe** to attach it. It shows up under **Weapons** as `+7 to hit, reach 5 ft · 10 (1d12 + 4) slashing`, the way a statblock would print it, with a green **FULL** badge meaning the simulator fully supports it. Click its pencil to open it in the ability editor, where each part (how it's used, its reach, the roll, the damage) sits in its own section with a one-line summary.
 
 ## 3. Give them Extra Attack
 
@@ -106,7 +106,7 @@ Click **+ Add effect**, then set it up like this:
 
 > **Radiant or necrotic:** in the rules, a Zealot picks radiant *or* necrotic each time. The hand-built version here deals radiant only. The library's **Rage (Zealot)** entry supports the choice, picking whichever type the target resists least. If your enemies are often radiant-resistant, use that entry.
 
-Click **Add to sheet**. Rage now appears under Features & Traits as `bonus · activates Rage`.
+Click **Add to sheet**. Rage now appears under Features & Traits as `bonus action: +2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant on melee hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute (1 rage)`.
 
 > **Tip:** the **Reference text** at the bottom of the form is just a note for you. It still describes plain Rage, so edit it if you want it to mention Divine Fury.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CreatureDefinition } from "../src/engine";
-import { buildSheetItems, describeAction, formatAutomationSupport, resourceIdsForEditor } from "../src/lib/sheet";
+import { buildSheetItems, formatAutomationSupport, resourceIdsForEditor } from "../src/lib/sheet";
 
 const base: CreatureDefinition = {
   id: "def-test",
@@ -99,16 +99,14 @@ describe("buildSheetItems", () => {
   });
 });
 
-describe("describeAction", () => {
-  it("summarizes an attack with its bonus and damage", () => {
-    const text = describeAction(base.actions[0], base);
-    expect(text).toContain("action melee");
-    expect(text).toContain("1d6");
-    expect(text).toContain("slashing");
+describe("sheet item details", () => {
+  it("summarize an attack the way its statblock does", () => {
+    const claw = buildSheetItems(base).actions.find((item) => item.id === "claw")!;
+    expect(claw.detail).toBe("+4 to hit, reach 5 ft · 5 (1d6 + 2) slashing");
   });
 
-  it('flags unsupported actions as "mapping required"', () => {
-    expect(describeAction(base.actions[1], base)).toBe("mapping required");
+  it("mark an unsupported action as reference only", () => {
+    expect(buildSheetItems(base).actions.find((item) => item.id === base.actions[1]!.id)!.detail).toBe("reference only");
   });
 });
 
