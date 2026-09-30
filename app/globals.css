@@ -364,7 +364,7 @@ img {
    no longer lives inside the token. */
 .token-hp {
   position: absolute;
-  height: 5px;
+  height: 12px;
   border: 1px solid #000;
   border-radius: 3px;
   background: #111;
@@ -385,6 +385,21 @@ img {
   /* 0ms outside replay (var set on .battlemap) so edits are instant; during
      watch-mode the bar drains in step with token movement. */
   transition: width var(--hp-anim-ms, 0ms) ease;
+}
+
+/* "current/max" label centred over the fill. */
+.token-hp > b {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 1px #000;
 }
 
 .token-hp.tone-high > i {

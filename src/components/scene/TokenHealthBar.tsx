@@ -31,6 +31,7 @@ export function TokenHealthBar({ current, max, out = false, x, y, size, dropping
       style={{ left: x + 2, top: y + size + 3, width: Math.max(0, size - 4) }}
     >
       <i style={{ width: `${Math.round(clamp(ratio, 0, 1) * 100)}%` }} />
+      <b>{out ? 0 : Math.max(0, current)}/{max}</b>
     </span>
   );
 }
