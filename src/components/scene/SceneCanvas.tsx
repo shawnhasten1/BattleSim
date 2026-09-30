@@ -42,6 +42,8 @@ interface SceneCanvasProps {
   viewport: UseViewportResult;
   scene: SceneInteraction;
   showGrid: boolean;
+  /** Draw the ground-height tint, cliff edges and legend. The Elevation tool shows them regardless. */
+  showElevation?: boolean;
   showHealthBars: boolean;
   onCanvasDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onCanvasDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -60,7 +62,7 @@ function tokenVisualsFor(definition: CreatureDefinition, combatant: CombatantSta
  * Interaction state and pointer logic live in `useSceneInteraction` /
  * `useViewport`; this component only wires them to the DOM and renders.
  */
-export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanvasDragOver, onCanvasDrop, onEditActor }: SceneCanvasProps) {
+export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, showHealthBars, onCanvasDragOver, onCanvasDrop, onEditActor }: SceneCanvasProps) {
   const map = useEncounterStore((state) => state.encounter.map);
   const replaySpeed = useEncounterStore((state) => state.replaySpeed);
   const mapImageDataUrl = useEncounterStore((state) => state.mapImageDataUrl);
@@ -542,6 +544,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           gridPixelWidth={metrics.gridPixelWidth}
           gridPixelHeight={metrics.gridPixelHeight}
           replaying={replaying}
+          showElevation={showElevation}
           areaFlashes={areaFlashes}
           activeZones={encounter.activeZones}
           round={encounter.round}
@@ -636,7 +639,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       </div>
       </div>
 
-      {tool === "elevation" && !replaying ? <ElevationPalette /> : <ElevationLegendCorner />}
+      {tool === "elevation" && !replaying ? <ElevationPalette /> : showElevation ? <ElevationLegendCorner /> : null}
 
       {scene.wallMenu && !replaying ? (
         <ContextMenu

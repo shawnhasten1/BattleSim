@@ -64,6 +64,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   const [rightTab, setRightTab] = useState<SidebarTab>("combat");
   const [showGrid, setShowGrid] = useState(true);
   const [showHealthBars, setShowHealthBars] = useState(true);
+  const [showElevation, setShowElevation] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "scene" | null>(null);
@@ -78,6 +79,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
     if (SIDEBAR_TABS.some((t) => t.id === savedTab)) setRightTab(savedTab);
     setShowGrid(readJson("showGrid", true));
     setShowHealthBars(readJson("showHealthBars", true));
+    setShowElevation(readJson("showElevation", true));
     setPrefsReady(true);
   }, []);
   useEffect(() => {
@@ -89,6 +91,9 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   useEffect(() => {
     if (prefsReady) writeJson("showHealthBars", showHealthBars);
   }, [prefsReady, showHealthBars]);
+  useEffect(() => {
+    if (prefsReady) writeJson("showElevation", showElevation);
+  }, [prefsReady, showElevation]);
 
   const viewport = useViewport();
   const scene = useSceneInteraction({ isPanning: viewport.isPanning, isPanningRef: viewport.isPanningRef });
@@ -190,6 +195,8 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
           <LeftToolRail
             showGrid={showGrid}
             onToggleGrid={() => setShowGrid((value) => !value)}
+            showElevation={showElevation}
+            onToggleElevation={() => setShowElevation((value) => !value)}
             showHealthBars={showHealthBars}
             onToggleHealthBars={() => setShowHealthBars((value) => !value)}
           />
@@ -199,6 +206,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
             viewport={viewport}
             scene={scene}
             showGrid={showGrid}
+            showElevation={showElevation}
             showHealthBars={showHealthBars}
             onCanvasDragOver={onCanvasDragOver}
             onCanvasDrop={onCanvasDrop}

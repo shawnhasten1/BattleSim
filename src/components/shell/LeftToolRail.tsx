@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Layers, Mountain, Ruler, Snowflake, SquareDashed, User, Waves, Waypoints } from "lucide-react";
+import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Layers, Mountain, MountainSnow, Ruler, Snowflake, SquareDashed, User, Waves, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
 import { useEncounterStore, type EditorTool, type TerrainBrushId } from "@/store/encounter-store";
@@ -9,6 +9,8 @@ import styles from "./LeftToolRail.module.css";
 interface LeftToolRailProps {
   showGrid: boolean;
   onToggleGrid: () => void;
+  showElevation?: boolean;
+  onToggleElevation?: () => void;
   showHealthBars: boolean;
   onToggleHealthBars: () => void;
 }
@@ -59,7 +61,7 @@ const TERRAIN_BRUSHES: Array<{ brush: TerrainBrushId; icon: ReactNode; label: st
  * cover level for new walls; while the terrain tool is active, a sub-group
  * picks the paint-brush preset for the click-and-drag terrain tile brush.
  */
-export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleHealthBars }: LeftToolRailProps) {
+export function LeftToolRail({ showGrid, onToggleGrid, showElevation = true, onToggleElevation, showHealthBars, onToggleHealthBars }: LeftToolRailProps) {
   const tool = useEncounterStore((state) => state.tool);
   const setTool = useEncounterStore((state) => state.setTool);
   const pendingWallStart = useEncounterStore((state) => state.pendingWallStart);
@@ -116,6 +118,13 @@ export function LeftToolRail({ showGrid, onToggleGrid, showHealthBars, onToggleH
         label={showGrid ? "Hide grid" : "Show grid"}
         active={showGrid}
         onClick={onToggleGrid}
+      />
+
+      <RailButton
+        icon={<MountainSnow size={18} />}
+        label={showElevation ? "Hide elevation (heights and cliff edges; still shown while the Elevation tool is active)" : "Show elevation"}
+        active={showElevation}
+        onClick={() => onToggleElevation?.()}
       />
 
       <RailButton

@@ -37,6 +37,8 @@ interface SceneOverlaysProps {
   activeZones?: ActiveZone[];
   /** Current round of the display encounter, for a zone's remaining-duration label. */
   round?: number;
+  /** Ground heights and cliff edges; forced on while the Elevation tool is active. */
+  showElevation?: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ interface SceneOverlaysProps {
  * gizmo. Wall hit-targets and nodes only render (and only accept clicks)
  * while the Wall tool is active — the Select tool owns tokens exclusively.
  */
-export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0 }: SceneOverlaysProps) {
+export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0, showElevation = true }: SceneOverlaysProps) {
   const {
     tool,
     pendingWallStart,
@@ -91,7 +93,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
       viewBox={`0 0 ${map.grid.width} ${map.grid.height}`}
       style={{ width: gridPixelWidth, height: gridPixelHeight }}
     >
-      <ElevationLayer
+      {showElevation || (tool === "elevation" && !replaying) ? <ElevationLayer
         map={map}
         editing={tool === "elevation" && !replaying}
         mode={elevationMode}
@@ -100,7 +102,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
         hoverCell={hoverCell}
         rampDrag={rampDrag}
         paintStroke={tool === "elevation" ? paintStroke : null}
-      />
+      /> : null}
       {map.terrain.map((zone) => (
         <polygon
           key={zone.id}
