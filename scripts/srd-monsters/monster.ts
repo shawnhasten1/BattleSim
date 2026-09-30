@@ -64,12 +64,9 @@ function parseBonusList(text: string): Record<string, number> {
 const FULL_SUPPORT_KINDS = new Set(["attack", "save", "area-save", "multiattack", "healing", "reposition"]);
 
 /** Creature-level gap codes for the parts of the statblock that live outside actions and traits. */
-function movementGaps(definition: CreatureDefinition, gaps: GapLog): void {
-  const m = definition.movement;
-  if (!m) return;
-  // Swim, climb and burrow are real movement modes now (see `modeMultiplier` in geometry.ts). Flying is fast movement
-  // that ignores the ground, but with no altitude a flier can still be reached by everything.
-  if (m.fly) gaps.add("ALTITUDE", `fly ${m.fly} ft.${m.hover ? " (hover)" : ""}`);
+function movementGaps(_definition: CreatureDefinition, _gaps: GapLog): void {
+  // Every movement mode is modelled now: swim, climb and burrow are terrain-cost modes (`modeMultiplier` in
+  // geometry.ts), and flying has altitude, 3D reach and falling (Phase 5B). Kept as the hook for a future mode.
 }
 
 function unsupportedAction(entry: RawEntry, ctx: MonsterContext, actionType: "action" | "reaction"): ActionDefinition {

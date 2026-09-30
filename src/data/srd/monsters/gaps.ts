@@ -28,7 +28,7 @@ export const GAP_CODES = {
   MOVE_SWIM: "(Retired — now a movement mode.) Swim speed.",
   MOVE_CLIMB: "(Retired — now a movement mode.) Climb speed.",
   MOVE_BURROW: "(Retired — now a movement mode.) Burrow speed.",
-  ALTITUDE: "Flying moves fast and ignores ground terrain, but there is no altitude yet: a flier can still be meleed by everything and never falls.",
+  ALTITUDE: "(Retired — Phase 5B.) Fliers have altitude: out of melee reach overhead, and they fall when knocked prone, unless they hover.",
   MOVE_TRAIT: "A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only.",
   // ── Phase 6: holds
   HOLD_GRAPPLE: "A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only.",

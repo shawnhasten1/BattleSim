@@ -162,7 +162,7 @@ describe("SRD monster filters", () => {
     await openFilters(root);
     await userEvent.click(within(root).getByRole("button", { name: "Full" }));
     expect(within(root).getByText("Goblin", { exact: true })).toBeTruthy();
-    expect(within(root).queryByText("Adult Red Dragon", { exact: true })).toBeNull();
+    expect(within(root).queryByText("Aboleth", { exact: true })).toBeNull();
 
     await userEvent.click(within(root).getByRole("button", { name: "Full" }));
     const environment = within(root).getByLabelText("Environment") as HTMLSelectElement;
