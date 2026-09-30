@@ -40,6 +40,8 @@ interface LeadingDamage {
   damage: DamageComponent[];
   versatile?: DamageComponent[];
   swarmHalf: boolean;
+  /** The swarm's damage at half its hit points or fewer ("…, or 5 (2d4) piercing damage if the swarm has half…"). */
+  swarmHalfDamage?: DamageComponent[];
   tail: string;
 }
 
@@ -53,6 +55,7 @@ function parseLeadingDamage(hit: string, magical: boolean): LeadingDamage | null
   const damage = [primary];
   let versatile: DamageComponent[] | undefined;
   let swarmHalf = false;
+  let swarmHalfDamage: DamageComponent[] | undefined;
 
   const versatileMatch = VERSATILE.exec(rest);
   if (versatileMatch) {
@@ -63,6 +66,8 @@ function parseLeadingDamage(hit: string, magical: boolean): LeadingDamage | null
     const swarm = SWARM_HALF.exec(rest);
     if (swarm) {
       swarmHalf = true;
+      const component = damageComponent(swarm, magical);
+      if (component) swarmHalfDamage = [component];
       rest = rest.slice(swarm[0].length);
     }
   }
@@ -76,7 +81,7 @@ function parseLeadingDamage(hit: string, magical: boolean): LeadingDamage | null
     versatile?.push({ ...component });
     rest = rest.slice(plus[0].length);
   }
-  return { damage, versatile, swarmHalf, tail: rest.trim() };
+  return { damage, versatile, swarmHalf, swarmHalfDamage, tail: rest.trim() };
 }
 
 function inferAbility(kind: "melee" | "ranged" | "spell", bonus: number, ctx: MonsterContext): Ability {
@@ -263,10 +268,9 @@ export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseRe
 
   const reachMatch = /reach\s+(\d+)\s*(?:ft|feet)/i.exec(middle);
   // "reach 0 ft., one creature in the swarm's space": the engine has no shared squares, so a swarm attacks
-  // from an adjacent square instead.
+  // from an adjacent square instead (same reach in practice).
   if (reachMatch && Number(reachMatch[1]) === 0) {
     reachMatch[1] = "5";
-    ctx.gaps.add("SWARM_DAMAGE", `${entry.name}: attacks a creature in its own space; modelled as adjacent`);
   }
   const rangeMatch = /range\s+(\d+)(?:\/(\d+))?\s*(?:ft|feet)/i.exec(middle);
   const variants: Array<{ suffix: string; kind: "melee" | "ranged" | "spell"; range: number; reach?: number; longRange?: number }> = [];
@@ -312,7 +316,8 @@ export function parseAttack(entry: RawEntry, ctx: MonsterContext): AttackParseRe
     if (tail.riders.length > 0) action.riders = tail.riders;
     features.push(...tail.features);
     applyUsage(action, entry, ctx);
-    if (leading.swarmHalf) ctx.gaps.add("SWARM_DAMAGE", entry.name);
+    if (leading.swarmHalfDamage) action.bloodiedDamage = variant.kind === "spell" ? leading.swarmHalfDamage.map((component) => ({ ...component })) : linkAbilityDamage(leading.swarmHalfDamage, ability, ctx);
+    else if (leading.swarmHalf) ctx.gaps.add("SWARM_DAMAGE", entry.name);
     actions.push(action);
 
     if (leading.versatile) {

@@ -168,14 +168,18 @@ describe("attack parser", () => {
     expect(result.features[0]!.effects![0]).toMatchObject({ kind: "save-gated-damage", damage: [{ dice: "10d8" }] });
   });
 
-  it("marks spell attacks magical and flags swarm half-HP damage", () => {
+  it("marks spell attacks magical and compiles a swarm's half-HP damage", () => {
     const spell = parseAttack(entry("Ray", "Ranged Spell Attack: +5 to hit, range 60 ft., one target. Hit: 10 (3d6) radiant damage."), ctx({ abilities: { str: 8, dex: 10, con: 10, int: 10, wis: 10, cha: 16 } }))!;
     expect((spell.actions[0] as AttackActionDefinition)).toMatchObject({ attackType: "spell", ability: "cha" });
     expect((spell.actions[0] as AttackActionDefinition).damage[0]!.magical).toBe(true);
 
     const gaps = new GapLog();
-    parseAttack(entry("Bites", "Melee Weapon Attack: +4 to hit, reach 0 ft., one creature in the swarm's space. Hit: 5 (2d4) piercing damage, or 2 (1d4) piercing damage if the swarm has half of its hit points or fewer."), ctx({ gaps }));
-    expect(gaps.codes()).toContain("SWARM_DAMAGE");
+    const bites = parseAttack(entry("Bites", "Melee Weapon Attack: +4 to hit, reach 0 ft., one creature in the swarm's space. Hit: 5 (2d4) piercing damage, or 2 (1d4) piercing damage if the swarm has half of its hit points or fewer."), ctx({ gaps }))!;
+    const action = bites.actions[0] as AttackActionDefinition;
+    expect(action.damage[0]!.dice).toBe("2d4");
+    expect(action.bloodiedDamage?.[0]?.dice).toBe("1d4");
+    expect(action.reach).toBe(5); // "reach 0 ft." (its own space) becomes an adjacent attack
+    expect(gaps.codes()).not.toContain("SWARM_DAMAGE");
   });
 
   it("refuses to guess at text it cannot read", () => {

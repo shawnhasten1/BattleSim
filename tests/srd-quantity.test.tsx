@@ -146,7 +146,9 @@ describe("adding several tokens at once", () => {
   });
 });
 
-describe("quantity stepper in the SRD Monsters folder", () => {
+// These drive the whole SRD folder (325 rows) through user-event; under a full parallel run they sit right at the
+// 5 s default, so they get more headroom.
+describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () => {
   function Harness() {
     return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
   }

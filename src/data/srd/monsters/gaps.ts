@@ -41,8 +41,8 @@ export const GAP_CODES = {
   TRANSFORM: "Shapechanging is reference-only (open-ended Change Shape, Doppelganger, Mimic; the fixed-shape lycanthropes and the vampire are automated).",
   FORM_STATS: "A shapechanger's forms differ in more than actions (AC, size, speed); only the actions are modelled.",
   // ── Phase 9: long tail
-  CHARGE_TRAIT: "Movement-conditioned bonus (Charge, Pounce, Blood Frenzy…) is reference-only.",
-  SWARM_DAMAGE: "Swarm rules are not modelled: reduced damage at half HP, and attacking a creature inside the swarm's own space (modelled as an adjacent attack).",
+  CHARGE_TRAIT: "(Retired — Phase 9.) Charge, Pounce, Trampling Charge, Rampage, Blood Frenzy and Surprise Attack are automated.",
+  SWARM_DAMAGE: "A swarm attack whose reduced (half-HP) damage couldn't be read. (A swarm attacks a creature in its own space from an adjacent square.)",
   SAVE_IMMUNITY_AFTER: "(Retired — now enforced.) Immunity after a successful save.",
   VARIANT: "An optional variant rule is reference-only.",
   // ── Parser gaps (fixed by improving the parser, not the engine)

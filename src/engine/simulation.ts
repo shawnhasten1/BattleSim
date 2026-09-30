@@ -45,6 +45,7 @@ import {
   isLegendaryVariant,
   isLairVariant,
   attackPrerequisitesMet,
+  hasChargedAt,
   refillLegendaryPoints,
   runTurnStart,
   spellSlotLevel,
@@ -2144,6 +2145,7 @@ function selectOffensivePlan(
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
+      const chargeValue = expectedChargeValue(snapshot, actor, definition, action, target, range, canMoveIntoRange);
       const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
         * optionalRiderCostDiscount(action, definition, targetDefinition);
@@ -2187,10 +2189,12 @@ function selectOffensivePlan(
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
       if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
       if (controlValue > 0) reasons.push("imposes a condition");
+      if (chargeValue > 0) reasons.push("charges in");
       if (tagPressure > 0) reasons.push("tagged high-priority");
       if (tagPressure < 0) reasons.push("tagged low-priority");
       let score = expectedDamage * 2
         + controlValue
+        + chargeValue * 2
         + preferredBonus
         + killPressure
         + woundedPressure
@@ -3229,6 +3233,42 @@ function averageAttackFeatureDamage(
   }
   return total;
 }
+/**
+ * What a charge adds to an attack against `target` (Charge, Pounce, Trampling Charge): its extra damage, the value of
+ * knocking the target down, and the bonus-action follow-up it unlocks. Only counted when the charge will actually
+ * happen — the attacker has already closed the distance this turn, or it has to cover at least that much ground
+ * straight at the target to reach it.
+ */
+function expectedChargeValue(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  definition: CreatureDefinition,
+  action: OffensiveAction,
+  target: CombatantState,
+  range: number,
+  canMoveIntoRange: boolean
+): number {
+  if (action.kind !== "attack" || action.attackType !== "melee") return 0;
+  let value = 0;
+  for (const feature of featureEffectSources(definition, actor)) {
+    for (const effect of feature.effects ?? []) {
+      const charged = ("condition" in effect && effect.condition === "charged") || ("allConditions" in effect && effect.allConditions?.includes("charged"));
+      if (!charged || !featureAppliesToExpectedAction(effect, action)) continue;
+      const feet = ("chargeFeet" in effect ? effect.chargeFeet : undefined) ?? 20;
+      const willCharge = hasChargedAt(snapshot, actor, target, feet)
+        || (canMoveIntoRange && gridDistance(actor.position, target.position, snapshot.map.grid) - range >= feet);
+      if (!willCharge) continue;
+      if (effect.kind === "damage-bonus") value += effect.damage.reduce((sum, component) => sum + averageOfDice(component.dice), 0);
+      if (effect.kind === "apply-condition-on-hit") value += 6;
+    }
+  }
+  if (value <= 0) return 0;
+  // A charge hit also opens its bonus-action follow-up (Pounce's bite, a trampling stomp).
+  const followUp = getExecutableActions(definition).find((candidate) => candidate.kind === "attack" && candidate.onlyAfter === "charge-hit");
+  if (followUp) value += averageDamage(followUp, definition) * 0.6;
+  return value;
+}
+
 
 function featureAppliesToExpectedAction(effect: FeatureEffect, action: Extract<ActionDefinition, { kind: "attack" }>): boolean {
   if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(action.id)) {

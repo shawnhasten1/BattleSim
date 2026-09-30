@@ -822,6 +822,8 @@ export interface AttackActionDefinition {
   requiresTargetCondition?: ConditionName;
   /** Extra movement this attack grants before it is made, in feet (Rampage: "move up to half its speed"). */
   grantsMovementFeet?: number;
+  /** Damage instead of `damage` while the attacker is at half its hit points or fewer (a swarm's weaker bite). */
+  bloodiedDamage?: DamageComponent[];
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
   grip?: "one-handed" | "two-handed";

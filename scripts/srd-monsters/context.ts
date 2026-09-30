@@ -1,4 +1,4 @@
-import type { Ability, CreatureDefinition } from "../../src/engine/types";
+import type { Ability, CreatureDefinition, DeathEffectDefinition } from "../../src/engine/types";
 import { GapLog } from "./util";
 
 /** One `actions[]` / `traits[]` entry as the Open5e v2 export writes it. */
@@ -26,6 +26,8 @@ export interface MonsterContext {
   resources: Record<string, number>;
   /** Used to keep generated action ids unique within the creature. */
   usedIds: Set<string>;
+  /** Effects that fire when the creature dies (Death Burst), gathered from its traits. */
+  deathEffects?: DeathEffectDefinition[];
 }
 
 export function uniqueId(ctx: MonsterContext, base: string): string {

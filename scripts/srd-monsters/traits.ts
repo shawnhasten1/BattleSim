@@ -1,7 +1,8 @@
-import type { Ability, ConditionName, DamageComponent, FeatureDefinition } from "../../src/engine/types";
+import type { Ability, ActionDefinition, ConditionName, DamageComponent, FeatureDefinition } from "../../src/engine/types";
 import type { GapCode } from "../../src/data/srd/monsters/gaps";
 import type { MonsterContext, RawEntry } from "./context";
-import { compactDice, isDamageType, slugify } from "./util";
+import { compactDice, GapLog, isDamageType, slugify } from "./util";
+import { parseSaveAction } from "./saves";
 
 /**
  * Trait recipes. A trait resolves, in order, to:
@@ -153,7 +154,216 @@ const RECIPES: Array<{ match: RegExp; build: Recipe }> = [
         effects: [{ kind: "damage-bonus", condition: "always", attackTypes: ["melee", "ranged"], damage: [damage] }]
       };
     }
-  }
+  },
+  // ── Phase 9: movement-conditioned damage. The named attack ("hits it with a tusk attack") is written as an
+  // `@attack:<word>` placeholder; `resolveTraitReferences` (monster.ts) points it at the real action once the
+  // creature's attacks exist.
+  {
+    // "If the boar moves at least 20 ft. straight toward a target and then hits it with a tusk attack on the same turn,
+    // the target takes an extra 3 (1d6) slashing damage. …DC 11 Strength saving throw or be knocked prone."
+    // Pounce / Trampling Charge add "If the target is prone, the lion can make one bite attack against it as a bonus action."
+    match: /^(Charge|Trampling Charge|Pounce)$/i,
+    build: (entry) => {
+      const text = entry.desc.replace(/\s+/g, " ");
+      const feet = Number(/moves at least (\d+) (?:ft\.?|feet) straight toward/i.exec(text)?.[1]);
+      const word = (/hits it with an? ([a-z]+(?: [a-z]+)?) attack/i.exec(text) ?? /hits it with its ([a-z]+)/i.exec(text))?.[1]?.toLowerCase();
+      if (!feet || !word) return { automationSupport: "manual-only" };
+      const scope = { actionIds: [`@attack:${word}`], condition: "charged" as const, chargeFeet: feet };
+      const effects: NonNullable<FeatureDefinition["effects"]> = [];
+      const extra = /takes an extra \d+ \(([^)]+)\)(?: ([a-z]+))? damage/i.exec(text);
+      if (extra) {
+        const type = extra[2]?.toLowerCase();
+        effects.push({ kind: "damage-bonus", ...scope, damage: [{ dice: compactDice(extra[1]!), damageType: type && isDamageType(type) ? type : "same-as-attack" }] });
+      }
+      const prone = /DC (\d+) Strength saving throw or be (pushed up to \d+ (?:feet|ft\.?) away and )?knocked prone/i.exec(text);
+      if (prone) {
+        effects.push({ kind: "apply-condition-on-hit", ...scope, appliedCondition: { name: "prone" }, save: { ability: "str", dc: Number(prone[1]) } });
+      }
+      const follow = /can make one ([a-z]+) attack against it as a bonus action|can make one attack with its ([a-z]+) against it as a bonus action/i.exec(text);
+      const grantedActions = follow
+        ? [{ id: `@follow:${(follow[1] ?? follow[2])!.toLowerCase()}`, onlyAfter: "charge-hit", requiresTargetCondition: "prone" } as unknown as ActionDefinition]
+        : undefined;
+      if (effects.length === 0) return { automationSupport: "manual-only" };
+      // The minotaur's charge also pushes the target 10 ft; the shove isn't modelled.
+      return { automationSupport: prone?.[2] ? "partial" : "full", effects, ...(grantedActions ? { grantedActions } : {}) };
+    }
+  },
+  {
+    // "When the gnoll reduces a creature to 0 hit points with a melee attack on its turn, the gnoll can take a bonus
+    // action to move up to half its speed and make a bite attack."
+    match: /^Rampage$/i,
+    build: (entry) => {
+      const word = /make an? ([a-z]+) attack/i.exec(entry.desc)?.[1]?.toLowerCase();
+      if (!word) return { automationSupport: "manual-only" };
+      // grantsMovementFeet -1 = "half its speed", filled in once the creature's speed is known.
+      return { automationSupport: "full", grantedActions: [{ id: `@follow:${word}`, onlyAfter: "dropped-creature", grantsMovementFeet: -1 } as unknown as ActionDefinition] };
+    }
+  },
+  {
+    // "…advantage on melee attack rolls against any creature that doesn't have all its hit points."
+    match: /^Blood Frenzy$/i,
+    build: () => ({ automationSupport: "full", effects: [{ kind: "attack-advantage", condition: "target-injured", attackTypes: ["melee"] }] })
+  },
+  {
+    // "If the bugbear surprises a creature and hits it with an attack during the first round of combat, the target
+    // takes an extra 7 (2d6) damage from the attack."
+    match: /^Surprise Attack$/i,
+    build: (entry) => {
+      const dice = /extra \d+ \(([^)]+)\) damage/i.exec(entry.desc)?.[1];
+      if (!dice) return { automationSupport: "manual-only" };
+      return { automationSupport: "full", effects: [{ kind: "damage-bonus", condition: "target-surprised", damage: [{ dice: compactDice(dice), damageType: "same-as-attack" }] }] };
+    }
+  },
+  {
+    // "…an extra 13 (4d6) damage when it hits a target with a weapon attack and has advantage on the attack roll, or when
+    // the target is within 5 ft. of an ally … and the assassin doesn't have disadvantage on the attack roll." Once per turn.
+    match: /^Sneak Attack$/i,
+    build: (entry) => {
+      const dice = /extra \d+ \(([^)]+)\) damage/i.exec(entry.desc)?.[1];
+      if (!dice) return { automationSupport: "manual-only" };
+      return {
+        automationSupport: "full",
+        effects: [{
+          kind: "damage-bonus", oncePerTurn: true, attackTypes: ["melee", "ranged"],
+          allConditions: ["attack-has-no-disadvantage"], anyConditions: ["attack-has-advantage", "ally-adjacent-to-target"],
+          damage: [{ dice: compactDice(dice), damageType: "same-as-attack" }]
+        }]
+      };
+    }
+  },
+  {
+    // "Once per turn, the hobgoblin can deal an extra 7 (2d6) damage to a creature it hits with a weapon attack if that
+    // creature is within 5 ft. of an ally of the hobgoblin that isn't incapacitated."
+    match: /^Martial Advantage$/i,
+    build: (entry) => {
+      const dice = /extra \d+ \(([^)]+)\) damage/i.exec(entry.desc)?.[1];
+      if (!dice) return { automationSupport: "manual-only" };
+      return {
+        automationSupport: "full",
+        effects: [{ kind: "damage-bonus", oncePerTurn: true, attackTypes: ["melee", "ranged"], condition: "ally-adjacent-to-target", damage: [{ dice: compactDice(dice), damageType: "same-as-attack" }] }]
+      };
+    }
+  },
+  {
+    // "At the start of its turn, the berserker can gain advantage on all melee weapon attack rolls during that turn, but
+    // attack rolls against it have advantage until the start of its next turn." A monster always takes the offer here.
+    match: /^Reckless$/i,
+    build: () => ({
+      automationSupport: "full",
+      effects: [
+        { kind: "attack-advantage", condition: "always", attackTypes: ["melee"] },
+        { kind: "incoming-attack-modifier", condition: "always", amount: 5 }
+      ]
+    })
+  },
+  {
+    // "As a bonus action, the orc can move up to its speed toward a hostile creature that it can see."
+    match: /^Aggressive$/i,
+    build: (_entry, ctx) => ({
+      automationSupport: "full",
+      grantedActions: [{ kind: "utility", id: `${ctx.slug}-aggressive`, name: "Aggressive (move toward a foe)", actionType: "bonus", mode: "dash", automationSupport: "full" }]
+    })
+  },
+  {
+    // "On each of its turns, the spy can use a bonus action to take the Dash, Disengage, or Hide action."
+    match: /^Cunning Action$/i,
+    build: (_entry, ctx) => ({
+      automationSupport: "full",
+      grantedActions: [
+        { kind: "utility", id: `${ctx.slug}-cunning-dash`, name: "Cunning Action: Dash", actionType: "bonus", mode: "dash", automationSupport: "full" },
+        { kind: "utility", id: `${ctx.slug}-cunning-disengage`, name: "Cunning Action: Disengage", actionType: "bonus", mode: "disengage", automationSupport: "full" },
+        { kind: "utility", id: `${ctx.slug}-cunning-hide`, name: "Cunning Action: Hide", actionType: "bonus", mode: "hide", automationSupport: "partial" }
+      ]
+    })
+  },
+  {
+    // "The mimic has advantage on attack rolls against any creature grappled by it."
+    match: /^Grappler$/i,
+    build: () => ({ automationSupport: "full", effects: [{ kind: "attack-advantage", condition: "target-grappled-by-self" }] })
+  },
+  {
+    match: /^Evasion$/i,
+    build: () => ({ automationSupport: "full", effects: [{ kind: "evasion" }] })
+  },
+  {
+    // "The stalker is invisible." Attacks against it have disadvantage; its own have advantage.
+    match: /^Invisibility$/i,
+    build: (entry) => (/is invisible\.?$/i.test(entry.desc.trim())
+      ? { automationSupport: "full", effects: [{ kind: "attack-advantage", condition: "always" }, { kind: "incoming-attack-modifier", condition: "always", amount: -5 }] }
+      : { automationSupport: "manual-only" })
+  },
+  {
+    // "A creature that touches the azer or hits it with a melee attack while within 5 ft. of it takes 5 (1d10) fire damage."
+    // Corrosive Form also corrodes nonmagical weapons (not modelled); Fire Form also burns creatures it moves through.
+    match: /^(Heated Body|Corrosive Form|Fire Form)$/i,
+    build: (entry) => {
+      const hit = /hits it with a melee attack while within (\d+) (?:ft\.?|feet) of it takes \d+ \(([^)]+)\) ([a-z]+) damage/i.exec(entry.desc.replace(/\s+/g, " "));
+      const type = hit?.[3]?.toLowerCase();
+      if (!hit || !type || !isDamageType(type)) return { automationSupport: "manual-only" };
+      return {
+        automationSupport: /^Heated Body$/i.test(entry.name) ? "full" : "partial",
+        effects: [{ kind: "melee-retaliation", withinFt: Number(hit[1]), damage: [{ dice: compactDice(hit[2]!), damageType: type }] }]
+      };
+    }
+  },
+  {
+    // "At the start of each of the balor's turns, each creature within 5 feet of it takes 10 (3d6) fire damage … A creature
+    // that touches the balor or hits it with a melee attack while within 5 feet of it takes 10 (3d6) fire damage."
+    match: /^Fire Aura$/i,
+    build: (entry) => {
+      const text = entry.desc.replace(/\s+/g, " ");
+      const aura = /each creature within (\d+) (?:feet|ft\.?) of it takes \d+ \(([^)]+)\) ([a-z]+) damage/i.exec(text);
+      const touch = /hits it with a melee attack while within (\d+) (?:feet|ft\.?) of it takes \d+ \(([^)]+)\) ([a-z]+) damage/i.exec(text);
+      const type = aura?.[3]?.toLowerCase();
+      if (!aura || !type || !isDamageType(type)) return { automationSupport: "manual-only" };
+      const damage = [{ dice: compactDice(aura[2]!), damageType: type }];
+      return {
+        automationSupport: "full",
+        emanation: { range: Number(aura[1]), timing: "bearer-turn-start", affects: "all", damage },
+        ...(touch ? { effects: [{ kind: "melee-retaliation" as const, withinFt: Number(touch[1]), damage: [{ dice: compactDice(touch[2]!), damageType: type }] }] } : {})
+      };
+    }
+  },
+  {
+    // "Any creature that starts its turn within 10 feet of the hezrou must succeed on a DC 14 Constitution saving throw or
+    // be poisoned until the start of its next turn. On a successful saving throw, the creature is immune … for 24 hours."
+    // "Any creature hostile to the pit fiend that starts its turn within 20 feet … DC 21 Wisdom saving throw, unless the
+    // pit fiend is incapacitated. On a failed save, the creature is frightened until the start of its next turn."
+    match: /^(Stench|Fear Aura)$/i,
+    build: (entry) => {
+      const text = entry.desc.replace(/\s+/g, " ");
+      const range = Number(/starts its turn within (\d+) (?:feet|ft\.?)/i.exec(text)?.[1]);
+      const save = /DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw/i.exec(text);
+      const condition = /be (poisoned|frightened) until the start of its next turn|the creature is (poisoned|frightened) until the start of its next turn/i.exec(text);
+      if (!range || !save || !condition) return { automationSupport: "manual-only" };
+      return {
+        automationSupport: "full",
+        emanation: {
+          range,
+          timing: "target-turn-start",
+          affects: /hostile to/i.test(text) ? "hostile" : "all",
+          save: { ability: save[2]!.slice(0, 3).toLowerCase() as Ability, dc: Number(save[1]) },
+          condition: (condition[1] ?? condition[2])!.toLowerCase() as ConditionName,
+          immuneOnSave: /immune/i.test(text),
+          ...(/unless the [\w -]+ is incapacitated/i.test(text) ? { suppressedWhenIncapacitated: true } : {})
+        }
+      };
+    }
+  },
+  {
+    // "When the mephit dies, it explodes in a burst of … Each creature within 5 ft. of it must …": a death effect.
+    match: /^(Death Burst|Death Throes)$/i,
+    build: (entry, ctx) => {
+      const burst = parseSaveAction({ ...entry, usage_limits: null }, { ...ctx, gaps: new GapLog() });
+      if (!burst || burst.kind !== "area-save") return { automationSupport: "manual-only" };
+      ctx.deathEffects ??= [];
+      ctx.deathEffects.push({
+        id: `${ctx.slug}-death-${slugify(entry.name)}`, name: entry.name, description: entry.desc, automationSupport: "full",
+        action: { ...burst, actionType: "action", affects: "all" }
+      });
+      return { automationSupport: "full", informational: true };
+    }
+  },
 ];
 
 /** Reference text with no engine effect worth modelling (senses, flavour, environment). */
@@ -163,7 +373,12 @@ const INFORMATIONAL = new RegExp(
   + "Immutable Form|Telepathic Bond|Limited Telepathy|Divine Awareness|Wakeful|Sunlight Sensitivity|Light Sensitivity|"
   + "Ambusher|Faultless Tracker|Blind Senses|Ethereal Sight|Speak with|Hag Coven|Hag Eye|Shared Spellcasting|"
   + "Turn Immunity|Turn Resistance|Turn Defiance|Brute|Magic Weapons|Swarm|Probing Telepathy|Read Thoughts|"
-  + "Transparent|Sense Magic|Otherworldly|Rejuvenation|Spider Climb|Web Walker|Ice Walk|Earth Glide|Tunneler|Amorphous)",
+  + "Transparent|Sense Magic|Otherworldly|Rejuvenation|Spider Climb|Web Walker|Ice Walk|Earth Glide|Tunneler|Amorphous|"
+  // Phase 9 sweep: senses, travel, flavour and out-of-combat rules — nothing a fight on this map would use.
+  + "Keen Senses|Running Leap|Shielded Mind|Hellish Rejuvenation|Tail Spike Regrowth|Ephemeral|Elemental Demise|"
+  + "Labyrinthine Recall|Iron Scent|Treasure Sense|Shark Telepathy|Beast of Burden|Night Hag Items|Snow Camouflage|"
+  + "Limited Amphibiousness|Ignited Illumination|Variable Illumination|Confer Fire Resistance|Antimagic Susceptibility|"
+  + "Mucous Cloud|Adhesive|Bound)",
   "i"
 );
 
@@ -171,7 +386,6 @@ const INFORMATIONAL = new RegExp(
 const GAPS: Array<{ match: RegExp; code: GapCode }> = [
   { match: /^(Spellcasting|Innate Spellcasting)/i, code: "SPELLS" },
   { match: /^Shapechanger/i, code: "TRANSFORM" },
-  { match: /^(Charge|Trampling Charge|Pounce|Rampage|Blood Frenzy|Surprise Attack)/i, code: "CHARGE_TRAIT" },
   { match: /^(Incorporeal Movement|Tree Stride)/i, code: "MOVE_TRAIT" }
 ];
 
@@ -191,7 +405,8 @@ export function parseTrait(entry: RawEntry, ctx: MonsterContext): FeatureDefinit
 
   if (/^Variant:/i.test(entry.name)) {
     feature.optional = true;
-    if (!VARIANT_NO_COMBAT_IMPACT.test(entry.name)) ctx.gaps.add("VARIANT", entry.name);
+    if (VARIANT_NO_COMBAT_IMPACT.test(entry.name)) feature.informational = true;
+    else ctx.gaps.add("VARIANT", entry.name);
     return feature;
   }
 
@@ -208,7 +423,10 @@ export function parseTrait(entry: RawEntry, ctx: MonsterContext): FeatureDefinit
     ctx.gaps.add(gap.code, entry.name);
     return feature;
   }
-  if (INFORMATIONAL.test(base)) return feature;
+  if (INFORMATIONAL.test(base)) {
+    feature.informational = true;
+    return feature;
+  }
 
   ctx.gaps.add("TRAIT_UNMODELED", entry.name);
   return feature;

@@ -1210,7 +1210,7 @@ function resolveAttackCore(
   const targetWasUp = target.state === "active";
   const damageApplied = hit
     ? applyDamageEntries(state, target, [
-      ...action.damage.map((component, index) => ({
+      ...(action.bloodiedDamage && attacker.currentHp <= Math.floor(attackerDefinition.maxHp / 2) ? action.bloodiedDamage : action.damage).map((component, index) => ({
         component, critical, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
         extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined
       })),

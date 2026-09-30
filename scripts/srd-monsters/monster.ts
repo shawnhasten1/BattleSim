@@ -63,6 +63,53 @@ function parseBonusList(text: string): Record<string, number> {
 
 const FULL_SUPPORT_KINDS = new Set(["attack", "save", "area-save", "multiattack", "healing", "reposition"]);
 
+/**
+ * Trait recipes name the attack they belong to ("hits it with a tusk attack") before the attacks exist. Point every
+ * `@attack:<word>` scope at the creature's matching attack, and build each `@follow:<word>` follow-up (Pounce's bite,
+ * Rampage's bite) as a bonus-action copy of that attack. A trait whose attack can't be found stays reference text.
+ */
+function resolveTraitReferences(traits: FeatureDefinition[], actions: ActionDefinition[], speed: number, gaps: GapLog): void {
+  const attacks = actions.filter((action): action is AttackActionDefinition => action.kind === "attack" && action.actionType === "action");
+  const stem = (word: string) => word.toLowerCase().replace(/(ves|es|s)$/, "");
+  const find = (word: string) => attacks.find((action) => action.name.toLowerCase() === word)
+    ?? attacks.find((action) => stem(action.name) === stem(word))
+    ?? attacks.find((action) => action.name.toLowerCase().startsWith(stem(word)));
+  for (const trait of traits) {
+    let unresolved = false;
+    for (const effect of trait.effects ?? []) {
+      if (!("actionIds" in effect) || !effect.actionIds?.some((id) => id.startsWith("@attack:"))) continue;
+      const ids = effect.actionIds.map((id) => (id.startsWith("@attack:") ? find(id.slice(8))?.id : id));
+      if (ids.some((id) => !id)) unresolved = true;
+      else effect.actionIds = ids as string[];
+    }
+    trait.grantedActions = trait.grantedActions?.flatMap((granted) => {
+      if (!granted.id.startsWith("@follow:")) return [granted];
+      const base = find(granted.id.slice(8));
+      if (!base) {
+        unresolved = true;
+        return [];
+      }
+      const extra = granted as unknown as Pick<AttackActionDefinition, "onlyAfter" | "requiresTargetCondition" | "grantsMovementFeet">;
+      const { usage: _usage, resourceCost: _cost, ...rest } = base;
+      return [{
+        ...rest,
+        id: `${base.id}-${slugify(trait.name)}`,
+        name: `${base.name} (${trait.name})`,
+        actionType: "bonus",
+        onlyAfter: extra.onlyAfter,
+        ...(extra.requiresTargetCondition ? { requiresTargetCondition: extra.requiresTargetCondition } : {}),
+        ...(extra.grantsMovementFeet ? { grantsMovementFeet: extra.grantsMovementFeet < 0 ? Math.floor(speed / 2 / 5) * 5 : extra.grantsMovementFeet } : {})
+      } satisfies AttackActionDefinition];
+    });
+    if (unresolved) {
+      trait.effects = undefined;
+      trait.grantedActions = undefined;
+      trait.automationSupport = "manual-only";
+      gaps.add("TRAIT_UNMODELED", `${trait.name}: its attack isn't in this form's statblock`);
+    }
+  }
+}
+
 /** Creature-level gap codes for the parts of the statblock that live outside actions and traits. */
 function movementGaps(_definition: CreatureDefinition, _gaps: GapLog): void {
   // Every movement mode is modelled now: swim, climb and burrow are terrain-cost modes (`modeMultiplier` in
@@ -325,6 +372,9 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
   const multiattacks = multiattackRaw.flatMap((entry) => parseMultiattack(entry, own, ctx, saveActions));
   actions.unshift(...multiattacks);
 
+  // ── Traits that name one of the attacks (Charge, Pounce, Rampage) can be pointed at it now.
+  resolveTraitReferences(traits, actions, groundSpeed, gaps);
+
   // ── "Weapon attacks are magical"
   if (magicalWeapons) {
     for (const action of own) {
@@ -442,7 +492,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     ...(reactions.length ? { reactions } : {}),
     ...(knownSpells.length ? { spells: knownSpells } : {}),
     ...(casterLevel ? { character: { level: casterLevel } } : {}),
-    ...(legendary ? { legendary } : {})
+    ...(legendary ? { legendary } : {}),
+    ...(ctx.deathEffects?.length ? { deathEffects: ctx.deathEffects } : {})
   };
   movementGaps(definition, gaps);
   const tactics = inferTactics(definition, slug);
