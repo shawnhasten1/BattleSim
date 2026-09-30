@@ -131,6 +131,11 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     () => getExecutableActions(definition).filter((a) => a.kind === "attack" && a.actionType === "action"),
     [definition]
   );
+  // The feature builder picks a Pounce / Rampage follow-up from these.
+  const featureContext = useMemo(
+    () => ({ attacks: attackChoices.filter((a): a is Extract<ActionDefinition, { kind: "attack" }> => a.kind === "attack" && !a.onlyAfter) }),
+    [attackChoices]
+  );
 
   const libraryResults = useMemo(() => {
     const kind = libKind === "all" ? undefined : libKind;
@@ -157,7 +162,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     }
     openEdit({ kind: "action", id: action.id }, effectDraftFromAction(action));
   }
-  function editFeature(feature: FeatureDefinition) { openEdit({ kind: "feature", id: feature.id }, featureDraftFromDefinition(feature)); }
+  function editFeature(feature: FeatureDefinition) { openEdit({ kind: "feature", id: feature.id }, featureDraftFromDefinition(feature, featureContext)); }
 
   /** The summon / shapechange editor: under the Add button for a new one, or under the row of the one being edited. */
   function spawnEditorNode() {
@@ -192,12 +197,12 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     else if (edit.kind === "spell") updateSpell(definition.id, edit.id, spellFromDraft(draft));
     else if (edit.kind === "deathEffect") updateDeathEffect(definition.id, edit.id, deathEffectFromDraft(draft));
     else if (edit.kind === "action") updateAction(definition.id, edit.id, actionFromEffectDraft(draft));
-    else if (edit.kind === "feature") updateFeature(definition.id, edit.id, featureFromDraft(draft));
+    else if (edit.kind === "feature") updateFeature(definition.id, edit.id, featureFromDraft(draft, featureContext));
     else if (edit.kind === "new") {
       if (edit.builderKind === "weapon") addWeaponV2(definition.id, weaponFromDraft(draft));
       else if (edit.builderKind === "spell") addSpellV2(definition.id, spellFromDraft(draft));
       else if (edit.builderKind === "deathEffect") addDeathEffectV2(definition.id, deathEffectFromDraft(draft));
-      else if (edit.builderKind === "feature") addFeatureV2(definition.id, featureFromDraft(draft));
+      else if (edit.builderKind === "feature") addFeatureV2(definition.id, featureFromDraft(draft, featureContext));
       else addActionV2(definition.id, actionFromEffectDraft(draft));
     }
     setEdit(null);
@@ -219,7 +224,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
         : kind === "deathEffect"
           ? deathEffectFieldSchema(draft)
           : kind === "feature"
-            ? featureFieldSchema(draft)
+            ? featureFieldSchema(draft, featureContext)
             : actionFieldSchema(draft);
     return (
       <div className={styles.builder}>

@@ -983,8 +983,45 @@ const ACTIVATE_AS_OPTIONS = [
   { value: "free", label: "Free (no economy cost)" }
 ] as const;
 
-export function featureFieldSchema(draft: BuilderDraft): FieldSpec[] {
+const EMANATION_TIMING_OPTIONS = [
+  { value: "target-turn-start", label: "When a creature starts its turn nearby" },
+  { value: "bearer-turn-start", label: "At the start of its own turn" }
+] as const;
+
+const EMANATION_CONDITION_OPTIONS = [
+  { value: "none", label: "No condition" },
+  { value: "poisoned", label: "Poisoned" }, { value: "frightened", label: "Frightened" }, { value: "blinded", label: "Blinded" },
+  { value: "charmed", label: "Charmed" }, { value: "deafened", label: "Deafened" }, { value: "restrained", label: "Restrained" },
+  { value: "stunned", label: "Stunned" }, { value: "prone", label: "Prone" }
+] as const;
+
+const FOLLOW_UP_OPTIONS = [
+  { value: "", label: "No follow-up attack" },
+  { value: "charge-hit", label: "After a charge knocks its target prone (Pounce)" },
+  { value: "dropped-creature", label: "After it drops a creature (Rampage)" }
+] as const;
+
+const DAMAGE_TYPE_SELECT = [
+  "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"
+].map((type) => ({ value: type, label: type[0]!.toUpperCase() + type.slice(1) }));
+
+/** What the feature builder needs to know about the creature it is editing: its attacks, to pick a follow-up from. */
+export interface FeatureBuilderContext {
+  attacks: Array<Extract<ActionDefinition, { kind: "attack" }>>;
+}
+
+/** "3d6" + "fire" → a damage component, or nothing for a blank / unreadable amount. */
+function damageFromText(text: unknown, type: unknown): DamageComponent[] | undefined {
+  const dice = String(text ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!/^(\d+d\d+|\d+)([+-]\d+)?$/.test(dice)) return undefined;
+  return [{ dice, damageType: (String(type ?? "") || "fire") as DamageType }];
+}
+
+export function featureFieldSchema(draft: BuilderDraft, context?: FeatureBuilderContext): FieldSpec[] {
   const shape = (draft.featureShape as string) ?? "passive";
+  const passive = (_draft?: BuilderDraft) => shape === "passive";
+  const emanating = (d: BuilderDraft) => shape === "passive" && Boolean(d.emanationEnabled);
+  const attackOptions = (context?.attacks ?? []).map((attack) => ({ value: attack.id, label: attack.name }));
   return [
     { key: "name", copy: "name", control: "text" },
     { key: "category", copy: "feature.category", control: "select", options: [{ value: "feature", label: "Feature" }, { value: "trait", label: "Trait" }] },
@@ -1002,6 +1039,31 @@ export function featureFieldSchema(draft: BuilderDraft): FieldSpec[] {
       visibleWhen: () => shape === "passive" && Boolean(draft.auraEnabled) },
     { key: "auraRequiresConscious", copy: "feature.auraRequiresConscious", control: "toggle", advanced: true,
       visibleWhen: () => shape === "passive" && Boolean(draft.auraEnabled) },
+    // ── Aura: something it does to the creatures around it each round (Stench, Fear Aura, Fire Aura).
+    { key: "emanationEnabled", copy: "feature.emanationEnabled", control: "toggle", visibleWhen: passive },
+    { key: "emanationTiming", copy: "feature.emanationTiming", control: "select", options: EMANATION_TIMING_OPTIONS, visibleWhen: emanating },
+    { key: "emanationRange", copy: "feature.emanationRange", control: "number", min: 5, step: 5, visibleWhen: emanating },
+    { key: "emanationAffects", copy: "feature.emanationAffects", control: "select", options: [{ value: "hostile", label: "Its enemies" }, { value: "all", label: "Every creature" }], visibleWhen: emanating },
+    { key: "emanationSave", copy: "feature.emanationSave", control: "select", options: [{ value: "none", label: "No save" }, ...ABILITY_OPTIONS], visibleWhen: emanating },
+    { key: "emanationDc", copy: "feature.emanationDc", control: "number", min: 1, max: 30, visibleWhen: (d) => emanating(d) && d.emanationSave !== "none" && Boolean(d.emanationSave) },
+    { key: "emanationDamage", copy: "feature.emanationDamage", control: "text", placeholder: "3d6", visibleWhen: emanating },
+    { key: "emanationDamageType", copy: "feature.emanationDamageType", control: "select", options: DAMAGE_TYPE_SELECT, visibleWhen: (d) => emanating(d) && Boolean(String(d.emanationDamage ?? "").trim()) },
+    { key: "emanationCondition", copy: "feature.emanationCondition", control: "select", options: EMANATION_CONDITION_OPTIONS, visibleWhen: emanating },
+    { key: "emanationHalfOnSave", copy: "feature.emanationHalfOnSave", control: "toggle", advanced: true,
+      visibleWhen: (d) => emanating(d) && d.emanationSave !== "none" && Boolean(String(d.emanationDamage ?? "").trim()) },
+    { key: "emanationImmuneOnSave", copy: "feature.emanationImmuneOnSave", control: "toggle", visibleWhen: (d) => emanating(d) && d.emanationSave !== "none" && Boolean(d.emanationSave) },
+    { key: "emanationSuppressed", copy: "feature.emanationSuppressed", control: "toggle", advanced: true, visibleWhen: emanating },
+    // ── Hurts whoever hits it in melee (Heated Body, Corrosive Form).
+    { key: "retaliationEnabled", copy: "feature.retaliationEnabled", control: "toggle", visibleWhen: passive },
+    { key: "retaliationDamage", copy: "feature.retaliationDamage", control: "text", placeholder: "1d10", visibleWhen: (d) => passive(d) && Boolean(d.retaliationEnabled) },
+    { key: "retaliationDamageType", copy: "feature.retaliationDamageType", control: "select", options: DAMAGE_TYPE_SELECT, visibleWhen: (d) => passive(d) && Boolean(d.retaliationEnabled) },
+    // ── A bonus-action attack it earns this turn (Pounce, Trampling Charge, Rampage).
+    { key: "followUpAfter", copy: "feature.followUpAfter", control: "select", options: FOLLOW_UP_OPTIONS, visibleWhen: passive },
+    { key: "followUpAttackId", copy: "feature.followUpAttackId", control: "select", options: [{ value: "", label: "(pick one of its attacks)" }, ...attackOptions],
+      visibleWhen: (d) => passive(d) && Boolean(d.followUpAfter) },
+    { key: "followUpMoveFeet", copy: "feature.followUpMoveFeet", control: "number", min: 0, step: 5, advanced: true,
+      visibleWhen: (d) => passive(d) && d.followUpAfter === "dropped-creature" },
+    { key: "evasion", copy: "feature.evasion", control: "toggle", advanced: true, visibleWhen: passive },
     { key: "grantsDash", copy: "feature.grantsDash", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
     { key: "grantsDisengage", copy: "feature.grantsDisengage", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
     { key: "grantsHide", copy: "feature.grantsHide", control: "toggle", visibleWhen: () => shape === "grants-bonus" },
@@ -1014,14 +1076,19 @@ function isInstantEffect(effect: FeatureEffect): boolean {
   return effect.kind === "extra-action" || (effect.kind === "resource-regain" && effect.timing === "on-activate");
 }
 
-export function featureDraftFromDefinition(feature: FeatureDefinition): BuilderDraft {
+export function featureDraftFromDefinition(feature: FeatureDefinition, context?: FeatureBuilderContext): BuilderDraft {
   const granted = feature.grantedActions ?? [];
+  const followUp = granted.find((action): action is Extract<ActionDefinition, { kind: "attack" }> => action.kind === "attack" && Boolean(action.onlyAfter));
+  const followUpBase = followUp ? context?.attacks.find((attack) => followUp.name.startsWith(attack.name) || followUp.id.startsWith(attack.id)) : undefined;
+  const retaliation = (feature.effects ?? []).find((effect): effect is Extract<FeatureEffect, { kind: "melee-retaliation" }> => effect.kind === "melee-retaliation");
+  const emanation = feature.emanation;
   const activate = granted.find((action) => action.kind === "activate-feature") as Extract<ActionDefinition, { kind: "activate-feature" }> | undefined;
   const grantedUtilities = granted.filter((action) => action.kind === "utility");
   const shape = activate ? "activated" : grantedUtilities.length > 0 ? "grants-bonus" : "passive";
   const legacyIncoming = activate?.condition?.modifiers?.incomingAttackRoll;
   const effects: FeatureEffect[] = [
-    ...(feature.effects ?? []),
+    // Retaliation and Evasion have their own fields below; the rest go to the effects list.
+    ...(feature.effects ?? []).filter((effect) => effect.kind !== "melee-retaliation" && effect.kind !== "evasion"),
     ...(activate?.condition?.effects ?? []),
     ...(legacyIncoming ? [{ kind: "incoming-attack-modifier" as const, condition: "always" as const, amount: legacyIncoming }] : [])
   ];
@@ -1041,11 +1108,33 @@ export function featureDraftFromDefinition(feature: FeatureDefinition): BuilderD
     grantsDash: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "dash"),
     grantsDisengage: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "disengage"),
     grantsHide: grantedUtilities.some((action) => action.kind === "utility" && action.mode === "hide"),
+    emanationEnabled: Boolean(emanation),
+    emanationTiming: emanation?.timing ?? "target-turn-start",
+    emanationRange: emanation?.range ?? 10,
+    emanationAffects: emanation?.affects ?? "hostile",
+    emanationSave: emanation?.save?.ability ?? "none",
+    emanationDc: emanation?.save?.dc ?? 13,
+    emanationDamage: emanation?.damage?.[0]?.dice ?? "",
+    emanationDamageType: emanation?.damage?.[0]?.damageType ?? "fire",
+    emanationCondition: emanation?.condition ?? "none",
+    emanationHalfOnSave: Boolean(emanation?.halfOnSave),
+    emanationImmuneOnSave: Boolean(emanation?.immuneOnSave),
+    emanationSuppressed: Boolean(emanation?.suppressedWhenIncapacitated),
+    retaliationEnabled: Boolean(retaliation),
+    retaliationDamage: retaliation?.damage[0]?.dice ?? "1d10",
+    retaliationDamageType: retaliation?.damage[0]?.damageType ?? "fire",
+    evasion: (feature.effects ?? []).some((effect) => effect.kind === "evasion"),
+    followUpAfter: followUp?.onlyAfter ?? "",
+    followUpAttackId: followUpBase?.id ?? "",
+    followUpMoveFeet: followUp?.grantsMovementFeet ?? 15,
+    // Kept as-is when its attack can't be matched, so saving never quietly drops it.
+    followUpExisting: followUp && !followUpBase ? followUp : undefined,
+    informational: feature.informational,
     description: feature.description ?? ""
   };
 }
 
-export function featureFromDraft(draft: BuilderDraft): FeatureDefinition {
+export function featureFromDraft(draft: BuilderDraft, context?: FeatureBuilderContext): FeatureDefinition {
   const name = (draft.name as string) || "Feature";
   const category: FeatureDefinition["category"] = draft.category === "trait" ? "trait" : "feature";
   const shape = (draft.featureShape as string) ?? "passive";
@@ -1104,11 +1193,63 @@ export function featureFromDraft(draft: BuilderDraft): FeatureDefinition {
       requiresConscious: draft.auraRequiresConscious === false ? false : undefined
     }
     : undefined;
+  const retaliationDamage = draft.retaliationEnabled ? damageFromText(draft.retaliationDamage, draft.retaliationDamageType) : undefined;
+  const passiveEffects: FeatureEffect[] = [
+    ...allEffects.filter((effect) => effect.kind !== "melee-retaliation" && effect.kind !== "evasion"),
+    ...(retaliationDamage ? [{ kind: "melee-retaliation" as const, damage: retaliationDamage }] : []),
+    ...(draft.evasion ? [{ kind: "evasion" as const }] : [])
+  ];
+  const saveAbility = draft.emanationSave && draft.emanationSave !== "none" ? draft.emanationSave as Ability : undefined;
+  const emanationDamage = damageFromText(draft.emanationDamage, draft.emanationDamageType);
+  const emanationCondition = draft.emanationCondition && draft.emanationCondition !== "none" ? draft.emanationCondition as FeatureEffectConditionApplication["name"] : undefined;
+  const emanation: FeatureDefinition["emanation"] = draft.emanationEnabled && (emanationDamage || emanationCondition)
+    ? {
+      range: Math.max(5, Number(draft.emanationRange) || 10),
+      timing: draft.emanationTiming === "bearer-turn-start" ? "bearer-turn-start" : "target-turn-start",
+      affects: draft.emanationAffects === "all" ? "all" : "hostile",
+      ...(saveAbility ? { save: { ability: saveAbility, dc: Math.max(1, Number(draft.emanationDc) || 13) } } : {}),
+      ...(emanationDamage ? { damage: emanationDamage } : {}),
+      ...(emanationCondition ? { condition: emanationCondition } : {}),
+      ...(saveAbility && emanationDamage && draft.emanationHalfOnSave ? { halfOnSave: true } : {}),
+      ...(saveAbility && draft.emanationImmuneOnSave ? { immuneOnSave: true } : {}),
+      ...(draft.emanationSuppressed ? { suppressedWhenIncapacitated: true } : {})
+    }
+    : undefined;
+  const followUp = followUpFromDraft(draft, name, context);
+  const automated = passiveEffects.length > 0 || Boolean(emanation) || Boolean(followUp) || Boolean(aura);
   return {
     id: "", name, category, description,
-    effects: allEffects.length ? allEffects : undefined,
+    effects: passiveEffects.length ? passiveEffects : undefined,
     aura,
-    automationSupport: allEffects.length ? "full" : "manual-only"
+    // Explicit undefineds: a builder save replaces what the feature had, it doesn't merge into it.
+    emanation,
+    grantedActions: followUp ? [followUp] : undefined,
+    informational: !automated && draft.informational ? true : undefined,
+    automationSupport: automated ? "full" : "manual-only"
+  };
+}
+
+/** The bonus-action attack a Pounce / Rampage-style feature earns: a copy of one of the creature's attacks. */
+function followUpFromDraft(draft: BuilderDraft, featureName: string, context?: FeatureBuilderContext): ActionDefinition | undefined {
+  const after = draft.followUpAfter === "charge-hit" || draft.followUpAfter === "dropped-creature" ? draft.followUpAfter : undefined;
+  if (!after) return undefined;
+  const attacks = context?.attacks ?? [];
+  const base = attacks.find((attack) => attack.id === draft.followUpAttackId)
+    ?? (draft.followUpExisting ? undefined : attacks.find((attack) => attack.attackType === "melee"));
+  if (!base) {
+    const existing = draft.followUpExisting as Extract<ActionDefinition, { kind: "attack" }> | undefined;
+    return existing ? { ...existing, onlyAfter: after } : undefined;
+  }
+  const { usage: _usage, resourceCost: _cost, ...rest } = base;
+  const moveFeet = Math.max(0, Number(draft.followUpMoveFeet) || 0);
+  return {
+    ...rest,
+    id: `${base.id}-follow-up`,
+    name: `${base.name} (${featureName})`,
+    actionType: "bonus",
+    onlyAfter: after,
+    ...(after === "charge-hit" ? { requiresTargetCondition: "prone" as const } : {}),
+    ...(after === "dropped-creature" && moveFeet > 0 ? { grantsMovementFeet: moveFeet } : {})
   };
 }
 
@@ -1195,5 +1336,74 @@ export const PRESETS: PresetSkeleton[] = [
       name: "Sneak Attack", category: "feature", featureShape: "passive",
       effects: [{ kind: "damage-bonus", oncePerTurn: true, condition: "always", anyConditions: ["attack-has-advantage", "ally-adjacent-to-target"], attackTypes: ["melee", "ranged"], damage: [{ dice: "3d6", damageType: "same-as-attack" }] }]
     }
+  },
+  {
+    kind: "feature", label: "Charge",
+    draft: {
+      name: "Charge", category: "trait", featureShape: "passive",
+      description: "If it moves at least 20 ft. straight toward a target and then hits it with a melee attack on the same turn, the target takes an extra 2d6 damage and must succeed on a DC 13 Strength saving throw or be knocked prone.",
+      effects: [
+        { kind: "damage-bonus", condition: "charged", attackTypes: ["melee"], damage: [{ dice: "2d6", damageType: "same-as-attack" }] },
+        { kind: "apply-condition-on-hit", condition: "charged", attackTypes: ["melee"], appliedCondition: { name: "prone" }, save: { ability: "str", dc: 13 } }
+      ]
+    }
+  },
+  {
+    kind: "feature", label: "Pounce",
+    draft: {
+      name: "Pounce", category: "trait", featureShape: "passive", followUpAfter: "charge-hit",
+      description: "If it moves at least 20 ft. straight toward a creature and then hits it with a melee attack on the same turn, that target must succeed on a DC 13 Strength saving throw or be knocked prone. If the target is prone, it can make one more attack against it as a bonus action.",
+      effects: [{ kind: "apply-condition-on-hit", condition: "charged", attackTypes: ["melee"], appliedCondition: { name: "prone" }, save: { ability: "str", dc: 13 } }]
+    }
+  },
+  {
+    kind: "feature", label: "Rampage",
+    draft: {
+      name: "Rampage", category: "trait", featureShape: "passive", followUpAfter: "dropped-creature", followUpMoveFeet: 15,
+      description: "When it reduces a creature to 0 hit points with a melee attack on its turn, it can take a bonus action to move up to half its speed and make another attack."
+    }
+  },
+  {
+    kind: "feature", label: "Blood Frenzy",
+    draft: { name: "Blood Frenzy", category: "trait", featureShape: "passive", effects: [{ kind: "attack-advantage", condition: "target-injured", attackTypes: ["melee"] }] }
+  },
+  {
+    kind: "feature", label: "Stench (aura)",
+    draft: {
+      name: "Stench", category: "trait", featureShape: "passive",
+      emanationEnabled: true, emanationTiming: "target-turn-start", emanationRange: 10, emanationAffects: "all",
+      emanationSave: "con", emanationDc: 14, emanationCondition: "poisoned", emanationImmuneOnSave: true,
+      description: "Any creature that starts its turn within 10 feet must succeed on a DC 14 Constitution saving throw or be poisoned until the start of its next turn. On a success, the creature is immune for 24 hours."
+    }
+  },
+  {
+    kind: "feature", label: "Fear Aura",
+    draft: {
+      name: "Fear Aura", category: "trait", featureShape: "passive",
+      emanationEnabled: true, emanationTiming: "target-turn-start", emanationRange: 20, emanationAffects: "hostile",
+      emanationSave: "wis", emanationDc: 15, emanationCondition: "frightened", emanationImmuneOnSave: true, emanationSuppressed: true,
+      description: "Any hostile creature that starts its turn within 20 feet must make a DC 15 Wisdom saving throw, unless this creature is incapacitated. On a failure it is frightened until the start of its next turn; on a success it is immune for 24 hours."
+    }
+  },
+  {
+    kind: "feature", label: "Fire Aura",
+    draft: {
+      name: "Fire Aura", category: "trait", featureShape: "passive",
+      emanationEnabled: true, emanationTiming: "bearer-turn-start", emanationRange: 5, emanationAffects: "all",
+      emanationSave: "none", emanationDamage: "3d6", emanationDamageType: "fire",
+      retaliationEnabled: true, retaliationDamage: "3d6", retaliationDamageType: "fire",
+      description: "At the start of each of its turns, each creature within 5 feet takes 3d6 fire damage. A creature that hits it with a melee attack while within 5 feet takes 3d6 fire damage."
+    }
+  },
+  {
+    kind: "feature", label: "Heated Body",
+    draft: {
+      name: "Heated Body", category: "trait", featureShape: "passive", retaliationEnabled: true, retaliationDamage: "1d10", retaliationDamageType: "fire",
+      description: "A creature that touches it or hits it with a melee attack while within 5 ft. of it takes 1d10 fire damage."
+    }
+  },
+  {
+    kind: "feature", label: "Evasion",
+    draft: { name: "Evasion", category: "feature", featureShape: "passive", evasion: true }
   }
 ];
