@@ -38,7 +38,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong>Build the map</strong> — draw walls, paint terrain, drop in a background image (see{" "}
-            <a href="#walls">Walls &amp; Terrain</a>).
+            <a href="#walls">Walls, Terrain &amp; Height</a>).
           </li>
           <li>
             <strong>Add actors</strong> to each side and fill out their sheets — stats, attacks, spells,
@@ -159,7 +159,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: "walls",
-    label: "Walls & Terrain",
+    label: "Walls, Terrain & Height",
     content: (
       <>
         <p>
@@ -218,6 +218,60 @@ const SECTIONS: Section[] = [
           hazard — fine-tune that hazard's own <strong>Save DC</strong> and <strong>damage dice</strong> count
           beyond the three fixed presets (e.g. turn a DC 12 acid pool into a DC 15 one, or bump 2d6 up to
           3d6). The same menu deletes the selection.
+        </p>
+
+        <h3>Ground height, ramps &amp; cliffs</h3>
+        <p>
+          Select the <strong>Elevation</strong> tool (the stacked-layers icon) to open the Ground height
+          palette. Height is its own layer, separate from terrain, so a lava pool can sit on top of a hill.
+          Hover a cell to see its height (and what the brush would change it to). The modes:
+        </p>
+        <ul>
+          <li><strong>Paint</strong> — drag over cells to set them to the chosen height (type a value or pick a preset).</li>
+          <li><strong>Raise 5 / Lower 5</strong> — each cell you drag over goes up or down one 5 ft step.</li>
+          <li>
+            <strong>Ramp</strong> — paint the two levels first, then drag from the low end to the high end;
+            the steps in between fill in. The preview turns red and tells you how long the ramp needs to be if
+            it is too steep to walk.
+          </li>
+          <li><strong>Flatten</strong> — drag to level cells back to ground height; <em>Flatten map</em> clears every height.</li>
+        </ul>
+        <p>
+          A walker can step up or down <strong>5 ft</strong> between neighbouring squares, which is what a
+          stair or a ramp gives it. Anything steeper is a <strong>cliff</strong>, drawn on the map as a heavy
+          dark-red line: walkers can&apos;t cross it (they path around to a ramp), climbers can at a square of
+          movement per 5 ft, and fliers ignore it. A creature shoved off a ledge falls the difference; one
+          shoved into a cliff face stops against it. Height also counts toward reach and range, so a spearman
+          on the ground can&apos;t hit someone standing on a 10 ft ledge overhead.
+        </p>
+
+        <h3>Flying &amp; altitude</h3>
+        <p>
+          A creature with a fly speed can be airborne. Set a token&apos;s starting altitude from its
+          right-click menu (<strong>Flight</strong> → Altitude, or <strong>Land</strong>; works on a whole
+          selection) or the sheet&apos;s Token tab. An airborne token floats over a shadow with its height on
+          a badge.
+        </p>
+        <ul>
+          <li>
+            Reach and range are measured in three dimensions: a creature more than its reach overhead can&apos;t be
+            hit in melee, but bows, spells and breath weapons still reach it. The log says so plainly when a
+            fighter can&apos;t reach a flier.
+          </li>
+          <li>Climbing or diving costs movement like any other flying (5 ft of fly speed per 5 ft of height).</li>
+          <li>Rising out of a foe&apos;s reach provokes an opportunity attack, just like walking out of it.</li>
+          <li>
+            A flier that is knocked prone, restrained, grappled, stunned, paralyzed, unconscious or killed
+            <strong> falls</strong>: 1d6 bludgeoning per 10 ft (up to 20d6), landing prone. Creatures that
+            <strong> hover</strong> (a toggle beside fly speed on the Stats tab) stay up.
+          </li>
+          <li>
+            In automated fights, melee fliers swoop down just far enough to strike, and ranged fliers climb
+            out of reach of foes who can&apos;t follow them up.
+          </li>
+        </ul>
+        <p>
+          Walls still block sight and movement at every height, and cover doesn&apos;t yet account for height.
         </p>
       </>
     )
