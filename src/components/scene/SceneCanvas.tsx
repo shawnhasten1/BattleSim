@@ -153,8 +153,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           hpOut: combatant.currentHp <= 0 || combatant.state !== "active",
           inActiveZone,
           altitude: combatant.altitude ?? 0,
-          // How far the token floats above its shadow: enough to read, capped so a dragon at 60 ft doesn't leave its cell.
-          lift: Math.min(16, 3 + ((combatant.altitude ?? 0) / 5) * 1.5)
+          // How far the token floats above its shadow: enough to read, small enough that a flier on the top row isn't cut off.
+          lift: Math.min(8, 3 + (combatant.altitude ?? 0) / 10)
         };
       }),
     [encounter, cellSize, draggedToken, droppingTokenId, walk.positions, map.grid.distancePerSquare]

@@ -1118,8 +1118,9 @@ img {
 
 .token-altitude {
   position: absolute;
-  top: -7px;
-  right: -9px;
+  /* Inside the token's own square, so a flier on the map's edge doesn't lose its badge. */
+  top: 0;
+  right: 0;
   min-width: 22px;
   padding: 1px 4px;
   border: 1px solid #fff;
