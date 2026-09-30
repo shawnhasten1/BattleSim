@@ -247,3 +247,62 @@ describe("replay", () => {
     expect(partial.combatants.some((combatant) => combatant.id === created!.id)).toBe(false);
   });
 });
+
+describe("battle text", () => {
+  const messages = (state: ReturnType<typeof createEngineState>) => state.log.map((entry) => entry.message);
+
+  it("announces a chancy summon as an attempt and shows the roll when it works or fails", () => {
+    let worked = 0;
+    let failed = 0;
+    for (const seed of ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10"]) {
+      const state = createEngineState(scene(summonAction({ chance: 50 }), [], {}, seed));
+      const created = resolveSummonAction(state, "caster", "call");
+      const lines = messages(state);
+      expect(lines).toContain("caster attempts to summon with Call Allies (50% chance)");
+      const result = state.log.find((entry) => entry.type === "CombatantSpawned")!;
+      expect(result.data?.roll).toBeGreaterThanOrEqual(1);
+      if (created.length > 0) {
+        worked += 1;
+        expect(result.message).toMatch(/Call Allies succeeds \(rolled \d+ against 50%\) — 1 Imp appears/);
+        expect(result.data).toMatchObject({ success: true, chance: 50 });
+      } else {
+        failed += 1;
+        expect(result.message).toMatch(/Call Allies fails — rolled \d+, needed 50 or less/);
+        expect(result.data).toMatchObject({ success: false, chance: 50 });
+      }
+    }
+    expect(worked).toBeGreaterThan(0);
+    expect(failed).toBeGreaterThan(0);
+  });
+
+  it("a sure summon just says it was used, with no roll", () => {
+    const state = createEngineState(scene(summonAction()));
+    resolveSummonAction(state, "caster", "call");
+    expect(messages(state)).toContain("caster uses Call Allies");
+    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/Call Allies succeeds — 1 Imp appears/);
+  });
+
+  it("pluralises the creature name", () => {
+    const action = summonAction({ options: [{ id: "imp-option", definitionId: "def-imp", label: "Imps", count: 3 }] });
+    const state = createEngineState(scene(action));
+    resolveSummonAction(state, "caster", "call");
+    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/3 Imps appear /);
+  });
+});
+
+describe("an opening summon", () => {
+  it("a summoner with a good attack still summons on its first turn", () => {
+    const strike: CreatureDefinition["actions"][number] = { kind: "attack", id: "smash", name: "Smash", actionType: "action", attackType: "melee", ability: "str", attackBonus: 9, range: 5, reach: 5, damage: [{ dice: "3d10", damageType: "bludgeoning", abilityModifier: "str" }], automationSupport: "full" };
+    let summonedFirst = 0;
+    for (const seed of ["o1", "o2", "o3", "o4", "o5", "o6"]) {
+      const snapshot = scene(summonAction({ chance: 100, options: [{ id: "imp-option", definitionId: "def-imp", label: "Imps", count: { dice: "2d4" } }] }), [], {}, seed);
+      snapshot.definitions = snapshot.definitions.map((definition) => (definition.id === "def-caster" ? { ...definition, actions: [...definition.actions, strike] } : definition));
+      // Next to its target, so the attack is instantly available.
+      snapshot.combatants = snapshot.combatants.map((combatant) => (combatant.id === "caster" ? { ...combatant, position: { x: 11, y: 4 } } : combatant));
+      const result = runAutomatedEncounter(snapshot, 1);
+      const firstChoice = result.log.find((entry) => entry.type === "AiDecision" && entry.data?.combatantId === "caster");
+      if (firstChoice?.message === "caster chose Call Allies") summonedFirst += 1;
+    }
+    expect(summonedFirst).toBeGreaterThanOrEqual(5);
+  });
+});

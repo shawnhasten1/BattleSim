@@ -2668,6 +2668,11 @@ function summonCells(state: EngineState, origin: Point, footprint: number, range
   return placed;
 }
 
+/** "Dretch" → "Dretches", "Imp" → "Imps" — good enough for log text. */
+function pluralName(name: string): string {
+  return /(s|x|z|ch|sh)$/i.test(name) ? `${name}es` : `${name}s`;
+}
+
 /**
  * Conjure Animals / Summon Demon / Animate Dead. Rolls the action's `chance` gate (if any), picks one option
  * (the caller's `optionId` for `choice: "pick"`, or a uniform roll for `"random"`), rolls its count, places
@@ -2690,12 +2695,18 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
   if (action.concentration) {
     breakConcentration(state, casterId);
   }
-  declareAction(state, caster, action);
+  // A chancy summon is announced as an attempt, and the d100 that decides it is shown either way.
+  declareAction(state, caster, action, {
+    message: action.chance !== undefined
+      ? `${caster.displayName} attempts to summon with ${action.name} (${action.chance}% chance)`
+      : `${caster.displayName} uses ${action.name}`
+  });
 
-  const succeeded = action.chance === undefined || state.rng.nextInt(1, 100) <= action.chance;
+  const chanceRoll = action.chance === undefined ? undefined : state.rng.nextInt(1, 100);
+  const succeeded = action.chance === undefined || chanceRoll! <= action.chance;
   if (!succeeded) {
-    state.log.push(event(state, "CombatantSpawned", `${caster.displayName}'s ${action.name} fizzles`, {
-      combatantId: caster.id, actionId, summonerId: casterId, combatants: []
+    state.log.push(event(state, "CombatantSpawned", `${caster.displayName}'s ${action.name} fails — rolled ${chanceRoll}, needed ${action.chance} or less`, {
+      combatantId: caster.id, actionId, summonerId: casterId, combatants: [], chance: action.chance, roll: chanceRoll, success: false
     }));
     return [];
   }
@@ -2750,8 +2761,9 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
     caster.concentration = { sourceConditionId: undefined };
   }
   state.log.push(event(state, "CombatantSpawned",
-    `${caster.displayName} summons ${created.length} ${summonedDefinition.name}${created.length === 1 ? "" : "s"} (initiative ${initiative})`, {
+    `${caster.displayName}'s ${action.name} succeeds${chanceRoll === undefined ? "" : ` (rolled ${chanceRoll} against ${action.chance}%)`} — ${created.length} ${created.length === 1 ? summonedDefinition.name : pluralName(summonedDefinition.name)} appear${created.length === 1 ? "s" : ""} (initiative ${initiative})`, {
       combatantId: caster.id, actionId, summonerId: casterId, definitionId: summonedDefinition.id, initiative, insertIndex,
+      chance: action.chance, roll: chanceRoll, success: true,
       // The full combatant objects, not just ids: replay reconstructs board state purely by folding the log
       // forward over the pre-run snapshot, which never had these combatants in it.
       combatants: created
@@ -2864,7 +2876,7 @@ function declareAction(
   state: EngineState,
   actor: CombatantState,
   action: ActionDefinition,
-  targetInfo: { target?: CombatantState; origin?: Point; aimVector?: { x: number; y: number } } = {}
+  targetInfo: { target?: CombatantState; origin?: Point; aimVector?: { x: number; y: number }; message?: string } = {}
 ): void {
   const targetText = targetInfo.target
     ? ` on ${targetInfo.target.displayName}`
@@ -2878,7 +2890,7 @@ function declareAction(
   // `direction` (always east) regardless of where it was actually pointed.
   const area = "area" in action ? action.area : undefined;
   const damageType = "damage" in action ? action.damage?.[0]?.damageType : undefined;
-  state.log.push(event(state, "ActionDeclared", `${actor.displayName} uses ${action.name}${targetText}`, {
+  state.log.push(event(state, "ActionDeclared", targetInfo.message ?? `${actor.displayName} uses ${action.name}${targetText}`, {
     actorId: actor.id,
     actionId: action.id,
     actionName: action.name,

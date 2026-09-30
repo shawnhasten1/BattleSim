@@ -1941,6 +1941,9 @@ function hasActiveFeatureCondition(actor: CombatantState, featureId: string): bo
 }
 
 /** Roughly how much a creature is worth having on the field as a fresh ally: its durability plus its best attack. */
+/** How much more a summon is worth on round 1, when its allies have the whole fight ahead of them. */
+const SUMMON_OPENING_BONUS = 4;
+
 function allyValue(definition: CreatureDefinition): number {
   const bestAttack = Math.max(0, ...getExecutableActions(definition)
     .filter((action) => action.automationSupport === "full" && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
@@ -1972,10 +1975,17 @@ function selectSummonAction(snapshot: EncounterSnapshot, actor: CombatantState, 
     const best = scored.reduce((top, candidate) => (candidate.value > top.value ? candidate : top), scored[0]!);
     const chanceFactor = (action.chance ?? 100) / 100;
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
-    const score = best.value * chanceFactor - resourcePenalty;
+    // Allies called in at the start have the whole fight to pay off, so a summoner opens with it (a much better
+    // attack can still win); after the opening round the summon competes on its plain value.
+    const opening = snapshot.round <= 1 ? SUMMON_OPENING_BONUS : 1;
+    const score = best.value * chanceFactor * opening - resourcePenalty;
     return {
       action, optionId: action.choice === "pick" ? best.optionId : undefined, score,
-      reasons: [`summons ~${Math.round(best.value)} worth of allies`, ...(action.chance !== undefined ? [`${action.chance}% chance`] : [])]
+      reasons: [
+        `summons ~${Math.round(best.value)} worth of allies`,
+        ...(action.chance !== undefined ? [`${action.chance}% chance`] : []),
+        ...(opening > 1 ? ["opening move"] : [])
+      ]
     };
   });
 
