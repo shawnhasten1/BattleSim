@@ -51,7 +51,8 @@ import {
 } from "./combat";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
-import { coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
+import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
+import { footprintGroundHeight, movementProfileOf, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
 import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -123,6 +124,9 @@ interface OffensivePlan {
 interface MovementPlan {
   cell: Point;
   pathCost: number;
+  /** Altitude to hold over `cell` (fliers only), and the movement it costs on top of `pathCost`. */
+  altitude?: number;
+  altitudeCost?: number;
   targetDistance: number;
   score: number;
   opportunityThreats: number;
@@ -563,7 +567,7 @@ function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactic
       const move = bestDestinationTowardTarget(state.snapshot, actor, pick.plan.target, pick.plan.action.range, tactics);
       if (move) {
         try {
-          moveCombatant(state, actor.id, move.cell);
+          moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
         } catch { /* map state moved on */ }
       }
     }
@@ -778,7 +782,7 @@ function executeJointTurnPlan(state: EngineState, actor: CombatantState, joint: 
       const move = bestDestinationTowardTarget(state.snapshot, actor, step.target, step.range, tactics);
       if (move) {
         try {
-          moveCombatant(state, actor.id, move.cell);
+          moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
         } catch { /* map state moved on */ }
       }
     }
@@ -878,7 +882,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       const move = bestDestinationTowardTarget(state.snapshot, actor, healing.target, healing.action.range, tactics);
       if (move) {
         try {
-          moveCombatant(state, actor.id, move.cell);
+          moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
           movedThisTurn = true;
         } catch { /* map state moved on */ }
       }
@@ -957,7 +961,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       const move = bestDestinationTowardTarget(state.snapshot, actor, buff.target, buff.action.range, tactics);
       if (move) {
         try {
-          moveCombatant(state, actor.id, move.cell);
+          moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
         } catch { /* map state moved on */ }
       }
     }
@@ -1078,7 +1082,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       if (dashId) {
         try {
           resolveUtilityAction(state, actor.id, dashId);
-          moveCombatant(state, actor.id, dashMove.cell);
+          moveCombatant(state, actor.id, dashMove.cell, { altitude: dashMove.altitude });
           state.log.push(event(state, "AiDecision", `${actor.displayName} dashed toward ${plan.target.displayName}`, {
             combatantId: actor.id, targetId: plan.target.id, destination: dashMove.cell, remainingDistance: dashMove.targetDistance
           }));
@@ -1090,8 +1094,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
 
     if (movement) {
       try {
-        const previousDistance = gridDistance(actor.position, plan.target.position, state.snapshot.map.grid);
-        moveCombatant(state, actor.id, movement.cell);
+        const previousDistance = spatialDistance(state.snapshot, actor, plan.target);
+        moveCombatant(state, actor.id, movement.cell, { altitude: movement.altitude });
         movedThisTurn = true;
         const coverNote = movement.coverBonus >= 2 ? ` into ${coverPhrase(movement.coverBonus)}` : "";
         state.log.push(event(state, "AiDecision", `${actor.displayName} moved ${Math.round(movement.pathCost * state.snapshot.map.grid.distancePerSquare)} ft toward ${plan.target.displayName}${coverNote}`, {
@@ -1114,7 +1118,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       // ground (the action would go unused anyway), otherwise just move — and
       // Dodge if the advance walked into a threatened square.
       const feet = (pathCost: number) => Math.round(pathCost * state.snapshot.map.grid.distancePerSquare);
-      const previousDistance = gridDistance(actor.position, plan.target.position, state.snapshot.map.grid);
+      const previousDistance = spatialDistance(state.snapshot, actor, plan.target);
       const walkApproach = bestDestinationTowardTarget(
         state.snapshot, actor, plan.target, plan.range, tactics, { allowPartialApproach: true }
       );
@@ -1133,7 +1137,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       if (dashApproach && dashId && dashRoute < walkRoute - 1e-9) {
         try {
           resolveUtilityAction(state, actor.id, dashId);
-          moveCombatant(state, actor.id, dashApproach.cell);
+          moveCombatant(state, actor.id, dashApproach.cell, { altitude: dashApproach.altitude });
           movedThisTurn = true;
           state.log.push(event(state, "AiDecision", `${actor.displayName} dashed ${feet(dashApproach.pathCost)} ft toward ${plan.target.displayName} (still out of range)`, {
             combatantId: actor.id,
@@ -1152,7 +1156,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
 
       if (walkApproach) {
         try {
-          moveCombatant(state, actor.id, walkApproach.cell);
+          moveCombatant(state, actor.id, walkApproach.cell, { altitude: walkApproach.altitude });
           movedThisTurn = true;
           state.log.push(event(state, "AiDecision", `${actor.displayName} moved ${feet(walkApproach.pathCost)} ft toward ${plan.target.displayName} (still out of range)`, {
             combatantId: actor.id,
@@ -1170,12 +1174,15 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         return undefined;
       }
 
-      state.log.push(event(state, "AutomationWarning", `${actor.displayName} found no legal movement toward ${plan.target.displayName}`, {
-        combatantId: actor.id,
-        targetId: plan.target.id,
-        actionId: plan.action.id,
-        range: plan.range
-      }));
+      // A walker under a flier it can't touch has nowhere useful to go, and says so below instead.
+      if (outOfMeleeReachVertically(state.snapshot, actor, plan.target, plan.action) === undefined) {
+        state.log.push(event(state, "AutomationWarning", `${actor.displayName} found no legal movement toward ${plan.target.displayName}`, {
+          combatantId: actor.id,
+          targetId: plan.target.id,
+          actionId: plan.action.id,
+          range: plan.range
+        }));
+      }
     }
     // A reaction provoked by that move (an opportunity attack) may have downed or
     // killed the actor outright — there's no action left to spend.
@@ -1192,6 +1199,18 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
     resolveDodgeIfThreatened(state, actor);
     maybeSpendBonusAction(state, actor, tactics);
+    const overhead = outOfMeleeReachVertically(state.snapshot, actor, plan.target, plan.action);
+    if (overhead !== undefined) {
+      const above = combatantHeight(state.snapshot, plan.target) > combatantHeight(state.snapshot, actor);
+      state.log.push(event(state, "AiDecision", `${actor.displayName} can't reach ${plan.target.displayName} with ${plan.action.name}: ${plan.target.displayName} is ${overhead} ft ${above ? "up" : "below"}`, {
+        combatantId: actor.id,
+        targetId: plan.target.id,
+        actionId: plan.action.id,
+        verticalGap: overhead,
+        reason: "out-of-reach-vertically"
+      }));
+      return undefined;
+    }
     const warning = `${actor.displayName} could not reach a valid target with ${plan.action.name}`;
     state.log.push(event(state, "AutomationWarning", warning, {
       combatantId: actor.id,
@@ -1212,7 +1231,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     const shotPos = bestShotPositionAgainst(state.snapshot, actor, plan.target, plan.range, tactics);
     if (shotPos) {
       try {
-        moveCombatant(state, actor.id, shotPos.cell);
+        moveCombatant(state, actor.id, shotPos.cell, { altitude: shotPos.altitude });
         movedThisTurn = true;
         state.log.push(event(state, "AiDecision", `${actor.displayName} repositioned for a clear shot at ${plan.target.displayName}`, {
           combatantId: actor.id,
@@ -1261,7 +1280,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     }
     if (reposition) {
       try {
-        moveCombatant(state, actor.id, reposition.cell);
+        moveCombatant(state, actor.id, reposition.cell, { altitude: reposition.altitude });
         const coverNote = reposition.coverBonus >= 2 ? ` to ${coverPhrase(reposition.coverBonus)}` : "";
         state.log.push(event(state, "AiDecision", `${actor.displayName} repositioned${coverNote}`, {
           combatantId: actor.id,
@@ -1279,6 +1298,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     }
   }
 
+  maybeTakeSafeAltitude(state, actor, tactics);
   maybeSpendBonusAction(state, actor, tactics);
   return undefined;
 }
@@ -1374,7 +1394,7 @@ function rollIfNeeded(state: EngineState): void {
 function selectNearestHostile(snapshot: EncounterSnapshot, actor: CombatantState): CombatantState | undefined {
   return snapshot.combatants
     .filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant))
-    .sort((a, b) => gridDistance(actor.position, a.position, snapshot.map.grid) - gridDistance(actor.position, b.position, snapshot.map.grid)
+    .sort((a, b) => spatialDistance(snapshot, actor, a) - spatialDistance(snapshot, actor, b)
       || a.currentHp - b.currentHp
       || a.id.localeCompare(b.id))[0];
 }
@@ -1520,7 +1540,7 @@ function selectHealingAction(
     const missingHp = targetDefinition.maxHp - target.currentHp;
     const missingHpRatio = missingHp / Math.max(1, targetDefinition.maxHp);
     const average = averageHealing(action, definition);
-    const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
+    const distance = spatialDistance(snapshot, actor, target);
     const selfTarget = action.targeting?.target === "self" || (action.range === 0 && target.id === actor.id);
     const reachable = selfTarget || isValidTarget(snapshot, actor, target, action.range);
     // If it's out of range, it's only a real option when the healer can close
@@ -1596,7 +1616,7 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
         .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
         .filter((combatant) => isValidTarget(snapshot, actor, combatant, action.range));
       const scored = woundedAllies
-        .map((target) => ({ target, value: scoreFor(target) - gridDistance(actor.position, target.position, snapshot.map.grid) / 20 }))
+        .map((target) => ({ target, value: scoreFor(target) - spatialDistance(snapshot, actor, target) / 20 }))
         .sort((a, b) => b.value - a.value);
       const taken = scored.slice(0, action.targeting?.count ?? scored.length);
       if (!taken.length) {
@@ -1621,7 +1641,7 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
     const woundedInRange = snapshot.combatants
       .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
       .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
-      .filter((combatant) => gridDistance(actor.position, combatant.position, snapshot.map.grid) <= rangeLimit);
+      .filter((combatant) => spatialDistance(snapshot, actor, combatant) <= rangeLimit);
     let bestPlacement: { origin: Point; targets: CombatantState[]; value: number } | undefined;
     for (const candidate of woundedInRange) {
       const caught = combatantsInArea(snapshot.map, candidate.position, action.area, snapshot.combatants, definitionsById, undefined, { includeDowned: true })
@@ -1634,7 +1654,7 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
     if (!bestPlacement || !bestPlacement.targets.length) {
       continue;
     }
-    const score = bestPlacement.value - resourcePenalty - gridDistance(actor.position, bestPlacement.origin, snapshot.map.grid) / 20;
+    const score = bestPlacement.value - resourcePenalty - spatialDistanceToPoint(snapshot, actor, bestPlacement.origin) / 20;
     if (score > 0 && (!best || score > best.score)) {
       best = { action, targets: bestPlacement.targets, aim: bestPlacement.origin, score, reasons: [`heals ${bestPlacement.targets.length} allies in a burst`] };
     }
@@ -1681,7 +1701,7 @@ function selectBuffAction(
     return eligible
       .filter((target) => !target.conditions?.some((condition) => condition.id === conditionId))
       .map((target) => {
-        const distance = mode === "self" ? 0 : gridDistance(actor.position, target.position, snapshot.map.grid);
+        const distance = mode === "self" ? 0 : spatialDistance(snapshot, actor, target);
         const reachable = mode === "self" || isValidTarget(snapshot, actor, target, action.range);
         const canMoveIntoRange = reachable || Boolean(bestDestinationTowardTarget(snapshot, actor, target, action.range, tacticsSettings(actor.tacticsProfile)));
         const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
@@ -1735,7 +1755,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
         const priorityBonus = (target.tags?.includes("protected") ? 20 : 0)
           + (target.tags?.includes("high-priority") ? 10 : 0)
           + (target.tags?.includes("low-priority") ? -15 : 0);
-        return { target, value: 15 + priorityBonus - gridDistance(actor.position, target.position, snapshot.map.grid) / 20 };
+        return { target, value: 15 + priorityBonus - spatialDistance(snapshot, actor, target) / 20 };
       })
       .sort((a, b) => b.value - a.value);
     const taken = scored.slice(0, action.targeting?.count ?? scored.length);
@@ -2014,7 +2034,7 @@ function selectOffensivePlan(
     .flatMap((action) => hostiles.map((target) => {
       const targetDefinition = getDefinition(snapshot, target);
       const range = actionRange(action, definition);
-      const distance = gridDistance(actor.position, target.position, snapshot.map.grid);
+      const distance = spatialDistance(snapshot, actor, target);
       const reachableNow = isValidTarget(snapshot, actor, target, range);
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
@@ -2135,8 +2155,19 @@ function selectOffensivePlan(
   return candidates[0];
 }
 
+/**
+ * How far overhead (or below) `target` is when a melee `action` from a creature that can't fly simply can't touch it,
+ * else `undefined`. That is not a mapping failure to warn about, just a fact of the fight the log should state plainly.
+ */
+function outOfMeleeReachVertically(snapshot: EncounterSnapshot, actor: CombatantState, target: CombatantState, action: OffensiveAction): number | undefined {
+  if (action.kind !== "attack" || action.attackType !== "melee") return undefined;
+  if (movementProfileOf(getDefinition(snapshot, actor)).fly) return undefined;
+  const gap = Math.abs(combatantHeight(snapshot, actor) - combatantHeight(snapshot, target));
+  return gap > (action.reach ?? action.range) ? gap : undefined;
+}
+
 function isValidTarget(snapshot: EncounterSnapshot, actor: CombatantState, target: CombatantState, range: number): boolean {
-  return gridDistance(actor.position, target.position, snapshot.map.grid) <= range
+  return spatialDistance(snapshot, actor, target) <= range
     && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, actor.position, target.position));
 }
 
@@ -2191,7 +2222,7 @@ function saveBonusTargetIds(
   }
   return snapshot.combatants
     .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && isTargetable(c) && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
-    .sort((a, b) => gridDistance(actor.position, a.position, snapshot.map.grid) - gridDistance(actor.position, b.position, snapshot.map.grid))
+    .sort((a, b) => spatialDistance(snapshot, actor, a) - spatialDistance(snapshot, actor, b))
     .slice(0, capacity)
     .map((c) => c.id);
 }
@@ -2209,7 +2240,7 @@ function bestDestinationTowardTarget(
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = remainingMovementBudget(snapshot, actor);
   const pathingMap = hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones));
-  const plans = findReachableCells(pathingMap, actor.position, footprint, movementBudget, occupied, movementOptionsFor(definition)).map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable));
+  const plans = findReachableCells(pathingMap, actor.position, footprint, movementBudget, occupied, movementOptionsFor(definition)).map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable, movementBudget));
 
   const inRange = plans.filter((candidate) => candidate.targetDistance <= range
     && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, candidate.cell, target.position)));
@@ -2262,7 +2293,7 @@ function bestRepositionAfterAction(
   const footprint = sizeFootprint(definition.size);
   const occupied = occupiedCellsFor(snapshot, actor.id);
   const movementBudget = remainingMovementBudget(snapshot, actor);
-  const currentDistance = gridDistance(actor.position, target.position, snapshot.map.grid);
+  const currentDistance = spatialDistance(snapshot, actor, target);
   const currentNearestHostile = nearestHostileDistanceFrom(snapshot, actor, actor.position);
   const currentCover = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
     ? coverFromHostilesAt(snapshot, actor, actor.position)
@@ -2271,7 +2302,7 @@ function bestRepositionAfterAction(
     + Math.min(currentNearestHostile, tactics.preferredMinDistance) / 5
     + (currentCover > 0 ? currentCover * tactics.coverWeight + 4 : 0);
   const candidates = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint, movementBudget, occupied, movementOptionsFor(definition))
-    .map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable))
+    .map((reachable) => movementPlanForCell(snapshot, actor, target, range, tactics, reachable, movementBudget))
     .filter((candidate) => candidate.targetDistance <= range
       && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, candidate.cell, target.position))
       && candidate.score > currentScore + 4);
@@ -2345,7 +2376,7 @@ function predictedZoneApproachValue(
   for (const hostile of otherHostiles) {
     const hostileDefinition = getDefinition(snapshot, hostile);
     const nearestAlly = alliesOfCaster.reduce<{ ally: CombatantState; distance: number } | null>((closest, ally) => {
-      const distance = gridDistance(hostile.position, ally.position, snapshot.map.grid);
+      const distance = spatialDistance(snapshot, hostile, ally);
       return !closest || distance < closest.distance ? { ally, distance } : closest;
     }, null)?.ally;
     if (!nearestAlly) {
@@ -2390,16 +2421,106 @@ function hazardAtCell(snapshot: EncounterSnapshot, actor: CombatantState, cell: 
 }
 
 
+/**
+ * Where a creature that can fly should hold itself over `cell` to deal with `target`, and what getting there costs.
+ * A melee flier comes down (or up) only as far as it takes to reach; a ranged one climbs just past the reach of any
+ * ground-bound melee foe. Either change is limited to what its movement, after the walk to `cell`, can pay for.
+ */
+function plannedAltitude(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  cell: Point,
+  target: CombatantState,
+  range: number,
+  tactics: TacticsSettings,
+  pathCost: number,
+  budget: number
+): { altitude: number; cost: number } {
+  const definition = getDefinition(snapshot, actor);
+  const current = actor.altitude ?? 0;
+  if (!movementProfileOf(definition).fly) {
+    return { altitude: current, cost: 0 };
+  }
+  const footprint = sizeFootprint(definition.size);
+  const here = footprintGroundHeight(snapshot.map, cell, footprint);
+  let desired = current;
+  if (tactics.preferred === "melee") {
+    const gap = here + current - combatantHeight(snapshot, target);
+    if (Math.abs(gap) > range) {
+      // Close just enough to strike: down onto the target's level plus reach, or up to its level minus reach.
+      desired = gap > 0
+        ? Math.floor((combatantHeight(snapshot, target) + range - here) / 5) * 5
+        : Math.ceil((combatantHeight(snapshot, target) - range - here) / 5) * 5;
+    }
+  } else {
+    const safe = safeAltitudeAt(snapshot, actor, cell);
+    if (safe !== undefined && safe > current) desired = safe;
+  }
+  desired = Math.max(0, desired);
+  const perFoot = altitudeMoveCost(snapshot, definition, 1);
+  const spare = Math.max(0, budget - pathCost);
+  const affordable = Number.isFinite(perFoot) && perFoot > 0 ? Math.floor(spare / perFoot / 5) * 5 : 0;
+  const change = Math.max(-affordable, Math.min(affordable, desired - current));
+  return { altitude: current + change, cost: Math.abs(change) * perFoot };
+}
+
+/**
+ * How high above `cell` a flier must hover to be out of every ground-bound melee foe's reach, or `undefined` when
+ * nothing that can only fight on the ground is a threat. Foes that fly, or only shoot, are not helped by height.
+ */
+function safeAltitudeAt(snapshot: EncounterSnapshot, actor: CombatantState, cell: Point): number | undefined {
+  const footprint = sizeFootprint(getDefinition(snapshot, actor).size);
+  const here = footprintGroundHeight(snapshot.map, cell, footprint);
+  let need: number | undefined;
+  for (const hostile of snapshot.combatants) {
+    if (effectiveFaction(snapshot, hostile) === effectiveFaction(snapshot, actor) || !isTargetable(hostile)) continue;
+    const definition = getDefinition(snapshot, hostile);
+    if (movementProfileOf(definition).fly || (hostile.altitude ?? 0) > 0) continue;
+    const reaches = getExecutableActions(definition)
+      .filter((action) => action.kind === "attack" && action.attackType === "melee" && action.automationSupport === "full")
+      .map((action) => (action.kind === "attack" ? action.reach ?? action.range : 0));
+    if (reaches.length === 0) continue;
+    const above = combatantHeight(snapshot, hostile) + Math.max(...reaches) + 5 - here;
+    need = Math.max(need ?? 0, Math.ceil(above / 5) * 5);
+  }
+  return need;
+}
+
+/** After acting, a flier that fights from range climbs out of the reach of foes who can't follow it up. */
+function maybeTakeSafeAltitude(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
+  if (actor.state !== "active" || tactics.preferred === "melee") return;
+  const definition = getDefinition(state.snapshot, actor);
+  if (!movementProfileOf(definition).fly) return;
+  const safe = safeAltitudeAt(state.snapshot, actor, actor.position);
+  const current = actor.altitude ?? 0;
+  if (safe === undefined || safe <= current) return;
+  const perFoot = altitudeMoveCost(state.snapshot, definition, 1);
+  const spare = remainingMovementBudget(state.snapshot, actor);
+  const affordable = Number.isFinite(perFoot) && perFoot > 0 ? Math.floor(spare / perFoot / 5) * 5 : 0;
+  const altitude = Math.min(safe, current + affordable);
+  if (altitude <= current) return;
+  try {
+    moveCombatant(state, actor.id, actor.position, { altitude });
+    state.log.push(event(state, "AiDecision", `${actor.displayName} climbs to ${altitude} ft, out of reach of the ground`, {
+      combatantId: actor.id, altitude, reason: "out-of-melee-reach"
+    }));
+  } catch { /* map state moved on */ }
+}
+
 function movementPlanForCell(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   target: CombatantState,
   range: number,
   tactics: TacticsSettings,
-  reachable: ReachableCell
+  reachable: ReachableCell,
+  budget = remainingMovementBudget(snapshot, actor)
 ): MovementPlan {
-  const { cell, cost, cells } = reachable;
-  const targetDistance = gridDistance(cell, target.position, snapshot.map.grid);
+  const { cell, cost: pathCost, cells } = reachable;
+  const flight = plannedAltitude(snapshot, actor, cell, target, range, tactics, pathCost, budget);
+  // Rising or dropping is movement too, so it counts against the plan like the walk does.
+  const cost = pathCost + flight.cost;
+  const targetDistance = spatialDistance(snapshot, actor, target, { a: cell, aAltitude: flight.altitude });
   const threats = opportunityAttackThreats(snapshot, actor.id, cells).length;
   const nearestHostile = nearestHostileDistanceFrom(snapshot, actor, cell);
   const coverBonus = tactics.coverWeight > 0 && mapHasCoverWalls(snapshot)
@@ -2427,7 +2548,10 @@ function movementPlanForCell(
       - (targetDistance > range ? 30 : 0)
       + coverScore
       - hazardPenalty;
-  return { cell, pathCost: cost, targetDistance, score, opportunityThreats: threats, coverBonus };
+  return {
+    cell, pathCost, targetDistance, score, opportunityThreats: threats, coverBonus,
+    ...(movementProfileOf(getDefinition(snapshot, actor)).fly ? { altitude: flight.altitude, altitudeCost: flight.cost } : {})
+  };
 }
 
 /** Cover (AC value; total cover scored as 6) `target` would have from an attacker standing on `cell`. */
@@ -2474,10 +2598,10 @@ function bestShotPositionAgainst(
   const candidates = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint, movementBudget, occupied, movementOptionsFor(definition))
     .map((reachable) => ({ reachable, gain: currentCover - targetCoverFrom(snapshot, reachable.cell, footprint, target) }))
     .filter(({ reachable, gain }) => gain > 0
-      && gridDistance(reachable.cell, target.position, snapshot.map.grid) <= range
+      && spatialDistance(snapshot, actor, target, { a: reachable.cell }) <= range
       && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, reachable.cell, target.position)))
     .map(({ reachable, gain }) => {
-      const plan = movementPlanForCell(snapshot, actor, target, range, tactics, reachable);
+      const plan = movementPlanForCell(snapshot, actor, target, range, tactics, reachable, movementBudget);
       // Reward the cover stripped off the target on top of the usual band /
       // self-cover / threat / cost terms.
       return { ...plan, score: plan.score + gain * 3, gain };
@@ -2522,7 +2646,7 @@ function occupiedCellsFor(snapshot: EncounterSnapshot, movingCombatantId: string
 function nearestHostileDistanceFrom(snapshot: EncounterSnapshot, actor: CombatantState, position: Point): number {
   const distances = snapshot.combatants
     .filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant))
-    .map((combatant) => gridDistance(position, combatant.position, snapshot.map.grid));
+    .map((combatant) => spatialDistance(snapshot, actor, combatant, { a: position }));
   return Math.min(Number.POSITIVE_INFINITY, ...distances);
 }
 
@@ -2537,7 +2661,7 @@ function isThreatenedAt(snapshot: EncounterSnapshot, actor: CombatantState, posi
         return false;
       }
       const reach = action.reach ?? action.range;
-      return gridDistance(hostile.position, position, snapshot.map.grid) <= reach
+      return spatialDistance(snapshot, hostile, actor, { b: position }) <= reach
         && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, hostile.position, position));
     });
   });
@@ -2552,7 +2676,7 @@ function threatensWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState
     const wounded = ally.currentHp <= Math.floor(definition.maxHp / 2);
     // A `protected` ally is guarded at full HP too, not just once it's bloodied.
     const guarded = wounded || Boolean(ally.tags?.includes("protected"));
-    return guarded && gridDistance(hostile.position, ally.position, snapshot.map.grid) <= 5;
+    return guarded && spatialDistance(snapshot, hostile, ally) <= 5;
   });
 }
 
