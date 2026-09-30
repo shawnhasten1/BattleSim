@@ -2705,7 +2705,7 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
   const chanceRoll = action.chance === undefined ? undefined : state.rng.nextInt(1, 100);
   const succeeded = action.chance === undefined || chanceRoll! <= action.chance;
   if (!succeeded) {
-    state.log.push(event(state, "CombatantSpawned", `${caster.displayName}'s ${action.name} fails — rolled ${chanceRoll}, needed ${action.chance} or less`, {
+    state.log.push(event(state, "CombatantSpawned", `Fail - ${action.name}: ${caster.displayName} rolled ${chanceRoll}, needed ${action.chance} or less`, {
       combatantId: caster.id, actionId, summonerId: casterId, combatants: [], chance: action.chance, roll: chanceRoll, success: false
     }));
     return [];
@@ -2761,7 +2761,7 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
     caster.concentration = { sourceConditionId: undefined };
   }
   state.log.push(event(state, "CombatantSpawned",
-    `${caster.displayName}'s ${action.name} succeeds${chanceRoll === undefined ? "" : ` (rolled ${chanceRoll} against ${action.chance}%)`} — ${created.length} ${created.length === 1 ? summonedDefinition.name : pluralName(summonedDefinition.name)} appear${created.length === 1 ? "s" : ""} (initiative ${initiative})`, {
+    `Success - ${action.name}: ${caster.displayName}${chanceRoll === undefined ? "" : ` rolled ${chanceRoll} against ${action.chance}% and`} summons ${created.length} ${created.length === 1 ? summonedDefinition.name : pluralName(summonedDefinition.name)} (initiative ${initiative})`, {
       combatantId: caster.id, actionId, summonerId: casterId, definitionId: summonedDefinition.id, initiative, insertIndex,
       chance: action.chance, roll: chanceRoll, success: true,
       // The full combatant objects, not just ids: replay reconstructs board state purely by folding the log

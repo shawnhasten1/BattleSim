@@ -263,11 +263,11 @@ describe("battle text", () => {
       expect(result.data?.roll).toBeGreaterThanOrEqual(1);
       if (created.length > 0) {
         worked += 1;
-        expect(result.message).toMatch(/Call Allies succeeds \(rolled \d+ against 50%\) — 1 Imp appears/);
+        expect(result.message).toMatch(/^Success - Call Allies: caster rolled \d+ against 50% and summons 1 Imp \(initiative/);
         expect(result.data).toMatchObject({ success: true, chance: 50 });
       } else {
         failed += 1;
-        expect(result.message).toMatch(/Call Allies fails — rolled \d+, needed 50 or less/);
+        expect(result.message).toMatch(/^Fail - Call Allies: caster rolled \d+, needed 50 or less$/);
         expect(result.data).toMatchObject({ success: false, chance: 50 });
       }
     }
@@ -279,14 +279,14 @@ describe("battle text", () => {
     const state = createEngineState(scene(summonAction()));
     resolveSummonAction(state, "caster", "call");
     expect(messages(state)).toContain("caster uses Call Allies");
-    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/Call Allies succeeds — 1 Imp appears/);
+    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/^Success - Call Allies: caster summons 1 Imp \(initiative/);
   });
 
   it("pluralises the creature name", () => {
     const action = summonAction({ options: [{ id: "imp-option", definitionId: "def-imp", label: "Imps", count: 3 }] });
     const state = createEngineState(scene(action));
     resolveSummonAction(state, "caster", "call");
-    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/3 Imps appear /);
+    expect(state.log.find((entry) => entry.type === "CombatantSpawned")!.message).toMatch(/summons 3 Imps \(initiative/);
   });
 });
 
