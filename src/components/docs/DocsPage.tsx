@@ -587,6 +587,64 @@ const SECTIONS: Section[] = [
     )
   },
   {
+    id: "traits",
+    label: "Monster Traits & Lair Actions",
+    content: (
+      <>
+        <p>
+          Library monsters come with their traits already wired up, and you can give any creature the same
+          abilities from <strong>Add → Preset</strong> in its Abilities tab. Each trait row says in plain words what it
+          does in a fight — &ldquo;charge 20 ft: +1d6 slashing, STR 11 or prone&rdquo;, &ldquo;aura 10 ft: CON 14 or
+          poisoned, at the start of their turn&rdquo;. Traits with nothing to simulate (Keen Smell, Amphibious) carry a
+          quiet <strong>no combat effect</strong> badge rather than looking like something is missing.
+        </p>
+
+        <h3>Charges and pounces</h3>
+        <ul>
+          <li>
+            <strong>Charge / Trampling Charge / Pounce</strong> — if the creature closes at least 20 ft (or the distance
+            you set) straight toward a target and then hits it with the named attack that turn, the extra damage lands
+            and the target saves or is knocked prone. A detour around a wall doesn&apos;t count: it has to get that much
+            closer. Pounce and Trampling Charge then allow a bonus-action attack against the prone target. The AI knows
+            this: a lion with room to run leads with its claw, not its (harder-hitting) bite.
+          </li>
+          <li><strong>Rampage</strong> — after dropping a creature with a melee attack, it moves (up to half its speed) and bites the next foe as a bonus action.</li>
+          <li><strong>Blood Frenzy</strong> — advantage on melee attacks against anything missing hit points.</li>
+          <li><strong>Surprise Attack / Sneak Attack / Martial Advantage</strong> — extra damage against a surprised target, with advantage or an ally beside the target, or with an ally beside the target (once per turn).</li>
+          <li><strong>Aggressive / Cunning Action</strong> — a bonus-action Dash (and Disengage or Hide): the AI closes the gap and still attacks.</li>
+        </ul>
+        <p>
+          A creature knocked prone gets up at the start of its next turn, which costs it half its movement (unless it&apos;s
+          grappled or restrained and can&apos;t move).
+        </p>
+
+        <h3>Auras and retaliation</h3>
+        <ul>
+          <li><strong>Stench, Fear Aura</strong> — a creature that starts its turn close by makes a save or is poisoned (or frightened) until the start of its next turn; a creature that saves is immune for the rest of the fight.</li>
+          <li><strong>Fire Aura</strong> — at the start of the bearer&apos;s own turn, everything next to it burns.</li>
+          <li><strong>Heated Body, Corrosive Form</strong> — hitting the creature with a melee attack from within 5 ft hurts the attacker.</li>
+          <li><strong>Death Burst, Death Throes</strong> — the creature explodes when it dies.</li>
+          <li><strong>Evasion</strong> — a Dexterity save for half damage takes none on a success and half on a failure.</li>
+        </ul>
+        <p>
+          To build your own, open a feature in the builder: <em>Affects creatures around it each round</em> (when, range,
+          who, save, damage, condition), <em>Hurts creatures that hit it in melee</em>, and <em>Bonus-action follow-up</em>
+          (pick which of its attacks it makes, and when it earns it).
+        </p>
+
+        <h3>Lair actions</h3>
+        <p>
+          Give a creature lair actions in its Abilities tab (<strong>+ Lair action</strong> — any save, area or attack
+          ability). Then mark the token <strong>In its lair</strong> from its right-click menu or the Token tab. Each
+          round, on initiative 20 (after anyone who rolled 20 or more), it takes one of its lair actions — never the same
+          one two rounds running — without spending any of its own actions. The initiative tracker shows the slot as a
+          dashed <em>Lair actions · 20</em> row, and the combat log reads &ldquo;Lair action (initiative 20): …&rdquo;. The SRD
+          statblocks don&apos;t include lair actions, so these are yours to write.
+        </p>
+      </>
+    )
+  },
+  {
     id: "credits",
     label: "Credits & Licensing",
     content: (

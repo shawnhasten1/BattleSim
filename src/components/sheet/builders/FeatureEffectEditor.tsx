@@ -17,7 +17,7 @@ const GATE_OPTIONS: Array<[FeatureCondition, string]> = [
   ["target-bloodied", "While the target is bloodied"],
   ["attack-has-advantage", "When the attack has advantage"],
   ["ally-adjacent-to-target", "When an ally is next to the target"],
-  ["charged", "After charging 20 ft straight at the target"],
+  ["charged", "After charging straight at the target"],
   ["target-injured", "When the target is missing any HP"],
   ["target-surprised", "When the target is surprised"],
   ["target-grappled-by-self", "When I'm grappling the target"]
@@ -93,7 +93,7 @@ const GATE_DESCRIPTIONS: Record<FeatureCondition, string> = {
   "attack-has-advantage": "Only when the attack roll already has advantage.",
   "attack-has-no-disadvantage": "Only when the attack roll doesn't have disadvantage.",
   "ally-adjacent-to-target": "Only when one of this creature's allies is within 5 ft of the target (e.g. Pack Tactics).",
-  charged: "Only when this creature moved at least 20 ft straight toward the target this turn before hitting it (Charge, Pounce, Trampling Charge).",
+  charged: "Only when this creature moved straight toward the target this turn — at least the charge distance you set, 20 ft by default — before hitting it (Charge, Pounce, Trampling Charge).",
   "target-injured": "Only against a target that is missing any of its hit points (Blood Frenzy).",
   "target-surprised": "Only against a surprised target (Surprise Attack, Assassinate).",
   "target-grappled-by-self": "Only against a target this creature is grappling (Grappler)."
