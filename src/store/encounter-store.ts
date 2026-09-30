@@ -29,6 +29,7 @@ import {
   runDownedTurn,
   finishTurn,
   runTurnStart,
+  runLairWindow,
   sampleEncounter,
   sizeFootprint,
   takeAutomatedTurn,
@@ -925,6 +926,8 @@ export const useEncounterStore = create<EncounterStore>()(
 
         const combatant = encounter.combatants[next];
         if (combatant) {
+          // Lair actions on initiative 20 come before this turn if it's the first one below 20 (same as Auto Run).
+          runLairWindow(engine, combatant);
           engine.log.push(event(engine, "TurnStarted", `${combatant.displayName} started an automated turn`, { combatantId: combatant.id, mode: "automated" }));
           // A regenerating monster stands up and takes a normal turn; anyone else rolls a death save.
           if (combatant.state === "downed" && runDownedTurn(engine, combatant) === "done") {

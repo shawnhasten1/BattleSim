@@ -43,6 +43,8 @@ import {
   escapeChance,
   isImmuneAfterSave,
   isLegendaryVariant,
+  isLairVariant,
+  attackPrerequisitesMet,
   refillLegendaryPoints,
   runTurnStart,
   spellSlotLevel,
@@ -261,6 +263,10 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
       if (!actor) {
         continue;
       }
+      runLairWindow(state, actor);
+      if (activeFactions(state.snapshot).size <= 1) {
+        break;
+      }
       if (actor.state === "downed") {
         // A regenerating monster stands up and carries on into a normal turn; anyone else rolls a death save.
         if (runDownedTurn(state, actor) !== "recovered") {
@@ -360,6 +366,85 @@ export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
     }
     if (activeFactions(state.snapshot).size <= 1) return;
   }
+}
+
+/** Lair actions happen on initiative count 20, losing ties. */
+export const LAIR_INITIATIVE = 20;
+
+/**
+ * Each creature fighting in its lair (`inLair`, with `lairActions`) takes one lair action on initiative 20: call this
+ * just before a turn begins, in every turn loop. It fires before the first creature whose initiative is below 20 (so
+ * a creature that rolled exactly 20 still goes first); if nobody is below 20 it fires before the round's first turn.
+ * The AI picks the best one that reaches a target, never the one it used last round.
+ */
+export function runLairWindow(state: EngineState, nextActor: CombatantState): void {
+  const round = state.snapshot.round;
+  if (round <= 0 || (state.snapshot.lairRound ?? 0) >= round) return;
+  const lairCreatures = state.snapshot.combatants.filter((combatant) => combatant.inLair && (getDefinition(state.snapshot, combatant).lairActions?.length ?? 0) > 0);
+  if (lairCreatures.length === 0) return;
+  const anyBelow = state.snapshot.combatants.some((combatant) => combatant.state !== "reserve" && (combatant.initiative ?? 0) < LAIR_INITIATIVE);
+  if (anyBelow && (nextActor.initiative ?? 0) >= LAIR_INITIATIVE) return;
+  state.snapshot.lairRound = round;
+
+  for (const creature of lairCreatures) {
+    // A lair acts through its master: an incapacitated (or dead) creature takes no lair action.
+    if (creature.state !== "active" || !canAct(creature, "free")) continue;
+    const definition = getDefinition(state.snapshot, creature);
+    const options = getExecutableActions(definition).filter((action): action is OffensiveAction =>
+      isLairVariant(action) && action.id !== creature.lastLairActionId
+      && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"));
+    const plan = options.length > 0
+      ? selectOffensivePlan(state.snapshot, creature, tacticsSettings(creature.tacticsProfile), "action", { actions: options, mustReachNow: true })
+      : undefined;
+    if (!plan || (plan.expectedDamage <= 0 && plan.score <= 0)) {
+      state.log.push(event(state, "LairAction", `${creature.displayName}'s lair stirs, but nothing is in reach (initiative ${LAIR_INITIATIVE})`, {
+        combatantId: creature.id, actionId: null
+      }));
+      creature.lastLairActionId = undefined;
+      continue;
+    }
+    state.log.push(event(state, "LairAction", `Lair action (initiative ${LAIR_INITIATIVE}): ${creature.displayName} uses ${plan.action.name}`, {
+      combatantId: creature.id, actionId: plan.action.id, targetId: plan.target.id
+    }));
+    creature.lastLairActionId = plan.action.id;
+    try {
+      executeOffensivePlan(state, creature, plan);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${creature.displayName}: lair action failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: creature.id }));
+    }
+    if (activeFactions(state.snapshot).size <= 1) return;
+  }
+}
+
+/**
+ * Rampage: having dropped a creature this turn, the attacker spends its bonus action to move (up to half its speed,
+ * granted as extra movement) and bite the nearest foe it can reach.
+ */
+function tryFollowUpAfterKill(state: EngineState, actor: CombatantState, tactics: TacticsSettings): boolean {
+  if (!actor.turnFlags?.droppedCreature || !canAct(actor, "bonus")) return false;
+  const definition = getDefinition(state.snapshot, actor);
+  const followUps = getExecutableActions(definition).filter((action): action is OffensiveAction =>
+    action.kind === "attack" && action.actionType === "bonus" && action.onlyAfter === "dropped-creature");
+  if (followUps.length === 0) return false;
+  const plan = selectOffensivePlan(state.snapshot, actor, tactics, "bonus", { actions: followUps, relaxReachability: true });
+  if (!plan) return false;
+  if (!isValidTarget(state.snapshot, actor, plan.target, plan.range)) {
+    const move = bestDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics);
+    if (!move) return false;
+    try {
+      moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
+    } catch {
+      return false;
+    }
+  }
+  if (actor.state !== "active" || !isValidTarget(state.snapshot, actor, plan.target, plan.range)) return false;
+  state.log.push(event(state, "AiDecision", `${actor.displayName} rampages on to ${plan.target.displayName} with ${plan.action.name}`, {
+    combatantId: actor.id, actionId: plan.action.id, targetId: plan.target.id, slot: "bonus", reason: "after-kill"
+  }));
+  try {
+    executeOffensivePlan(state, actor, plan);
+  } catch { /* map state moved on */ }
+  return true;
 }
 
 /** Resolve a chosen offensive plan through the right engine call, with beam / multiattack target spread. */
@@ -556,6 +641,9 @@ function resolveBonusPick(state: EngineState, actor: CombatantState, pick: Bonus
 /** After the main action, spend a still-open bonus action. Only targets already in reach count. */
 function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
   if (actor.state !== "active" || !canAct(actor, "bonus")) {
+    return;
+  }
+  if (tryFollowUpAfterKill(state, actor, tactics)) {
     return;
   }
   const pick = selectBonusCandidate(state.snapshot, actor, tactics);
@@ -1063,9 +1151,17 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     const gapCloser = !normalReaches
       ? selectMeleeGapCloserReposition(state.snapshot, actor, plan.target, plan.range, tactics)
       : undefined;
+    // A bonus-action Dash (an orc's Aggressive, a spy's Cunning Action) closes the gap and keeps the action
+    // for the attack — always better than spending the action on Dash.
+    const bonusDashId = !normalReaches && !gapCloser && canAct(actor, "bonus")
+      ? utilityActionId(state.snapshot, actor, "dash", "bonus")
+      : undefined;
+    const bonusDashMove = bonusDashId
+      ? dashDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics)
+      : undefined;
     // A single move can't close the gap; if a doubled (Dash) move would, spend
     // the action on Dash instead of half-closing and standing idle.
-    const dashMove = !normalReaches && !gapCloser && canAct(actor, "action")
+    const dashMove = !normalReaches && !gapCloser && !bonusDashMove && canAct(actor, "action")
       ? dashDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics)
       : undefined;
 
@@ -1075,6 +1171,15 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         movedThisTurn = true;
         state.log.push(event(state, "AiDecision", `${actor.displayName} blinks into range with ${gapCloser.action.name}`, {
           combatantId: actor.id, actionId: gapCloser.action.id, targetId: plan.target.id, destination: gapCloser.destination, slot: "bonus"
+        }));
+      } catch { /* map state moved on */ }
+    } else if (bonusDashMove && bonusDashId) {
+      try {
+        resolveUtilityAction(state, actor.id, bonusDashId);
+        moveCombatant(state, actor.id, bonusDashMove.cell, { altitude: bonusDashMove.altitude });
+        movedThisTurn = true;
+        state.log.push(event(state, "AiDecision", `${actor.displayName} dashes toward ${plan.target.displayName} (bonus action)`, {
+          combatantId: actor.id, targetId: plan.target.id, destination: bonusDashMove.cell, remainingDistance: bonusDashMove.targetDistance, slot: "bonus"
         }));
       } catch { /* map state moved on */ }
     } else if (dashMove) {
@@ -1112,7 +1217,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
       } catch {
         // Candidate generation should avoid illegal moves; if map state changed, skip movement.
       }
-    } else if (!gapCloser) {
+    } else if (!gapCloser && !bonusDashMove) {
       // Can't get within range this turn, even with a Dash. Close the distance
       // instead of standing still: Dash toward the target if that covers more
       // ground (the action would go unused anyway), otherwise just move — and
@@ -2138,6 +2243,8 @@ function selectOffensivePlan(
       }
       return { action, target, range, score, expectedDamage, distance, reachableNow, canMoveIntoRange, reasons };
     }))
+    // Pounce's bite needs a prone target its charge hit; Rampage's needs a kill first.
+    .filter((plan) => attackPrerequisitesMet(actor, plan.action, plan.target))
     // A swallow only works on a creature the swallower is already grappling.
     .filter((plan) => !(plan.action.kind === "attack" && plan.action.requiresHeld && !(plan.target.conditions ?? []).some((condition) => condition.hold && condition.sourceCombatantId === actor.id)))
     // Someone who already resisted an `immuneAfterSave` action (Frightful Presence) can't be affected by it again.

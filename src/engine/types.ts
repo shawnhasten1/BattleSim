@@ -375,6 +375,14 @@ export type FeatureCondition =
   | "attack-has-no-disadvantage"
   | "target-bloodied"
   | "self-bloodied"
+  /** Charge / Pounce: this turn the attacker closed at least `chargeFeet` (default 20) straight toward the target. */
+  | "charged"
+  /** Blood Frenzy: the target is missing any hit points. */
+  | "target-injured"
+  /** Surprise Attack / Assassinate: the target is surprised. */
+  | "target-surprised"
+  /** Grappler: the target is grappled by the attacker. */
+  | "target-grappled-by-self"
   | "always";
 
 export interface FeatureEffectScope {
@@ -392,6 +400,8 @@ export interface FeatureEffectConditions {
   condition?: FeatureCondition;
   allConditions?: FeatureCondition[];
   anyConditions?: FeatureCondition[];
+  /** For a `"charged"` condition: how far the attacker must have closed on the target this turn, in feet. Default 20. */
+  chargeFeet?: number;
 }
 
 /** What kind of save a `save-advantage` effect applies to. See `FeatureEffect` "save-advantage". */
@@ -453,6 +463,8 @@ export type FeatureEffect =
     target?: "self" | "target";
     appliedCondition: FeatureEffectConditionApplication;
     oncePerTurn?: boolean;
+    /** The target resists with this save (a charge's "DC 13 Strength saving throw or be knocked prone"). */
+    save?: FeatureEffectSaveGate;
   } & FeatureEffectScope & FeatureEffectConditions)
   | ({
     kind: "incoming-hit-damage";
@@ -569,7 +581,42 @@ export type FeatureEffect =
      * `opportunityAttackThreats`.
      */
     kind: "avoids-opportunity-attacks";
-  } & FeatureEffectConditions);
+  } & FeatureEffectConditions)
+  | {
+    /**
+     * Heated Body, Corrosive Form, a balor's Fire Aura: a creature that hits the bearer with a melee attack while
+     * within `withinFt` (default 5) takes this damage.
+     */
+    kind: "melee-retaliation";
+    damage: DamageComponent[];
+    withinFt?: number;
+  }
+  | {
+    /** Evasion: a Dexterity save that would halve damage instead negates it on a success and halves it on a failure. */
+    kind: "evasion";
+  };
+
+/**
+ * An always-on aura a creature radiates (Stench, Fear Aura, a balor's Fire Aura). Unlike `FeatureDefinition.aura`
+ * (a buff it shares), this does something TO the creatures near it at a turn boundary:
+ * - `"target-turn-start"`: each creature that starts its turn within `range` (Stench, Fear Aura);
+ * - `"bearer-turn-start"`: at the start of the bearer's own turn, everyone within `range` (Fire Aura).
+ * A `save` gates the rest; `immuneOnSave` makes a creature that succeeds immune for the encounter (the 24-hour rule).
+ */
+export interface TraitEmanation {
+  range: number;
+  timing: "target-turn-start" | "bearer-turn-start";
+  affects: "hostile" | "all";
+  save?: { ability: Ability; dc: number };
+  damage?: DamageComponent[];
+  /** With a save and damage: half damage on a success (otherwise a success takes none). */
+  halfOnSave?: boolean;
+  /** Applied on a failed save (or always, without a save), lasting until the start of the affected creature's next turn. */
+  condition?: ConditionName;
+  immuneOnSave?: boolean;
+  /** The aura goes quiet while the bearer is incapacitated (Fear Aura: "unless the pit fiend is incapacitated"). */
+  suppressedWhenIncapacitated?: boolean;
+}
 
 export interface ResourceCost {
   resourceId: string;
@@ -766,6 +813,15 @@ export interface AttackActionDefinition {
   attackType: "melee" | "ranged" | "spell";
   /** Can only target a creature this attacker is grappling (a swallow: "one bite attack against a target it is grappling"). */
   requiresHeld?: boolean;
+  /**
+   * Only usable after something this turn: `"charge-hit"` against a creature its charge / pounce already hit (Pounce,
+   * Trampling Charge); `"dropped-creature"` once it has dropped a creature to 0 HP with a melee attack (Rampage).
+   */
+  onlyAfter?: "charge-hit" | "dropped-creature";
+  /** Only against a target that has this condition (Pounce's bite: "If the target is prone"). */
+  requiresTargetCondition?: ConditionName;
+  /** Extra movement this attack grants before it is made, in feet (Rampage: "move up to half its speed"). */
+  grantsMovementFeet?: number;
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
   grip?: "one-handed" | "two-handed";
@@ -1431,6 +1487,10 @@ export interface FeatureDefinition {
     /** Bearer must be `state === "active"` (conscious) for the aura to apply. Default `true`. */
     requiresConscious?: boolean;
   };
+  /** An aura that acts on nearby creatures at a turn boundary (Stench, Fear Aura, Fire Aura). See `TraitEmanation`. */
+  emanation?: TraitEmanation;
+  /** Nothing to simulate: flavour, senses, or out-of-combat rules (Keen Smell, Amphibious). Shown as reference, never as a gap. */
+  informational?: boolean;
   /** A variant / optional rule from the source text: shown as opt-in reference, not on by default. */
   optional?: boolean;
   /** For an `optional` feature: the DM has switched it on, so the actions it grants are available. Off (absent) by default. */
@@ -1512,6 +1572,11 @@ export interface CreatureDefinition {
   weapons?: WeaponDefinition[];
   spells?: SpellDefinition[];
   deathEffects?: DeathEffectDefinition[];
+  /**
+   * Lair actions: when a token of this creature is `inLair`, it takes one of these on initiative count 20 each round
+   * (losing ties), never the same one twice in a row. They cost no action. Hand-authored — the SRD statblocks have none.
+   */
+  lairActions?: ActionDefinition[];
   features?: FeatureDefinition[];
   traits?: FeatureDefinition[];
   actions: ActionDefinition[];
@@ -1594,6 +1659,14 @@ export interface TurnFlags {
   disengaged?: boolean;
   /** Movement already spent this turn, in grid squares (path-cost units). */
   movementUsed?: number;
+  /** Where this turn's movement began — a charge is measured from here. */
+  movedFrom?: Point;
+  /** Creatures a charge / pounce has hit this turn (unlocks `onlyAfter: "charge-hit"` attacks against them). */
+  chargeHitTargetIds?: Id[];
+  /** Dropped a creature to 0 HP with a melee attack this turn (unlocks `onlyAfter: "dropped-creature"`). */
+  droppedCreature?: boolean;
+  /** Extra movement granted this turn (Rampage), in grid squares. */
+  bonusMovement?: number;
 }
 
 export interface CombatantState {
@@ -1609,6 +1682,10 @@ export interface CombatantState {
   deathSaves?: DeathSaveState;
   /** `<attacker id>:<action id>` of every `immuneAfterSave` action this creature has made the save against. */
   savedAgainst?: string[];
+  /** Fighting in its lair: takes a lair action on initiative 20 each round. Only meaningful if its creature has `lairActions`. */
+  inLair?: boolean;
+  /** The lair action it took most recently — it can't use the same one two rounds running. */
+  lastLairActionId?: Id;
   /** Swallowed by this combatant: not on the board for anyone else, and can only act against the swallower. */
   containedBy?: Id;
   /** What swallowing does to the creature inside: recurring damage, and the swallower's regurgitation threshold. */
@@ -1690,6 +1767,8 @@ export interface EncounterSnapshot {
   combatants: CombatantState[];
   /** Standing persistent-area effects currently on the board. See `ActiveZone`. */
   activeZones?: ActiveZone[];
+  /** The round whose initiative-20 lair actions have been taken. */
+  lairRound?: number;
 }
 
 export interface CombatLogEvent {
@@ -1701,6 +1780,7 @@ export interface CombatLogEvent {
     | "TurnStarted"
     | "CombatantMoved"
     | "CombatantFell"
+    | "LairAction"
     | "ActionDeclared"
     | "AttackRolled"
     | "SaveRolled"
@@ -2112,6 +2192,7 @@ export const encounterSnapshotSchema = z.object({
   }),
   definitions: z.array(z.any()),
   activeZones: z.array(z.any()).optional(),
+  lairRound: z.number().int().optional(),
   combatants: z.array(
     z.object({
       id: z.string(),
@@ -2120,6 +2201,8 @@ export const encounterSnapshotSchema = z.object({
       faction: z.union([z.literal("party"), z.literal("enemy"), z.literal("neutral")]),
       position: pointSchema,
       altitude: z.number().min(0).optional(),
+      inLair: z.boolean().optional(),
+      lastLairActionId: z.string().optional(),
       currentHp: z.number().int(),
       tempHp: z.number().int().min(0),
       deathSaves: z.object({

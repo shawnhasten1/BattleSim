@@ -2,7 +2,7 @@ import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrain
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { SeededRandom, type RandomSource } from "./rng";
-import { MAX_STEP_HEIGHT_FT } from "./types";
+import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
   Ability,
   ActionDefinition,
@@ -224,7 +224,8 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   return dedupeActionsById([
     ...declared,
     ...synthesizeUtilityActions(declared),
-    ...legendaryVariants(definition, declared)
+    ...legendaryVariants(definition, declared),
+    ...lairVariants(definition)
   ]).map(withEffectiveAutomationSupport);
 }
 
@@ -450,6 +451,162 @@ function hazardAwarePath(
   return { reachable: true, cost: pathCostAlong(map, planned.cells, footprint, occupied, options), cells: planned.cells };
 }
 
+/* ─── Phase 9: charges, trigger-gated follow-ups, trait auras, evasion, lair actions ─────────────────────── */
+
+/** Lair versions of an action carry this id suffix; they spend no action and are taken on initiative 20. */
+export const LAIR_SUFFIX = ":lair";
+
+export function isLairVariant(action: { id: string }): boolean {
+  return action.id.endsWith(LAIR_SUFFIX);
+}
+
+/** `definition.lairActions`, as `"free"` actions the engine can resolve by id (`<id>:lair`). */
+function lairVariants(definition: CreatureDefinition): ActionDefinition[] {
+  return (definition.lairActions ?? [])
+    .filter((action) => action.kind !== "unsupported")
+    .map((action) => ({ ...action, id: action.id.endsWith(LAIR_SUFFIX) ? action.id : `${action.id}${LAIR_SUFFIX}`, actionType: "free" } as ActionDefinition));
+}
+
+/**
+ * Charge / Pounce: whether `attacker` has closed at least `feet` on `target` this turn, measured from where its
+ * movement began. Closing distance rather than distance walked is what makes it "straight toward": a detour around a
+ * wall covers ground without getting any closer.
+ */
+export function hasChargedAt(snapshot: EncounterSnapshot, attacker: CombatantState, target: CombatantState, feet = 20): boolean {
+  const from = attacker.turnFlags?.movedFrom;
+  if (!from) return false;
+  const grid = snapshot.map.grid;
+  return gridDistance(from, target.position, grid) - gridDistance(attacker.position, target.position, grid) >= feet;
+}
+
+/** A charge-conditioned effect just landed on `target`: remember it, so Pounce's follow-up bite can go after it. */
+function noteChargeHit(attacker: CombatantState, target: CombatantState, effect: FeatureEffect): void {
+  const gated = ("condition" in effect && effect.condition === "charged")
+    || ("allConditions" in effect && effect.allConditions?.includes("charged"));
+  if (!gated) return;
+  const hits = attacker.turnFlags?.chargeHitTargetIds ?? [];
+  if (!hits.includes(target.id)) attacker.turnFlags = { ...(attacker.turnFlags ?? {}), chargeHitTargetIds: [...hits, target.id] };
+}
+
+/**
+ * Whether a trigger-gated attack (`onlyAfter`, `requiresTargetCondition`) can be made against `target` right now:
+ * Pounce's bite only against the prone creature its charge hit, Rampage's bite only after a kill this turn.
+ */
+export function attackPrerequisitesMet(actor: CombatantState, action: ActionDefinition, target: CombatantState): boolean {
+  if (action.kind !== "attack") return true;
+  if (action.onlyAfter === "charge-hit" && !(actor.turnFlags?.chargeHitTargetIds ?? []).includes(target.id)) return false;
+  if (action.onlyAfter === "dropped-creature" && !actor.turnFlags?.droppedCreature) return false;
+  if (action.requiresTargetCondition && !(target.conditions ?? []).some((condition) => condition.name === action.requiresTargetCondition)) return false;
+  return true;
+}
+
+/** Evasion: a Dexterity save for half damage negates it on a success and halves it on a failure. */
+function saveDamageOutcome(
+  state: EngineState,
+  target: CombatantState,
+  ability: Ability | undefined,
+  onSuccess: "half" | "none" | "negates" | undefined,
+  success: boolean | null
+): { dealsDamage: boolean; halve: boolean } {
+  const evades = ability === "dex" && onSuccess === "half" && success !== null
+    && featureSources(getDefinition(state.snapshot, target), target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "evasion"));
+  if (evades) return { dealsDamage: success === false, halve: success === false };
+  return {
+    dealsDamage: !(success === true && (onSuccess === "none" || onSuccess === "negates")),
+    halve: success === true && onSuccess === "half"
+  };
+}
+
+/** Heated Body / Corrosive Form / Fire Aura: hitting the bearer in melee from close by hurts the attacker. */
+function applyMeleeRetaliation(state: EngineState, attacker: CombatantState, target: CombatantState, action: AttackActionDefinition): void {
+  if (action.attackType !== "melee" || attacker.state !== "active") return;
+  const targetDefinition = getDefinition(state.snapshot, target);
+  for (const feature of featureSources(targetDefinition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "melee-retaliation" || spatialDistance(state.snapshot, attacker, target) > (effect.withinFt ?? 5)) continue;
+      state.log.push(event(state, "FeatureEffectApplied", `${attacker.displayName} is hurt by ${target.displayName}'s ${feature.name}`, {
+        combatantId: target.id, attackerId: attacker.id, targetId: attacker.id, featureId: feature.id, featureName: feature.name, effectKind: effect.kind
+      }));
+      applyDamageComponents(state, attacker, effect.damage, targetDefinition, false, {}, target.id);
+      if (attacker.state !== "active") return;
+    }
+  }
+}
+
+/**
+ * Trait auras (Stench, Fear Aura, Fire Aura) for the turn that is starting: every other creature's
+ * `"target-turn-start"` aura that reaches `actor`, then `actor`'s own `"bearer-turn-start"` aura on everyone near it.
+ */
+export function applyEmanations(state: EngineState, actor: CombatantState): void {
+  const live = (combatant: CombatantState) => combatant.state === "active" || combatant.state === "downed";
+  for (const bearer of state.snapshot.combatants) {
+    if (bearer.id === actor.id || bearer.state !== "active" || !live(actor)) continue;
+    for (const feature of featureSources(getDefinition(state.snapshot, bearer), bearer)) {
+      const emanation = "emanation" in feature ? feature.emanation : undefined;
+      if (emanation?.timing === "target-turn-start") applyEmanation(state, bearer, feature, emanation, actor);
+    }
+  }
+  if (actor.state !== "active") return;
+  for (const feature of featureSources(getDefinition(state.snapshot, actor), actor)) {
+    const emanation = "emanation" in feature ? feature.emanation : undefined;
+    if (emanation?.timing !== "bearer-turn-start") continue;
+    for (const other of [...state.snapshot.combatants]) {
+      if (other.id !== actor.id && live(other)) applyEmanation(state, actor, feature, emanation, other);
+    }
+  }
+}
+
+function applyEmanation(state: EngineState, bearer: CombatantState, feature: FeatureDefinitionSource, emanation: TraitEmanation, target: CombatantState): void {
+  if (target.containedBy || bearer.containedBy) return;
+  if (emanation.affects === "hostile" && effectiveFaction(state.snapshot, bearer) === effectiveFaction(state.snapshot, target)) return;
+  if (spatialDistance(state.snapshot, bearer, target) > emanation.range) return;
+  if (emanation.suppressedWhenIncapacitated && !canAct(bearer, "action")) return;
+  const immunityKey = `${bearer.id}:${feature.id}`;
+  if (emanation.immuneOnSave && (target.savedAgainst ?? []).includes(immunityKey)) return;
+  const bearerDefinition = getDefinition(state.snapshot, bearer);
+
+  let success: boolean | null = null;
+  if (emanation.save) {
+    const save = rollSavingThrow(state, target, {
+      ability: emanation.save.ability, dc: emanation.save.dc, kind: "feature",
+      conditions: emanation.condition ? [emanation.condition] : undefined
+    });
+    success = save.success;
+    state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${emanation.save.ability.toUpperCase()} save against ${bearer.displayName}'s ${feature.name}`, {
+      attackerId: bearer.id, targetId: target.id, featureId: feature.id, saveRoll: save.roll, total: save.roll.total, dc: emanation.save.dc,
+      featureSaveBonus: save.featureBonus.total, appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources], success
+    }));
+    if (success && emanation.immuneOnSave) {
+      target.savedAgainst = [...(target.savedAgainst ?? []), immunityKey];
+    }
+  } else {
+    state.log.push(event(state, "FeatureEffectApplied", `${target.displayName} is caught in ${bearer.displayName}'s ${feature.name}`, {
+      combatantId: bearer.id, targetId: target.id, featureId: feature.id, featureName: feature.name, effectKind: "emanation"
+    }));
+  }
+
+  if (emanation.damage?.length && (success !== true || emanation.halfOnSave)) {
+    applyDamageComponents(state, target, emanation.damage, bearerDefinition, false, { halve: success === true }, bearer.id);
+  }
+  if (emanation.condition && success !== true && (target.state === "active" || target.state === "downed")) {
+    const index = state.snapshot.combatants.findIndex((combatant) => combatant.id === target.id);
+    const { expiresAt } = riderDurationToExpiry(state, { kind: "until-start-of-next-turn" }, index >= 0 ? index : undefined);
+    applyCondition(state, target.id, {
+      id: `${target.id}:${bearer.id}:${feature.id}`,
+      name: emanation.condition,
+      modifiers: defaultConditionModifiers(emanation.condition),
+      sourceId: feature.id,
+      sourceName: feature.name,
+      sourceCombatantId: bearer.id,
+      startedRound: state.snapshot.round,
+      // Applied at the start of the target's own turn, so it lasts through that turn to the start of its next.
+      expiresAt: expiresAt && expiresAt.round === state.snapshot.round && expiresAt.turnIndex === state.snapshot.turnIndex
+        ? { ...expiresAt, round: expiresAt.round + 1 }
+        : expiresAt
+    });
+  }
+}
+
 /**
  * Height above the datum of `combatant` (or of where it would be at `position` / `altitude`): the ground under its
  * footprint plus how far it is flying above it. A map with no ground heights skips the lookup.
@@ -516,6 +673,9 @@ export function moveCombatant(
   const movementBudget = remainingMovementBudget(state.snapshot, combatant);
 
   // Rising or dropping is flying, and costs movement like any other flying.
+  if (!combatant.turnFlags?.movedFrom) {
+    combatant.turnFlags = { ...(combatant.turnFlags ?? {}), movedFrom: { ...start } };
+  }
   const startAltitude = combatant.altitude ?? 0;
   const targetAltitude = options.altitude === undefined ? startAltitude : Math.max(0, options.altitude);
   const verticalFt = Math.abs(targetAltitude - startAltitude);
@@ -922,7 +1082,7 @@ export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: 
   const definition = getDefinition(snapshot, combatant);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
   const fullBudget = movementReference(movementProfileOf(definition)) / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
-  return Math.max(0, fullBudget - (combatant.turnFlags?.movementUsed ?? 0));
+  return Math.max(0, fullBudget + (combatant.turnFlags?.bonusMovement ?? 0) - (combatant.turnFlags?.movementUsed ?? 0));
 }
 
 function coverLabel(level: CoverLevel): string {
@@ -1047,6 +1207,7 @@ function resolveAttackCore(
     ? targetIncomingHitDamageEntries(state, attacker, target, action, { rollMode, critical })
     : { entries: [], sources: [] };
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const targetWasUp = target.state === "active";
   const damageApplied = hit
     ? applyDamageEntries(state, target, [
       ...action.damage.map((component, index) => ({
@@ -1102,6 +1263,18 @@ function resolveAttackCore(
     critical,
     damageApplied
   }));
+
+  // Rampage: dropping a creature with a melee attack on its own turn unlocks the follow-up bite (and its move).
+  if (hit && action.attackType === "melee" && targetWasUp && target.state !== "active"
+    && state.snapshot.combatants[state.snapshot.turnIndex]?.id === attacker.id && !attacker.turnFlags?.droppedCreature) {
+    const rampage = getExecutableActions(attackerDefinition)
+      .find((candidate) => candidate.kind === "attack" && candidate.onlyAfter === "dropped-creature");
+    const extraSquares = rampage && rampage.kind === "attack" && rampage.grantsMovementFeet
+      ? rampage.grantsMovementFeet / state.snapshot.map.grid.distancePerSquare
+      : 0;
+    attacker.turnFlags = { ...(attacker.turnFlags ?? {}), droppedCreature: true, bonusMovement: (attacker.turnFlags?.bonusMovement ?? 0) + extraSquares };
+  }
+  if (hit) applyMeleeRetaliation(state, attacker, target, action);
 
   return { hit, critical, attackRoll: d20, total, targetAc, damageApplied };
 }
@@ -1170,10 +1343,11 @@ function resolveSaveAgainstTarget(
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   if (success) recordSavedAgainst(attacker, target, action);
   const onSuccess = resolveOnSuccess(action);
-  const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+  const outcome = saveDamageOutcome(state, target, action.saveAbility, onSuccess, success);
+  const dealsDamage = outcome.dealsDamage;
   const damageApplied = dealsDamage
     ? applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
-      halve: success && onSuccess === "half",
+      halve: outcome.halve,
       casterLevel: scaling.casterLevel,
       extraDiceOnFirst: scaling.upcastDamageDice
     }, attacker.id)
@@ -1291,9 +1465,10 @@ export function resolveAreaSaveAction(
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     if (success) recordSavedAgainst(attacker, target, action);
-    const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+    const outcome = saveDamageOutcome(state, target, action.saveAbility, onSuccess, success);
+    const dealsDamage = outcome.dealsDamage;
     const damageApplied = dealsDamage && blastRoll.length
-      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", attacker.id)
+      ? applyRolledAreaDamage(state, target, blastRoll, outcome.halve, attacker.id)
       : 0;
 
     if (!(success && onSuccess === "negates")) {
@@ -1883,7 +2058,7 @@ export function fallCombatant(state: EngineState, combatant: CombatantState, fee
     applyDamageComponents(state, combatant, [{ dice: `${dice}d6`, damageType: "bludgeoning" }], getDefinition(state.snapshot, combatant), false, {}, combatant.id);
   }
   if (combatant.state === "active" || combatant.state === "downed") {
-    applyCondition(state, combatant.id, { id: `${combatant.id}-fall-prone-${state.log.length}`, name: "prone", startedRound: state.snapshot.round });
+    applyCondition(state, combatant.id, { id: `${combatant.id}-fall-prone-${state.log.length}`, name: "prone", startedRound: state.snapshot.round, modifiers: defaultConditionModifiers("prone") });
   }
 }
 
@@ -2040,8 +2215,7 @@ function applySaveGatedEffect(state: EngineState, spec: SaveGatedEffectSpec, tar
     });
     const { roll: saveRoll, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     success = save.success;
-    dealsDamage = !(success && (spec.onSuccess === "none" || spec.onSuccess === "negates"));
-    halve = success === true && spec.onSuccess === "half";
+    ({ dealsDamage, halve } = saveDamageOutcome(state, target, spec.saveAbility, spec.onSuccess, success));
     state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${spec.saveAbility.toUpperCase()} save against ${spec.name}`, {
       attackerId: source.id,
       targetId: target.id,
@@ -2641,6 +2815,22 @@ export function refillLegendaryPoints(state: EngineState, actor: CombatantState)
   if (legendary) actor.resources = { ...(actor.resources ?? {}), [LEGENDARY_POINTS]: legendary.pool };
 }
 
+/**
+ * A creature that starts its turn prone gets up, which costs half its movement (5e) — unless it can't move at all
+ * (grappled, restrained). Riders that knock a creature prone only "until the start of its next turn" have already
+ * expired by now; this is for the ones with no end of their own (a fall, a charge, being spat out).
+ */
+function standUpFromProne(state: EngineState, actor: CombatantState): void {
+  if (actor.state !== "active" || !(actor.conditions ?? []).some((condition) => condition.name === "prone")) return;
+  if ((actor.conditions ?? []).some((condition) => (condition.modifiers?.movementMultiplier ?? 1) >= 999)) return;
+  const half = remainingMovementBudget(state.snapshot, actor) / 2;
+  actor.conditions = (actor.conditions ?? []).filter((condition) => condition.name !== "prone");
+  actor.turnFlags = { ...(actor.turnFlags ?? {}), movementUsed: (actor.turnFlags?.movementUsed ?? 0) + half };
+  state.log.push(event(state, "ConditionExpired", `${actor.displayName} stands up (half its movement)`, {
+    combatantId: actor.id, condition: { name: "prone" }, reason: "stood-up"
+  }));
+}
+
 export function runTurnStart(state: EngineState, actor: CombatantState): void {
   resetActionEconomy(actor);
   rollRecharges(state, actor);
@@ -2649,7 +2839,9 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
   runHoldsAtTurnStart(state, actor);
   runContainmentAtTurnStart(state, actor);
   expireConditions(state, "start");
+  standUpFromProne(state, actor);
   applyTimedFeatureEffects(state, actor.id, "turn-start");
+  applyEmanations(state, actor);
   runRepeatedSaves(state, actor.id, "turn-start");
   applyZoneTriggers(state, actor.id, "turn-start");
   applyTerrainHazardTriggers(state, actor.id, "turn-start");
@@ -3044,6 +3236,9 @@ function validateTargeting(
   }
   if (action.kind === "attack" && action.requiresHeld && holdConditions(target, attacker.id).length === 0) {
     throw new Error(`${target.displayName} isn't grappled by ${attacker.displayName}`);
+  }
+  if (!attackPrerequisitesMet(attacker, action, target)) {
+    throw new Error(`${action.name} can't be used against ${target.displayName} right now`);
   }
   const distance = spatialDistance(snapshot, attacker, target);
   const range = action.kind === "attack"
@@ -3619,9 +3814,10 @@ function resolveOneDeathEffect(
       ability: action.saveAbility, dc, kind: "death-effect", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), situationalBonus: coverSaveBonus
     });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
-    const dealsDamage = !(success && (onSuccess === "none" || onSuccess === "negates"));
+    const outcome = saveDamageOutcome(state, target, action.saveAbility, onSuccess, success);
+    const dealsDamage = outcome.dealsDamage;
     const damageApplied = dealsDamage && blastRoll.length
-      ? applyRolledAreaDamage(state, target, blastRoll, success && onSuccess === "half", deceased.id)
+      ? applyRolledAreaDamage(state, target, blastRoll, outcome.halve, deceased.id)
       : 0;
 
     if (!(success && onSuccess === "negates")) {
@@ -4312,6 +4508,7 @@ function featureDamageEntries(
       }
       if (effect.kind === "damage-bonus") {
         markFeatureEffectApplied(state, attacker, target, action, feature, effect, effectIndex);
+        noteChargeHit(attacker, target, effect);
         entries.push(...effect.damage.map((component) => ({
           component,
           critical: context.critical && (effect.critical ?? true),
@@ -4444,7 +4641,24 @@ function applyOnHitFeatureConditions(
       if (effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) {
         continue;
       }
+      noteChargeHit(attacker, target, effect);
       const recipient = effect.target === "self" ? attacker : target;
+      if (effect.save && recipient.id !== attacker.id) {
+        const recipientDefinition = getDefinition(state.snapshot, recipient);
+        const dc = resolveFeatureSaveDc(effect.save, definition);
+        const conditionName = effect.appliedCondition.name;
+        if (conditionName && isImmuneToCondition(recipientDefinition, conditionName)) {
+          logConditionResisted(state, recipient, conditionName);
+          continue;
+        }
+        const save = rollSavingThrow(state, recipient, { ability: effect.save.ability, dc, kind: "feature", conditions: conditionName ? [conditionName] : undefined });
+        state.log.push(event(state, "SaveRolled", `${recipient.displayName} rolled a ${effect.save.ability.toUpperCase()} save against ${feature.name}`, {
+          attackerId: attacker.id, targetId: recipient.id, actionId: action.id, featureId: feature.id, effectKind: effect.kind,
+          saveRoll: save.roll, total: save.roll.total, dc, featureSaveBonus: save.featureBonus.total,
+          appliedSaveEffects: [...save.featureBonus.sources, ...save.featureAdvantage.sources], success: save.success
+        }));
+        if (save.success) continue;
+      }
       const conditionId = effect.appliedCondition.id ?? `${recipient.id}-${feature.id}`;
       applyCondition(state, recipient.id, {
         id: conditionId,
@@ -4460,7 +4674,7 @@ function applyOnHitFeatureConditions(
             timing: "end"
           }
           : undefined,
-        modifiers: effect.appliedCondition.modifiers,
+        modifiers: effect.appliedCondition.modifiers ?? (effect.appliedCondition.name ? defaultConditionModifiers(effect.appliedCondition.name) : undefined),
         effects: effect.appliedCondition.effects
       });
       markFeatureEffectApplied(state, attacker, recipient, action, feature, effect, effectIndex, {
@@ -5302,8 +5516,9 @@ function featureConditionsMet(
     ...("allConditions" in effect && effect.allConditions ? effect.allConditions : [])
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
-  return required.every((condition) => featureConditionMet(state, attacker, target, condition, context))
-    && (alternatives.length === 0 || alternatives.some((condition) => featureConditionMet(state, attacker, target, condition, context)));
+  const chargeFeet = "chargeFeet" in effect ? effect.chargeFeet : undefined;
+  return required.every((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet))
+    && (alternatives.length === 0 || alternatives.some((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet)));
 }
 
 function featureConditionMet(
@@ -5311,9 +5526,14 @@ function featureConditionMet(
   attacker: CombatantState,
   target: CombatantState,
   condition: FeatureCondition,
-  context: AttackFeatureContext
+  context: AttackFeatureContext,
+  chargeFeet?: number
 ): boolean {
   if (condition === "always") return true;
+  if (condition === "charged") return hasChargedAt(state.snapshot, attacker, target, chargeFeet ?? 20);
+  if (condition === "target-injured") return target.currentHp < getDefinition(state.snapshot, target).maxHp;
+  if (condition === "target-surprised") return (target.conditions ?? []).some((instance) => instance.name === "surprised");
+  if (condition === "target-grappled-by-self") return holdConditions(target, attacker.id).length > 0;
   if (condition === "attack-has-advantage") return context.rollMode === "advantage";
   if (condition === "attack-has-no-disadvantage") return context.rollMode !== "disadvantage";
   if (condition === "ally-adjacent-to-target") {

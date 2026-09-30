@@ -132,7 +132,8 @@ function applyEvent(
       const combatant = byId.get(String(data.combatantId));
       const condition = data.condition as ConditionInstance | undefined;
       if (combatant && condition) {
-        combatant.conditions = (combatant.conditions ?? []).filter((existing) => existing.id !== condition.id);
+        // Standing up clears every prone at once, so it names the condition rather than one instance.
+        combatant.conditions = (combatant.conditions ?? []).filter((existing) => (condition.id ? existing.id !== condition.id : existing.name !== condition.name));
       }
       return;
     }
