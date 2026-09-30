@@ -13,6 +13,7 @@ import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { SceneOverlays } from "@/components/scene/SceneOverlays";
 import { TokenHealthBar } from "@/components/scene/TokenHealthBar";
 import { SceneFeedbackLayer } from "@/components/scene/SceneFeedbackLayer";
+import { ElevationLegend, ElevationPalette } from "@/components/scene/ElevationPalette";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { UseViewportResult } from "@/hooks/useViewport";
@@ -67,6 +68,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
   const removeCombatants = useEncounterStore((state) => state.removeCombatants);
   const duplicateCombatant = useEncounterStore((state) => state.duplicateCombatant);
   const updateHp = useEncounterStore((state) => state.updateHp);
+  const setAltitude = useEncounterStore((state) => state.setAltitude);
+  const adjustAltitude = useEncounterStore((state) => state.adjustAltitude);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const toggleCombatantSurprised = useEncounterStore((state) => state.toggleCombatantSurprised);
   const combatRound = useEncounterStore((state) => state.encounter.round);
@@ -148,7 +151,10 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           dropping: droppingTokenId === combatant.id,
           visuals: tokenVisualsFor(definition, combatant),
           hpOut: combatant.currentHp <= 0 || combatant.state !== "active",
-          inActiveZone
+          inActiveZone,
+          altitude: combatant.altitude ?? 0,
+          // How far the token floats above its shadow: enough to read, capped so a dragon at 60 ft doesn't leave its cell.
+          lift: Math.min(16, 3 + ((combatant.altitude ?? 0) / 5) * 1.5)
         };
       }),
     [encounter, cellSize, draggedToken, droppingTokenId, walk.positions, map.grid.distancePerSquare]
@@ -330,6 +336,19 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       const anyBenched = arrivals.some((n) => n > 1);
       return [
         { heading: `${present.length} tokens` },
+        { separator: true } as ContextMenuItem,
+        { heading: "Flight" } as ContextMenuItem,
+        {
+          stepper: {
+            label: "Altitude",
+            value: Math.max(...present.map((id) => encounter.combatants.find((c) => c.id === id)?.altitude ?? 0)),
+            sub: "ft (highest)",
+            steps: [-10, -5, 5, 10],
+            onStep: (delta: number) => adjustAltitude(present, delta)
+          }
+        } as ContextMenuItem,
+        { label: "Land all", disabled: !present.some((id) => (encounter.combatants.find((c) => c.id === id)?.altitude ?? 0) > 0), onSelect: () => setAltitude(present, 0) } as ContextMenuItem,
+        { separator: true } as ContextMenuItem,
         { label: "Duplicate all", onSelect: () => present.forEach((id) => duplicateCombatant(id)) },
         {
           label: "Delete all",
@@ -388,6 +407,18 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
       },
       { label: "Set to full", disabled: hp >= maxHp, onSelect: () => updateHp(combatant.id, maxHp) },
       { label: "Down (0 HP)", disabled: hp <= 0, onSelect: () => updateHp(combatant.id, 0) },
+      { separator: true },
+      { heading: "Flight" },
+      {
+        stepper: {
+          label: "Altitude",
+          value: combatant.altitude ?? 0,
+          sub: "ft up",
+          steps: [-10, -5, 5, 10],
+          onStep: (delta) => adjustAltitude([combatant.id], delta)
+        }
+      },
+      { label: "Land", disabled: (combatant.altitude ?? 0) <= 0, onSelect: () => setAltitude([combatant.id], 0) },
       ...(canMarkSurprised
         ? [
             {
@@ -459,7 +490,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         }}
       >
       <div
-        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""}`}
+        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""} ${tool === "elevation" && !replaying ? "tool-elevation" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
@@ -515,20 +546,29 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
           activeZones={encounter.activeZones}
           round={encounter.round}
         />
-        {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals, inActiveZone }) => {
+        {tokenLayouts.filter((layout) => layout.altitude > 0).map(({ combatant, size, x, y }) => (
+          <div
+            key={`${combatant.id}-shadow`}
+            className="token-shadow"
+            aria-hidden="true"
+            style={{ left: x + size * 0.12, top: y + size * 0.6, width: size * 0.76, height: size * 0.32 }}
+          />
+        ))}
+        {tokenLayouts.map(({ combatant, size, x, y, dragging, dropping, visuals, inActiveZone, altitude, lift }) => {
           const tokenImage = visuals.imageUrl;
           const tokenScale = clamp(visuals.scale ?? 1, 0.5, 1.5);
           return (
             <button
               key={combatant.id}
               type="button"
-              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${isDominated(combatant) ? "dominated" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""} ${inActiveZone ? "in-active-zone" : ""}`}
+              className={`token ${tokenImage ? "image-token" : ""} ${combatant.faction} ${combatant.state} ${isSurprised(combatant) ? "surprised" : ""} ${isDominated(combatant) ? "dominated" : ""} ${scene.selectedCombatantIds.includes(combatant.id) ? "selected" : ""} ${dragging ? "dragging" : ""} ${dropping ? "dropping" : ""} ${srdDropTokenId === combatant.id ? "srd-drop-target" : ""} ${inActiveZone ? "in-active-zone" : ""} ${altitude > 0 ? "airborne" : ""}`}
               style={{
                 left: x,
                 top: y,
                 width: size,
                 height: size,
-                borderColor: visuals.borderColor ?? undefined
+                borderColor: visuals.borderColor ?? undefined,
+                ...(altitude > 0 ? { ["--lift" as string]: `${lift}px` } : {})
               }}
               onDragOver={(event) => onTokenSrdDragOver(event, combatant.id)}
               onDragLeave={() => setSrdDropTokenId((current) => (current === combatant.id ? null : current))}
@@ -548,11 +588,11 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
                     }
               }
               title={
-                isDominated(combatant)
+                (isDominated(combatant)
                   ? `${combatant.displayName} · dominated`
                   : inActiveZone
                     ? `${combatant.displayName} · in zone`
-                    : combatant.displayName
+                    : combatant.displayName) + (altitude > 0 ? ` · ${altitude} ft up` : "")
               }
             >
               {tokenImage ? (
@@ -568,6 +608,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
               ) : (
                 <span className="token-initials">{combatant.displayName.slice(0, 2)}</span>
               )}
+              {altitude > 0 ? <span className="token-altitude" aria-label={`${altitude} feet up`}>↑{altitude}</span> : null}
               {visuals.showNameplate ? <span className="token-nameplate">{combatant.displayName}</span> : null}
             </button>
           );
@@ -594,6 +635,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
       </div>
       </div>
+
+      {tool === "elevation" && !replaying ? <ElevationPalette /> : <ElevationLegendCorner />}
 
       {scene.wallMenu && !replaying ? (
         <ContextMenu
@@ -622,5 +665,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showHealthBars, onCanva
         />
       ) : null}
     </section>
+  );
+}
+
+/** With no elevation tool open, a small legend still explains the tinted cells and heavy lines on the map. */
+function ElevationLegendCorner() {
+  return (
+    <div className="elevation-legend-corner">
+      <ElevationLegend compact />
+    </div>
   );
 }

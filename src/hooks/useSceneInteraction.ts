@@ -58,6 +58,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const updateTemplate = useEncounterStore((state) => state.updateTemplate);
   const moveWallNode = useEncounterStore((state) => state.moveWallNode);
   const paintTerrainCells = useEncounterStore((state) => state.paintTerrainCells);
+  const paintElevationCells = useEncounterStore((state) => state.paintElevationCells);
+  const applyRamp = useEncounterStore((state) => state.applyRamp);
+  const elevationMode = useEncounterStore((state) => state.elevationMode);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
   const grid = encounter.map.grid;
@@ -83,6 +86,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   // pointer-up (see paintTerrainCells) — nothing is written to the store
   // mid-drag, so a preview render of this list is the only feedback.
   const [paintStroke, setPaintStroke] = useState<GridPoint[] | null>(null);
+  // The elevation tool's ramp: dragged from one end to the other, previewed live, laid down on release.
+  const [rampDrag, setRampDrag] = useState<{ start: GridPoint; end: GridPoint } | null>(null);
+  // The cell under the cursor while an elevation tool is active — the palette reads its height, the map outlines it.
+  const [hoverCell, setHoverCell] = useState<GridPoint | null>(null);
   // Right-click-a-token menu. Carries the target id so the menu can act on it
   // even before a future multi-selection model exists.
   const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
@@ -601,7 +608,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
    * SceneOverlays) rather than painting over it.
    */
   function onMapPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (isPanning || isPanningRef.current || tool !== "terrain" || event.button !== 0 || event.shiftKey) {
+    if (isPanning || isPanningRef.current || (tool !== "terrain" && tool !== "elevation") || event.button !== 0 || event.shiftKey) {
       return;
     }
     // Unlike onMapClick's equivalent guard, this must also admit SVG targets
@@ -616,12 +623,24 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       return;
     }
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    if (tool === "elevation" && elevationMode === "ramp") {
+      setRampDrag({ start: point, end: point });
+      return;
+    }
     setPaintStroke([point]);
   }
 
   function onMapPointerMove(event: PointerEvent<HTMLDivElement>) {
     if (isPanning || isPanningRef.current) {
       return;
+    }
+    if (tool === "elevation") {
+      const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      const inside = point.x >= 0 && point.y >= 0 && point.x < grid.width && point.y < grid.height;
+      setHoverCell((prev) => (inside ? (prev && pointsMatch(prev, point) ? prev : point) : null));
+      if (rampDrag && inside) {
+        setRampDrag((prev) => (prev && !pointsMatch(prev.end, point) ? { ...prev, end: point } : prev));
+      }
     }
     if (paintStroke) {
       const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
@@ -686,14 +705,28 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
 
   function onMapPointerLeave() {
     setWallCursorPoint(null);
+    setHoverCell(null);
   }
 
   function onMapPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (rampDrag) {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      applyRamp(rampDrag.start, rampDrag.end);
+      setRampDrag(null);
+      suppressNextMapClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+      }, 50);
+      return;
+    }
     if (paintStroke) {
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-      paintTerrainCells(paintStroke);
+      if (tool === "elevation") paintElevationCells(paintStroke);
+      else paintTerrainCells(paintStroke);
       setPaintStroke(null);
       suppressNextMapClickRef.current = true;
       window.setTimeout(() => {
@@ -870,6 +903,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     openTerrainMenu,
     closeTerrainMenu,
     paintStroke,
+    rampDrag,
+    hoverCell,
 
     // walls
     displayWalls,

@@ -17,6 +17,9 @@ import {
   event,
   footprintCells,
   getDefinition,
+  groundHeightAt,
+  planRamp,
+  withGroundHeights,
   getExecutableActions,
   resolveDeathSave,
   rollDice,
@@ -77,7 +80,15 @@ import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
-export type EditorTool = "select" | "measure" | "wall" | "terrain";
+export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
+
+/** What the elevation tool does to the cells it is dragged over. */
+export type ElevationMode = "set" | "raise" | "lower" | "ramp" | "flatten";
+
+/** How much one pass of the raise / lower brush changes a cell: one stair step. */
+export const ELEVATION_STEP_FT = 5;
+/** The tallest ground the editor will paint; airborne creatures are separate (altitude). */
+export const MAX_ELEVATION_FT = 500;
 
 /** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
 export interface NewMapOptions {
@@ -171,6 +182,23 @@ interface EncounterStore {
   setTerrainBrush: (brush: TerrainBrushId) => void;
   /** Paint (or erase, for the "eraser" brush) one 1x1 terrain tile per cell, as a single undo step — the terrain tool's click-and-drag brush stroke. */
   paintTerrainCells: (cells: Point[]) => void;
+  /** The elevation tool's brush: what a drag does, the height "set" paints, and how wide a ramp is. */
+  elevationMode: ElevationMode;
+  elevationHeight: number;
+  elevationRampWidth: number;
+  setElevationMode: (mode: ElevationMode) => void;
+  setElevationHeight: (feet: number) => void;
+  setElevationRampWidth: (squares: number) => void;
+  /** Apply the current elevation mode to a dragged-over set of cells, as one undo step. */
+  paintElevationCells: (cells: Point[]) => void;
+  /** Lay a ramp from `start` to `end` (drag from one end to the other) using the current width. */
+  applyRamp: (start: Point, end: Point) => void;
+  /** Level the whole map back to the datum. */
+  clearElevation: () => void;
+  /** Set how high above the ground these tokens are flying. 0 lands them. */
+  setAltitude: (combatantIds: string[], feet: number) => void;
+  /** Raise (or, negative, lower) these tokens' altitude by the same number of feet, as one undo step. */
+  adjustAltitude: (combatantIds: string[], deltaFeet: number) => void;
   addTemplate: (template: Omit<PlacedTemplate, "id">) => string;
   updateTemplate: (templateId: string, updates: Partial<Omit<PlacedTemplate, "id">>) => void;
   removeTemplate: (templateId: string) => void;
@@ -764,6 +792,12 @@ export const useEncounterStore = create<EncounterStore>()(
       setWallCoverDraft: (cover) => set({ wallCoverDraft: cover }),
       terrainBrush: "difficult",
       setTerrainBrush: (brush) => set({ terrainBrush: brush }),
+      elevationMode: "set",
+      elevationHeight: 10,
+      elevationRampWidth: 2,
+      setElevationMode: (mode) => set({ elevationMode: mode }),
+      setElevationHeight: (feet) => set({ elevationHeight: Math.max(-MAX_ELEVATION_FT, Math.min(MAX_ELEVATION_FT, Math.round(feet) || 0)) }),
+      setElevationRampWidth: (squares) => set({ elevationRampWidth: Math.max(1, Math.min(6, Math.round(squares) || 1)) }),
       setTool: (tool) => set({ tool, pendingWallStart: null }),
       handleMapClick: (point) => {
         const state = get();
@@ -791,8 +825,8 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
 
-        if (state.tool === "terrain") {
-          // Terrain tiles are painted via the click-and-drag brush (see
+        if (state.tool === "terrain" || state.tool === "elevation") {
+          // Terrain tiles and heights are painted via the click-and-drag brush (see
           // onMapPointerDown/Move/Up in useSceneInteraction + paintTerrainCells
           // below), not the plain click handler.
           return;
@@ -1195,6 +1229,70 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         if (!changed) return;
         commitEncounter({ ...encounter, map: { ...encounter.map, terrain } });
+      },
+      paintElevationCells: (cells) => {
+        const { elevationMode: mode, elevationHeight: paintHeight } = get();
+        if (cells.length === 0 || mode === "ramp") return;
+        const encounter = get().encounter;
+        const { width, height } = encounter.map.grid;
+        const updates = cells
+          .filter((cell) => cell.x >= 0 && cell.y >= 0 && cell.x < width && cell.y < height)
+          .map((cell) => {
+            const current = groundHeightAt(encounter.map, cell);
+            const next = mode === "set" ? paintHeight
+              : mode === "raise" ? current + ELEVATION_STEP_FT
+                : mode === "lower" ? current - ELEVATION_STEP_FT
+                  : 0;
+            return { cell, current, height: Math.max(-MAX_ELEVATION_FT, Math.min(MAX_ELEVATION_FT, next)) };
+          })
+          .filter((update) => update.height !== update.current);
+        if (updates.length === 0) return;
+        commitEncounter({
+          ...encounter,
+          map: { ...encounter.map, elevation: withGroundHeights(encounter.map.elevation, updates) }
+        });
+      },
+      applyRamp: (start, end) => {
+        const encounter = get().encounter;
+        const plan = planRamp(encounter.map, start, end, get().elevationRampWidth);
+        const updates = plan.cells.filter((entry) => entry.height !== groundHeightAt(encounter.map, entry.cell));
+        if (updates.length === 0) return;
+        commitEncounter({
+          ...encounter,
+          map: { ...encounter.map, elevation: withGroundHeights(encounter.map.elevation, updates) }
+        });
+      },
+      clearElevation: () => {
+        const encounter = get().encounter;
+        if (!encounter.map.elevation) return;
+        commitEncounter({ ...encounter, map: { ...encounter.map, elevation: undefined } });
+      },
+      setAltitude: (combatantIds, feet) => {
+        const encounter = get().encounter;
+        const ids = new Set(combatantIds);
+        const altitude = Math.max(0, Math.min(MAX_ELEVATION_FT, Math.round(feet) || 0));
+        let changed = false;
+        const combatants = encounter.combatants.map((combatant) => {
+          if (!ids.has(combatant.id) || (combatant.altitude ?? 0) === altitude) return combatant;
+          changed = true;
+          return { ...combatant, altitude: altitude > 0 ? altitude : undefined };
+        });
+        if (!changed) return;
+        commitEncounter({ ...encounter, combatants });
+      },
+      adjustAltitude: (combatantIds, deltaFeet) => {
+        const encounter = get().encounter;
+        const ids = new Set(combatantIds);
+        let changed = false;
+        const combatants = encounter.combatants.map((combatant) => {
+          if (!ids.has(combatant.id)) return combatant;
+          const altitude = Math.max(0, Math.min(MAX_ELEVATION_FT, (combatant.altitude ?? 0) + deltaFeet));
+          if (altitude === (combatant.altitude ?? 0)) return combatant;
+          changed = true;
+          return { ...combatant, altitude: altitude > 0 ? altitude : undefined };
+        });
+        if (!changed) return;
+        commitEncounter({ ...encounter, combatants });
       },
       addTemplate: (template) => {
         const encounter = get().encounter;

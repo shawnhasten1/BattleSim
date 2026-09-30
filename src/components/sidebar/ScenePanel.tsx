@@ -27,6 +27,7 @@ function toolReadout(
   }
   if (tool === "wall") return "Click grid intersections to draw walls; drag nodes to reshape.";
   if (tool === "terrain") return "Click-and-drag to paint terrain tiles; right-click a tile to change or delete it.";
+  if (tool === "elevation") return "Paint ground height or drag a ramp between two levels. Walkers climb 5 ft per step; cliffs stop them.";
   if (tool === "select") return "Click or drag a token to select and move it.";
   return "Select a scene object or token to inspect.";
 }

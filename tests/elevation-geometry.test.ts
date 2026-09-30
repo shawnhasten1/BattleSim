@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cliffEdges,
   distanceWithHeight,
   encounterSnapshotSchema,
   findPath,
@@ -7,6 +8,8 @@ import {
   footprintGroundHeight,
   groundHeightAt,
   heightOfSpot,
+  planRamp,
+  withGroundHeights,
   sampleEncounter,
   type BattleMapState,
   type GridConfig
@@ -129,5 +132,75 @@ describe("saving and importing", () => {
     expect(parsed.combatants[0]!.altitude).toBe(20);
     expect(parsed.map.terrain[0]!.cell).toEqual({ x: 1, y: 1 });
     expect(parsed.map.terrain[0]!.hazard?.damage?.[0]?.dice).toBe("4d10");
+  });
+});
+
+describe("ramps, edges and writing heights", () => {
+  const mapOf = (elevation?: Record<string, number>) => flat(12, 8, elevation);
+
+  it("a ramp fills in the steps between a low cell and a high cell", () => {
+    const map = mapOf({ "0,2": 0, "4,2": 20 });
+    const plan = planRamp(map, at(0, 2), at(4, 2), 1);
+    expect(plan.cells.map((entry) => entry.height)).toEqual([0, 5, 10, 15, 20]);
+    expect(plan.cells.every((entry) => entry.cell.y === 2)).toBe(true);
+    expect(plan.walkable).toBe(true);
+    expect(plan.steepestStep).toBe(5);
+    expect(plan.squaresNeeded).toBe(4);
+  });
+
+  it("works from the high end down, and keeps the ends at the heights they already had", () => {
+    const map = mapOf({ "0,2": 10, "2,2": 0 });
+    const plan = planRamp(map, at(0, 2), at(2, 2), 1);
+    expect(plan.cells.map((entry) => [entry.cell.x, entry.height])).toEqual([[0, 10], [1, 5], [2, 0]]);
+  });
+
+  it("warns when the slope is too steep to walk, and says how long it needs to be", () => {
+    const map = mapOf({ "0,2": 0, "2,2": 30 });
+    const plan = planRamp(map, at(0, 2), at(2, 2), 1);
+    expect(plan.walkable).toBe(false);
+    expect(plan.steepestStep).toBe(15);
+    expect(plan.squaresNeeded).toBe(6);
+    expect(plan.squaresSpanned).toBe(2);
+  });
+
+  it("is as wide as asked, and a walker can use every row of it", () => {
+    const map = mapOf({ "0,2": 0, "4,2": 20 });
+    const plan = planRamp(map, at(0, 2), at(4, 2), 3);
+    const rows = new Set(plan.cells.map((entry) => entry.cell.y));
+    expect(rows.size).toBe(3);
+    expect(plan.walkable).toBe(true);
+    // Every cell in a column has the same height.
+    for (const entry of plan.cells) expect(entry.height).toBe(entry.cell.x * 5);
+  });
+
+  it("can run on a diagonal, and checks the diagonal steps too", () => {
+    const map = mapOf({ "0,0": 0, "3,3": 15 });
+    const plan = planRamp(map, at(0, 0), at(3, 3), 1);
+    expect(plan.cells.map((entry) => entry.height)).toEqual([0, 5, 10, 15]);
+    expect(plan.walkable).toBe(true);
+  });
+
+  it("does nothing between a cell and itself", () => {
+    expect(planRamp(mapOf(), at(2, 2), at(2, 2), 1).cells).toEqual([]);
+  });
+
+  it("finds the edges walkers can't cross: a plateau's open sides, and nothing along 5 ft steps", () => {
+    const map = mapOf({ "3,3": 10, "4,3": 10, "5,3": 5, "6,3": 0 });
+    const edges = cliffEdges(map);
+    // (3,3) is open on three sides, (4,3) on two; the 10 -> 5 -> 0 ft steps eastward are all walkable.
+    expect(edges).toHaveLength(5);
+    expect(edges.every((edge) => edge.drop === 10)).toBe(true);
+    expect(edges).toContainEqual({ x1: 3, y1: 3, x2: 3, y2: 4, drop: 10 }); // west side of (3,3)
+    expect(edges).toContainEqual({ x1: 3, y1: 3, x2: 4, y2: 3, drop: 10 }); // its north side
+    expect(edges).toContainEqual({ x1: 4, y1: 4, x2: 5, y2: 4, drop: 10 }); // south side of (4,3)
+    expect(edges.some((edge) => edge.x1 === 5 && edge.x2 === 5)).toBe(false); // (4,3) -> (5,3) is a 5 ft step
+  });
+
+  it("writes heights into the layer, drops a 0, and no cells at all means no layer", () => {
+    let layer = withGroundHeights(undefined, [{ cell: at(1, 1), height: 10 }, { cell: at(2, 1), height: -5 }]);
+    expect(layer).toEqual({ cells: { "1,1": 10, "2,1": -5 } });
+    layer = withGroundHeights(layer, [{ cell: at(1, 1), height: 0 }]);
+    expect(layer).toEqual({ cells: { "2,1": -5 } });
+    expect(withGroundHeights(layer, [{ cell: at(2, 1), height: 0 }])).toBeUndefined();
   });
 });

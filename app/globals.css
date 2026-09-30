@@ -1005,3 +1005,132 @@ img {
   text-anchor: middle;
   dominant-baseline: central;
 }
+
+/* ============================================================
+ * Ground height (Phase 5B): tinted cells, cliff edges, brush + ramp preview
+ * ============================================================ */
+
+.elevation-layer {
+  pointer-events: none;
+}
+
+.elevation-cell {
+  stroke: none;
+}
+
+.cliff-edge {
+  stroke: #7a2e12;
+  stroke-width: 0.09;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 0.03px rgba(0, 0, 0, 0.8));
+}
+
+.elevation-label {
+  fill: #fff;
+  font-size: 0.3px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 0.06px;
+}
+
+.elevation-label.preview {
+  fill: #fff7d6;
+}
+
+.elevation-paint-preview rect {
+  fill: rgba(255, 255, 255, 0.3);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 0.05;
+  stroke-dasharray: 0.08 0.06;
+}
+
+.ramp-preview rect {
+  fill: rgba(96, 200, 120, 0.4);
+  stroke: rgba(150, 240, 170, 0.95);
+  stroke-width: 0.05;
+}
+
+.ramp-preview.steep rect {
+  fill: rgba(220, 80, 70, 0.42);
+  stroke: rgba(255, 150, 140, 0.95);
+}
+
+.ramp-summary,
+.elevation-hover-label {
+  fill: #fff;
+  font-size: 0.26px;
+  font-weight: 700;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 0.08px;
+}
+
+.ramp-preview.steep .ramp-summary {
+  fill: #ffd0cb;
+}
+
+.elevation-hover rect {
+  fill: none;
+  stroke: var(--ui-accent);
+  stroke-width: 0.07;
+}
+
+.tool-elevation {
+  cursor: crosshair;
+}
+
+.elevation-legend-corner {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 11;
+  max-width: 300px;
+  pointer-events: none;
+}
+
+.elevation-legend-corner > div {
+  padding: 7px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  opacity: 0.92;
+}
+
+/* Airborne tokens (altitude > 0): lifted off a soft ground shadow, with the height on a badge. */
+.token.airborne {
+  translate: 0 calc(var(--lift, 0px) * -1);
+  box-shadow: 0 10px 14px rgba(0, 0, 0, 0.35);
+}
+
+.token-shadow {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.22) 55%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+  transition: left var(--token-move-ms, 0ms) ease, top var(--token-move-ms, 0ms) ease;
+}
+
+.token-altitude {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 22px;
+  padding: 1px 4px;
+  border: 1px solid #fff;
+  border-radius: 9px;
+  background: #1c4f7a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}

@@ -18,6 +18,9 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
   const updateDefinitionVisuals = useEncounterStore((s) => s.updateDefinitionVisuals);
   const applyConditionToCombatant = useEncounterStore((s) => s.applyConditionToCombatant);
   const clearConditions = useEncounterStore((s) => s.clearConditions);
+  const setAltitude = useEncounterStore((s) => s.setAltitude);
+  const groundHeight = useEncounterStore((s) => s.encounter.map.elevation?.cells[`${combatant.position.x},${combatant.position.y}`] ?? 0);
+  const canFly = Boolean(definition.movement?.fly);
 
   const visuals = { ...(definition.tokenVisuals ?? {}), ...(combatant.tokenVisuals ?? {}) };
 
@@ -82,6 +85,35 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
               Y
               <input type="number" value={combatant.position.y} onChange={(e) => updateCombatant(combatant.id, { position: { ...combatant.position, y: Number(e.target.value) } })} />
             </label>
+          </div>
+          <div className={styles.field}>
+            <span className={styles.fieldLabel}>
+              Altitude
+              <InfoTooltip
+                label="About altitude"
+                content="How many feet above the ground this token is flying. A creature more than its reach above a foe can't be hit in melee (bows and spells still reach), and it falls if it's knocked prone, can't move, or dies in the air — unless it can hover. The AI raises and lowers fliers itself; set it here to start a fight airborne."
+              />
+            </span>
+            <div className={styles.chips}>
+              <input
+                type="number" min={0} step={5} aria-label="Altitude in feet" style={{ width: 72 }}
+                value={combatant.altitude ?? 0} onChange={(e) => setAltitude([combatant.id], Number(e.target.value))}
+              />
+              <span style={{ alignSelf: "center", fontSize: 11 }}>ft up</span>
+              {[0, 10, 20, 30, 60].map((feet) => (
+                <button key={feet} type="button" aria-pressed={(combatant.altitude ?? 0) === feet} onClick={() => setAltitude([combatant.id], feet)}>
+                  {feet === 0 ? "Land" : feet}
+                </button>
+              ))}
+            </div>
+            <p className={styles.note} style={{ margin: "4px 0 0" }}>
+              {groundHeight !== 0 ? `Standing on ground ${groundHeight} ft high. ` : ""}
+              {canFly
+                ? `Flies ${definition.movement?.fly} ft${definition.movement?.hover ? " (hovers, so it stays up when knocked prone)" : ""}.`
+                : (combatant.altitude ?? 0) > 0
+                  ? "No fly speed — only magic (Fly, Levitate) keeps it up."
+                  : "No fly speed."}
+            </p>
           </div>
         </div>
       </section>

@@ -3,6 +3,8 @@
 import { Droplet, Flame, Snowflake, TriangleAlert, type LucideIcon } from "lucide-react";
 import { cellsInArea, lineOfEffect, wallCover, type ActiveZone, type BattleMapState } from "@/engine";
 import { pointsMatch } from "@/components/scene/coords";
+import { ElevationLayer } from "@/components/scene/ElevationLayer";
+import { useEncounterStore } from "@/store/encounter-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
 
@@ -75,8 +77,13 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
     measuredPathCostFeet,
     previewPath,
     onWallNodePointerDown,
-    onTemplatePointerDown
+    onTemplatePointerDown,
+    rampDrag,
+    hoverCell
   } = scene;
+  const elevationMode = useEncounterStore((state) => state.elevationMode);
+  const elevationHeight = useEncounterStore((state) => state.elevationHeight);
+  const elevationRampWidth = useEncounterStore((state) => state.elevationRampWidth);
 
   return (
     <svg
@@ -84,6 +91,16 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
       viewBox={`0 0 ${map.grid.width} ${map.grid.height}`}
       style={{ width: gridPixelWidth, height: gridPixelHeight }}
     >
+      <ElevationLayer
+        map={map}
+        editing={tool === "elevation" && !replaying}
+        mode={elevationMode}
+        paintHeight={elevationHeight}
+        rampWidth={elevationRampWidth}
+        hoverCell={hoverCell}
+        rampDrag={rampDrag}
+        paintStroke={tool === "elevation" ? paintStroke : null}
+      />
       {map.terrain.map((zone) => (
         <polygon
           key={zone.id}

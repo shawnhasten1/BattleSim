@@ -96,6 +96,18 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
               />
             </label>
           ))}
+          {definition.movement?.fly ? (
+            <label className={styles.field} title="A hovering flier doesn't fall when it's knocked prone or can't move.">
+              hover
+              <input
+                type="checkbox" aria-label="Hovers" checked={Boolean(definition.movement.hover)}
+                onChange={(e) => {
+                  const { hover: _dropped, ...rest } = definition.movement ?? { walk: definition.speed };
+                  updateCreatureDefinition(definition.id, { movement: { ...rest, walk: definition.speed, ...(e.target.checked ? { hover: true } : {}) } });
+                }}
+              />
+            </label>
+          ) : null}
           <label className={styles.field}>
             Prof
             <input type="number" value={definition.proficiencyBonus ?? 2} onChange={(e) => updateCreatureDefinition(definition.id, { proficiencyBonus: Number(e.target.value) })} />

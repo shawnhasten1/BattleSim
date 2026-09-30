@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Mountain, Ruler, Snowflake, SquareDashed, User, Waves, Waypoints } from "lucide-react";
+import { Ban, Blocks, BrickWall, Droplet, Eraser, Fence, Flame, Footprints, Grid3x3, HeartPulse, Layers, Mountain, Ruler, Snowflake, SquareDashed, User, Waves, Waypoints } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { CoverLevel } from "@/engine";
 import { useEncounterStore, type EditorTool, type TerrainBrushId } from "@/store/encounter-store";
@@ -23,7 +23,8 @@ const TOOLS: ToolDef[] = [
   { tool: "select", icon: <User size={18} />, label: "Select / move actors" },
   { tool: "measure", icon: <Ruler size={18} />, label: "Measure" },
   { tool: "wall", icon: <BrickWall size={18} />, label: "Walls — select, move, draw" },
-  { tool: "terrain", icon: <Waypoints size={18} />, label: "Terrain" }
+  { tool: "terrain", icon: <Waypoints size={18} />, label: "Terrain" },
+  { tool: "elevation", icon: <Layers size={18} />, label: "Elevation — paint ground height, ramps and cliffs" }
 ];
 
 /** Cover level for newly drawn walls — the sub-group shown under "Draw walls". */
