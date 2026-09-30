@@ -189,6 +189,18 @@ export interface PlacedTemplate {
   color?: string;
 }
 
+/**
+ * Ground height, independent of terrain (a lake and lava can sit on any hill). Only cells that differ from the
+ * datum are stored: `"x,y"` -> feet above it. Walkers can step between neighbours whose heights differ by at most
+ * `MAX_STEP_HEIGHT_FT`; anything steeper is a cliff.
+ */
+export interface MapElevation {
+  cells: Record<string, number>;
+}
+
+/** The tallest step a walker takes in stride — a stair, a kerb, a ramp square. Bigger differences are cliffs. */
+export const MAX_STEP_HEIGHT_FT = 5;
+
 export interface BattleMapState {
   id: Id;
   name: string;
@@ -202,6 +214,8 @@ export interface BattleMapState {
   walls: WallSegment[];
   terrain: TerrainZone[];
   templates?: PlacedTemplate[];
+  /** Ground heights (Phase 5B). Missing means a flat map, and everything behaves exactly as it did before. */
+  elevation?: MapElevation;
 }
 
 export interface TokenVisuals {
@@ -1588,6 +1602,8 @@ export interface CombatantState {
   displayName: string;
   faction: Faction;
   position: Point;
+  /** Feet above the ground it stands over. Above 0 it is airborne: out of reach of most melee, and it falls if it can't stay up. */
+  altitude?: number;
   currentHp: number;
   tempHp: number;
   deathSaves?: DeathSaveState;
@@ -1963,6 +1979,7 @@ export const combatantExportSchema = z.object({
     displayName: z.string().min(1),
     faction: z.union([z.literal("party"), z.literal("enemy"), z.literal("neutral")]),
     position: pointSchema,
+    altitude: z.number().min(0).optional(),
     currentHp: z.number().int(),
     tempHp: z.number().int().min(0),
     deathSaves: z.object({
@@ -2060,9 +2077,14 @@ export const encounterSnapshotSchema = z.object({
         ]),
         polygon: z.array(pointSchema).min(3),
         movementMultiplier: z.number().positive().optional(),
-        tags: z.array(z.string()).optional()
+        tags: z.array(z.string()).optional(),
+        // Painted tiles carry their grid cell and any hazard; zod strips unknown keys, so name them or an import loses them.
+        cell: pointSchema.optional(),
+        hazard: z.custom<TerrainHazardEffect>().optional(),
+        hazardAppliedRounds: z.record(z.number()).optional()
       })
     ),
+    elevation: z.object({ cells: z.record(z.number().finite()) }).optional(),
     templates: z.array(
       z.object({
         id: z.string(),
@@ -2096,6 +2118,7 @@ export const encounterSnapshotSchema = z.object({
       displayName: z.string(),
       faction: z.union([z.literal("party"), z.literal("enemy"), z.literal("neutral")]),
       position: pointSchema,
+      altitude: z.number().min(0).optional(),
       currentHp: z.number().int(),
       tempHp: z.number().int().min(0),
       deathSaves: z.object({

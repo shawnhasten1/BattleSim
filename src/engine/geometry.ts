@@ -1,4 +1,4 @@
-import type { BattleMapState, CoverLevel, CreatureDefinition, GridConfig, MovementProfile, Point, SizeCategory, TerrainZone, WallSegment } from "./types";
+import { MAX_STEP_HEIGHT_FT, type BattleMapState, type CoverLevel, type CreatureDefinition, type GridConfig, type MovementProfile, type Point, type SizeCategory, type TerrainZone, type WallSegment } from "./types";
 
 export interface PathResult {
   reachable: boolean;
@@ -259,6 +259,44 @@ export function coverBetween(
   };
 }
 
+/** Ground height of one cell, in feet. A map with no elevation layer is flat. */
+export function groundHeightAt(map: Pick<BattleMapState, "elevation">, cell: Point): number {
+  return map.elevation?.cells[`${cell.x},${cell.y}`] ?? 0;
+}
+
+/** The ground a creature stands on: the highest cell under its footprint. */
+export function footprintGroundHeight(map: Pick<BattleMapState, "elevation">, position: Point, footprint: number): number {
+  if (!map.elevation) return 0;
+  let highest = 0;
+  for (let y = 0; y < footprint; y += 1) {
+    for (let x = 0; x < footprint; x += 1) {
+      highest = Math.max(highest, groundHeightAt(map, { x: position.x + x, y: position.y + y }));
+    }
+  }
+  return highest;
+}
+
+/** Height above the datum of a creature at `position` flying `altitude` ft above the ground there. */
+export function heightOfSpot(map: Pick<BattleMapState, "elevation">, position: Point, footprint: number, altitude = 0): number {
+  return footprintGroundHeight(map, position, footprint) + altitude;
+}
+
+/**
+ * Feet between two spots once height counts. It follows the map's own distance rule, so a flier 5 ft up and 5 ft
+ * across is 5 ft away on a standard grid (not 7.07): standard counting takes the larger of the flat and vertical
+ * distance, and 5-10-5 treats the vertical like one more diagonal axis.
+ */
+export function distanceWithHeight(grid: GridConfig, a: Point, b: Point, verticalFt: number): number {
+  const planar = gridDistance(a, b, grid);
+  const vertical = Math.abs(verticalFt);
+  if (vertical <= 0) return planar;
+  if (grid.diagonalMode === "standard") return Math.max(planar, vertical);
+  const per = grid.distancePerSquare;
+  const flat = planar / per;
+  const up = vertical / per;
+  return (Math.max(flat, up) + Math.floor(Math.min(flat, up) / 2)) * per;
+}
+
 export function footprintCells(position: Point, footprint: number): Point[] {
   const cells: Point[] = [];
   for (let y = 0; y < footprint; y += 1) {
@@ -321,16 +359,34 @@ function modeMultiplier(zone: TerrainZone | undefined, mode: "walk" | "fly" | "s
   }
 }
 
-export function movementCostForCell(terrain: TerrainZone[], cell: Point, movement?: MovementProfile): number {
+/**
+ * What a step that rises or drops `heightDelta` ft costs each mode, as a multiplier. Up to a stair's height it is free
+ * for everyone. Beyond that it is a cliff: walkers and swimmers can't take it, climbers pay a square per 5 ft, and
+ * fliers (and burrowers, who go through it) don't notice.
+ */
+function heightMultiplier(mode: "walk" | "fly" | "swim" | "climb" | "burrow", heightDelta: number): number {
+  if (heightDelta <= MAX_STEP_HEIGHT_FT) return 1;
+  switch (mode) {
+    case "fly":
+    case "burrow":
+      return 1;
+    case "climb":
+      return heightDelta / MAX_STEP_HEIGHT_FT;
+    default:
+      return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function movementCostForCell(terrain: TerrainZone[], cell: Point, movement?: MovementProfile, heightDelta = 0): number {
   const zone = terrainAtCell(terrain, cell);
   const reference = movement ? movementReference(movement) : 0;
   if (!movement || reference <= 0) {
-    return walkMultiplier(zone);
+    return walkMultiplier(zone) * heightMultiplier("walk", heightDelta);
   }
   let best = Number.POSITIVE_INFINITY;
   for (const mode of ["walk", "fly", "swim", "climb", "burrow"] as const) {
     const speed = movement[mode] ?? 0;
-    if (speed > 0) best = Math.min(best, modeMultiplier(zone, mode) * reference / speed);
+    if (speed > 0) best = Math.min(best, modeMultiplier(zone, mode) * heightMultiplier(mode, heightDelta) * reference / speed);
   }
   return best;
 }
@@ -378,7 +434,10 @@ export function findPath(
       if (!isTransitFootprintLegal(map, next, footprint, occupied, options) || movementBlockedBetween(map.walls, current, next, footprint)) {
         continue;
       }
-      const stepCost = stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options);
+      const stepCost = stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options, current);
+      if (!Number.isFinite(stepCost)) {
+        continue;
+      }
       const tentative = (gScore.get(currentKey) ?? Infinity) + stepCost;
       const nextKey = key(next);
       if (tentative < (gScore.get(nextKey) ?? Infinity)) {
@@ -422,7 +481,7 @@ export function findReachableCells(
       if (!isTransitFootprintLegal(map, next, footprint, occupied, options) || movementBlockedBetween(map.walls, current, next, footprint)) {
         continue;
       }
-      const nextCost = currentCost + stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options);
+      const nextCost = currentCost + stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options, current);
       if (nextCost > movementBudget || nextCost >= (costs.get(key(next)) ?? Infinity)) {
         continue;
       }
@@ -489,9 +548,14 @@ function footprintMovementCost(
   position: Point,
   footprint: number,
   occupied: Point[],
-  options: OccupancyMovementOptions
+  options: OccupancyMovementOptions,
+  from?: Point
 ): number {
-  const terrainCost = Math.max(...footprintCells(position, footprint).map((cell) => movementCostForCell(map.terrain, cell, options.movement)));
+  // Only a map with ground heights pays for a rise or drop; a flat map skips the lookup entirely.
+  const heightDelta = from && map.elevation
+    ? Math.abs(footprintGroundHeight(map, position, footprint) - footprintGroundHeight(map, from, footprint))
+    : 0;
+  const terrainCost = Math.max(...footprintCells(position, footprint).map((cell) => movementCostForCell(map.terrain, cell, options.movement, heightDelta)));
   if (!options.allowOccupiedTransit || !footprintOverlapsOccupied(position, footprint, occupied)) {
     return terrainCost;
   }
@@ -517,7 +581,7 @@ export function pathCostAlong(
   for (let i = 1; i < cells.length; i += 1) {
     const from = cells[i - 1] as Point;
     const to = cells[i] as Point;
-    total += stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options);
+    total += stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options, from);
   }
   return total;
 }
