@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sampleEncounter, type ActionDefinition, type CreatureDefinition, type LegendaryActionRef } from "@/engine";
 import { loadSrdMonster, loadSrdMonsterAbilities } from "@/data/srd/monsters";
@@ -18,6 +20,7 @@ import { findAbility, withNewAbilityAt, withRecordAfter, type AbilityRef } from 
 import { sectionsFor } from "@/lib/ability-editor/sections";
 import { creaturesToFetch, newSummonLoop, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { blankAttack, blankDeathEffect, blankHeal, blankLairAction, blankSummon, blankTransform } from "@/lib/ability-editor/templates";
+import { abilityList } from "@/lib/ability-editor/list";
 import { abilityWarnings } from "@/lib/ability-editor/validate";
 import { legendaryLosses, withoutDefinitionItem } from "@/lib/definition-edits";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -142,6 +145,41 @@ describe("death effects and lair actions", () => {
     expect(summary(definition, { list: "lairActions", id: "eruption" }, "use")).toBe("initiative 20, in its lair");
     expect(warningIds(fighter(), "lairActions", blankHeal())).toContain("lair-never-taken");
     expect(warningIds(fighter(), "lairActions", blankLairAction())).toEqual([]);
+  });
+});
+
+describe("one row per ability on the SRD monsters", () => {
+  const chunks = join(process.cwd(), "src/data/srd/monsters/generated/chunks");
+  const monsters: CreatureDefinition[] = readdirSync(chunks).flatMap((file) => (JSON.parse(readFileSync(join(chunks, file), "utf8")) as { definitions: CreatureDefinition[] }).definitions);
+  const byId = (id: string) => monsters.find((monster) => monster.id === id)!;
+
+  it("lists no ability twice: only a legendary action named after the action it uses shares a name", () => {
+    const twice = monsters.flatMap((monster) => {
+      const groups = abilityList(monster).flatMap((group) => [...group.rows, ...(group.levels ?? []).flatMap((level) => level.rows)].map((row) => ({ group: group.id, name: row.name })));
+      return [...new Set(groups.map((row) => row.name))]
+        .filter((name) => groups.filter((row) => row.name === name && row.group !== "legendary").length > 1)
+        .map((name) => `${monster.name}: ${name}`);
+    });
+    expect(twice).toEqual([]);
+  });
+
+  it("keeps the statblock's text on the row that's left", () => {
+    const werewolf = byId("srd:monster:werewolf");
+    expect(werewolf.traits?.some((trait) => /^Shapechanger/.test(trait.name))).toBe(false);
+    expect(werewolf.actions.find((action) => action.kind === "transform")!.description).toMatch(/^The werewolf can use its action to polymorph/);
+    // Every form has the same action, text and all.
+    expect(byId("srd:monster:werewolf--wolf").actions.find((action) => action.kind === "transform")!.description).toMatch(/^The werewolf can use its action/);
+    const mephit = byId("srd:monster:dust-mephit");
+    expect(mephit.traits?.some((trait) => trait.name === "Death Burst")).toBe(false);
+    expect(mephit.deathEffects![0]!.description).toMatch(/^When the mephit dies, it explodes/);
+    expect(byId("srd:monster:balor").traits?.some((trait) => trait.name === "Death Throes")).toBe(false);
+  });
+
+  it("says the AI never changes shape on its own, on the shapechange row", () => {
+    const werewolf = byId("srd:monster:werewolf");
+    const shift = abilityList(werewolf).flatMap((group) => group.rows).find((row) => row.name === "Shapechanger")!;
+    expect(shift).toMatchObject({ automation: "partial" });
+    expect(shift.automationNote).toContain("The AI never changes shape on its own.");
   });
 });
 

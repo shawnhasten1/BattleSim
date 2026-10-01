@@ -54,8 +54,12 @@ export function splitForms(monster: ParsedMonster): ParsedMonster[] {
     });
   };
 
+  // The statblock's Shapechanger trait is the action itself: its text goes on the action, and the trait isn't listed twice.
+  const isShapechanger = (trait: { name: string }) => /^Shapechanger/i.test(trait.name);
+  const shapechangerText = base.traits?.find(isShapechanger)?.description;
   const transform: TransformActionDefinition = {
-    kind: "transform", id: "shapechanger", name: "Shapechanger", actionType: "action", canRevert: true, revertOnDeath: true,
+    kind: "transform", id: "shapechanger", name: "Shapechanger", ...(shapechangerText ? { description: shapechangerText } : {}),
+    actionType: "action", canRevert: true, revertOnDeath: true,
     forms: others.map((word) => ({ id: slugify(word), label: title(word), definitionId: formId(word) })),
     automationSupport: "full"
   };
@@ -68,7 +72,7 @@ export function splitForms(monster: ParsedMonster): ParsedMonster[] {
     ...definition,
     ...(definition.legendary ? { legendary: legendaryActions.length > 0 ? { ...definition.legendary, actions: legendaryActions } : undefined } : {}),
     actions,
-    traits: (definition.traits ?? []).map((trait) => (/^Shapechanger/i.test(trait.name) ? { ...trait, automationSupport: "partial" as const } : trait))
+    traits: (definition.traits ?? []).filter((trait) => !isShapechanger(trait))
     };
   };
 

@@ -487,7 +487,8 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
     ...(adjustments.length ? { damageAdjustments: adjustments } : {}),
     ...(conditionImmunities.length ? { conditionImmunities } : {}),
     ...(Object.keys(ctx.resources).length ? { resources: { ...ctx.resources } } : {}),
-    traits: [...traits, ...generatedFeatures],
+    // A trait that became a death effect (Death Burst) isn't listed twice: the death effect carries its text.
+    traits: [...traits, ...generatedFeatures].filter((trait) => !ctx.deathEffects?.some((effect) => effect.name === trait.name)),
     actions,
     ...(reactions.length ? { reactions } : {}),
     ...(knownSpells.length ? { spells: knownSpells } : {}),

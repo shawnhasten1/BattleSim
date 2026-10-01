@@ -55,7 +55,8 @@ export type WarningId =
   | "death-aimed"
   | "lair-never-taken"
   | "summon-empty"
-  | "transform-empty";
+  | "transform-empty"
+  | "transform-not-automatic";
 
 export interface AbilityWarning {
   id: WarningId;
@@ -325,6 +326,14 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
     }
     if (action.kind === "transform" && !action.forms.length) {
       warnings.push({ id: "transform-empty", message: "It has no form to change into yet: pick one in Shapechange.", section: "outcome" });
+    }
+    // The engine changes a creature's shape only to start a fight in a form, and back when it dies.
+    if (action.kind === "transform" && action.forms.length) {
+      warnings.push({
+        id: "transform-not-automatic",
+        message: "The AI never changes shape on its own. A creature can start a fight in one of its forms (an SRD lycanthrope starts as a hybrid), and changes back when it dies if that's ticked.",
+        section: "outcome"
+      });
     }
     if (action.kind === "buff" && grantsNothing(action)) {
       warnings.push({ id: "empty-buff", message: "It grants nothing yet, so casting it does nothing.", section: "outcome" });
