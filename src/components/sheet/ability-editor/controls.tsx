@@ -30,11 +30,18 @@ export interface SegmentOption<T extends string> {
 
 /**
  * A single choice from a few options, as a row of buttons (a radio group: arrow keys move the choice). `label` names
- * the group for screen readers.
+ * the group for screen readers; `disabled` shows the choice but won't change it (`title` says why).
  */
 export function Segmented<T extends string>({
-  label, value, options, onChange
-}: { label: string; value: T | undefined; options: Array<SegmentOption<T>>; onChange: (next: T) => void }) {
+  label, value, options, onChange, disabled, title
+}: {
+  label: string;
+  value: T | undefined;
+  options: Array<SegmentOption<T>>;
+  onChange: (next: T) => void;
+  disabled?: boolean;
+  title?: string;
+}) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const index = options.findIndex((option) => option.value === value);
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, at: number) {
@@ -46,7 +53,7 @@ export function Segmented<T extends string>({
     refs.current[next]?.focus();
   }
   return (
-    <div className={styles.segmented} role="radiogroup" aria-label={label}>
+    <div className={styles.segmented} role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} title={title}>
       {options.map((option, at) => (
         <button
           key={option.value}
@@ -57,6 +64,7 @@ export function Segmented<T extends string>({
           // One stop in the tab order: the chosen option, or the first when none is chosen.
           tabIndex={option.value === value || (index < 0 && at === 0) ? 0 : -1}
           title={option.title}
+          disabled={disabled}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => onKeyDown(event, at)}
         >

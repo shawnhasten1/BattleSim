@@ -291,6 +291,7 @@
 }
 
 .checkLine {
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
@@ -327,8 +328,10 @@
   min-height: 48px;
 }
 
+/* A swatch: the Token tab's border and glow. */
 .tab input[type="color"] {
-  width: 100%;
+  flex: none;
+  width: 44px;
   height: 26px;
   padding: 2px;
   border: 1px solid var(--ui-border);
@@ -493,19 +496,6 @@
   color: var(--ui-text-dim);
 }
 
-.tokenArt {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-
-.uploadRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
 .upload {
   display: flex;
   align-items: center;
@@ -520,9 +510,14 @@
   cursor: pointer;
 }
 
-.upload:hover {
+.upload:hover:not(:disabled) {
   border-color: var(--ui-accent);
   color: var(--ui-accent);
+}
+
+.upload:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .upload input {
@@ -749,15 +744,15 @@
 }
 
 /* A folding section: its title, a summary in statblock wording, and its fields. */
-.statSection {
+.sheetSection {
   border-bottom: 1px solid var(--ui-border);
 }
 
-.statSection:last-child {
+.sheetSection:last-child {
   border-bottom: none;
 }
 
-.statSectionHead {
+.sheetSectionHead {
   display: grid;
   grid-template-columns: 14px 128px minmax(0, 1fr);
   align-items: center;
@@ -772,25 +767,25 @@
   cursor: pointer;
 }
 
-.statSectionHead:hover {
+.sheetSectionHead:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.statSectionHead:focus-visible {
+.sheetSectionHead:focus-visible {
   outline: 2px solid var(--ui-accent);
   outline-offset: -2px;
 }
 
-.statChevron {
+.sheetChevron {
   color: var(--ui-text-dim);
   transition: transform 0.12s ease;
 }
 
-.statSectionOpen .statChevron {
+.sheetSectionOpen .sheetChevron {
   transform: rotate(90deg);
 }
 
-.statSectionTitle {
+.sheetSectionTitle {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -798,11 +793,11 @@
   color: var(--ui-text-dim);
 }
 
-.statSectionOpen .statSectionTitle {
+.sheetSectionOpen .sheetSectionTitle {
   color: var(--ui-accent);
 }
 
-.statSectionSummary {
+.sheetSectionSummary {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -810,7 +805,7 @@
   font-size: 12px;
 }
 
-.statSectionBody {
+.sheetSectionBody {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -832,4 +827,68 @@
 
 .tab .lineRow > input:not(.coreBox) {
   flex: 1;
+}
+
+/* ── Token: name and side, then folding sections (actor sheet plan §3.4) ── */
+
+/* A field that takes the row's spare width (the token's name). */
+.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* This fight: each row's name on the left, its controls on the right. */
+.rows {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.rowLabel {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.rowBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.rowNote {
+  grid-column: 2;
+  margin-top: -4px;
+}
+
+.chips button[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* Appearance: the token as the map draws it, beside its image controls. */
+.appearance {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.preview {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 64px;
+  min-height: 64px;
+  /* Room for a nameplate, which the map draws under the token. */
+  padding-bottom: 22px;
+}
+
+.appearance > .stack {
+  flex: 1;
+  min-width: 0;
 }

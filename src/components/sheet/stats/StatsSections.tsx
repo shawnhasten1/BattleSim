@@ -20,7 +20,7 @@ import { formatChallengeRating } from "@/lib/srd-monster-tree";
 import { formatBonus } from "@/lib/ui-helpers";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "./DamageAdjustmentGroup";
-import { StatSection } from "./StatSection";
+import { SheetSection } from "../SheetSection";
 import defenseStyles from "./defenses.module.css";
 import styles from "../sheet.module.css";
 
@@ -44,7 +44,7 @@ export function SkillsSection({ definition, open, onToggle }: SectionProps) {
   const setSkills = (next: Record<string, number>) => update(definition.id, { skills: Object.keys(next).length ? next : undefined });
 
   return (
-    <StatSection title="Skills" summary={skillsLine(definition)} open={open} onToggle={onToggle}>
+    <SheetSection title="Skills" summary={skillsLine(definition)} open={open} onToggle={onToggle}>
       {entries.map(([id, value]) => {
         const name = skillName(id);
         const kind = skillKind(definition, id);
@@ -80,7 +80,7 @@ export function SkillsSection({ definition, open, onToggle }: SectionProps) {
         Athletics and Acrobatics are what it escapes a grapple with, and Perception gives its passive Perception. The
         others are for your reference.
       </p>
-    </StatSection>
+    </SheetSection>
   );
 }
 
@@ -93,7 +93,7 @@ const CONDITION_IMMUNITIES: ConditionImmunity[] = [
 export function DefensesSection({ definition, open, onToggle }: SectionProps) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   return (
-    <StatSection title="Defenses" summary={defensesLine(definition)} open={open} onToggle={onToggle}>
+    <SheetSection title="Defenses" summary={defensesLine(definition)} open={open} onToggle={onToggle}>
       <div className={defenseStyles.list}>
         {groupAdjustments(definition.damageAdjustments ?? []).map((group, index, groups) => (
           <div key={index} className={defenseStyles.card}>
@@ -142,7 +142,7 @@ export function DefensesSection({ definition, open, onToggle }: SectionProps) {
         These apply to every attack and effect that damages it, and a condition immunity stops the condition being
         applied at all (no save is rolled). Defenses a feature grants, like a Rage&apos;s, are edited on the feature.
       </p>
-    </StatSection>
+    </SheetSection>
   );
 }
 
@@ -157,7 +157,7 @@ export function SensesSection({ definition, open, onToggle }: SectionProps) {
     update(definition.id, { senses: Object.keys(senses).length ? senses : undefined });
   }
   return (
-    <StatSection title="Senses & languages" summary={sensesLine(definition)} open={open} onToggle={onToggle}>
+    <SheetSection title="Senses & languages" summary={sensesLine(definition)} open={open} onToggle={onToggle}>
       <div className={styles.coreRow}>
         {SENSES.map((sense) => (
           <label key={sense} className={styles.field}>
@@ -177,7 +177,7 @@ export function SensesSection({ definition, open, onToggle }: SectionProps) {
         Passive Perception {passivePerception(definition)}, from its Perception skill or its Wisdom. The simulator
         doesn&apos;t model sight or hearing yet, so these are for your reference.
       </p>
-    </StatSection>
+    </SheetSection>
   );
 }
 
@@ -190,7 +190,7 @@ export function LevelSection({ definition, open, onToggle }: SectionProps) {
   const setClass = (index: number, entry: ClassEntry) => setClasses(classes.map((candidate, at) => (at === index ? entry : candidate)));
 
   return (
-    <StatSection title="Level & CR" summary={challengeLine(definition)} open={open} onToggle={onToggle}>
+    <SheetSection title="Level & CR" summary={challengeLine(definition)} open={open} onToggle={onToggle}>
       <div className={styles.coreRow}>
         <label className={styles.field} style={{ width: 120 }}>
           Challenge rating
@@ -252,6 +252,6 @@ export function LevelSection({ definition, open, onToggle }: SectionProps) {
         their total. The challenge rating is for your reference (and the AC a multiattack&apos;s preview aims at); choosing
         one sets the proficiency bonus it gives.
       </p>
-    </StatSection>
+    </SheetSection>
   );
 }

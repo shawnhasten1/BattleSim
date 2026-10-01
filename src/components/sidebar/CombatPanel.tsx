@@ -2,12 +2,13 @@
 
 import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
 import { Fragment, useEffect, useRef } from "react";
-import { getDefinition, getExecutableActions, type ActionDefinition, type CombatantState, type Faction } from "@/engine";
+import { getDefinition, type CombatantState, type Faction } from "@/engine";
 import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
+import { prepBuffs } from "@/lib/actor-sheet/token";
 import styles from "./CombatPanel.module.css";
 
 const TACTICS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -235,11 +236,7 @@ export function CombatPanel() {
           const reserve = combatant.state === "reserve";
           const preCombat = displayEncounter.round <= 0 && !replaying;
           const arrivesRound = combatant.arrivesRound ?? 1;
-          const prepBuffs = preCombat
-            ? getExecutableActions(definition).filter(
-              (action): action is Extract<ActionDefinition, { kind: "buff" }> => action.kind === "buff" && Boolean(action.prepOnly)
-            )
-            : [];
+          const buffs = preCombat ? prepBuffs(definition, combatant) : [];
           // The lair acts on initiative 20, losing ties: its marker sits before the first creature below 20.
           const lairHere = lairMarker && index === lairMarkerIndex;
           return (
@@ -291,14 +288,10 @@ export function CombatPanel() {
                   </button>
                 </div>
               ) : null}
-              {prepBuffs.length > 0 ? (
+              {buffs.length > 0 ? (
                 <div className={styles.prepBuffs} title="Spells cast before this fight — toggle which are already active">
-                  {prepBuffs.map((action) => {
-                    const conditionId = action.appliedCondition.id ?? action.id;
-                    const active = combatant.conditions?.some((condition) => condition.id === conditionId) ?? false;
-                    const resourceId = action.resourceCost?.resourceId;
-                    const canAfford = !resourceId || (combatant.resources?.[resourceId] ?? 0) >= (action.resourceCost?.amount ?? 0);
-                    const disabled = !active && !canAfford;
+                  {buffs.map(({ action, active, affordable }) => {
+                    const disabled = !active && !affordable;
                     return (
                       <label
                         key={action.id}

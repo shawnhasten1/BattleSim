@@ -81,6 +81,7 @@ import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryA
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
 import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
+import { isSurprised } from "@/lib/actor-sheet/token";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -393,9 +394,7 @@ function canTakeTurn(encounter: EncounterSnapshot, combatant: CombatantState): b
       && !combatant.deathSaves?.stable);
 }
 
-export function isSurprised(combatant: CombatantState): boolean {
-  return (combatant.conditions ?? []).some((condition) => condition.name === "surprised");
-}
+export { isSurprised };
 
 /** Currently fighting for its dominator's side (Dominate Person/Beast, Planar Binding). */
 export function isDominated(combatant: CombatantState): boolean {

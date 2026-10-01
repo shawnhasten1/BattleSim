@@ -34,12 +34,17 @@ interface SheetNumberCommon {
   step?: number;
   /** Accessible name, when no `<label>` wraps the box. */
   label?: string;
+  /** For a `<label htmlFor>` beside the box. */
+  id?: string;
   placeholder?: string;
   /** Shows a bonus with its sign: "+6". */
   signed?: boolean;
   /** For a box outside a tab's own styles (the resource list). */
   className?: string;
   style?: CSSProperties;
+  disabled?: boolean;
+  /** On hover: why it's disabled. */
+  title?: string;
 }
 
 type SheetNumberProps = SheetNumberCommon & (
@@ -56,7 +61,7 @@ const show = (n: number | undefined, signed?: boolean) => (n === undefined ? "" 
  * focus. Out of range is marked while you type.
  */
 export function SheetNumber(props: SheetNumberProps) {
-  const { value, min, max, step = 1, label, placeholder, signed, className, style } = props;
+  const { value, min, max, step = 1, label, id, placeholder, signed, className, style, disabled, title } = props;
   const session = useEditSession();
   const [text, setText] = useState(show(value, signed));
   const focused = useRef(false);
@@ -98,12 +103,15 @@ export function SheetNumber(props: SheetNumberProps) {
     <input
       type="text"
       inputMode={whole ? "numeric" : "decimal"}
+      id={id}
       aria-label={label}
       aria-invalid={invalid || undefined}
       placeholder={placeholder}
       value={text}
       className={className}
       style={style}
+      disabled={disabled}
+      title={title}
       onFocus={() => { focused.current = true; session.begin(); }}
       onBlur={() => { focused.current = false; session.end(); setText(show(value, signed)); }}
       onChange={(event) => {

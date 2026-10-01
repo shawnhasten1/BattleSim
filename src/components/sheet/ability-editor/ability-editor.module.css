@@ -508,8 +508,13 @@
   border-right: none;
 }
 
-.segmented button:hover {
+.segmented button:where(:enabled):hover {
   color: var(--ui-text);
+}
+
+.segmented button:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .segmented button[aria-checked="true"] {

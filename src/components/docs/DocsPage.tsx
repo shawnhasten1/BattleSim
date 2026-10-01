@@ -249,8 +249,8 @@ const SECTIONS: Section[] = [
         <p>
           A creature with a fly speed can be airborne. Set a token&apos;s starting altitude from its
           right-click menu (<strong>Flight</strong> → Altitude, or <strong>Land</strong>; works on a whole
-          selection) or the sheet&apos;s Token tab. An airborne token floats over a shadow with its height on
-          a badge.
+          selection) or the sheet&apos;s Token tab, under This fight. An airborne token floats over a shadow
+          with its height on a badge.
         </p>
         <ul>
           <li>
@@ -311,8 +311,14 @@ const SECTIONS: Section[] = [
             resource they spend.
           </li>
           <li>
-            <strong>Token</strong> — this token: its name, faction, position, altitude and image, and its tactics:
-            the AI behavior profile that decides how it plays (who it targets, how aggressively it uses resources).
+            <strong>Token</strong> — this token: its name and side, then <strong>This fight</strong> (whether it starts
+            on the board or arrives on a later round, whether it&apos;s surprised, which spells it cast beforehand, like
+            Mage Armor, are already up, its altitude if it flies, and whether it&apos;s in its lair; the first three are
+            set before the fight starts), <strong>Tactics</strong> (the AI behavior profile that decides how it plays:
+            who it targets, how aggressively it uses resources), <strong>Appearance</strong> (its image, for this token
+            or for every token of its creature, its border, a nameplate, and with an image its scale and glow) and{" "}
+            <strong>Status &amp; position</strong> (a state you set by hand, such as Fled, and its square). The
+            right-click menu and the Combat panel change the same settings.
           </li>
         </ul>
         <p>

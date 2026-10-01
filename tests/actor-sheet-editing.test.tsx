@@ -88,7 +88,7 @@ describe("typing on the sheet", () => {
 
   it("a token's name is one undo step however long", async () => {
     await openSheet("enemy-goblin-2", "Token");
-    await retype(screen.getByLabelText("Name"), "Boss Goblin");
+    await retype(screen.getByLabelText("Token name"), "Boss Goblin");
     expect(token("enemy-goblin-2").displayName).toBe("Boss Goblin");
     expect(store().undoStack).toHaveLength(1);
   });
@@ -105,7 +105,8 @@ describe("typing on the sheet", () => {
 
   it("a color picked by dragging in the picker is one undo step; the next pick is another", async () => {
     await openSheet("enemy-goblin-2", "Token");
-    const border = screen.getByLabelText("Border");
+    await userEvent.click(screen.getByRole("button", { name: /^Appearance/ }));
+    const border = screen.getByLabelText("Border color");
     fireEvent.focus(border);
     for (const color of ["#110000", "#220000", "#330000"]) fireEvent.input(border, { target: { value: color } });
     fireEvent.change(border, { target: { value: "#330000" } });
