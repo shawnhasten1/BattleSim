@@ -8,6 +8,7 @@ import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
 import type { Compendium } from "@/hooks/useCompendium";
 import { blankWeapon } from "@/lib/ability-editor/templates";
 import { useEncounterStore } from "@/store/encounter-store";
+import { startFromScratch } from "./helpers/abilities-tab";
 
 /**
  * The ability editor (ABILITY_BUILDER_REDESIGN_PLAN.md Phase 2): weapons and attacks open in place of the Abilities
@@ -47,7 +48,7 @@ describe("the ability editor's shell", () => {
   it("opens in place of the list, with the ability as a statblock", async () => {
     const editor = await openLongsword();
     expect(editor).toBeTruthy();
-    expect(screen.queryByText("Weapons")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Actions" })).toBeNull();
     expect(preview()).toContain("Longsword. Melee Weapon Attack: +5 to hit, reach 5 ft., one target.");
     expect(section(/^Roll/).textContent).toContain("Melee attack");
   });
@@ -281,9 +282,7 @@ describe("weapons", () => {
 
   async function newWeapon() {
     render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-    await userEvent.click(screen.getByRole("button", { name: "Weapon" }));
+    await startFromScratch("Weapon");
     return screen.getByRole("region", { name: "Edit New weapon" });
   }
 

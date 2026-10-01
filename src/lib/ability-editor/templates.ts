@@ -66,6 +66,18 @@ export function blankSpecialAction(): SaveAction {
   };
 }
 
+/**
+ * A blank reaction: when it's targeted by an attack, it gains something for a round, the way a Parry does. While active
+ * says what; Use & cost changes when it fires.
+ */
+export function blankReaction(): Extract<ActionDefinition, { kind: "activate-feature" }> {
+  return {
+    kind: "activate-feature", id: "", name: "New reaction", actionType: "reaction", featureId: "",
+    reaction: { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" },
+    condition: { name: "custom", durationRounds: 1 }, automationSupport: "full"
+  };
+}
+
 /** A blank heal it takes on itself as a bonus action (Second Wind): Target makes it a touch or a heal for others. */
 export function blankHeal(): Extract<ActionDefinition, { kind: "healing" }> {
   return {
@@ -81,6 +93,84 @@ export function blankBuff(): Extract<ActionDefinition, { kind: "buff" }> {
     appliedCondition: { name: "custom", durationRounds: 10 }, automationSupport: "full"
   };
 }
+
+/* ─── monster actions ────────────────────────────────────────────────────── */
+
+export interface ActionTemplate {
+  label: string;
+  hint: string;
+  record: () => ActionDefinition;
+}
+
+/** A save DC worked out from an ability and proficiency, as a statblock's are (8 + proficiency + the ability). */
+const dcFrom = (ability: Ability) => ({ base: 8, ability, proficiency: true }) as const;
+
+/**
+ * Monster actions to start from, shaped the way the SRD library writes them (compare the Adult Red Dragon's Fire Breath
+ * and Frightful Presence, a Giant Crab's Claw, a Purple Worm's Bite, a Knight's Parry).
+ */
+export const ACTION_TEMPLATES: ActionTemplate[] = [
+  {
+    label: "Breath weapon",
+    hint: "A 30-ft cone: DEX save for half, recharges on a 5–6",
+    record: () => ({
+      kind: "area-save", id: "", name: "Breath Weapon", actionType: "action", saveAbility: "dex", dcFormula: { ...dcFrom("con") }, range: 30,
+      area: { type: "cone", size: 30 }, targeting: { origin: "self", aimedFromSelf: true, range: 30 }, damage: [{ dice: "7d6", damageType: "fire" }],
+      halfDamageOnSuccess: true, onSuccess: "half", affects: "all", usage: { kind: "recharge", recharge: { min: 5 } },
+      // Its own recharge, named for it when it is saved (see `withOwnUsagePool`).
+      resourceCost: { resourceId: "usage:", amount: 1 }, automationSupport: "full"
+    })
+  },
+  {
+    label: "Frightful presence",
+    hint: "Enemies within 120 ft: WIS save or frightened; a success makes them immune",
+    record: () => ({
+      kind: "area-save", id: "", name: "Frightful Presence", actionType: "action", saveAbility: "wis", dcFormula: { ...dcFrom("cha") }, range: 120,
+      area: { type: "circle", size: 120 }, targeting: { origin: "self", aimedFromSelf: false, range: 120 }, damage: [], halfDamageOnSuccess: false,
+      onSuccess: "negates", affects: "hostile", immuneAfterSave: true, automationSupport: "full",
+      riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "save-ends", saveAt: "turn-end" } }]
+    })
+  },
+  {
+    label: "Poison bite",
+    hint: "A bite whose target makes a CON save or is poisoned for a minute",
+    record: () => ({
+      kind: "attack", id: "", name: "Bite", actionType: "action", attackType: "melee", ability: "str", range: 5, reach: 5,
+      damage: [{ dice: "1d8", damageType: "piercing", abilityModifier: "str" }], automationSupport: "full",
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "poisoned", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
+        save: { ability: "con", dcFormula: { ...dcFrom("con") }, onSuccess: "negates" }
+      }]
+    })
+  },
+  {
+    label: "Grappling claw",
+    hint: "On a hit the target is grappled (escape DC 13)",
+    record: () => ({
+      kind: "attack", id: "", name: "Claw", actionType: "action", attackType: "melee", ability: "str", range: 5, reach: 5,
+      damage: [{ dice: "1d10", damageType: "bludgeoning", abilityModifier: "str" }], automationSupport: "full",
+      riders: [{ kind: "hold", when: "on-hit", escapeDc: 13 }]
+    })
+  },
+  {
+    label: "Swallow",
+    hint: "A bite that swallows a Medium or smaller target on a failed DEX save; acid inside",
+    record: () => ({
+      kind: "attack", id: "", name: "Bite", actionType: "action", attackType: "melee", ability: "str", range: 10, reach: 10,
+      damage: [{ dice: "3d8", damageType: "piercing", abilityModifier: "str" }], automationSupport: "full",
+      riders: [{ kind: "swallow", when: "on-hit", maxSize: "medium", save: { ability: "dex", dc: 15 }, damage: [{ dice: "3d6", damageType: "acid" }], regurgitate: { damage: 20, dc: 15 } }]
+    })
+  },
+  {
+    label: "Parry",
+    hint: "A reaction: +2 AC against a melee attack that targets it",
+    record: () => ({
+      kind: "activate-feature", id: "", name: "Parry", actionType: "reaction", featureId: "parry",
+      reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+      condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 2 } }, automationSupport: "full"
+    })
+  }
+];
 
 /* ─── spells ─────────────────────────────────────────────────────────────── */
 

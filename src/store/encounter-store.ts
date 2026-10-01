@@ -79,8 +79,8 @@ import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
-import { findAbility, withNewAbility, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
-import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
+import { findAbility, withNewAbility, withRecordAfter, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
+import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withOwnUsagePool, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
@@ -3073,7 +3073,8 @@ export const useEncounterStore = create<EncounterStore>()(
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
         const inserted = definition ? withInsertedAbility(definition, where, record) : undefined;
         if (!inserted) return undefined;
-        const pooled = withNewPools(inserted.definition, extras?.pools);
+        const placed = extras?.after ? withRecordAfter(inserted.definition, inserted.ref, extras.after) : inserted.definition;
+        const pooled = withNewPools(placed, extras?.pools);
         commitAbilityChange(encounter, definitionId, withSettledSpellcasting(pooled.definition), { ...inserted.seeded, ...pooled.added });
         return inserted.ref;
       },
@@ -3269,30 +3270,40 @@ function withInsertedAbility(
     const id = `spell-${crypto.randomUUID()}`;
     const spell = normalizeSpellDefinition({ ...(record as SpellDefinition), id });
     spell.id = id;
-    if (spell.action) spell.action = { ...spell.action, id: `spell-action-${id}` };
+    if (spell.action) {
+      const previous = (record as SpellDefinition).action?.id ?? "";
+      spell.action = withOwnUsagePool({ ...spell.action, id: `spell-action-${id}` }, previous);
+      // The spell's own cost follows its action's (see `spellLimit`).
+      if (spell.resourceCost?.resourceId === `usage:${previous}` && "resourceCost" in spell.action && spell.action.resourceCost) spell.resourceCost = spell.action.resourceCost;
+    }
     placed = withNewAbility(definition, "spells", spell);
   } else if (where === "features" || where === "traits") {
-    const feature = normalizeFeatureRecord(structuredClone(record as FeatureDefinition), `feature-${crypto.randomUUID()}`);
+    const input = record as FeatureDefinition;
+    const normalized = normalizeFeatureRecord(structuredClone(input), `feature-${crypto.randomUUID()}`);
+    // Its granted abilities' own uses or recharge follow their new ids (see `withOwnUsagePool`).
+    const feature = normalized.grantedActions
+      ? { ...normalized, grantedActions: normalized.grantedActions.map((action, index) => withOwnUsagePool(action, input.grantedActions?.[index]?.id ?? "")) }
+      : normalized;
     placed = withNewAbility(definition, where, feature);
     pools = featurePoolsToSeed(feature) ?? {};
   } else if (where === "deathEffects") {
     const id = `death-effect-${crypto.randomUUID()}`;
     const effect = normalizeDeathEffectDefinition({ ...(record as DeathEffectDefinition), id });
     effect.id = id;
-    if (effect.action) effect.action = { ...effect.action, id: `death-effect-action-${id}` };
+    if (effect.action) effect.action = withOwnUsagePool({ ...effect.action, id: `death-effect-action-${id}` }, (record as DeathEffectDefinition).action?.id ?? "");
     placed = withNewAbility(definition, "deathEffects", effect);
   } else if (where === "lairActions") {
     const id = `lair-${crypto.randomUUID()}`;
     const action = normalizeActionDefinition({ ...(record as ActionDefinition), id, actionType: "action" } as ActionDefinition, "action");
     action.id = id;
-    placed = withNewAbility(definition, "lairActions", action);
+    placed = withNewAbility(definition, "lairActions", withOwnUsagePool(action, (record as ActionDefinition).id));
   } else {
     const id = `action-${crypto.randomUUID()}`;
     const input = record as ActionDefinition;
     const fallback = input.actionType === "bonus" || input.actionType === "reaction" ? input.actionType : "action";
     const action = normalizeActionDefinition({ ...input, id }, fallback);
     action.id = id;
-    placed = withNewAbility(definition, where, action);
+    placed = withNewAbility(definition, where, withOwnUsagePool(action, input.id));
   }
   if (!placed) return undefined;
   const added = findAbility(placed.definition, placed.ref);

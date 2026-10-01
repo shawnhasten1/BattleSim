@@ -11,6 +11,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { activationOf } from "@/lib/ability-editor/features";
 import { featureStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
+import { startFromScratch } from "./helpers/abilities-tab";
 
 /** Phase 4's done-when: features and traits built from a blank one in the editor, matching the library and the SRD. */
 
@@ -33,9 +34,7 @@ function LiveTab() {
 
 async function blankFeature(name: string) {
   render(<LiveTab />);
-  await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-  await userEvent.click(screen.getByRole("button", { name: "Feature / trait" }));
+  await startFromScratch("Trait or feature");
   const box = screen.getByLabelText("Name") as HTMLInputElement;
   await userEvent.clear(box);
   await userEvent.type(box, name);
@@ -244,9 +243,7 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
 
   it("gives a buff's other effects as cards: advantage on attacks while it lasts", async () => {
     render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-    await userEvent.click(screen.getByRole("button", { name: "Spell" }));
+    await startFromScratch("Spell");
     await retype(screen.getByLabelText("Name"), "Battle Focus");
     await radio(inSection("roll"), "How it works", "Automatic");
     await radio(inSection("roll"), "It", "Grants a benefit");
@@ -266,7 +263,8 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
     render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
-    const features = screen.getByText("Features & traits").closest("div")!;
+    // Second Wind grants a bonus-action heal, so it's listed with the bonus actions.
+    const features = screen.getByRole("region", { name: "Bonus actions" });
     await userEvent.click(within(features).getByRole("button", { name: "Edit Second Wind" }));
     await userEvent.click(screen.getByRole("button", { name: /^Grants/ }));
     await userEvent.click(inSection("grants").getByRole("button", { name: "Edit Second Wind" }));

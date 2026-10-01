@@ -303,9 +303,35 @@ const SECTIONS: Section[] = [
           </li>
         </ul>
         <p>
-          Each row on the Abilities tab reads like a line from a statblock (<em>+6 to hit, reach 5 ft · 11 (2d6 + 4)
-          slashing</em>), worked out from the numbers the simulator actually rolls.
+          The Abilities tab lists what the actor has in statblock order: <strong>Traits</strong>, <strong>Actions</strong>,{" "}
+          <strong>Bonus actions</strong>, <strong>Reactions</strong>, <strong>Spellcasting</strong>, <strong>Legendary
+          actions</strong>, <strong>Lair actions</strong> and <strong>On death</strong>. Each ability appears once, where it&apos;s
+          mainly used: Rage with the bonus actions, Extra Attack with the actions, a feature that&apos;s always on with the traits.
+          Within a group, a multiattack (or Extra Attack) comes first, then the weapons, the creature&apos;s own actions, and what
+          its features give.
         </p>
+        <ul>
+          <li>
+            <strong>A row</strong> reads like a line from a statblock (<em>+6 to hit, reach 5 ft · 11 (2d6 + 4) slashing</em>),
+            worked out from the numbers the simulator actually rolls. A chip says what it costs (Recharge 5–6, 3/encounter,
+            1 rage) and another its other uses (power attack, also a bonus action). Its dot says how much of it the simulator
+            runs: ● all of it, ◐ part of it, ○ reference only; hover it to see why. A half dot also marks what the AI never uses
+            on its own (Reckless Attack, a reaction set to manual) and what does nothing yet, the way the editor&apos;s warnings do.
+          </li>
+          <li>
+            <strong>Click a row</strong> to edit it. Its <strong>⋯</strong> menu duplicates it beside itself, moves an action
+            between Actions, Bonus actions and Reactions, or deletes it; a note after a delete offers <strong>Undo</strong>.
+          </li>
+          <li>
+            <strong>Spellcasting</strong> gives the actor&apos;s spellcasting ability, save DC and attack bonus, then its spells by
+            level with the slots it has left.
+          </li>
+          <li>
+            <strong>The pools</strong> above the list show what it has to spend: a breath that&apos;s ready or recharging, uses and
+            pools (rage, ki, a weapon&apos;s charges), and legendary actions a round. Click them to change what this token has
+            left and the full size every fight starts with.
+          </li>
+        </ul>
         <p>
           Weapons, attacks, multiattacks, spells, special actions (saves, areas, heals, buffs, teleports), and features
           and traits open in the{" "}
@@ -315,7 +341,7 @@ const SECTIONS: Section[] = [
           them. Below, each section (Use &amp; cost, Target, Roll, Damage, Effects, Notes &amp; AI and more; see{" "}
           <a href="#spells">Spells &amp; Attacks</a>) shows a one-line summary and opens to its settings, with the rarer
           ones under <strong>More options</strong>. Save is one undo step and does nothing until something changes;
-          Esc or leaving the sheet asks before throwing changes away. Summons, shapechanges and death effects still
+          Esc or leaving the sheet asks before throwing changes away. Summons, shapechanges, lair actions and death effects still
           open the builder form (see <a href="#features">Features &amp; Traits</a> for features).
         </p>
         <p>
@@ -338,25 +364,40 @@ const SECTIONS: Section[] = [
           it: how to start one, what each section does, and two worked examples.
         </p>
 
-        <h3>Starting one</h3>
-        <p>Click <strong>Add</strong> on the Abilities tab:</p>
+        <h3>Adding one</h3>
+        <p>
+          <strong>Add ability</strong> on the Abilities tab opens one search over everything you can add, with filters for
+          weapons, spells, monster abilities, traits and features, and recipes. Enter takes the first thing found; Esc clears
+          the search, then closes it.
+        </p>
         <ul>
           <li>
-            <strong>Library</strong> — search the built-in SRD spells and click one (or drag it onto the sheet) to
-            attach it, fully simulated. It casts with this creature&apos;s spellcasting ability (below): its DC and
-            attack bonus follow it, and a heal adds its modifier.
+            <strong>Recipes</strong> — patterns to start from: a damage cantrip, a save-or-condition spell, an area blast,
+            healing, a buff, a teleport and a reaction spell; a breath weapon, frightful presence, a poison bite, a grappling
+            claw, a swallow and a parry; Rage, Pack Tactics and the other features. One opens in the editor with the sections
+            to fill in marked <em>fill in</em>.
           </li>
           <li>
-            <strong>Preset</strong> — recipes to start from: a damage cantrip, a save-or-condition spell, an area
-            blast, healing, a buff, a teleport and a reaction spell.
+            <strong>Library</strong> — the built-in SRD weapons, spells and features. Click one to check it in the editor
+            first (it&apos;s added when you save), click its <strong>+</strong> to add it as it is, or drag it onto the sheet.
+            After a <strong>+</strong> the panel stays open for the next one (<strong>Done</strong> closes it), and rows the
+            creature already has say <em>on the sheet</em>.
+            A spell casts with this creature&apos;s spellcasting ability (below): its DC and attack bonus follow it, and a heal
+            adds its modifier.
           </li>
           <li>
-            <strong>Blank</strong> — <em>Spell</em> starts a 1st-level spell attack; <em>Special action</em> starts a
-            monster&apos;s saving throw. The Roll and Target sections turn either into anything else.
+            <strong>From SRD monsters</strong> — any library monster&apos;s ability, copied into the editor: a dragon&apos;s
+            Fire Breath, a knight&apos;s Parry, Pack Tactics. It brings the pools it spends.
           </li>
           <li>
-            <strong>Import</strong> — an Open5e spell comes in as reference text the simulator doesn&apos;t cast.
-            Open it and pick how it works in its Roll section to simulate it.
+            <strong>Start from scratch</strong> — <em>Spell</em> starts a 1st-level spell attack, <em>Special action</em> a
+            monster&apos;s saving throw, and <em>Attack</em> a claw or a bite; there are also <em>Weapon</em>,{" "}
+            <em>Multiattack</em>, <em>Trait or feature</em>, <em>Reaction</em>, <em>Lair action</em>, <em>On death</em>,{" "}
+            <em>Summon</em> and <em>Shapechange</em>. The Roll and Target sections turn a spell or an action into anything else.
+          </li>
+          <li>
+            <strong>Search Open5e</strong> — an Open5e spell comes in as reference text the simulator doesn&apos;t cast. Open it
+            and pick how it works in its Roll section to simulate it.
           </li>
         </ul>
 
@@ -444,7 +485,7 @@ const SECTIONS: Section[] = [
 
         <h3>Worked example: building Fireball from scratch</h3>
         <ol>
-          <li>Abilities tab → Add → Blank → Spell. Name: <em>Fireball</em>.</li>
+          <li>Abilities tab → Add ability → Start from scratch → Spell. Name: <em>Fireball</em>.</li>
           <li>Roll: How it works → <em>Saving throw</em>. Target: Reaches → <em>An area</em> (a 20-ft sphere at a point); within <em>150</em> ft.</li>
           <li>Roll: A success → <em>Half damage</em>. Damage: <em>8</em> d <em>6</em> fire.</li>
           <li>Basics: Level → <em>3rd</em>; it now spends a 3rd-level slot. Use &amp; cost: tick <strong>Stronger with a higher slot</strong> (+1d6 per level above).</li>
@@ -453,7 +494,7 @@ const SECTIONS: Section[] = [
 
         <h3>Worked example: a Cloudkill-style poison cloud</h3>
         <ol>
-          <li>Abilities tab → Add → Blank → Spell. Name: <em>Poison Cloud</em>. Basics: Level → <em>5th</em>, tick <strong>Needs concentration</strong>.</li>
+          <li>Abilities tab → Add ability → Start from scratch → Spell. Name: <em>Poison Cloud</em>. Basics: Level → <em>5th</em>, tick <strong>Needs concentration</strong>.</li>
           <li>Roll: How it works → <em>Saving throw</em>. Target: Reaches → <em>An area</em>.</li>
           <li>Roll: Saving throw → <em>CON</em>, A success → <em>Half damage</em>. Damage: <em>5</em> d <em>8</em> poison.</li>
           <li>Lingering area: tick <strong>Leaves a lingering area</strong>. It lasts while its caster concentrates and affects a creature that enters it or starts its turn in it. The area → <em>Drifts away</em>, 10 ft.</li>
@@ -469,8 +510,8 @@ const SECTIONS: Section[] = [
       <>
         <p>
           Features and traits (Rage, Pack Tactics, Regeneration, Aura of Protection, Stench) open in the same{" "}
-          <strong>ability editor</strong> as spells and attacks. Start one from <strong>Add → Blank → Feature / trait</strong>,
-          or from <strong>Add → Preset</strong>: Rage, Reckless Attack, Action Surge, Cunning Action, Sneak Attack, Pack
+          <strong>ability editor</strong> as spells and attacks. Start one from <strong>Add ability → Start from scratch → Trait
+          or feature</strong>, or from a recipe in <strong>Add ability</strong>: Rage, Reckless Attack, Action Surge, Cunning Action, Sneak Attack, Pack
           Tactics, Charge, Pounce, Rampage, Blood Frenzy, Magic Resistance, Legendary Resistance, Regeneration, Undead
           Fortitude, Stench, Fear Aura, Fire Aura, Heated Body, Aura of Protection and Evasion. The{" "}
           <a href="/docs/guides/zealot-barbarian">Zealot Barbarian guide</a> builds Rage with Divine Fury step by step.
@@ -541,7 +582,7 @@ const SECTIONS: Section[] = [
 
         <h3>Worked example: Pack Tactics</h3>
         <ol>
-          <li>Abilities tab → Add → Blank → Feature / trait. Name: <em>Pack Tactics</em>. Basics: Listed as → <em>Trait</em>.</li>
+          <li>Abilities tab → Add ability → Start from scratch → Trait or feature. Name: <em>Pack Tactics</em>. Basics: Listed as → <em>Trait</em>.</li>
           <li>While active → Add effect → <em>Advantage on its attacks</em>. When → <em>an ally is next to the target</em>. Done.</li>
           <li>The preview reads <em>It has advantage on attack rolls if an ally is within 5 feet of the target.</em> Add to sheet.</li>
         </ol>
@@ -557,7 +598,7 @@ const SECTIONS: Section[] = [
           A <strong>Multiattack</strong> is several attacks for one action, written the way a statblock prints it:{" "}
           <em>It can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws.</em>{" "}
           It opens in the <strong>ability editor</strong>, where its <strong>Sequence</strong> section is the routine, and
-          it heads the creature&apos;s Actions. Start one from <strong>Add → Blank → Multiattack</strong>. Every SRD
+          it heads the creature&apos;s Actions. Start one from <strong>Add ability → Start from scratch → Multiattack</strong>. Every SRD
           monster&apos;s Multiattack is built this way already, and its preview reads like its statblock.
         </p>
 
@@ -616,7 +657,8 @@ const SECTIONS: Section[] = [
 
         <h3>Extra Attack</h3>
         <p>
-          Attach <strong>Extra Attack</strong> from <strong>Add → Library → Features</strong>. It grants a routine of
+          Add <strong>Extra Attack</strong> from the library (<strong>Add ability</strong>, search <em>extra attack</em>, then its{" "}
+          <strong>+</strong>). It grants a routine of
           two <em>any weapon attack</em> swings, so swapping a weapon breaks nothing. For a fighter&apos;s third
           attack at 11th level, open the feature, then <strong>Grants → Extra Attack</strong>, and make it three.
         </p>
@@ -630,7 +672,7 @@ const SECTIONS: Section[] = [
 
         <h3>Worked example: Flurry of Blows</h3>
         <ol>
-          <li>Abilities tab → Add → Blank → Multiattack. Name: <em>Flurry of Blows</em>.</li>
+          <li>Abilities tab → Add ability → Start from scratch → Multiattack. Name: <em>Flurry of Blows</em>.</li>
           <li>Sequence: the step → <em>2</em> × the monk&apos;s unarmed strike.</li>
           <li>Use &amp; cost: Takes → <em>Bonus action</em>; Limit → <em>Pool</em> → a new pool, <code>ki</code>, the size of the monk&apos;s ki points.</li>
           <li>Add to sheet. It&apos;s listed under Bonus actions, and the AI uses it after its attacks while it has ki.</li>
@@ -680,7 +722,7 @@ const SECTIONS: Section[] = [
       <>
         <p>
           Library monsters come with their traits already wired up, and you can give any creature the same
-          abilities from <strong>Add → Preset</strong> in its Abilities tab. Each trait row says in plain words what it
+          abilities from the recipes in <strong>Add ability</strong> on its Abilities tab, or copy one straight from a library monster there. Each trait row says in plain words what it
           does in a fight — &ldquo;charge 20 ft: +1d6 slashing, STR 11 or prone&rdquo;, &ldquo;aura 10 ft: CON 14 or
           poisoned, at the start of their turn&rdquo;. Traits with nothing to simulate (Keen Smell, Amphibious) carry a
           quiet <strong>no combat effect</strong> badge rather than looking like something is missing.
@@ -714,7 +756,7 @@ const SECTIONS: Section[] = [
           <li><strong>Evasion</strong> — a Dexterity save for half damage takes none on a success and half on a failure.</li>
         </ul>
         <p>
-          To build your own, start from <strong>Add → Preset</strong> (Stench, Fear Aura, Fire Aura, Heated Body, Charge,
+          To build your own, start from a recipe in <strong>Add ability</strong> (Stench, Fear Aura, Fire Aura, Heated Body, Charge,
           Pounce, Rampage) or a blank feature: <em>Affects creatures nearby each round</em> in its Aura section (when,
           reach, who, save, damage, condition), <em>Hurts what hits it in melee</em> in While active, and an attack after a
           charge or after it drops a creature in Grants. See <a href="#features">Features &amp; Traits</a>.

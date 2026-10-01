@@ -8,6 +8,7 @@ import { StatsTab } from "@/components/sheet/sheet-tabs/StatsTab";
 import { loadSrdMonster } from "@/data/srd/monsters";
 import { actionStatblock, spellStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
+import { startFromScratch } from "./helpers/abilities-tab";
 
 /**
  * The ability editor for saves, areas and spells (ABILITY_BUILDER_REDESIGN_PLAN.md Phase 3): the worked examples built
@@ -36,9 +37,7 @@ function LiveTab() {
 
 async function blank(kind: "Spell" | "Special action") {
   render(<LiveTab />);
-  await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-  await userEvent.click(screen.getByRole("button", { name: kind }));
+  await startFromScratch(kind);
 }
 const radio = (group: string, option: string) => userEvent.click(within(screen.getByRole("radiogroup", { name: group })).getByRole("radio", { name: option }));
 async function retype(label: string, value: string) {

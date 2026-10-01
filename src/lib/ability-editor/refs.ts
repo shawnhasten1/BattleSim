@@ -138,6 +138,17 @@ export function withNewAbility(definition: CreatureDefinition, list: AbilityList
   return { definition: { ...definition, [target]: [...listOf(definition, target), record] }, ref: { list: target, id } };
 }
 
+/** The creature with the record at `ref` moved to just after `afterId` in its list (a duplicate beside its original). */
+export function withRecordAfter(definition: CreatureDefinition, ref: AbilityRef, afterId: string): CreatureDefinition {
+  if (ref.list === "legendary" || ref.list === "granted") return definition;
+  const list = listOf(definition, ref.list);
+  const moving = list.find((item) => item.id === ref.id);
+  const rest = list.filter((item) => item !== moving);
+  const at = rest.findIndex((item) => item.id === afterId);
+  if (!moving || at < 0) return definition;
+  return { ...definition, [ref.list]: [...rest.slice(0, at + 1), moving, ...rest.slice(at + 1)] };
+}
+
 /** Every ability on a creature, in the order a sheet lists them within each list. */
 export function abilityRefs(definition: CreatureDefinition): AbilityRef[] {
   const lists: AbilityList[] = ["weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions", "lairActions", "deathEffects"];

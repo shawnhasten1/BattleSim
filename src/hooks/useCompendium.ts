@@ -36,9 +36,10 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
   const [results, setResults] = useState<CompendiumSearchResult[]>([]);
   const [status, setStatus] = useState("");
 
-  async function search(category = tab) {
+  /** Search a category; `text` searches for that instead of the query box (set in the same click, before it re-renders). */
+  async function search(category = tab, text = query) {
     setStatus("Searching compendium");
-    const params = new URLSearchParams({ query, category, limit: "18" });
+    const params = new URLSearchParams({ query: text, category, limit: "18" });
     if (documentKey.trim()) {
       params.set("documentKey", documentKey.trim());
     }

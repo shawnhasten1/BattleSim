@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useEncounterStore } from "@/store/encounter-store";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
 import { getExecutableActions, type CreatureDefinition } from "@/engine";
+import { addFromLibrary, group, openAdd, openFromLibrary, rowMenu, searchAdd, startFromScratch, useRecipe } from "./helpers/abilities-tab";
 
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
@@ -30,50 +31,52 @@ function renderTab() {
 }
 
 describe("ActionsTab", () => {
-  it("lists the actor's weapons with an edit affordance", () => {
+  it("lists the actor's weapons where they're used, with an edit affordance", () => {
     renderTab();
-    expect(screen.getByText("Weapons")).toBeTruthy();
-    expect(screen.getByText("Rapier", { selector: "strong" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Edit Rapier" })).toBeTruthy();
+    expect(group("Actions").getByRole("button", { name: "Edit Rapier" })).toBeTruthy();
+    expect(group("Actions").getByRole("button", { name: "Edit Longsword" })).toBeTruthy();
   });
 
-  it("opens the + Add popover with all four routes", async () => {
+  it("opens Add with one search, its filters, and blank kinds to start from scratch", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    expect(screen.getByRole("button", { name: "Library" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Preset" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Blank" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Import" })).toBeTruthy();
+    await openAdd();
+    expect(screen.getByRole("searchbox", { name: "Search abilities" })).toBeTruthy();
+    const filters = within(screen.getByRole("group", { name: "Show" })).getAllByRole("button").map((button) => button.textContent);
+    expect(filters).toEqual(["All", "Weapons", "Spells", "Monster abilities", "Traits & features", "Recipes"]);
+    const blanks = within(screen.getByRole("region", { name: "Start from scratch" })).getAllByRole("button").map((button) => button.textContent);
+    expect(blanks).toEqual(["Weapon", "Attack", "Special action", "Multiattack", "Spell", "Trait or feature", "Reaction", "Lair action", "On death", "Summon", "Shapechange"]);
   });
 
-  it("searches and filters the SRD library, and attaches on click", async () => {
+  it("adds a library entry with one click on its +, or opens it to check first and adds it on Save", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    const search = screen.getByLabelText("Search the library");
-    await userEvent.type(search, "fireball");
-    const fireball = screen.getByRole("button", { name: /Fireball/ });
-    expect(fireball).toBeTruthy();
+    const spells = () => useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.spells ?? [];
+    await addFromLibrary("Fireball", "fireball");
+    expect(spells().map((spell) => spell.name)).toEqual(["Fireball"]);
 
-    await userEvent.click(fireball);
-    const spells = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.spells ?? [];
-    expect(spells.some((s) => s.name === "Fireball")).toBe(true);
+    await openFromLibrary("Magic Missile", "magic missile");
+    // The editor is open on a copy: nothing is added until Save.
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Magic Missile");
+    expect(spells().map((spell) => spell.name)).toEqual(["Fireball"]);
+    await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+    expect(spells().map((spell) => spell.name)).toEqual(["Fireball", "Magic Missile"]);
+    expect(spells()[1]!.source).toMatchObject({ documentName: "SRD", slug: "srd:spell:magic-missile" });
   });
 
-  it("the Weapon / Spell filter narrows the library", async () => {
+  it("the Weapons / Spells filters narrow the library", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    await openAdd();
     await userEvent.click(screen.getByRole("button", { name: "Spells" }));
-    await userEvent.type(screen.getByLabelText("Search the library"), "dagger");
+    await searchAdd("dagger");
     // "Dagger" the weapon must not appear under the Spells filter
-    expect(screen.queryByText("Dagger", { selector: "strong" })).toBeNull();
-    await userEvent.clear(screen.getByLabelText("Search the library"));
+    expect(screen.queryByRole("region", { name: "Library" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Weapons" }));
-    await userEvent.type(screen.getByLabelText("Search the library"), "dagger");
-    expect(screen.getByText("Dagger", { selector: "strong" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Library" })).getByRole("button", { name: /^Dagger ·/ })).toBeTruthy();
   });
 
-  it("Simple / Advanced toggle persists to localStorage", async () => {
+  it("keeps the Simple / Advanced toggle in the builder forms that still use it, persisted", async () => {
     renderTab();
+    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
+    await startFromScratch("Lair action");
     await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     expect(localStorage.getItem("actions-builder-mode")).toBe("advanced");
     await userEvent.click(screen.getByRole("button", { name: "Simple" }));
@@ -101,13 +104,13 @@ describe("ActionsTab", () => {
 
   it("a spell recipe opens the editor with its shape, and adds a spell that follows the spellcasting ability", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Preset" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save or condition" }));
+    await useRecipe("Save or condition");
 
-    // The editor is open on a saving throw with a paralysis effect.
+    // The editor is open on a saving throw with a paralysis effect, its Roll and Effects to fill in.
     expect(screen.getByRole("radio", { name: "Saving throw" }).getAttribute("aria-checked")).toBe("true");
     expect(within(document.querySelector<HTMLElement>('[data-section="effects"]')!).getByText("On a failed save")).toBeTruthy();
+    const filling = [...document.querySelectorAll<HTMLElement>("[data-section]")].filter((section) => section.textContent?.includes("fill in")).map((section) => section.dataset.section);
+    expect(filling).toEqual(["roll", "effects"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
     const spells = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.spells ?? [];
@@ -138,9 +141,7 @@ describe("ActionsTab", () => {
 
   it("turns a blank spell into a lingering area, and drops the drift once it follows its caster", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-    await userEvent.click(screen.getByRole("button", { name: "Spell" }));
+    await startFromScratch("Spell");
     await userEvent.click(screen.getByRole("radio", { name: "Saving throw" }));
     await userEvent.click(screen.getByRole("radio", { name: "An area" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Leaves a lingering area" }));
@@ -214,7 +215,7 @@ describe("ActionsTab asks before a delete changes a multiattack", () => {
   it("asks first when the multiattack would be deleted too, and Cancel keeps both", async () => {
     routine([{ actionId: "longsword", count: 2 }]);
     render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: "Remove Longsword" }));
+    await rowMenu("Longsword", "Delete");
     const prompt = screen.getByRole("alertdialog", { name: "Delete Longsword?" });
     expect(prompt.textContent).toContain("Multiattack uses only Longsword, so it will be deleted too.");
     await userEvent.click(within(prompt).getByRole("button", { name: "Cancel" }));
@@ -227,7 +228,7 @@ describe("ActionsTab asks before a delete changes a multiattack", () => {
     routine([{ actionId: "longsword", count: 2 }]);
     render(<LiveTab />);
     const undoDepth = useEncounterStore.getState().undoStack.length;
-    await userEvent.click(screen.getByRole("button", { name: "Remove Longsword" }));
+    await rowMenu("Longsword", "Delete");
     await userEvent.click(screen.getByRole("button", { name: "Delete Longsword and Multiattack" }));
 
     expect(fighterActions()).toEqual([]);
@@ -239,7 +240,7 @@ describe("ActionsTab asks before a delete changes a multiattack", () => {
   it("says what a multiattack is left with when it keeps other steps", async () => {
     routine([{ actionId: "longsword", count: 1 }, { actionId: rapierAttackId(), count: 1 }]);
     render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: "Remove Longsword" }));
+    await rowMenu("Longsword", "Delete");
     const prompt = screen.getByRole("alertdialog", { name: "Delete Longsword?" });
     expect(prompt.textContent).toContain("Multiattack uses Longsword. Without it, Multiattack will be: Rapier.");
     await userEvent.click(within(prompt).getByRole("button", { name: "Delete Longsword" }));
@@ -247,11 +248,16 @@ describe("ActionsTab asks before a delete changes a multiattack", () => {
     expect(fighterActions().find((a) => a.kind === "multiattack")).toMatchObject({ attacks: [{ actionId: rapierAttackId(), count: 1 }] });
   });
 
-  it("deletes at once when no multiattack uses the record", async () => {
+  it("deletes at once when no multiattack uses the record, and Undo brings it back", async () => {
     routine([{ actionId: "longsword", count: 2 }]);
     render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: "Remove Rapier" }));
+    await rowMenu("Rapier", "Delete");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(fighterDefinition().weapons).toEqual([]);
+    const toast = screen.getByRole("status");
+    expect(toast.textContent).toContain("Deleted Rapier.");
+    await userEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    expect(fighterDefinition().weapons!.map((weapon) => weapon.name)).toEqual(["Rapier"]);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

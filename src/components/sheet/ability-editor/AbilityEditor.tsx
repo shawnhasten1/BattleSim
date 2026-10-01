@@ -38,7 +38,15 @@ import styles from "./ability-editor.module.css";
  */
 export type AbilityEditorTarget =
   | { mode: "edit"; ref: AbilityRef }
-  | { mode: "new"; list: AbilityList; record: AbilityRecord }
+  | {
+    mode: "new";
+    list: AbilityList;
+    record: AbilityRecord;
+    /** A recipe's sections to fill in: they open, highlighted, and the rest stay closed. */
+    focus?: SectionId[];
+    /** Pools it spends that the creature may lack (a copied monster ability's), offered as new pools. */
+    pools?: Record<string, number>;
+  }
   | {
     mode: "nested";
     /** Where it sits in its parent's granted abilities, on the creature as the parent's editor has it. */
@@ -164,7 +172,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
     target.mode === "edit" ? findAbility(definition, target.ref)! : target.record
   ));
   const [working, setWorking] = useState<AbilityRecord>(() => structuredClone(opened));
-  const [ownPools, setOwnPools] = useState<Record<string, number>>({});
+  const [ownPools, setOwnPools] = useState<Record<string, number>>(() => (target.mode === "new" ? { ...(target.pools ?? {}) } : {}));
   const [error, setError] = useState<string | null>(null);
   // "Save your changes?": what Discard does, and what follows a successful save (saving itself closes the editor).
   const [leaving, setLeaving] = useState<{ message: string; discard: () => void; afterSave?: () => void; saveLabel?: string; discardLabel?: string } | null>(null);
@@ -177,8 +185,10 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
   const list: AbilityList = target.mode === "new" ? target.list : target.mode === "edit" ? (target.ref.list === "legendary" || target.ref.list === "granted" ? "actions" : target.ref.list) : "actions";
   const type: RecordType = list === "weapons" ? "weapon" : list === "spells" ? "spell" : list === "features" || list === "traits" ? "feature" : "action";
   const available = SECTIONS[type];
-  // A new record opens every section; a multiattack opens on its routine, which is what there is to edit.
-  const [open, setOpen] = useState<Set<SectionId>>(() => new Set(isNew ? available : type === "action" && (opened as ActionDefinition).kind === "multiattack" ? ["sequence"] : []));
+  // A new record opens every section (a recipe only the ones to fill in); a multiattack opens on its routine.
+  const focus = target.mode === "new" ? target.focus ?? [] : [];
+  const [open, setOpen] = useState<Set<SectionId>>(() => new Set(focus.length ? focus
+    : isNew ? available : type === "action" && (opened as ActionDefinition).kind === "multiattack" ? ["sequence"] : []));
   const parkedReaction = useParkedReaction();
   const parkedActivation = useRef<Activation | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -514,6 +524,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
           open={open.has(section.id)}
           onToggle={() => toggle(section.id)}
           flagged={flagged.has(section.id)}
+          suggested={focus.includes(section.id)}
         >
           {renderSection(section.id)}
           {section.id === "notes" && entry ? (

@@ -2,6 +2,7 @@ import { SRD_ATTRIBUTION } from "../../src/data/srd/attribution";
 import { GAP_CODES } from "../../src/data/srd/monsters/gaps";
 import { MONSTER_OVERRIDES } from "../../src/data/srd/monsters/overrides";
 import type { SrdMonsterIndexEntry } from "../../src/data/srd/monsters/types";
+import { monsterAbilities } from "./abilities";
 import { parseCsv } from "./csv";
 import { splitForms } from "./forms";
 import { parseMonster, type ParsedMonster } from "./monster";
@@ -88,6 +89,10 @@ export function buildMonsterLibrary(csvText: string): MonsterLibraryBuild {
     };
   });
   files.set("monster-index.json", `{\n "attribution": ${JSON.stringify(ATTRIBUTION)},\n "monsters": [\n${index.map((entry) => `  ${JSON.stringify(entry)}`).join(",\n")}\n ]\n}\n`);
+
+  // Every ability, one line each, for the sheet's Add search; the records stay in the chunks.
+  const abilities = monsterAbilities(parsed.map((monster) => monster.definition));
+  files.set("monster-abilities.json", `{\n "attribution": ${JSON.stringify(ATTRIBUTION)},\n "abilities": [\n${abilities.map((entry) => `  ${JSON.stringify(entry)}`).join(",\n")}\n ]\n}\n`);
 
   const tiers = { full: 0, partial: 0, manual: 0 };
   const gapCounts = new Map<string, number>();

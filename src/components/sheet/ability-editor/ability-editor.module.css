@@ -344,6 +344,22 @@
   background: #d8b56a;
 }
 
+/* A section a recipe expects filled in. */
+.sectionSuggested {
+  box-shadow: inset 2px 0 0 var(--ui-accent);
+}
+
+.sectionTag {
+  padding: 1px 6px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 999px;
+  color: var(--ui-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 .sectionBody {
   display: flex;
   flex-direction: column;

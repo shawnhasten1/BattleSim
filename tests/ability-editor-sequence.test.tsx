@@ -16,6 +16,7 @@ import {
 } from "@/lib/ability-editor/sequence";
 import { actionStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
+import { rowMenu, startFromScratch } from "./helpers/abilities-tab";
 
 /** Phase 5's editor: a multiattack's Sequence section, deletes that offer a replacement, and the library's Extra Attack. */
 
@@ -50,9 +51,7 @@ async function retype(box: HTMLElement, value: string) {
 
 async function blankMultiattackEditor() {
   render(<LiveTab />);
-  await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-  await userEvent.click(screen.getByRole("button", { name: "Multiattack" }));
+  await startFromScratch("Multiattack");
 }
 
 async function editRoutine(attacks: Array<{ actionId: string; count: number; targetGroup?: number }>) {
@@ -73,8 +72,8 @@ describe("the Sequence section", { timeout: 20000 }, () => {
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
 
     expect(routines()).toEqual([expect.objectContaining({ name: "Multiattack", attacks: [{ any: "weapon", count: 2 }] })]);
-    const actionRows = [...document.querySelectorAll("h4")].find((head) => head.textContent === "Actions")!.parentElement!;
-    expect(actionRows.querySelector("strong")?.textContent).toBe("Multiattack");
+    const actionRows = within(screen.getByRole("region", { name: "Actions" })).getAllByRole("button", { name: /^Edit / });
+    expect(actionRows[0]!.getAttribute("aria-label")).toBe("Edit Multiattack");
   });
 
   it("edits a routine in place: a step's count and what it uses", async () => {
@@ -212,7 +211,7 @@ describe("deleting an ability a routine uses", { timeout: 20000 }, () => {
     await editRoutine([{ actionId: "longsword", count: 2 }]);
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     const undoDepth = store().undoStack.length;
-    await userEvent.click(screen.getByRole("button", { name: "Remove Longsword" }));
+    await rowMenu("Longsword", "Delete");
     const prompt = within(screen.getByRole("alertdialog", { name: "Delete Longsword?" }));
     expect(prompt.getByRole("button", { name: "Delete Longsword and Multiattack" })).toBeTruthy();
     await userEvent.selectOptions(prompt.getByLabelText("Replace Longsword with"), "any:melee");

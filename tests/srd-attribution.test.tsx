@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { openAdd } from "./helpers/abilities-tab";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SRD_ATTRIBUTION, SRD_CREDITS_PATH, SRD_MODIFICATION_NOTICE } from "@/data/srd/attribution";
 import { DocsPage } from "@/components/docs/DocsPage";
@@ -78,8 +79,7 @@ describe("credits in the app", () => {
     const { ActionsTab } = await import("@/components/sheet/sheet-tabs/ActionsTab");
     const encounter = useEncounterStore.getState().encounter;
     render(<ActionsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />);
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Library" }));
+    await openAdd();
     const link = screen.getByRole("link", { name: /SRD 5.1 credits/ });
     expect(link.getAttribute("href")).toBe(SRD_CREDITS_PATH);
     expect(link.getAttribute("target")).toBe("_blank");

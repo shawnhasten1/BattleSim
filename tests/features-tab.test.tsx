@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useEncounterStore } from "@/store/encounter-store";
+import { openAdd, startFromScratch, useRecipe } from "./helpers/abilities-tab";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
 import {
   createEngineState,
@@ -35,20 +36,18 @@ function def() {
 }
 
 describe("Abilities tab — feature building", () => {
-  it("has a Features & traits group and a Feature blank route", async () => {
+  it("lists features where they're used (Second Wind with the bonus actions) and starts a trait from scratch", async () => {
     renderTab();
-    expect(screen.getByText("Features & traits")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Bonus actions" })).getByRole("button", { name: "Edit Second Wind" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Actions" })).getByRole("button", { name: "Edit Action Surge" })).toBeTruthy();
     expect(screen.getByText("Standard actions")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-    expect(screen.getByRole("button", { name: "Feature / trait" })).toBeTruthy();
+    await openAdd();
+    expect(within(screen.getByRole("region", { name: "Start from scratch" })).getByRole("button", { name: "Trait or feature" })).toBeTruthy();
   });
 
   it("the Rage preset opens the editor switched on, and adds an activate-feature bonus action", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Preset" }));
-    await userEvent.click(screen.getByRole("button", { name: "Rage" }));
+    await useRecipe("Rage");
     const works = screen.getByRole("radiogroup", { name: "It works" });
     expect(within(works).getByRole("radio", { name: "When switched on" }).getAttribute("aria-checked")).toBe("true");
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
@@ -67,7 +66,7 @@ describe("Abilities tab — feature building", () => {
     useEncounterStore.getState().attachSrdFeature("def-fighter", "srd:feature:pack-tactics");
     renderTab();
     const undoBefore = useEncounterStore.getState().undoStack.length;
-    const group = screen.getByText("Features & traits").closest("div")!;
+    const group = screen.getByRole("region", { name: "Traits" });
     await userEvent.click(within(group).getByRole("button", { name: "Edit Pack Tactics" }));
     const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
     await userEvent.clear(nameInput);
@@ -81,7 +80,7 @@ describe("Abilities tab — feature building", () => {
   it("shows the attached Aura of Protection's aura and what it shares", async () => {
     useEncounterStore.getState().attachSrdFeature("def-fighter", "srd:feature:aura-of-protection");
     renderTab();
-    const group = screen.getByText("Features & traits").closest("div")!;
+    const group = screen.getByRole("region", { name: "Traits" });
     await userEvent.click(within(group).getByRole("button", { name: "Edit Aura of Protection" }));
     await userEvent.click(screen.getByRole("button", { name: /^Aura/ }));
 
@@ -93,9 +92,7 @@ describe("Abilities tab — feature building", () => {
 
   it("a fresh feature can share a hostile-affecting aura", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
-    await userEvent.click(screen.getByRole("button", { name: "Feature / trait" }));
+    await startFromScratch("Trait or feature");
 
     expect(screen.queryByLabelText("Aura range (ft)")).toBeNull();
     await userEvent.click(screen.getByLabelText("Shares its effects with creatures nearby"));

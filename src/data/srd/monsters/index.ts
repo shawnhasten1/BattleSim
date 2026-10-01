@@ -1,6 +1,6 @@
 import type { CreatureDefinition } from "@/engine";
 import indexFile from "./generated/monster-index.json";
-import type { SrdMonsterIndexEntry } from "./types";
+import type { SrdMonsterAbilityEntry, SrdMonsterIndexEntry } from "./types";
 
 /**
  * The bundled SRD monster library. The light index is loaded eagerly (it powers the
@@ -12,7 +12,7 @@ import type { SrdMonsterIndexEntry } from "./types";
  */
 export const SRD_MONSTER_ID_PREFIX = "srd:monster:";
 
-export type { SrdMonsterIndexEntry } from "./types";
+export type { SrdMonsterAbilityEntry, SrdMonsterIndexEntry } from "./types";
 export { GAP_CODES, type GapCode, type MonsterTier } from "./gaps";
 
 function freeze<T>(value: T): T {
@@ -78,6 +78,20 @@ function loadChunk(name: string): Promise<Chunk> {
     chunkCache.set(name, pending);
   }
   return pending;
+}
+
+let abilitiesPending: Promise<readonly SrdMonsterAbilityEntry[]> | undefined;
+
+/** Every library monster's abilities, one line each (loaded once, when Add first searches them). */
+export function loadSrdMonsterAbilities(): Promise<readonly SrdMonsterAbilityEntry[]> {
+  if (!abilitiesPending) {
+    abilitiesPending = import("./generated/monster-abilities.json").then((module) => {
+      const data = ((module as { default?: unknown }).default ?? module) as { abilities: SrdMonsterAbilityEntry[] };
+      return freeze(data.abilities);
+    });
+    abilitiesPending.catch(() => { abilitiesPending = undefined; });
+  }
+  return abilitiesPending;
 }
 
 /** The full definition for a library monster, as a fresh deep copy the caller owns. */

@@ -5,6 +5,7 @@
  */
 import {
   normalizeActionDefinition,
+  usagePoolId,
   normalizeDeathEffectDefinition,
   normalizeSpellDefinition,
   normalizeWeaponDefinition,
@@ -43,6 +44,18 @@ export function featurePoolsToSeed(feature: FeatureDefinition): Record<string, n
  * A parent's granted actions with their ids kept. One without an id, or reusing one already taken, gets a fresh
  * `${parentId}-granted-N`. A feature's activations point back at the feature.
  */
+/**
+ * An ability's own uses or recharge are a pool named after it (`usage:<id>`). A new or copied ability only gets its id
+ * when it's saved, so its pool moves to the new id with it: two abilities never share one by accident. A pool shared on
+ * purpose (`usage.poolId`, a dragon's two breaths) stays as it is.
+ */
+export function withOwnUsagePool<A extends ActionDefinition>(action: A, previousId: string): A {
+  const usage = "usage" in action ? action.usage : undefined;
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  if (!usage || usage.poolId || !cost || cost.resourceId !== `usage:${previousId}`) return action;
+  return { ...action, resourceCost: { ...cost, resourceId: usagePoolId({ id: action.id, usage }) } };
+}
+
 export function pinGrantedActions(parentId: string, granted: ActionDefinition[] | undefined, isFeature: boolean): ActionDefinition[] | undefined {
   if (!granted?.length) return undefined;
   const taken = new Set<string>();
@@ -54,7 +67,8 @@ export function pinGrantedActions(parentId: string, granted: ActionDefinition[] 
   return granted.map((action) => {
     const id = action.id && !taken.has(action.id) ? action.id : freshId();
     taken.add(id);
-    return isFeature && action.kind === "activate-feature" ? { ...action, id, featureId: parentId } : { ...action, id };
+    const pinned = withOwnUsagePool({ ...action, id }, action.id);
+    return isFeature && pinned.kind === "activate-feature" ? { ...pinned, featureId: parentId } : pinned;
   });
 }
 
@@ -106,7 +120,7 @@ const legendaryCost = (cost: number): number => Math.min(3, Math.max(1, Math.rou
 /** The creature with a new legendary action at the end of its list (a pool of 3 if it had none). */
 export function withNewLegendaryAction(definition: CreatureDefinition, entry: LegendaryActionRef, actionId: string): { definition: CreatureDefinition; ref: AbilityRef } {
   const legendary = definition.legendary ?? { pool: 3, actions: [] };
-  const action = entry.action ? normalizedAction(entry.action, actionId, "action") : undefined;
+  const action = entry.action ? withOwnUsagePool(normalizedAction(entry.action, actionId, "action"), entry.action.id) : undefined;
   return {
     definition: { ...definition, legendary: { ...legendary, actions: [...legendary.actions, { ...entry, cost: legendaryCost(entry.cost), action }] } },
     ref: { list: "legendary", index: legendary.actions.length }
@@ -132,6 +146,8 @@ export function withNewGrantedAction(
 /** What a save can bring along besides the record: pools the editor created for it ("New pool…"), at their starting size. */
 export interface AbilityRecordExtras {
   pools?: Record<string, number>;
+  /** A new record goes right after this one in its list (a duplicate beside its original), not at the end. */
+  after?: string;
 }
 
 export interface ReplacedAbility {

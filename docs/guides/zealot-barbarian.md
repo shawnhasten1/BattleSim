@@ -2,11 +2,11 @@
 
 This walkthrough builds a level 5 Path of the Zealot Barbarian from scratch: a hard-hitting melee fighter who rages, attacks recklessly, and adds radiant "Divine Fury" damage to a hit each turn while raging.
 
-Along the way you'll use the token creator, the library, and the **ability editor** for features — the last one is the important skill, because almost every class feature is built the same way.
+Along the way you'll use the token creator, the **Add ability** search, and the **ability editor** for features — the last one is the important skill, because almost every class feature is built the same way.
 
 > **What you'll end up with:** 55 HP, AC 15, a Greataxe, two attacks per Attack action, Rage (3 uses) with Divine Fury built in, and Reckless Attack.
 
-**Shortcut:** the library has a ready-made **Rage (Zealot)** entry (Add → Library → Features). It bundles Rage and Divine Fury, and its Divine Fury lets the wielder choose radiant *or* necrotic per hit. If you just want the character, attach that and skip to [Step 5](#5-reckless-attack). Read on if you want to understand how it's put together, or need to build a variant.
+**Shortcut:** the library has a ready-made **Rage (Zealot)**. It bundles Rage and Divine Fury, and its Divine Fury lets the wielder choose radiant *or* necrotic per hit. If you just want the character, add it with the others in [step 2](#2-add-the-greataxe-extra-attack-and-reckless-attack) (search `rage`, then its **+**) and skip step 3. Read on if you want to understand how it's put together, or need to build a variant.
 
 ---
 
@@ -34,39 +34,47 @@ Then select it and click **Sheet** to open its sheet. Weapons, spells, attacks a
 
 > **Tip:** the sheet's **Stats** tab also has **Level** and **Class** fields (they default to 1 / Adventurer). They're informational, so set them to 5 / Barbarian if you like.
 
-## 2. Add the weapon
+## 2. Add the Greataxe, Extra Attack and Reckless Attack
 
-Click **Add**, stay on the **Library** tab, and choose the **Weapons** filter. Search for `greataxe`.
+All three are in the library, ready to use, so they go on in one go. Click **Add ability** and type `greataxe`.
 
-![Searching the library for Greataxe](img/zealot-barbarian/03-library-greataxe.png)
+![Searching for greataxe](img/zealot-barbarian/03-add-greataxe.png)
 
-Click **Greataxe** to attach it. It shows up under **Weapons** as `+7 to hit, reach 5 ft · 10 (1d12 + 4) slashing`, the way a statblock would print it, with a green **FULL** badge meaning the simulator fully supports it. Click its pencil to open it in the ability editor, where each part (how it's used, its reach, the roll, the damage) sits in its own section with a one-line summary.
+One search covers everything you can add: recipes, the library's weapons, spells and features, and the abilities of the SRD monsters (four of them swing a greataxe too). Click the **+** beside the library's **Greataxe** to add it as it is.
 
-## 3. Give them Extra Attack
+The panel stays open and says *Added Greataxe*, with your search selected, so just type the next one: `extra attack`, then its **+**. Then `reckless`, and its **+**.
 
-At level 5 a Barbarian attacks twice per Attack action. Click **Add**, stay on the **Library** tab, choose the **Features** filter, and search for `extra attack`.
+![Adding Extra Attack after the Greataxe](img/zealot-barbarian/04-add-extra-attack.png)
 
-![Extra Attack in the library](img/zealot-barbarian/04-extra-attack-library.png)
+Click **Done**. All three are listed under **Actions**:
 
-Click **Extra Attack** to attach it. It's added under **Features & Traits** as `Extra Attack: 2 × any weapon attack`, with a green **FULL** badge: each Attack action makes two attacks, and each one picks the Zealot's best weapon for its target.
+![The three on the Abilities tab](img/zealot-barbarian/05-library-added.png)
 
-![Extra Attack on the sheet](img/zealot-barbarian/05-extra-attack-added.png)
+- **Extra Attack** comes first, as a multiattack does in a statblock: `2 × any weapon attack`. Each Attack action makes two attacks, and each one picks the Zealot's best weapon for its target.
+- **Greataxe** reads `+7 to hit, reach 5 ft · 10 (1d12 + 4) slashing`, the way a statblock would print it.
+- **Reckless Attack** gives advantage on your melee attacks this turn, at the cost of attacks against you having advantage until your next turn.
 
-To see how it works, click Extra Attack's pencil and open **Grants → Extra Attack**. Its **Sequence** is one step, `2 × Any weapon attack`, with what that does in an average round. A fighter makes it three at 11th level; a Barbarian stays at two.
+The dot before each row says how much of it the simulator runs. Extra Attack's and the Greataxe's are full: the AI uses them as written. Reckless Attack's is half, and hovering it says why: it costs no action, and the AI only switches on features that cost a bonus action (and reactions), so in an automatic fight the Zealot never attacks recklessly. Use it by hand when you play the fight yourself.
+
+> **Clicking a result instead of its +** opens it in the ability editor first, to check or change before it's added (**Add to sheet**). **Enter** in the search does the same for the first result.
+
+To see how Extra Attack works, click its row and open **Grants → Extra Attack**. Its **Sequence** is one step, `2 × Any weapon attack`, with what that does in an average round. A fighter makes it three at 11th level; a Barbarian stays at two.
 
 ![The Extra Attack routine](img/zealot-barbarian/06-extra-attack-routine.png)
 
-## 4. Build Rage (with Divine Fury inside it)
+## 3. Build Rage (with Divine Fury inside it)
 
 Divine Fury only works **while raging**, so it's built as one more effect inside the Rage feature rather than as a separate feature. That way it switches on and off with Rage automatically.
 
-### 4a. Start from the Rage recipe
+### 3a. Start from the Rage recipe
 
-Click **Add → Preset** and choose **Rage**.
+Click **Add ability** and type `rage`.
 
-![The Preset tab](img/zealot-barbarian/07-preset-tab.png)
+![Searching for rage](img/zealot-barbarian/07-add-rage.png)
 
-This opens Rage in the ability editor. The preview at the top reads the way the feature works; each section below it has a one-line summary, and opens to its fields.
+**Recipes** are patterns to start from; the **Library** has finished features, including the shortcut's **Rage (Zealot)**. Click the **Rage** recipe.
+
+It opens in the ability editor. The preview at the top reads the way the feature works, and each section below it has a one-line summary. The two sections the recipe expects you to look at, **Use & cost** and **While active**, are open and marked **fill in**.
 
 ![Rage in the ability editor](img/zealot-barbarian/08-rage-form-top.png)
 
@@ -77,15 +85,15 @@ What **Use & cost** says:
 - **Limit: Pool, spends 1 from `rage`** — each use spends one from a pool named `rage`. The pool is added to the creature when you add Rage (see [the check at the end](#check-your-work)).
 - **Lasts: 1 minute** — ten six-second rounds.
 
-### 4b. Read what it does while active
+### 3b. Read what it does while active
 
-Scroll to **While active**. Each card is one thing that's true while Rage lasts, written as a sentence.
+Fold **Use & cost** to see all of **While active**. Each card is one thing that's true while Rage lasts, written as a sentence.
 
 ![Rage's While active cards](img/zealot-barbarian/09-rage-effects.png)
 
 The recipe gives you: **+2** damage on STR melee hits, **resistance** to bludgeoning, piercing and slashing, and **advantage on STR saves**. Click a card's pencil to see its fields.
 
-### 4c. Add Divine Fury
+### 3c. Add Divine Fury
 
 Click **+ Add effect**. The menu is grouped by what an effect changes (its attacks, its defense, saving throws, staying alive, its turn). Choose **Extra damage on its hits**, then set the card up like this:
 
@@ -101,30 +109,27 @@ Click **+ Add effect**. The menu is grouped by what an effect changes (its attac
 
 > **Radiant or necrotic:** the Zealot picks the type each time. With both picked, the simulator chooses whichever the target resists least.
 
-The card reads *Once per turn, its melee or ranged hits deal an extra 5 (1d6 + 2) radiant or necrotic damage.* Click **Done**, then **Add to sheet**. Rage now appears under Features & Traits as `bonus action: +2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant or necrotic on melee or ranged hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute (1 rage)`.
+The card reads *Once per turn, its melee or ranged hits deal an extra 5 (1d6 + 2) radiant or necrotic damage.* Click **Done**, then **Add to sheet**.
 
 > **Tip:** this is exactly what the library's **Rage (Zealot)** holds. Opening that one in the editor shows the same cards.
 
-## 5. Reckless Attack
-
-Click **Add → Library → Features**, search `reckless`, and click **Reckless Attack**.
-
-Reckless Attack gives advantage on your melee attacks this turn, at the cost of attacks against you having advantage until your next turn. It costs no action, and the AI only switches on features that cost a bonus action (and reactions), so in an automatic fight the Zealot never attacks recklessly. Opening it in the editor says so. Use it by hand when you play the fight yourself.
-
 ## Check your work
 
-Your **Abilities** tab should list Greataxe, Extra Attack, Rage and Reckless Attack, all with green **FULL** badges — and the sheet's header badge should also read **FULL**.
+The **Abilities** tab should now read:
 
-![The finished Features & Traits list](img/zealot-barbarian/11-features-list.png)
+![The finished Abilities tab](img/zealot-barbarian/11-finished-list.png)
 
-Then open the **Stats** tab and scroll to **Resources**. You should see a `rage` pool of **3** current / **3** default, created automatically when you added Rage. Three is right for a level 5 Barbarian; change both numbers if you build a different level.
+- **Actions:** Extra Attack, Greataxe and Reckless Attack.
+- **Bonus actions:** Rage, with a **1 rage** chip for what each use costs, and `+2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant or necrotic on melee or ranged hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute`.
 
-![The rage resource pool on the Stats tab](img/zealot-barbarian/12-stats-resources.png)
+Above the list, the pools strip shows **Rage 3/3**: the `rage` pool, created when you added Rage, with all three uses left. Three is right for a level 5 Barbarian. Click it to change what this token has left now, and the full size every fight starts with.
+
+![The rage pool's sizes](img/zealot-barbarian/12-rage-pool.png)
 
 Now drop the token onto a map and run a fight from the **Combat** panel. Use **Step** to watch each decision, and see whether the Zealot rages and how Divine Fury shows up in the log.
 
 ## Next steps
 
-- Add **Danger Sense** (advantage on DEX saves): **Add → Blank → Feature / trait**, then in **While active** choose **Add effect → Advantage on its saves** and pick **DEX**.
+- Add **Danger Sense** (advantage on DEX saves): **Add ability → Start from scratch → Trait or feature**, then in **While active** choose **Add effect → Advantage on its saves** and pick **DEX**.
 - Tweak the **Tactics** tab to make the Zealot charge in more or less aggressively.
 - Build a Bear Totem variant: the library has **Rage (Totem Warrior: Bear)**, which resists every damage type except psychic.
