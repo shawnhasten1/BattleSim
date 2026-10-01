@@ -21,7 +21,7 @@ export const GAP_CODES = {
   // ── Phase 4: legendary actions, reactions
   LEGENDARY_ACTIONS: "A legendary action that is not an attack or save (Move, Teleport, Cast a Spell, Heal Self…) is reference-only; the rest are taken.",
   MULTIATTACK_PARSE: "Multiattack text could not be fully compiled.",
-  MULTIATTACK_STEP: "A Multiattack step is a spell, breath replacement or other non-attack and is skipped.",
+  MULTIATTACK_STEP: "Part of a Multiattack isn't simulated (a spell, Fling, Reel, Engulf, a count that varies, a choice made while flying…); the routine lists it as not simulated and runs the rest.",
   REACTION: "A reaction other than Parry (Unnerving Mask, Rock Catching, a guardian's Shield) is reference-only.",
   // ── Phase 5: movement
   MOVE_FLY: "(Retired — see ALTITUDE.) Flying speed.",

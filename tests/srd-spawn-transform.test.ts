@@ -51,7 +51,7 @@ describe("shapechanger forms", () => {
   it("no hidden form references an attack it doesn't have", () => {
     for (const form of all.filter((monster) => monster.hidden)) {
       const ids = new Set(getExecutableActions(form).map((action) => action.id));
-      for (const action of form.actions) if (action.kind === "multiattack") for (const step of action.attacks) expect(ids.has(step.actionId), `${form.id} ${step.actionId}`).toBe(true);
+      for (const action of form.actions) if (action.kind === "multiattack") for (const step of [...action.attacks, ...(action.options ?? []).flatMap((option) => option.attacks)]) if (step.actionId) expect(ids.has(step.actionId), `${form.id} ${step.actionId}`).toBe(true);
       for (const ref of form.legendary?.actions ?? []) if (ref.actionId) expect(ids.has(ref.actionId), `${form.id} legendary ${ref.name}`).toBe(true);
     }
   });

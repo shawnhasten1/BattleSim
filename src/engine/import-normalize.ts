@@ -32,7 +32,9 @@ import {
   type SpellDefinition,
   type SpellUpcast,
   type WeaponCharges,
-  type WeaponDefinition
+  type WeaponDefinition,
+  type MultiattackActionDefinition,
+  type MultiattackStep
 } from "./types";
 
 const abilities: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -295,6 +297,9 @@ function normalizeAction(
       name,
       actionType,
       attacks: normalizeMultiattackSteps(input.attacks, idMap),
+      options: normalizeMultiattackOptions(input.options, idMap),
+      oneWeapon: input.oneWeapon === true ? true : undefined,
+      unsimulated: Array.isArray(input.unsimulated) ? input.unsimulated.filter((line): line is string => typeof line === "string" && line.trim() !== "") : undefined,
       automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
     };
   }
@@ -336,14 +341,15 @@ function normalizeAction(
 function normalizeMultiattackSteps(
   input: unknown,
   idMap: Map<string, string>
-): Array<{ actionId: string; count: number; targetGroup?: number }> {
+): MultiattackStep[] {
   if (!Array.isArray(input)) {
     return [];
   }
-  return input.map((step, index) => {
+  return input.map((step, index): MultiattackStep => {
     if (!isRecord(step)) {
       return { actionId: `missing-action-${index + 1}`, count: 1 };
     }
+    const any = step.any === "melee" || step.any === "ranged" || step.any === "weapon" ? step.any : undefined;
     const referenced = typeof step.actionId === "string"
       ? idMap.get(step.actionId) ?? step.actionId
       : typeof step.actionName === "string"
@@ -351,11 +357,27 @@ function normalizeMultiattackSteps(
         : undefined;
     const targetGroup = numberField(step, "targetGroup");
     return {
-      actionId: referenced ?? `missing-action-${index + 1}`,
+      // A generic step ("any melee attack") names no ability.
+      ...(any ? { any } : { actionId: referenced ?? `missing-action-${index + 1}` }),
       count: typeof step.count === "number" ? step.count : 1,
-      targetGroup: targetGroup !== undefined && targetGroup > 0 ? Math.floor(targetGroup) : undefined
+      targetGroup: targetGroup !== undefined && targetGroup > 0 ? Math.floor(targetGroup) : undefined,
+      target: step.target === "different" || step.target === "same-as-previous" ? step.target : undefined,
+      requiresPreviousHit: step.requiresPreviousHit === true ? true : undefined
     };
   });
+}
+
+/** A multiattack's other routines, each with its steps normalized; an option left with none goes. */
+function normalizeMultiattackOptions(input: unknown, idMap: Map<string, string>): MultiattackActionDefinition["options"] {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+  const options = input.flatMap((option) => {
+    if (!isRecord(option)) return [];
+    const attacks = normalizeMultiattackSteps(option.attacks, idMap);
+    return attacks.length ? [{ label: typeof option.label === "string" && option.label.trim() ? option.label : undefined, attacks }] : [];
+  });
+  return options.length ? options : undefined;
 }
 
 function normalizeWeapons(input: unknown, actionIdMap: Map<string, string>, abilitiesInput: unknown): WeaponDefinition[] {

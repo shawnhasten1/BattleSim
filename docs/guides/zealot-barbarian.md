@@ -2,7 +2,7 @@
 
 This walkthrough builds a level 5 Path of the Zealot Barbarian from scratch: a hard-hitting melee fighter who rages, attacks recklessly, and adds radiant "Divine Fury" damage to a hit each turn while raging.
 
-Along the way you'll use the token creator, the library, the multiattack builder, and the **ability editor** for features — the last one is the important skill, because almost every class feature is built the same way.
+Along the way you'll use the token creator, the library, and the **ability editor** for features — the last one is the important skill, because almost every class feature is built the same way.
 
 > **What you'll end up with:** 55 HP, AC 15, a Greataxe, two attacks per Attack action, Rage (3 uses) with Divine Fury built in, and Reckless Attack.
 
@@ -28,7 +28,7 @@ Open the **Actors** tab in the sidebar and click **Create Token**.
 
 Click **Create token**. The token appears on the map and in the actor list.
 
-Then select it and click **Sheet** to open its sheet. Weapons, spells, multiattack, and features are all added on the **Abilities** tab.
+Then select it and click **Sheet** to open its sheet. Weapons, spells, attacks and features are all added on the **Abilities** tab.
 
 ![The empty Abilities tab](img/zealot-barbarian/02-abilities-empty.png)
 
@@ -44,19 +44,17 @@ Click **Greataxe** to attach it. It shows up under **Weapons** as `+7 to hit, re
 
 ## 3. Give them Extra Attack
 
-At level 5 a Barbarian attacks twice per Attack action. This is done with the **Multiattack** builder, at the bottom of the Abilities tab.
+At level 5 a Barbarian attacks twice per Attack action. Click **Add**, stay on the **Library** tab, choose the **Features** filter, and search for `extra attack`.
 
-> **Watch out:** the library also contains an "Extra Attack" entry, but it is **reference-only** — it shows text on the sheet and does nothing in combat. Use the multiattack builder instead.
+![Extra Attack in the library](img/zealot-barbarian/04-extra-attack-library.png)
 
-![The multiattack builder](img/zealot-barbarian/04-multiattack-builder.png)
+Click **Extra Attack** to attach it. It's added under **Features & Traits** as `Extra Attack: 2 × any weapon attack`, with a green **FULL** badge: each Attack action makes two attacks, and each one picks the Zealot's best weapon for its target.
 
-Click the **Extra Attack (2 swings)** quick-start button. It fills in two swings of your weapon.
+![Extra Attack on the sheet](img/zealot-barbarian/05-extra-attack-added.png)
 
-![Multiattack filled in](img/zealot-barbarian/05-multiattack-filled.png)
+To see how it works, click Extra Attack's pencil and open **Grants → Extra Attack**. Its **Sequence** is one step, `2 × Any weapon attack`, with what that does in an average round. A fighter makes it three at 11th level; a Barbarian stays at two.
 
-Click **Create multiattack**. It's added under **Features & Traits** with a **FULL** badge.
-
-![Multiattack added to the sheet](img/zealot-barbarian/06-multiattack-added.png)
+![The Extra Attack routine](img/zealot-barbarian/06-extra-attack-routine.png)
 
 ## 4. Build Rage (with Divine Fury inside it)
 
@@ -115,7 +113,7 @@ Reckless Attack gives advantage on your melee attacks this turn, at the cost of 
 
 ## Check your work
 
-Your **Abilities** tab should list Greataxe, Rage, Reckless Attack, and Multiattack, all with green **FULL** badges — and the sheet's header badge should also read **FULL**.
+Your **Abilities** tab should list Greataxe, Extra Attack, Rage and Reckless Attack, all with green **FULL** badges — and the sheet's header badge should also read **FULL**.
 
 ![The finished Features & Traits list](img/zealot-barbarian/11-features-list.png)
 

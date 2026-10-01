@@ -1,6 +1,7 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
@@ -219,7 +220,8 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...spellUpcastActions,
     ...grantedActions,
     ...weaponGrantedActions
-  ];
+    // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
+  ].flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
   return dedupeActionsById([
     ...declared,
@@ -958,6 +960,33 @@ function saveStepWorthTaking(state: EngineState, attacker: CombatantState, actio
     && !(action.damage.length === 0 && inflicted.length > 0 && inflicted.every((name) => candidate.conditions?.some((condition) => condition.name === name))));
 }
 
+/** What a multiattack's caller (the AI) is told before each swing, to decide it after the previous one landed. */
+export interface MultiattackSwingContext {
+  swing: MultiattackSwing;
+  /** The attacks this swing can use right now: affordable, and the same weapon when the routine is held to one. */
+  candidates: AttackActionDefinition[];
+  /** The swing before it, if one was made. */
+  previous?: { targetId: Id; actionId: Id; hit: boolean };
+  /** Everyone an earlier swing of this use attacked. */
+  targetedIds: Id[];
+}
+
+/** The caller's decision for one swing: whom, with what; or to skip it. Anything left out falls back to the defaults. */
+export interface MultiattackSwingChoice {
+  targetId?: Id;
+  actionId?: Id;
+  skip?: boolean;
+}
+
+/** Spend what an attack or ability inside a routine costs (a charge, ki, a recharge), without spending another action. */
+function spendEmbeddedCost(combatant: CombatantState, action: { resourceCost?: ResourceCost }): void {
+  const cost = action.resourceCost;
+  if (!cost) return;
+  const available = combatant.resources?.[cost.resourceId] ?? 0;
+  if (available < cost.amount) throw new Error(`${combatant.displayName} lacks ${cost.resourceId}`);
+  combatant.resources = { ...(combatant.resources ?? {}), [cost.resourceId]: available - cost.amount };
+}
+
 export function resolveMultiattackAction(
   state: EngineState,
   attackerId: Id,
@@ -973,6 +1002,13 @@ export function resolveMultiattackAction(
      * `targetIds` entry when the assigned target is already down.
      */
     attackTargetIds?: Id[];
+    /** One attack per swing, as `attackTargetIds`: which of its candidates (a power attack, the longbow) to use. */
+    attackActionIds?: Id[];
+    /**
+     * Called before each attack swing, after the one before it resolved: the AI re-decides the swing there (and may
+     * move first, with the movement it has left). Its answer wins over `attackTargetIds` / `attackActionIds`.
+     */
+    beforeSwing?: (context: MultiattackSwingContext) => MultiattackSwingChoice | undefined;
   } = {}
 ): MultiattackResult {
   const ids = (Array.isArray(targetIds) ? targetIds : [targetIds]).filter(Boolean);
@@ -989,6 +1025,7 @@ export function resolveMultiattackAction(
 
   const targets = ids.map((id) => findCombatant(state.snapshot, id));
   declareAction(state, attacker, action, { target: targets[0] });
+  const executables = getExecutableActions(attackerDefinition);
 
   // A step aims at its `targetGroup` index; if that target is down we spill to
   // the next live one (mirrors beam spread), scanning forward then wrapping.
@@ -1002,40 +1039,106 @@ export function resolveMultiattackAction(
     }
     return undefined;
   };
+  const skipped = (swing: MultiattackSwing, reason: string) => state.log.push(event(state, "MultiattackSwingSkipped", `${attacker.displayName} skips a ${action.name} attack: ${reason}`, {
+    attackerId, actionId, step: swing.stepIndex, swing: swing.index, reason
+  }));
 
   const attacks: AttackResult[] = [];
-  let flatIndex = 0;
-  for (const step of action.attacks) {
-    const child = findActionDefinition(attackerDefinition, step.actionId);
-    if (child && (child.kind === "area-save" || child.kind === "save")) {
+  let previous: MultiattackSwingContext["previous"];
+  const targetedIds: Id[] = [];
+  // "One weapon per Attack action": the first swing's weapon, for the rest.
+  let weapon: Id | undefined;
+  for (const swing of swingsOf(action.attacks)) {
+    const { step } = swing;
+    const ability = stepAbility(step, executables);
+    if (ability) {
       // "It can use its Frightful Presence. It then makes three attacks": a save step, taken first when it would
-      // do something (someone in range who hasn't already resisted it or been affected).
+      // do something (someone in range who hasn't already resisted it or been affected) and it can pay for it.
       const first = pickTarget(step.targetGroup ?? 0);
-      if (first && attacker.state === "active" && saveStepWorthTaking(state, attacker, child)) {
-        if (child.kind === "area-save") resolveAreaSaveAction(state, attackerId, child.targeting?.origin === "self" ? attacker.position : first.position, child.id, { embedded: true });
-        else resolveSaveAction(state, attackerId, first.id, child.id, { embedded: true });
+      if (first && attacker.state === "active" && canPayFor(attacker, ability) && saveStepWorthTaking(state, attacker, ability)) {
+        spendEmbeddedCost(attacker, ability);
+        // Aimed at the target, as when the ability is used on its own: a breath from itself points its cone that way.
+        if (ability.kind === "area-save") resolveAreaSaveAction(state, attackerId, first.position, ability.id, { embedded: true });
+        else resolveSaveAction(state, attackerId, first.id, ability.id, { embedded: true });
       }
       continue;
     }
-    if (!child || child.kind !== "attack") {
+    if (step.actionId && !executables.some((candidate) => candidate.id === step.actionId)) {
+      skipped(swing, "it no longer has that ability");
+      continue;
+    }
+    if (step.actionId && executables.find((candidate) => candidate.id === step.actionId)?.kind !== "attack") {
       throw new Error(`Multiattack child action ${step.actionId} is not an attack`);
     }
-    for (let index = 0; index < step.count; index += 1) {
-      // A `hit-by-attack` reaction (Hellish Rebuke) can drop the attacker mid-multiattack.
-      if (attacker.state !== "active") {
-        break;
-      }
-      const explicitId = options.attackTargetIds?.[flatIndex];
-      flatIndex += 1;
-      const explicit = explicitId
-        ? state.snapshot.combatants.find((c) => c.id === explicitId)
-        : undefined;
-      const target = isLiveTarget(explicit) ? explicit : pickTarget(step.targetGroup ?? 0);
-      if (!target) {
-        break;
-      }
-      attacks.push(resolveAttackCore(state, attacker, target, attackerDefinition, child, options, false, action));
+    // A `hit-by-attack` reaction (Hellish Rebuke) can drop the attacker mid-multiattack.
+    if (attacker.state !== "active") {
+      break;
     }
+    if (step.requiresPreviousHit && !previous?.hit) {
+      skipped(swing, "the attack before it missed");
+      previous = undefined;
+      continue;
+    }
+    const candidates = swingCandidates(step, executables)
+      .filter((candidate) => canPayFor(attacker, candidate))
+      .filter((candidate) => !weapon || attackFamilyId(candidate, executables) === weapon);
+    if (candidates.length === 0) {
+      skipped(swing, "nothing it can attack with");
+      continue;
+    }
+    const choice = options.beforeSwing?.({ swing, candidates, previous, targetedIds: [...targetedIds] });
+    // The hook may have moved the attacker into an opportunity attack.
+    if (attacker.state !== "active") {
+      break;
+    }
+    if (choice?.skip) {
+      skipped(swing, "its controller passed");
+      continue;
+    }
+
+    // Whom: the rule first, then the caller's choice, then the planned spread.
+    const find = (id: Id | undefined) => (id ? state.snapshot.combatants.find((combatant) => combatant.id === id) : undefined);
+    let target: CombatantState | undefined;
+    if (step.target === "same-as-previous" && previous) {
+      target = find(previous.targetId);
+    } else {
+      const explicit = find(choice?.targetId) ?? find(options.attackTargetIds?.[swing.index]);
+      target = isLiveTarget(explicit) ? explicit : pickTarget(step.targetGroup ?? 0);
+    }
+    if (step.target === "different" && target && targetedIds.includes(target.id)) {
+      target = targets.find((candidate) => isLiveTarget(candidate) && !targetedIds.includes(candidate.id)
+        && candidates.some((attack) => !targetingProblem(state.snapshot, attacker, candidate, attack)));
+    }
+    if (!isLiveTarget(target)) {
+      skipped(swing, step.target === "different" ? "no other creature to attack" : "no target left");
+      continue;
+    }
+
+    // With what: the caller's choice when it can reach, else whatever of its candidates does.
+    const reaching = (candidate: CombatantState) => candidates.filter((attack) => !targetingProblem(state.snapshot, attacker, candidate, attack));
+    let usable = reaching(target);
+    if (usable.length === 0 && step.target !== "same-as-previous") {
+      // Out of this swing's reach (a claw aimed past a 10-ft bite): someone else it does reach instead.
+      const other = targets.find((candidate) => candidate !== target && isLiveTarget(candidate)
+        && !(step.target === "different" && targetedIds.includes(candidate.id)) && reaching(candidate).length > 0);
+      if (other) {
+        target = other;
+        usable = reaching(other);
+      }
+    }
+    const wanted = usable.find((candidate) => candidate.id === choice?.actionId)
+      ?? usable.find((candidate) => candidate.id === options.attackActionIds?.[swing.index]);
+    const attack = wanted ?? defaultSwingAttack(step, usable);
+    if (!attack) {
+      skipped(swing, `${target.displayName} is out of its reach`);
+      continue;
+    }
+    spendEmbeddedCost(attacker, attack);
+    const result = resolveAttackCore(state, attacker, target, attackerDefinition, attack, options, false, action);
+    attacks.push(result);
+    targetedIds.push(target.id);
+    previous = { targetId: target.id, actionId: attack.id, hit: result.hit };
+    if (action.oneWeapon && !weapon) weapon = attackFamilyId(attack, executables);
   }
 
   state.log.push(event(state, "MultiattackResolved", `${attacker.displayName} resolved ${action.name}`, {
@@ -3261,18 +3364,31 @@ function validateTargeting(
   target: CombatantState,
   action: AttackActionDefinition | SaveActionDefinition
 ): void {
+  const problem = targetingProblem(snapshot, attacker, target, action);
+  if (problem) {
+    throw new Error(problem);
+  }
+}
+
+/** Why `attacker` can't use `action` on `target` right now (out of reach, behind a wall…), or `undefined` when it can. */
+export function targetingProblem(
+  snapshot: EncounterSnapshot,
+  attacker: CombatantState,
+  target: CombatantState,
+  action: AttackActionDefinition | SaveActionDefinition
+): string | undefined {
   if (target.state !== "active" && target.state !== "downed") {
-    throw new Error("Target is not a legal active combatant");
+    return "Target is not a legal active combatant";
   }
   // Someone swallowed can be attacked only by the swallower, and can attack only it.
   if ((target.containedBy && target.containedBy !== attacker.id) || (attacker.containedBy && attacker.containedBy !== target.id)) {
-    throw new Error("Target is inside another creature");
+    return "Target is inside another creature";
   }
   if (action.kind === "attack" && action.requiresHeld && holdConditions(target, attacker.id).length === 0) {
-    throw new Error(`${target.displayName} isn't grappled by ${attacker.displayName}`);
+    return `${target.displayName} isn't grappled by ${attacker.displayName}`;
   }
   if (!attackPrerequisitesMet(attacker, action, target)) {
-    throw new Error(`${action.name} can't be used against ${target.displayName} right now`);
+    return `${action.name} can't be used against ${target.displayName} right now`;
   }
   const distance = spatialDistance(snapshot, attacker, target);
   const range = action.kind === "attack"
@@ -3281,11 +3397,12 @@ function validateTargeting(
       : action.longRange ?? action.range
     : action.range;
   if (distance > range) {
-    throw new Error(`Target is ${distance} ft. away, beyond ${range} ft. range`);
+    return `Target is ${distance} ft. away, beyond ${range} ft. range`;
   }
   if (snapshot.rules.requireLineOfEffect && !lineOfEffect(snapshot.map, attacker.position, target.position)) {
-    throw new Error("Line of effect is blocked");
+    return "Line of effect is blocked";
   }
+  return undefined;
 }
 
 function attackIsAtLongRange(

@@ -1,4 +1,5 @@
 import { parseDiceExpression } from "../../src/engine/dice";
+import { multiattackRoutines, stepAbility, swingCandidates } from "../../src/engine/multiattack";
 import { creatureDefinitionSchema, type ActionDefinition, type CreatureDefinition } from "../../src/engine/types";
 import { abilityMod, averageDice } from "./util";
 
@@ -40,15 +41,18 @@ function attackDamage(action: ActionDefinition, definition: CreatureDefinition):
 
 /** Best single-round damage the creature can plausibly deal with its non-limited actions (assumes every attack hits). */
 export function roundDamage(definition: CreatureDefinition): number {
-  const byId = new Map(definition.actions.map((action) => [action.id, action]));
   let best = 0;
   for (const action of definition.actions) {
     if (action.kind === "multiattack") {
-      const total = action.attacks.reduce((sum, step) => {
-        const child = byId.get(step.actionId);
-        return sum + (child ? attackDamage(child, definition) * step.count : 0);
-      }, 0);
-      best = Math.max(best, total);
+      // Its best routine, a generic step ("two melee attacks") at its best matching attack.
+      for (const routine of multiattackRoutines(action)) {
+        const total = routine.attacks.reduce((sum, step) => {
+          const ability = stepAbility(step, definition.actions);
+          const choices: ActionDefinition[] = [...swingCandidates(step, definition.actions), ...(ability ? [ability] : [])];
+          return sum + Math.max(0, ...choices.map((child) => attackDamage(child, definition))) * step.count;
+        }, 0);
+        best = Math.max(best, total);
+      }
     } else if (!(action.kind === "attack" || action.kind === "save" || action.kind === "area-save") || !action.resourceCost) {
       best = Math.max(best, attackDamage(action, definition));
     }
@@ -78,8 +82,10 @@ export function validateMonster(definition: CreatureDefinition): Validation {
       for (const component of action.healing) checkDice(component.dice, `${where} ${action.name}`, errors);
     }
     if (action.kind === "multiattack") {
-      for (const step of action.attacks) {
-        if (!definition.actions.some((candidate) => candidate.id === step.actionId && (candidate.kind === "attack" || candidate.kind === "save" || candidate.kind === "area-save"))) {
+      for (const step of multiattackRoutines(action).flatMap((routine) => routine.attacks)) {
+        if (step.any) {
+          if (swingCandidates(step, definition.actions).length === 0) errors.push(`${where}: multiattack "${action.name}" has no ${step.any} attack to make`);
+        } else if (!definition.actions.some((candidate) => candidate.id === step.actionId && (candidate.kind === "attack" || candidate.kind === "save" || candidate.kind === "area-save"))) {
           errors.push(`${where}: multiattack "${action.name}" points at missing attack "${step.actionId}"`);
         }
       }

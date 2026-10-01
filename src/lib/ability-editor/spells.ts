@@ -26,9 +26,9 @@ export function spellOpensInEditor(spell: SpellDefinition): boolean {
   return !spell.action || EDITOR_KINDS.has(spell.action.kind);
 }
 
-/** Whether an action opens in the ability editor. */
+/** Whether an action opens in the ability editor: the kinds above, and a multiattack (its Sequence section). */
 export function actionOpensInEditor(action: ActionDefinition): boolean {
-  return EDITOR_KINDS.has(action.kind);
+  return EDITOR_KINDS.has(action.kind) || action.kind === "multiattack";
 }
 
 /* ─── action type ────────────────────────────────────────────────────────── */

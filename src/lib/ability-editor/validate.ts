@@ -4,7 +4,10 @@
  */
 import {
   getExecutableActions,
+  multiattackRoutines,
   spellSlotLevel,
+  stepAbility,
+  swingCandidates,
   withSpellcastingAttackAbility,
   type ActionDefinition,
   type CreatureDefinition,
@@ -29,6 +32,10 @@ export type WarningId =
   | "partly-simulated"
   | "reference-only"
   | "missing-step"
+  | "step-not-runnable"
+  | "generic-step-empty"
+  | "step-follows-nothing"
+  | "empty-routine"
   | "empty-buff"
   | "dead-success-effects"
   | "activation-does-nothing"
@@ -45,6 +52,49 @@ export interface AbilityWarning {
   message: string;
   /** The section to open to fix it. */
   section?: SectionId;
+}
+
+/**
+ * What a multiattack's routines ask for that the engine can't do: a step it skips, or a rule with nothing to follow.
+ * `section` is where to fix it: the routine's Sequence, or the Grants of the feature that gives it (Extra Attack).
+ */
+function routineWarnings(action: Extract<ActionDefinition, { kind: "multiattack" }>, executables: ActionDefinition[], section: SectionId): AbilityWarning[] {
+  const warnings: AbilityWarning[] = [];
+  const byId = new Map(executables.map((candidate) => [candidate.id, candidate]));
+  const routines = multiattackRoutines(action);
+  const steps = routines.flatMap((routine) => routine.attacks);
+  const gone = steps.filter((step) => step.actionId && !byId.has(step.actionId));
+  if (gone.length) {
+    warnings.push({ id: "missing-step", message: `${gone.length === 1 ? "A step uses" : `${gone.length} steps use`} an ability this creature no longer has.`, section });
+  }
+  // Only attacks, and save or area abilities, can be steps; and only ones the simulator runs.
+  const skipped = [...new Set(steps.flatMap((step) => {
+    const found = step.actionId ? byId.get(step.actionId) : undefined;
+    const usable = found && (found.kind === "attack" || found.kind === "save" || found.kind === "area-save") && found.automationSupport === "full";
+    return found && !usable ? [found.name] : [];
+  }))];
+  if (skipped.length) {
+    warnings.push({
+      id: "step-not-runnable",
+      message: `The routine skips ${skipped.join(" and ")}: a step makes an attack or uses a save or area ability the simulator runs.`,
+      section
+    });
+  }
+  const empty = [...new Set(steps.filter((step) => step.any && swingCandidates(step, executables).length === 0).map((step) => step.any!))];
+  if (empty.length) {
+    warnings.push({ id: "generic-step-empty", message: `It has no ${empty.join(" or ")} attack to make: add one, or change that step.`, section });
+  }
+  // A swing that needs the attack before it, with none before it, never happens.
+  if (routines.some((routine) => {
+    const first = routine.attacks.find((step) => !stepAbility(step, executables));
+    return first && (first.requiresPreviousHit || first.target === "same-as-previous");
+  })) {
+    warnings.push({ id: "step-follows-nothing", message: "A routine's first attack follows “the previous attack”, but there's none before it.", section });
+  }
+  if (routines.some((routine) => routine.attacks.length === 0)) {
+    warnings.push({ id: "empty-routine", message: "A routine has no steps yet.", section });
+  }
+  return warnings;
 }
 
 /** The actions inside a record: itself, a spell's or death effect's action, a legendary entry's, or what it grants. */
@@ -245,13 +295,7 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
       }
       warnings.push(...activationWarnings(action));
     }
-    if (action.kind === "multiattack") {
-      const available = new Set(getExecutableActions(withRecord).map((candidate) => candidate.id));
-      const gone = action.attacks.filter((step) => !available.has(step.actionId));
-      if (gone.length) {
-        warnings.push({ id: "missing-step", message: `${gone.length === 1 ? "A step uses" : `${gone.length} steps use`} an ability this creature no longer has.`, section: "sequence" });
-      }
-    }
+    if (action.kind === "multiattack") warnings.push(...routineWarnings(action, getExecutableActions(withRecord), action === record ? "sequence" : "grants"));
   }
 
   // A feature that does nothing the DM can see yet.

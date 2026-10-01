@@ -85,9 +85,9 @@ describe("statblock text for SRD monsters", () => {
   });
 
   it("prints multiattack as the SRD does", () => {
-    expect(entry("brown-bear", "actions", "Multiattack").text).toBe("It makes two attacks: one with its Bite and one with its Claws.");
+    expect(entry("brown-bear", "actions", "Multiattack").text).toBe("It makes two attacks: one with its bite and one with its claws.");
     expect(entry("adult-red-dragon", "actions", "Multiattack").text).toBe(
-      "It can use its Frightful Presence. It then makes three attacks: one with its Bite and two with its Claw.");
+      "It can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws.");
   });
 
   it("prints legendary actions with their cost, and says what a borrowed action is", () => {
@@ -251,5 +251,85 @@ describe("statblock numbers follow the engine", () => {
 
   it("finds nothing for a ref that points nowhere", () => {
     expect(statblockFor(creature(), { list: "actions", id: "missing" })).toBeUndefined();
+  });
+});
+
+describe("every SRD multiattack reads like its statblock", { timeout: 60000 }, () => {
+  // The browsable creatures, and the shapes only a transform reaches.
+  const FORMS = ["werebear--bear", "werebear--hybrid", "wereboar--hybrid", "wererat--hybrid", "weretiger--hybrid", "werewolf--hybrid"];
+  const all = new Map<string, CreatureDefinition>();
+  beforeAll(async () => {
+    for (const id of [...SRD_MONSTER_INDEX.map((indexed) => indexed.id), ...FORMS.map((form) => `srd:monster:${form}`)]) {
+      const definition = (await loadSrdMonster(id))!;
+      if (definition.actions.some((action) => action.kind === "multiattack")) all.set(id.replace("srd:monster:", ""), definition);
+    }
+  });
+  const text = (slug: string) => {
+    const definition = all.get(slug)!;
+    return actionStatblock(definition.actions.find((action) => action.kind === "multiattack")!, definition);
+  };
+
+  it("names every attack and ability its routines use, in plain sentences", () => {
+    expect(all.size).toBeGreaterThan(140);
+    for (const [slug, definition] of all) {
+      const multiattack = definition.actions.find((action) => action.kind === "multiattack")!;
+      const { text: sentence } = actionStatblock(multiattack, definition);
+      expect(sentence, slug).toMatch(/^It [^]*\.$/);
+      expect(sentence, slug).not.toMatch(/undefined|\s{2}/);
+      // Its own words, without the statblock text it quotes as not simulated ("(escape DC 14)").
+      const own = (multiattack.unsimulated ?? []).reduce((rest, note) => rest.replace(note, ""), sentence);
+      expect(own, slug).not.toMatch(/\(|any (?:melee|ranged|weapon)/);
+      const byId = new Map(getExecutableActions(definition).map((action) => [action.id, action]));
+      for (const step of [multiattack.attacks, ...(multiattack.options ?? []).map((option) => option.attacks)].flat()) {
+        if (!step.actionId) continue;
+        const word = byId.get(step.actionId)!.name.replace(/\s*\([^)]*\)/g, "").toLowerCase();
+        // "claw" is named in "two with its claws"; Constrict in "one to constrict".
+        expect(sentence.toLowerCase(), `${slug}: ${word}`).toContain(word);
+      }
+    }
+  });
+
+  it("reads options, replacements, step rules and abilities the way the SRD prints them", () => {
+    const expected: Record<string, string> = {
+      scout: "It makes two melee attacks or two ranged attacks.",
+      erinyes: "It makes three attacks.",
+      "chain-devil": "It makes two chain attacks.",
+      efreeti: "It makes two scimitar attacks or uses its Hurl Flame twice.",
+      "barbed-devil": "It makes three attacks: one with its tail and two with its claws. Alternatively, it uses its Hurl Flame twice.",
+      "bandit-captain": "It makes three attacks: two with its scimitar and one with its dagger, or two ranged attacks with its dagger.",
+      centaur: "It makes two attacks: one with its pike and one with its hooves, or two ranged attacks with its longbow.",
+      medusa: "It makes three attacks: one with its snake hair and two with its shortsword, or two ranged attacks with its longbow.",
+      behir: "It makes two attacks: one with its bite and one to constrict.",
+      wight: "It makes two longsword attacks or two longbow attacks. It can use its Life Drain in place of one longsword attack.",
+      chimera: "It makes three attacks: one with its bite, one with its horns, and one with its claws. It can use its Fire Breath in place of its bite attack or its horns attack.",
+      "dragon-turtle": "It makes three attacks: one with its bite and two with its claws. It can make one tail attack in place of its two claw attacks.",
+      drider: "It makes three longsword attacks or three longbow attacks. It can make one bite attack in place of one longsword attack or one longbow attack.",
+      "vampire-spawn": "It makes two attacks with its claws. It can make one bite attack in place of one attack with its claws.",
+      tarrasque: "It can use its Frightful Presence. It then makes five attacks: one with its bite, two with its claws, one with its horns, and one with its tail. "
+        + "It can use its Swallow in place of its bite attack.",
+      "gibbering-mouther": "It makes one attack with its bites and can then use its Blinding Spittle.",
+      grick: "It makes one attack with its tentacles. If that attack hits, it can make one beak attack against the same target.",
+      "tyrannosaurus-rex": "It makes two attacks: one with its bite and one with its tail. It can't make both attacks against the same target.",
+      veteran: "It makes three attacks: two with its longsword and one with its shortsword.",
+      xorn: "It makes four attacks: three with its claws and one with its bite.",
+      "werebear--bear": "It makes two claw attacks.",
+      "werebear--hybrid": "It makes two greataxe attacks or two claw attacks.",
+      "werewolf--hybrid": "It makes two attacks: one with its bite and one with its claws."
+    };
+    for (const [slug, sentence] of Object.entries(expected)) expect(text(slug).text, slug).toBe(sentence);
+  });
+
+  it("says what the routine doesn't run, apart from what it does", () => {
+    expect(text("lizardfolk")).toMatchObject({ text: "It makes two melee attacks. Each attack uses a different weapon.", notSimulated: ["Each attack uses a different weapon."] });
+    expect(text("kraken").notSimulated).toEqual(["It can replace each tentacle attack with one use of Fling."]);
+    expect(text("horned-devil").text).toBe(
+      "It makes three attacks: two with its fork and one with its tail. Alternatively, it uses its Hurl Flame three times. It can also use Hurl Flame in place of just some of its melee attacks.");
+    expect(text("scout").notSimulated).toEqual([]);
+  });
+
+  it("gives each routine a short form that lists the options by label", () => {
+    expect(text("wight").short).toBe("2 × Longsword · or Longbow · or Life Drain");
+    expect(text("scout").short).toBe("2 × any melee attack · or Ranged");
+    expect(text("grick").short).toBe("Tentacles, Beak");
   });
 });

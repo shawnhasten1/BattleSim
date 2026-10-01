@@ -347,8 +347,6 @@ interface EncounterStore {
   /** Merge a partial patch into one feature / trait. One undo step. */
   updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
   addMultiattack: (definitionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
-  /** Replace an existing multiattack's name and steps, keeping its id (one undo step). */
-  updateMultiattack: (definitionId: string, actionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
   /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
   addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
   /** Add a fully-formed spell record from the guided builder. Returns its id. */
@@ -366,7 +364,8 @@ interface EncounterStore {
   /** Merge a partial patch into one death effect and re-normalize it. One undo step. */
   updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
   /** Delete a record from a creature, and what goes with it: its steps in any multiattack, and a multiattack left empty. */
-  removeDefinitionItem: (definitionId: string, itemType: DefinitionItemType, itemId: string) => void;
+  /** Delete a record; with a `replacement` (`id:<action>` or `any:<kind>`), routines that used it use that instead. */
+  removeDefinitionItem: (definitionId: string, itemType: DefinitionItemType, itemId: string, replacement?: string) => void;
   /**
    * Put an edited ability back where `ref` points, whole: normalized for its list, keeping the ids of the record it
    * replaces, and moved to the list its type belongs in (an action made a bonus action, a feature made a trait).
@@ -2833,11 +2832,7 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
-      updateMultiattack: (definitionId, actionId, input) => {
-        const attacks = multiattackSteps(input.attacks);
-        if (attacks.length === 0) return;
-        get().updateAction(definitionId, actionId, { name: input.name, attacks });
-      },
+
       addWeaponV2: (definitionId, weaponInput) => {
         const encounter = get().encounter;
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
@@ -3052,12 +3047,12 @@ export const useEncounterStore = create<EncounterStore>()(
           })
         });
       },
-      removeDefinitionItem: (definitionId, itemType, itemId) => {
+      removeDefinitionItem: (definitionId, itemType, itemId, replacement) => {
         const encounter = get().encounter;
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? withoutDefinitionItem(definition, itemType, itemId)
+            ? withoutDefinitionItem(definition, itemType, itemId, replacement)
             : definition)
         });
       },

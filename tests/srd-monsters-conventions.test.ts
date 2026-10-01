@@ -75,13 +75,15 @@ describe("damage follows the actor convention", () => {
 });
 
 describe("naming follows the actor convention", () => {
-  it("names multiattack alternatives after their weapons", () => {
+  it("makes one Multiattack and names its options after their weapons", () => {
     const own = [
       { id: "longsword", name: "Longsword", attackType: "melee" as const },
       { id: "longbow", name: "Longbow", attackType: "ranged" as const }
     ];
     const entry: RawEntry = { name: "Multiattack", desc: "The knight makes two longsword attacks or two longbow attacks.", action_type: "ACTION" };
-    expect(parseMultiattack(entry, own, ctx()).map((action) => action.name)).toEqual(["Multiattack (Longsword)", "Multiattack (Longbow)"]);
+    const parsed = parseMultiattack(entry, own, ctx());
+    expect(parsed.map((action) => [action.id, action.name])).toEqual([["multiattack", "Multiattack"]]);
+    expect(parsed[0]!.kind === "multiattack" && parsed[0]!.options?.map((option) => option.label)).toEqual(["Longbow"]);
     expect(parseMultiattack({ ...entry, desc: "The knight makes two longsword attacks." }, own, ctx()).map((action) => action.name)).toEqual(["Multiattack"]);
   });
 

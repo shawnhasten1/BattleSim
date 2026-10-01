@@ -125,24 +125,6 @@ describe("ActionsTab", () => {
     expect(screen.queryByLabelText("What it does")).toBeNull();
   });
 
-  it("builds a multiattack from the Extra Attack quick-start, with no target split to offer", async () => {
-    renderTab();
-    await userEvent.click(screen.getByRole("button", { name: "Extra Attack (2 swings)" }));
-    expect(screen.getByRole("spinbutton", { name: "Attack 1 count" })).toHaveProperty("value", "2");
-    // "Aim at" had no effect in play (the AI picks every swing's target), so it isn't offered.
-    expect(screen.queryByText("Aim at")).toBeNull();
-    expect(screen.queryByLabelText(/different enemy/)).toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: "Create multiattack" }));
-    const actions = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.actions;
-    const ma = actions.find((a) => a.kind === "multiattack");
-    expect(ma?.kind).toBe("multiattack");
-    if (ma?.kind === "multiattack") {
-      expect(ma.attacks).toHaveLength(1);
-      expect(ma.attacks[0]?.count).toBe(2);
-    }
-  });
-
   it("shows Spirit Guardians' area moving with its caster, with no drift or bonus-action move", async () => {
     useEncounterStore.getState().attachSrdSpell("def-fighter", "srd:spell:spirit-guardians");
     renderTab();
@@ -223,39 +205,6 @@ describe("ActionsTab saves only what was edited", () => {
   });
 });
 
-describe("ActionsTab multiattack editing", () => {
-  it("lists the steps by name, and the pencil edits the multiattack in place", async () => {
-    useEncounterStore.getState().addMultiattack("def-fighter", { name: "Multiattack", attacks: [{ actionId: "longsword", count: 2 }] });
-    const id = fighterActions().find((a) => a.kind === "multiattack")!.id;
-    render(<LiveTab />);
-
-    expect(screen.getByText("2 × Longsword")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Edit Multiattack" }));
-    expect(screen.getByText("Edit multiattack")).toBeTruthy();
-    const count = screen.getByRole("spinbutton", { name: "Attack 1 count" });
-    expect(count).toHaveProperty("value", "2");
-
-    fireEvent.change(count, { target: { value: "3" } });
-    await userEvent.click(screen.getByRole("button", { name: "Save multiattack" }));
-
-    const multiattacks = fighterActions().filter((a) => a.kind === "multiattack");
-    expect(multiattacks).toHaveLength(1);
-    expect(multiattacks[0]).toMatchObject({ id, attacks: [{ actionId: "longsword", count: 3 }] });
-    expect(screen.getByRole("button", { name: "Create multiattack" })).toBeTruthy();
-  });
-
-  it("Cancel leaves the multiattack as it was", async () => {
-    useEncounterStore.getState().addMultiattack("def-fighter", { name: "Multiattack", attacks: [{ actionId: "longsword", count: 2 }] });
-    render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: "Edit Multiattack" }));
-    await userEvent.click(screen.getByRole("button", { name: "Extra Attack (3 swings)" }));
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(fighterActions().find((a) => a.kind === "multiattack")).toMatchObject({ attacks: [{ actionId: "longsword", count: 2 }] });
-    expect(screen.getByRole("button", { name: "Create multiattack" })).toBeTruthy();
-  });
-});
-
 describe("ActionsTab asks before a delete changes a multiattack", () => {
   const routine = (attacks: Array<{ actionId: string; count: number; targetGroup?: number }>) =>
     useEncounterStore.getState().addMultiattack("def-fighter", { name: "Multiattack", attacks });
@@ -304,17 +253,5 @@ describe("ActionsTab asks before a delete changes a multiattack", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove Rapier" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(fighterDefinition().weapons).toEqual([]);
-  });
-
-  it("keeps a multiattack's saved target groups through an edit", async () => {
-    routine([{ actionId: "longsword", count: 1 }, { actionId: "longsword", count: 1, targetGroup: 1 }]);
-    render(<LiveTab />);
-    await userEvent.click(screen.getByRole("button", { name: "Edit Multiattack" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Attack 1 count" }), { target: { value: "2" } });
-    await userEvent.click(screen.getByRole("button", { name: "Save multiattack" }));
-
-    expect(fighterActions().find((a) => a.kind === "multiattack")).toMatchObject({
-      attacks: [{ actionId: "longsword", count: 2 }, { actionId: "longsword", count: 1, targetGroup: 1 }]
-    });
   });
 });

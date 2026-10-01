@@ -66,7 +66,7 @@ type RecordType = "weapon" | "spell" | "action" | "feature";
 const SECTIONS: Record<RecordType, SectionId[]> = {
   weapon: ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"],
   spell: ["basics", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
-  action: ["use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
+  action: ["sequence", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   feature: ["basics", "use", "while-active", "aura", "grants", "notes"]
 };
 
@@ -177,7 +177,8 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
   const list: AbilityList = target.mode === "new" ? target.list : target.mode === "edit" ? (target.ref.list === "legendary" || target.ref.list === "granted" ? "actions" : target.ref.list) : "actions";
   const type: RecordType = list === "weapons" ? "weapon" : list === "spells" ? "spell" : list === "features" || list === "traits" ? "feature" : "action";
   const available = SECTIONS[type];
-  const [open, setOpen] = useState<Set<SectionId>>(() => new Set(isNew ? available : []));
+  // A new record opens every section; a multiattack opens on its routine, which is what there is to edit.
+  const [open, setOpen] = useState<Set<SectionId>>(() => new Set(isNew ? available : type === "action" && (opened as ActionDefinition).kind === "multiattack" ? ["sequence"] : []));
   const parkedReaction = useParkedReaction();
   const parkedActivation = useRef<Activation | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -408,8 +409,9 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
     }
     return actionSection(id, { ...common, action: working as ActionDefinition, onChange: update });
   }
+  const actionKind = type === "action" ? (working as ActionDefinition).kind : undefined;
   const kindLabel = type === "weapon" ? "weapon" : type === "spell" ? "spell" : type === "feature" ? (working as FeatureDefinition).category
-    : (working as ActionDefinition).kind === "attack" ? "attack" : "action";
+    : actionKind === "attack" ? "attack" : actionKind === "multiattack" ? "multiattack" : "action";
 
   return (
     <div ref={rootRef} className={styles.editor} tabIndex={-1} onKeyDown={onKeyDown} aria-label={`Edit ${name || `new ${kindLabel}`}`} role="region">

@@ -248,7 +248,14 @@ describe("multiattack parser", () => {
     { id: "claws", name: "Claws", attackType: "melee" as const },
     { id: "longbow", name: "Longbow", attackType: "ranged" as const }
   ];
-  const steps = (actions: ReturnType<typeof parseMultiattack>) => (actions as MultiattackActionDefinition[]).map((action) => action.attacks.map((step) => `${step.count}x${step.actionId}`));
+  // Every routine of the one multiattack: its own, then each option.
+  const steps = (actions: ReturnType<typeof parseMultiattack>) => {
+    expect(actions.length).toBeLessThanOrEqual(1);
+    return (actions as MultiattackActionDefinition[])
+      .flatMap((action) => [action.attacks, ...(action.options ?? []).map((option) => option.attacks)])
+      .map((attacks) => attacks.map((step) => `${step.count}x${step.actionId ?? `any-${step.any}`}`));
+  };
+  const labels = (actions: ReturnType<typeof parseMultiattack>) => (actions as MultiattackActionDefinition[])[0]!.options?.map((option) => option.label);
 
   it("reads a colon list of counts and weapons", () => {
     expect(steps(parseMultiattack(entry("Multiattack", "The owlbear makes two attacks: one with its bite and one with its claws."), own, ctx()))).toEqual([["1xbite", "1xclaws"]]);
@@ -263,7 +270,38 @@ describe("multiattack parser", () => {
   });
 
   it("handles 'only one of which can be a bite' as two options", () => {
-    expect(steps(parseMultiattack(entry("Multiattack", "The vampire makes two attacks, only one of which can be a bite."), own, ctx()))).toEqual([["2xclaws"], ["1xclaws", "1xbite"]]);
+    const parsed = parseMultiattack(entry("Multiattack", "The vampire makes two attacks, only one of which can be a bite."), own, ctx());
+    expect(steps(parsed)).toEqual([["2xclaws"], ["1xclaws", "1xbite"]]);
+    expect(labels(parsed)).toEqual(["Bite"]);
+  });
+
+  it("keeps 'two melee attacks' and 'three attacks' generic, chosen swing by swing", () => {
+    const scout = parseMultiattack(entry("Multiattack", "The scout makes two melee attacks or two ranged attacks."), own, ctx());
+    expect(steps(scout)).toEqual([["2xany-melee"], ["2xany-ranged"]]);
+    expect(labels(scout)).toEqual(["Ranged"]);
+    expect(steps(parseMultiattack(entry("Multiattack", "The erinyes makes three attacks"), own, ctx()))).toEqual([["3xany-weapon"]]);
+  });
+
+  it("names the weapon a generic count says it uses", () => {
+    expect(steps(parseMultiattack(entry("Multiattack", "The devil makes two attacks with its claws."), own, ctx()))).toEqual([["2xclaws"]]);
+    expect(steps(parseMultiattack(entry("Multiattack", "The captain makes two claws attacks. Or the captain makes two ranged attacks with its longbow."), own, ctx())))
+      .toEqual([["2xclaws"], ["2xlongbow"]]);
+  });
+
+  it("puts an ability the statblock uses after its attacks at the end", () => {
+    const spittle = [{ id: "spittle", name: "Blinding Spittle" }];
+    expect(steps(parseMultiattack(entry("Multiattack", "The gibbering mouther makes one bite attack and, if it can, uses its Blinding Spittle."), own, ctx(), spittle)))
+      .toEqual([["1xbite", "1xspittle"]]);
+    const presence = [{ id: "presence", name: "Frightful Presence" }];
+    expect(steps(parseMultiattack(entry("Multiattack", "The dragon can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws."), own, ctx(), presence)))
+      .toEqual([["1xpresence", "1xbite", "2xclaws"]]);
+  });
+
+  it("lists what the routine doesn't run as not simulated", () => {
+    const context = ctx();
+    const [multiattack] = parseMultiattack(entry("Multiattack", "The glabrezu makes four attacks: two with its claws and two with its bite. Alternatively, it makes two attacks with its claws and casts one spell."), own, context) as MultiattackActionDefinition[];
+    expect(multiattack!.unsimulated).toEqual(["Alternatively, it makes two attacks with its claws and casts one spell."]);
+    expect(context.gaps.codes()).toContain("MULTIATTACK_STEP");
   });
 
   it("drops form notes and splits form alternatives", () => {
@@ -424,7 +462,7 @@ describe("generated library integrity", () => {
       const spellActions = (definition.spells ?? []).flatMap((spell) => (spell.action ? [spell.action] : []));
       const ids = new Set([...definition.actions, ...spellActions].map((action) => action.id));
       for (const action of [...definition.actions, ...spellActions]) {
-        if (action.kind === "multiattack") for (const step of action.attacks) expect(ids.has(step.actionId), `${definition.id} → ${step.actionId}`).toBe(true);
+        if (action.kind === "multiattack") for (const step of [...action.attacks, ...(action.options ?? []).flatMap((option) => option.attacks)]) if (step.actionId) expect(ids.has(step.actionId), `${definition.id} → ${step.actionId}`).toBe(true);
         if ("resourceCost" in action && action.resourceCost) expect(definition.resources?.[action.resourceCost.resourceId], `${definition.id} ${action.name}`).toBeGreaterThan(0);
       }
       for (const ref of definition.legendary?.actions ?? []) if (ref.actionId) expect(ids.has(ref.actionId), `${definition.id} legendary ${ref.name}`).toBe(true);

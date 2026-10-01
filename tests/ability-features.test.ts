@@ -268,7 +268,9 @@ describe("warnings for features", () => {
 
   it("says nothing about the library's simulated features but Action Surge's and Reckless Attack's switch", () => {
     for (const feature of SRD_FEATURES.filter((candidate) => candidate.automationSupport === "full")) {
-      const expected = ["action-surge", "reckless-attack"].some((id) => feature.id.endsWith(id)) ? ["activation-never-automatic"] : [];
+      const expected = ["action-surge", "reckless-attack"].some((id) => feature.id.endsWith(id)) ? ["activation-never-automatic"]
+        // This creature has no weapon attack for Extra Attack's swings to make.
+        : feature.id.endsWith("extra-attack") ? ["generic-step-empty"] : [];
       expect(ids(feature), feature.name).toEqual(expected);
     }
   });

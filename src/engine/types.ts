@@ -1239,6 +1239,36 @@ export interface UtilityActionDefinition {
   automationSupport: "full" | "partial";
 }
 
+/** A generic multiattack step: any of the creature's melee attacks, ranged attacks, or weapon attacks (not spells). */
+export type MultiattackGeneric = "melee" | "ranged" | "weapon";
+
+/**
+ * One step of a multiattack routine: `count` swings with one ability, or with any attack of a kind.
+ * A step naming an attack can use any of its variants swing by swing (a weapon's power attack, a
+ * charge it spends); a generic step picks the best matching attack for each swing.
+ */
+export interface MultiattackStep {
+  /** The ability the step uses: a compiled action id (a weapon's attack, an action, a save). Absent for a generic step. */
+  actionId?: Id;
+  /** A generic step: any melee, ranged or weapon attack the creature has ("two melee attacks", Extra Attack). */
+  any?: MultiattackGeneric;
+  count: number;
+  /**
+   * Legacy: aim this step at the target the caller supplies at this index
+   * (0 = primary). Out-of-range indices clamp; a dead target falls through to
+   * the next live one. Default `0`. Read, no longer written.
+   */
+  targetGroup?: number;
+  /**
+   * Whom the step's swings may target. `"different"`: a creature no other swing of this use targets
+   * (Tyrannosaurus: "can't make both attacks against the same target"). `"same-as-previous"`: the
+   * previous swing's target (Grick: "…against the same target"). Default: anyone in reach.
+   */
+  target?: "different" | "same-as-previous";
+  /** Only if the previous swing hit (Grick: "If that attack hits, the grick can make one beak attack"). */
+  requiresPreviousHit?: boolean;
+}
+
 export interface MultiattackActionDefinition {
   kind: "multiattack";
   id: Id;
@@ -1246,16 +1276,19 @@ export interface MultiattackActionDefinition {
   /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */
   description?: string;
   actionType: ActionType;
-  attacks: Array<{
-    actionId: Id;
-    count: number;
-    /**
-     * Advanced: aim this step at the target the caller supplies at this index
-     * (0 = primary). Out-of-range indices clamp; a dead target falls through to
-     * the next live one. Default `0`.
-     */
-    targetGroup?: number;
-  }>;
+  /** The routine. With `options`, the first of the routines it can choose between. */
+  attacks: MultiattackStep[];
+  /**
+   * Other routines it can use instead ("…or it makes two ranged attacks", "It can use its Life Drain in place of one
+   * longsword attack"). Each compiles to its own action (`<id>:option-N`), so the AI chooses between them.
+   */
+  options?: Array<{ label?: string; attacks: MultiattackStep[] }>;
+  /** What one use spends (Flurry of Blows: 1 ki). */
+  resourceCost?: ResourceCost;
+  /** Every swing of one use is made with the same weapon (the DM's choice for Extra Attack). Default: each swing picks. */
+  oneWeapon?: boolean;
+  /** Statblock sentences the routine doesn't run ("It uses Reel.", a Hydra's heads), shown as not simulated. */
+  unsimulated?: string[];
   /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
   usage?: ActionUsage;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
@@ -1822,6 +1855,7 @@ export interface CombatLogEvent {
     | "SaveRolled"
     | "AreaSaveResolved"
     | "MultiattackResolved"
+    | "MultiattackSwingSkipped"
     | "DamageApplied"
     | "HealingApplied"
     | "DeathSaveRolled"

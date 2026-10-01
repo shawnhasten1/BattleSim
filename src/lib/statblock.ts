@@ -7,6 +7,7 @@ import {
   abilityModifier,
   formulaAbility,
   getExecutableActions,
+  multiattackRoutines,
   parseDiceExpression,
   proficiencyFromDefinition,
   resolveAttackBonus,
@@ -31,6 +32,7 @@ import {
   type FeatureEffect,
   type HealingComponent,
   type LegendaryActionRef,
+  type MultiattackStep,
   type NumericFormula,
   type ReactionTrigger,
   type ResourceCost,
@@ -1049,21 +1051,233 @@ function activationText(action: ActivateAction, definition: CreatureDefinition, 
   };
 }
 
-function multiattackBody(action: Extract<ActionDefinition, { kind: "multiattack" }>, definition: CreatureDefinition): Body {
+type MultiattackAction = Extract<ActionDefinition, { kind: "multiattack" }>;
+
+/** "Claws", "Dagger (Melee)" → "claws", "dagger": an attack as a statblock names it inside a sentence. */
+function attackWord(name: string): string {
+  return name.replace(/\s*\([^)]*\)\s*/g, " ").trim().toLowerCase();
+}
+
+/** Weapons a creature carries one of: "two with its longsword" (where claws and tentacles come in pairs). */
+const CARRIED_WEAPON = /\b(?:axe|battleaxe|blowgun|bow|club|crossbow|dagger|dart|flail|fork|glaive|greataxe|greatclub|greatsword|halberd|hammer|handaxe|harpoon|javelin|lance|longbow|longsword|mace|maul|morningstar|net|pick|pike|quarterstaff|rapier|scimitar|scythe|shield|shortbow|shortsword|sickle|sling|spear|staff|sword|trident|warhammer|whip)$/;
+
+/** Attacks a statblock names with a verb: "one to constrict", "use its Swallow". */
+const VERB_ATTACK = /^(?:constrict|engulf|fling|reel|swallow)$/;
+
+/** "claw" → "claws" for two of them; a name already plural ("claws", "tentacles") and a carried weapon stay. */
+function pluralWord(word: string, count: number): string {
+  if (count === 1 || /s$/.test(word) || CARRIED_WEAPON.test(word)) return word;
+  if (/(ch|sh|x)$/.test(word)) return `${word}es`;
+  if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
+  return `${word}s`;
+}
+
+/** Once, twice, three times. */
+const timesWord = (n: number): string => (n === 1 ? "once" : n === 2 ? "twice" : `${countWord(n)} times`);
+
+const GENERIC_WORDS: Record<NonNullable<MultiattackStep["any"]>, string> = { melee: "melee", ranged: "ranged", weapon: "weapon" };
+
+/** How a routine's step reads: a kind of attack ("melee"), an ability it uses (Hurl Flame, Swallow), or an attack it makes. */
+type StepReading =
+  | { kind: "generic"; any: NonNullable<MultiattackStep["any"]> }
+  | { kind: "used"; name: string }
+  | { kind: "verb"; word: string }
+  | { kind: "attack"; word: string; ranged: boolean };
+
+function readStep(step: MultiattackStep, byId: Map<string, ActionDefinition>): StepReading {
+  if (step.any) return { kind: "generic", any: step.any };
+  const action = byId.get(step.actionId!);
+  const name = action?.name ?? step.actionId!;
+  const word = attackWord(name);
+  if (action && (action.kind !== "attack" || action.attackType === "spell")) return { kind: "used", name };
+  if (VERB_ATTACK.test(word)) return { kind: "verb", word };
+  return { kind: "attack", word, ranged: action?.kind === "attack" && action.attackType === "ranged" };
+}
+
+/**
+ * One step on its own: "makes two melee attacks", "makes three attacks", "makes two scimitar attacks", "makes one attack
+ * with its tentacles", "uses its Hurl Flame twice". `rangedQualifier` says "ranged" for a ranged attack offered beside
+ * melee ones ("or two ranged attacks with its longbow").
+ */
+function stepPhrase(step: MultiattackStep, byId: Map<string, ActionDefinition>, rangedQualifier = false): string {
+  const reading = readStep(step, byId);
+  const n = step.count;
+  switch (reading.kind) {
+    case "generic": return `makes ${countWord(n)} ${reading.any === "weapon" ? "" : `${GENERIC_WORDS[reading.any]} `}${plural(n, "attack")}`;
+    case "used": return `uses its ${reading.name}${n > 1 ? ` ${timesWord(n)}` : ""}`;
+    case "verb": return n > 1 ? `makes ${countWord(n)} ${reading.word} attacks` : `uses its ${capitalize(reading.word)}`;
+    case "attack":
+      if (rangedQualifier && reading.ranged) return `makes ${countWord(n)} ranged ${plural(n, "attack")} with its ${pluralWord(reading.word, n)}`;
+      // "one tentacles attack" doesn't read: a plural name says what it attacks with.
+      return /s$/.test(reading.word)
+        ? `makes ${countWord(n)} ${plural(n, "attack")} with its ${reading.word}`
+        : `makes ${countWord(n)} ${reading.word} ${plural(n, "attack")}`;
+  }
+}
+
+/** One step inside a listed routine: "two with its claws", "one to constrict", "two melee attacks", "one with its Hurl Flame". */
+function listedPhrase(step: MultiattackStep, byId: Map<string, ActionDefinition>): string {
+  const reading = readStep(step, byId);
+  const n = countWord(step.count);
+  switch (reading.kind) {
+    case "generic": return `${n} ${GENERIC_WORDS[reading.any]} ${plural(step.count, "attack")}`;
+    case "used": return `${n} with its ${reading.name}`;
+    case "verb": return `${n} to ${reading.word}`;
+    case "attack": return `${n} with its ${pluralWord(reading.word, step.count)}`;
+  }
+}
+
+/** A step as a noun, for rules and replacements: "bite attack", "two claw attacks", "melee attack". */
+function stepNoun(step: MultiattackStep, count: number, byId: Map<string, ActionDefinition>): string {
+  const reading = readStep(step, byId);
+  const word = reading.kind === "generic" ? GENERIC_WORDS[reading.any] : reading.kind === "used" ? reading.name : reading.word;
+  return `${word} ${plural(count, "attack")}`;
+}
+
+/** "makes two melee attacks", "makes two scimitar attacks", "makes three attacks: one with its bite and two with its claws". */
+function attacksPhrase(steps: MultiattackStep[], byId: Map<string, ActionDefinition>): { text: string; listed: boolean } {
+  if (steps.length === 1) return { text: stepPhrase(steps[0]!, byId), listed: false };
+  const total = steps.reduce((sum, step) => sum + step.count, 0);
+  return { text: `makes ${countWord(total)} attacks: ${joinList(steps.map((step) => listedPhrase(step, byId)))}`, listed: true };
+}
+
+/**
+ * A routine read the way a statblock prints it: the abilities it opens with, its attacks, the abilities it uses after
+ * them, attacks that follow a hit, and its target rules ("It can't make both attacks against the same target.").
+ */
+function routineSentences(steps: MultiattackStep[], byId: Map<string, ActionDefinition>): {
+  opening: string[]; attacks?: string; listed: boolean; closing: string[]; after: string[];
+} {
+  const isAbility = (step: MultiattackStep) => Boolean(step.actionId) && byId.get(step.actionId!)?.kind !== undefined && byId.get(step.actionId!)?.kind !== "attack";
+  const conditional = (step: MultiattackStep) => step.requiresPreviousHit || step.target === "same-as-previous";
+  const firstAttack = steps.findIndex((step) => !isAbility(step));
+  // Abilities before its first attack open the routine ("can use its Frightful Presence. It then…"); later ones close it.
+  const opening = steps.filter((step, index) => isAbility(step) && (firstAttack < 0 || index < firstAttack));
+  const closing = steps.filter((step, index) => isAbility(step) && firstAttack >= 0 && index > firstAttack);
+  const attackSteps = steps.filter((step) => !isAbility(step));
+  const firstConditional = attackSteps.findIndex(conditional);
+  const plain = firstConditional < 0 ? attackSteps : attackSteps.slice(0, firstConditional);
+  const following = firstConditional < 0 ? [] : attackSteps.slice(firstConditional);
+  const after: string[] = [];
+  for (const step of following) {
+    const what = `${countWord(step.count)} ${stepNoun(step, step.count, byId)}${step.target === "same-as-previous" ? " against the same target" : ""}`;
+    after.push(step.requiresPreviousHit ? `If that attack hits, it can make ${what}.` : `It then makes ${what}.`);
+  }
+  const total = plain.reduce((sum, step) => sum + step.count, 0);
+  const different = attackSteps.filter((step) => step.target === "different");
+  if (different.length) {
+    after.push(total === 2 && attackSteps.length === 2
+      ? "It can't make both attacks against the same target."
+      : `${capitalize(joinList(different.map((step) => `its ${stepNoun(step, step.count, byId)}`)))} can't target a creature its other attacks target.`);
+  }
+  const nameOf = (step: MultiattackStep) => byId.get(step.actionId!)?.name ?? step.actionId!;
+  const phrase = plain.length ? attacksPhrase(plain, byId) : undefined;
+  return { opening: opening.map(nameOf), attacks: phrase?.text, listed: phrase?.listed ?? false, closing: closing.map(nameOf), after };
+}
+
+/** How many swings a routine makes with each ability, keyed by what the step names (or its generic kind). */
+function swingCounts(steps: MultiattackStep[]): Map<string, { step: MultiattackStep; count: number }> {
+  const counts = new Map<string, { step: MultiattackStep; count: number }>();
+  for (const step of steps) {
+    const key = step.actionId ?? `any:${step.any}`;
+    const entry = counts.get(key);
+    if (entry) entry.count += step.count;
+    else counts.set(key, { step, count: step.count });
+  }
+  return counts;
+}
+
+/**
+ * An option that's another routine with some swings swapped ("It can use its Life Drain in place of one longsword
+ * attack"), as `{ added, removed }` phrases; undefined when it's a different routine altogether ("…or two ranged
+ * attacks").
+ */
+function replacementOf(base: MultiattackStep[], option: MultiattackStep[], byId: Map<string, ActionDefinition>): { added: string; removed: string } | undefined {
+  const before = swingCounts(base);
+  const after = swingCounts(option);
+  const removed = [...before].flatMap(([key, entry]) => {
+    const left = entry.count - (after.get(key)?.count ?? 0);
+    return left > 0 ? [{ ...entry, count: left, all: left === entry.count }] : [];
+  });
+  const added = [...after].flatMap(([key, entry]) => {
+    const extra = entry.count - (before.get(key)?.count ?? 0);
+    return extra > 0 ? [{ ...entry, count: extra }] : [];
+  });
+  const kept = [...before.values()].reduce((sum, entry) => sum + entry.count, 0) - removed.reduce((sum, entry) => sum + entry.count, 0);
+  if (!removed.length || !added.length || kept <= 0) return undefined;
+  const addedPhrases = added.map(({ step, count }) => {
+    const reading = readStep(step, byId);
+    const action = step.actionId ? byId.get(step.actionId) : undefined;
+    // A named ability (Life Drain, Fire Breath, Swallow) is used; a body part or weapon (Tail) makes an attack.
+    const named = reading.kind === "used" || reading.kind === "verb"
+      || (reading.kind === "attack" && /\s/.test(reading.word) && !CARRIED_WEAPON.test(reading.word));
+    if (named) return `use its ${action?.name ?? step.actionId}${count > 1 ? ` ${timesWord(count)}` : ""}`;
+    return `make ${countWord(count)} ${stepNoun(step, count, byId)}`;
+  });
+  // "in place of its bite attack" (its only one), "in place of its two claw attacks", "in place of one longsword attack".
+  const removedPhrases = removed.map(({ step, count, all }) => {
+    const reading = readStep(step, byId);
+    if (!all && reading.kind === "attack" && /s$/.test(reading.word)) return `${countWord(count)} ${plural(count, "attack")} with its ${reading.word}`;
+    return `${all ? `its ${count > 1 ? `${countWord(count)} ` : ""}` : `${countWord(count)} `}${stepNoun(step, count, byId)}`;
+  });
+  return { added: joinList(addedPhrases), removed: joinList(removedPhrases) };
+}
+
+function multiattackBody(action: MultiattackAction, definition: CreatureDefinition): Body {
   const byId = new Map(getExecutableActions(definition).map((candidate) => [candidate.id, candidate]));
-  const nameOf = (id: string) => byId.get(id)?.name ?? id;
-  const abilitySteps = action.attacks.filter((step) => byId.has(step.actionId) && byId.get(step.actionId)?.kind !== "attack");
-  const attackSteps = action.attacks.filter((step) => !abilitySteps.includes(step));
-  const total = attackSteps.reduce((sum, step) => sum + step.count, 0);
-  const attacks = attackSteps.length === 1
-    ? `makes ${countWord(total)} ${plural(total, "attack")} with its ${nameOf(attackSteps[0]!.actionId)}`
-    : `makes ${countWord(total)} attacks: ${joinList(attackSteps.map((step) => `${countWord(step.count)} with its ${nameOf(step.actionId)}`))}`;
-  const uses = joinList(abilitySteps.map((step) => nameOf(step.actionId)));
-  const text = !attackSteps.length ? `It uses its ${uses}.`
-    : abilitySteps.length ? `It can use its ${uses}. It then ${attacks}.`
-      : `It ${attacks}.`;
-  const short = action.attacks.map((step) => `${step.count > 1 ? `${step.count} × ` : ""}${nameOf(step.actionId)}`).join(", ");
-  return { text, short, notSimulated: [] };
+  const [main, ...options] = multiattackRoutines(action);
+  const routine = routineSentences(main!.attacks, byId);
+  // An option that swaps some swings of the routine (or of an earlier alternative) reads as a replacement; the rest are
+  // alternatives ("…or two ranged attacks").
+  const bases: MultiattackStep[][] = [main!.attacks];
+  const alternatives: MultiattackStep[][] = [];
+  const replacements = new Map<string, string[]>();
+  for (const option of options) {
+    const swap = bases.map((base) => replacementOf(base, option.attacks, byId)).find((found) => found);
+    if (swap) {
+      const removed = replacements.get(swap.added) ?? [];
+      if (!removed.includes(swap.removed)) replacements.set(swap.added, [...removed, swap.removed]);
+      continue;
+    }
+    alternatives.push(option.attacks);
+    bases.push(option.attacks);
+  }
+
+  // After a listed routine, an alternative of one kind of attack joins the list ("…, or two ranged attacks with its
+  // longbow"); anything else gets its own sentence.
+  const meleeRoutine = !main!.attacks.some((step) => {
+    const reading = readStep(step, byId);
+    return reading.kind === "attack" && reading.ranged;
+  });
+  const joined: string[] = [];
+  const separate: string[] = [];
+  for (const steps of alternatives) {
+    const sentences = routineSentences(steps, byId);
+    const opening = sentences.opening.length ? `uses its ${joinList(sentences.opening)}${sentences.attacks ? " and " : ""}` : "";
+    const single = steps.length === 1 && !sentences.opening.length && sentences.attacks;
+    const phrase = single ? stepPhrase(steps[0]!, byId, routine.listed && meleeRoutine) : `${opening}${sentences.attacks ?? ""}`;
+    if (!phrase) continue;
+    if (routine.attacks && (!routine.listed || (single && !phrase.startsWith("uses ")))) joined.push(phrase.replace(/^makes /, ""));
+    else separate.push(routine.attacks ? `Alternatively, it ${phrase}.` : `Or it ${phrase}.`);
+  }
+
+  const opening = routine.opening.length
+    ? routine.attacks ? [`It can use its ${joinList(routine.opening)}.`] : [`It uses its ${joinList(routine.opening)}.`]
+    : [];
+  const closing = routine.closing.length ? ` and can then use its ${joinList(routine.closing)}` : "";
+  const choices = joined.length ? `${routine.listed ? "," : ""} or ${joinList(joined, "or")}` : "";
+  const attacks = routine.attacks ? [`It ${routine.opening.length ? "then " : ""}${routine.attacks}${closing}${choices}.`] : [];
+  const swaps = [...replacements].map(([added, removed]) => `It can ${added} in place of ${joinList(removed, "or")}.`);
+  // Every routine is held to one weapon, so it's said when any of them picks its weapon swing by swing.
+  const oneWeapon = action.oneWeapon && [main!, ...options].some((routine) => routine.attacks.some((step) => step.any)) ? ["It makes them all with the same weapon."] : [];
+  const unsimulated = action.unsimulated ?? [];
+  const text = [...opening, ...attacks, ...separate, ...routine.after, ...swaps, ...oneWeapon, ...unsimulated].join(" ");
+
+  const shortOf = (steps: MultiattackStep[]) => steps
+    .map((step) => `${step.count > 1 ? `${step.count} × ` : ""}${step.any ? `any ${GENERIC_WORDS[step.any]} attack` : byId.get(step.actionId!)?.name ?? step.actionId}`)
+    .join(", ");
+  const short = [shortOf(main!.attacks), ...options.map((option) => `or ${option.label ?? shortOf(option.attacks)}`)].join(" · ");
+  return { text, short, notSimulated: [...unsimulated] };
 }
 
 function actionBody(action: ActionDefinition, definition: CreatureDefinition, inSpell: boolean): Body {

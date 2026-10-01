@@ -244,7 +244,10 @@ function lingeringSummary(action: ActionDefinition): string {
 function sequenceSummary(action: ActionDefinition, definition: CreatureDefinition): string {
   if (action.kind !== "multiattack") return "—";
   const names = new Map(getExecutableActions(definition).map((candidate) => [candidate.id, candidate.name]));
-  return action.attacks.map((step) => `${step.count > 1 ? `${step.count} × ` : ""}${names.get(step.actionId) ?? "(missing)"}`).join(", ") || "no steps";
+  const routine = (steps: typeof action.attacks) => steps
+    .map((step) => `${step.count > 1 ? `${step.count} × ` : ""}${step.any ? `any ${step.any} attack` : names.get(step.actionId ?? "") ?? "(missing)"}`)
+    .join(", ");
+  return [routine(action.attacks) || "no steps", ...(action.options ?? []).map((option) => `or ${option.label?.trim() || routine(option.attacks)}`)].join(" · ");
 }
 
 function whileActiveSummary(shape: Shape, definition: CreatureDefinition): string {
@@ -341,6 +344,8 @@ const ROLL_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-sa
 
 const SECTIONS: SectionSpec[] = [
   { id: "basics", title: "Basics", appliesTo: () => true, summary: (shape) => basicsSummary(shape) },
+  // A multiattack is its routine: it comes first, as the statblock sentence does.
+  { id: "sequence", title: "Sequence", appliesTo: withAction((action) => action.kind === "multiattack"), summary: (shape, definition) => sequenceSummary(actionOf(shape)!, definition) },
   {
     id: "use",
     title: "Use & cost",
@@ -378,7 +383,6 @@ const SECTIONS: SectionSpec[] = [
   },
   { id: "aura", title: "Aura", appliesTo: (shape) => shape.type === "feature", summary: (shape, definition) => auraSummary((shape as Extract<Shape, { type: "feature" }>).feature, definition) },
   { id: "lingering", title: "Lingering area", appliesTo: withAction((action) => action.kind === "area-save"), summary: (shape) => lingeringSummary(actionOf(shape)!) },
-  { id: "sequence", title: "Sequence", appliesTo: withAction((action) => action.kind === "multiattack"), summary: (shape, definition) => sequenceSummary(actionOf(shape)!, definition) },
   { id: "grants", title: "Grants", appliesTo: (shape) => shape.type === "weapon" || shape.type === "feature", summary: (shape) => grantsSummary(shape) },
   { id: "notes", title: "Notes & AI", appliesTo: () => true, summary: (shape) => notesSummary(shape) }
 ];

@@ -86,21 +86,5 @@ export const MONSTER_OVERRIDES: Record<string, MonsterOverride> = {
   "gnome-deep-svirfneblin": {
     reason: "Source data error: walk speed 0. SRD 5.1: Speed 20 ft.",
     patch: (definition) => withSpeed(definition, 20)
-  },
-  hydra: {
-    reason: "Multiattack is \"as many bite attacks as it has heads\" — the parser can't read a variable count. "
-      + "A fresh hydra has five heads, so model five bites (head loss isn't modelled).",
-    clearGaps: ["MULTIATTACK_PARSE"],
-    patch: (definition) => {
-      const bite = definition.actions.find((action) => action.kind === "attack" && action.id === "bite");
-      if (!bite) return definition;
-      return {
-        ...definition,
-        actions: [
-          { kind: "multiattack", id: "multiattack", name: "Multiattack", actionType: "action", attacks: [{ actionId: bite.id, count: 5 }], automationSupport: "full" },
-          ...definition.actions
-        ]
-      };
-    }
   }
 };

@@ -1,4 +1,4 @@
-import type { ActionDefinition, CreatureDefinition, TransformActionDefinition } from "../../src/engine/types";
+import type { ActionDefinition, CreatureDefinition, MultiattackStep, TransformActionDefinition } from "../../src/engine/types";
 import type { ParsedMonster } from "./monster";
 import { slugify } from "./util";
 
@@ -42,8 +42,16 @@ export function splitForms(monster: ParsedMonster): ParsedMonster[] {
       return limits.length === 0 || limits.some((entry) => entry.words.includes(word));
     });
     const ids = new Set(allowed.map((action) => action.id));
-    // A multiattack only survives in a shape that has every attack it names.
-    return allowed.filter((action) => action.kind !== "multiattack" || action.attacks.every((step) => ids.has(step.actionId)));
+    // A shape keeps the multiattack routines it has every named attack for ("two claw attacks" in bear form, "two
+    // greataxe attacks" as a humanoid); when its main routine goes, the first routine left takes its place.
+    return allowed.flatMap((action): ActionDefinition[] => {
+      if (action.kind !== "multiattack") return [action];
+      const fits = (attacks: MultiattackStep[]) => attacks.every((step) => !step.actionId || ids.has(step.actionId));
+      const [main, ...options] = [{ attacks: action.attacks }, ...(action.options ?? [])].filter((routine) => fits(routine.attacks));
+      if (!main) return [];
+      const { options: _all, ...rest } = action;
+      return [{ ...rest, attacks: main.attacks, ...(options.length ? { options } : {}) }];
+    });
   };
 
   const transform: TransformActionDefinition = {

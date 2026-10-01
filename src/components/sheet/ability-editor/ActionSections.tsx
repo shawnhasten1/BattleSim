@@ -21,6 +21,7 @@ import { EffectCards } from "./EffectCards";
 import { ActivationUse, ActivationWhileActive } from "./FeatureSections";
 import { LimitPicker, type NewPools } from "./LimitPicker";
 import { LingeringArea } from "./LingeringArea";
+import { SequenceSection } from "./SequenceSections";
 import { BuffOutcome, HealingOutcome } from "./OutcomeSections";
 import { ATTACK_TRIGGERS, ReactionControls } from "./ReactionControls";
 import { HowItWorks, SaveRoll } from "./RollSection";
@@ -105,6 +106,8 @@ export function actionSection(id: SectionId, props: ActionSectionProps): ReactNo
       return action.kind === "area-save"
         ? <LingeringArea zone={zoneOf(action)} onZone={(zone) => onChange(withActionZone(action, zone))} concentrates={Boolean(action.concentration)} definition={definition} />
         : null;
+    case "sequence":
+      return action.kind === "multiattack" ? <SequenceSection action={action} onChange={onChange} definition={definition} /> : null;
     case "notes":
       return <ActionNotes action={action} onChange={onChange} />;
     default:

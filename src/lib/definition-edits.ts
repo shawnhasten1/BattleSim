@@ -2,7 +2,9 @@ import {
   getExecutableActions,
   type ActionDefinition,
   type CreatureDefinition,
-  type MultiattackActionDefinition
+  type MultiattackActionDefinition,
+  type MultiattackGeneric,
+  type MultiattackStep
 } from "@/engine";
 
 /** A record on a creature's sheet that can be deleted on its own. */
@@ -31,9 +33,10 @@ function multiattacksOf(definition: CreatureDefinition): MultiattackActionDefini
 /**
  * The creature without one of its records, and without what went with it: every executable action the record
  * produced (a weapon's bonus-action, reaction and power-attack copies, a spell's upcast variants, a feature's granted
- * attacks) is removed from every multiattack, and a multiattack left with no steps is deleted.
+ * attacks) is removed from every multiattack, and a multiattack left with no steps is deleted. With a `replacement`
+ * (`id:<action>` or `any:<kind>`), the steps that used the record use it instead, and every routine is kept.
  */
-export function withoutDefinitionItem(definition: CreatureDefinition, itemType: DefinitionItemType, itemId: string): CreatureDefinition {
+export function withoutDefinitionItem(definition: CreatureDefinition, itemType: DefinitionItemType, itemId: string, replacement?: string): CreatureDefinition {
   const removedIds = new Set<string>([itemId]);
   if (itemType === "weapon") {
     const weapon = (definition.weapons ?? []).find((item) => item.id === itemId);
@@ -74,16 +77,53 @@ export function withoutDefinitionItem(definition: CreatureDefinition, itemType: 
     if (!remaining.has(action.id)) removedIds.add(action.id);
   }
   const scrub = (list: ActionDefinition[] | undefined): ActionDefinition[] | undefined => list
-    ?.map((action) => action.kind === "multiattack"
-      ? { ...action, attacks: action.attacks.filter((step) => !removedIds.has(step.actionId)) }
-      : action)
-    .filter((action) => action.kind !== "multiattack" || action.attacks.length > 0);
+    ?.flatMap((action): ActionDefinition[] => {
+      if (action.kind !== "multiattack") return [action];
+      if (replacement) return [withStepsReplaced(action, removedIds, replacement)];
+      const scrubbed = withoutSteps(action, removedIds);
+      return scrubbed ? [scrubbed] : [];
+    });
   return {
     ...itemRemoved,
     actions: scrub(itemRemoved.actions) ?? [],
     bonusActions: scrub(itemRemoved.bonusActions),
     reactions: scrub(itemRemoved.reactions)
   };
+}
+
+/** A routine with every step that used a `removed` ability using `replacement` instead; counts and rules stay. */
+function withStepsReplaced(action: MultiattackActionDefinition, removed: Set<string>, replacement: string): MultiattackActionDefinition {
+  const swap = (steps: MultiattackStep[]) => steps.map((step): MultiattackStep => {
+    if (!step.actionId || !removed.has(step.actionId)) return step;
+    const next = { ...step };
+    delete next.actionId;
+    delete next.any;
+    return replacement.startsWith("any:") ? { ...next, any: replacement.slice(4) as MultiattackGeneric } : { ...next, actionId: replacement.slice(3) };
+  });
+  return {
+    ...action,
+    attacks: swap(action.attacks),
+    ...(action.options ? { options: action.options.map((option) => ({ ...option, attacks: swap(option.attacks) })) } : {})
+  };
+}
+
+/** Every step a routine has, its options' included. */
+const stepCount = (action: MultiattackActionDefinition) => action.attacks.length + (action.options ?? []).reduce((sum, option) => sum + option.attacks.length, 0);
+
+/**
+ * A routine without the steps that use `removed` abilities (a generic step names none, so it stays). An option left
+ * empty goes; a main routine left empty hands over to its first option; with nothing left, the routine goes too.
+ */
+function withoutSteps(action: MultiattackActionDefinition, removed: Set<string>): MultiattackActionDefinition | undefined {
+  const keep = (steps: MultiattackActionDefinition["attacks"]) => steps.filter((step) => !step.actionId || !removed.has(step.actionId));
+  const main = keep(action.attacks);
+  const options = (action.options ?? []).map((option) => ({ ...option, attacks: keep(option.attacks) })).filter((option) => option.attacks.length > 0);
+  const routines = main.length ? [{ attacks: main }, ...options] : options;
+  if (!routines.length) return undefined;
+  const [first, ...rest] = routines;
+  const next: MultiattackActionDefinition = { ...action, attacks: first!.attacks };
+  delete next.options;
+  return rest.length ? { ...next, options: rest } : next;
 }
 
 export interface MultiattackLoss {
@@ -103,6 +143,6 @@ export function multiattackLosses(definition: CreatureDefinition, itemType: Defi
     .filter((multiattack) => !(ACTION_BUCKET[itemType] && multiattack.id === itemId))
     .flatMap((multiattack) => {
       const after = remaining.get(multiattack.id);
-      return after && after.attacks.length === multiattack.attacks.length ? [] : [{ multiattack, after, definitionAfter }];
+      return after && stepCount(after) === stepCount(multiattack) ? [] : [{ multiattack, after, definitionAfter }];
     });
 }

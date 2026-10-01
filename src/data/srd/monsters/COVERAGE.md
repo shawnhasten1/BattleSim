@@ -21,8 +21,8 @@ A phase is done when its codes reach 0.
 | `LEGENDARY_RESISTANCE` | 0 | (Retired — now enforced.) Legendary Resistance. |
 | `SURVIVE_ZERO` | 0 | (Retired — now enforced.) Undead Fortitude / Relentless. |
 | `LEGENDARY_ACTIONS` | 10 | A legendary action that is not an attack or save (Move, Teleport, Cast a Spell, Heal Self…) is reference-only; the rest are taken. |
-| `MULTIATTACK_PARSE` | 1 | Multiattack text could not be fully compiled. |
-| `MULTIATTACK_STEP` | 7 | A Multiattack step is a spell, breath replacement or other non-attack and is skipped. |
+| `MULTIATTACK_PARSE` | 0 | Multiattack text could not be fully compiled. |
+| `MULTIATTACK_STEP` | 11 | Part of a Multiattack isn't simulated (a spell, Fling, Reel, Engulf, a count that varies, a choice made while flying…); the routine lists it as not simulated and runs the rest. |
 | `REACTION` | 3 | A reaction other than Parry (Unnerving Mask, Rock Catching, a guardian's Shield) is reference-only. |
 | `MOVE_FLY` | 0 | (Retired — see ALTITUDE.) Flying speed. |
 | `MOVE_SWIM` | 0 | (Retired — now a movement mode.) Swim speed. |
@@ -121,7 +121,7 @@ A phase is done when its codes reach 0.
 | Balor | 19 | partial | RIDER_TEXT, SPAWN, SPECIAL_ACTION |
 | Bandit | 0.125 | full |  |
 | Bandit Captain | 2 | full |  |
-| Barbed Devil | 5 | partial | MULTIATTACK_STEP, RIDER_TEXT, TRAIT_UNMODELED |
+| Barbed Devil | 5 | partial | RIDER_TEXT, TRAIT_UNMODELED |
 | Basilisk | 3 | partial | TRAIT_UNMODELED |
 | Bat | 0 | full |  |
 | Bearded Devil | 3 | partial | RIDER_TEXT, TRAIT_UNMODELED |
@@ -144,8 +144,8 @@ A phase is done when its codes reach 0.
 | Cat | 0 | full |  |
 | Centaur | 2 | full |  |
 | Chain Devil | 11 | partial | REACTION, SPAWN |
-| Chimera | 6 | partial | MULTIATTACK_STEP |
-| Chuul | 4 | partial | HOLD_GRAPPLE |
+| Chimera | 6 | full |  |
+| Chuul | 4 | partial | HOLD_GRAPPLE, MULTIATTACK_STEP |
 | Clay Golem | 9 | partial | RIDER_TEXT, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloaker | 8 | partial | HOLD_GRAPPLE, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloud Giant | 9 | partial | SPELLS, SPELL_UTILITY |
@@ -170,7 +170,7 @@ A phase is done when its codes reach 0.
 | Draft Horse | 0.25 | full |  |
 | Dragon Turtle | 17 | partial | RIDER_TEXT |
 | Dretch | 0.25 | full |  |
-| Drider | 6 | partial | MULTIATTACK_STEP, SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
+| Drider | 6 | partial | SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
 | Drow | 0.25 | partial | SPELLS, SPELL_UTILITY, TRAIT_UNMODELED |
 | Druid | 2 | partial | RIDER_TEXT, SPELL_UTILITY |
 | Dryad | 1 | partial | MOVE_TRAIT, RIDER_TEXT, SPELL_UTILITY |
@@ -227,7 +227,7 @@ A phase is done when its codes reach 0.
 | Giant Weasel | 0.125 | full |  |
 | Giant Wolf Spider | 0.25 | full |  |
 | Gibbering Mouther | 2 | partial | TRAIT_UNMODELED |
-| Glabrezu | 9 | partial | SPELLS, SPELL_UTILITY |
+| Glabrezu | 9 | partial | MULTIATTACK_STEP, SPELLS, SPELL_UTILITY |
 | Gladiator | 5 | full |  |
 | Gnoll | 0.5 | full |  |
 | Gnome, Deep (Svirfneblin) | 0 | full |  |
@@ -255,7 +255,7 @@ A phase is done when its codes reach 0.
 | Homunculus | 0 | full |  |
 | Horned Devil | 11 | partial | MULTIATTACK_STEP, RIDER_TEXT |
 | Hunter Shark | 2 | full |  |
-| Hydra | 8 | partial | TRAIT_UNMODELED |
+| Hydra | 8 | partial | MULTIATTACK_STEP, TRAIT_UNMODELED |
 | Hyena | 0 | full |  |
 | Ice Devil | 14 | full |  |
 | Ice Mephit | 0.5 | partial | SPELL_UTILITY |
@@ -266,13 +266,13 @@ A phase is done when its codes reach 0.
 | Killer Whale | 3 | full |  |
 | Knight | 3 | partial | SAVE_UNPARSED |
 | Kobold | 0.125 | full |  |
-| Kraken | 23 | partial | HOLD_GRAPPLE, LEGENDARY_ACTIONS, TRAIT_UNMODELED |
-| Lamia | 4 | partial | ATTACK_UNPARSED, SPELLS, SPELL_UTILITY |
+| Kraken | 23 | partial | HOLD_GRAPPLE, LEGENDARY_ACTIONS, MULTIATTACK_STEP, TRAIT_UNMODELED |
+| Lamia | 4 | partial | ATTACK_UNPARSED, MULTIATTACK_STEP, SPELLS, SPELL_UTILITY |
 | Lemure | 0 | full |  |
 | Lich | 21 | partial | SPELLS, SPELL_UTILITY |
 | Lion | 1 | full |  |
 | Lizard | 0 | full |  |
-| Lizardfolk | 0.5 | full |  |
+| Lizardfolk | 0.5 | partial | MULTIATTACK_STEP |
 | Mage | 6 | partial | SPELLS, SPELL_UTILITY |
 | Magma Mephit | 0.5 | full |  |
 | Magmin | 0.5 | partial | RIDER_TEXT |
@@ -325,7 +325,7 @@ A phase is done when its codes reach 0.
 | Rhinoceros | 2 | full |  |
 | Riding Horse | 0.25 | full |  |
 | Roc | 11 | full |  |
-| Roper | 5 | partial | HOLD_SWALLOW, TRAIT_UNMODELED |
+| Roper | 5 | partial | HOLD_SWALLOW, MULTIATTACK_STEP, TRAIT_UNMODELED |
 | Rug of Smothering | 2 | manual | HOLD_GRAPPLE, TRAIT_UNMODELED |
 | Rust Monster | 0.5 | partial | SAVE_UNPARSED, TRAIT_UNMODELED |
 | Saber-Toothed Tiger | 2 | full |  |
@@ -337,7 +337,7 @@ A phase is done when its codes reach 0.
 | Sea Hag | 2 | partial | SAVE_UNPARSED, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Sea Horse | 0 | full |  |
 | Shadow | 0.5 | partial | RIDER_TEXT, TRAIT_UNMODELED |
-| Shambling Mound | 5 | partial | HOLD_SWALLOW |
+| Shambling Mound | 5 | partial | HOLD_SWALLOW, MULTIATTACK_STEP |
 | Shield Guardian | 7 | partial | REACTION, TRAIT_UNMODELED |
 | Shrieker | 0 | manual | SPECIAL_ACTION |
 | Silver Dragon Wyrmling | 2 | full |  |
@@ -364,7 +364,7 @@ A phase is done when its codes reach 0.
 | Swarm of Ravens | 0.25 | full |  |
 | Swarm of Spiders | 0.5 | full |  |
 | Swarm of Wasps | 0.5 | full |  |
-| Tarrasque | 30 | partial | LEGENDARY_ACTIONS, MULTIATTACK_STEP, TRAIT_UNMODELED |
+| Tarrasque | 30 | partial | LEGENDARY_ACTIONS, TRAIT_UNMODELED |
 | Thug | 0.5 | full |  |
 | Tiger | 1 | full |  |
 | Treant | 9 | partial | SPAWN |
@@ -377,7 +377,7 @@ A phase is done when its codes reach 0.
 | Vampire (Bat) | 13 | partial | FORM_STATS, HOLD_GRAPPLE, LEGENDARY_ACTIONS, REGEN_TERRAIN, RIDER_TEXT, SPAWN, TRAIT_UNMODELED |
 | Vampire Spawn | 5 | partial | HOLD_GRAPPLE, REGEN_TERRAIN, RIDER_TEXT, TRAIT_UNMODELED |
 | Veteran | 3 | full |  |
-| Violet Fungus | 0.25 | partial | MULTIATTACK_PARSE |
+| Violet Fungus | 0.25 | partial | MULTIATTACK_STEP |
 | Vrock | 6 | full |  |
 | Vulture | 0 | full |  |
 | Warhorse | 0.5 | full |  |
@@ -400,7 +400,7 @@ A phase is done when its codes reach 0.
 | Werewolf (Hybrid) | 3 | partial | FORM_STATS, RIDER_TEXT |
 | Werewolf (Wolf) | 3 | partial | FORM_STATS, RIDER_TEXT |
 | White Dragon Wyrmling | 2 | full |  |
-| Wight | 3 | partial | MULTIATTACK_STEP, RIDER_TEXT |
+| Wight | 3 | partial | RIDER_TEXT |
 | Will-o'-Wisp | 2 | partial | MOVE_TRAIT, SPECIAL_ACTION, TRAIT_UNMODELED |
 | Winter Wolf | 3 | full |  |
 | Wolf | 0.25 | full |  |
@@ -488,7 +488,6 @@ A phase is done when its codes reach 0.
 ### Barbed Devil
 - `TRAIT_UNMODELED` — Barbed Hide
 - `RIDER_TEXT` — Hurl Flame: If the target is a flammable object that isn't being worn or carried, it also ca
-- `MULTIATTACK_STEP` — Multiattack: Alternatively, it can use Hurl Flame twice.
 
 ### Basilisk
 - `TRAIT_UNMODELED` — Petrifying Gaze
@@ -514,11 +513,9 @@ A phase is done when its codes reach 0.
 - `REACTION` — Unnerving Mask
 - `SPAWN` — Animate Chains
 
-### Chimera
-- `MULTIATTACK_STEP` — Multiattack: When its fire breath is available, it can use the breath in place of its bite or horns.
-
 ### Chuul
 - `HOLD_GRAPPLE` — Tentacles
+- `MULTIATTACK_STEP` — Multiattack: If the chuul is grappling a creature, it can also use its tentacles once.
 
 ### Clay Golem
 - `TRAIT_UNMODELED` — Berserk
@@ -577,7 +574,6 @@ A phase is done when its codes reach 0.
 - `TRAIT_UNMODELED` — Fey Ancestry
 - `SPELLS` — Innate Spellcasting: darkness
 - `SPELL_UTILITY` — Innate Spellcasting: dancing lights
-- `MULTIATTACK_STEP` — Multiattack: It can replace one of those attacks with a bite attack.
 
 ### Drow
 - `TRAIT_UNMODELED` — Fey Ancestry
@@ -651,6 +647,7 @@ A phase is done when its codes reach 0.
 ### Glabrezu
 - `SPELLS` — Innate Spellcasting: darkness, fly
 - `SPELL_UTILITY` — Innate Spellcasting: detect magic, dispel magic
+- `MULTIATTACK_STEP` — Multiattack: Alternatively, it makes two attacks with its pincers and casts one spell.
 
 ### Gold Dragon Wyrmling
 - `SAVE_UNPARSED` — Weakening Breath: no damage or condition found
@@ -677,10 +674,11 @@ A phase is done when its codes reach 0.
 ### Horned Devil
 - `RIDER_TEXT` — Tail: If the target is a creature other than an undead or a construct, it must succeed
 - `RIDER_TEXT` — Hurl Flame: If the target is a flammable object that isn't being worn or carried, it also ca
-- `MULTIATTACK_STEP` — Multiattack: It can use Hurl Flame in place of any melee attack.
+- `MULTIATTACK_STEP` — Multiattack: It can also use Hurl Flame in place of just some of its melee attacks.
 
 ### Hydra
 - `TRAIT_UNMODELED` — Reactive Heads
+- `MULTIATTACK_STEP` — Multiattack: One bite per head: heads it loses or regrows don't change the count.
 
 ### Ice Mephit
 - `SPELL_UTILITY` — Innate Spellcasting (1/Day): fog cloud
@@ -695,16 +693,21 @@ A phase is done when its codes reach 0.
 ### Kraken
 - `TRAIT_UNMODELED` — Freedom of Movement
 - `HOLD_GRAPPLE` — Fling
+- `MULTIATTACK_STEP` — Multiattack: It can replace each tentacle attack with one use of Fling.
 - `LEGENDARY_ACTIONS` — Lightning Storm (cost 2)
 
 ### Lamia
 - `SPELLS` — Innate Spellcasting: suggestion
 - `SPELL_UTILITY` — Innate Spellcasting: disguise self, major image, scrying, geas
 - `ATTACK_UNPARSED` — Intoxicating Touch
+- `MULTIATTACK_STEP` — Multiattack: It can use its Intoxicating Touch in place of its dagger attack.
 
 ### Lich
 - `SPELLS` — Spellcasting: animate dead, power word kill
 - `SPELL_UTILITY` — Spellcasting: mage hand, prestidigitation, detect magic, detect thoughts, invisibility, dispel magic, scrying, globe of invulnerability, plane shift
+
+### Lizardfolk
+- `MULTIATTACK_STEP` — Multiattack: Each attack uses a different weapon.
 
 ### Mage
 - `SPELLS` — Spellcasting: suggestion, fly
@@ -799,6 +802,7 @@ A phase is done when its codes reach 0.
 ### Roper
 - `TRAIT_UNMODELED` — Grasping Tendrils
 - `HOLD_SWALLOW` — Reel
+- `MULTIATTACK_STEP` — Multiattack: It uses Reel between its tendril attacks and its bite.
 
 ### Rug of Smothering
 - `TRAIT_UNMODELED` — Damage Transfer
@@ -823,6 +827,7 @@ A phase is done when its codes reach 0.
 
 ### Shambling Mound
 - `HOLD_SWALLOW` — Engulf
+- `MULTIATTACK_STEP` — Multiattack: If both attacks hit a Medium or smaller target, the target is grappled (escape DC 14), and
 
 ### Shield Guardian
 - `TRAIT_UNMODELED` — Spell Storing
@@ -873,7 +878,6 @@ A phase is done when its codes reach 0.
 
 ### Tarrasque
 - `TRAIT_UNMODELED` — Reflective Carapace
-- `MULTIATTACK_STEP` — Multiattack: It can use its Swallow instead of its bite.
 - `LEGENDARY_ACTIONS` — Move (cost 1)
 
 ### Treant
@@ -918,7 +922,7 @@ A phase is done when its codes reach 0.
 - `HOLD_GRAPPLE` — Claws: Instead of dealing damage, the vampire can grapple the target (escape DC 13).
 
 ### Violet Fungus
-- `MULTIATTACK_PARSE` — Multiattack: rolled attack count "1d4" approximated by its average
+- `MULTIATTACK_STEP` — Multiattack: The number of attacks is 1d4; the simulator always makes three.
 
 ### Water Elemental
 - `TRAIT_UNMODELED` — Freeze
@@ -987,7 +991,6 @@ A phase is done when its codes reach 0.
 
 ### Wight
 - `RIDER_TEXT` — Life Drain: The target must succeed on a DC 13 Constitution saving throw or its hit point ma
-- `MULTIATTACK_STEP` — Multiattack: It can use its Life Drain in place of one longsword attack.
 
 ### Will-o'-Wisp
 - `TRAIT_UNMODELED` — Consume Life

@@ -192,6 +192,21 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     ]
   },
 
+  /* ── Attack routines ────────────────────────────────────────────────────────── */
+  {
+    id: "srd:feature:extra-attack",
+    name: "Extra Attack",
+    category: "feature",
+    automationSupport: "full",
+    description:
+      "You can attack twice, instead of once, whenever you take the Attack action on your turn. Each attack picks its own weapon "
+      + "(the longsword beside an enemy, the longbow at range). At 11th level a fighter attacks three times: edit the Extra Attack it grants.",
+    grantedActions: [{
+      kind: "multiattack", id: "extra-attack", name: "Extra Attack", actionType: "action",
+      attacks: [{ any: "weapon", count: 2 }], automationSupport: "full"
+    }]
+  },
+
   /* ── Passive ──────────────────────────────────────────────────────────────── */
   {
     id: "srd:feature:sneak-attack",
@@ -260,24 +275,17 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
 
   /* ── Reference (toggle lives elsewhere) ───────────────────────────────────── */
   {
-    id: "srd:feature:extra-attack",
-    name: "Extra Attack",
-    category: "feature",
-    automationSupport: "manual-only",
-    description: 'Not a feature to attach — build it in the Multiattack section (the "Extra Attack (×2)" button). This entry is only a reminder.'
-  },
-  {
     id: "srd:feature:great-weapon-master",
     name: "Great Weapon Master",
     category: "feature",
     automationSupport: "manual-only",
-    description: 'Before a heavy-melee attack you may take -5 to hit for +10 damage. Toggle "Power attack" on the weapon to model it.'
+    description: 'Before a heavy-melee attack you may take -5 to hit for +10 damage. To model it, edit the weapon: Roll › More options › "Offer a power attack".'
   },
   {
     id: "srd:feature:sharpshooter",
     name: "Sharpshooter",
     category: "feature",
     automationSupport: "manual-only",
-    description: 'Before a ranged-weapon attack you may take -5 to hit for +10 damage. Toggle "Power attack" on the weapon to model it.'
+    description: 'Before a ranged-weapon attack you may take -5 to hit for +10 damage. To model it, edit the weapon: Roll › More options › "Offer a power attack".'
   }
 ];

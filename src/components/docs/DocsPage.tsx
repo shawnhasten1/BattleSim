@@ -307,8 +307,8 @@ const SECTIONS: Section[] = [
           slashing</em>), worked out from the numbers the simulator actually rolls.
         </p>
         <p>
-          Weapons, attacks, spells, special actions (saves, areas, heals, buffs, teleports), and features and traits
-          open in the{" "}
+          Weapons, attacks, multiattacks, spells, special actions (saves, areas, heals, buffs, teleports), and features
+          and traits open in the{" "}
           <strong>ability editor</strong>, in place of the list. Its preview at the
           top shows the ability as a statblock entry, with whether the simulator runs all of it, and any warnings
           (a pool the creature doesn&apos;t have, a trigger that never fires) with a link to the section that fixes
@@ -544,6 +544,96 @@ const SECTIONS: Section[] = [
           <li>Abilities tab → Add → Blank → Feature / trait. Name: <em>Pack Tactics</em>. Basics: Listed as → <em>Trait</em>.</li>
           <li>While active → Add effect → <em>Advantage on its attacks</em>. When → <em>an ally is next to the target</em>. Done.</li>
           <li>The preview reads <em>It has advantage on attack rolls if an ally is within 5 feet of the target.</em> Add to sheet.</li>
+        </ol>
+      </>
+    )
+  },
+  {
+    id: "multiattack",
+    label: "Multiattack & Extra Attack",
+    content: (
+      <>
+        <p>
+          A <strong>Multiattack</strong> is several attacks for one action, written the way a statblock prints it:{" "}
+          <em>It can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws.</em>{" "}
+          It opens in the <strong>ability editor</strong>, where its <strong>Sequence</strong> section is the routine, and
+          it heads the creature&apos;s Actions. Start one from <strong>Add → Blank → Multiattack</strong>. Every SRD
+          monster&apos;s Multiattack is built this way already, and its preview reads like its statblock.
+        </p>
+
+        <h3>The routine</h3>
+        <ul>
+          <li>
+            <strong>Steps</strong> — each is a count and what it uses: one of the creature&apos;s attacks (a weapon&apos;s
+            stands for its power attack and charges too); <em>any melee</em>, <em>any ranged</em> or <em>any weapon
+            attack</em>, where each swing picks its best one (the longsword beside an enemy, the longbow at range); or a
+            save or area ability it uses along the way (a dragon&apos;s Frightful Presence; a breath is aimed at the
+            routine&apos;s target). The arrows reorder the steps.
+          </li>
+          <li>
+            <strong>Rules</strong> (a step&apos;s <em>⋯</em>) — who it can target: any creature (the AI spreads the
+            swings), <em>a different creature</em> from the routine&apos;s other swings (a tyrannosaurus&apos;s tail), or{" "}
+            <em>the previous attack&apos;s target</em>; and <em>only if the previous attack hit</em> (a grick&apos;s beak).
+          </li>
+          <li>
+            <strong>Options</strong> — <em>…or another routine</em> adds one it can make instead, with a label
+            (<em>…or two ranged attacks</em>). <em>Replace one attack with…</em> adds the routine with one swing
+            swapped (a wight&apos;s Life Drain in place of one longsword attack), and the preview reads it that way.
+          </li>
+          <li>
+            <strong>One weapon per Attack action</strong> — with <em>any</em> steps, holds every swing to the same
+            weapon. Off, a creature can draw or drop a weapon between attacks, as the rules allow.
+          </li>
+          <li>
+            <strong>Damage vs AC</strong> — each routine&apos;s average damage a round against a typical AC for the
+            creature&apos;s challenge rating or level (change it to compare), and each step&apos;s reach.
+          </li>
+          <li>
+            <strong>Not simulated</strong> (under More) — statblock sentences the routine leaves out, one a line (a
+            hydra&apos;s heads, a roper&apos;s Reel). The preview shows them apart.
+          </li>
+          <li>
+            <strong>Use &amp; cost</strong> — an action, or a bonus action that spends from a pool: Flurry of Blows
+            (below).
+          </li>
+        </ul>
+        <p>
+          Warnings point at the Sequence when a step can&apos;t happen: an ability the creature no longer has, one the
+          simulator doesn&apos;t run, <em>any ranged attack</em> with no ranged attack to make, or a first attack that
+          waits on &ldquo;the previous attack&rdquo;.
+        </p>
+
+        <h3>How it plays</h3>
+        <p>
+          The AI takes the routine (or option) worth the most from where it stands, then makes its swings one at a
+          time. Each swing picks its attack and a target within that attack&apos;s own reach, so a dragon bites a
+          creature 10 ft away and claws the one beside it, and a power attack goes only on the swings where it pays.
+          When a target drops, the next swing goes to someone else in reach, or the creature moves with the movement
+          it has left and finishes the routine there; moving out of an enemy&apos;s reach provokes opportunity attacks
+          as usual. An option that needs a spent ability (a breath that hasn&apos;t recharged) isn&apos;t offered.
+          Reach counts from a creature&apos;s top-left square, so a big creature&apos;s reach is short on its far sides.
+        </p>
+
+        <h3>Extra Attack</h3>
+        <p>
+          Attach <strong>Extra Attack</strong> from <strong>Add → Library → Features</strong>. It grants a routine of
+          two <em>any weapon attack</em> swings, so swapping a weapon breaks nothing. For a fighter&apos;s third
+          attack at 11th level, open the feature, then <strong>Grants → Extra Attack</strong>, and make it three.
+        </p>
+
+        <h3>Deleting what a routine uses</h3>
+        <p>
+          Deleting an ability a routine uses asks first, and says what the routine is left with.{" "}
+          <strong>Replace it with</strong> keeps the routine whole: its steps use another attack, or any attack of a
+          kind, instead. Either way it&apos;s one undo step.
+        </p>
+
+        <h3>Worked example: Flurry of Blows</h3>
+        <ol>
+          <li>Abilities tab → Add → Blank → Multiattack. Name: <em>Flurry of Blows</em>.</li>
+          <li>Sequence: the step → <em>2</em> × the monk&apos;s unarmed strike.</li>
+          <li>Use &amp; cost: Takes → <em>Bonus action</em>; Limit → <em>Pool</em> → a new pool, <code>ki</code>, the size of the monk&apos;s ki points.</li>
+          <li>Add to sheet. It&apos;s listed under Bonus actions, and the AI uses it after its attacks while it has ki.</li>
         </ol>
       </>
     )

@@ -7,6 +7,7 @@ export * from "./fixtures";
 export * from "./geometry";
 export * from "./elevation";
 export * from "./import-normalize";
+export * from "./multiattack";
 export * from "./report";
 export * from "./rng";
 export * from "./simulation";

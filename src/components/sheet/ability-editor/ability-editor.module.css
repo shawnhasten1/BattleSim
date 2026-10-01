@@ -658,6 +658,67 @@
   font-style: italic;
 }
 
+/* ── multiattack routines ── */
+
+.routines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.routine {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+}
+
+.routineHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.routineHead input {
+  flex: 1;
+}
+
+.routineHead .iconBtn {
+  margin-left: auto;
+}
+
+.line .stepPick {
+  width: 200px;
+}
+
+.stepRule {
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  white-space: nowrap;
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  border-color: var(--ui-border);
+  color: var(--ui-text-dim);
+}
+
+.replaceRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.replaceRow > span {
+  color: var(--ui-text-dim);
+}
+
 /* ── effect cards ── */
 
 .effectGroup {

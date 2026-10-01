@@ -204,6 +204,17 @@ export const COPY = {
   onlyAfter: { label: "Only after", hint: "A bonus attack it earns this turn: after hitting with a charge (Pounce), or after it drops a creature (Rampage)." },
   movesFirst: { label: "Moves first", hint: "Rampage: it can move up to this far before the attack." },
 
+  // Sequence (a multiattack's routines)
+  stepTarget: { label: "Target" },
+  previousHit: { label: "Only if the previous attack hit", hint: "Like a grick's beak after its tentacles: no hit, no swing." },
+  abilityStep: { label: "Ability", hint: "An ability is used once, when it would affect someone it can reach (a dragon's Frightful Presence); a breath is aimed at the routine's target." },
+  oneWeapon: {
+    label: "One weapon per Attack action",
+    hint: "Every swing uses the same weapon. Off, each swing picks its own (the longsword beside an enemy, the longbow at range), as a creature can draw or drop a weapon between attacks."
+  },
+  referenceAc: { label: "Damage vs AC", hint: "a typical AC at its challenge rating or level; change it to compare." },
+  unsimulated: { label: "Not simulated", hint: "Statblock sentences the routine leaves out (a hydra's heads, a roper's Reel), one a line. The preview shows them apart." },
+
   // Notes & AI
   description: { label: "Reference text", hint: "Shown with the ability; the simulator doesn't read it." },
   automation: { label: "The simulator", hint: "Reference only keeps it on the sheet for you to resolve; the AI never uses it." },

@@ -10,7 +10,9 @@ import {
   conditionSeverity,
   averageOfDice,
   featureSources,
+  findActionDefinition,
   simulatedFeatures,
+  targetingProblem,
   isImmuneToCondition,
   saveAdvantageApplies,
   event,
@@ -34,6 +36,8 @@ import {
   resolveHealingBurstAction,
   resolveActivateFeatureAction,
   resolveMultiattackAction,
+  type MultiattackSwingChoice,
+  type MultiattackSwingContext,
   resolveNumericFormula,
   resolveRepositionAction,
   resolveSaveDc,
@@ -53,6 +57,7 @@ import {
   tickZones,
   type EngineState
 } from "./combat";
+import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
@@ -458,8 +463,12 @@ function executeOffensivePlan(state: EngineState, actor: CombatantState, plan: O
       : plan.target.id;
     resolveAttack(state, actor.id, targets, action.id);
   } else if (action.kind === "multiattack") {
-    const alloc = multiattackTargetIds(state.snapshot, actor, action, plan.target, plan.range);
-    resolveMultiattackAction(state, actor.id, alloc.targetIds, action.id, { attackTargetIds: alloc.attackTargetIds });
+    const swings = planMultiattackSwings(state.snapshot, actor, action, plan.target);
+    resolveMultiattackAction(state, actor.id, swings.targetIds, action.id, {
+      attackTargetIds: swings.attackTargetIds,
+      attackActionIds: swings.attackActionIds,
+      beforeSwing: (context) => decideMultiattackSwing(state, actor, context, swings)
+    });
   } else if (action.kind === "save") {
     const bonusTargetIds = saveBonusTargetIds(state.snapshot, actor, action, plan.target, plan.range);
     resolveSaveAction(state, actor.id, plan.target.id, action.id, { bonusTargetIds });
@@ -468,51 +477,261 @@ function executeOffensivePlan(state: EngineState, actor: CombatantState, plan: O
   }
 }
 
+type MultiattackAction = Extract<ActionDefinition, { kind: "multiattack" }>;
+type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
+
 /**
- * Allocate a multiattack's individual attacks across targets: fill the primary
- * to (estimated) death, then spill onto the next-lowest-HP hostile in reach.
- * Mirrors `beamTargets`. Returns the ordered `targetIds` (for spill-on-death) and
- * a flat per-attack list (`attackTargetIds`).
+ * How the AI plans a routine. One of "any weapon attack" swings, from a creature with both melee and ranged attacks,
+ * is planned two ways: close in and swing, or shoot from where it is. Each is a copy whose generic swings are melee
+ * or ranged only, under the routine's own id: when the swings are made, each picks from all of its attacks.
  */
-function multiattackTargetIds(
+function multiattackPlanningForms(action: MultiattackAction, executables: ActionDefinition[]): MultiattackAction[] {
+  if (!action.attacks.some((step) => step.any === "weapon")) return [action];
+  const forms = (["melee", "ranged"] as const)
+    .map((any): MultiattackAction => ({ ...action, attacks: action.attacks.map((step) => (step.any === "weapon" ? { ...step, any } : step)) }))
+    .filter((form) => form.attacks.every((step) => !step.any || swingCandidates(step, executables).length > 0));
+  return forms.length ? forms : [action];
+}
+
+/**
+ * The best attack for one swing against one target: the most expected damage for what it spends. A power attack
+ * pays against a low AC and not a high one; a charge only when the stance and the payoff say so.
+ */
+function bestSwingAttack(
+  candidates: AttackAction[],
+  source: CreatureDefinition,
+  sourceCombatant: CombatantState,
+  target: CreatureDefinition,
+  targetCombatant: CombatantState | undefined,
+  usedOncePerTurnEffects: Set<string>
+): { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined {
+  const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
+  let best: { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined;
+  for (const attack of candidates) {
+    const hitChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), target.armorClass);
+    const damage = (averageDamage(attack, source, adjustments) + averageAttackFeatureDamage(attack, source, sourceCombatant, target, new Set(usedOncePerTurnEffects))) * hitChance
+      + expectedRiderDamage(attack, source, target, { landChance: hitChance });
+    // In damage terms, half the plan-level penalty a single attack that spends the same would carry.
+    const cost = resourceCostWeight(attack) * 2 * resourceStanceMultiplier(sourceCombatant.resourceStance) * optionalRiderCostDiscount(attack, source, target);
+    const value = damage - cost;
+    if (!best || value > best.value + 1e-9) best = { attack, value, damage, hitChance };
+  }
+  return best;
+}
+
+/** The weapons (attack families) a "one weapon" routine could be held to, best first against `target`. */
+function routineFamilies(action: MultiattackAction, executables: ActionDefinition[]): Array<string | undefined> {
+  if (!action.oneWeapon) return [undefined];
+  const families = new Set(action.attacks.flatMap((step) => swingCandidates(step, executables).map((attack) => attackFamilyId(attack, executables))));
+  return families.size ? [...families] : [undefined];
+}
+
+/** A routine's expected damage against one target with one weapon family (or any), each swing with its best attack. */
+function familyExpectedDamage(
+  action: MultiattackAction,
+  family: string | undefined,
+  source: CreatureDefinition,
+  sourceCombatant: CombatantState,
+  target: CreatureDefinition,
+  targetCombatant: CombatantState | undefined
+): number {
+  const executables = getExecutableActions(source);
+  const used = new Set<string>();
+  let total = 0;
+  let previousHit = 1;
+  for (const swing of swingsOf(action.attacks)) {
+    // A breath in place of a bite (a chimera's option) counts for what it would deal this target.
+    const ability = stepAbility(swing.step, executables);
+    if (ability) {
+      if (canPayFor(sourceCombatant, ability)) total += expectedDamageAgainst(ability, source, sourceCombatant, target, targetCombatant);
+      continue;
+    }
+    const candidates = swingCandidates(swing.step, executables)
+      .filter((attack) => canPayFor(sourceCombatant, attack) && (!family || attackFamilyId(attack, executables) === family));
+    const best = bestSwingAttack(candidates, source, sourceCombatant, target, targetCombatant, used);
+    if (!best) continue;
+    averageAttackFeatureDamage(best.attack, source, sourceCombatant, target, used);
+    total += best.value * (swing.step.requiresPreviousHit ? previousHit : 1);
+    previousHit = best.hitChance;
+  }
+  return total;
+}
+
+/** The weapon a "one weapon" routine does best with against `target` (undefined: each swing picks freely). */
+function bestRoutineFamily(
+  action: MultiattackAction,
+  source: CreatureDefinition,
+  sourceCombatant: CombatantState,
+  target: CreatureDefinition,
+  targetCombatant: CombatantState | undefined
+): string | undefined {
+  const families = routineFamilies(action, getExecutableActions(source));
+  let best: { family: string | undefined; value: number } | undefined;
+  for (const family of families) {
+    const value = familyExpectedDamage(action, family, source, sourceCombatant, target, targetCombatant);
+    if (!best || value > best.value + 1e-9) best = { family, value };
+  }
+  return best?.family;
+}
+
+/** A routine's expected damage against one target, each swing with its best attack (held to one weapon if it must be). */
+function multiattackExpectedDamage(
+  action: MultiattackAction,
+  source: CreatureDefinition,
+  sourceCombatant: CombatantState,
+  target: CreatureDefinition,
+  targetCombatant: CombatantState | undefined
+): number {
+  const family = bestRoutineFamily(action, source, sourceCombatant, target, targetCombatant);
+  return Math.max(0, familyExpectedDamage(action, family, source, sourceCombatant, target, targetCombatant));
+}
+
+/**
+ * Who each swing of a routine attacks, and with what. Swings fill the primary target to (estimated) death, then spill
+ * onto the next-lowest-HP hostile, each only onto someone its own attacks reach from here. The most constrained swing
+ * picks first (the claws, before a bite that reaches 10 ft), and the step's rule holds: a "different" swing never joins
+ * another's target, a "same as previous" one follows the swing before it. Returns the ordered `targetIds` (for
+ * spill-on-death) and per-swing target and attack ids (sparse: a save step, or a swing with nobody in reach, has none).
+ */
+function planMultiattackSwings(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
-  action: Extract<ActionDefinition, { kind: "multiattack" }>,
-  primary: CombatantState,
-  range: number
-): { targetIds: string[]; attackTargetIds: string[] | undefined } {
+  action: MultiattackAction,
+  primary: CombatantState
+): { targetIds: string[]; attackTargetIds: string[]; attackActionIds: string[] } {
   const definition = getDefinition(snapshot, actor);
   const executables = getExecutableActions(definition);
-  const primaryDefinition = getDefinition(snapshot, primary);
-  const perAttackDamage = action.attacks.flatMap((step) => {
-    const child = executables.find((candidate) => candidate.id === step.actionId);
-    const value = child && child.kind === "attack"
-      ? Math.max(1, expectedDamageAgainst(child, definition, actor, primaryDefinition, primary))
-      : 1;
-    return Array.from({ length: Math.max(0, step.count) }, () => value);
-  });
+  // The routine as the engine runs it: a planning copy restricts its "any weapon" swings, the real one doesn't.
+  const found = findActionDefinition(definition, action.id);
+  const routine = found?.kind === "multiattack" ? found : action;
   const others = snapshot.combatants
-    .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && isTargetable(c) && c.id !== primary.id
-      && isValidTarget(snapshot, actor, c, range))
+    .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && isTargetable(c) && c.id !== primary.id)
     .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id));
-  const targetIds = [primary.id, ...others.map((c) => c.id)];
-  if (others.length === 0) {
-    return { targetIds, attackTargetIds: undefined };
-  }
   const pool = [primary, ...others];
+  const targetIds = pool.map((c) => c.id);
+  const swings = swingsOf(routine.attacks).filter((swing) => !stepAbility(swing.step, executables));
+  const family = bestRoutineFamily(routine, definition, actor, getDefinition(snapshot, primary), primary);
+  const budget: Record<string, number> = { ...(actor.resources ?? {}) };
+  const affordable = (attack: AttackAction) => !attack.resourceCost || (budget[attack.resourceCost.resourceId] ?? 0) >= attack.resourceCost.amount;
+  const candidatesFor = (swing: MultiattackSwing) => swingCandidates(swing.step, executables)
+    .filter((attack) => affordable(attack) && (!family || attackFamilyId(attack, executables) === family));
+  const reachOf = (swing: MultiattackSwing) => Math.max(0, ...candidatesFor(swing).map(attackReach));
   const assigned: Record<string, number> = {};
   const attackTargetIds: string[] = [];
-  let cursor = 0;
-  for (const damage of perAttackDamage) {
-    while (cursor < pool.length - 1 && (assigned[pool[cursor]!.id] ?? 0) >= pool[cursor]!.currentHp) {
-      cursor += 1;
+  const attackActionIds: string[] = [];
+  const choose = (swing: MultiattackSwing, target: CombatantState) => {
+    const usable = candidatesFor(swing).filter((attack) => !targetingProblem(snapshot, actor, target, attack));
+    return bestSwingAttack(usable, definition, actor, getDefinition(snapshot, target), target, new Set());
+  };
+  const commit = (swing: MultiattackSwing, target: CombatantState, best: { attack: AttackAction; damage: number }) => {
+    attackTargetIds[swing.index] = target.id;
+    attackActionIds[swing.index] = best.attack.id;
+    assigned[target.id] = (assigned[target.id] ?? 0) + Math.max(1, best.damage);
+    const cost = best.attack.resourceCost;
+    if (cost) budget[cost.resourceId] = (budget[cost.resourceId] ?? 0) - cost.amount;
+  };
+
+  const order = [...swings].sort((a, b) => reachOf(a) - reachOf(b) || a.index - b.index);
+  for (const swing of order) {
+    if (swing.step.target === "same-as-previous") continue;
+    const taken = swing.step.target === "different"
+      ? new Set(attackTargetIds.filter((id, index) => id && index !== swing.index))
+      : new Set<string>();
+    let pick: { target: CombatantState; best: { attack: AttackAction; damage: number } } | undefined;
+    for (const target of pool) {
+      if (taken.has(target.id)) continue;
+      const best = choose(swing, target);
+      if (!best) continue;
+      if ((assigned[target.id] ?? 0) < target.currentHp) {
+        pick = { target, best };
+        break;
+      }
+      // Everyone in reach already has enough coming: the first of them, if nobody better turns up.
+      pick ??= { target, best };
     }
-    const pick = pool[cursor]!;
-    attackTargetIds.push(pick.id);
-    assigned[pick.id] = (assigned[pick.id] ?? 0) + damage;
+    if (pick) commit(swing, pick.target, pick.best);
   }
-  return { targetIds, attackTargetIds };
+  // A swing that follows the one before goes where it went.
+  for (const swing of swings) {
+    if (swing.step.target !== "same-as-previous") continue;
+    const before = swings.filter((candidate) => candidate.index < swing.index).at(-1);
+    const target = before ? pool.find((c) => c.id === attackTargetIds[before.index]) : undefined;
+    const best = target ? choose(swing, target) : undefined;
+    if (target && best) commit(swing, target, best);
+  }
+  return { targetIds, attackTargetIds, attackActionIds };
 }
+
+/**
+ * One swing of a routine, decided when it's made (D10), after the swing before it landed. The planned target if it's
+ * still up and in reach; else whoever in reach is worth it most (one it can drop first); else, with nobody in reach,
+ * a move toward the nearest hostile it can reach with the movement it has left (opportunity attacks apply, so it
+ * won't walk away from a threat while badly hurt), then the swing.
+ */
+function decideMultiattackSwing(
+  state: EngineState,
+  actor: CombatantState,
+  context: MultiattackSwingContext,
+  planned: { attackTargetIds: string[]; attackActionIds: string[] }
+): MultiattackSwingChoice | undefined {
+  const { snapshot } = state;
+  const { step } = context.swing;
+  // "Against the same target": the resolver keeps it on the previous swing's target.
+  if (step.target === "same-as-previous") return undefined;
+  const definition = getDefinition(snapshot, actor);
+  const taken = step.target === "different" ? new Set(context.targetedIds) : new Set<string>();
+  const live = (combatant: CombatantState | undefined): combatant is CombatantState => Boolean(combatant)
+    && (combatant!.state === "active" || combatant!.state === "downed") && isTargetable(combatant!) && !taken.has(combatant!.id);
+  const bestAgainst = (target: CombatantState) => bestSwingAttack(
+    context.candidates.filter((attack) => !targetingProblem(snapshot, actor, target, attack)),
+    definition, actor, getDefinition(snapshot, target), target, new Set()
+  );
+
+  const plannedTarget = snapshot.combatants.find((combatant) => combatant.id === planned.attackTargetIds[context.swing.index]);
+  if (live(plannedTarget) && plannedTarget.state === "active") {
+    const best = bestAgainst(plannedTarget);
+    if (best) {
+      const wanted = context.candidates.find((attack) => attack.id === planned.attackActionIds[context.swing.index]);
+      // The planned attack, unless that weapon can't reach from here any more.
+      return { targetId: plannedTarget.id, actionId: wanted && !targetingProblem(snapshot, actor, plannedTarget, wanted) ? wanted.id : best.attack.id };
+    }
+  }
+
+  const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor)
+    && combatant.state === "active" && live(combatant));
+  const inReach = hostiles
+    .map((target) => ({ target, best: bestAgainst(target) }))
+    .filter((entry): entry is { target: CombatantState; best: NonNullable<ReturnType<typeof bestAgainst>> } => Boolean(entry.best))
+    .sort((a, b) => Number(b.target.currentHp <= b.best.damage) - Number(a.target.currentHp <= a.best.damage)
+      || b.best.value - a.best.value || a.target.currentHp - b.target.currentHp || a.target.id.localeCompare(b.target.id));
+  if (inReach[0]) return { targetId: inReach[0].target.id, actionId: inReach[0].best.attack.id };
+
+  // Nobody in reach: walk on to the next foe, if the move is worth its risk.
+  const reach = Math.max(0, ...context.candidates.map(attackReach));
+  const hurt = actor.currentHp <= definition.maxHp / 2;
+  const tactics = tacticsSettings(actor.tacticsProfile);
+  const nearest = [...hostiles].sort((a, b) => spatialDistance(snapshot, actor, a) - spatialDistance(snapshot, actor, b) || a.id.localeCompare(b.id));
+  for (const target of nearest) {
+    const move = bestDestinationTowardTarget(snapshot, actor, target, reach, tactics);
+    if (!move || (hurt && move.opportunityThreats > 0)) continue;
+    try {
+      const previousDistance = spatialDistance(snapshot, actor, target);
+      moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
+      state.log.push(event(state, "AiDecision", `${actor.displayName} moves on to ${target.displayName} to finish its attacks`, {
+        combatantId: actor.id, targetId: target.id, destination: move.cell, pathCost: move.pathCost, previousDistance,
+        opportunityThreats: move.opportunityThreats, reason: "multiattack-move"
+      }));
+    } catch {
+      continue;
+    }
+    // An opportunity attack on the way may have dropped it.
+    if (actor.state !== "active") return { skip: true };
+    const best = bestAgainst(target);
+    return best ? { targetId: target.id, actionId: best.attack.id } : { skip: true };
+  }
+  return undefined;
+}
+
 
 /** Id of a synthesised / feature-granted `utility` action for `mode` at the given slot, if the actor has one. */
 function utilityActionId(
@@ -906,12 +1125,13 @@ export function explainIdleTurn(snapshot: EncounterSnapshot, actor: CombatantSta
     action.automationSupport === "full"
     && action.actionType === "action"
     && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack");
-  const offensive = getExecutableActions(getDefinition(snapshot, actor)).filter(isOffensive);
+  const executables = getExecutableActions(getDefinition(snapshot, actor));
+  const offensive = executables.filter(isOffensive);
   if (offensive.length === 0) {
     return { reason: "no-automated-action", message: "has no fully automated action" };
   }
   const concentrating = hasWorkingConcentrationEffect(snapshot, actor);
-  const usable = offensive.filter((action) => canPayResource(actor, action) && !("concentration" in action && action.concentration && concentrating));
+  const usable = offensive.filter((action) => canPayResource(actor, action, executables) && !("concentration" in action && action.concentration && concentrating));
   if (usable.length === 0) {
     return { reason: "out-of-resources", message: "has nothing left it can use this turn" };
   }
@@ -2134,10 +2354,13 @@ function selectOffensivePlan(
     ? snapshot.combatants.filter((combatant) => combatant.id === actor.containedBy)
     : snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
   const definitionsById = new Map(snapshot.definitions.map((candidate) => [candidate.id, candidate]));
-  const candidates = (options.actions ?? getExecutableActions(definition))
-    .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+  const executables = getExecutableActions(definition);
+  const candidates = (options.actions ?? executables)
+    .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action, executables) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
     // Don't trade a still-working concentration effect for a new one.
     .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
+    // A routine of "any weapon attack" swings is planned two ways: close in and swing, or shoot from here.
+    .flatMap((action): OffensiveAction[] => (action.kind === "multiattack" ? multiattackPlanningForms(action, executables) : [action]))
     .flatMap((action) => hostiles.map((target) => {
       const targetDefinition = getDefinition(snapshot, target);
       const range = actionRange(action, definition);
@@ -2159,17 +2382,13 @@ function selectOffensivePlan(
         ? tactics.protectWeight
         : 0;
       const tagPressure = tagPriorityValue(target.tags) * tactics.priorityWeight;
-      const spacingScore = action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell")
-        ? distanceBandScore(distance, tactics)
-        : 0;
-      const threatenedRangedPenalty = isThreatenedAt(snapshot, actor, actor.position)
-        && action.kind === "attack"
-        && action.attackType !== "melee"
-        ? 12
-        : 0;
+      // A single ranged attack, or a routine whose every swing is ranged (a Scout's two longbow shots).
+      const shoots = (action.kind === "attack" && action.attackType !== "melee") || (action.kind === "multiattack" && routineIsRanged(action, executables));
+      const spacingScore = shoots ? distanceBandScore(distance, tactics) : 0;
+      // Shooting with an enemy beside it.
+      const threatenedRangedPenalty = shoots && isThreatenedAt(snapshot, actor, actor.position) ? 12 : 0;
       const targetCover = snapshot.rules.cover
-        && ((action.kind === "attack" && action.attackType !== "melee")
-          || (action.kind === "save" && action.saveAbility === "dex"))
+        && (shoots || (action.kind === "save" && action.saveAbility === "dex"))
         ? coverBetween(
           snapshot.map,
           actor.position,
@@ -2210,29 +2429,17 @@ function selectOffensivePlan(
       else if (canMoveIntoRange) score += 2;
       else score -= 35;
       if (action.kind === "area-save") {
-        // Score the blast where it will actually land (self-centred / aimed templates included).
-        const { origin, aimVector, fromSelf } = resolveAreaTargeting(actor, definition, action, target.position);
-        const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
-          // A self-origin blast never catches its own caster (matches resolution).
-          .filter((combatant) => !(fromSelf && combatant.id === actor.id));
-        const hostiles = affected.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
-        const hostileValue = hostiles.reduce((sum, combatant) => {
-          const combatantDefinition = getDefinition(snapshot, combatant);
-          return sum
-            + expectedDamageAgainst(action, definition, actor, combatantDefinition, combatant)
-            + expectedRiderControl(action, definition, combatantDefinition, tactics)
-            + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
-        }, 0);
-        const friendlyRisk = affected
-          .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor))
-          .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant), combatant), 0);
-        score += hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
-        reasons.push(`${hostiles.length} hostile targets`);
-        if (friendlyRisk > 0) reasons.push("friendly fire risk");
-        if (action.zone) {
-          const predictedValue = predictedZoneApproachValue(snapshot, actor, definition, action, origin, aimVector, affected, tactics);
-          score += predictedValue * (1.2 + tactics.areaWeight);
-          if (predictedValue > 0) reasons.push("blocks a likely approach route");
+        const area = areaPlanValue(snapshot, actor, definition, action, target, tactics, definitionsById);
+        score += area.score;
+        reasons.push(...area.reasons);
+      } else if (action.kind === "multiattack") {
+        // A breath in place of a bite (a chimera's option) is worth what the breath itself would be.
+        for (const step of action.attacks) {
+          const ability = stepAbility(step, executables);
+          if (ability?.kind !== "area-save" || !canPayFor(actor, ability)) continue;
+          const area = areaPlanValue(snapshot, actor, definition, ability, target, tactics, definitionsById);
+          score += area.score;
+          reasons.push(...area.reasons.map((reason) => `${ability.name}: ${reason}`));
         }
       } else if (action.kind === "save") {
         // Hold Person-style upcast: extra in-range hostiles caught for free, valued like the primary target.
@@ -2265,6 +2472,46 @@ function selectOffensivePlan(
 
   candidates.sort((a, b) => b.score - a.score || a.target.currentHp - b.target.currentHp || a.target.id.localeCompare(b.target.id));
   return candidates[0];
+}
+
+/**
+ * What an area ability adds to a plan beyond the damage it deals the target: everyone else it catches (an enemy's
+ * worth, an ally's risk), scored where the blast will actually land (self-centred and aimed templates included), and
+ * a lingering area's hold on the routes enemies are likely to take.
+ */
+function areaPlanValue(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  definition: CreatureDefinition,
+  action: AreaSaveActionDefinition,
+  target: CombatantState,
+  tactics: TacticsSettings,
+  definitionsById: Map<string, CreatureDefinition>
+): { score: number; reasons: string[] } {
+  const { origin, aimVector, fromSelf } = resolveAreaTargeting(actor, definition, action, target.position);
+  const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
+    // A self-origin blast never catches its own caster (matches resolution).
+    .filter((combatant) => !(fromSelf && combatant.id === actor.id));
+  const hostiles = affected.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
+  const hostileValue = hostiles.reduce((sum, combatant) => {
+    const combatantDefinition = getDefinition(snapshot, combatant);
+    return sum
+      + expectedDamageAgainst(action, definition, actor, combatantDefinition, combatant)
+      + expectedRiderControl(action, definition, combatantDefinition, tactics)
+      + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
+  }, 0);
+  const friendlyRisk = affected
+    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor))
+    .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant), combatant), 0);
+  let score = hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
+  const reasons = [`${hostiles.length} hostile targets`];
+  if (friendlyRisk > 0) reasons.push("friendly fire risk");
+  if (action.zone) {
+    const predictedValue = predictedZoneApproachValue(snapshot, actor, definition, action, origin, aimVector, affected, tactics);
+    score += predictedValue * (1.2 + tactics.areaWeight);
+    if (predictedValue > 0) reasons.push("blocks a likely approach route");
+  }
+  return { score, reasons };
 }
 
 /**
@@ -2792,11 +3039,27 @@ function threatensWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState
   });
 }
 
-function canPayResource(actor: CombatantState, action: ActionDefinition): boolean {
-  if (!("resourceCost" in action) || !action.resourceCost) {
-    return true;
+function canPayResource(actor: CombatantState, action: ActionDefinition, executables?: ActionDefinition[]): boolean {
+  if ("resourceCost" in action && action.resourceCost && (actor.resources?.[action.resourceCost.resourceId] ?? 0) < action.resourceCost.amount) {
+    return false;
   }
-  return (actor.resources?.[action.resourceCost.resourceId] ?? 0) >= action.resourceCost.amount;
+  // A routine needs every ability it names: an option that breathes fire isn't offered while the breath recharges.
+  return action.kind !== "multiattack" || !executables || multiattackPayable(actor, action, executables);
+}
+
+/** Whether a routine only ever shoots: every attack its swings could make is ranged (a Scout's two longbow shots). */
+function routineIsRanged(action: Extract<ActionDefinition, { kind: "multiattack" }>, executables: ActionDefinition[]): boolean {
+  const attacks = action.attacks.flatMap((step) => swingCandidates(step, executables));
+  return attacks.length > 0 && attacks.every((attack) => attack.attackType !== "melee");
+}
+
+/** Whether every step of a routine can be made: its abilities paid for, and each attack step with something to swing. */
+function multiattackPayable(actor: CombatantState, action: Extract<ActionDefinition, { kind: "multiattack" }>, executables: ActionDefinition[]): boolean {
+  return action.attacks.every((step) => {
+    const ability = stepAbility(step, executables);
+    if (ability) return canPayFor(actor, ability);
+    return swingCandidates(step, executables).some((candidate) => canPayFor(actor, candidate));
+  });
 }
 
 /**
@@ -2871,10 +3134,7 @@ function actionMatchesPreference(
   }
   if (action.kind === "multiattack") {
     const actions = getExecutableActions(source);
-    return action.attacks.some((step) => {
-      const child = actions.find((candidate) => candidate.id === step.actionId);
-      return child?.kind === "attack" && actionMatchesPreference(child, source, tactics, target);
-    });
+    return action.attacks.some((step) => swingCandidates(step, actions).some((child) => actionMatchesPreference(child, source, tactics, target)));
   }
   return tactics.preferred === "ranged";
 }
@@ -2889,10 +3149,7 @@ function actionImposesConditions(action: OffensiveAction, source: ReturnType<typ
   }
   if (action.kind === "multiattack") {
     const actions = getExecutableActions(source);
-    return action.attacks.some((step) => {
-      const child = actions.find((candidate) => candidate.id === step.actionId);
-      return child?.kind === "attack" && (child.riders ?? []).some(lands);
-    });
+    return action.attacks.some((step) => swingCandidates(step, actions).some((child) => (child.riders ?? []).some(lands)));
   }
   return false;
 }
@@ -2929,20 +3186,8 @@ function expectedDamageAgainst(
     return damageEv + expectedRiderDamage(action, source, target, { failChance });
   }
   if (action.kind === "multiattack") {
-    const actions = getExecutableActions(source);
-    const oncePerTurnEffects = new Set<string>();
-    return action.attacks.reduce((sum, step) => {
-      const child = actions.find((candidate) => candidate.id === step.actionId);
-      if (child?.kind !== "attack") {
-        return sum;
-      }
-      let childSum = 0;
-      for (let index = 0; index < step.count; index += 1) {
-        const average = averageDamage(child, source, adjustments) + averageAttackFeatureDamage(child, source, sourceCombatant, target, oncePerTurnEffects);
-        childSum += average * chanceToHit(resolveAttackBonus(child, source), target.armorClass);
-      }
-      return sum + childSum;
-    }, 0);
+    // Each swing with its best attack: a power attack where it pays, a ranged one for a "ranged" swing.
+    return multiattackExpectedDamage(action, source, sourceCombatant, target, targetCombatant);
   }
   return averageDamage(action, source, adjustments);
 }
@@ -3161,10 +3406,11 @@ function averageDamage(
     return 0;
   }
   if (action.kind === "multiattack") {
+    // Each swing with the attack it makes when nobody chooses (its own, or a generic step's hardest-hitting).
     const actions = getExecutableActions(source);
-    return action.attacks.reduce((sum, step) => {
-      const child = actions.find((candidate) => candidate.id === step.actionId);
-      return sum + (child ? averageDamage(child, source, targetAdjustments) * step.count : 0);
+    return swingsOf(action.attacks).reduce((sum, swing) => {
+      const attack = defaultSwingAttack(swing.step, swingCandidates(swing.step, actions));
+      return sum + (attack ? averageDamage(attack, source, targetAdjustments) : 0);
     }, 0);
   }
   const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source) * defenseMultiplier(component, targetAdjustments), 0);
@@ -3331,12 +3577,12 @@ function averageDamageComponent(component: Extract<ActionDefinition, { kind: "at
 function actionRange(action: OffensiveAction, source: ReturnType<typeof getDefinition>): number {
   if (action.kind === "multiattack") {
     const actions = getExecutableActions(source);
-    const ranges = action.attacks
-      .map((step) => actions.find((candidate) => candidate.id === step.actionId))
-      .filter((candidate): candidate is Extract<ActionDefinition, { kind: "attack" }> => candidate?.kind === "attack")
-      .map((candidate) => candidate.attackType === "melee" ? candidate.reach ?? candidate.range : candidate.longRange ?? candidate.range);
-    // Every step has to reach the target, so the multiattack is only in range at the *shortest* step's
-    // range — a 5 ft beard plus a 10 ft glaive can't be used from 10 ft away (the beard step would throw).
+    // A step reaches as far as its farthest attack (a generic step's longbow). The routine closes in to the
+    // *shortest* step's reach, so every swing can land on the target: a 5 ft beard and a 10 ft glaive want 5 ft.
+    const ranges = action.attacks.flatMap((step) => {
+      const reaches = swingCandidates(step, actions).map(attackReach);
+      return reaches.length ? [Math.max(...reaches)] : [];
+    });
     return ranges.length > 0 ? Math.min(...ranges) : 0;
   }
   return action.kind === "attack" && action.attackType === "melee" ? action.reach ?? action.range : action.kind === "attack" ? action.longRange ?? action.range : action.range;
