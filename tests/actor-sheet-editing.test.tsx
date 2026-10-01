@@ -7,7 +7,10 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { useEncounterStore } from "@/store/encounter-store";
 
 const pristine = useEncounterStore.getState();
-beforeEach(() => useEncounterStore.setState(pristine, true));
+beforeEach(() => {
+  useEncounterStore.setState(pristine, true);
+  window.localStorage.clear();
+});
 afterEach(() => { document.body.innerHTML = ""; });
 
 const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
@@ -93,8 +96,8 @@ describe("typing on the sheet", () => {
     useEncounterStore.setState({ selectedCombatantId: "pc-fighter", undoStack: [] });
     render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
-    await userEvent.click(within(screen.getByRole("group", { name: "Pools" })).getByRole("button", { name: "Second Wind: 1/1" }));
-    await retype(within(screen.getByRole("group", { name: "Pool sizes" })).getByLabelText("Second Wind full"), "12");
+    await userEvent.click(within(screen.getByRole("region", { name: "Resources" })).getByRole("button", { name: /^Resources/ }));
+    await retype(within(screen.getByRole("group", { name: "Resource sizes" })).getByLabelText("Second Wind full"), "12");
     expect(definition("def-fighter").resources?.["second-wind"]).toBe(12);
     expect(store().undoStack).toHaveLength(1);
   });

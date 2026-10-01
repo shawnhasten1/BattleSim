@@ -1,12 +1,14 @@
 /**
  * The Abilities list (plan §3.1): every record on a creature once, in statblock order, placed where it's mainly used,
- * with what its row shows (its cost, its other uses, how much of it the simulator runs), and the pools strip above it.
- * Pure: the Abilities tab shows it, tests read it.
+ * with what its row shows (its cost, its other uses, how much of it the simulator runs). The resources above it are
+ * `src/lib/actor-sheet/resources.ts`. Pure: the Abilities tab shows it, tests read it.
  */
 import {
+  casterLevelOf,
   resolveNumericFormula,
   spellcastingAbility,
   spellSlotLevel,
+  type Ability,
   type ActionDefinition,
   type CombatantState,
   type CreatureDefinition,
@@ -63,11 +65,13 @@ export interface SpellLevel {
 export interface ListGroup {
   id: ListGroupId;
   title: string;
-  /** "3 a round" (legendary), "Wisdom · save DC 15 · +7 to hit" (spellcasting). */
+  /** "3 a round" (legendary), "Wisdom · save DC 15 · +7 to hit · 6th-level spellcaster" (spellcasting). */
   note?: string;
   rows: ListRow[];
   /** Spellcasting: its spells by level. */
   levels?: SpellLevel[];
+  /** Spellcasting: what its note says, for a heading that edits the ability. */
+  spellcasting?: { ability: Ability; dc: number; toHit: number; casterLevel: number };
 }
 
 const TITLES: Record<ListGroupId, string> = {
@@ -225,6 +229,13 @@ function spellRow(definition: CreatureDefinition, spell: SpellDefinition): ListR
 const ORDINAL = ["Cantrips", "1st level", "2nd level", "3rd level", "4th level", "5th level", "6th level", "7th level", "8th level", "9th level"];
 const ABILITY_NAMES = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" } as const;
 
+/** "save DC 15 · +7 to hit · 6th-level spellcaster": the Spellcasting heading after its ability. */
+export function spellcastingFacts({ dc, toHit, casterLevel }: { dc: number; toHit: number; casterLevel: number }): string {
+  return `save DC ${dc} · ${toHit >= 0 ? "+" : ""}${toHit} to hit · ${ORDINAL_NUMBERS[casterLevel] ?? `${casterLevel}th`}-level spellcaster`;
+}
+
+const ORDINAL_NUMBERS = ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th", "13th", "14th", "15th", "16th", "17th", "18th", "19th", "20th"];
+
 function spellcastingGroup(definition: CreatureDefinition, combatant: CombatantState | undefined): ListGroup | undefined {
   const spells = definition.spells ?? [];
   if (!spells.length) return undefined;
@@ -233,7 +244,8 @@ function spellcastingGroup(definition: CreatureDefinition, combatant: CombatantS
   const toHit = resolveNumericFormula({ ability: "spellcasting", proficiency: true }, definition);
   const levels = [...new Set(spells.map((spell) => spell.level))].sort((a, b) => a - b).map((level): SpellLevel => {
     const full = level > 0 ? definition.resources?.[`slot-${level}`] : undefined;
-    const now = level > 0 ? combatant?.resources?.[`slot-${level}`] ?? full : undefined;
+    // What a token has left as the engine reads it (one it lacks is none), as the resource list says it.
+    const now = level > 0 ? (combatant ? combatant.resources?.[`slot-${level}`] ?? 0 : full) : undefined;
     return {
       level,
       title: level === 0 ? "Cantrips (at will)" : ORDINAL[level] ?? `Level ${level}`,
@@ -241,12 +253,14 @@ function spellcastingGroup(definition: CreatureDefinition, combatant: CombatantS
       rows: spells.filter((spell) => spell.level === level).map((spell) => spellRow(definition, spell))
     };
   });
+  const casterLevel = casterLevelOf(definition);
   return {
     id: "spellcasting",
     title: TITLES.spellcasting,
-    note: `${ABILITY_NAMES[ability]} · save DC ${dc} · ${toHit >= 0 ? "+" : ""}${toHit} to hit`,
+    note: `${ABILITY_NAMES[ability]} · ${spellcastingFacts({ dc, toHit, casterLevel })}`,
     rows: [],
-    levels
+    levels,
+    spellcasting: { ability, dc, toHit, casterLevel }
   };
 }
 
@@ -321,72 +335,3 @@ export function duplicateOf(definition: CreatureDefinition, ref: AbilityRef): { 
   return { list: ref.list === "legendary" ? "legendary" : ref.list, record: { ...copy, name: `${copy.name} (copy)` }, after: ref.list === "legendary" ? String(ref.index) : ref.id };
 }
 
-/* ─── the pools strip ────────────────────────────────────────────────────── */
-
-export interface PoolChip {
-  id: string;
-  /** "Fire Breath", "rage", "Legendary actions". */
-  label: string;
-  kind: "recharge" | "uses" | "pool" | "legendary";
-  /** What's left now (the token's), and its full size (the creature's). */
-  now: number;
-  full: number;
-  /** "ready", "recharging", "2/3", "3 a round". */
-  state: string;
-}
-
-/** Every action on the creature that can spend a pool, with where it came from. */
-function spenders(definition: CreatureDefinition): Array<{ name: string; action: ActionDefinition }> {
-  const out: Array<{ name: string; action: ActionDefinition }> = [];
-  for (const list of ["actions", "bonusActions", "reactions", "lairActions"] as const) for (const action of definition[list] ?? []) out.push({ name: action.name, action });
-  for (const spell of definition.spells ?? []) if (spell.action) out.push({ name: spell.name, action: spell.action });
-  for (const owner of [...(definition.features ?? []), ...(definition.traits ?? []), ...(definition.weapons ?? [])]) {
-    for (const action of owner.grantedActions ?? []) out.push({ name: action.kind === "activate-feature" ? owner.name : action.name, action });
-  }
-  return out;
-}
-
-/**
- * The creature's pools, for the strip above the list: what recharges (ready or recharging), what has uses, its named
- * pools (rage, ki, a weapon's charges) and its legendary actions. Spell slots are in the Spellcasting block.
- */
-export function poolsStrip(definition: CreatureDefinition, combatant?: CombatantState): PoolChip[] {
-  const sizes = definition.resources ?? {};
-  const nowOf = (id: string) => combatant?.resources?.[id] ?? sizes[id] ?? 0;
-  const chips: PoolChip[] = [];
-  const seen = new Set<string>();
-  const users = spenders(definition);
-
-  for (const { name, action } of users) {
-    const usage = "usage" in action ? action.usage : undefined;
-    const cost = "resourceCost" in action ? action.resourceCost : undefined;
-    if (!usage || !cost?.resourceId.startsWith("usage:") || seen.has(cost.resourceId)) continue;
-    seen.add(cost.resourceId);
-    // A pool shared on purpose (a dragon's two breaths) is named for everything that spends it.
-    const names = [...new Set(users.filter((user) => "resourceCost" in user.action && user.action.resourceCost?.resourceId === cost.resourceId).map((user) => user.name))];
-    const full = sizes[cost.resourceId] ?? (usage.kind === "uses" ? usage.uses ?? 1 : 1);
-    const now = nowOf(cost.resourceId);
-    chips.push({
-      id: cost.resourceId, label: names.join(", "), kind: usage.kind === "recharge" ? "recharge" : "uses", now, full,
-      state: usage.kind === "recharge" ? (now > 0 ? "ready" : "recharging") : `${now}/${full}`
-    });
-  }
-
-  const charges = new Map((definition.weapons ?? []).filter((weapon) => weapon.charges).map((weapon) => [weapon.charges!.id, weapon.name]));
-  for (const [id, full] of Object.entries(sizes)) {
-    if (seen.has(id) || id.startsWith("usage:") || spellSlotLevel(id) !== undefined || id === "legendary-points") continue;
-    seen.add(id);
-    // Named for what spends it (Rage, Second Wind) or, failing that, the pool itself ("Legendary resistance").
-    const weapon = charges.get(id) ?? [...charges.entries()].find(([chargesId]) => id.endsWith(`:${chargesId}`))?.[1];
-    const names = [...new Set(users.filter((user) => "resourceCost" in user.action && user.action.resourceCost?.resourceId === id).map((user) => user.name))];
-    const own = poolName(id, 1);
-    const label = weapon ? `${weapon} charges` : names.length ? names.join(", ") : `${own.charAt(0).toUpperCase()}${own.slice(1)}`;
-    chips.push({ id, label, kind: "pool", now: nowOf(id), full, state: `${nowOf(id)}/${full}` });
-  }
-
-  if (definition.legendary?.actions.length) {
-    const full = definition.legendary.pool;
-    chips.push({ id: "legendary-points", label: "Legendary actions", kind: "legendary", now: nowOf("legendary-points") || full, full, state: `${full} a round` });
-  }
-  return chips;
-}

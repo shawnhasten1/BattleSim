@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ActionDefinition, CreatureDefinition } from "@/engine";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
-import { StatsTab } from "@/components/sheet/sheet-tabs/StatsTab";
 import { loadSrdMonster } from "@/data/srd/monsters";
 import { actionStatblock, spellStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -260,14 +259,10 @@ describe("the editor on existing spells", () => {
   });
 });
 
-describe("the Stats tab", () => {
+describe("the Spellcasting heading", () => {
   it("sets the spellcasting ability the spells follow", async () => {
     store().attachSrdSpell("def-fighter", "srd:spell:hold-person");
-    function LiveStats() {
-      const encounter = useEncounterStore((s) => s.encounter);
-      return <StatsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />;
-    }
-    render(<LiveStats />);
+    render(<LiveTab />);
     const select = screen.getByLabelText("Spellcasting ability") as HTMLSelectElement;
     // Attaching gave the fighter one: its highest of INT, WIS and CHA (all 10, so INT).
     expect(select.value).toBe("int");
@@ -278,11 +273,7 @@ describe("the Stats tab", () => {
   });
 
   it("isn't shown for a creature with no spells", () => {
-    function LiveStats() {
-      const encounter = useEncounterStore((s) => s.encounter);
-      return <StatsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />;
-    }
-    render(<LiveStats />);
+    render(<LiveTab />);
     expect(screen.queryByLabelText("Spellcasting ability")).toBeNull();
   });
 });

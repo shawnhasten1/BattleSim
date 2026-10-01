@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CreatureDefinition } from "../src/engine";
-import { buildSheetItems, formatAutomationSupport, resourceIdsForEditor } from "../src/lib/sheet";
+import { buildSheetItems, formatAutomationSupport } from "../src/lib/sheet";
 
 const base: CreatureDefinition = {
   id: "def-test",
@@ -107,18 +107,6 @@ describe("sheet item details", () => {
 
   it("mark an unsupported action as reference only", () => {
     expect(buildSheetItems(base).actions.find((item) => item.id === base.actions[1]!.id)!.detail).toBe("reference only");
-  });
-});
-
-describe("resourceIdsForEditor", () => {
-  it("falls back to a placeholder when a creature has no resources", () => {
-    expect(resourceIdsForEditor(base, { resources: undefined } as never)).toEqual(["limited-use"]);
-  });
-
-  it("merges and slot-sorts definition, combatant, and action-cost resources", () => {
-    const def: CreatureDefinition = { ...base, resources: { "slot-2": 3, rage: 2 } };
-    const ids = resourceIdsForEditor(def, { resources: { "slot-1": 1 } } as never);
-    expect(ids).toEqual(["slot-1", "slot-2", "rage"]);
   });
 });
 

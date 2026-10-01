@@ -1,26 +1,15 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { useState } from "react";
-import { abilityModifier, inferSpellcastingAbility, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
+import { abilityModifier, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
 import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../stats/DamageAdjustmentGroup";
 import defenseStyles from "../stats/defenses.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
-import { resourceIdsForEditor } from "@/lib/sheet";
 import { characterLevel, withClassName, withLevel } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import styles from "../sheet.module.css";
-
-const RESOURCES_HELP = (
-  <p>
-    <strong>Current</strong> is what's left this encounter — it's what actions spend. <strong>Default</strong> is
-    what it resets to at the start of a fresh encounter. Give a resource the exact id an action's "resource cost"
-    refers to (e.g. <code>slot-3</code> for a 3rd-level spell slot) or that action can't spend it.
-  </p>
-);
 
 const CREATURE_TYPE_HELP = (
   <p>
@@ -31,17 +20,6 @@ const CREATURE_TYPE_HELP = (
 );
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
-
-/** The spellcasting abilities first (INT, WIS, CHA), then the rest for unusual casters. */
-const SPELLCASTING_CHOICES: Ability[] = ["int", "wis", "cha", "str", "dex", "con"];
-
-const SPELLCASTING_HELP = (
-  <p>
-    The ability its spells use for their save DC and spell attack bonus (8 + this modifier + proficiency, and this
-    modifier + proficiency). A spell can use its own ability instead, set in the spell&apos;s Roll section. Auto uses the
-    ability its spells name most, or else its highest of INT, WIS and CHA.
-  </p>
-);
 
 const CONDITION_IMMUNITIES: ConditionImmunity[] = [
   "blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "paralyzed",
@@ -56,24 +34,12 @@ const DEFENSES_HELP = (
   </p>
 );
 
-export function StatsTab({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
+/** The creature's numbers. Its spellcasting ability and its resources are on the Abilities tab, by what spends them. */
+export function StatsTab({ definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateCreatureDefinition = useEncounterStore((s) => s.updateCreatureDefinition);
   const updateCreatureAbility = useEncounterStore((s) => s.updateCreatureAbility);
-  const updateResource = useEncounterStore((s) => s.updateResource);
-  const updateDefinitionResource = useEncounterStore((s) => s.updateDefinitionResource);
-
-  const [resourceForm, setResourceForm] = useState({ resourceId: "slot-1", current: 1, maximum: 1 });
-  const resourceIds = resourceIdsForEditor(definition, combatant);
   const primaryClass = definition.character?.classes?.[0];
   const level = characterLevel(definition);
-
-  function addResource() {
-    const id = resourceForm.resourceId.trim();
-    if (!id) return;
-    updateResource(combatant.id, id, resourceForm.current);
-    updateDefinitionResource(definition.id, id, resourceForm.maximum);
-    setResourceForm({ resourceId: "", current: 1, maximum: 1 });
-  }
 
   return (
     <div className={styles.tab}>
@@ -125,22 +91,6 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             Prof
             <SheetNumber value={definition.proficiencyBonus ?? 2} min={0} max={10} onCommit={(proficiencyBonus) => updateCreatureDefinition(definition.id, { proficiencyBonus })} />
           </label>
-          {definition.spells?.length || definition.spellcasting ? (
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>
-                Spellcasting
-                <InfoTooltip label="About spellcasting ability" content={SPELLCASTING_HELP} />
-              </span>
-              <select
-                aria-label="Spellcasting ability"
-                value={definition.spellcasting?.ability ?? ""}
-                onChange={(e) => updateCreatureDefinition(definition.id, { spellcasting: e.target.value ? { ability: e.target.value as Ability } : undefined })}
-              >
-                <option value="">Auto: {inferSpellcastingAbility(definition).toUpperCase()}</option>
-                {SPELLCASTING_CHOICES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
-              </select>
-            </label>
-          ) : null}
           <label className={styles.field}>
             Size
             <input value={definition.size} readOnly />
@@ -274,44 +224,6 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             );
           })}
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h3 className={styles.fieldLabel}>
-          Resources
-          <InfoTooltip label="About resources" content={RESOURCES_HELP} />
-        </h3>
-        <div className={styles.stack}>
-          {resourceIds.map((id) => (
-            <div key={id} className={styles.grid}>
-              <label className={styles.field}>
-                {id} — current
-                <SheetNumber value={combatant.resources?.[id] ?? 0} min={0} max={999} onCommit={(amount) => updateResource(combatant.id, id, amount)} />
-              </label>
-              <label className={styles.field}>
-                default
-                <SheetNumber value={definition.resources?.[id] ?? 0} min={0} max={999} onCommit={(amount) => updateDefinitionResource(definition.id, id, amount)} />
-              </label>
-            </div>
-          ))}
-        </div>
-        <div className={styles.grid} style={{ marginTop: 6 }}>
-          <label className={styles.field}>
-            New id
-            <input value={resourceForm.resourceId} placeholder="slot-3" onChange={(e) => setResourceForm({ ...resourceForm, resourceId: e.target.value })} />
-          </label>
-          <label className={styles.field}>
-            current
-            <input type="number" min={0} value={resourceForm.current} onChange={(e) => setResourceForm({ ...resourceForm, current: Number(e.target.value) })} />
-          </label>
-          <label className={styles.field}>
-            default
-            <input type="number" min={0} value={resourceForm.maximum} onChange={(e) => setResourceForm({ ...resourceForm, maximum: Number(e.target.value) })} />
-          </label>
-        </div>
-        <button type="button" className={styles.addBtn} onClick={addResource}>
-          <Plus size={14} /> Add resource
-        </button>
       </section>
     </div>
   );

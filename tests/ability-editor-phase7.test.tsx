@@ -73,11 +73,13 @@ describe("a legendary action, from scratch", { timeout: 30000 }, () => {
     expect(fighter().legendary!.actions).toEqual([{ name: "Swipe", cost: 1, description: "It swings." }]);
   });
 
-  it("edits how many it takes a round from the pools", async () => {
+  it("edits how many it takes a round from the resources above the list", async () => {
     patchFighter({ legendary: { pool: 3, actions: [{ name: "Swipe", cost: 1, description: "", actionId: "longsword" }] } });
     render(<LiveTab />);
-    await userEvent.click(within(screen.getByRole("group", { name: "Pools" })).getByRole("button", { name: "Legendary actions: 3 a round" }));
-    const full = within(screen.getByRole("group", { name: "Pool sizes" })).getByLabelText("Legendary actions full");
+    const resources = within(screen.getByRole("region", { name: "Resources" }));
+    expect(resources.getByRole("button", { name: /^Resources/ }).textContent).toContain("Legendary actions 3 a round");
+    await userEvent.click(resources.getByRole("button", { name: /^Resources/ }));
+    const full = within(screen.getByRole("group", { name: "Resource sizes" })).getByLabelText("Legendary actions full");
     await userEvent.clear(full);
     await userEvent.type(full, "1");
     expect(fighter().legendary!.pool).toBe(1);

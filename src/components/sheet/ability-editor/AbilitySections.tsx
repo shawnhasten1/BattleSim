@@ -137,7 +137,7 @@ export function AttackRoll({ action, onChange, definition, spell }: {
   // A spell's calculated to-hit can follow its caster; a printed one is a fixed number.
   const offerFollow = Boolean(spell) && mode.mode === "calculated";
   const abilityOptions = offerFollow
-    ? [{ value: "spellcasting" as const, label: `Spellcasting (${casting.toUpperCase()})`, title: "The caster's spellcasting ability, set on the Stats tab" }, ...ABILITY_OPTIONS]
+    ? [{ value: "spellcasting" as const, label: `Spellcasting (${casting.toUpperCase()})`, title: "The caster's spellcasting ability, set in the Spellcasting heading above its spells" }, ...ABILITY_OPTIONS]
     : ABILITY_OPTIONS;
 
   function setUses(next: Ability | "spellcasting") {

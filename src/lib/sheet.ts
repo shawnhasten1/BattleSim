@@ -39,24 +39,6 @@ export function formatAutomationSupport(value: string): string {
   return value === "manual-only" ? "reference-only" : value;
 }
 
-function resourceSortKey(resourceId: string): string {
-  const slotMatch = /^slot-(\d+)$/.exec(resourceId);
-  if (slotMatch) return `00-slot-${slotMatch[1].padStart(2, "0")}`;
-  return `10-${resourceId}`;
-}
-
-/** All resource ids relevant to the editor: defined, held, or spent by an action. */
-export function resourceIdsForEditor(definition: CreatureDefinition, combatant: CombatantState): string[] {
-  const ids = new Set<string>();
-  Object.keys(definition.resources ?? {}).forEach((id) => ids.add(id));
-  Object.keys(combatant.resources ?? {}).forEach((id) => ids.add(id));
-  getExecutableActions(definition).forEach((action) => {
-    if ("resourceCost" in action && action.resourceCost?.resourceId) ids.add(action.resourceCost.resourceId);
-  });
-  if (ids.size === 0) ids.add("limited-use");
-  return [...ids].sort((a, b) => resourceSortKey(a).localeCompare(resourceSortKey(b)) || a.localeCompare(b));
-}
-
 export interface SheetItems {
   actions: SheetItem[];
   weapons: SheetItem[];

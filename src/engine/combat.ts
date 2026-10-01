@@ -4448,7 +4448,8 @@ function spellUpcastVariants(definition: CreatureDefinition, action: ActionDefin
   } as ActionDefinition));
 }
 
-function casterLevelOf(definition: CreatureDefinition): number {
+/** The level a creature casts at: what scales its cantrips (and Eldritch Blast's beams). */
+export function casterLevelOf(definition: CreatureDefinition): number {
   return definition.character?.level ?? 1;
 }
 

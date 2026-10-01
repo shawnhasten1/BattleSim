@@ -17,6 +17,7 @@ import {
   footprintCells,
   getDefinition,
   groundHeightAt,
+  LEGENDARY_POINTS,
   planRamp,
   withGroundHeights,
   getExecutableActions,
@@ -78,6 +79,7 @@ import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition
 import { findAbility, withNewAbility, withRecordAfter, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
 import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withOwnUsagePool, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
+import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -282,6 +284,17 @@ interface EncounterStore {
   updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
+  /**
+   * A resource's full size on a creature (the Resources list), kept in step everywhere it's stored: the pool, a
+   * weapon's charges, the uses of the abilities spending it, or the legendary actions a round (`withResourceSize`).
+   * Tokens that were full follow it; the others keep what they have, capped at it, measured from before the edit (so
+   * typing 12 over 3 isn't read as 1 on the way). A size for a pool a token lacks seeds it full. One undo step.
+   */
+  setResourceSize: (definitionId: string, resourceId: string, size: number) => void;
+  /** Take a spell slot level, or a pool nothing spends any more, off a creature and its tokens. One undo step. */
+  removeResource: (definitionId: string, resourceId: string) => void;
+  /** Every resource of a token back to full and every recharge ready (legendary actions refill on their own). One undo step. */
+  refillResources: (combatantId: string) => void;
   /** How many legendary actions a creature takes a round (1-10). One undo step; nothing for a creature without them. */
   setLegendaryPool: (definitionId: string, pool: number) => void;
   /** Put a condition on a token by hand, with the engine's modifiers for it and despite any immunity. One undo step. */
@@ -2225,6 +2238,53 @@ export const useEncounterStore = create<EncounterStore>()(
               }
             }
             : definition)
+        });
+      },
+      setResourceSize: (definitionId, resourceId, size) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!definition) return;
+        const base = editBase();
+        const baseDefinition = base.definitions.find((candidate) => candidate.id === definitionId) ?? definition;
+        const oldFull = fullOf(baseDefinition, resourceId);
+        const next = withResourceSize(definition, resourceId, size);
+        const full = fullOf(next, resourceId) ?? size;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)),
+          combatants: encounter.combatants.map((combatant) => {
+            if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== definitionId) return combatant;
+            const was = (base.combatants.find((candidate) => candidate.id === combatant.id) ?? combatant).resources?.[resourceId];
+            // The engine refills legendary actions itself; a token that hasn't any yet is left to it.
+            if (was === undefined && resourceId === LEGENDARY_POINTS) return combatant;
+            const wasFull = was === undefined || oldFull === undefined || was >= oldFull;
+            return { ...combatant, resources: { ...(combatant.resources ?? {}), [resourceId]: wasFull ? full : Math.min(was, full) } };
+          })
+        });
+      },
+      removeResource: (definitionId, resourceId) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        if (!definition || definition.resources?.[resourceId] === undefined) return;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? withoutResource(candidate, resourceId) : candidate)),
+          combatants: encounter.combatants.map((combatant) => {
+            if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== definitionId || combatant.resources?.[resourceId] === undefined) return combatant;
+            const { [resourceId]: _removed, ...resources } = combatant.resources;
+            return { ...combatant, resources };
+          })
+        });
+      },
+      refillResources: (combatantId) => {
+        const encounter = get().encounter;
+        const combatant = encounter.combatants.find((candidate) => candidate.id === combatantId);
+        if (!combatant) return;
+        const resources = refilledResources(getDefinition(encounter, combatant), combatant);
+        if (deepEqual(resources, combatant.resources ?? {})) return;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((candidate) => (candidate.id === combatantId ? { ...candidate, resources } : candidate))
         });
       },
       setLegendaryPool: (definitionId, pool) => {

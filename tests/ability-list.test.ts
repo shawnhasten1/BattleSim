@@ -4,13 +4,14 @@ import { findSrdFeature, findSrdWeapon } from "@/data/srd";
 import { SRD_MONSTER_INDEX, loadSrdMonster, loadSrdMonsterAbilities, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { RECIPES, prepareLibrary, prepareMonsterAbility, searchAdd } from "@/lib/ability-editor/add";
 import { actionLimit } from "@/lib/ability-editor/bindings";
-import { abilityList, duplicateOf, featureGroup, poolsStrip, weaponGroup, type ListGroup } from "@/lib/ability-editor/list";
+import { abilityList, duplicateOf, featureGroup, weaponGroup, type ListGroup } from "@/lib/ability-editor/list";
+import { resourceRows, resourceSummary } from "@/lib/actor-sheet/resources";
 import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
 import { sectionsFor } from "@/lib/ability-editor/sections";
 import { blankSpecialAction, FEATURE_TEMPLATES } from "@/lib/ability-editor/templates";
 import { useEncounterStore } from "@/store/encounter-store";
 
-/** Phase 6's models: the list in statblock order, the pools strip, and Add's search, recipes and copies. */
+/** Phase 6's models: the list in statblock order, the resources above it, and Add's search, recipes and copies. */
 
 const titles = (groups: ListGroup[]) => groups.map((group) => group.title);
 const rowsOf = (groups: ListGroup[], title: string) => groups.find((group) => group.title === title)?.rows ?? [];
@@ -48,7 +49,7 @@ describe("the list, in statblock order", () => {
   it("gives a spellcaster a Spellcasting block: its ability, DC and attack, and spells by level with their slots", async () => {
     const mage = await monster("mage");
     const spellcasting = abilityList(mage).find((group) => group.id === "spellcasting")!;
-    expect(spellcasting.note).toBe("Intelligence · save DC 14 · +6 to hit");
+    expect(spellcasting.note).toBe("Intelligence · save DC 14 · +6 to hit · 9th-level spellcaster");
     expect(spellcasting.levels!.map((level) => `${level.title}${level.slots ? ` (${level.slots})` : ""}`)).toEqual([
       "Cantrips (at will)", "1st level (4 of 4 slots)", "2nd level (3 of 3 slots)", "3rd level (3 of 3 slots)", "4th level (3 of 3 slots)", "5th level (1 of 1 slot)"
     ]);
@@ -121,13 +122,13 @@ describe("the list, in statblock order", () => {
   });
 });
 
-describe("the pools strip", () => {
-  it("shows what recharges, what has uses or a pool, and legendary actions", async () => {
+describe("the resources above the list, folded", () => {
+  it("say what recharges, what has uses or a pool, and the legendary actions a round", async () => {
     const dragon = await monster("adult-red-dragon");
-    expect(poolsStrip(dragon).map((chip) => `${chip.label} ${chip.state}`)).toEqual(["Fire Breath ready", "Legendary resistance 3/3", "Legendary actions 3 a round"]);
+    expect(resourceSummary(resourceRows(dragon))).toBe("Fire Breath ready · Legendary resistance 3/3 · Legendary actions 3 a round");
     const spent = { ...sampleEncounter.combatants[0]!, resources: { ...dragon.resources, "usage:fire-breath": 0, "legendary-resistance": 1 } };
-    expect(poolsStrip(dragon, spent).slice(0, 2).map((chip) => `${chip.label} ${chip.state}`)).toEqual(["Fire Breath recharging", "Legendary resistance 1/3"]);
-    expect(poolsStrip(fighter()).map((chip) => `${chip.label} ${chip.state}`)).toEqual(["Second Wind 1/1", "Action Surge 1/1", "Rage 3/3"]);
+    expect(resourceSummary(resourceRows(dragon, spent))).toBe("Fire Breath recharging · Legendary resistance 1/3 · Legendary actions 3 a round");
+    expect(resourceSummary(resourceRows(fighter()))).toBe("Second Wind 1/1 · Action Surge 1/1 · Rage 3/3");
   });
 });
 

@@ -122,7 +122,7 @@ The **Abilities** tab should now read:
 - **Actions:** Extra Attack, Greataxe and Reckless Attack.
 - **Bonus actions:** Rage, with a **1 rage** chip for what each use costs, and `+2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant or necrotic on melee or ranged hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute`.
 
-Above the list, the pools strip shows **Rage 3/3**: the `rage` pool, created when you added Rage, with all three uses left. Three is right for a level 5 Barbarian. Click it to change what this token has left now, and the full size every fight starts with.
+Above the list, **Resources** reads **Rage 3/3**: the rage pool, created when you added Rage, with all three uses left. Three is right for a level 5 Barbarian. Open it to change what this token has left, and the full size every fight starts with.
 
 ![The rage pool's sizes](img/zealot-barbarian/12-rage-pool.png)
 

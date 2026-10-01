@@ -35,7 +35,7 @@ interface SheetNumberCommon {
   /** Accessible name, when no `<label>` wraps the box. */
   label?: string;
   placeholder?: string;
-  /** For a box outside a tab's own styles (the pools strip). */
+  /** For a box outside a tab's own styles (the resource list). */
   className?: string;
   style?: CSSProperties;
 }

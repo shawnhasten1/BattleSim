@@ -297,11 +297,12 @@ const SECTIONS: Section[] = [
         </p>
         <ul>
           <li>
-            <strong>Stats</strong> — ability scores, AC, HP, speed, proficiency bonus, saving throws, damage and
-            condition defenses, resources such as spell slots, and the spellcasting ability its spells follow.
+            <strong>Stats</strong> — ability scores, AC, HP, speed, proficiency bonus, level, saving throws, and damage
+            and condition defenses.
           </li>
           <li>
-            <strong>Abilities</strong> — the attacks, spells, and features this actor can use in combat.
+            <strong>Abilities</strong> — the attacks, spells, and features this actor can use in combat, and every
+            resource they spend.
           </li>
           <li>
             <strong>Token</strong> — this token: its name, faction, position, altitude and image, and its tactics:
@@ -333,13 +334,20 @@ const SECTIONS: Section[] = [
             between Actions, Bonus actions and Reactions, or deletes it; a note after a delete offers <strong>Undo</strong>.
           </li>
           <li>
-            <strong>Spellcasting</strong> gives the actor&apos;s spellcasting ability, save DC and attack bonus, then its spells by
-            level with the slots it has left.
+            <strong>Spellcasting</strong> gives the actor&apos;s spellcasting ability (pick another there: Auto uses the one its
+            spells name most), save DC, attack bonus and caster level, then its spells by level with the slots it has left.
           </li>
           <li>
-            <strong>The pools</strong> above the list show what it has to spend: a breath that&apos;s ready or recharging, uses and
-            pools (rage, ki, a weapon&apos;s charges), and legendary actions a round. Click them to change what this token has
-            left and the full size every fight starts with.
+            <strong>Resources</strong>, above the list, is everything it spends, in one list: spell slots by level, uses, a
+            breath that&apos;s ready or recharging, pools (rage, ki, legendary resistance), a weapon&apos;s charges, and legendary
+            actions a round. Folded, it&apos;s one line. Open it to see what this token has left (dots to click, or a number)
+            beside what every token of the creature starts a fight with. Changing a full size changes the ability that
+            spends it too, so its editor and its statblock line agree, and tokens that were full stay full.{" "}
+            <strong>Add a spell slot level</strong> adds one; a level its spells need but it hasn&apos;t is listed, waiting
+            for a number. <strong>Add a pool</strong> names a new one (Ki points, Superiority dice) and its size; an
+            ability spends it once you pick it in the ability&apos;s Use &amp; cost (Limit, then Pool). Uses, recharges and
+            charges come with the ability that has them. <strong>Refill all</strong> tops this token up, and a pool
+            nothing spends yet is listed apart, to remove.
           </li>
         </ul>
         <p>
@@ -534,7 +542,7 @@ const SECTIONS: Section[] = [
           <li>Roll: How it works → <em>Saving throw</em>. Target: Reaches → <em>An area</em> (a 20-ft sphere at a point); within <em>150</em> ft.</li>
           <li>Roll: A success → <em>Half damage</em>. Damage: <em>8</em> d <em>6</em> fire.</li>
           <li>Basics: Level → <em>3rd</em>; it now spends a 3rd-level slot. Use &amp; cost: tick <strong>Stronger with a higher slot</strong> (+1d6 per level above).</li>
-          <li>Add to sheet. Give the caster <code>slot-3</code> (and higher, to upcast) on its Stats tab; the editor warns until it has them.</li>
+          <li>Add to sheet. Give the caster 3rd-level slots (and higher, to upcast) in Resources, above its abilities: a level its spells need is listed there, waiting for a number. The editor warns until it has them.</li>
         </ol>
 
         <h3>Worked example: a Cloudkill-style poison cloud</h3>
@@ -819,7 +827,7 @@ const SECTIONS: Section[] = [
         <ul>
           <li>
             <strong>Use &amp; cost</strong> — what it costs (1, 2 or 3 actions) and how many the creature takes a round
-            (3 for most, shared by all of them; the pools above the list change it too).
+            (3 for most, shared by all of them; Resources, above the list, changes it too).
           </li>
           <li>
             <strong>Does</strong> — it uses one of the creature&apos;s abilities as it is (a dragon&apos;s Tail Attack is its

@@ -8,7 +8,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { useEncounterStore } from "@/store/encounter-store";
 import { group, openAdd, rowMenu, searchAdd, useRecipe } from "./helpers/abilities-tab";
 
-/** Phase 6: the list in statblock order, its rows' menu, the pools strip, and Add's one search. */
+/** Phase 6: the list in statblock order, its rows' menu, the resources above it, and Add's one search. */
 
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
@@ -107,20 +107,21 @@ describe("the list", { timeout: 20000 }, () => {
   });
 });
 
-describe("the pools strip", { timeout: 20000 }, () => {
-  it("shows the pools, and edits what's left now and the full size", async () => {
+describe("the resource list", { timeout: 20000 }, () => {
+  it("folds to one line, and opens to what this token has left and the full sizes", async () => {
     render(<LiveTab />);
-    const pools = screen.getByRole("group", { name: "Pools" });
-    expect(within(pools).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Second Wind: 1/1", "Action Surge: 1/1"]);
-    await userEvent.click(within(pools).getByRole("button", { name: "Second Wind: 1/1" }));
-    const sizes = screen.getByRole("group", { name: "Pool sizes" });
+    const head = within(screen.getByRole("region", { name: "Resources" })).getByRole("button", { name: /^Resources/ });
+    expect(head.getAttribute("aria-expanded")).toBe("false");
+    expect(head.textContent).toBe("ResourcesSecond Wind 1/1 · Action Surge 1/1");
+    await userEvent.click(head);
+    const sizes = screen.getByRole("group", { name: "Resource sizes" });
     const full = within(sizes).getByLabelText("Second Wind full");
     await userEvent.clear(full);
     await userEvent.type(full, "2");
     expect(fighter().resources?.["second-wind"]).toBe(2);
-    const now = within(sizes).getByLabelText("Action Surge now");
-    await userEvent.clear(now);
-    await userEvent.type(now, "0");
+    // The token was full, so it stays full.
+    expect(token().resources?.["second-wind"]).toBe(2);
+    await userEvent.click(within(sizes).getByRole("button", { name: "Action Surge: 1 left" }));
     expect(token().resources?.["action-surge"]).toBe(0);
   });
 });

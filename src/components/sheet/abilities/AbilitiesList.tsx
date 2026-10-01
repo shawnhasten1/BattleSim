@@ -20,31 +20,36 @@ export interface RowHandlers {
  * Legendary actions, Lair actions, On death. A row opens its editor; its ⋯ menu duplicates, moves or deletes it.
  * `under` renders what belongs beneath a row (its delete prompt).
  */
-export function AbilitiesList({ groups, handlers, flashId, under }: {
+export function AbilitiesList({ groups, handlers, flashId, under, heading }: {
   groups: ListGroup[];
   handlers: RowHandlers;
   /** The row an editor just saved, highlighted so the eye finds it. */
   flashId?: string;
   under?: (row: ListRow) => ReactNode;
+  /** What a group's heading shows after its title in place of its note (the Spellcasting ability picker). */
+  heading?: (group: ListGroup) => ReactNode | undefined;
 }) {
   if (!groups.length) return <p className={styles.footnote} style={{ padding: "10px 12px" }}>No abilities yet: Add one above.</p>;
   return (
     <>
-      {groups.map((group) => (
-        <section key={group.id} className={styles.group} aria-label={group.title}>
-          <h4 className={styles.groupHead}>
-            {group.title}
-            {group.note ? <span className={styles.groupNote}>{group.note}</span> : null}
-          </h4>
-          {group.rows.map((row) => <Row key={row.key} row={row} handlers={handlers} flash={flashId === rowId(row)} under={under} />)}
-          {(group.levels ?? []).map((level) => (
-            <div key={level.level}>
-              <p className={styles.levelHead}>{level.title}{level.slots ? ` · ${level.slots}` : ""}</p>
-              {level.rows.map((row) => <Row key={row.key} row={row} handlers={handlers} flash={flashId === rowId(row)} under={under} />)}
-            </div>
-          ))}
-        </section>
-      ))}
+      {groups.map((group) => {
+        const custom = heading?.(group);
+        return (
+          <section key={group.id} className={styles.group} aria-label={group.title}>
+            <h4 className={styles.groupHead}>
+              {group.title}
+              {custom ?? (group.note ? <span className={styles.groupNote}>{group.note}</span> : null)}
+            </h4>
+            {group.rows.map((row) => <Row key={row.key} row={row} handlers={handlers} flash={flashId === rowId(row)} under={under} />)}
+            {(group.levels ?? []).map((level) => (
+              <div key={level.level}>
+                <p className={styles.levelHead}>{level.title}{level.slots ? ` · ${level.slots}` : ""}</p>
+                {level.rows.map((row) => <Row key={row.key} row={row} handlers={handlers} flash={flashId === rowId(row)} under={under} />)}
+              </div>
+            ))}
+          </section>
+        );
+      })}
     </>
   );
 }

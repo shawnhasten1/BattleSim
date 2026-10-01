@@ -93,7 +93,7 @@ export const COPY = {
   automaticOutcome: { label: "It" },
   saveRoll: { label: "Saving throw", hint: "The ability the target saves with." },
   dc: { label: "DC", hint: "“As printed” keeps a statblock's number. “Calculated” is 8 + an ability modifier + proficiency, and follows them if they change." },
-  dcAbility: { label: "Ability", hint: "A spell can follow its caster's spellcasting ability (set on the Stats tab), or use one of its own." },
+  dcAbility: { label: "Ability", hint: "A spell can follow its caster's spellcasting ability (set in the Spellcasting heading above its spells), or use one of its own." },
   onSuccess: { label: "A success", hint: "Half damage: effects still happen by their When. No damage: the same, without the damage. Avoids it: nothing at all happens to a creature that succeeds." },
   immuneAfterSave: { label: "Immune after a successful save", hint: "A creature that succeeds can't be affected by it again this fight (Frightful Presence)." },
   autoHit: { label: "Hits automatically", hint: "No attack roll: each beam just deals its damage (Magic Missile)." },

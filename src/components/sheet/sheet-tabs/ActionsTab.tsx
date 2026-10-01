@@ -28,7 +28,8 @@ import { findAbility, refKey } from "@/lib/ability-editor/refs";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
 import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
 import { AddAbility, type BlankKind } from "../abilities/AddAbility";
-import { PoolsStrip } from "../abilities/PoolsStrip";
+import { ResourceList } from "../abilities/ResourceList";
+import { SpellcastingHeading } from "../abilities/SpellcastingHeading";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -43,8 +44,8 @@ interface PendingRemoval {
 const MOVE_TYPES: Record<MoveTarget, ActionDefinition["actionType"]> = { actions: "action", bonus: "bonus", reactions: "reaction" };
 
 /**
- * The Abilities tab: what the creature has, in statblock order (plan §3.1), with its pools above, and Add (§3.2). Every
- * ability opens in the ability editor, in place of the list.
+ * The Abilities tab: what the creature has, in statblock order (plan §3.1), with every resource it spends above (the
+ * actor sheet plan's D5), and Add (§3.2). Every ability opens in the ability editor, in place of the list.
  */
 export function ActionsTab({ combatant, definition, compendium }: { combatant: CombatantState; definition: CreatureDefinition; compendium?: Compendium }) {
   const updateFeature = useEncounterStore((s) => s.updateFeature);
@@ -259,7 +260,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
           <span className={abilityStyles.spacer} />
           <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
         </div>
-        <PoolsStrip definition={definition} combatant={combatant} />
+        <ResourceList definition={definition} combatant={combatant} />
       </div>
 
       {addOpen ? (
@@ -277,6 +278,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
         groups={groups}
         flashId={returnTo?.saved ? returnTo.id : undefined}
         under={underRow}
+        heading={(group) => (group.spellcasting ? <SpellcastingHeading definition={definition} facts={group.spellcasting} /> : undefined)}
         handlers={{
           onOpen: openRow,
           onDuplicate: duplicateRow,
