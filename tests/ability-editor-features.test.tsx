@@ -1,0 +1,304 @@
+// @vitest-environment happy-dom
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { ActionDefinition, CreatureDefinition, FeatureDefinition } from "@/engine";
+import { SRD_FEATURES, findSrdFeature } from "@/data/srd";
+import { loadSrdMonster } from "@/data/srd/monsters";
+import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
+import type { Compendium } from "@/hooks/useCompendium";
+import { activationOf } from "@/lib/ability-editor/features";
+import { featureStatblock } from "@/lib/statblock";
+import { useEncounterStore } from "@/store/encounter-store";
+
+/** Phase 4's done-when: features and traits built from a blank one in the editor, matching the library and the SRD. */
+
+const pristine = useEncounterStore.getState();
+beforeEach(() => {
+  useEncounterStore.setState(pristine, true);
+  try { localStorage.clear(); } catch { /* private mode */ }
+});
+afterEach(() => { document.body.innerHTML = ""; });
+
+const store = () => useEncounterStore.getState();
+const fighter = () => store().encounter.definitions.find((d) => d.id === "def-fighter")! as CreatureDefinition;
+const allFeatures = () => [...(fighter().features ?? []), ...(fighter().traits ?? [])];
+const named = (name: string) => allFeatures().find((feature) => feature.name === name)!;
+
+function LiveTab() {
+  const encounter = useEncounterStore((s) => s.encounter);
+  return <ActionsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />;
+}
+
+async function blankFeature(name: string) {
+  render(<LiveTab />);
+  await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Blank" }));
+  await userEvent.click(screen.getByRole("button", { name: "Feature / trait" }));
+  const box = screen.getByLabelText("Name") as HTMLInputElement;
+  await userEvent.clear(box);
+  await userEvent.type(box, name);
+}
+const inSection = (id: string) => within(document.querySelector<HTMLElement>(`[data-section="${id}"]`)!);
+const radio = (scope: ReturnType<typeof within>, group: string, option: string) =>
+  userEvent.click(within(scope.getByRole("radiogroup", { name: group })).getByRole("radio", { name: option }));
+const chip = (scope: ReturnType<typeof within>, group: string, name: string) =>
+  userEvent.click(within(scope.getByRole("group", { name: group })).getByRole("button", { name }));
+async function addEffect(menuItem: RegExp, cardLabel: string) {
+  await userEvent.click(inSection("while-active").getByRole("button", { name: "Add effect" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: menuItem }));
+  return within(screen.getByRole("group", { name: `${cardLabel} effect` }));
+}
+async function retype(box: HTMLElement, value: string) {
+  await userEvent.clear(box);
+  await userEvent.type(box, value);
+}
+const done = (card: ReturnType<typeof within>) => userEvent.click(card.getByRole("button", { name: "Done" }));
+const addToSheet = () => userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+
+describe("traits built from a blank one", { timeout: 20000 }, () => {
+  it("Pack Tactics: advantage when an ally is next to the target", async () => {
+    await blankFeature("Pack Tactics");
+    await radio(inSection("basics"), "Listed as", "Trait");
+    const card = await addEffect(/^Advantage on its attacks/, "Advantage on its attacks");
+    await chip(card, "When", "an ally is next to the target");
+    await done(card);
+    await addToSheet();
+    expect(named("Pack Tactics")).toMatchObject({ category: "trait", effects: findSrdFeature("srd:feature:pack-tactics")!.effects });
+    expect((fighter().traits ?? []).some((trait) => trait.name === "Pack Tactics")).toBe(true);
+  });
+
+  it("Magic Resistance: advantage on saves against spells and other magic", async () => {
+    await blankFeature("Magic Resistance");
+    const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");
+    await radio(card, "Against", "Spells and magic");
+    await done(card);
+    await addToSheet();
+    expect(named("Magic Resistance").effects).toEqual([{ kind: "save-advantage", against: { source: "magical" } }]);
+  });
+
+  it("Regeneration: 10 hit points a turn, stopped by acid or fire", async () => {
+    await blankFeature("Regeneration");
+    const card = await addEffect(/^Regenerates/, "Regenerates");
+    await chip(card, "Stopped by", "acid");
+    await chip(card, "Stopped by", "fire");
+    await done(card);
+    await addToSheet();
+    expect(named("Regeneration").effects).toEqual([{ kind: "hp-regen", amount: 10, suppressedByDamageTypes: ["acid", "fire"] }]);
+  });
+
+  it("Stench: creatures starting a turn within 10 ft make a DC 14 CON save or are poisoned", async () => {
+    const hezrou = (await loadSrdMonster("srd:monster:hezrou"))!;
+    await blankFeature("Stench");
+    await userEvent.click(inSection("aura").getByLabelText("Affects creatures nearby each round"));
+    await retype(inSection("aura").getByLabelText("Aura save DC"), "14");
+    await addToSheet();
+    const stench = [...(hezrou.traits ?? []), ...(hezrou.features ?? [])].find((trait) => trait.name === "Stench")!;
+    expect(named("Stench").emanation).toEqual(stench.emanation);
+  });
+
+  it("Fire Aura: 3d6 fire to everything within 5 ft each turn, and to what hits it in melee", async () => {
+    const balor = (await loadSrdMonster("srd:monster:balor"))!;
+    await blankFeature("Fire Aura");
+    const aura = inSection("aura");
+    await userEvent.click(aura.getByLabelText("Affects creatures nearby each round"));
+    await radio(aura, "When", "It starts its own turn");
+    await retype(aura.getByLabelText("Aura reach (ft)"), "5");
+    await userEvent.click(aura.getByLabelText("A saving throw avoids it"));
+    await userEvent.selectOptions(aura.getByLabelText("Condition"), "");
+    await userEvent.click(aura.getByRole("button", { name: "Add aura damage" }));
+    await retype(aura.getByLabelText("Aura damage dice count"), "3");
+    const card = await addEffect(/^Hurts what hits it in melee/, "Hurts what hits it in melee");
+    await retype(card.getByLabelText("Damage to the attacker dice count"), "3");
+    await userEvent.selectOptions(card.getByLabelText("Damage to the attacker die size"), "6");
+    await done(card);
+    await addToSheet();
+
+    const fire = [...(balor.traits ?? []), ...(balor.features ?? [])].find((trait) => trait.name === "Fire Aura")!;
+    const built = named("Fire Aura");
+    expect(built.emanation).toMatchObject({ ...fire.emanation, damage: [{ dice: "3d6", damageType: "fire" }] });
+    expect(built.emanation?.save).toBeUndefined();
+    expect(built.emanation?.condition).toBeUndefined();
+    expect(built.effects).toMatchObject(fire.effects!);
+    expect(featureStatblock(built, fighter()).text).toBe(featureStatblock(fire, fighter()).text);
+  });
+});
+
+describe("features built from a blank one", { timeout: 30000 }, () => {
+  it("the Zealot's Rage with Divine Fury: switched on with a bonus action, from a pool of rages", async () => {
+    await blankFeature("Rage (Zealot)");
+    const use = inSection("use");
+    await radio(use, "It works", "When switched on");
+    expect(within(use.getByRole("radiogroup", { name: "Takes" })).getByRole("radio", { name: "Bonus action" }).getAttribute("aria-checked")).toBe("true");
+    await radio(use, "Limit", "Pool");
+    await userEvent.selectOptions(use.getByLabelText("Spends from"), "__new");
+    await userEvent.type(use.getByLabelText("New pool name"), "rage");
+    await userEvent.click(use.getByRole("button", { name: "Create pool" }));
+    expect((use.getByLabelText("Lasts") as HTMLSelectElement).value).toBe("10");
+
+    // +2 on Strength melee hits.
+    let card = await addEffect(/^Extra damage on its hits/, "Extra damage on its hits");
+    await userEvent.click(card.getByRole("button", { name: "More for extra damage" }));
+    await radio(card, "Extra damage written as", "Flat");
+    await retype(card.getByLabelText("Extra damage amount"), "2");
+    await chip(card, "Attacks", "melee");
+    await chip(card, "Using", "STR");
+    await done(card);
+
+    // Divine Fury: once a turn, 1d6 + 2 radiant or necrotic.
+    card = await addEffect(/^Extra damage on its hits/, "Extra damage on its hits");
+    await retype(card.getByLabelText("Extra damage flat bonus"), "2");
+    await userEvent.selectOptions(card.getByLabelText("Extra damage type"), "radiant");
+    await userEvent.click(card.getByRole("button", { name: "More for extra damage" }));
+    await userEvent.click(card.getByLabelText("Choose the type each time"));
+    await chip(card, "Extra damage type choices", "lightning");
+    await chip(card, "Extra damage type choices", "necrotic");
+    await userEvent.click(card.getByLabelText("Once per turn"));
+    await chip(card, "Attacks", "melee");
+    await chip(card, "Attacks", "ranged");
+    await done(card);
+
+    card = await addEffect(/^Resistance, immunity or vulnerability/, "Resistance");
+    for (const type of ["bludgeoning", "piercing", "slashing", "fire"]) await chip(card, "To", type);
+    await done(card);
+
+    card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");
+    await chip(card, "Which saves", "STR");
+    await done(card);
+    await addToSheet();
+
+    const built = named("Rage (Zealot)");
+    const zealot = findSrdFeature("srd:feature:rage-zealot")!;
+    expect(activationOf(built)).toMatchObject({ actionType: "bonus", resourceCost: { resourceId: "rage", amount: 1 }, condition: { durationRounds: 10 } });
+    expect(fighter().resources?.rage).toBe(3);
+    // It reads exactly as the library's does.
+    expect(featureStatblock(built, fighter()).text).toBe(featureStatblock(zealot, fighter()).text);
+    expect(activationOf(built)!.condition!.effects).toMatchObject(activationOf(zealot)!.condition!.effects!.map((effect) => ({ ...effect })));
+  });
+
+  it("Pounce: a bonus-action bite after a charge, added through Grants", async () => {
+    await blankFeature("Pounce");
+    const card = await addEffect(/^A condition on its hits/, "A condition on its hits");
+    await chip(card, "When", "it charged the target");
+    await chip(card, "Attacks", "melee");
+    await done(card);
+    await userEvent.click(inSection("grants").getByRole("button", { name: "Add an ability it grants" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /^An attack after a charge/ }));
+    // The follow-up opens nested, copied from the fighter's longsword.
+    expect(screen.getByRole("button", { name: "Back to Pounce" })).toBeTruthy();
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Longsword (Pounce)");
+    expect(within(screen.getByRole("radiogroup", { name: "Only after" })).getByRole("radio", { name: "A charge hits" }).getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await addToSheet();
+
+    const pounce = named("Pounce");
+    expect(pounce.effects).toEqual([{
+      kind: "apply-condition-on-hit", condition: "charged", attackTypes: ["melee"], appliedCondition: { name: "prone" }, save: { ability: "str", dc: 13 }
+    }]);
+    expect(pounce.grantedActions?.[0]).toMatchObject({ kind: "attack", name: "Longsword (Pounce)", actionType: "bonus", onlyAfter: "charge-hit", requiresTargetCondition: "prone" });
+  });
+
+  it("a Second Wind of its own: a heal it grants, from a pool, made with a new pool", async () => {
+    // The fighter already has Second Wind (and its pool): this one is built beside it.
+    await blankFeature("Catch Breath");
+    await userEvent.click(inSection("grants").getByRole("button", { name: "Add an ability it grants" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /^A heal/ }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Catch Breath");
+    await radio(inSection("use"), "Limit", "Pool");
+    await userEvent.selectOptions(inSection("use").getByLabelText("Spends from"), "__new");
+    await userEvent.type(inSection("use").getByLabelText("New pool name"), "breath");
+    await retype(inSection("use").getByLabelText("New pool size"), "2");
+    await userEvent.click(inSection("use").getByRole("button", { name: "Create pool" }));
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(inSection("use").getByText("What it grants is used like any other ability: see Grants.")).toBeTruthy();
+    await addToSheet();
+
+    const breath = named("Catch Breath");
+    expect(breath.grantedActions?.[0]).toMatchObject({ kind: "healing", name: "Catch Breath", actionType: "bonus", targeting: { target: "self" }, resourceCost: { resourceId: "breath", amount: 1 } });
+    // A pool made inside the granted ability is saved with the feature.
+    expect(fighter().resources?.breath).toBe(2);
+  });
+});
+
+describe("activations of their own, buffs, and the sheet around a nested editor", { timeout: 20000 }, () => {
+  it("edits a Parry: a reaction on itself, its AC bonus a card", async () => {
+    store().insertAbilityRecord("def-fighter", "reactions", {
+      kind: "activate-feature", id: "", name: "Parry", actionType: "reaction", featureId: "parry",
+      reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+      condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 2 } }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Parry" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    expect(inSection("use").queryByRole("radiogroup", { name: "It acts on" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /^While active/ }));
+    expect(inSection("while-active").getByText("It gains a +2 bonus to AC.")).toBeTruthy();
+    await userEvent.click(inSection("while-active").getByRole("button", { name: "Edit ac bonus effect" }));
+    await retype(inSection("while-active").getByLabelText("AC bonus"), "3");
+    await done(inSection("while-active"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    const parry = (fighter().reactions ?? []).find((action) => action.name === "Parry")!;
+    expect(parry).toMatchObject({ kind: "activate-feature", condition: { id: "parry-active", durationRounds: 1, modifiers: { armorClass: 3 } }, reaction: { priority: "always" } });
+  });
+
+  it("gives a buff's other effects as cards: advantage on attacks while it lasts", async () => {
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Blank" }));
+    await userEvent.click(screen.getByRole("button", { name: "Spell" }));
+    await retype(screen.getByLabelText("Name"), "Battle Focus");
+    await radio(inSection("roll"), "How it works", "Automatic");
+    await radio(inSection("roll"), "It", "Grants a benefit");
+    await userEvent.click(inSection("outcome").getByRole("button", { name: "Add effect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /^Advantage on its attacks/ }));
+    const card = within(screen.getByRole("group", { name: "Advantage on its attacks effect" }));
+    await chip(card, "Attacks", "melee");
+    await done(card);
+    expect(screen.getByLabelText("Preview").textContent).toMatch(/advantage on melee attack rolls/);
+    await addToSheet();
+    const spell = fighter().spells!.find((candidate) => candidate.name === "Battle Focus")!;
+    expect(spell.action).toMatchObject({ kind: "buff", appliedCondition: { effects: [{ kind: "attack-advantage", condition: "always", attackTypes: ["melee"] }] } });
+  });
+
+  it("keeps a granted ability's edits when the sheet saves on a tab switch", async () => {
+    // The fighter has Second Wind: a feature that grants a bonus-action heal.
+    const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
+    render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
+    const features = screen.getByText("Features & traits").closest("div")!;
+    await userEvent.click(within(features).getByRole("button", { name: "Edit Second Wind" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Grants/ }));
+    await userEvent.click(inSection("grants").getByRole("button", { name: "Edit Second Wind" }));
+    await retype(screen.getByLabelText("Name"), "Second Breath");
+    await userEvent.click(screen.getByRole("tab", { name: "Stats" }));
+    const prompt = screen.getByRole("alertdialog", { name: "Unsaved changes" });
+    await userEvent.click(within(prompt).getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("tab", { name: "Stats" }).getAttribute("aria-selected")).toBe("true");
+    expect(named("Second Wind").grantedActions?.map((action) => action.name)).toEqual(["Second Breath"]);
+  });
+});
+
+describe("the library's features in the editor", { timeout: 60000 }, () => {
+  let attached: FeatureDefinition[] = [];
+  beforeAll(() => {
+    attached = [...SRD_FEATURES];
+  });
+
+  it("opens all 16 with every section and card shown, changing nothing", async () => {
+    expect(attached).toHaveLength(16);
+    for (const feature of attached) store().attachSrdFeature("def-fighter", feature.id);
+    render(<LiveTab />);
+    for (const feature of attached) {
+      const name = feature.name;
+      await userEvent.click(screen.getAllByRole("button", { name: `Edit ${name}` })[0]!);
+      await userEvent.click(screen.getByRole("button", { name: "Expand all" }));
+      for (const edit of screen.queryAllByRole("button", { name: /^Edit .* effect$/ })) {
+        await userEvent.click(edit);
+        await userEvent.click(screen.getByRole("button", { name: "Done" }));
+      }
+      expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled, name).toBe(true);
+      await userEvent.click(screen.getByRole("button", { name: "Back to abilities" }));
+    }
+  });
+});

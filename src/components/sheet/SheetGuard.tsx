@@ -21,20 +21,20 @@ export const SheetGuardContext = createContext<GuardRegistry | null>(null);
 
 /**
  * Tell the sheet around this editor about its unsaved changes. Outside a sheet (a test rendering the tab alone) it
- * does nothing.
+ * does nothing; so does an editor nested in another (`enabled` false), whose parent answers for both.
  */
-export function useEditorGuard(guard: EditorGuard) {
+export function useEditorGuard(guard: EditorGuard, enabled = true) {
   const registry = useContext(SheetGuardContext);
   const latest = useRef(guard);
   latest.current = guard;
   useEffect(() => {
-    if (!registry) return;
+    if (!registry || !enabled) return;
     registry.register({
       dirty: guard.dirty,
       label: guard.label,
       save: () => latest.current.save(),
       discard: () => latest.current.discard()
     });
-  }, [registry, guard.dirty, guard.label]);
-  useEffect(() => () => registry?.register(null), [registry]);
+  }, [registry, enabled, guard.dirty, guard.label]);
+  useEffect(() => () => { if (enabled) registry?.register(null); }, [registry, enabled]);
 }

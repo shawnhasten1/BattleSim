@@ -17,17 +17,25 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { findAbility, withAbility, type AbilityRecord, type AbilityRef } from "./refs";
+import { effectPools } from "./features";
 
 /** Starting sizes for the class pools a feature's granted actions spend. */
-const FEATURE_POOL_DEFAULTS: Record<string, number> = { rage: 3, "action-surge": 1, "second-wind": 1, "bardic-inspiration": 3 };
+const FEATURE_POOL_DEFAULTS: Record<string, number> = {
+  rage: 3, "action-surge": 1, "second-wind": 1, "bardic-inspiration": 3, "legendary-resistance": 3, relentless: 1
+};
 
-/** Pools a feature's granted actions spend that have a standard starting size (Rage 3, Action Surge 1 …). */
+/**
+ * Pools a feature spends that have a standard starting size: its granted actions' (Rage 3, Action Surge 1 …) and its
+ * effects' (Legendary Resistance 3, Relentless 1).
+ */
 export function featurePoolsToSeed(feature: FeatureDefinition): Record<string, number> | undefined {
   const seeded: Record<string, number> = {};
+  const seed = (id: string | undefined) => { if (id && FEATURE_POOL_DEFAULTS[id] !== undefined) seeded[id] = FEATURE_POOL_DEFAULTS[id]!; };
   for (const action of feature.grantedActions ?? []) {
-    const cost = "resourceCost" in action ? action.resourceCost : undefined;
-    if (cost?.resourceId && FEATURE_POOL_DEFAULTS[cost.resourceId] !== undefined) seeded[cost.resourceId] = FEATURE_POOL_DEFAULTS[cost.resourceId]!;
+    seed("resourceCost" in action ? action.resourceCost?.resourceId : undefined);
+    if (action.kind === "activate-feature") for (const id of effectPools(action.condition?.effects)) seed(id);
   }
+  for (const id of effectPools(feature.effects)) seed(id);
   return Object.keys(seeded).length ? seeded : undefined;
 }
 

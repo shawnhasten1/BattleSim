@@ -13,9 +13,11 @@ import type {
   HealingComponent
 } from "@/engine";
 import { diceBinding } from "@/lib/ability-editor/bindings";
-import { componentAverage, effectShorts, modifierShorts, roundsText } from "@/lib/statblock";
+import { componentAverage, modifierShorts, roundsText } from "@/lib/statblock";
 import { Check, Field, More, NumberField } from "./controls";
 import { DAMAGE_TYPES, DamageLines } from "./DamageLines";
+import { FeatureEffectCards } from "./FeatureEffectCards";
+import type { NewPools } from "./LimitPicker";
 import styles from "./ability-editor.module.css";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -50,6 +52,43 @@ const DURATIONS: Array<{ value: string; label: string; rounds?: number }> = [
   { value: "fight", label: "Until the fight ends" }
 ];
 
+/**
+ * How long something lasts: the usual durations, a number of rounds, or the rest of the fight (no rounds). A buff's
+ * benefit and a switched-on feature both use it.
+ */
+export function DurationSelect({ id, rounds, onChange, label = "Lasts" }: {
+  id?: string;
+  rounds: number | undefined;
+  onChange: (rounds: number | undefined) => void;
+  /** Its accessible name when no Field label points at it. */
+  label?: string;
+}) {
+  const preset = DURATIONS.find((entry) => entry.rounds !== undefined && entry.rounds === rounds);
+  const duration = rounds === undefined ? "fight" : preset ? preset.value : "custom";
+  return (
+    <span className={styles.inline}>
+      <select
+        id={id}
+        aria-label={id ? undefined : label}
+        value={duration}
+        onChange={(e) => {
+          const choice = DURATIONS.find((entry) => entry.value === e.target.value)!;
+          if (choice.value === "fight") return onChange(undefined);
+          onChange(choice.rounds ?? (rounds && !preset ? rounds : 3));
+        }}
+      >
+        {DURATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
+      </select>
+      {duration === "custom" ? (
+        <>
+          <NumberField label={`${label} (rounds)`} value={rounds} min={1} max={14400} onChange={(n) => n !== undefined && onChange(n)} />
+          <span>rounds{rounds ? ` (${roundsText(rounds)})` : ""}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 const BUFF_CONDITIONS: ConditionName[] = ["invisible"];
 
 /** A modifier's value written, or removed when empty; modifiers go when nothing is left in them. */
@@ -64,9 +103,15 @@ function withModifier<K extends keyof Modifiers>(condition: FeatureEffectConditi
 
 /**
  * What a buff grants (Bless, Shield of Faith, Aid): bonuses to AC, attacks and saves, a penalty to attacks against it,
- * temporary hit points, and for how long. Speed, resistances and a condition it gives are behind More.
+ * temporary hit points, and for how long. Resistances and a condition it gives are behind More; anything else it grants
+ * (advantage, extra damage on hits) is an effect card.
  */
-export function BuffOutcome({ action, onChange, definition }: { action: BuffAction; onChange: (next: ActionDefinition) => void; definition: CreatureDefinition }) {
+export function BuffOutcome({ action, onChange, definition, newPools }: {
+  action: BuffAction;
+  onChange: (next: ActionDefinition) => void;
+  definition: CreatureDefinition;
+  newPools: NewPools;
+}) {
   const lastsId = useId();
   const tempId = useId();
   const conditionId = useId();
@@ -74,10 +119,6 @@ export function BuffOutcome({ action, onChange, definition }: { action: BuffActi
   const modifiers = condition.modifiers ?? {};
   const setCondition = (next: FeatureEffectConditionApplication) => onChange({ ...action, appliedCondition: next });
   const set = <K extends keyof Modifiers>(key: K, value: Modifiers[K] | undefined) => setCondition(withModifier(condition, key, value));
-
-  const rounds = condition.durationRounds;
-  const preset = DURATIONS.find((entry) => entry.rounds !== undefined && entry.rounds === rounds);
-  const duration = rounds === undefined ? "fight" : preset ? preset.value : "custom";
 
   const saves = modifiers.savingThrows ?? {};
   const saveAbilities = ABILITIES.filter((ability) => saves[ability] !== undefined);
@@ -98,15 +139,14 @@ export function BuffOutcome({ action, onChange, definition }: { action: BuffActi
     set("damageAdjustments", list.length ? list : undefined);
   }
 
-  // What this form doesn't edit yet, listed so it's never hidden (Phase 4 brings the effect cards).
+  // What these fields don't edit, listed so it's never hidden.
   const others = [
     ...modifierShorts({ movementMultiplier: modifiers.movementMultiplier }),
     ...(modifiers.deniesActions ? ["can't take actions"] : []),
     ...(modifiers.deniesBonusActions ? ["can't take bonus actions"] : []),
     ...(modifiers.deniesReactions ? ["can't take reactions"] : []),
     ...(modifiers.forcesRandomAction ? ["acts at random"] : []),
-    ...otherAdjustments.map((adjustment) => `${adjustment.type} to ${adjustment.damageType}`),
-    ...effectShorts(condition.effects, definition)
+    ...otherAdjustments.map((adjustment) => `${adjustment.type} to ${adjustment.damageType}`)
   ];
   const moreSet = (resistances.length ? 1 : 0)
     + (condition.name && condition.name !== "custom" ? 1 : 0);
@@ -114,27 +154,15 @@ export function BuffOutcome({ action, onChange, definition }: { action: BuffActi
   return (
     <>
       <Field copy="buffLasts" id={lastsId}>
-        <span className={styles.inline}>
-          <select
-            id={lastsId}
-            value={duration}
-            onChange={(e) => {
-              const choice = DURATIONS.find((entry) => entry.value === e.target.value)!;
-              const next = { ...condition };
-              delete next.durationRounds;
-              if (choice.value === "fight") return setCondition(next);
-              setCondition({ ...next, durationRounds: choice.rounds ?? (rounds && !preset ? rounds : 3) });
-            }}
-          >
-            {DURATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
-          </select>
-          {duration === "custom" ? (
-            <>
-              <NumberField label="Lasts (rounds)" value={rounds} min={1} max={14400} onChange={(n) => n !== undefined && setCondition({ ...condition, durationRounds: n })} />
-              <span>rounds{rounds ? ` (${roundsText(rounds)})` : ""}</span>
-            </>
-          ) : null}
-        </span>
+        <DurationSelect
+          id={lastsId}
+          rounds={condition.durationRounds}
+          onChange={(rounds) => {
+            const next = { ...condition };
+            delete next.durationRounds;
+            setCondition(rounds === undefined ? next : { ...next, durationRounds: rounds });
+          }}
+        />
       </Field>
       <div className={styles.row}>
         <Field copy="buffAc">
@@ -215,6 +243,23 @@ export function BuffOutcome({ action, onChange, definition }: { action: BuffActi
           </select>
         </Field>
       </More>
+      <Field copy="buffEffects">
+        <FeatureEffectCards
+          groups={[{
+            id: "buff",
+            place: "condition",
+            effects: condition.effects ?? [],
+            onChange: (effects) => {
+              const next = { ...condition };
+              delete next.effects;
+              setCondition(effects.length ? { ...next, effects } : next);
+            }
+          }]}
+          definition={definition}
+          newPools={newPools}
+          emptyText="Nothing else."
+        />
+      </Field>
       {others.length ? (
         <p className={styles.hint}>
           Also: {others.join(", ")}. To change these, open it in the classic editor (link at the bottom).

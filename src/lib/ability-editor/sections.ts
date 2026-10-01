@@ -103,6 +103,12 @@ const actionOf = (shape: Shape): ActionDefinition | undefined => ("action" in sh
 const DAMAGE_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-save"]);
 const RIDER_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-save", "healing"]);
 
+/** A reaction that counters a spell or protects an ally: the engine does that, whatever else the activation holds. */
+function answersOnly(action: ActionDefinition): boolean {
+  const trigger = action.actionType === "reaction" && "reaction" in action ? action.reaction?.trigger : undefined;
+  return trigger?.kind === "enemy-casts-spell" || trigger?.kind === "ally-targeted-by-attack";
+}
+
 /** A feature's activation, if it has one (Rage, Action Surge). */
 const activationOf = (feature: FeatureDefinition) => feature.grantedActions?.find((action) => action.kind === "activate-feature");
 
@@ -125,8 +131,11 @@ function limitText(limit: Limit, action: ActionDefinition | undefined): string {
 function useSummary(shape: Shape): string {
   if (shape.type === "feature") {
     const activation = activationOf(shape.feature);
-    if (!activation) return "always on";
-    return [SLOT_WORDS[activation.actionType], limitText(actionLimit.get(activation), activation)].join(" · ");
+    const { feature } = shape;
+    // A feature that only grants abilities (Second Wind) is used through them.
+    if (!activation) return !feature.effects?.length && !feature.aura && !feature.emanation && feature.grantedActions?.length ? "through what it grants" : "always on";
+    const rounds = activation.kind === "activate-feature" ? activation.condition?.durationRounds : undefined;
+    return [SLOT_WORDS[activation.actionType], limitText(actionLimit.get(activation), activation), rounds ? `for ${roundsText(rounds)}` : ""].filter(Boolean).join(" · ");
   }
   if (shape.type === "legendary") return `costs ${shape.entry.cost} legendary ${shape.entry.cost === 1 ? "action" : "actions"}`;
   if (shape.type === "weapon") {
@@ -248,6 +257,13 @@ function whileActiveSummary(shape: Shape, definition: CreatureDefinition): strin
     return effects.join(", ") || "none";
   }
   if (shape.type === "weapon") return effectShorts(shape.weapon.effects, definition).join(", ") || "none";
+  // A spell that activates a state (Shield's +5 AC until its next turn).
+  const action = actionOf(shape);
+  if (action?.kind === "activate-feature") {
+    const shorts = [...modifierShorts(action.condition?.modifiers), ...effectShorts(action.condition?.effects, definition)];
+    const rounds = action.condition?.durationRounds;
+    return [shorts.join(", ") || "none", rounds ? roundsText(rounds) : ""].filter(Boolean).join(" · ");
+  }
   return "none";
 }
 
@@ -328,8 +344,8 @@ const SECTIONS: SectionSpec[] = [
   {
     id: "use",
     title: "Use & cost",
-    // Everything but a passive trait, which isn't used at all; and a death effect, which fires on its own.
-    appliesTo: (shape) => shape.type === "feature" ? Boolean(activationOf(shape.feature)) : shape.type !== "death",
+    // Everything but a death effect, which fires on its own. A feature's says whether it's always on or switched on.
+    appliesTo: (shape) => shape.type !== "death",
     summary: (shape) => useSummary(shape)
   },
   { id: "target", title: "Target", appliesTo: withAction((action) => actionTarget.get(action) !== undefined), summary: (shape) => targetSummary(actionOf(shape)!) },
@@ -355,7 +371,9 @@ const SECTIONS: SectionSpec[] = [
   {
     id: "while-active",
     title: "While active",
-    appliesTo: (shape) => shape.type === "feature" || shape.type === "weapon",
+    // An activation of its own (Shield, Parry) too, unless it counters a spell or protects an ally: those do only that.
+    appliesTo: (shape) => shape.type === "feature" || shape.type === "weapon"
+      || withAction((action) => action.kind === "activate-feature" && !answersOnly(action))(shape),
     summary: (shape, definition) => whileActiveSummary(shape, definition)
   },
   { id: "aura", title: "Aura", appliesTo: (shape) => shape.type === "feature", summary: (shape, definition) => auraSummary((shape as Extract<Shape, { type: "feature" }>).feature, definition) },

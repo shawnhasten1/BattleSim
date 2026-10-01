@@ -307,15 +307,16 @@ const SECTIONS: Section[] = [
           slashing</em>), worked out from the numbers the simulator actually rolls.
         </p>
         <p>
-          Weapons, attacks, spells and special actions (saves, areas, heals, buffs, teleports) open in the{" "}
+          Weapons, attacks, spells, special actions (saves, areas, heals, buffs, teleports), and features and traits
+          open in the{" "}
           <strong>ability editor</strong>, in place of the list. Its preview at the
           top shows the ability as a statblock entry, with whether the simulator runs all of it, and any warnings
           (a pool the creature doesn&apos;t have, a trigger that never fires) with a link to the section that fixes
           them. Below, each section (Use &amp; cost, Target, Roll, Damage, Effects, Notes &amp; AI and more; see{" "}
           <a href="#spells">Spells &amp; Attacks</a>) shows a one-line summary and opens to its settings, with the rarer
           ones under <strong>More options</strong>. Save is one undo step and does nothing until something changes;
-          Esc or leaving the sheet asks before throwing changes away. Features, summons and shapechanges still open
-          the builder form.
+          Esc or leaving the sheet asks before throwing changes away. Summons, shapechanges and death effects still
+          open the builder form (see <a href="#features">Features &amp; Traits</a> for features).
         </p>
         <p>
           You can build an actor by hand on the Abilities tab, or drop in a
@@ -404,8 +405,9 @@ const SECTIONS: Section[] = [
             <strong>Healing</strong> or <strong>Benefit</strong> — for an automatic ability: healing lines (dice
             plus the ability they add), or what a buff grants (AC, attack rolls, saving throws, attacks against it,
             temporary hit points; resistances and a condition such as invisible under More options) and how long
-            it lasts. <strong>Cast before combat</strong> (under Use &amp; cost) keeps a long buff like Mage Armor
-            out of the fight.
+            it lasts. Anything else it grants (advantage on attacks, extra damage on hits) is a card under{" "}
+            <strong>Other effects</strong>, as in <a href="#features">While active</a>. <strong>Cast before
+            combat</strong> (under Use &amp; cost) keeps a long buff like Mage Armor out of the fight.
           </li>
           <li>
             <strong>Damage</strong> — lines of dice, the ability each adds, and a type, with averages. A
@@ -425,6 +427,10 @@ const SECTIONS: Section[] = [
             with its caster, drifts away each turn, or the caster moves it with a bonus action), difficult or
             impassable ground, damage for moving through it, and whether it&apos;s heavily obscured. See{" "}
             <a href="#zones">Zones &amp; Persistent Effects</a> for how they play.
+          </li>
+          <li>
+            <strong>While active</strong> (Shield) — how long it lasts and what it gives meanwhile; see{" "}
+            <a href="#features">Features &amp; Traits</a>.
           </li>
           <li>
             <strong>Notes &amp; AI</strong> — reference text, and whether the simulator uses it at all.
@@ -452,6 +458,92 @@ const SECTIONS: Section[] = [
           <li>Roll: Saving throw → <em>CON</em>, A success → <em>Half damage</em>. Damage: <em>5</em> d <em>8</em> poison.</li>
           <li>Lingering area: tick <strong>Leaves a lingering area</strong>. It lasts while its caster concentrates and affects a creature that enters it or starts its turn in it. The area → <em>Drifts away</em>, 10 ft.</li>
           <li>Add to sheet. The cloud settles on the map, hits anyone who starts a turn in it, and drifts away from the caster each turn until concentration breaks.</li>
+        </ol>
+      </>
+    )
+  },
+  {
+    id: "features",
+    label: "Features & Traits",
+    content: (
+      <>
+        <p>
+          Features and traits (Rage, Pack Tactics, Regeneration, Aura of Protection, Stench) open in the same{" "}
+          <strong>ability editor</strong> as spells and attacks. Start one from <strong>Add → Blank → Feature / trait</strong>,
+          or from <strong>Add → Preset</strong>: Rage, Reckless Attack, Action Surge, Cunning Action, Sneak Attack, Pack
+          Tactics, Charge, Pounce, Rampage, Blood Frenzy, Magic Resistance, Legendary Resistance, Regeneration, Undead
+          Fortitude, Stench, Fear Aura, Fire Aura, Heated Body, Aura of Protection and Evasion. The{" "}
+          <a href="/docs/guides/zealot-barbarian">Zealot Barbarian guide</a> builds Rage with Divine Fury step by step.
+        </p>
+
+        <h3>The sections</h3>
+        <ul>
+          <li>
+            <strong>Basics</strong> — listed as a feature or a trait (they work the same), and whether it&apos;s an
+            optional rule: what an optional rule grants is only available while it&apos;s switched on.
+          </li>
+          <li>
+            <strong>Use &amp; cost</strong> — <em>It works</em>: <strong>Always</strong> (Pack Tactics simply applies) or{" "}
+            <strong>When switched on</strong> (Rage). Switched on, it takes an action, a bonus action, a reaction or
+            nothing, spends from a limit (a pool such as <code>rage</code>, made here if the creature has none), and
+            lasts a while. Switching between the two moves its effects to where they belong, and switching back brings
+            back how it was switched on.
+          </li>
+          <li>
+            <strong>While active</strong> — what it does, as cards that each read as a sentence. A feature that&apos;s
+            switched on groups them by when they apply: <em>When it activates</em> (an extra action, a resource back)
+            and <em>While it&apos;s active</em>. <strong>Add effect</strong> lists every kind, grouped by what it
+            changes: its attacks (advantage, a bonus to hit, extra damage, damage with a save, a condition on its hits,
+            swarm damage), its defense (attacks against it, AC, resistance, Evasion, hurting what hits it in melee),
+            saving throws, staying alive (regeneration, dropping to 1 HP instead of 0, splitting) and its turn.
+            A card&apos;s <strong>When</strong> limits it (an ally next to the target, after a charge, while
+            it&apos;s bloodied; with several picked, any one of them or all of them) and <strong>Which attacks</strong>{" "}
+            limits it to melee, ranged or spell attacks and the ability they use, with specific attacks under More
+            options. A condition on its hits can be a <em>mark of its own</em> whose own cards say what it does, such
+            as &ldquo;hits against it deal more&rdquo;.
+          </li>
+          <li>
+            <strong>Aura</strong> — <em>Shares its effects with creatures nearby</em> (Aura of Protection: its allies,
+            everyone or its enemies within a range, while it&apos;s conscious; the simulator shares save bonuses,
+            advantage on saves and AC bonuses), and <em>Affects creatures nearby each round</em> (Stench, Fear Aura,
+            Fire Aura: when a creature starts its turn near it, or at the start of its own turn; a save, damage and a
+            condition, with immunity after a save and going quiet while it&apos;s incapacitated under More options).
+          </li>
+          <li>
+            <strong>Grants</strong> — Dash, Disengage and Hide as bonus actions (Cunning Action), and abilities it
+            grants: an attack after a charge (Pounce), an attack after it drops a creature (Rampage), or an attack,
+            a save, a heal or a benefit of its own (Second Wind). Each opens in the editor, inside the feature&apos;s:
+            the back button says where you are (<em>‹ Second Wind</em>), <strong>Done</strong> puts it back, and it&apos;s
+            saved with the feature. An item&apos;s While active and Grants work the same way.
+          </li>
+          <li>
+            <strong>Notes &amp; AI</strong> — reference text, and whether the simulator <em>uses it</em>, keeps it as{" "}
+            <em>reference only</em>, or treats it as having <em>no combat effect</em> (Keen Smell). The last two switch
+            its effects off in fights.
+          </li>
+        </ul>
+
+        <h3>Shield, Parry and Counterspell</h3>
+        <p>
+          A spell or reaction that switches something on for a moment (Shield, a Parry) shows the same{" "}
+          <strong>While active</strong>: how long it lasts and its cards (Shield&apos;s +5 AC). Counterspell and
+          Protection do one thing (counter the spell, give the attack disadvantage), so they have none.
+        </p>
+
+        <h3>What the AI does with them</h3>
+        <p>
+          The AI switches a feature on when it costs a bonus action and improves its attacks or defenses (Rage), and
+          takes reactions when their trigger happens. It never switches on one that costs an action or nothing
+          (Reckless Attack, Action Surge): use those by hand when you play the fight. The editor warns about this,
+          and about anything that can&apos;t work where it is: an aura with nothing it can share, an extra action on a
+          feature that&apos;s always on, or &ldquo;hits against it deal more&rdquo; on something that never ends.
+        </p>
+
+        <h3>Worked example: Pack Tactics</h3>
+        <ol>
+          <li>Abilities tab → Add → Blank → Feature / trait. Name: <em>Pack Tactics</em>. Basics: Listed as → <em>Trait</em>.</li>
+          <li>While active → Add effect → <em>Advantage on its attacks</em>. When → <em>an ally is next to the target</em>. Done.</li>
+          <li>The preview reads <em>It has advantage on attack rolls if an ally is within 5 feet of the target.</em> Add to sheet.</li>
         </ol>
       </>
     )
@@ -532,9 +624,10 @@ const SECTIONS: Section[] = [
           <li><strong>Evasion</strong> — a Dexterity save for half damage takes none on a success and half on a failure.</li>
         </ul>
         <p>
-          To build your own, open a feature in the builder: <em>Affects creatures around it each round</em> (when, range,
-          who, save, damage, condition), <em>Hurts creatures that hit it in melee</em>, and <em>Bonus-action follow-up</em>
-          (pick which of its attacks it makes, and when it earns it).
+          To build your own, start from <strong>Add → Preset</strong> (Stench, Fear Aura, Fire Aura, Heated Body, Charge,
+          Pounce, Rampage) or a blank feature: <em>Affects creatures nearby each round</em> in its Aura section (when,
+          reach, who, save, damage, condition), <em>Hurts what hits it in melee</em> in While active, and an attack after a
+          charge or after it drops a creature in Grants. See <a href="#features">Features &amp; Traits</a>.
         </p>
 
         <h3>Lair actions</h3>

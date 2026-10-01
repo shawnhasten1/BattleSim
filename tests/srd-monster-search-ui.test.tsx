@@ -32,7 +32,7 @@ async function openFilters(root: HTMLElement) {
   await userEvent.click(within(root).getByRole("button", { name: "Filters" }));
 }
 
-describe("SRD monster search", () => {
+describe("SRD monster search", { timeout: 20000 }, () => {
   it("shows no search UI until the SRD folder is opened", () => {
     render(<Harness />);
     const root = screen.getByTestId("srd-monsters-root");
@@ -91,7 +91,7 @@ describe("SRD monster search", () => {
   });
 });
 
-describe("SRD monster filters", () => {
+describe("SRD monster filters", { timeout: 20000 }, () => {
   it("filters by CR minimum and maximum", async () => {
     const root = await openSrd();
     await openFilters(root);

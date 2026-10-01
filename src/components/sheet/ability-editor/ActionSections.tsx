@@ -15,15 +15,17 @@ import type { SectionId } from "@/lib/ability-editor/sections";
 import { canBeReaction, withActionConcentration, withActionType, withActionZone, zoneOf } from "@/lib/ability-editor/spells";
 import { componentAverage, type EffectContext } from "@/lib/statblock";
 import { ActionNotes, AttackRoll } from "./AbilitySections";
-import { Check, Field, More, Segmented } from "./controls";
+import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DamageLines } from "./DamageLines";
 import { EffectCards } from "./EffectCards";
+import { ActivationUse, ActivationWhileActive } from "./FeatureSections";
 import { LimitPicker, type NewPools } from "./LimitPicker";
 import { LingeringArea } from "./LingeringArea";
 import { BuffOutcome, HealingOutcome } from "./OutcomeSections";
 import { ATTACK_TRIGGERS, ReactionControls } from "./ReactionControls";
 import { HowItWorks, SaveRoll } from "./RollSection";
 import { TargetSection } from "./TargetSection";
+import styles from "./ability-editor.module.css";
 
 export type Convert = (to: ConvertibleKind, then?: (converted: ActionDefinition) => ActionDefinition) => void;
 
@@ -61,7 +63,13 @@ export function actionSection(id: SectionId, props: ActionSectionProps): ReactNo
   const { action, onChange, definition, newPools, parkedReaction, onConvert, conversionNote, spell } = props;
   switch (id) {
     case "use":
+      // An activation of its own (Parry): what it takes and spends; what it gives is in While active.
+      if (action.kind === "activate-feature") {
+        return <ActivationUse activation={action} onChange={onChange} definition={definition} newPools={newPools} parkedReaction={parkedReaction} />;
+      }
       return <ActionUse action={action} onChange={onChange} definition={definition} newPools={newPools} parkedReaction={parkedReaction} />;
+    case "while-active":
+      return action.kind === "activate-feature" ? <ActivationWhileActive activation={action} onChange={onChange} definition={definition} newPools={newPools} /> : null;
     case "target":
       return <TargetSection action={action} onChange={onChange} onConvert={onConvert} spell={spell} />;
     case "roll":
@@ -74,7 +82,7 @@ export function actionSection(id: SectionId, props: ActionSectionProps): ReactNo
       );
     case "outcome":
       if (action.kind === "healing") return <HealingOutcome action={action} onChange={onChange} definition={definition} />;
-      if (action.kind === "buff") return <BuffOutcome action={action} onChange={onChange} definition={definition} />;
+      if (action.kind === "buff") return <BuffOutcome action={action} onChange={onChange} definition={definition} newPools={newPools} />;
       return null;
     case "damage":
       return DAMAGE_KINDS.has(action.kind) ? <ActionDamage action={action as Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" }>} onChange={onChange} definition={definition} spell={spell} /> : null;
@@ -149,7 +157,10 @@ function ActionDamage({ action, onChange, definition, spell }: {
   );
 }
 
-/** An action's slot (a reaction's trigger), its limit, and its rarer switches: concentration, cast before combat. */
+/**
+ * An action's slot (a reaction's trigger), its limit, and its rarer switches: concentration, cast before combat, and an
+ * attack that only follows a charge or a kill (shown up front when it's set).
+ */
 function ActionUse({ action, onChange, definition, newPools, parkedReaction }: {
   action: ActionDefinition;
   onChange: (next: ActionDefinition) => void;
@@ -161,6 +172,8 @@ function ActionUse({ action, onChange, definition, newPools, parkedReaction }: {
   const reaction = "reaction" in action && action.actionType === "reaction" ? action.reaction : undefined;
   const concentration = CONCENTRATION_KINDS.has(action.kind) ? Boolean((action as { concentration?: boolean }).concentration) : undefined;
   const prepOnly = action.kind === "buff" ? action.prepOnly === true : undefined;
+  const attack = action.kind === "attack" ? action : undefined;
+  const followUp = Boolean(attack?.onlyAfter);
   return (
     <>
       <Field copy="takes">
@@ -183,12 +196,49 @@ function ActionUse({ action, onChange, definition, newPools, parkedReaction }: {
       {reaction ? (
         <ReactionControls reaction={reaction} onChange={(next) => onChange({ ...action, reaction: next } as ActionDefinition)} kinds={ATTACK_TRIGGERS} />
       ) : null}
+      {attack && followUp ? <FollowUp action={attack} onChange={onChange} /> : null}
       <LimitPicker action={action} onChange={onChange} definition={definition} newPools={newPools} />
       {concentration !== undefined || prepOnly !== undefined ? (
         <More set={(concentration ? 1 : 0) + (prepOnly ? 1 : 0)}>
           {concentration !== undefined ? <Check copy="concentration" checked={concentration} onChange={(on) => onChange(withActionConcentration(action, on))} /> : null}
           {prepOnly !== undefined ? <PrepOnly action={action as Extract<ActionDefinition, { kind: "buff" }>} onChange={onChange} /> : null}
+          {attack && !followUp ? <FollowUp action={attack} onChange={onChange} /> : null}
         </More>
+      ) : null}
+    </>
+  );
+}
+
+/** A bonus attack it earns this turn (Pounce after a charge, Rampage after a kill), and how far it moves first. */
+function FollowUp({ action, onChange }: { action: Extract<ActionDefinition, { kind: "attack" }>; onChange: (next: ActionDefinition) => void }) {
+  const set = <K extends "onlyAfter" | "grantsMovementFeet">(key: K, value: (typeof action)[K] | undefined) => {
+    const next = { ...action };
+    delete next[key];
+    onChange(value === undefined ? next : { ...next, [key]: value });
+  };
+  return (
+    <>
+      <Field copy="onlyAfter">
+        <Segmented
+          label="Only after"
+          value={action.onlyAfter ?? "any"}
+          options={[{ value: "any", label: "Any time" }, { value: "charge-hit", label: "A charge hits" }, { value: "dropped-creature", label: "It drops a creature" }]}
+          onChange={(next) => set("onlyAfter", next === "any" ? undefined : next)}
+        />
+      </Field>
+      {action.onlyAfter === "dropped-creature" || action.grantsMovementFeet ? (
+        <Field copy="movesFirst">
+          <span className={styles.inline}>
+            <span>up to</span>
+            <NumberField label="Moves first (ft)" value={action.grantsMovementFeet} optional min={5} max={120} step={5} placeholder="0" onChange={(n) => set("grantsMovementFeet", n)} />
+            <span>ft</span>
+          </span>
+        </Field>
+      ) : null}
+      {action.onlyAfter === "charge-hit" ? (
+        <p className={styles.hint}>
+          Only against a creature one of its charge effects hit this turn (an effect whose When is “it charged the target”){action.requiresTargetCondition ? `, while it's ${action.requiresTargetCondition}` : ""}.
+        </p>
       ) : null}
     </>
   );

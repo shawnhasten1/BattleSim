@@ -877,3 +877,74 @@
   font-size: 9px;
   fill: var(--ui-text-dim);
 }
+
+/* ── the effect menu, grouped by theme ── */
+
+.menuGrouped {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 8px;
+  align-self: stretch;
+}
+
+.menuGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.menuGroupTitle {
+  padding: 6px 8px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.warningText {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #d8b56a;
+}
+
+/* a condition's own effects (a mark's), inside its card */
+
+.subCards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--ui-border);
+}
+
+/* ── granted abilities ── */
+
+.grantRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+}
+
+.grantMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.grantName {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.grantMeta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ui-text-dim);
+}

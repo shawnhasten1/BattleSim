@@ -22,7 +22,8 @@ import { actionSection, PrepOnly, type Convert } from "./ActionSections";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { LimitPicker, type NewPools } from "./LimitPicker";
 import { LingeringArea } from "./LingeringArea";
-import { ATTACK_TRIGGERS, ReactionControls } from "./ReactionControls";
+import { TriggerNote } from "./FeatureSections";
+import { ACTIVATION_TRIGGERS, ATTACK_TRIGGERS, ReactionControls } from "./ReactionControls";
 import { HowItWorks } from "./RollSection";
 import styles from "./ability-editor.module.css";
 
@@ -163,7 +164,16 @@ function SpellUse({ spell, onChange, definition, newPools, parkedReaction }: {
         />
       </Field>
       {reaction && action ? (
-        <ReactionControls reaction={reaction} onChange={(next) => onChange(withSpellAction(spell, { ...action, reaction: next } as ActionDefinition))} kinds={ATTACK_TRIGGERS} />
+        <>
+          {/* An activation (Shield, Counterspell) always acts on its caster, and answers its own set of triggers. */}
+          <ReactionControls
+            reaction={reaction}
+            onChange={(next) => onChange(withSpellAction(spell, { ...action, reaction: next } as ActionDefinition))}
+            kinds={action.kind === "activate-feature" ? ACTIVATION_TRIGGERS : ATTACK_TRIGGERS}
+            actsOn={action.kind !== "activate-feature"}
+          />
+          {action.kind === "activate-feature" ? <TriggerNote trigger={reaction.trigger} /> : null}
+        </>
       ) : null}
       <LimitPicker spell={spell} onSpellChange={onChange} definition={definition} newPools={newPools} />
       {limit.kind === "slot" && spell.level > 0 ? <Upcasting spell={spell} onChange={onChange} /> : null}

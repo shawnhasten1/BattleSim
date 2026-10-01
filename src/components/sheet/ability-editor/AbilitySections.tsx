@@ -18,10 +18,12 @@ import {
 } from "@/engine";
 import { actionTarget, attackBonusBinding, calculatedAttackBonus, diceBinding, diceExpression, diceParts } from "@/lib/ability-editor/bindings";
 import type { SectionId } from "@/lib/ability-editor/sections";
-import { compiledWeaponAttack, componentAverage, effectSentence } from "@/lib/statblock";
+import { compiledWeaponAttack, componentAverage } from "@/lib/statblock";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DamageLines } from "./DamageLines";
 import { EffectCards } from "./EffectCards";
+import { FeatureEffectCards } from "./FeatureEffectCards";
+import { GrantsSection, type OpenGranted } from "./FeatureSections";
 import type { NewPools } from "./LimitPicker";
 import { ATTACK_TRIGGERS, TriggerPicker } from "./ReactionControls";
 import styles from "./ability-editor.module.css";
@@ -245,6 +247,8 @@ export interface WeaponSectionProps {
   onChange: (next: WeaponDefinition) => void;
   definition: CreatureDefinition;
   newPools: NewPools;
+  /** Opens one of the abilities it grants (a staff's spell) in the editor. */
+  onOpenGranted: OpenGranted;
 }
 
 const PROPERTIES = ["light", "heavy", "reach", "thrown", "loading", "ammunition", "special"];
@@ -290,7 +294,7 @@ function usableAs(weapon: WeaponDefinition, parts: { action: boolean; bonus: boo
 }
 
 export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNode {
-  const { weapon, onChange, definition, newPools } = props;
+  const { weapon, onChange, definition, newPools, onOpenGranted } = props;
   switch (id) {
     case "basics":
       return (
@@ -343,23 +347,18 @@ export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNo
         />
       );
     case "while-active":
+      // What the item does while it's carried: always on, like a trait.
       return (
-        <>
-          <ul className={styles.hint} style={{ margin: 0, paddingLeft: 16 }}>
-            {(weapon.effects ?? []).map((effect, index) => <li key={index}>{effectSentence(effect, definition)}</li>)}
-          </ul>
-          <p className={styles.hint} style={{ margin: 0 }}>To change these, open the weapon in the classic editor (link at the bottom).</p>
-        </>
+        <FeatureEffectCards
+          groups={[{ id: "always", place: "always", effects: weapon.effects ?? [], onChange: (effects) => onChange(withValue(weapon, "effects", effects.length ? effects : undefined)) }]}
+          definition={definition}
+          weapon={weapon}
+          newPools={newPools}
+          emptyText="Nothing while it's carried: a plain weapon."
+        />
       );
     case "grants":
-      return (
-        <>
-          <ul className={styles.hint} style={{ margin: 0, paddingLeft: 16 }}>
-            {(weapon.grantedActions ?? []).map((action) => <li key={action.id}>{action.name}</li>)}
-          </ul>
-          <p className={styles.hint} style={{ margin: 0 }}>To change these, open the weapon in the classic editor (link at the bottom).</p>
-        </>
-      );
+      return <GrantsSection record={weapon} onChange={onChange} definition={definition} onOpenGranted={onOpenGranted} />;
     case "notes":
       return <WeaponNotes weapon={weapon} onChange={onChange} />;
     default:

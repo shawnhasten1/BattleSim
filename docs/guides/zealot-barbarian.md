@@ -2,7 +2,7 @@
 
 This walkthrough builds a level 5 Path of the Zealot Barbarian from scratch: a hard-hitting melee fighter who rages, attacks recklessly, and adds radiant "Divine Fury" damage to a hit each turn while raging.
 
-Along the way you'll use the token creator, the library, the multiattack builder, and the **feature builder** — the last one is the important skill, because almost every class feature is built the same way.
+Along the way you'll use the token creator, the library, the multiattack builder, and the **ability editor** for features — the last one is the important skill, because almost every class feature is built the same way.
 
 > **What you'll end up with:** 55 HP, AC 15, a Greataxe, two attacks per Attack action, Rage (3 uses) with Divine Fury built in, and Reckless Attack.
 
@@ -62,59 +62,56 @@ Click **Create multiattack**. It's added under **Features & Traits** with a **FU
 
 Divine Fury only works **while raging**, so it's built as one more effect inside the Rage feature rather than as a separate feature. That way it switches on and off with Rage automatically.
 
-### 4a. Start from the Rage preset
+### 4a. Start from the Rage recipe
 
 Click **Add → Preset** and choose **Rage**.
 
 ![The Preset tab](img/zealot-barbarian/07-preset-tab.png)
 
-This opens the feature builder pre-filled.
+This opens Rage in the ability editor. The preview at the top reads the way the feature works; each section below it has a one-line summary, and opens to its fields.
 
-![The Rage feature form](img/zealot-barbarian/08-rage-form-top.png)
+![Rage in the ability editor](img/zealot-barbarian/08-rage-form-top.png)
 
-What the top fields mean:
+What **Use & cost** says:
 
-- **What it does: Something you activate** — Rage is a button the character presses, not an always-on bonus.
-- **Activate as: Bonus action** — it costs the bonus action.
-- **Lasts (rounds): 10** — one minute is 10 six-second rounds.
-- **Spends resource: `rage`** — each use spends one from a resource pool named `rage`. The pool is created for you (see [the check at the end](#check-your-work)).
+- **It works: When switched on** — Rage is something the character switches on, not an always-on bonus (Pack Tactics is *Always*).
+- **Takes: Bonus action** — switching it on costs the bonus action.
+- **Limit: Pool, spends 1 from `rage`** — each use spends one from a pool named `rage`. The pool is added to the creature when you add Rage (see [the check at the end](#check-your-work)).
+- **Lasts: 1 minute** — ten six-second rounds.
 
-### 4b. Read the existing effects
+### 4b. Read what it does while active
 
-Scroll down to **Effects**. Each card is one thing that happens while Rage is active.
+Scroll to **While active**. Each card is one thing that's true while Rage lasts, written as a sentence.
 
-![The Rage preset's effects](img/zealot-barbarian/09-rage-effects.png)
+![Rage's While active cards](img/zealot-barbarian/09-rage-effects.png)
 
-The preset gives you: **+2** damage on STR melee attacks, **resistance** to bludgeoning / piercing / slashing, and **advantage on STR saves**.
+The recipe gives you: **+2** damage on STR melee hits, **resistance** to bludgeoning, piercing and slashing, and **advantage on STR saves**. Click a card's pencil to see its fields.
 
 ### 4c. Add Divine Fury
 
-Click **+ Add effect**, then set it up like this:
+Click **+ Add effect**. The menu is grouped by what an effect changes (its attacks, its defense, saving throws, staying alive, its turn). Choose **Extra damage on its hits**, then set the card up like this:
 
-![The Divine Fury effect](img/zealot-barbarian/10-divine-fury-effect.png)
+![The Divine Fury card](img/zealot-barbarian/10-divine-fury-effect.png)
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Effect type | Bonus / penalty damage | Extra damage on top of the weapon hit. |
-| Bonus kind | Extra dice + flat | Divine Fury is 1d6 plus a flat bonus. |
-| Dice | `1` d `6` | The 1d6. |
-| Flat | `2` | Half the Barbarian level, rounded down (level 5 → 2). Raise it as they level. |
-| Damage type | radiant | See the note below. |
-| Applies to | melee attacks | Divine Fury needs a weapon attack. |
-| Applies | once per turn | Only the first hit each turn. |
-| When | Always | (Effects already only run during Rage.) |
+| Damage | `1` d `6` `+2` | The 1d6, plus half the Barbarian level, rounded down (level 5 → 2). Raise it as they level. |
+| Type | radiant | Then open the line's **…** and tick **Choose the type each time**, with **radiant** and **necrotic** picked. |
+| Once per turn | ticked | Only the first hit each turn. |
+| When | nothing picked | It already only happens while Rage lasts. |
+| Which attacks | melee and ranged | Any weapon attack. |
 
-> **Radiant or necrotic:** in the rules, a Zealot picks radiant *or* necrotic each time. The hand-built version here deals radiant only. The library's **Rage (Zealot)** entry supports the choice, picking whichever type the target resists least. If your enemies are often radiant-resistant, use that entry.
+> **Radiant or necrotic:** the Zealot picks the type each time. With both picked, the simulator chooses whichever the target resists least.
 
-Click **Add to sheet**. Rage now appears under Features & Traits as `bonus action: +2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant on melee hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute (1 rage)`.
+The card reads *Once per turn, its melee or ranged hits deal an extra 5 (1d6 + 2) radiant or necrotic damage.* Click **Done**, then **Add to sheet**. Rage now appears under Features & Traits as `bonus action: +2 on melee hits, advantage on STR saves, +5 (1d6 + 2) radiant or necrotic on melee or ranged hits once a turn, resists bludgeoning, piercing, and slashing for 1 minute (1 rage)`.
 
-> **Tip:** the **Reference text** at the bottom of the form is just a note for you. It still describes plain Rage, so edit it if you want it to mention Divine Fury.
+> **Tip:** this is exactly what the library's **Rage (Zealot)** holds. Opening that one in the editor shows the same cards.
 
 ## 5. Reckless Attack
 
 Click **Add → Library → Features**, search `reckless`, and click **Reckless Attack**.
 
-Reckless Attack gives advantage on your melee attacks this turn, at the cost of attacks against you having advantage until your next turn. It costs no action.
+Reckless Attack gives advantage on your melee attacks this turn, at the cost of attacks against you having advantage until your next turn. It costs no action, and the AI only switches on features that cost a bonus action (and reactions), so in an automatic fight the Zealot never attacks recklessly. Opening it in the editor says so. Use it by hand when you play the fight yourself.
 
 ## Check your work
 
@@ -130,6 +127,6 @@ Now drop the token onto a map and run a fight from the **Combat** panel. Use **S
 
 ## Next steps
 
-- Add **Danger Sense** (advantage on DEX saves) with the feature builder: Blank → Feature / trait → "Advantage on saving throws".
+- Add **Danger Sense** (advantage on DEX saves): **Add → Blank → Feature / trait**, then in **While active** choose **Add effect → Advantage on its saves** and pick **DEX**.
 - Tweak the **Tactics** tab to make the Zealot charge in more or less aggressively.
 - Build a Bear Totem variant: the library has **Rage (Totem Warrior: Bear)**, which resists every damage type except psychic.

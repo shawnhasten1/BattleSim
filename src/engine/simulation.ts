@@ -10,6 +10,7 @@ import {
   conditionSeverity,
   averageOfDice,
   featureSources,
+  simulatedFeatures,
   isImmuneToCondition,
   saveAdvantageApplies,
   event,
@@ -3287,7 +3288,7 @@ function featureEffectSources(source: ReturnType<typeof getDefinition>, combatan
       id: condition.sourceId ?? condition.id,
       effects: condition.effects
     }));
-  return [...(source.features ?? []), ...(source.traits ?? []), ...activeConditionSources];
+  return [...simulatedFeatures(source), ...activeConditionSources];
 }
 
 function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {

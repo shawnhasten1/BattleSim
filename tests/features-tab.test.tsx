@@ -44,13 +44,13 @@ describe("Abilities tab — feature building", () => {
     expect(screen.getByRole("button", { name: "Feature / trait" })).toBeTruthy();
   });
 
-  it("the Rage preset builds a FeatureDefinition with an activate-feature bonus action", async () => {
+  it("the Rage preset opens the editor switched on, and adds an activate-feature bonus action", async () => {
     renderTab();
     await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     await userEvent.click(screen.getByRole("button", { name: "Preset" }));
     await userEvent.click(screen.getByRole("button", { name: "Rage" }));
-    // the feature builder is open with the activated shape
-    expect((screen.getByLabelText("What it does") as HTMLSelectElement).value).toBe("activated");
+    const works = screen.getByRole("radiogroup", { name: "It works" });
+    expect(within(works).getByRole("radio", { name: "When switched on" }).getAttribute("aria-checked")).toBe("true");
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
 
     const feature = (def().features ?? []).find((f) => f.name === "Rage");
@@ -58,8 +58,9 @@ describe("Abilities tab — feature building", () => {
     const activate = feature?.grantedActions?.[0];
     expect(activate?.kind).toBe("activate-feature");
     expect(activate?.actionType).toBe("bonus");
-    // it shows up as a bonus action in the compiled action list
+    // It shows up as a bonus action in the compiled action list, and the creature gets its rage pool.
     expect(getExecutableActions(def()).some((a) => a.kind === "activate-feature" && a.actionType === "bonus")).toBe(true);
+    expect(def().resources?.rage).toBe(3);
   });
 
   it("edits an attached feature in place in a single undo step", async () => {
@@ -71,49 +72,42 @@ describe("Abilities tab — feature building", () => {
     const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, "Wolf Pack");
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect((def().traits ?? []).some((f) => f.name === "Wolf Pack")).toBe(true);
     expect(useEncounterStore.getState().undoStack.length).toBe(undoBefore + 1);
   });
 
-  it("shows the attached Aura of Protection's aura fields, and hides the aura toggle on an activated feature", async () => {
+  it("shows the attached Aura of Protection's aura and what it shares", async () => {
     useEncounterStore.getState().attachSrdFeature("def-fighter", "srd:feature:aura-of-protection");
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     const group = screen.getByText("Features & traits").closest("div")!;
     await userEvent.click(within(group).getByRole("button", { name: "Edit Aura of Protection" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Aura/ }));
 
-    const auraToggle = screen.getByLabelText("Radiates as an aura") as HTMLInputElement;
-    expect(auraToggle.checked).toBe(true);
-    expect((screen.getByLabelText("Range (ft)") as HTMLInputElement).value).toBe("10");
-    expect((screen.getByLabelText("Affects") as HTMLSelectElement).value).toBe("allies");
-
-    // Switching to an activated shape drops the aura fields entirely — an
-    // aura is always-on, it doesn't fit the "spend a resource to trigger"
-    // activated shape's instant/lingering effect split.
-    await userEvent.selectOptions(screen.getByLabelText("What it does"), "activated");
-    expect(screen.queryByLabelText("Radiates as an aura")).toBeNull();
+    expect((screen.getByLabelText("Shares its effects with creatures nearby") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Aura range (ft)") as HTMLInputElement).value).toBe("10");
+    expect(within(screen.getByRole("radiogroup", { name: "Shares them with" })).getByRole("radio", { name: "Its allies" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/They get: \+\d+ to saves|They get: .*saves/)).toBeTruthy();
   });
 
-  it("a fresh passive feature can enable a hostile-affecting aura through the builder", async () => {
+  it("a fresh feature can share a hostile-affecting aura", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     await userEvent.click(screen.getByRole("button", { name: "Blank" }));
     await userEvent.click(screen.getByRole("button", { name: "Feature / trait" }));
 
-    expect(screen.queryByLabelText("Range (ft)")).toBeNull();
-    await userEvent.click(screen.getByLabelText("Radiates as an aura"));
-    expect(screen.getByLabelText("Range (ft)")).toBeTruthy();
-    await userEvent.selectOptions(screen.getByLabelText("Affects"), "hostile");
+    expect(screen.queryByLabelText("Aura range (ft)")).toBeNull();
+    await userEvent.click(screen.getByLabelText("Shares its effects with creatures nearby"));
+    expect(screen.getByLabelText("Aura range (ft)")).toBeTruthy();
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Shares them with" })).getByRole("radio", { name: "Its enemies" }));
     const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
     await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, "Fear Aura");
+    await userEvent.type(nameInput, "Unnerving Presence");
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
 
-    const feature = (def().features ?? []).find((f) => f.name === "Fear Aura");
-    expect(feature?.aura).toEqual({ range: 10, affects: "hostile", requiresConscious: undefined });
+    const feature = (def().features ?? []).find((f) => f.name === "Unnerving Presence");
+    expect(feature?.aura).toEqual({ range: 10, affects: "hostile" });
   });
 });
 

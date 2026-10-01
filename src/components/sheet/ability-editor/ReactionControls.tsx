@@ -29,6 +29,12 @@ export function blankTrigger(kind: ReactionTrigger["kind"]): ReactionTrigger {
  */
 export const ATTACK_TRIGGERS: Array<ReactionTrigger["kind"]> = ["enemy-leaves-reach", "targeted-by-attack", "hit-by-attack", "manual"];
 
+/**
+ * The triggers an activation (Shield, Parry, Counterspell) answers. "An enemy casts a spell" counters the spell and "an
+ * ally is targeted" gives the attack disadvantage, whatever the activation holds.
+ */
+export const ACTIVATION_TRIGGERS: Array<ReactionTrigger["kind"]> = ["targeted-by-attack", "hit-by-attack", "ally-targeted-by-attack", "enemy-casts-spell", "manual"];
+
 /** What sets the reaction off, with the trigger's own details (melee only, how near, what it says). */
 export function TriggerPicker({ value, onChange, label = "When", kinds }: {
   value: ReactionTrigger;
@@ -67,13 +73,18 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
   );
 }
 
-/** A reaction's trigger, who it acts on, and how eagerly the AI takes it. */
-export function ReactionControls({ reaction, onChange, kinds }: { reaction: ReactionMeta; onChange: (next: ReactionMeta) => void; kinds?: Array<ReactionTrigger["kind"]> }) {
+/** A reaction's trigger, who it acts on (not for an activation, which always acts on itself), and how eagerly the AI takes it. */
+export function ReactionControls({ reaction, onChange, kinds, actsOn = true }: {
+  reaction: ReactionMeta;
+  onChange: (next: ReactionMeta) => void;
+  kinds?: Array<ReactionTrigger["kind"]>;
+  actsOn?: boolean;
+}) {
   const eagerness = reaction.priority ?? "worthwhile";
   return (
     <>
       <TriggerPicker value={reaction.trigger} onChange={(trigger) => onChange({ ...reaction, trigger })} kinds={kinds} />
-      <Field copy="reactionActsOn">
+      {actsOn ? <Field copy="reactionActsOn">
         <Segmented
           label="It acts on"
           value={reaction.target ?? "trigger-source"}
@@ -84,7 +95,7 @@ export function ReactionControls({ reaction, onChange, kinds }: { reaction: Reac
           ]}
           onChange={(target) => { const next = { ...reaction }; delete next.target; onChange(target === "trigger-source" ? next : { ...next, target }); }}
         />
-      </Field>
+      </Field> : null}
       <More set={eagerness !== "worthwhile" ? 1 : 0}>
         <Field copy="reactionEagerness">
           <Segmented

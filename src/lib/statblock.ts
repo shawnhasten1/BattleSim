@@ -109,7 +109,8 @@ export function poolName(resourceId: string, amount = 1): string {
   if (slot !== undefined) return `${ordinal(slot)}-level ${plural(amount, "slot")}`;
   const bare = resourceId.includes(":") ? resourceId.slice(resourceId.lastIndexOf(":") + 1) : resourceId;
   const words = bare.replace(/[-_]+/g, " ").trim();
-  // "1 charge", "2 ki points": one of a plural-named pool drops its "s"; more than one gains it.
+  // "1 charge", "2 ki points": one of a plural-named pool drops its "s"; more than one gains it. Ki and dice don't.
+  if (/(^|\s)(ki|psi)$|dice$/.test(words)) return words;
   if (amount === 1) return words.endsWith("s") && !words.endsWith("ss") ? words.slice(0, -1) : words;
   return words.endsWith("s") ? words : `${words}s`;
 }
@@ -520,23 +521,30 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
     case "incoming-attack-modifier":
       return incomingText(effect.amount, who, gate);
     case "damage-bonus":
-      return `${effect.oncePerTurn ? `Once per turn, ${who.possessive}` : P} ${effect.critical ? "critical hits" : `${attackScope(effect, definition)}hits`}${usingText(effect)} deal an extra ${damageText(effect.damage, definition)}${gate}.`;
+      // `critical` only says whether the dice double on a critical hit (they do by default): every hit deals it.
+      return `${effect.oncePerTurn ? `Once per turn, ${who.possessive}` : P} ${attackScope(effect, definition)}hits${usingText(effect)} deal an extra ${damageText(effect.damage, definition)}${gate}.`;
     case "save-gated-damage":
       return `${effect.oncePerTurn ? `Once per turn, ${who.possessive}` : P} ${attackScope(effect, definition)}hits${usingText(effect)} deal an extra ${damageText(effect.damage, definition)}${gate}, unless the target succeeds on a ${effect.save.dc ? `DC ${effect.save.dc} ` : ""}${ABILITY_NAME[effect.save.ability]} saving throw${effect.save.halfDamageOnSuccess ? " (half as much on a success)" : ""}.`;
     case "apply-condition-on-hit": {
       const applied = effect.appliedCondition;
+      // A condition of its own (a mark) reads by what it does: "marked (hitting it: +7 necrotic)".
+      const own = !applied.name || applied.name === "custom";
       const condition = {
-        condition: applied.name ?? "affected",
-        duration: applied.durationRounds ? ({ kind: "rounds", rounds: applied.durationRounds } as RiderDuration) : undefined
-      } as Pick<ConditionRider, "condition" | "duration">;
+        condition: own ? { custom: applied.effects?.length || applied.modifiers ? "marked" : "affected" } : applied.name!,
+        duration: applied.durationRounds ? ({ kind: "rounds", rounds: applied.durationRounds } as RiderDuration) : undefined,
+        modifiers: applied.modifiers,
+        effects: applied.effects
+      } as ConditionPhrase;
       const whom = effect.target === "self" ? who.subject : "the target";
       const outcome = effect.save
-        ? `${whom} must succeed on a ${effect.save.dc ? `DC ${effect.save.dc} ` : ""}${ABILITY_NAME[effect.save.ability]} saving throw or ${beCondition(condition)}`
-        : `${whom} ${isCondition(condition)}`;
+        ? `${whom} must succeed on a ${effect.save.dc ? `DC ${effect.save.dc} ` : ""}${ABILITY_NAME[effect.save.ability]} saving throw or ${beCondition(condition, definition)}`
+        : `${whom} ${isCondition(condition, definition)}`;
       return `When ${who.subject} hits with ${article(attackScope(effect, definition) || "attack")} ${attackScope(effect, definition)}attack${gate}, ${outcome}${effect.oncePerTurn ? " (once per turn)" : ""}.`;
     }
     case "incoming-hit-damage":
-      return `A creature that hits ${who.object} takes ${damageText(effect.damage, definition)}${gate}.`;
+      // Read from a condition on the creature that's hit: the hit itself deals more (a hunter's mark), and by default
+      // the first such hit ends the condition.
+      return `Hits against ${who.object} deal an extra ${damageText(effect.damage, definition)}${gate}.${(effect.consumeCondition ?? true) ? " The first such hit ends this." : ""}`;
     case "damage-adjustment":
       return adjustmentSentences([effect.adjustment], who, gate)[0]!;
     case "save-advantage": {
@@ -622,9 +630,13 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "attack-advantage": return `${effect.mode ?? "advantage"} on ${scope}attacks${gate}`;
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
     case "incoming-attack-modifier": return `${effect.amount >= 5 ? "attackers have advantage" : effect.amount <= -5 ? "attackers have disadvantage" : `attackers ${signed(effect.amount)}`}${gate}`;
-    case "damage-bonus": return `+${damageShort(effect.damage, definition)} on ${effect.critical ? "crits" : `${scope}hits`}${effect.oncePerTurn ? " once a turn" : ""}${gate}`;
+    case "damage-bonus": return `+${damageShort(effect.damage, definition)} on ${scope}hits${effect.oncePerTurn ? " once a turn" : ""}${gate}`;
     case "save-gated-damage": return `+${damageShort(effect.damage, definition)} on ${scope}hits${gate}, DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} ${effect.save.halfDamageOnSuccess ? "halves" : "negates"}`;
-    case "apply-condition-on-hit": return `hits: ${effect.save ? `DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} or ` : ""}${effect.appliedCondition.name ?? "a condition"}${gate}`;
+    case "apply-condition-on-hit": {
+      const applied = effect.appliedCondition;
+      const name = applied.name && applied.name !== "custom" ? applied.name : applied.effects?.length || applied.modifiers ? "marked" : "a condition";
+      return `hits: ${effect.save ? `DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} or ` : ""}${name}${gate}`;
+    }
     case "incoming-hit-damage": return `hitting it: ${damageShort(effect.damage, definition)}`;
     case "damage-adjustment":
       return `${adjustmentShorts([effect.adjustment])[0]}${effect.adjustment.nonMagicalOnly ? " (nonmagical)" : ""}${gate}`;
@@ -700,6 +712,19 @@ function effectSentences(effects: FeatureEffect[] | undefined, definition: Creat
   }
   flush();
   return sentences;
+}
+
+/** One editor card's sentence: a folded resistance card says all its damage types at once. */
+export function effectCardSentence(effect: FeatureEffect, definition: CreatureDefinition, damageTypes?: DamageAdjustment["damageType"][]): string {
+  if (effect.kind === "damage-adjustment" && damageTypes && damageTypes.length > 1) {
+    return adjustmentSentences(damageTypes.map((damageType) => ({ ...effect.adjustment, damageType })), IT, gateText(effect))[0]!;
+  }
+  return effectSentence(effect, definition);
+}
+
+/** A condition's modifiers as sentences about the creature that has it ("It gains a +5 bonus to AC."). */
+export function modifiersSentence(modifiers: ConditionModifiers | undefined): string {
+  return modifierSentences(modifiers, IT).join(" ");
 }
 
 /** Sentences as one run, the first word lowercased to follow a colon. */
@@ -1143,6 +1168,9 @@ function activationLead(action: ActivateAction): string {
   return "As an action";
 }
 
+/** The effects an aura passes on to creatures near it (`auraSources` reads only these). */
+const AURA_SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus"]);
+
 export function featureStatblock(feature: FeatureDefinition, definition: CreatureDefinition): StatblockEntry {
   const granted = feature.grantedActions ?? [];
   const activation = granted.find((action): action is ActivateAction => action.kind === "activate-feature");
@@ -1168,15 +1196,18 @@ export function featureStatblock(feature: FeatureDefinition, definition: Creatur
   // Effects that fire when the feature activates belong to the activation, not to the always-on list.
   const firesOnActivate = (effect: FeatureEffect) => Boolean(activation) && (effect.kind === "extra-action" || (effect.kind === "resource-regain" && effect.timing === "on-activate"));
   const passive = (feature.effects ?? []).filter((effect) => !firesOnActivate(effect));
-  if (feature.aura && passive.length) {
-    const reach = feature.aura.affects === "allies" ? "it and its allies" : feature.aura.affects === "hostile" ? "its enemies" : "every creature";
-    const lead = `${reach} within ${feature.aura.range} feet of it gain these benefits${feature.aura.requiresConscious === false ? "" : " while it is conscious"}`;
-    sentences.push(`${capitalize(lead)}: ${afterColon(effectSentences(passive, definition, EACH))}`);
-    shorts.push(`aura ${feature.aura.range} ft: ${effectShorts(passive, definition).join(", ")}`);
-  } else {
-    sentences.push(...effectSentences(passive, definition));
-    shorts.push(...effectShorts(passive, definition));
+  // An aura passes on only what the simulator shares with other creatures (save bonuses, advantage on saves, AC), and
+  // only while the creature is conscious; anything else stays its own.
+  const shared = feature.aura ? passive.filter((effect) => AURA_SHARED_KINDS.has(effect.kind)) : [];
+  const own = passive.filter((effect) => !shared.includes(effect));
+  if (feature.aura && shared.length) {
+    const reach = feature.aura.affects === "allies" ? "it and its allies" : feature.aura.affects === "hostile" ? "its enemies" : "it and all other creatures";
+    const lead = `${reach} within ${feature.aura.range} feet of it gain these benefits while it is conscious`;
+    sentences.push(`${capitalize(lead)}: ${afterColon(effectSentences(shared, definition, EACH))}`);
+    shorts.push(`aura ${feature.aura.range} ft: ${effectShorts(shared, definition).join(", ")}`);
   }
+  sentences.push(...effectSentences(own, definition));
+  shorts.push(...effectShorts(own, definition));
 
   if (activation) {
     const cost = activation.resourceCost ? costText(activation.resourceCost) : "";

@@ -9,10 +9,13 @@ import {
   type ActionDefinition,
   type CreatureDefinition,
   type FeatureDefinition,
+  type FeatureEffect,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { MANUAL_REACTION_NOTES, poolName, statblockFor } from "@/lib/statblock";
+import { firesOnActivate } from "./effects";
+import { activationOf, effectPools } from "./features";
 import { featurePoolsToSeed } from "./records";
 import { withAbility, withNewAbility, type AbilityList, type AbilityRecord, type AbilityRef } from "./refs";
 import type { SectionId } from "./sections";
@@ -27,7 +30,15 @@ export type WarningId =
   | "reference-only"
   | "missing-step"
   | "empty-buff"
-  | "dead-success-effects";
+  | "dead-success-effects"
+  | "activation-does-nothing"
+  | "activation-never-automatic"
+  | "activation-not-worth-it"
+  | "reaction-never-taken"
+  | "aura-shares-nothing"
+  | "emanation-does-nothing"
+  | "needs-activation"
+  | "needs-duration";
 
 export interface AbilityWarning {
   id: WarningId;
@@ -67,6 +78,10 @@ function missingPools(definition: CreatureDefinition, record: AbilityRecord): st
   ];
   // A spell's upcasting is on the spell; the engine copies it onto the action.
   const spellUpcasts = Boolean((record as SpellDefinition).upcast?.perSlotAboveBase);
+  // Pools its effects spend (Legendary Resistance's uses, a regained resource), on the record or while it's active.
+  const holder = record as { effects?: FeatureEffect[]; grantedActions?: ActionDefinition[] };
+  const effectIds = [...effectPools(holder.effects), ...effectPools(activationOf(holder)?.condition?.effects)];
+  for (const id of effectIds) if (!seeds.has(id) && !has(id)) missing.add(poolName(id));
   for (const { action, cost } of costs) {
     if (!cost || seeds.has(cost.resourceId) || has(cost.resourceId)) continue;
     const slot = spellSlotLevel(cost.resourceId);
@@ -102,6 +117,58 @@ function mismatchedDamage(record: AbilityRecord, definition: CreatureDefinition)
     }
   }
   return [...new Set(problems)];
+}
+
+/** What the AI looks for before switching a bonus-action feature on: better attacks, or better defenses. */
+const OFFENSE_KINDS = new Set<FeatureEffect["kind"]>(["damage-bonus", "attack-bonus", "attack-advantage"]);
+const DEFENSE_KINDS = new Set<FeatureEffect["kind"]>(["damage-adjustment", "armor-class-bonus", "save-bonus", "save-advantage"]);
+/** The effects a "helps" aura passes on to creatures near it. */
+const SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus"]);
+
+type Activation = Extract<ActionDefinition, { kind: "activate-feature" }>;
+
+/** A reaction that counters a spell or protects an ally: the engine does that, whatever the activation holds. */
+const answersOnly = (activation: Activation) => activation.actionType === "reaction"
+  && (activation.reaction?.trigger.kind === "enemy-casts-spell" || activation.reaction?.trigger.kind === "ally-targeted-by-attack");
+
+/** Whether the activation's condition does anything while it lasts. */
+function lingers(activation: Activation): boolean {
+  const condition = activation.condition;
+  return Boolean(condition?.effects?.length || (condition?.modifiers && Object.keys(condition.modifiers).length) || (condition?.name && condition.name !== "custom"));
+}
+
+/**
+ * Why the AI never switches an activation on by itself, if it doesn't: it only takes a bonus-action one that improves
+ * its attacks or defenses (`selectFeatureActivationAction`), and a reaction its trigger and eagerness allow.
+ */
+function activationWarnings(activation: Activation): AbilityWarning[] {
+  if (activation.automationSupport !== "full") return [];
+  if (activation.actionType === "action" || activation.actionType === "free") {
+    return [{
+      id: "activation-never-automatic",
+      message: "The AI never switches it on by itself: it only takes ones that cost a bonus action, and reactions. Use it by hand in manual play.",
+      section: "use"
+    }];
+  }
+  if (activation.actionType === "bonus") {
+    const effects = activation.condition?.effects ?? [];
+    if (!effects.some((effect) => OFFENSE_KINDS.has(effect.kind) || DEFENSE_KINDS.has(effect.kind))) {
+      return [{
+        id: "activation-not-worth-it",
+        message: "The AI never switches it on: it looks for better attacks (advantage, a bonus to hit or damage) or defenses (resistance, AC or save bonuses) while it lasts.",
+        section: "while-active"
+      }];
+    }
+  }
+  if (activation.actionType === "reaction" && activation.reaction && (activation.reaction.priority ?? "worthwhile") === "worthwhile"
+    && (activation.reaction.trigger.kind === "targeted-by-attack" || activation.reaction.trigger.kind === "hit-by-attack")) {
+    return [{
+      id: "reaction-never-taken",
+      message: "The AI never takes it: “When it's worth it” only suits a reaction that deals damage. Set “The AI uses it” to “Whenever it can” (More options).",
+      section: "use"
+    }];
+  }
+  return [];
 }
 
 /** A buff whose condition changes nothing and that grants no temporary hit points. */
@@ -171,6 +238,13 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
         section: "use"
       });
     }
+    // An activation of its own (Shield, Parry); a feature's is checked with the feature below.
+    if (action.kind === "activate-feature" && !("category" in record)) {
+      if (!answersOnly(action) && !lingers(action)) {
+        warnings.push({ id: "activation-does-nothing", message: "Switching it on does nothing yet: add what it gives in While active.", section: "while-active" });
+      }
+      warnings.push(...activationWarnings(action));
+    }
     if (action.kind === "multiattack") {
       const available = new Set(getExecutableActions(withRecord).map((candidate) => candidate.id));
       const gone = action.attacks.filter((step) => !available.has(step.actionId));
@@ -178,6 +252,43 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
         warnings.push({ id: "missing-step", message: `${gone.length === 1 ? "A step uses" : `${gone.length} steps use`} an ability this creature no longer has.`, section: "sequence" });
       }
     }
+  }
+
+  // A feature that does nothing the DM can see yet.
+  const feature = "category" in record && !("kind" in record) ? (record as FeatureDefinition) : undefined;
+  if (feature) {
+    const activation = activationOf(feature);
+    if (activation && !answersOnly(activation) && !lingers(activation) && !(feature.effects ?? []).some(firesOnActivate)) {
+      warnings.push({ id: "activation-does-nothing", message: "Switching it on does nothing yet: add what it does in While active.", section: "while-active" });
+    }
+    if (activation) warnings.push(...activationWarnings(activation));
+    if (!activation && (feature.effects ?? []).some(firesOnActivate)) {
+      warnings.push({
+        id: "needs-activation",
+        message: "An extra action, or regaining something when it's switched on, only happens on a feature that's switched on (Use & cost).",
+        section: "use"
+      });
+    }
+    if (feature.aura && !(feature.effects ?? []).some((effect) => !firesOnActivate(effect) && SHARED_KINDS.has(effect.kind))) {
+      warnings.push({
+        id: "aura-shares-nothing",
+        message: "Its aura shares nothing yet: only a bonus to saves, advantage on saves and an AC bonus reach creatures near it.",
+        section: "aura"
+      });
+    }
+    if (feature.emanation && !feature.emanation.damage?.length && !feature.emanation.condition) {
+      warnings.push({ id: "emanation-does-nothing", message: "Its aura harms nothing yet: give it damage or a condition.", section: "aura" });
+    }
+  }
+
+  // "Hits against it deal more" is read only from a condition: on a trait or an item that's always on it never applies.
+  const always = (record as { effects?: FeatureEffect[]; attackType?: unknown }).effects;
+  if ((feature || "attackType" in record) && always?.some((effect) => effect.kind === "incoming-hit-damage")) {
+    warnings.push({
+      id: "needs-duration",
+      message: "“Hits against it deal more” only works on something that lasts a while: a feature that's switched on, a buff, or a mark a hit leaves.",
+      section: "while-active"
+    });
   }
 
   const ref = typeof where === "string" ? withNewAbility(definition, where, record).ref : withAbility(definition, where, record).ref;

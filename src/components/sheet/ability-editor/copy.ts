@@ -123,6 +123,7 @@ export const COPY = {
   resistances: { label: "Resistance to" },
   nonmagicalOnly: { label: "Only from nonmagical attacks" },
   alsoCondition: { label: "Also counts as", hint: "A condition it gives for as long as it lasts (invisible)." },
+  buffEffects: { label: "Other effects", hint: "Anything else it grants while it lasts: advantage on attacks, extra damage on hits, advantage on saves…" },
   prepOnly: { label: "Cast before combat", hint: "A long buff (Mage Armor, Aid): the AI never casts it mid-fight. Switch it on for a token in the encounter setup." },
   concentration: { label: "Needs concentration", hint: "It ends when the caster's concentration breaks." },
 
@@ -153,6 +154,55 @@ export const COPY = {
   movementDamage: { label: "Hurts creatures moving in it", hint: "Spike Growth: damage for every 5 feet a creature moves into or within it, with no save." },
   blocksSight: { label: "Heavily obscured" },
   zoneColor: { label: "Colour" },
+
+  // While active (a feature's or an item's effects)
+  effectWhenGate: { label: "When", hint: "Nothing picked: always. With several picked, it can need any one of them or all of them." },
+  effectScope: { label: "Which attacks", hint: "Nothing picked: all of them. Pick melee, ranged or spell attacks, and the ability they use." },
+  effectAttacks: { label: "Only these attacks", hint: "None picked: any attack that fits “Which attacks”." },
+  effectSpellsOnly: { label: "Only its spells", hint: "Spells it casts, whatever they do, and not its other attacks." },
+  effectAlreadyDeals: { label: "Only if it already deals", hint: "The attack or spell must already deal one of these types (a staff that strengthens cold spells)." },
+  exceptMaterials: { label: "Except from weapons that are", hint: "Silvered or adamantine weapons get past it, as with a werewolf." },
+  againstBeing: { label: "Only against being", hint: "Saves against these conditions only (Brave: frightened)." },
+  markerStats: { label: "Adds the marker's modifiers", hint: "An ability modifier in the damage comes from the creature that put this on it, not from the attacker." },
+  critDoubles: { label: "Doubles on a critical hit", hint: "Its dice are rolled twice on a critical hit, like the attack's own." },
+  halfOnSuccess: { label: "Half on a success" },
+  featureSaveDc: { label: "DC", hint: "Leave empty for 8 + its modifier for that ability + proficiency." },
+  swarmFull: { label: "Above half its hit points" },
+  swarmBloodied: { label: "At half its hit points or fewer" },
+  endsAfterHit: { label: "The first such hit ends it", hint: "Off: every hit deals the extra damage until it ends." },
+  markEffects: { label: "While it has it", hint: "What the condition does to the creature that has it, such as “Hits against it deal more” for a mark." },
+  worksAtZero: { label: "Even at 0 hit points", hint: "A troll: it keeps regenerating, and doesn't die, at 0 hit points." },
+  regenStoppedBy: { label: "Stopped by", hint: "Damage of these types switches it off at the start of its next turn (a troll's acid and fire)." },
+  needsSave: { label: "Needs a saving throw", hint: "Undead Fortitude: a save against 5 + the damage taken. Off: it always works (Relentless Endurance)." },
+  neverAgainst: { label: "Never against", hint: "Damage of these types always takes it to 0 (radiant for a zombie)." },
+  notCrits: { label: "Not against a critical hit" },
+  limitedUses: { label: "Limited uses", hint: "Each time spends one use from a pool (Relentless Endurance: once per rest)." },
+  splitBy: { label: "Splits when it takes", hint: "An ochre jelly splits when it takes slashing or lightning damage." },
+  saveModifierOn: { label: "On", hint: "None picked: every saving throw." },
+
+  // Features: basics, use and notes
+  featureCategory: { label: "Listed as", hint: "Where it shows on the sheet. A trait and a feature work the same." },
+  optionalRule: { label: "An optional rule", hint: "A variant from the statblock: what it grants is only available while it's switched on." },
+  optionalOn: { label: "Switched on" },
+  featureUse: { label: "It works", hint: "Always: its effects simply apply (Pack Tactics). Switched on: it takes an action, a bonus action, a reaction or nothing to start (Rage), and lasts a while." },
+  activationLasts: { label: "Lasts" },
+  featureAutomation: { label: "The simulator", hint: "Uses it: its effects apply. Reference only: shown for you to resolve. No combat effect: flavour, senses, rules outside combat; never shown as a gap." },
+
+  // Aura
+  auraHelps: { label: "Shares its effects with creatures nearby", hint: "Aura of Protection. The simulator shares save bonuses, advantage on saves and AC bonuses; its other effects stay with it." },
+  auraWho: { label: "With" },
+  auraRange: { label: "Within (ft)" },
+  auraHarms: { label: "Affects creatures nearby each round", hint: "Stench, Fear Aura, a balor's Fire Aura." },
+  emanationWhen: { label: "When", hint: "When each creature starts its turn nearby (Stench), or at the start of its own turn, to everything nearby (Fire Aura)." },
+  emanationAffects: { label: "Affects" },
+  emanationCondition: { label: "Condition", hint: "Until the start of the creature's next turn." },
+  emanationQuiet: { label: "Stops while it's incapacitated", hint: "A pit fiend's Fear Aura." },
+
+  // Grants
+  grantsBonus: { label: "Bonus actions it can take", hint: "Standard actions it can take as a bonus action: Cunning Action, Nimble Escape." },
+  grantsAbilities: { label: "Abilities it grants", hint: "Each opens in this editor. They're saved with it." },
+  onlyAfter: { label: "Only after", hint: "A bonus attack it earns this turn: after hitting with a charge (Pounce), or after it drops a creature (Rampage)." },
+  movesFirst: { label: "Moves first", hint: "Rampage: it can move up to this far before the attack." },
 
   // Notes & AI
   description: { label: "Reference text", hint: "Shown with the ability; the simulator doesn't read it." },

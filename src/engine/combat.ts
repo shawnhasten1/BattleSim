@@ -2794,7 +2794,7 @@ function checkSplit(state: EngineState, target: CombatantState, damageTypes: Dam
   // Runs on every instance of damage, so bail cheaply for the 99% of creatures that can't split.
   let capable = splitCapableCache.get(definition);
   if (capable === undefined) {
-    capable = [...(definition.traits ?? []), ...(definition.features ?? [])].some((feature) => feature.effects?.some((effect) => effect.kind === "split-on-damage"));
+    capable = simulatedFeatures(definition).some((feature) => feature.effects?.some((effect) => effect.kind === "split-on-damage"));
     splitCapableCache.set(definition, capable);
   }
   if (!capable) return;
@@ -4424,7 +4424,16 @@ export function featureSources(definition: CreatureDefinition, combatant?: Comba
       effects: weapon.effects,
       automationSupport: "full" as const
     }));
-  return [...(definition.features ?? []), ...(definition.traits ?? []), ...weaponSources, ...activeConditionSources];
+  return [...simulatedFeatures(definition), ...weaponSources, ...activeConditionSources];
+}
+
+/**
+ * The features and traits whose effects, auras and emanations the simulator applies: not ones kept for reference only
+ * (the DM resolves them), unsupported, or marked as having no combat effect.
+ */
+export function simulatedFeatures(definition: CreatureDefinition): FeatureDefinitionSource[] {
+  return [...(definition.features ?? []), ...(definition.traits ?? [])].filter((feature) =>
+    !feature.informational && feature.automationSupport !== "manual-only" && feature.automationSupport !== "unsupported");
 }
 
 type FeatureDefinitionSource = NonNullable<CreatureDefinition["features"]>[number];
@@ -4453,7 +4462,7 @@ function auraSources(state: EngineState, target: CombatantState): AuraContributi
       continue;
     }
     const bearerDefinition = getDefinition(state.snapshot, bearer);
-    for (const feature of [...(bearerDefinition.features ?? []), ...(bearerDefinition.traits ?? [])]) {
+    for (const feature of simulatedFeatures(bearerDefinition)) {
       if (!feature.aura) {
         continue;
       }

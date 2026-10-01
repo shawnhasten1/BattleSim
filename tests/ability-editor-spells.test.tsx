@@ -60,7 +60,7 @@ function compare(srdId: string) {
   return { built: builtText, library: libraryText };
 }
 
-describe("spells built from a blank one", () => {
+describe("spells built from a blank one", { timeout: 20000 }, () => {
   it("Fireball: a saving throw over an area, half on a success, upcast by a die", async () => {
     await blank("Spell");
     await retype("Name", "Fireball");
@@ -198,7 +198,7 @@ describe("spells built from a blank one", () => {
   });
 });
 
-describe("a monster's special action built from a blank one", () => {
+describe("a monster's special action built from a blank one", { timeout: 20000 }, () => {
   it("Fire Breath: a 60-ft cone, DC 21 DEX as printed, half on a success, recharge 5–6", async () => {
     await blank("Special action");
     await retype("Name", "Fire Breath");

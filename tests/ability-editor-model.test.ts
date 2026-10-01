@@ -44,16 +44,16 @@ describe("sections", () => {
     expect(sections).not.toHaveProperty("roll");
   });
 
-  it("leaves Use & cost off a passive trait, and on an activated feature", () => {
+  it("says a passive trait is always on, and what an activated feature takes and how long it lasts", () => {
     const pack = wolf.traits!.find((trait) => trait.name === "Pack Tactics")!;
     const packSections = summaries(wolf, { list: "traits", id: pack.id });
-    expect(packSections).not.toHaveProperty("use");
+    expect(packSections.use).toBe("always on");
     expect(packSections["while-active"]).toBe("advantage on attacks with an ally next to the target");
 
     const rage = findSrdFeature("srd:feature:rage")!;
     const barbarian: CreatureDefinition = { ...wolf, features: [rage], resources: { rage: 3 } };
     const rageSections = summaries(barbarian, { list: "features", id: rage.id });
-    expect(rageSections.use).toBe("Bonus action · 1 rage");
+    expect(rageSections.use).toBe("Bonus action · 1 rage · for 1 minute");
     expect(rageSections["while-active"]).toContain("resists bludgeoning, piercing, and slashing");
   });
 

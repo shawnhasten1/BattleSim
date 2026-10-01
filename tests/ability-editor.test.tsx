@@ -38,6 +38,8 @@ async function openLongsword() {
 }
 
 const section = (name: RegExp) => screen.getByRole("button", { name });
+/** Queries inside one section's body (`[data-section="effects"]`). */
+const inSection = (id: string) => within(document.querySelector<HTMLElement>(`[data-section="${id}"]`)!);
 const preview = () => screen.getByLabelText("Preview").textContent ?? "";
 const nameBox = () => screen.getByLabelText("Name") as HTMLInputElement;
 
@@ -314,7 +316,7 @@ describe("weapons", () => {
     await userEvent.clear(nameBox());
     await userEvent.type(nameBox(), "The Fear Sword");
     await userEvent.click(screen.getByLabelText("It has charges"));
-    await userEvent.click(screen.getByRole("button", { name: "Add effect" }));
+    await userEvent.click(inSection("effects").getByRole("button", { name: "Add effect" }));
     await userEvent.click(screen.getByRole("menuitem", { name: /^Condition/ }));
     const card = screen.getByRole("group", { name: "Condition effect" });
     await userEvent.selectOptions(within(card).getByLabelText("Condition"), "frightened");
@@ -341,7 +343,7 @@ describe("weapons", () => {
     await userEvent.selectOptions(screen.getByLabelText("Damage die size"), "4");
     await userEvent.selectOptions(screen.getByLabelText("Damage type"), "piercing");
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Magic bonus" })).getByRole("radio", { name: "+1" }));
-    await userEvent.click(screen.getByRole("button", { name: "Add effect" }));
+    await userEvent.click(inSection("effects").getByRole("button", { name: "Add effect" }));
     await userEvent.click(screen.getByRole("menuitem", { name: /^Condition/ }));
     const card = screen.getByRole("group", { name: "Condition effect" });
     await userEvent.selectOptions(within(card).getByLabelText("Condition"), "poisoned");
@@ -358,7 +360,7 @@ describe("weapons", () => {
     expect((weapons().at(-1) as WeaponDefinition).damage[0]?.abilityModifier).toBeUndefined();
   });
 
-  it("lists what a weapon does while carried and what it grants, and says where to change them", async () => {
+  it("edits what a weapon does while carried, and what it grants in a nested editor", async () => {
     store().insertAbilityRecord("def-fighter", "weapons", {
       ...blankWeapon(), name: "Sword of Warding",
       effects: [{ kind: "armor-class-bonus", bonus: { base: 1 } }],
@@ -367,11 +369,25 @@ describe("weapons", () => {
     render(<LiveTab />);
     await userEvent.click(screen.getByRole("button", { name: "Edit Sword of Warding" }));
     await userEvent.click(section(/^While active/));
-    await userEvent.click(section(/^Grants/));
+    expect(inSection("while-active").getByText("It gains a +1 bonus to AC.")).toBeTruthy();
+    await userEvent.click(inSection("while-active").getByRole("button", { name: "Edit ac bonus effect" }));
+    await userEvent.clear(inSection("while-active").getByLabelText("AC bonus"));
+    await userEvent.type(inSection("while-active").getByLabelText("AC bonus"), "2");
+    await userEvent.click(inSection("while-active").getByRole("button", { name: "Done" }));
 
-    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toContain("Warding Swing");
-    expect(screen.getAllByText(/open the weapon in the classic editor/)).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Open it in the classic editor" })).toBeTruthy();
+    await userEvent.click(section(/^Grants/));
+    await userEvent.click(inSection("grants").getByRole("button", { name: "Edit Warding Swing" }));
+    // The granted swing opens in the same editor, nested: back goes to the sword.
+    expect(screen.getByRole("button", { name: "Back to Sword of Warding" })).toBeTruthy();
+    await userEvent.clear(nameBox());
+    await userEvent.type(nameBox(), "Warding Strike");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(inSection("grants").getByRole("button", { name: "Edit Warding Strike" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const sword = weapons().find((weapon) => weapon.name === "Sword of Warding")!;
+    expect(sword.effects).toEqual([{ kind: "armor-class-bonus", bonus: { base: 2 } }]);
+    expect(sword.grantedActions?.map((action) => action.name)).toEqual(["Warding Strike"]);
   });
 });
 

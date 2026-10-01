@@ -18,10 +18,10 @@ import { actionTarget, spellLimit } from "./bindings";
 
 type Kind = ActionDefinition["kind"];
 
-/** The kinds of spell the editor edits. Activations (Shield, Counterspell), summons and shapechanges keep the old builder. */
-const EDITOR_KINDS = new Set<Kind>(["attack", "save", "area-save", "healing", "buff", "reposition", "unsupported"]);
+/** The kinds of spell the editor edits. Summons and shapechanges keep the old builder. */
+const EDITOR_KINDS = new Set<Kind>(["attack", "save", "area-save", "healing", "buff", "reposition", "activate-feature", "unsupported"]);
 
-/** Whether a spell opens in the ability editor: one that casts an attack, save, area, heal, buff or teleport, or nothing yet. */
+/** Whether a spell opens in the ability editor: one that casts an attack, save, area, heal, buff, teleport or activation (Shield), or nothing yet. */
 export function spellOpensInEditor(spell: SpellDefinition): boolean {
   return !spell.action || EDITOR_KINDS.has(spell.action.kind);
 }
@@ -34,7 +34,7 @@ export function actionOpensInEditor(action: ActionDefinition): boolean {
 /* ─── action type ────────────────────────────────────────────────────────── */
 
 /** Kinds that can be taken as a reaction: they carry a trigger. */
-const REACTION_KINDS = new Set<Kind>(["attack", "save", "area-save"]);
+const REACTION_KINDS = new Set<Kind>(["attack", "save", "area-save", "activate-feature"]);
 
 export function canBeReaction(action: ActionDefinition | undefined): boolean {
   return Boolean(action && REACTION_KINDS.has(action.kind));
@@ -42,7 +42,9 @@ export function canBeReaction(action: ActionDefinition | undefined): boolean {
 
 /**
  * The action taken as `actionType`. A reaction's trigger is set aside (`parked`) when it stops being one, and brought
- * back when it's a reaction again; a new reaction starts on "it's hit by an attack".
+ * back when it's a reaction again. A new reaction starts on "it's hit by an attack"; a new activation (Shield, Parry)
+ * on "it's targeted by an attack", on itself, taken whenever it can: the AI only weighs whether a damaging reaction is
+ * worth it.
  */
 export function withActionType(
   action: ActionDefinition,
@@ -54,7 +56,11 @@ export function withActionType(
   const nextParked = current ?? parked;
   const next = { ...action, actionType } as ActionDefinition & { reaction?: ReactionMeta };
   delete next.reaction;
-  if (actionType === "reaction" && canBeReaction(action)) next.reaction = nextParked ?? { trigger: { kind: "hit-by-attack" } };
+  if (actionType === "reaction" && canBeReaction(action)) {
+    next.reaction = nextParked ?? (action.kind === "activate-feature"
+      ? { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" }
+      : { trigger: { kind: "hit-by-attack" } });
+  }
   return { action: next as ActionDefinition, parked: nextParked };
 }
 
