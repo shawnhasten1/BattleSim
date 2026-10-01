@@ -80,6 +80,7 @@ import { findAbility, withNewAbility, withRecordAfter, type AbilityInsertTarget,
 import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withOwnUsagePool, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
+import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -2647,27 +2648,45 @@ export const useEncounterStore = create<EncounterStore>()(
         const base = editBase();
         const before = base.definitions.find((definition) => definition.id === definitionId);
         const maxHp = updates.maxHp;
+        // Saves and skills that were proficient follow a new proficiency bonus or level (plan D9).
+        const follow = (next: CreatureDefinition) => (before ? withProficienciesFollowing(before, next, { saves: "saves" in updates, skills: "skills" in updates }) : next);
+        const grid = encounter.map.grid;
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? { ...definition, ...updates }
+            ? follow({ ...definition, ...updates })
             : definition),
-          combatants: maxHp === undefined ? encounter.combatants : encounter.combatants.map((combatant) => {
-            // The tokens showing this creature's max HP: those in its form now.
+          combatants: maxHp === undefined && !updates.size ? encounter.combatants : encounter.combatants.map((combatant) => {
+            // The tokens showing this creature: those in its form now.
             if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== definitionId) return combatant;
-            const was = base.combatants.find((candidate) => candidate.id === combatant.id) ?? combatant;
-            const wasFull = before !== undefined && was.currentHp >= before.maxHp;
-            return { ...combatant, currentHp: wasFull ? maxHp : Math.min(Math.max(0, was.currentHp), maxHp) };
+            let next = combatant;
+            if (maxHp !== undefined) {
+              const was = base.combatants.find((candidate) => candidate.id === combatant.id) ?? combatant;
+              const wasFull = before !== undefined && was.currentHp >= before.maxHp;
+              next = { ...next, currentHp: wasFull ? maxHp : Math.min(Math.max(0, was.currentHp), maxHp) };
+            }
+            if (updates.size) {
+              // A bigger creature grows from its top-left square; one that would leave the grid moves back onto it.
+              const footprint = sizeFootprint(updates.size);
+              const x = Math.max(0, Math.min(next.position.x, grid.width - footprint));
+              const y = Math.max(0, Math.min(next.position.y, grid.height - footprint));
+              if (x !== next.position.x || y !== next.position.y) next = { ...next, position: { x, y } };
+            }
+            return next;
           })
         });
       },
       updateCreatureAbility: (definitionId, ability, value) => {
         const encounter = get().encounter;
+        const before = editBase().definitions.find((definition) => definition.id === definitionId);
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? { ...definition, abilities: { ...definition.abilities, [ability]: value } }
-            : definition)
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            const next = { ...definition, abilities: { ...definition.abilities, [ability]: value } };
+            // Saves and skills that were proficient follow the new score (plan D9), measured from before the edit.
+            return before ? withProficienciesFollowing(before, next) : next;
+          })
         });
       },
       attachSpellDefinition: (definitionId, spell) => {

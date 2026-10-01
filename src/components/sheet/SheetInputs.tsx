@@ -35,6 +35,8 @@ interface SheetNumberCommon {
   /** Accessible name, when no `<label>` wraps the box. */
   label?: string;
   placeholder?: string;
+  /** Shows a bonus with its sign: "+6". */
+  signed?: boolean;
   /** For a box outside a tab's own styles (the resource list). */
   className?: string;
   style?: CSSProperties;
@@ -46,7 +48,7 @@ type SheetNumberProps = SheetNumberCommon & (
   | { optional: true; onCommit: (next: number | undefined) => void }
 );
 
-const show = (n: number | undefined) => (n === undefined ? "" : String(n));
+const show = (n: number | undefined, signed?: boolean) => (n === undefined ? "" : signed && n > 0 ? `+${n}` : String(n));
 
 /**
  * A number box on the sheet. A value is committed as it's typed, once it's a number in range. Anything else (an empty
@@ -54,13 +56,13 @@ const show = (n: number | undefined) => (n === undefined ? "" : String(n));
  * focus. Out of range is marked while you type.
  */
 export function SheetNumber(props: SheetNumberProps) {
-  const { value, min, max, step = 1, label, placeholder, className, style } = props;
+  const { value, min, max, step = 1, label, placeholder, signed, className, style } = props;
   const session = useEditSession();
-  const [text, setText] = useState(show(value));
+  const [text, setText] = useState(show(value, signed));
   const focused = useRef(false);
   useEffect(() => {
-    if (!focused.current) setText(show(value));
-  }, [value]);
+    if (!focused.current) setText(show(value, signed));
+  }, [value, signed]);
 
   const whole = Number.isInteger(step);
   const decimals = whole ? 0 : (String(step).split(".")[1] ?? "").length;
@@ -87,7 +89,7 @@ export function SheetNumber(props: SheetNumberProps) {
     let next = Number((from + (event.key === "ArrowUp" ? step : -step)).toFixed(decimals));
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
-    setText(show(next));
+    setText(show(next, signed));
     commit(next);
   }
 
@@ -103,7 +105,7 @@ export function SheetNumber(props: SheetNumberProps) {
       className={className}
       style={style}
       onFocus={() => { focused.current = true; session.begin(); }}
-      onBlur={() => { focused.current = false; session.end(); setText(show(value)); }}
+      onBlur={() => { focused.current = false; session.end(); setText(show(value, signed)); }}
       onChange={(event) => {
         setText(event.target.value);
         const next = parse(event.target.value);

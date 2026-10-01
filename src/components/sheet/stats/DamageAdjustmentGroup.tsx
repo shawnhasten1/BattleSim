@@ -89,8 +89,6 @@ export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGr
             not {material}
           </label>
         )) : null}
-        <button type="button" onClick={() => onChange({ ...group, damageTypes: [...DAMAGE_TYPES] })}>All</button>
-        <button type="button" onClick={() => onChange({ ...group, damageTypes: DAMAGE_TYPES.filter((t) => t !== "psychic") })}>All but psychic</button>
       </div>
       <div className={styles.chips}>
         {DAMAGE_TYPES.map((t) => (
@@ -106,6 +104,8 @@ export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGr
             {t}
           </button>
         ))}
+        <button type="button" className={styles.quick} onClick={() => onChange({ ...group, damageTypes: [...DAMAGE_TYPES] })}>All</button>
+        <button type="button" className={styles.quick} onClick={() => onChange({ ...group, damageTypes: DAMAGE_TYPES.filter((t) => t !== "psychic") })}>All but psychic</button>
       </div>
     </>
   );

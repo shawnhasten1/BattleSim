@@ -306,9 +306,11 @@
   accent-color: var(--ui-accent);
 }
 
-.tab input:not([type="checkbox"]):not([type="color"]),
-.tab select,
-.tab textarea {
+/*
+ * The tabs' boxes. `:where` keeps this at one class's weight, so a box's own class (`.coreBox`, `.scoreBox`) and states
+ * like `[aria-invalid]` override it without `!important`.
+ */
+.tab :where(input:not([type="checkbox"]):not([type="color"]), select, textarea) {
   width: 100%;
   min-width: 0;
   padding: 5px 7px;
@@ -346,72 +348,6 @@
 /* A number the box won't take (out of range): `SheetNumber` marks it while it's typed. */
 .tab input[aria-invalid="true"] {
   border-color: var(--ui-hp-red);
-}
-
-.abilities {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
-}
-
-.abilities label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 5px 2px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: var(--ui-panel-2);
-}
-
-.abilities label > span {
-  font-size: 9px;
-  text-transform: uppercase;
-  color: var(--ui-text-dim);
-}
-
-.abilities label > input {
-  width: 100%;
-  padding: 2px !important;
-  border: none !important;
-  background: transparent !important;
-  text-align: center;
-  font-size: 13px !important;
-  font-weight: 700;
-}
-
-.abilities label > strong {
-  font-size: 10px;
-  color: var(--ui-accent-soft);
-}
-
-/* The score's box has no border of its own: mark the cell instead. */
-.abilities label:has(input[aria-invalid="true"]) {
-  border-color: var(--ui-hp-red);
-}
-
-.addBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 100%;
-  margin-top: 8px;
-  padding: 7px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: var(--ui-panel-2);
-  color: var(--ui-text);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.addBtn:hover {
-  border-color: var(--ui-accent);
-  color: var(--ui-accent);
 }
 
 .itemList {
@@ -591,4 +527,309 @@
 
 .upload input {
   display: none;
+}
+
+/* ── Stats: the core, always open, then folding sections (actor sheet plan §3.2) ── */
+
+.core {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.coreRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+/* Number boxes that hold a few digits, not the field's whole width. */
+.tab .coreBox {
+  width: 60px;
+}
+
+.unit {
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ui-text-dim);
+}
+
+.inlineRow,
+.speedRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.speedRow {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.speedChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 3px 2px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  color: var(--ui-text);
+  font-size: 11.5px;
+}
+
+.tab .speedChip .coreBox {
+  width: 52px;
+  padding: 2px 5px;
+}
+
+.hoverCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.chipRemove {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.chipRemove:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ui-hp-red);
+}
+
+.tab .addSmall {
+  width: auto;
+  align-self: flex-start;
+  padding: 3px 8px;
+  border: 1px dashed var(--ui-border);
+  background: transparent;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tab .addSmall:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.toggleSmall {
+  padding: 2px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.toggleSmall[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* The six scores, each with its modifier and, under a line, its save. */
+.scores {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 2px 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.score:has(input[aria-invalid="true"]) {
+  border-color: var(--ui-hp-red);
+}
+
+.scoreName {
+  font-size: 9.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ui-text-dim);
+}
+
+.tab .scoreBox {
+  width: 100%;
+  padding: 1px;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.scoreMod {
+  font-size: 10.5px;
+  color: var(--ui-accent-soft);
+}
+
+.save {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.saveMark {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+  opacity: 0.4;
+  cursor: pointer;
+}
+
+.saveMark:hover {
+  opacity: 0.8;
+}
+
+.saveMark[data-kind="proficient"] {
+  color: var(--ui-accent);
+  opacity: 1;
+}
+
+.saveMark[data-kind="custom"] {
+  color: #d8b56a;
+  opacity: 1;
+}
+
+.tab .saveBox {
+  width: 42px;
+  padding: 1px 2px;
+  border-color: transparent;
+  background: transparent;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tab .saveBox:hover,
+.tab .saveBox:focus {
+  border-color: var(--ui-border);
+}
+
+.scoresLegend {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+/* A folding section: its title, a summary in statblock wording, and its fields. */
+.statSection {
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.statSection:last-child {
+  border-bottom: none;
+}
+
+.statSectionHead {
+  display: grid;
+  grid-template-columns: 14px 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.statSectionHead:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.statSectionHead:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+}
+
+.statChevron {
+  color: var(--ui-text-dim);
+  transition: transform 0.12s ease;
+}
+
+.statSectionOpen .statChevron {
+  transform: rotate(90deg);
+}
+
+.statSectionTitle {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ui-text-dim);
+}
+
+.statSectionOpen .statSectionTitle {
+  color: var(--ui-accent);
+}
+
+.statSectionSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.statSectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 12px 12px 32px;
+}
+
+/* A skill or a class: name, numbers, toggles, and ×. */
+.lineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lineName {
+  width: 130px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tab .lineRow > input:not(.coreBox) {
+  flex: 1;
 }

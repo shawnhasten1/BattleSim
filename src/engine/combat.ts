@@ -5788,6 +5788,18 @@ export function proficiencyFromDefinition(definition: CreatureDefinition): numbe
   return 2;
 }
 
+/** Proficiency bonus a challenge rating gives (5e DMG table); the SRD generator's `proficiencyForCr` uses the same. */
+export function proficiencyForChallengeRating(cr: number): number {
+  if (cr < 5) return 2;
+  if (cr < 9) return 3;
+  if (cr < 13) return 4;
+  if (cr < 17) return 5;
+  if (cr < 21) return 6;
+  if (cr < 25) return 7;
+  if (cr < 29) return 8;
+  return 9;
+}
+
 function resolveConcentration(state: EngineState, combatant: CombatantState, damageTaken: number): void {
   if (!combatant.concentration) {
     return;

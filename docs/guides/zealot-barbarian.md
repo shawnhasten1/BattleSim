@@ -32,7 +32,7 @@ Then select it and click **Sheet** to open its sheet. Weapons, spells, attacks a
 
 ![The empty Abilities tab](img/zealot-barbarian/02-abilities-empty.png)
 
-> **Tip:** the sheet's **Stats** tab also has **Level** and **Class** fields (they default to 1 / Adventurer). They're informational, so set them to 5 / Barbarian if you like.
+> **Tip:** a new token starts as a level 1 Adventurer. On the sheet's **Stats** tab, open **Level & CR** and make the class Barbarian, level 5. The level is what scales cantrips, and the proficiency bonus when Proficiency is left blank.
 
 ## 2. Add the Greataxe, Extra Attack and Reckless Attack
 

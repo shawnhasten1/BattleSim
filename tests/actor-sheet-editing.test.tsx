@@ -46,7 +46,7 @@ describe("typing on the sheet", () => {
 
   it("an emptied box writes nothing, and shows the value again when you leave it", async () => {
     await openSheet("enemy-goblin-2", "Stats");
-    const ac = screen.getByLabelText("AC") as HTMLInputElement;
+    const ac = screen.getByLabelText("Armor Class") as HTMLInputElement;
     const before = definition("def-goblin").armorClass;
     await userEvent.clear(ac);
     expect(definition("def-goblin").armorClass).toBe(before);
@@ -57,7 +57,7 @@ describe("typing on the sheet", () => {
 
   it("a number out of range isn't taken, and is marked until you leave the box", async () => {
     await openSheet("enemy-goblin-2", "Stats");
-    const ac = screen.getByLabelText("AC") as HTMLInputElement;
+    const ac = screen.getByLabelText("Armor Class") as HTMLInputElement;
     await retype(ac, "150");
     expect(definition("def-goblin").armorClass).toBe(15);
     expect(ac.getAttribute("aria-invalid")).toBe("true");
@@ -76,8 +76,9 @@ describe("typing on the sheet", () => {
       }
     }));
     await openSheet("pc-fighter", "Stats");
-    await retype(screen.getByLabelText("Level"), "7");
-    await retype(screen.getByLabelText("Class"), "Skald");
+    await userEvent.click(screen.getByRole("button", { name: /^Level & CR/ }));
+    await retype(screen.getByLabelText("Class 1 level"), "7");
+    await retype(screen.getByLabelText("Class 1"), "Skald");
     expect(definition("def-fighter").character).toEqual({
       level: 7,
       classes: [{ id: "bard", name: "Skald", level: 7, subclass: { id: "college-of-lore", name: "College of Lore" } }]

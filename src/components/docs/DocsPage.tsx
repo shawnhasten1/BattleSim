@@ -297,8 +297,14 @@ const SECTIONS: Section[] = [
         </p>
         <ul>
           <li>
-            <strong>Stats</strong> — ability scores, AC, HP, speed, proficiency bonus, level, saving throws, and damage
-            and condition defenses.
+            <strong>Stats</strong> — the creature as a statblock reads: size, type, alignment, Armor Class, max HP and
+            speeds (fly, swim, climb and burrow as chips, with hover on fly), then its ability scores with each save
+            beneath (◆ marks a proficient one; click it to switch, or type a save&apos;s whole bonus). Below fold its{" "}
+            <strong>Skills</strong> (Athletics and Acrobatics are what it escapes grapples with),{" "}
+            <strong>Defenses</strong>, <strong>Senses &amp; languages</strong>, and <strong>Level &amp; CR</strong> (its
+            classes, its level, which scales its cantrips, and its proficiency bonus). Each folded section reads like
+            its statblock line. A proficient save or skill keeps up when its score or the proficiency bonus changes; a
+            number of its own stays as typed.
           </li>
           <li>
             <strong>Abilities</strong> — the attacks, spells, and features this actor can use in combat, and every
