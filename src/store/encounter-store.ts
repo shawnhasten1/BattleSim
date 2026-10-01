@@ -165,6 +165,12 @@ interface EncounterStore {
   reset: () => void;
   undo: () => void;
   redo: () => void;
+  /**
+   * Run `edit` (one or more store actions) so that what it commits joins the undo step of the last edit with the same
+   * `key`, as long as nothing else was committed or undone in between. The sheet commits as you type, and passes one
+   * key per focus of a field, so typing 256 into a box is one undo step, not three.
+   */
+  mergeEdits: (key: string, edit: () => void) => void;
   deleteLastWall: () => void;
   deleteLastTerrain: () => void;
   removeWall: (wallId: string) => void;
@@ -245,6 +251,7 @@ interface EncounterStore {
   adoptSrdDefinition: (definitionId: string) => string | undefined;
   /** Saves a private, editable copy of a library monster to the user's own library ("Customize"). */
   saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<void>;
+  /** Adds a token of a saved actor. When the scene already has that actor, the token shares the scene's copy and its edits. */
   addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
@@ -724,19 +731,33 @@ export const useEncounterStore = create<EncounterStore>()(
         })();
       };
 
+      // `mergeEdits`: the key of the edit running now, and the last merged edit's key and the undo step it pushed.
+      let mergingKey: string | null = null;
+      let lastMerge: { key: string; step: EncounterSnapshot } | null = null;
+
+      /** Whether a commit now joins the undo step of the edit in progress, nothing having been committed or undone since. */
+      const continuesMerge = () => mergingKey !== null && lastMerge?.key === mergingKey && get().undoStack[0] === lastMerge.step;
+
+      /** The encounter as it was before the edit in progress began: the undo step a merged edit is joining, or now. */
+      const editBase = (): EncounterSnapshot => (continuesMerge() ? get().undoStack[0]! : get().encounter);
+
       const commitEncounter = (
         encounter: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
-      ) => set({
-        encounter: normalizeEncounterVisuals(encounter),
-        undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
-        redoStack: [],
-        outcome: null,
-        batchSummary: null,
-        replayBase: null,
-        replayIndex: null,
-        ...extras
-      });
+      ) => {
+        const undoStack = continuesMerge() ? get().undoStack : [structuredClone(get().encounter), ...get().undoStack].slice(0, 50);
+        lastMerge = mergingKey ? { key: mergingKey, step: undoStack[0]! } : null;
+        set({
+          encounter: normalizeEncounterVisuals(encounter),
+          undoStack,
+          redoStack: [],
+          outcome: null,
+          batchSummary: null,
+          replayBase: null,
+          replayIndex: null,
+          ...extras
+        });
+      };
 
       /**
        * Commit a creature after an ability edit; tokens of it get any pool they lack (existing values are kept). The
@@ -1037,6 +1058,15 @@ export const useEncounterStore = create<EncounterStore>()(
             message: "Redo applied"
           }]
         });
+      },
+      mergeEdits: (key, edit) => {
+        const outer = mergingKey;
+        mergingKey = key;
+        try {
+          edit();
+        } finally {
+          mergingKey = outer;
+        }
       },
       deleteLastWall: () => {
         const encounter = get().encounter;
@@ -1845,7 +1875,10 @@ export const useEncounterStore = create<EncounterStore>()(
         }
       },
       addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position) => {
-        const definition = get().definitionsLibrary.find((candidate) => candidate.id === definitionId);
+        // Already in the scene: another token of the scene's copy, as for SRD monsters. The library's copy would
+        // replace it, silently undoing every edit made to it on the sheet, for every token of it.
+        const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId)
+          ?? get().definitionsLibrary.find((candidate) => candidate.id === definitionId);
         if (definition) {
           const embedded = await loadDependencies(definition, get().encounter.definitions);
           if (embedded.length > 0) get().embedDefinitions(embedded);
@@ -2540,17 +2573,22 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       updateCreatureDefinition: (definitionId, updates) => {
         const encounter = get().encounter;
+        // A new max HP: tokens that were at full follow it, the others keep their HP, capped at it. "Were" is measured
+        // before the edit began, so the 6 typed on the way from 52 to 60 can't cut a token's HP to 6.
+        const base = editBase();
+        const before = base.definitions.find((definition) => definition.id === definitionId);
+        const maxHp = updates.maxHp;
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
             ? { ...definition, ...updates }
             : definition),
-          combatants: encounter.combatants.map((combatant) => {
-            if (combatant.definitionId !== definitionId || updates.maxHp === undefined) return combatant;
-            return {
-              ...combatant,
-              currentHp: Math.min(Math.max(0, combatant.currentHp), updates.maxHp)
-            };
+          combatants: maxHp === undefined ? encounter.combatants : encounter.combatants.map((combatant) => {
+            // The tokens showing this creature's max HP: those in its form now.
+            if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== definitionId) return combatant;
+            const was = base.combatants.find((candidate) => candidate.id === combatant.id) ?? combatant;
+            const wasFull = before !== undefined && was.currentHp >= before.maxHp;
+            return { ...combatant, currentHp: wasFull ? maxHp : Math.min(Math.max(0, was.currentHp), maxHp) };
           })
         });
       },

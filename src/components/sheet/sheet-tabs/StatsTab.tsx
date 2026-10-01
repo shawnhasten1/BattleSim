@@ -8,8 +8,10 @@ import defenseStyles from "../stats/defenses.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
+import { characterLevel, withClassName, withLevel } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { SheetNumber, SheetText } from "../SheetInputs";
 import styles from "../sheet.module.css";
 
 const RESOURCES_HELP = (
@@ -63,7 +65,7 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
   const [resourceForm, setResourceForm] = useState({ resourceId: "slot-1", current: 1, maximum: 1 });
   const resourceIds = resourceIdsForEditor(definition, combatant);
   const primaryClass = definition.character?.classes?.[0];
-  const level = definition.character?.level ?? primaryClass?.level ?? 1;
+  const level = characterLevel(definition);
 
   function addResource() {
     const id = resourceForm.resourceId.trim();
@@ -79,28 +81,27 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
         <h3>Profile</h3>
         <label className={styles.field}>
           Name
-          <input value={definition.name} onChange={(e) => updateCreatureDefinition(definition.id, { name: e.target.value })} />
+          <SheetText value={definition.name} onCommit={(name) => updateCreatureDefinition(definition.id, { name })} />
         </label>
         <div className={styles.grid} style={{ marginTop: 6 }}>
           <label className={styles.field}>
             AC
-            <input type="number" value={definition.armorClass} onChange={(e) => updateCreatureDefinition(definition.id, { armorClass: Number(e.target.value) })} />
+            <SheetNumber value={definition.armorClass} min={0} max={99} onCommit={(armorClass) => updateCreatureDefinition(definition.id, { armorClass })} />
           </label>
           <label className={styles.field}>
             Max HP
-            <input type="number" value={definition.maxHp} onChange={(e) => updateCreatureDefinition(definition.id, { maxHp: Number(e.target.value) })} />
+            <SheetNumber value={definition.maxHp} min={1} max={9999} onCommit={(maxHp) => updateCreatureDefinition(definition.id, { maxHp })} />
           </label>
           <label className={styles.field}>
             Speed
-            <input type="number" value={definition.speed} onChange={(e) => updateCreatureDefinition(definition.id, { speed: Number(e.target.value) })} />
+            <SheetNumber value={definition.speed} min={0} max={999} step={5} onCommit={(speed) => updateCreatureDefinition(definition.id, { speed })} />
           </label>
           {(["fly", "swim", "climb", "burrow"] as const).map((mode) => (
             <label key={mode} className={styles.field}>
               {mode}
-              <input
-                type="number" min={0} step={5} aria-label={`${mode} speed`} value={definition.movement?.[mode] ?? 0}
-                onChange={(e) => {
-                  const feet = Math.max(0, Number(e.target.value) || 0);
+              <SheetNumber
+                label={`${mode} speed`} value={definition.movement?.[mode] ?? 0} min={0} max={999} step={5}
+                onCommit={(feet) => {
                   const { [mode]: _dropped, ...rest } = definition.movement ?? { walk: definition.speed };
                   updateCreatureDefinition(definition.id, { movement: { ...rest, walk: definition.speed, ...(feet > 0 ? { [mode]: feet } : {}) } });
                 }}
@@ -121,7 +122,7 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           ) : null}
           <label className={styles.field}>
             Prof
-            <input type="number" value={definition.proficiencyBonus ?? 2} onChange={(e) => updateCreatureDefinition(definition.id, { proficiencyBonus: Number(e.target.value) })} />
+            <SheetNumber value={definition.proficiencyBonus ?? 2} min={0} max={10} onCommit={(proficiencyBonus) => updateCreatureDefinition(definition.id, { proficiencyBonus })} />
           </label>
           {definition.spells?.length || definition.spellcasting ? (
             <label className={styles.field}>
@@ -164,30 +165,17 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           </label>
           <label className={styles.field}>
             Level
-            <input
-              type="number"
-              value={level}
-              onChange={(e) =>
-                updateCreatureDefinition(definition.id, {
-                  character: {
-                    ...(definition.character ?? {}),
-                    level: Number(e.target.value),
-                    classes: [{ name: primaryClass?.name ?? "", level: Number(e.target.value) }]
-                  }
-                })
-              }
+            <SheetNumber
+              value={level} min={1} max={20}
+              onCommit={(next) => updateCreatureDefinition(definition.id, { character: withLevel(definition.character, next) })}
             />
           </label>
           <label className={styles.field} style={{ gridColumn: "1 / -1" }}>
             Class
-            <input
+            <SheetText
               value={primaryClass?.name ?? ""}
               placeholder="Fighter"
-              onChange={(e) =>
-                updateCreatureDefinition(definition.id, {
-                  character: { ...(definition.character ?? {}), classes: [{ name: e.target.value, level }] }
-                })
-              }
+              onCommit={(name) => updateCreatureDefinition(definition.id, { character: withClassName(definition.character, name, level) })}
             />
           </label>
         </div>
@@ -199,11 +187,7 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           {ABILITIES.map((ability) => (
             <label key={ability}>
               <span>{ability}</span>
-              <input
-                type="number"
-                value={definition.abilities[ability]}
-                onChange={(e) => updateCreatureAbility(definition.id, ability, Number(e.target.value))}
-              />
+              <SheetNumber value={definition.abilities[ability]} min={1} max={30} onCommit={(score) => updateCreatureAbility(definition.id, ability, score)} />
               <strong>{formatBonus(abilityModifier(definition.abilities[ability]))}</strong>
             </label>
           ))}
@@ -222,12 +206,12 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           {ABILITIES.map((ability) => (
             <label key={ability}>
               <span>{ability}</span>
-              <input
-                type="number" aria-label={`${ability.toUpperCase()} save`} value={definition.saves?.[ability] ?? ""}
+              <SheetNumber
+                optional label={`${ability.toUpperCase()} save`} value={definition.saves?.[ability]} min={-10} max={30}
                 placeholder={formatBonus(abilityModifier(definition.abilities[ability]))}
-                onChange={(e) => {
+                onCommit={(bonus) => {
                   const { [ability]: _dropped, ...rest } = definition.saves ?? {};
-                  const saves = e.target.value === "" ? rest : { ...rest, [ability]: Number(e.target.value) };
+                  const saves = bonus === undefined ? rest : { ...rest, [ability]: bonus };
                   updateCreatureDefinition(definition.id, { saves: Object.keys(saves).length ? saves : undefined });
                 }}
               />
@@ -299,11 +283,11 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             <div key={id} className={styles.grid}>
               <label className={styles.field}>
                 {id} — current
-                <input type="number" min={0} value={combatant.resources?.[id] ?? 0} onChange={(e) => updateResource(combatant.id, id, Number(e.target.value))} />
+                <SheetNumber value={combatant.resources?.[id] ?? 0} min={0} max={999} onCommit={(amount) => updateResource(combatant.id, id, amount)} />
               </label>
               <label className={styles.field}>
                 default
-                <input type="number" min={0} value={definition.resources?.[id] ?? 0} onChange={(e) => updateDefinitionResource(definition.id, id, Number(e.target.value))} />
+                <SheetNumber value={definition.resources?.[id] ?? 0} min={0} max={999} onCommit={(amount) => updateDefinitionResource(definition.id, id, amount)} />
               </label>
             </div>
           ))}

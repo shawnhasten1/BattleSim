@@ -4,7 +4,8 @@ import { useState } from "react";
 import type { CombatantState, CreatureDefinition } from "@/engine";
 import { poolsStrip } from "@/lib/ability-editor/list";
 import { useEncounterStore } from "@/store/encounter-store";
-import { NumberField } from "../ability-editor/controls";
+import { SheetNumber } from "../SheetInputs";
+import editorStyles from "../ability-editor/ability-editor.module.css";
 import styles from "./abilities.module.css";
 
 /**
@@ -55,13 +56,13 @@ export function PoolsStrip({ definition, combatant }: { definition: CreatureDefi
   );
 }
 
-/** One pool: its numbers can be cleared while typing (see `NumberField`), and change once they're a whole number. */
+/** One pool: its numbers change as they're typed, once they're whole numbers, one undo step per box (see `SheetNumber`). */
 function PoolRow({ label, now, full, onNow, onFull }: { label: string; now: number; full: number; onNow: (n: number) => void; onFull: (n: number) => void }) {
   return (
     <>
       <span>{label}</span>
-      <NumberField label={`${label} now`} value={now} min={0} max={999} onChange={(n) => n !== undefined && onNow(Math.floor(n))} />
-      <NumberField label={`${label} full`} value={full} min={0} max={999} onChange={(n) => n !== undefined && onFull(Math.floor(n))} />
+      <SheetNumber className={editorStyles.num} label={`${label} now`} value={now} min={0} max={999} onCommit={onNow} />
+      <SheetNumber className={editorStyles.num} label={`${label} full`} value={full} min={0} max={999} onCommit={onFull} />
     </>
   );
 }

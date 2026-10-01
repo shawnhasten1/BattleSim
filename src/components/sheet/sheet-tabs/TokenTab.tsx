@@ -3,10 +3,11 @@
 import { ImagePlus } from "lucide-react";
 import { type ChangeEvent } from "react";
 import type { CombatantState, ConditionName, CreatureDefinition } from "@/engine";
-import { useEncounterStore } from "@/store/encounter-store";
+import { MAX_ELEVATION_FT, useEncounterStore } from "@/store/encounter-store";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { COMBATANT_STATE_HELP } from "@/lib/sheet-help";
+import { SheetColor, SheetNumber, SheetText } from "../SheetInputs";
 import styles from "../sheet.module.css";
 
 const QUICK_CONDITIONS: ConditionName[] = ["poisoned", "prone", "restrained", "unconscious"];
@@ -14,6 +15,8 @@ const QUICK_CONDITIONS: ConditionName[] = ["poisoned", "prone", "restrained", "u
 export function TokenTab({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
   const updateHp = useEncounterStore((s) => s.updateHp);
+  const placeCombatant = useEncounterStore((s) => s.placeCombatant);
+  const grid = useEncounterStore((s) => s.encounter.map.grid);
   const updateCombatantVisuals = useEncounterStore((s) => s.updateCombatantVisuals);
   const updateDefinitionVisuals = useEncounterStore((s) => s.updateDefinitionVisuals);
   const applyConditionToCombatant = useEncounterStore((s) => s.applyConditionToCombatant);
@@ -47,7 +50,7 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
         <div className={styles.stack}>
           <label className={styles.field}>
             Name
-            <input value={combatant.displayName} onChange={(e) => updateCombatant(combatant.id, { displayName: e.target.value })} />
+            <SheetText value={combatant.displayName} onCommit={(displayName) => updateCombatant(combatant.id, { displayName })} />
           </label>
           <div className={styles.grid}>
             <label className={styles.field}>
@@ -73,19 +76,20 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
             </label>
             <label className={styles.field}>
               Current HP
-              <input type="number" value={combatant.currentHp} onChange={(e) => updateHp(combatant.id, Number(e.target.value))} />
+              <SheetNumber value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
             </label>
             <label className={styles.field}>
               Temp HP
-              <input type="number" value={combatant.tempHp} onChange={(e) => updateCombatant(combatant.id, { tempHp: Number(e.target.value) })} />
+              <SheetNumber value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
             </label>
+            {/* Placed as the Move tool places it: a large token's footprint stays on the grid. */}
             <label className={styles.field}>
               X
-              <input type="number" value={combatant.position.x} onChange={(e) => updateCombatant(combatant.id, { position: { ...combatant.position, x: Number(e.target.value) } })} />
+              <SheetNumber value={combatant.position.x} min={0} max={grid.width - 1} onCommit={(x) => placeCombatant(combatant.id, { ...combatant.position, x })} />
             </label>
             <label className={styles.field}>
               Y
-              <input type="number" value={combatant.position.y} onChange={(e) => updateCombatant(combatant.id, { position: { ...combatant.position, y: Number(e.target.value) } })} />
+              <SheetNumber value={combatant.position.y} min={0} max={grid.height - 1} onCommit={(y) => placeCombatant(combatant.id, { ...combatant.position, y })} />
             </label>
           </div>
           {hasLair ? (
@@ -103,9 +107,9 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
               />
             </span>
             <div className={styles.chips}>
-              <input
-                type="number" min={0} step={5} aria-label="Altitude in feet" style={{ width: 72 }}
-                value={combatant.altitude ?? 0} onChange={(e) => setAltitude([combatant.id], Number(e.target.value))}
+              <SheetNumber
+                label="Altitude in feet" style={{ width: 72 }} value={combatant.altitude ?? 0} min={0} max={MAX_ELEVATION_FT} step={5}
+                onCommit={(feet) => setAltitude([combatant.id], feet)}
               />
               <span style={{ alignSelf: "center", fontSize: 11 }}>ft up</span>
               {[0, 10, 20, 30, 60].map((feet) => (
@@ -150,15 +154,15 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
         <div className={styles.grid} style={{ marginTop: 6 }}>
           <label className={styles.field}>
             Scale
-            <input type="number" min={0.5} max={1.5} step={0.05} value={visuals.scale ?? 1} onChange={(e) => updateCombatantVisuals(combatant.id, { scale: Number(e.target.value) })} />
+            <SheetNumber value={visuals.scale ?? 1} min={0.5} max={1.5} step={0.05} onCommit={(scale) => updateCombatantVisuals(combatant.id, { scale })} />
           </label>
           <label className={styles.field}>
             Border
-            <input type="color" value={visuals.borderColor ?? "#ffffff"} onChange={(e) => updateCombatantVisuals(combatant.id, { borderColor: e.target.value })} />
+            <SheetColor value={visuals.borderColor ?? "#ffffff"} onCommit={(borderColor) => updateCombatantVisuals(combatant.id, { borderColor })} />
           </label>
           <label className={styles.field}>
             Tint
-            <input type="color" value={visuals.tint ?? "#287277"} onChange={(e) => updateCombatantVisuals(combatant.id, { tint: e.target.value })} />
+            <SheetColor value={visuals.tint ?? "#287277"} onCommit={(tint) => updateCombatantVisuals(combatant.id, { tint })} />
           </label>
         </div>
         <label className={`${styles.field} ${styles.checkLine}`} style={{ marginTop: 8 }}>

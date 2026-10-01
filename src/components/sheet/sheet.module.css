@@ -8,7 +8,7 @@
 
 .tabs button {
   flex: 1;
-  min-width: 33%;
+  min-width: 0;
   padding: 8px 4px;
   border: none;
   border-bottom: 2px solid transparent;
@@ -140,6 +140,11 @@
   cursor: default;
 }
 
+/* A number the box won't take (out of range): `SheetNumber` marks it while it's typed. */
+.tab input[aria-invalid="true"] {
+  border-color: var(--ui-hp-red);
+}
+
 .abilities {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -176,6 +181,11 @@
 .abilities label > strong {
   font-size: 10px;
   color: var(--ui-accent-soft);
+}
+
+/* The score's box has no border of its own: mark the cell instead. */
+.abilities label:has(input[aria-invalid="true"]) {
+  border-color: var(--ui-hp-red);
 }
 
 .addBtn {
