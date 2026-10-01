@@ -2,25 +2,22 @@
 
 import { ImagePlus } from "lucide-react";
 import { type ChangeEvent } from "react";
-import type { CombatantState, ConditionName, CreatureDefinition } from "@/engine";
+import type { CombatantState, CreatureDefinition } from "@/engine";
 import { MAX_ELEVATION_FT, useEncounterStore } from "@/store/encounter-store";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { COMBATANT_STATE_HELP } from "@/lib/sheet-help";
 import { SheetColor, SheetNumber, SheetText } from "../SheetInputs";
+import { TacticsSection } from "../token/TacticsSection";
 import styles from "../sheet.module.css";
 
-const QUICK_CONDITIONS: ConditionName[] = ["poisoned", "prone", "restrained", "unconscious"];
-
+/** This token: who it is, where, its art and its tactics. Its HP and conditions are in the vitals strip above the tabs. */
 export function TokenTab({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
-  const updateHp = useEncounterStore((s) => s.updateHp);
   const placeCombatant = useEncounterStore((s) => s.placeCombatant);
   const grid = useEncounterStore((s) => s.encounter.map.grid);
   const updateCombatantVisuals = useEncounterStore((s) => s.updateCombatantVisuals);
   const updateDefinitionVisuals = useEncounterStore((s) => s.updateDefinitionVisuals);
-  const applyConditionToCombatant = useEncounterStore((s) => s.applyConditionToCombatant);
-  const clearConditions = useEncounterStore((s) => s.clearConditions);
   const setAltitude = useEncounterStore((s) => s.setAltitude);
   const setInLair = useEncounterStore((s) => s.setInLair);
   const hasLair = (definition.lairActions?.length ?? 0) > 0;
@@ -66,21 +63,14 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
                 State
                 <InfoTooltip label="About combatant states" content={COMBATANT_STATE_HELP} />
               </span>
-              <select value={combatant.state} onChange={(e) => updateCombatant(combatant.id, { state: e.target.value as typeof combatant.state })}>
+              {/* Named here: the label also holds the "?" button, which a browser would take as the thing it labels. */}
+              <select aria-label="State" value={combatant.state} onChange={(e) => updateCombatant(combatant.id, { state: e.target.value as typeof combatant.state })}>
                 <option value="active">Active</option>
                 <option value="downed">Downed</option>
                 <option value="defeated">Defeated</option>
                 <option value="dead">Dead</option>
                 <option value="fled">Fled</option>
               </select>
-            </label>
-            <label className={styles.field}>
-              Current HP
-              <SheetNumber value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
-            </label>
-            <label className={styles.field}>
-              Temp HP
-              <SheetNumber value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
             </label>
             {/* Placed as the Move tool places it: a large token's footprint stays on the grid. */}
             <label className={styles.field}>
@@ -171,22 +161,7 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
         </label>
       </section>
 
-      <section className={styles.section}>
-        <h3>Conditions</h3>
-        <div className={styles.chips}>
-          {QUICK_CONDITIONS.map((condition) => (
-            <button key={condition} type="button" onClick={() => applyConditionToCombatant(combatant.id, condition)}>
-              {condition}
-            </button>
-          ))}
-          <button type="button" onClick={() => clearConditions(combatant.id)}>clear</button>
-        </div>
-        <div className={styles.active_conditions}>
-          {(combatant.conditions ?? []).map((condition) => (
-            <span key={condition.id}>{condition.name}</span>
-          ))}
-        </div>
-      </section>
+      <TacticsSection combatant={combatant} />
     </div>
   );
 }

@@ -62,6 +62,11 @@
   color: var(--ui-text);
 }
 
+.subheader {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+
 .body {
   flex: 1;
   min-height: 0;

@@ -6,7 +6,7 @@ import { abilityModifier, inferSpellcastingAbility, type Ability, type Combatant
 import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../stats/DamageAdjustmentGroup";
 import defenseStyles from "../stats/defenses.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
-import { formatBonus } from "@/lib/ui-helpers";
+import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
 import { characterLevel, withClassName, withLevel } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
@@ -79,6 +79,7 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
     <div className={styles.tab}>
       <section className={styles.section}>
         <h3>Profile</h3>
+        <p className={styles.source}>Source: {sourceLabel(definition.source)}</p>
         <label className={styles.field}>
           Name
           <SheetText value={definition.name} onCommit={(name) => updateCreatureDefinition(definition.id, { name })} />
@@ -150,6 +151,8 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
               <InfoTooltip label="About creature type" content={CREATURE_TYPE_HELP} />
             </span>
             <select
+              // Named here: the label also holds the "?" button, which a browser would take as the thing it labels.
+              aria-label="Creature type"
               value={definition.type ?? ""}
               onChange={(e) =>
                 updateCreatureDefinition(definition.id, {

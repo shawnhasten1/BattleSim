@@ -18,6 +18,8 @@ interface FloatingWindowProps {
   storageKey?: string;
   /** Rendered in the title bar between the title and the window controls. */
   headerExtra?: ReactNode;
+  /** Rendered under the title bar, above the scrolling body, so it stays in view (the sheet's vitals and tabs). */
+  subheader?: ReactNode;
   /** Optional drop-zone wiring for the whole window. */
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
   onDragLeave?: (event: DragEvent<HTMLDivElement>) => void;
@@ -41,6 +43,7 @@ export function FloatingWindow({
   width,
   storageKey,
   headerExtra,
+  subheader,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -85,6 +88,7 @@ export function FloatingWindow({
           <X size={13} />
         </button>
       </header>
+      {subheader ? <div className={styles.subheader} hidden={minimized}>{subheader}</div> : null}
       {/* Hidden, not unmounted: minimizing mustn't throw away what's open inside (an ability being edited). */}
       <div className={styles.body} hidden={minimized}>{children}</div>
     </div>

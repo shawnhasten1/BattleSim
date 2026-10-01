@@ -4146,7 +4146,7 @@ function conditionSaveModifier(combatant: CombatantState, ability: keyof Creatur
 }
 
 /** Condition names that (5e) are or imply *incapacitated* — no action, bonus, or reaction. */
-const INCAPACITATING_CONDITIONS: ReadonlySet<ConditionName> = new Set<ConditionName>([
+export const INCAPACITATING_CONDITIONS: ReadonlySet<ConditionName> = new Set<ConditionName>([
   "incapacitated", "stunned", "paralyzed", "unconscious"
 ]);
 
@@ -4972,7 +4972,10 @@ function resolveRiderSaveDc(
   return fallbackDc;
 }
 
-/** Crude, engine-consistent mechanical effect of a bare condition name (mirrors the store's `applyConditionToCombatant`). */
+/**
+ * Crude, engine-consistent mechanical effect of a bare condition name: what a fall, a hold or the sheet's + Condition
+ * (the store's `applyConditionToCombatant`) gives a creature.
+ */
 export function defaultConditionModifiers(name: ConditionName): ConditionInstance["modifiers"] | undefined {
   switch (name) {
     case "poisoned":

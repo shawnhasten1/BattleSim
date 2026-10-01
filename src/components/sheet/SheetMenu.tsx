@@ -1,0 +1,102 @@
+"use client";
+
+import { MoreHorizontal } from "lucide-react";
+import { useState } from "react";
+import type { CombatantState, CreatureDefinition } from "@/engine";
+import { useEncounterStore } from "@/store/encounter-store";
+import { exportCombatant } from "@/lib/actor-sheet/export";
+import type { LibraryStatus } from "@/lib/actor-sheet/scope";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import styles from "./sheet.module.css";
+
+export interface SheetToast {
+  message: string;
+  /** Offered beside the message ("Deleted Goblin 2. Undo"). */
+  undo?: () => void;
+}
+
+const SAVE_LABELS: Record<LibraryStatus, string> = {
+  saved: "Update my library copy",
+  template: "Copy to my library",
+  srd: "Save a copy to my library",
+  scene: "Save to my library"
+};
+
+/**
+ * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself. Every item waits on
+ * `guard`, which asks first when an ability being edited has unsaved changes.
+ */
+export function SheetMenu({ combatant, definition, status, guard, onToast }: {
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  status: LibraryStatus;
+  guard: (action: () => void) => void;
+  onToast: (toast: SheetToast) => void;
+}) {
+  const saveDefinition = useEncounterStore((s) => s.saveDefinition);
+  const copyLibraryDefinition = useEncounterStore((s) => s.copyLibraryDefinition);
+  const duplicateCombatant = useEncounterStore((s) => s.duplicateCombatant);
+  const removeCombatant = useEncounterStore((s) => s.removeCombatant);
+  const selectCombatant = useEncounterStore((s) => s.selectCombatant);
+  const undo = useEncounterStore((s) => s.undo);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  async function save() {
+    const name = definition.name;
+    if (status === "template") {
+      await copyLibraryDefinition(definition.id);
+      onToast({ message: `Copied ${name} to your library.` });
+      return;
+    }
+    await saveDefinition(definition.id);
+    // Saving an SRD monster gives the scene's copy (and its tokens) a fresh id first: look for whichever it has now.
+    const state = useEncounterStore.getState();
+    const id = state.encounter.combatants.find((candidate) => candidate.id === combatant.id)?.definitionId ?? definition.id;
+    const saved = state.definitionsLibrary.some((candidate) => candidate.id === id || candidate.id === definition.id);
+    onToast({ message: saved ? `${status === "saved" ? "Updated" : "Saved"} ${name} in your library.` : `Couldn't save ${name} to your library.` });
+  }
+
+  function duplicate() {
+    duplicateCombatant(combatant.id);
+    const state = useEncounterStore.getState();
+    const copy = state.encounter.combatants.find((candidate) => candidate.id === state.selectedCombatantId);
+    if (copy && copy.id !== combatant.id) onToast({ message: `Added ${copy.displayName}, a copy of ${combatant.displayName}.` });
+  }
+
+  function remove() {
+    removeCombatant(combatant.id);
+    // Only the delete it announces: anything done since would be undone instead.
+    const depth = useEncounterStore.getState().undoStack.length;
+    onToast({
+      message: `Deleted ${combatant.displayName}.`,
+      undo: () => {
+        if (useEncounterStore.getState().undoStack.length !== depth) return;
+        undo();
+        selectCombatant(combatant.id);
+      }
+    });
+  }
+
+  const items: ContextMenuItem[] = [
+    { label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) },
+    { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition)) },
+    { separator: true },
+    { label: "Duplicate token", onSelect: () => guard(duplicate) },
+    { label: "Delete token", danger: true, onSelect: () => guard(remove) }
+  ];
+
+  return (
+    <>
+      <button
+        type="button" className={styles.menuButton} aria-label="More actions" aria-haspopup="menu" aria-expanded={menu !== null}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setMenu(menu ? null : { x: rect.left, y: rect.bottom + 4 });
+        }}
+      >
+        <MoreHorizontal size={14} />
+      </button>
+      {menu ? <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} /> : null}
+    </>
+  );
+}

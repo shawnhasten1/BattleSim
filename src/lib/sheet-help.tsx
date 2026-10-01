@@ -1,28 +1,24 @@
 /**
  * Shared `InfoTooltip` content for concepts that show up in more than one
- * sheet tab (automation support, combatant state). Tooltip content that's
- * local to a single dropdown (tactics profiles, resource stances, actor tags,
- * rider triggers, feature-effect kinds) is built next to that dropdown
- * instead — see TacticsTab.tsx, RiderEditor.tsx, FeatureEffectEditor.tsx.
+ * place on the sheet (automation, combatant state). Tooltip content that's
+ * local to a single dropdown (tactics profiles, resource stances, actor tags)
+ * is built next to that dropdown instead — see token/TacticsSection.tsx.
  */
 
+/** The Abilities list's dots, which the sheet's title bar counts. */
 export const AUTOMATION_HELP = (
   <dl>
     <div>
-      <dt>full</dt>
-      <dd>The AI can pick and use this entirely on its own — attack rolls, damage, saves, and conditions all resolve automatically.</dd>
+      <dt>● Simulated</dt>
+      <dd>The AI uses it as written: attack rolls, damage, saves and conditions resolve on their own.</dd>
     </div>
     <div>
-      <dt>partial</dt>
-      <dd>The engine models part of this, but part needs a DM call to resolve. The AI never chooses it on its own.</dd>
+      <dt>◐ Partly simulated</dt>
+      <dd>The simulator runs only part of it, or the AI never uses it on its own (Reckless Attack, a reaction set to manual). Hover its dot to see which.</dd>
     </div>
     <div>
-      <dt>reference-only</dt>
-      <dd>Visible on the sheet so the DM can play it by hand. The AI and batch runs always skip it.</dd>
-    </div>
-    <div>
-      <dt>unsupported</dt>
-      <dd>Not modeled by the engine yet — a note only. Always skipped by the AI.</dd>
+      <dt>○ Reference only</dt>
+      <dd>On the sheet for you to play by hand: the AI and batch runs never use it. Flavor with no combat effect has a hollow dot too, and isn&apos;t counted.</dd>
     </div>
   </dl>
 );

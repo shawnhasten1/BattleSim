@@ -131,5 +131,5 @@ Now drop the token onto a map and run a fight from the **Combat** panel. Use **S
 ## Next steps
 
 - Add **Danger Sense** (advantage on DEX saves): **Add ability → Start from scratch → Trait or feature**, then in **While active** choose **Add effect → Advantage on its saves** and pick **DEX**.
-- Tweak the **Tactics** tab to make the Zealot charge in more or less aggressively.
+- Tweak the tactics on the sheet's **Token** tab to make the Zealot charge in more or less aggressively.
 - Build a Bear Totem variant: the library has **Rage (Totem Warrior: Bear)**, which resists every damage type except psychic.

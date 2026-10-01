@@ -284,6 +284,7 @@ interface EncounterStore {
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
   /** How many legendary actions a creature takes a round (1-10). One undo step; nothing for a creature without them. */
   setLegendaryPool: (definitionId: string, pool: number) => void;
+  /** Put a condition on a token by hand, with the engine's modifiers for it and despite any immunity. One undo step. */
   applyConditionToCombatant: (combatantId: string, condition: ConditionName) => void;
   /**
    * Toggle one `prepOnly` buff spell "already active" on a combatant, before
@@ -295,6 +296,8 @@ interface EncounterStore {
    */
   togglePrepBuff: (combatantId: string, actionId: string) => void;
   clearConditions: (combatantId: string) => void;
+  /** Take one condition off a token (the vitals strip's ×). One undo step; nothing when it doesn't have it. */
+  removeCondition: (combatantId: string, conditionId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
   addCreatureDefinition: (definition: CreatureDefinition, faction?: "party" | "enemy", position?: Point) => void;
   /**
@@ -2235,19 +2238,25 @@ export const useEncounterStore = create<EncounterStore>()(
         const state = get();
         const engine = createEngineState(state.encounter);
         engine.log = [...state.log];
+        // The engine's own modifiers for the name: prone from the sheet is prone from a fall.
         applyCondition(engine, combatantId, {
           id: `${condition}-${crypto.randomUUID()}`,
           name: condition,
           startedRound: engine.snapshot.round,
-          modifiers: condition === "poisoned"
-            ? { attackRoll: -2 }
-            : condition === "restrained"
-              ? { attackRoll: -2, movementMultiplier: 999 }
-              : condition === "prone"
-                ? { movementMultiplier: 2 }
-                : undefined
+          modifiers: defaultConditionModifiers(condition)
         }, { force: true }); // the DM's word beats a creature's immunity
         commitEncounter(engine.snapshot, { log: engine.log });
+      },
+      removeCondition: (combatantId, conditionId) => {
+        const encounter = get().encounter;
+        const combatant = encounter.combatants.find((candidate) => candidate.id === combatantId);
+        if (!combatant?.conditions?.some((condition) => condition.id === conditionId)) return;
+        commitEncounter({
+          ...encounter,
+          combatants: encounter.combatants.map((candidate) => candidate.id === combatantId
+            ? { ...candidate, conditions: (candidate.conditions ?? []).filter((condition) => condition.id !== conditionId) }
+            : candidate)
+        });
       },
       togglePrepBuff: (combatantId, actionId) => {
         const state = get();

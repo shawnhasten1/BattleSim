@@ -9,6 +9,9 @@ interface InfoTooltipProps {
   /** Accessible name for the trigger, e.g. "About tactics profiles". */
   label: string;
   content: ReactNode;
+  /** A trigger of the caller's own (a condition chip's name) in place of the "?" icon, styled by `className`. */
+  children?: ReactNode;
+  className?: string;
 }
 
 /**
@@ -19,7 +22,7 @@ interface InfoTooltipProps {
  * past its edges. Content is caller-supplied, so this is the one reusable
  * primitive for "hover to explain" anywhere in the UI.
  */
-export function InfoTooltip({ label, content }: InfoTooltipProps) {
+export function InfoTooltip({ label, content, children, className }: InfoTooltipProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -74,7 +77,7 @@ export function InfoTooltip({ label, content }: InfoTooltipProps) {
       <button
         ref={triggerRef}
         type="button"
-        className={styles.trigger}
+        className={className ?? styles.trigger}
         aria-label={label}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
@@ -82,7 +85,7 @@ export function InfoTooltip({ label, content }: InfoTooltipProps) {
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((value) => !value)}
       >
-        <HelpCircle size={13} />
+        {children ?? <HelpCircle size={13} />}
       </button>
       {open && typeof document !== "undefined"
         ? createPortal(

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ActorTag, CombatantState, CreatureDefinition } from "@/engine";
+import type { ActorTag, CombatantState } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
@@ -46,7 +46,8 @@ const TAGS_HELP = (
   </dl>
 );
 
-export function TacticsTab({ combatant }: { combatant: CombatantState; definition: CreatureDefinition }) {
+/** How this token fights and how others treat it: the Token tab's Tactics sections (the old Tactics tab, plan D1). */
+export function TacticsSection({ combatant }: { combatant: CombatantState }) {
   const updateTactics = useEncounterStore((s) => s.updateTactics);
   const updateResourceStance = useEncounterStore((s) => s.updateResourceStance);
   const updateTags = useEncounterStore((s) => s.updateTags);
@@ -58,7 +59,7 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
   };
 
   return (
-    <div className={styles.tab}>
+    <>
       <section className={styles.section}>
         <h3>AI tactics</h3>
         <div className={styles.grid}>
@@ -67,7 +68,9 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
               Profile
               <InfoTooltip label="About tactics profiles" content={TACTICS_PROFILE_HELP} />
             </span>
+            {/* Named here: the label also holds the "?" button, which a browser would take as the thing it labels. */}
             <select
+              aria-label="Tactics profile"
               value={combatant.tacticsProfile}
               onChange={(e) => updateTactics(combatant.id, e.target.value as typeof combatant.tacticsProfile)}
             >
@@ -82,6 +85,7 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
               <InfoTooltip label="About resource stances" content={RESOURCE_STANCE_HELP} />
             </span>
             <select
+              aria-label="Resource stance"
               value={combatant.resourceStance}
               onChange={(e) => updateResourceStance(combatant.id, e.target.value as typeof combatant.resourceStance)}
             >
@@ -89,10 +93,6 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-          </label>
-          <label className={styles.field}>
-            Faction
-            <input value={combatant.faction} readOnly />
           </label>
         </div>
       </section>
@@ -124,6 +124,6 @@ export function TacticsTab({ combatant }: { combatant: CombatantState; definitio
           <span>Reference-only and unsupported content is skipped by batch runs.</span>
         </p>
       </section>
-    </div>
+    </>
   );
 }

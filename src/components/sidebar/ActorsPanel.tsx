@@ -2,14 +2,15 @@
 
 import { Copy, Download, FolderOpen, FolderPlus, Save, Swords, Trash2, UserPlus, Users } from "lucide-react";
 import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
-import { ENCOUNTER_SCHEMA_VERSION, type CombatantExportPackage, type CreatureDefinition } from "@/engine";
+import type { CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import type { Compendium } from "@/hooks/useCompendium";
 import type { CompendiumDragPayload } from "@/lib/compendium";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
-import { defaultFactionForDefinition, downloadJson, safeFileName } from "@/lib/ui-helpers";
+import { defaultFactionForDefinition } from "@/lib/ui-helpers";
+import { exportCombatant } from "@/lib/actor-sheet/export";
 import { buildFolderTree } from "@/lib/actor-folders";
 import type { SrdMonsterIndexEntry } from "@/data/srd/monsters";
 import { SrdMonsterFolders } from "./SrdMonsterFolders";
@@ -206,15 +207,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
 
   function exportSelected() {
     if (!selectedCombatant || !selectedDefinition) return;
-    const { id, definitionId, initiative, actionEconomy, concentration, ...combatant } = selectedCombatant;
-    const payload: CombatantExportPackage = {
-      kind: "battle-sim-combatant",
-      schemaVersion: ENCOUNTER_SCHEMA_VERSION,
-      exportedAt: new Date().toISOString(),
-      definition: structuredClone(selectedDefinition),
-      combatant
-    };
-    downloadJson(`${safeFileName(selectedCombatant.displayName)}.${selectedCombatant.faction}.json`, payload);
+    exportCombatant(selectedCombatant, selectedDefinition);
   }
 
   function onSheetDragOver(event: DragEvent<HTMLElement>) {

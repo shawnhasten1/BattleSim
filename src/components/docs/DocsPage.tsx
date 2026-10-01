@@ -282,26 +282,36 @@ const SECTIONS: Section[] = [
     content: (
       <>
         <p>
-          Every token on the board — player character or monster — has an actor sheet behind it, split into
-          tabs:
+          Every token on the board — player character or monster — has an actor sheet behind it. Its top shows the
+          token&apos;s vitals on every tab: HP and temp HP to edit, AC, speed and faction, and its conditions. Hover a
+          condition to see what it does, where it came from and what ends it; its <strong>×</strong> takes it off, and{" "}
+          <strong>+ Condition</strong> adds any of the standard ones. A downed token shows its death saves, and a
+          concentrating one what it&apos;s concentrating on. The title bar counts how many of its abilities the simulator
+          runs, and its <strong>⋯</strong> menu saves the creature to your library, exports the token as JSON, duplicates
+          it or deletes it.
+        </p>
+        <p>
+          The tabs are grouped by what they change. <strong>Stats</strong> and <strong>Abilities</strong> change the
+          creature, which every token of it in the scene shares (the caption above them says how many);{" "}
+          <strong>Token</strong> changes this token only.
         </p>
         <ul>
           <li>
-            <strong>Stats</strong> — ability scores, AC, HP, speed, proficiency bonus, saving throws, skills,
-            resources such as spell slots, and the spellcasting ability its spells follow.
+            <strong>Stats</strong> — ability scores, AC, HP, speed, proficiency bonus, saving throws, damage and
+            condition defenses, resources such as spell slots, and the spellcasting ability its spells follow.
           </li>
           <li>
             <strong>Abilities</strong> — the attacks, spells, and features this actor can use in combat.
           </li>
           <li>
-            <strong>Tactics</strong> — the AI behavior profile that decides how this actor plays (who it
-            targets, how aggressively it uses resources).
-          </li>
-          <li>
-            <strong>Token</strong> — the on-map instance data: position and token image, kept separate from
-            the reusable sheet so the same actor definition can be dropped onto multiple maps.
+            <strong>Token</strong> — this token: its name, faction, position, altitude and image, and its tactics:
+            the AI behavior profile that decides how it plays (who it targets, how aggressively it uses resources).
           </li>
         </ul>
+        <p>
+          A box changes the sheet as you type, and each box you edit is one undo step. A new max HP brings tokens
+          at full HP along with it; wounded ones keep their HP.
+        </p>
         <p>
           The Abilities tab lists what the actor has in statblock order: <strong>Traits</strong>, <strong>Actions</strong>,{" "}
           <strong>Bonus actions</strong>, <strong>Reactions</strong>, <strong>Spellcasting</strong>, <strong>Legendary
