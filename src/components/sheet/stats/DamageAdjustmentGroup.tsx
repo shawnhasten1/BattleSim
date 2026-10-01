@@ -1,9 +1,9 @@
 "use client";
 
 import type { DamageAdjustment, DamageType } from "@/engine";
-import styles from "./builders.module.css";
+import styles from "./defenses.module.css";
 
-export const DAMAGE_TYPES: DamageType[] = [
+const DAMAGE_TYPES: DamageType[] = [
   "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic",
   "piercing", "poison", "psychic", "radiant", "slashing", "thunder"
 ];
@@ -57,17 +57,17 @@ const TYPE_LABELS: Array<[DamageAdjustment["type"], string]> = [
   ["resistance", "Resistance"], ["immunity", "Immunity"], ["vulnerability", "Vulnerability"], ["absorb", "Absorbs (heals instead)"]
 ];
 
-/** One group of damage types sharing an adjustment. Used by the feature effect editor and the Stats tab. */
+/** One group of damage types sharing an adjustment, on the Stats tab. */
 export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGroup; onChange: (next: AdjustmentGroup) => void }) {
   const selected = new Set(group.damageTypes);
   const materials = new Set(group.exceptMaterials ?? []);
   return (
     <>
-      <div className={styles.riderRow}>
+      <div className={styles.row}>
         <select aria-label="Adjustment" value={group.type} onChange={(e) => onChange({ ...group, type: e.target.value as DamageAdjustment["type"] })}>
           {TYPE_LABELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-        <label className={styles.fieldInlineLabel}>
+        <label className={styles.inlineLabel}>
           <input
             type="checkbox"
             checked={Boolean(group.nonMagicalOnly)}
@@ -76,7 +76,7 @@ export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGr
           non-magical only
         </label>
         {group.nonMagicalOnly ? MATERIALS.map((material) => (
-          <label key={material} className={styles.fieldInlineLabel}>
+          <label key={material} className={styles.inlineLabel}>
             <input
               type="checkbox"
               checked={materials.has(material)}

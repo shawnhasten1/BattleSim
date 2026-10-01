@@ -18,7 +18,7 @@ export interface RowHandlers {
 /**
  * The creature's abilities in statblock order (plan §3.1): Traits, Actions, Bonus actions, Reactions, Spellcasting,
  * Legendary actions, Lair actions, On death. A row opens its editor; its ⋯ menu duplicates, moves or deletes it.
- * `under` renders what belongs beneath a row (a builder form, a summon editor, a delete prompt).
+ * `under` renders what belongs beneath a row (its delete prompt).
  */
 export function AbilitiesList({ groups, handlers, flashId, under }: {
   groups: ListGroup[];
@@ -60,14 +60,12 @@ export function refRowId(ref: ListRow["ref"]): string {
 }
 
 function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandlers; flash: boolean; under?: (row: ListRow) => ReactNode }) {
-  const opens = row.opens !== "none";
   return (
     <div data-row-id={rowId(row)}>
       <div className={`${styles.row} ${flash ? styles.rowFlash : ""}`}>
         <span className={styles.dot} data-automation={row.automation} role="img" aria-label={row.automationNote} title={row.automationNote} />
         <button
-          type="button" className={styles.rowOpen} aria-label={`Edit ${row.name}`} disabled={!opens}
-          title={opens ? undefined : "It can't be opened."}
+          type="button" className={styles.rowOpen} aria-label={`Edit ${row.name}`}
           onClick={() => handlers.onOpen(row)}
         >
           <span className={styles.rowTitle}>

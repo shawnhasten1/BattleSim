@@ -3,8 +3,8 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { abilityModifier, inferSpellcastingAbility, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
-import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../builders/DamageAdjustmentGroup";
-import builderStyles from "../builders/builders.module.css";
+import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../stats/DamageAdjustmentGroup";
+import defenseStyles from "../stats/defenses.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
 import { formatBonus } from "@/lib/ui-helpers";
 import { resourceIdsForEditor } from "@/lib/sheet";
@@ -241,13 +241,13 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           Defenses
           <InfoTooltip label="About defenses" content={DEFENSES_HELP} />
         </h3>
-        <div className={builderStyles.riderList}>
+        <div className={defenseStyles.list}>
           {groupAdjustments(definition.damageAdjustments ?? []).map((group, index, groups) => (
-            <div key={index} className={builderStyles.riderCard}>
-              <div className={builderStyles.riderHead}>
+            <div key={index} className={defenseStyles.card}>
+              <div className={defenseStyles.head}>
                 <span>Damage</span>
                 <button
-                  type="button" className={builderStyles.riderRemove} aria-label="Remove damage defense"
+                  type="button" className={defenseStyles.remove} aria-label="Remove damage defense"
                   onClick={() => updateCreatureDefinition(definition.id, { damageAdjustments: flattenGroups(groups.filter((_, i) => i !== index)) })}
                 >
                   ×
@@ -260,7 +260,7 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             </div>
           ))}
           <button
-            type="button" className={builderStyles.riderAdd}
+            type="button" className={defenseStyles.add}
             onClick={() => updateCreatureDefinition(definition.id, {
               damageAdjustments: [...(definition.damageAdjustments ?? []), { type: "resistance", damageType: "fire" }]
             })}
@@ -269,13 +269,13 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
           </button>
         </div>
         <div className={styles.field}>Immune to being</div>
-        <div className={builderStyles.chips}>
+        <div className={defenseStyles.chips}>
           {CONDITION_IMMUNITIES.map((condition) => {
             const on = definition.conditionImmunities?.includes(condition) ?? false;
             return (
               <button
                 key={condition} type="button" aria-pressed={on}
-                className={on ? builderStyles.chipOn : undefined}
+                className={on ? defenseStyles.chipOn : undefined}
                 onClick={() => {
                   const current = definition.conditionImmunities ?? [];
                   const next = on ? current.filter((entry) => entry !== condition) : [...current, condition];

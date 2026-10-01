@@ -20,7 +20,7 @@ import {
 } from "@/engine";
 import { MANUAL_REACTION_NOTES, poolName, statblockFor } from "@/lib/statblock";
 import { firesOnActivate } from "./effects";
-import { activationOf, effectPools } from "./features";
+import { activationOf, effectPools, legacyBonusEffects } from "./features";
 import { OFFENSIVE_KINDS } from "./legendary";
 import { featurePoolsToSeed } from "./records";
 import { withAbility, withNewAbilityAt, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "./refs";
@@ -56,7 +56,8 @@ export type WarningId =
   | "lair-never-taken"
   | "summon-empty"
   | "transform-empty"
-  | "transform-not-automatic";
+  | "transform-not-automatic"
+  | "legacy-bonuses";
 
 export interface AbilityWarning {
   id: WarningId;
@@ -377,6 +378,13 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
       warnings.push({ id: "activation-does-nothing", message: "Switching it on does nothing yet: add what it does in While active.", section: "while-active" });
     }
     if (activation) warnings.push(...activationWarnings(activation));
+    if (legacyBonusEffects(feature.modifiers).length) {
+      warnings.push({
+        id: "legacy-bonuses",
+        message: "It lists bonuses the simulator doesn't apply (from an older save): make them effects in While active.",
+        section: "while-active"
+      });
+    }
     if (!activation && (feature.effects ?? []).some(firesOnActivate)) {
       warnings.push({
         id: "needs-activation",

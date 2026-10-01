@@ -22,8 +22,8 @@ function setUp() {
   }));
   useEncounterStore.setState({ encounter, log: [] });
   const goblin = encounter.combatants.find((combatant) => combatant.faction === "enemy")!;
-  const id = store().addLairAction(goblin.definitionId, eruption);
-  return { goblin, id };
+  const ref = store().insertAbilityRecord(goblin.definitionId, "lairActions", eruption);
+  return { goblin, id: ref && "id" in ref ? ref.id : "" };
 }
 
 describe("lair actions in the store", () => {
@@ -32,7 +32,7 @@ describe("lair actions in the store", () => {
     const definition = () => store().encounter.definitions.find((candidate) => candidate.id === goblin.definitionId)!;
     expect(definition().lairActions).toHaveLength(1);
     expect(definition().lairActions![0]).toMatchObject({ id, name: "Magma Eruption", actionType: "action" });
-    store().updateLairAction(goblin.definitionId, id, { name: "Tremor" });
+    store().replaceAbilityRecord(goblin.definitionId, { list: "lairActions", id }, { ...definition().lairActions![0]!, name: "Tremor" });
     expect(definition().lairActions![0]!.name).toBe("Tremor");
     store().removeDefinitionItem(goblin.definitionId, "lairAction", id);
     expect(definition().lairActions).toEqual([]);

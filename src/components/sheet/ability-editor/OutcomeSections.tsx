@@ -13,7 +13,7 @@ import type {
   HealingComponent
 } from "@/engine";
 import { diceBinding } from "@/lib/ability-editor/bindings";
-import { componentAverage, modifierShorts, roundsText } from "@/lib/statblock";
+import { componentAverage, roundsText } from "@/lib/statblock";
 import { Check, Field, More, NumberField } from "./controls";
 import { DAMAGE_TYPES, DamageLines } from "./DamageLines";
 import { FeatureEffectCards } from "./FeatureEffectCards";
@@ -101,10 +101,30 @@ function withModifier<K extends keyof Modifiers>(condition: FeatureEffectConditi
   return Object.keys(modifiers).length ? { ...next, modifiers } : next;
 }
 
+/** What a buff's fields edit. Its other modifiers (a speed change, actions it can't take, an immunity) are cards. */
+const FIELD_MODIFIERS = new Set<keyof Modifiers>(["armorClass", "attackRoll", "incomingAttackRoll", "savingThrows"]);
+
+/** A buff's modifiers: what its fields edit (resistances among them), and the rest, shown as cards. */
+function splitModifiers(modifiers: Modifiers): { fields: Modifiers; rest: Modifiers | undefined } {
+  const fields: Modifiers = {};
+  const rest: Modifiers = {};
+  for (const [key, value] of Object.entries(modifiers) as Array<[keyof Modifiers, never]>) {
+    if (value === undefined || key === "damageAdjustments") continue;
+    (FIELD_MODIFIERS.has(key) ? fields : rest)[key] = value;
+  }
+  const adjustments = modifiers.damageAdjustments ?? [];
+  const resistances = adjustments.filter((adjustment) => adjustment.type === "resistance");
+  const others = adjustments.filter((adjustment) => adjustment.type !== "resistance");
+  if (resistances.length) fields.damageAdjustments = resistances;
+  if (others.length) rest.damageAdjustments = others;
+  return { fields, rest: Object.keys(rest).length ? rest : undefined };
+}
+
 /**
  * What a buff grants (Bless, Shield of Faith, Aid): bonuses to AC, attacks and saves, a penalty to attacks against it,
  * temporary hit points, and for how long. Resistances and a condition it gives are behind More; anything else it grants
- * (advantage, extra damage on hits) is an effect card.
+ * (advantage, extra damage on hits) is an effect card, and so is a modifier the fields don't edit (a speed change, an
+ * immunity).
  */
 export function BuffOutcome({ action, onChange, definition, newPools }: {
   action: BuffAction;
@@ -139,15 +159,18 @@ export function BuffOutcome({ action, onChange, definition, newPools }: {
     set("damageAdjustments", list.length ? list : undefined);
   }
 
-  // What these fields don't edit, listed so it's never hidden.
-  const others = [
-    ...modifierShorts({ movementMultiplier: modifiers.movementMultiplier }),
-    ...(modifiers.deniesActions ? ["can't take actions"] : []),
-    ...(modifiers.deniesBonusActions ? ["can't take bonus actions"] : []),
-    ...(modifiers.deniesReactions ? ["can't take reactions"] : []),
-    ...(modifiers.forcesRandomAction ? ["acts at random"] : []),
-    ...otherAdjustments.map((adjustment) => `${adjustment.type} to ${adjustment.damageType}`)
-  ];
+  // What the fields don't edit, as cards beside its effects; what the cards leave goes back with what the fields hold.
+  const leftover = splitModifiers(modifiers).rest;
+  function setLeftover(next: Modifiers | undefined) {
+    const { fields } = splitModifiers(modifiers);
+    const adjustments = [...(fields.damageAdjustments ?? []), ...(next?.damageAdjustments ?? [])];
+    const merged: Modifiers = { ...fields, ...next };
+    delete merged.damageAdjustments;
+    if (adjustments.length) merged.damageAdjustments = adjustments;
+    const nextCondition = { ...condition };
+    delete nextCondition.modifiers;
+    setCondition(Object.keys(merged).length ? { ...nextCondition, modifiers: merged } : nextCondition);
+  }
   const moreSet = (resistances.length ? 1 : 0)
     + (condition.name && condition.name !== "custom" ? 1 : 0);
 
@@ -253,18 +276,15 @@ export function BuffOutcome({ action, onChange, definition, newPools }: {
               const next = { ...condition };
               delete next.effects;
               setCondition(effects.length ? { ...next, effects } : next);
-            }
+            },
+            modifiers: leftover,
+            onModifiers: setLeftover
           }]}
           definition={definition}
           newPools={newPools}
           emptyText="Nothing else."
         />
       </Field>
-      {others.length ? (
-        <p className={styles.hint}>
-          Also: {others.join(", ")}. To change these, open it in the classic editor (link at the bottom).
-        </p>
-      ) : null}
     </>
   );
 }

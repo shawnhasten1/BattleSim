@@ -210,7 +210,7 @@ export const actionLimit: Binding<ActionDefinition, Limit> = {
 
 /**
  * A spell's limit. The simulator spends its action's cost; the spell's own `resourceCost` is kept in step with it, as
- * the SRD library and the builder both write it.
+ * the SRD library writes it.
  */
 export const spellLimit: Binding<SpellDefinition, Limit> = {
   get: (spell) => (spell.action ? actionLimit.get(spell.action) : limitOf({ id: spell.id, resourceCost: spell.resourceCost })),

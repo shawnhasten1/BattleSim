@@ -18,21 +18,6 @@ import { actionTarget, spellLimit } from "./bindings";
 
 type Kind = ActionDefinition["kind"];
 
-/** The kinds of ability the editor edits: every kind but a multiattack, which opens on its Sequence (below). */
-const EDITOR_KINDS = new Set<Kind>([
-  "attack", "save", "area-save", "healing", "buff", "reposition", "activate-feature", "summon", "transform", "utility", "unsupported"
-]);
-
-/** Whether a spell opens in the ability editor: one that casts any kind of ability, or nothing yet. */
-export function spellOpensInEditor(spell: SpellDefinition): boolean {
-  return !spell.action || EDITOR_KINDS.has(spell.action.kind);
-}
-
-/** Whether an action opens in the ability editor: the kinds above, and a multiattack (its Sequence section). */
-export function actionOpensInEditor(action: ActionDefinition): boolean {
-  return EDITOR_KINDS.has(action.kind) || action.kind === "multiattack";
-}
-
 /* ─── action type ────────────────────────────────────────────────────────── */
 
 /** Kinds that can be taken as a reaction: they carry a trigger. */

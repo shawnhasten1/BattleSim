@@ -6,7 +6,6 @@ import {
   activeFactions,
   admitReinforcements,
   spellcastingAbility,
-  findSummonCycle,
   compareInitiative,
   createEngineState,
   applyCondition,
@@ -56,8 +55,6 @@ import {
   type PlacedTemplate,
   type Point,
   type SizeCategory,
-  type SummonActionDefinition,
-  type TransformActionDefinition,
   type SpellDefinition,
   type SimulationOutcome,
   type TerrainZone,
@@ -241,13 +238,6 @@ interface EncounterStore {
    */
   embedDefinitions: (definitions: CreatureDefinition[]) => void;
   /**
-   * Adds a summon or transform action to a definition, embedding the creatures it names first (library creatures
-   * are fetched). A summon that would lead back to itself is refused; a transform's forms each get a copy of the
-   * action so the creature can always change again. Returns the new action's id, or undefined if it was refused
-   * (see `definitionStatus`).
-   */
-  addSpawnAction: (definitionId: string, action: SummonActionDefinition | TransformActionDefinition, replaceId?: string) => Promise<string | undefined>;
-  /**
    * Turns a scene actor that came from the SRD library into the user's own actor: a fresh id (library
    * ids are global, so saving one would collide across users) on the definition and every token using
    * it. Returns the new id, or undefined if there is nothing to adopt.
@@ -345,29 +335,12 @@ interface EncounterStore {
    * and its combatants. One undo step. `undefined` if the srd id is unknown.
    */
   attachSrdFeature: (definitionId: string, srdId: string) => string | undefined;
-  /** Add a fully-formed feature / trait from the guided builder (light-normalized, one undo step). Returns its id. */
-  addFeatureV2: (definitionId: string, feature: FeatureDefinition) => string;
-  /** Merge a partial patch into one feature / trait. One undo step. */
+  /** Merge a partial patch into one feature / trait (an optional rule switched on). One undo step. */
   updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
-  addMultiattack: (definitionId: string, input: { name: string; attacks: Array<{ actionId: string; count: number; targetGroup?: number }> }) => void;
-  /** Add a fully-formed weapon record from the guided builder (normalized, one undo step). Returns its id. */
-  addWeaponV2: (definitionId: string, weapon: WeaponDefinition) => string;
-  /** Add a fully-formed spell record from the guided builder. Returns its id. */
-  addSpellV2: (definitionId: string, spell: SpellDefinition) => string;
-  /** Add a fully-formed action from the guided builder; routed to actions / bonusActions / reactions by `actionType`. Returns its id. */
-  addActionV2: (definitionId: string, action: ActionDefinition) => string;
-  /** Add a fully-formed death effect from the guided builder. Returns its id. */
-  addDeathEffectV2: (definitionId: string, deathEffect: DeathEffectDefinition) => string;
-  /** Merge a partial patch into one weapon and re-normalize it. One undo step. */
-  updateWeapon: (definitionId: string, weaponId: string, patch: Partial<WeaponDefinition>) => void;
-  /** Merge a partial patch into one spell and re-normalize it. One undo step. */
-  updateSpell: (definitionId: string, spellId: string, patch: Partial<SpellDefinition>) => void;
-  /** Merge a partial patch into one action (searched across actions / bonusActions / reactions) and re-normalize it. One undo step. */
-  updateAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
-  /** Merge a partial patch into one death effect and re-normalize it. One undo step. */
-  updateDeathEffect: (definitionId: string, deathEffectId: string, patch: Partial<DeathEffectDefinition>) => void;
-  /** Delete a record from a creature, and what goes with it: its steps in any multiattack, and a multiattack left empty. */
-  /** Delete a record; with a `replacement` (`id:<action>` or `any:<kind>`), routines that used it use that instead. */
+  /**
+   * Delete a record from a creature, and what goes with it: its steps in any multiattack, and a multiattack left empty.
+   * With a `replacement` (`id:<action>` or `any:<kind>`), routines that used it use that instead.
+   */
   removeDefinitionItem: (definitionId: string, itemType: DefinitionItemType, itemId: string, replacement?: string) => void;
   /**
    * Put an edited ability back where `ref` points, whole: normalized for its list, keeping the ids of the record it
@@ -379,9 +352,6 @@ interface EncounterStore {
   replaceAbilityRecord: (definitionId: string, ref: AbilityRef, record: AbilityRecord, extras?: AbilityRecordExtras) => AbilityRef | undefined;
   /** Add a new ability with fresh ids, its pools seeded (a weapon's charges, a feature's pools, `extras.pools`). One undo step. Returns where it went. */
   insertAbilityRecord: (definitionId: string, where: AbilityInsertTarget, record: AbilityRecord, extras?: AbilityRecordExtras) => AbilityRef | undefined;
-  /** Add a lair action to a creature (taken on initiative 20 while a token of it is in its lair). Returns its id. */
-  addLairAction: (definitionId: string, action: ActionDefinition) => string;
-  updateLairAction: (definitionId: string, actionId: string, patch: Partial<ActionDefinition>) => void;
   /** Mark tokens as fighting in (or out of) their lair. */
   setInLair: (combatantIds: string[], inLair: boolean) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
@@ -588,7 +558,7 @@ function rewriteActionResourceId(actions: ActionDefinition[] | undefined, from: 
  * every `onHit` rider and `grantedActions` entry (scoped to `weaponId`, so two
  * copies of the same weapon never collide), namespace its charge pool to
  * `<weaponId>:<id>` and rewrite every reference to it, and compute the
- * resource seed the pool needs. Shared by `attachSrdWeapon` and `addWeaponV2`
+ * resource seed the pool needs. Shared by `attachSrdWeapon` and `withInsertedAbility`
  * so a custom-built weapon's charges work exactly like a library weapon's.
  */
 function prepareWeaponForAttach(weapon: WeaponDefinition, weaponId: string): { weapon: WeaponDefinition; seeded?: Record<string, number> } {
@@ -1831,59 +1801,6 @@ export const useEncounterStore = create<EncounterStore>()(
         const raced = get().encounter.definitions.find((candidate) => candidate.id === monsterId);
         await place(raced ?? definition);
       },
-      addSpawnAction: async (definitionId, action, replaceId) => {
-        const owner = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
-        if (!owner) return undefined;
-        const embedded = await loadDependencies({ ...owner, actions: [action] }, get().encounter.definitions);
-        if (embedded.length > 0) get().embedDefinitions(embedded);
-        if (action.kind === "summon") {
-          // Only a loop this action creates counts: a creature whose own variant already summons its kind (a hezrou
-          // calling another hezrou) is bounded by `maxGeneration` and shouldn't block adding an unrelated summon.
-          const others = get().encounter.definitions;
-          const loop = findSummonCycle([...others, { ...owner, actions: [...owner.actions.filter((existing) => existing.id !== replaceId), action] }], definitionId);
-          if (loop && !findSummonCycle(others, definitionId)) {
-            set({ definitionStatus: `That summon would loop back on itself (${loop.join(" → ")})` });
-            return undefined;
-          }
-        }
-        // Editing keeps the action's id (and so its place in the list); adding mints a new one.
-        let id: string;
-        if (replaceId) {
-          get().updateAction(definitionId, replaceId, action);
-          id = replaceId;
-        } else {
-          id = get().addActionV2(definitionId, action);
-        }
-        if (action.kind === "summon" && action.resourceCost) {
-          // A limited summon spends a pool; seed it on the definition and on tokens already on the map.
-          const { resourceId, amount } = action.resourceCost;
-          const encounter = get().encounter;
-          commitEncounter({
-            ...encounter,
-            definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-              ? { ...candidate, resources: { ...(candidate.resources ?? {}), [resourceId]: Math.max(candidate.resources?.[resourceId] ?? 0, amount) } }
-              : candidate),
-            combatants: encounter.combatants.map((combatant) => combatant.definitionId === definitionId
-              ? { ...combatant, resources: { ...(combatant.resources ?? {}), [resourceId]: Math.max(combatant.resources?.[resourceId] ?? 0, amount) } }
-              : combatant)
-          });
-        }
-        if (action.kind === "transform") {
-          // Each form needs the same action, or a creature turned into a wolf could never turn back.
-          const copy = { ...action, id };
-          const encounter = get().encounter;
-          const formIds = new Set(action.forms.map((form) => form.definitionId));
-          commitEncounter({
-            ...encounter,
-            definitions: encounter.definitions.map((candidate) => {
-              if (!formIds.has(candidate.id)) return candidate;
-              const has = candidate.actions.some((existing) => existing.id === id);
-              return { ...candidate, actions: has ? candidate.actions.map((existing) => (existing.id === id ? copy : existing)) : [...candidate.actions, copy] };
-            })
-          });
-        }
-        return id;
-      },
       embedDefinitions: (definitions) => {
         const encounter = get().encounter;
         const have = new Set(encounter.definitions.map((definition) => definition.id));
@@ -2762,29 +2679,6 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         return featureId;
       },
-      addFeatureV2: (definitionId, input) => {
-        const encounter = get().encounter;
-        const id = `feature-${crypto.randomUUID()}`;
-        const feature = normalizeFeatureRecord(structuredClone(input), id);
-        const seeded = featurePoolsToSeed(feature);
-        const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? {
-              ...candidate,
-              [bucket]: [...(candidate[bucket] ?? []), feature],
-              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
-            }
-            : candidate),
-          combatants: seeded
-            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
-              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
-              : combatant)
-            : encounter.combatants
-        });
-        return id;
-      },
       updateFeature: (definitionId, featureId, patch) => {
         const encounter = get().encounter;
         const patchIn = (list: FeatureDefinition[] | undefined) =>
@@ -2795,120 +2689,6 @@ export const useEncounterStore = create<EncounterStore>()(
           ...encounter,
           definitions: encounter.definitions.map((definition) => definition.id === definitionId
             ? { ...definition, features: patchIn(definition.features), traits: patchIn(definition.traits) }
-            : definition)
-        });
-      },
-      addMultiattack: (definitionId, input) => {
-        const encounter = get().encounter;
-        const attacks = multiattackSteps(input.attacks);
-        if (attacks.length === 0) return;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? {
-              ...definition,
-              actions: [
-                ...definition.actions,
-                {
-                  kind: "multiattack" as const,
-                  id: `multiattack-${crypto.randomUUID()}`,
-                  name: input.name,
-                  actionType: "action" as const,
-                  attacks,
-                  automationSupport: "full" as const
-                }
-              ]
-            }
-            : definition)
-        });
-      },
-
-      addWeaponV2: (definitionId, weaponInput) => {
-        const encounter = get().encounter;
-        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
-        const id = `weapon-${crypto.randomUUID()}`;
-        const normalized = normalizeWeaponDefinition({ ...weaponInput, id }, definition?.abilities);
-        normalized.id = id;
-        normalized.actionId = `weapon-action-${id}`;
-        const { weapon, seeded } = prepareWeaponForAttach(normalized, id);
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? {
-              ...candidate,
-              weapons: [...(candidate.weapons ?? []), weapon],
-              resources: seeded ? { ...(candidate.resources ?? {}), ...seeded } : candidate.resources
-            }
-            : candidate),
-          combatants: seeded
-            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
-              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
-              : combatant)
-            : encounter.combatants
-        });
-        return id;
-      },
-      addSpellV2: (definitionId, spell) => {
-        const encounter = get().encounter;
-        const id = `spell-${crypto.randomUUID()}`;
-        const normalized = normalizeSpellDefinition({ ...spell, id });
-        normalized.id = id;
-        if (normalized.action) {
-          normalized.action = { ...normalized.action, id: `spell-action-${id}` };
-        }
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, spells: [...(candidate.spells ?? []), normalized] }
-            : candidate)
-        });
-        return id;
-      },
-      addActionV2: (definitionId, action) => {
-        const encounter = get().encounter;
-        const id = `action-${crypto.randomUUID()}`;
-        const fallbackType = action.actionType === "bonus" || action.actionType === "reaction" ? action.actionType : "action";
-        const normalized = normalizeActionDefinition({ ...action, id }, fallbackType);
-        normalized.id = id;
-        const bucket: "actions" | "bonusActions" | "reactions" =
-          normalized.actionType === "bonus" ? "bonusActions" : normalized.actionType === "reaction" ? "reactions" : "actions";
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, [bucket]: [...(candidate[bucket] ?? []), normalized] }
-            : candidate)
-        });
-        return id;
-      },
-      addLairAction: (definitionId, action) => {
-        const encounter = get().encounter;
-        const id = `lair-${crypto.randomUUID()}`;
-        // A lair action is resolved as a "free" action on initiative 20; authoring it as an ordinary action keeps the
-        // builder simple, and `lairVariants` in the engine does the rest.
-        const normalized = normalizeActionDefinition({ ...action, id, actionType: "action" } as ActionDefinition, "action");
-        normalized.id = id;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, lairActions: [...(candidate.lairActions ?? []), normalized] }
-            : candidate)
-        });
-        return id;
-      },
-      updateLairAction: (definitionId, actionId, patch) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? {
-              ...definition,
-              lairActions: (definition.lairActions ?? []).map((action) => {
-                if (action.id !== actionId) return action;
-                const merged = normalizeActionDefinition({ ...action, ...patch, id: action.id, actionType: "action" } as ActionDefinition, "action");
-                merged.id = action.id;
-                return merged;
-              })
-            }
             : definition)
         });
       },
@@ -2923,119 +2703,6 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         if (!changed) return;
         commitEncounter({ ...encounter, combatants });
-      },
-      addDeathEffectV2: (definitionId, deathEffect) => {
-        const encounter = get().encounter;
-        const id = `death-effect-${crypto.randomUUID()}`;
-        const normalized = normalizeDeathEffectDefinition({ ...deathEffect, id });
-        normalized.id = id;
-        if (normalized.action) {
-          normalized.action = { ...normalized.action, id: `death-effect-action-${id}` };
-        }
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, deathEffects: [...(candidate.deathEffects ?? []), normalized] }
-            : candidate)
-        });
-        return id;
-      },
-      updateWeapon: (definitionId, weaponId, patch) => {
-        const encounter = get().encounter;
-        let seeded: Record<string, number> | undefined;
-        const definitions = encounter.definitions.map((definition) => {
-          if (definition.id !== definitionId) return definition;
-          const weapons = (definition.weapons ?? []).map((weapon) => {
-            if (weapon.id !== weaponId) return weapon;
-            const merged = normalizeWeaponDefinition({ ...weapon, ...patch, id: weapon.id }, definition.abilities);
-            merged.id = weapon.id;
-            merged.actionId = weapon.actionId ?? `weapon-action-${weapon.id}`;
-            // A pool that just gained a `charges` block (or is being seen for
-            // the first time) needs a starting value — an edit shouldn't reset
-            // an already-seeded pool back to max.
-            if (merged.charges && definition.resources?.[merged.charges.id] === undefined) {
-              seeded = { ...seeded, [merged.charges.id]: merged.charges.max };
-            }
-            return merged;
-          });
-          return {
-            ...definition,
-            weapons,
-            resources: seeded ? { ...(definition.resources ?? {}), ...seeded } : definition.resources
-          };
-        });
-        commitEncounter({
-          ...encounter,
-          definitions,
-          combatants: seeded
-            ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
-              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
-              : combatant)
-            : encounter.combatants
-        });
-      },
-      updateSpell: (definitionId, spellId, patch) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            return {
-              ...definition,
-              spells: (definition.spells ?? []).map((spell) => {
-                if (spell.id !== spellId) return spell;
-                const merged = normalizeSpellDefinition({ ...spell, ...patch, id: spell.id });
-                merged.id = spell.id;
-                if (merged.action) {
-                  merged.action = { ...merged.action, id: spell.action?.id ?? `spell-action-${spell.id}` };
-                }
-                return merged;
-              })
-            };
-          })
-        });
-      },
-      updateAction: (definitionId, actionId, patch) => {
-        const encounter = get().encounter;
-        const patchBucket = (list: ActionDefinition[] | undefined, fallback: "action" | "bonus" | "reaction") =>
-          (list ?? []).map((action) => {
-            if (action.id !== actionId) return action;
-            const merged = normalizeActionDefinition({ ...action, ...patch, id: action.id }, fallback);
-            merged.id = action.id;
-            return merged;
-          });
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? {
-              ...definition,
-              actions: patchBucket(definition.actions, "action"),
-              bonusActions: definition.bonusActions ? patchBucket(definition.bonusActions, "bonus") : definition.bonusActions,
-              reactions: definition.reactions ? patchBucket(definition.reactions, "reaction") : definition.reactions
-            }
-            : definition)
-        });
-      },
-      updateDeathEffect: (definitionId, deathEffectId, patch) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => {
-            if (definition.id !== definitionId) return definition;
-            return {
-              ...definition,
-              deathEffects: (definition.deathEffects ?? []).map((deathEffect) => {
-                if (deathEffect.id !== deathEffectId) return deathEffect;
-                const merged = normalizeDeathEffectDefinition({ ...deathEffect, ...patch, id: deathEffect.id });
-                merged.id = deathEffect.id;
-                if (merged.action) {
-                  merged.action = { ...merged.action, id: deathEffect.action?.id ?? `death-effect-action-${deathEffect.id}` };
-                }
-                return merged;
-              })
-            };
-          })
-        });
       },
       removeDefinitionItem: (definitionId, itemType, itemId, replacement) => {
         const encounter = get().encounter;
@@ -3327,14 +2994,4 @@ function normalizeFeatureRecord(input: FeatureDefinition, id: string, srdSlug?: 
   };
 }
 
-/** A multiattack's steps from the builder: steps with no attack dropped, counts at least 1, the default target group left unset. */
-function multiattackSteps(steps: Array<{ actionId: string; count: number; targetGroup?: number }>) {
-  return steps
-    .filter((step) => step.actionId)
-    .map((step) => ({
-      actionId: step.actionId,
-      count: Math.max(1, Math.floor(step.count) || 1),
-      targetGroup: step.targetGroup && step.targetGroup > 0 ? Math.floor(step.targetGroup) : undefined
-    }));
-}
 

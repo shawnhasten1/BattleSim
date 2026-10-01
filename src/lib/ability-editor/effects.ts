@@ -3,7 +3,7 @@
  * which theme it sits under in the Add menu, what a new one starts as, and which shared settings it takes ("When" from
  * `FeatureEffectConditions`, "Which attacks" from `FeatureEffectScope`). The cards, the Add menu and the tests read it.
  */
-import type { Ability, ConditionInstance, DamageAdjustment, FeatureCondition, FeatureEffect } from "@/engine";
+import type { Ability, ConditionInstance, DamageAdjustment, FeatureCondition, FeatureEffect, NumericFormula } from "@/engine";
 
 export type EffectKind = FeatureEffect["kind"];
 export type EffectTheme = "attacks" | "defense" | "saves" | "survival" | "turn";
@@ -71,7 +71,7 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "armor-class-bonus", bonus: { base: 1 } })
   },
   {
-    kind: "damage-adjustment", label: "Resistance, immunity or vulnerability", hint: "To one or more damage types", theme: "defense", when: "self", scope: false,
+    kind: "damage-adjustment", label: "Resistance, immunity or vulnerability", hint: "To one or more damage types, or absorbing them as healing", theme: "defense", when: "self", scope: false,
     blank: () => ({ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "fire" } })
   },
   {
@@ -385,4 +385,33 @@ export function withModifierCard(
       if (!next) delete out[card.key];
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/* ─── bonus formulas ─────────────────────────────────────────────────────── */
+
+/**
+ * How a bonus is edited: a number (+1 AC), an ability's modifier (Aura of Protection's CHA), or a formula that adds more
+ * (a number and a modifier, a proficiency bonus, a multiplier), which a card reads out and the JSON view changes.
+ */
+export function formulaShape(formula: NumericFormula): "number" | "ability" | "formula" {
+  const plain = !formula.proficiency && (formula.multiplier ?? 1) === 1;
+  if (plain && !formula.ability) return "number";
+  if (plain && !formula.base) return "ability";
+  return "formula";
+}
+
+/** A formula in words: "1 + CHA modifier + proficiency bonus", "half of proficiency bonus, rounded down". */
+export function formulaWords(formula: NumericFormula): string {
+  const ability = formula.ability === "spellcasting" ? "spellcasting modifier" : formula.ability ? `${formula.ability.toUpperCase()} modifier` : undefined;
+  const parts = [
+    ...(formula.base ? [String(formula.base)] : []),
+    ...(ability ? [ability] : []),
+    ...(formula.proficiency ? ["proficiency bonus"] : [])
+  ];
+  const sum = parts.length ? parts.join(" + ") : "0";
+  const multiplier = formula.multiplier ?? 1;
+  if (multiplier === 1) return sum;
+  // The engine multiplies the whole sum, then drops any fraction.
+  const whole = parts.length > 1 ? `(${sum})` : sum;
+  return multiplier === 0.5 ? `half of ${whole}, rounded down` : `${whole} × ${multiplier}`;
 }

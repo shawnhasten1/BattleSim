@@ -333,8 +333,8 @@ export interface DamageComponent {
   dice: string;
   /**
    * Structured mirror of `dice`, kept in sync by `normalizeDamageComponent`:
-   * parsed from `dice` when it is a clean `NdM(+K)` form, or authored directly by
-   * the builder (which then compiles `dice`). Absent for expressions that do not
+   * parsed from `dice` when it is a clean `NdM(+K)` form, or written with it by
+   * the ability editor's dice controls. Absent for expressions that do not
    * fit that form (a flat "6", a mixed "2d6+1d4").
    */
   diceCount?: number;

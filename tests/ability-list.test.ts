@@ -7,7 +7,6 @@ import { actionLimit } from "@/lib/ability-editor/bindings";
 import { abilityList, duplicateOf, featureGroup, poolsStrip, weaponGroup, type ListGroup } from "@/lib/ability-editor/list";
 import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
 import { sectionsFor } from "@/lib/ability-editor/sections";
-import { actionOpensInEditor, spellOpensInEditor } from "@/lib/ability-editor/spells";
 import { blankSpecialAction, FEATURE_TEMPLATES } from "@/lib/ability-editor/templates";
 import { useEncounterStore } from "@/store/encounter-store";
 
@@ -38,12 +37,12 @@ describe("the list, in statblock order", () => {
     expect(actions.map((row) => row.name)).toEqual(["Multiattack", "Bite", "Claw", "Tail", "Frightful Presence", "Fire Breath"]);
     const breath = actions.find((row) => row.name === "Fire Breath")!;
     // The cost is a chip, not repeated in the line.
-    expect(breath).toMatchObject({ cost: "Recharge 5–6", automation: "simulated", opens: "editor", moves: ["bonus", "reactions"], itemType: "action" });
+    expect(breath).toMatchObject({ cost: "Recharge 5–6", automation: "simulated", moves: ["bonus", "reactions"], itemType: "action" });
     expect(breath.line).toBe("60-ft cone · DC 21 DEX · 63 (18d6) fire, half on save");
     expect(groups.find((group) => group.title === "Legendary actions")).toMatchObject({ note: "3 a round" });
     // Legendary actions open in the editor too (Phase 7), and are deleted by their place.
     const detect = rowsOf(groups, "Legendary actions").find((row) => row.name === "Detect")!;
-    expect(detect).toMatchObject({ cost: "1 action", opens: "editor", automation: "reference", itemType: "legendary", moves: [] });
+    expect(detect).toMatchObject({ cost: "1 action", automation: "reference", itemType: "legendary", moves: [] });
   });
 
   it("gives a spellcaster a Spellcasting block: its ability, DC and attack, and spells by level with their slots", async () => {
@@ -139,10 +138,6 @@ describe("Add: recipes, search and copies", () => {
     for (const recipe of RECIPES) {
       const prepared = recipe.prepare(definition);
       const record = prepared.record as { kind?: string; level?: number };
-      if (prepared.list === "spells") expect(spellOpensInEditor(prepared.record as never), recipe.id).toBe(true);
-      // A death effect opens on the action it fires.
-      else if (prepared.list === "deathEffects") expect(actionOpensInEditor((prepared.record as { action: ActionDefinition }).action), recipe.id).toBe(true);
-      else if (prepared.list !== "weapons" && prepared.list !== "features" && prepared.list !== "traits") expect(actionOpensInEditor(prepared.record as ActionDefinition), recipe.id).toBe(true);
       const ids = sectionsFor({ ref: { list: prepared.list, id: "x" } as never, record: prepared.record, definition }).map((section) => section.id);
       for (const focus of prepared.focus ?? []) expect(ids, `${recipe.id} ${focus} (${record.kind ?? prepared.list})`).toContain(focus);
     }

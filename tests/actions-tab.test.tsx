@@ -74,20 +74,16 @@ describe("ActionsTab", () => {
     expect(within(screen.getByRole("region", { name: "Library" })).getByRole("button", { name: /^Dagger ·/ })).toBeTruthy();
   });
 
-  it("keeps the Simple / Advanced toggle in the classic builder forms, persisted", async () => {
-    // A lair action opens in the editor now; the classic form is one link away until Phase 8.
+  it("opens what used to need the classic forms in the ability editor, which has no classic form to fall back on", async () => {
     const encounter = useEncounterStore.getState().encounter;
     useEncounterStore.setState({
       encounter: { ...encounter, definitions: encounter.definitions.map((d) => (d.id === "def-fighter" ? { ...d, lairActions: [{ ...blankLairAction(), id: "lair-1", name: "Eruption" }] } : d)) }
     });
     renderTab();
-    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Edit Eruption" }));
-    await userEvent.click(screen.getByRole("button", { name: "Open it in the classic editor" }));
-    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(localStorage.getItem("actions-builder-mode")).toBe("advanced");
-    await userEvent.click(screen.getByRole("button", { name: "Simple" }));
-    expect(localStorage.getItem("actions-builder-mode")).toBe("simple");
+    expect(screen.getByRole("region", { name: "Edit Eruption" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open it in the classic editor" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
   });
 
   it("edits a weapon in the ability editor in a single undo step", async () => {
@@ -215,7 +211,7 @@ describe("ActionsTab saves only what was edited", () => {
 
 describe("ActionsTab asks before a delete changes a multiattack", () => {
   const routine = (attacks: Array<{ actionId: string; count: number; targetGroup?: number }>) =>
-    useEncounterStore.getState().addMultiattack("def-fighter", { name: "Multiattack", attacks });
+    useEncounterStore.getState().insertAbilityRecord("def-fighter", "actions", { kind: "multiattack", id: "", name: "Multiattack", actionType: "action", attacks, automationSupport: "full" });
   const fighterDefinition = () => useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!;
   const rapierAttackId = () => getExecutableActions(fighterDefinition()).find((a) => a.name === "Rapier" && a.actionType === "action")!.id;
 

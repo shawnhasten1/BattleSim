@@ -4,6 +4,7 @@
  * the moment it activates (an extra action, a resource back) lives on the feature, where the engine reads it.
  */
 import type { Ability, ActionDefinition, CreatureDefinition, DamageAdjustment, FeatureDefinition, FeatureEffect, WeaponDefinition } from "@/engine";
+import { deepEqual } from "@/lib/deep-equal";
 import { firesOnActivate, type ConditionModifiers } from "./effects";
 
 export type Activation = Extract<ActionDefinition, { kind: "activate-feature" }>;
@@ -228,6 +229,37 @@ export function followUpFrom(base: AttackAction, featureName: string, after: "ch
     ...(after === "charge-hit" ? { requiresTargetCondition: "prone" as const } : {}),
     ...(after === "dropped-creature" && moveFeet > 0 ? { grantsMovementFeet: moveFeet } : {})
   };
+}
+
+/* ─── old feature bonuses ────────────────────────────────────────────────── */
+
+const SAVE_ORDER: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+/**
+ * A feature's old `modifiers` (bonuses to AC, attacks and saves the statblock prints, which the simulator never applies)
+ * as the effects that say the same, which it does apply. Six equal save bonuses are one bonus to every save.
+ */
+export function legacyBonusEffects(modifiers: FeatureDefinition["modifiers"]): FeatureEffect[] {
+  if (!modifiers) return [];
+  const saves = SAVE_ORDER.flatMap((ability) => (modifiers.savingThrows?.[ability] ? [{ ability, bonus: modifiers.savingThrows[ability]! }] : []));
+  const everySave = saves.length === 6 && saves.every((save) => deepEqual(save.bonus, saves[0]!.bonus));
+  return [
+    ...(modifiers.armorClass ? [{ kind: "armor-class-bonus" as const, bonus: modifiers.armorClass }] : []),
+    ...(modifiers.attackRoll ? [{ kind: "attack-bonus" as const, condition: "always" as const, bonus: modifiers.attackRoll }] : []),
+    ...(everySave
+      ? [{ kind: "save-bonus" as const, bonus: saves[0]!.bonus }]
+      : saves.map((save) => ({ kind: "save-bonus" as const, ability: save.ability, bonus: save.bonus })))
+  ];
+}
+
+/** The feature with its old `modifiers` made effects, which the simulator applies (always on, as the statblock says). */
+export function withModifiersAsEffects(feature: FeatureDefinition): FeatureDefinition {
+  if (!feature.modifiers) return feature;
+  const effects = [...(feature.effects ?? []), ...legacyBonusEffects(feature.modifiers)];
+  const next = { ...feature };
+  delete next.modifiers;
+  delete next.effects;
+  return effects.length ? { ...next, effects } : next;
 }
 
 /** Pools a record's effects spend outside its actions: Legendary Resistance's uses, Relentless's, a regained resource. */

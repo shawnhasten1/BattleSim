@@ -72,7 +72,7 @@ export function pinGrantedActions(parentId: string, granted: ActionDefinition[] 
   });
 }
 
-/** A feature, lightly normalized the way the builder's features always have been, with its granted actions' ids kept. */
+/** A feature, lightly normalized (its id, its category, its granted actions pointed at it), with their ids kept. */
 function normalizedFeature(input: FeatureDefinition, id: string): FeatureDefinition {
   return {
     ...input,

@@ -28,9 +28,6 @@ export type ListGroupId = "traits" | "actions" | "bonus" | "reactions" | "spellc
 /** ● simulated, ◐ partly, ○ reference only or no combat effect. */
 export type Automation = "simulated" | "partial" | "reference" | "no-effect";
 
-/** Where a row opens: the ability editor (every kind of ability opens there since Phase 7), or nowhere. */
-export type RowOpens = "editor" | "none";
-
 /** Where Move to… can take an action. */
 export type MoveTarget = "actions" | "bonus" | "reactions";
 
@@ -47,12 +44,11 @@ export interface ListRow {
   automation: Automation;
   /** The dot's tooltip: why it's what it is. */
   automationNote: string;
-  opens: RowOpens;
   /** An optional rule: whether it's switched on. */
   enabled?: boolean;
   /** Where Move to… can take it (none for a record that isn't an action). */
   moves: MoveTarget[];
-  /** How the sheet deletes it; absent when the list can't yet (a legendary action). */
+  /** How the sheet deletes it (a legendary action by its place). */
   itemType?: DefinitionItemType;
 }
 
@@ -129,7 +125,7 @@ function actionCost(action: ActionDefinition): string | undefined {
  * (Reckless Attack, a manual reaction, a missing pool), using it does nothing yet, or a routine skips a step.
  */
 const RUNS_AS_WRITTEN = new Set<WarningId>(["free-leveled-spell", "damage-ability-mismatch", "partly-simulated", "reference-only"]);
-/** The lists the editor checks; lair actions and death effects keep the builder until Phase 7. */
+/** The lists whose records the dot checks with the editor's warnings: all of them. */
 const CHECKED_LISTS = new Set<AbilityRef["list"]>([
   "weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions", "legendary", "lairActions", "deathEffects"
 ]);
@@ -183,7 +179,6 @@ function row(definition: CreatureDefinition, ref: AbilityRef, name: string, fiel
       .split(" · ").filter((part) => !fields.chips?.includes(part)).join(" · "),
     chips: [],
     moves: [],
-    opens: "editor",
     ...automationOf(definition, ref),
     ...(ref.list === "legendary" ? { itemType: "legendary" as const } : ref.list !== "granted" ? { itemType: ITEM_TYPES[ref.list] } : {}),
     ...fields
@@ -197,7 +192,6 @@ function weaponRow(definition: CreatureDefinition, weapon: WeaponDefinition): Li
     ...(weapon.powerAttack ? ["power attack"] : [])
   ];
   const cost = weapon.resourceCost ? costText(weapon.resourceCost) : weapon.charges ? `${weapon.charges.max} ${weapon.charges.max === 1 ? "charge" : "charges"}` : undefined;
-  // A spellcasting focus is still built in the builder (Phase 7).
   return row(definition, { list: "weapons", id: weapon.id }, weapon.name, { chips, cost }, weaponGroup(weapon));
 }
 

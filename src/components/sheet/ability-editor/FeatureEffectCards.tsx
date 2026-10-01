@@ -2,6 +2,7 @@
 
 import { Pencil, Plus, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   abilityModifier,
   getExecutableActions,
@@ -27,6 +28,8 @@ import {
   WHEN_CONDITIONS,
   effectCards,
   expandCard,
+  formulaShape,
+  formulaWords,
   modifierCardPart,
   modifierCards,
   whenOf,
@@ -536,27 +539,44 @@ function Damage({ lines, onChange, label, definition, sameAsAttack = true, empty
   );
 }
 
-/** A bonus: a flat number, or an ability's modifier (Aura of Protection's CHA). A modifier card takes a number only. */
-function FormulaField({ value, onChange, label, restricted }: { value: NumericFormula; onChange: (next: NumericFormula) => void; label: string; restricted?: boolean }) {
-  const byAbility = Boolean(value.ability) && !value.base && !value.proficiency;
-  const other = Boolean(value.ability) && !byAbility;
+/**
+ * A bonus: a flat number, or an ability's modifier (Aura of Protection's CHA). A modifier card takes a number only. A
+ * formula that adds more (a number and a modifier, a proficiency bonus) is read out with what it comes to: switching it
+ * to a number or a modifier replaces it, and the JSON view changes its parts.
+ */
+function FormulaField({ value, onChange, label, restricted, definition }: {
+  value: NumericFormula;
+  onChange: (next: NumericFormula) => void;
+  label: string;
+  restricted?: boolean;
+  definition: CreatureDefinition;
+}) {
+  const shape = formulaShape(value);
   if (restricted) {
     return <NumberField label={label} signed value={value.base ?? 0} min={-20} max={20} onChange={(n) => n !== undefined && onChange({ base: n })} />;
   }
+  const total = resolveNumericFormula(value, definition);
   return (
     <span className={styles.inline}>
       <Segmented
         label={`${label} is`}
-        value={other ? undefined : byAbility ? "ability" : "number"}
+        value={shape === "formula" ? undefined : shape}
         options={[{ value: "number", label: "A number" }, { value: "ability", label: "An ability modifier" }]}
         onChange={(mode) => onChange(mode === "ability" ? { ability: value.ability && value.ability !== "spellcasting" ? value.ability : "cha" } : { base: value.base ?? 1 })}
       />
-      {byAbility ? (
-        <select aria-label={`${label} ability`} value={value.ability} onChange={(e) => onChange({ ability: e.target.value as Ability })}>
+      {shape === "ability" ? (
+        <select aria-label={`${label} ability`} value={value.ability} onChange={(e) => onChange({ ability: e.target.value as NumericFormula["ability"] })}>
           {ABILITIES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+          {value.ability === "spellcasting" ? <option value="spellcasting">Spellcasting</option> : null}
         </select>
-      ) : other ? (
-        <span className={styles.hint}>a formula from the classic editor</span>
+      ) : shape === "formula" ? (
+        <span className={styles.inline}>
+          <span>{total < 0 ? total : `+${total}`} <span className={styles.hint}>({formulaWords(value)})</span></span>
+          <InfoTooltip
+            label="About this formula"
+            content={<p>It adds up more than one number or one modifier. Pick a number or an ability modifier to replace it, or change its parts with Edit as JSON (under Notes &amp; AI).</p>}
+          />
+        </span>
       ) : (
         <NumberField label={label} signed value={value.base ?? 0} min={-20} max={20} onChange={(n) => n !== undefined && onChange({ base: n })} />
       )}
@@ -640,19 +660,19 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       );
     case "attack-bonus":
     case "armor-class-bonus":
-      return <FormulaField label={effect.kind === "attack-bonus" ? "Bonus to hit" : "AC bonus"} value={effect.bonus} restricted={restricted} onChange={(bonus) => set({ ...effect, bonus })} />;
+      return <FormulaField label={effect.kind === "attack-bonus" ? "Bonus to hit" : "AC bonus"} value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />;
     case "save-bonus":
       // A condition's save bonus covers several saves at once; an effect's, one or all.
       return abilities ? (
         <span className={styles.inline}>
-          <FormulaField label="Save bonus" value={effect.bonus} restricted onChange={(bonus) => set({ ...effect, bonus })} />
+          <FormulaField label="Save bonus" value={effect.bonus} restricted definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />
           <span>on</span>
           <SaveChips label="Which saves" value={abilities.length === 6 ? [] : abilities} onChange={(list) => onChange({ effect, abilities: list })} />
           <span className={styles.hint}>{abilities.length === 6 ? "(none picked: every save)" : ""}</span>
         </span>
       ) : (
         <span className={styles.inline}>
-          <FormulaField label="Save bonus" value={effect.bonus} onChange={(bonus) => set({ ...effect, bonus })} />
+          <FormulaField label="Save bonus" value={effect.bonus} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />
           <span>on</span>
           <AbilitySelect label="Which saves" value={effect.ability} none="every save" onChange={(ability) => set(opt(effect, "ability", ability))} />
         </span>
@@ -660,7 +680,7 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
     case "save-dc-bonus":
       return (
         <>
-          <FormulaField label="DC bonus" value={effect.bonus} onChange={(bonus) => set({ ...effect, bonus })} />
+          <FormulaField label="DC bonus" value={effect.bonus} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />
           <Check copy="effectSpellsOnly" checked={effect.spellsOnly === true} onChange={(on) => set(opt(effect, "spellsOnly", on ? true : undefined))} />
         </>
       );
@@ -716,7 +736,8 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           <Segmented label="It has" value={effect.adjustment.type}
             options={[
               { value: "resistance", label: "Resistance" }, { value: "immunity", label: "Immunity" }, { value: "vulnerability", label: "Vulnerability" },
-              ...(effect.adjustment.type === "absorb" ? [{ value: "absorb" as const, label: "Absorbs it" }] : [])
+              // Absorbing it heals instead (a clay golem and acid).
+              { value: "absorb", label: "Absorbs it" }
             ]}
             onChange={(type) => onChange({ effect: { ...effect, adjustment: { ...effect.adjustment, type } }, damageTypes, abilities })} />
           <TypeChips label="To" value={types} onChange={(next) => next.length && onChange({ effect: { ...effect, adjustment: { ...effect.adjustment, damageType: next[0]! } }, damageTypes: next, abilities })} />
@@ -848,7 +869,7 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           <PoolPicker definition={definition} weapon={weapon} newPools={newPools} noAmount value={effect.resourceId ? { resourceId: effect.resourceId, amount: 1 } : undefined} onChange={(cost) => set({ ...effect, resourceId: cost.resourceId })} />
           <span className={styles.inline}>
             <span>Regains</span>
-            <FormulaField label="Amount regained" value={effect.amount} onChange={(amount) => set({ ...effect, amount })} />
+            <FormulaField label="Amount regained" value={effect.amount} definition={definition} onChange={(amount) => set({ ...effect, amount })} />
           </span>
           <Segmented label="When it regains" value={effect.timing}
             options={[...(activated || effect.timing === "on-activate" ? [{ value: "on-activate" as const, label: "When it's switched on" }] : []), { value: "turn-start", label: "Start of its turn" }, { value: "turn-end", label: "End of its turn" }]}

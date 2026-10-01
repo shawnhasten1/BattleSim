@@ -13,7 +13,6 @@ import {
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { convertAction, type ConvertibleKind, type ParkedRecords } from "@/lib/ability-editor/conversions";
 import { withGrantedAt, type Activation } from "@/lib/ability-editor/features";
 import { checkRecordJson } from "@/lib/ability-editor/json";
@@ -205,12 +204,10 @@ function SupportBadge({ entry }: { entry: StatblockEntry }) {
 
 type Granting = { grantedActions?: ActionDefinition[] };
 
-export function AbilityEditor({ definition, target, onClose, onOpenClassic, pools: sharedPools }: {
+export function AbilityEditor({ definition, target, onClose, pools: sharedPools }: {
   definition: CreatureDefinition;
   target: AbilityEditorTarget;
   onClose: (result: AbilityEditorResult) => void;
-  /** Hands the ability to the old builder, for what this editor doesn't cover yet. */
-  onOpenClassic?: () => void;
   /** A nested editor's pools are its parent's: a pool made for a granted ability is saved with the parent. */
   pools?: NewPools;
 }) {
@@ -225,7 +222,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
   const [ownPools, setOwnPools] = useState<Record<string, number>>(() => (target.mode === "new" ? { ...(target.pools ?? {}) } : {}));
   const [error, setError] = useState<string | null>(null);
   // "Save your changes?": what Discard does, and what follows a successful save (saving itself closes the editor).
-  const [leaving, setLeaving] = useState<{ message: string; discard: () => void; afterSave?: () => void; saveLabel?: string; discardLabel?: string } | null>(null);
+  const [leaving, setLeaving] = useState<{ message: string; discard: () => void; saveLabel?: string; discardLabel?: string } | null>(null);
   // Earlier versions of the action, one per kind it has been this session, and what the last switch did.
   const [parked, setParked] = useState<ParkedRecords>({});
   const [note, setNote] = useState<string | undefined>(undefined);
@@ -593,7 +590,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
           message={leaving.message}
           saveLabel={leaving.saveLabel}
           discardLabel={leaving.discardLabel}
-          onSave={() => { if (save()) leaving.afterSave?.(); }}
+          onSave={() => { save(); }}
           onDiscard={() => leaving.discard()}
           onKeep={() => setLeaving(null)}
         />
@@ -678,20 +675,6 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
         </EditorSection>
       ))}
 
-      {onOpenClassic && target.mode === "edit" ? (
-        <p className={styles.classic}>
-          Need something this editor doesn&apos;t cover yet?{" "}
-          <button
-            type="button" className={styles.linkBtn}
-            onClick={() => (dirty
-              ? setLeaving({ message: "Open it in the classic editor? Save your changes here first, or they're discarded.", discard: onOpenClassic, afterSave: onOpenClassic, saveLabel: "Save and open", discardLabel: "Discard and open" })
-              : onOpenClassic())}
-          >
-            Open it in the classic editor
-          </button>
-          <InfoTooltip label="About the classic editor" content={<p>The older, all-in-one form. It will go once this editor covers every kind of ability.</p>} />
-        </p>
-      ) : null}
     </div>
   );
 }

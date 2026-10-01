@@ -1,6 +1,6 @@
 /**
- * Every label and hint in the ability editor, in one place so the wording stays consistent and reviewable (the same
- * rule the old builder's `field-copy.ts` follows).
+ * Every label and hint in the ability editor, in one place so the wording stays consistent and reviewable: every
+ * control has a real label, worded here.
  */
 export const COPY = {
   name: { label: "Name" },

@@ -1,16 +1,61 @@
 // @vitest-environment happy-dom
-import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
-import type { DamageAdjustment, FeatureEffect } from "@/engine";
-import { FeatureEffectEditor } from "@/components/sheet/builders/FeatureEffectEditor";
-import { flattenGroups, groupAdjustments } from "@/components/sheet/builders/DamageAdjustmentGroup";
-import { weaponDraftFromDefinition, weaponFromDraft } from "@/components/sheet/builders/schemas";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ActionDefinition, CreatureDefinition, DamageAdjustment, FeatureDefinition, FeatureEffect } from "@/engine";
+import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
+import { flattenGroups, groupAdjustments } from "@/components/sheet/stats/DamageAdjustmentGroup";
+import { useEncounterStore } from "@/store/encounter-store";
+import { startFromScratch } from "./helpers/abilities-tab";
 
-afterEach(() => {
-  document.body.innerHTML = "";
+/**
+ * The editors for what protects a creature, and what it does to what it grabs: the Stats tab's damage adjustment
+ * groups; the ability editor's cards for resistances, saves and staying alive; its grapple and swallow cards; and a
+ * weapon's material.
+ */
+
+const pristine = useEncounterStore.getState();
+beforeEach(() => {
+  useEncounterStore.setState(pristine, true);
+  try { localStorage.clear(); } catch { /* private mode */ }
 });
+afterEach(() => { document.body.innerHTML = ""; });
+
+const store = () => useEncounterStore.getState();
+const fighter = () => store().encounter.definitions.find((d) => d.id === "def-fighter")! as CreatureDefinition;
+const trait = () => (fighter().traits ?? []).find((candidate) => candidate.name === "Defenses")!;
+
+function LiveTab() {
+  const encounter = useEncounterStore((s) => s.encounter);
+  return <ActionsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />;
+}
+
+const section = (id: string) => document.querySelector<HTMLElement>(`[data-section="${id}"]`)!;
+async function openSection(id: string) {
+  const head = section(id).querySelector<HTMLButtonElement>(":scope > button")!;
+  if (head.getAttribute("aria-expanded") !== "true") await userEvent.click(head);
+  return within(section(id));
+}
+const radio = (scope: ReturnType<typeof within>, group: string, option: string) =>
+  userEvent.click(within(scope.getByRole("radiogroup", { name: group })).getByRole("radio", { name: option }));
+const chip = (scope: ReturnType<typeof within>, group: string, name: string) =>
+  userEvent.click(within(scope.getByRole("group", { name: group })).getByRole("button", { name }));
+const pressed = (scope: ReturnType<typeof within>, group: string, name: string) =>
+  within(scope.getByRole("group", { name: group })).getByRole("button", { name }).getAttribute("aria-pressed") === "true";
+const done = (card: ReturnType<typeof within>) => userEvent.click(card.getByRole("button", { name: "Done" }));
+const save = () => userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+/** A trait with these effects on the fighter, opened in the editor on the card named `label`. */
+async function openCard(effects: FeatureEffect[], label: string) {
+  if (!(fighter().traits ?? []).some((candidate) => candidate.name === "Defenses")) {
+    store().insertAbilityRecord("def-fighter", "traits", { id: "", name: "Defenses", category: "trait", effects, automationSupport: "full" } as FeatureDefinition);
+    render(<LiveTab />);
+  }
+  await userEvent.click(screen.getByRole("button", { name: "Edit Defenses" }));
+  const effectsSection = await openSection("while-active");
+  await userEvent.click(effectsSection.getByRole("button", { name: `Edit ${label.toLowerCase()} effect` }));
+  return within(screen.getByRole("group", { name: `${label} effect` }));
+}
 
 describe("damage adjustment groups", () => {
   const adjustments: DamageAdjustment[] = [
@@ -33,120 +78,142 @@ describe("damage adjustment groups", () => {
   });
 });
 
-function Harness({ initial }: { initial: FeatureEffect[] }) {
-  const [effects, setEffects] = useState(initial);
-  return (
-    <>
-      <FeatureEffectEditor value={effects} onChange={setEffects} />
-      <output data-testid="effects">{JSON.stringify(effects)}</output>
-    </>
-  );
-}
-const current = (): FeatureEffect[] => JSON.parse(screen.getByTestId("effects").textContent!);
-
-describe("feature effect editor", () => {
-  it("keeps a material exception through an edit (it used to be dropped)", async () => {
-    render(<Harness initial={[{ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "slashing", nonMagicalOnly: true, exceptMaterials: ["adamantine"] } }]} />);
-    expect((screen.getByLabelText("not adamantine") as HTMLInputElement).checked).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "piercing" }));
-    const effects = current();
-    expect(effects).toHaveLength(2);
-    expect(effects.every((effect) => effect.kind === "damage-adjustment" && effect.adjustment.exceptMaterials?.[0] === "adamantine")).toBe(true);
+describe("the effect cards for resistances, saves and staying alive", { timeout: 20000 }, () => {
+  it("keeps a material exception on every type when another joins the card", async () => {
+    const card = await openCard([{
+      kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "slashing", nonMagicalOnly: true, exceptMaterials: ["adamantine"] }
+    }], "Resistance");
+    await userEvent.click(card.getByRole("button", { name: /More options/ }));
+    expect(pressed(card, "Except from weapons that are", "adamantine")).toBe(true);
+    await chip(card, "To", "piercing");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual((["slashing", "piercing"] as const).map((damageType) => ({
+      kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType, nonMagicalOnly: true, exceptMaterials: ["adamantine"] }
+    })));
   });
 
-  it("offers absorb as an adjustment", async () => {
-    render(<Harness initial={[{ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "fire" } }]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Adjustment"), "absorb");
-    expect(current()[0]).toMatchObject({ adjustment: { type: "absorb", damageType: "fire" } });
+  it("absorbs a damage type as well as resisting it", async () => {
+    const card = await openCard([{ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "acid" } }], "Resistance");
+    await radio(card, "It has", "Absorbs it");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "damage-adjustment", condition: "always", adjustment: { type: "absorb", damageType: "acid" } }]);
   });
 
-  it("scopes save advantage to magic and to a condition", async () => {
-    render(<Harness initial={[{ kind: "save-advantage" }]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Save source"), "magical");
-    await userEvent.click(screen.getByRole("button", { name: "charmed" }));
-    await userEvent.click(screen.getByRole("button", { name: "WIS" }));
-    expect(current()[0]).toEqual({ kind: "save-advantage", abilities: ["wis"], against: { source: "magical", conditions: ["charmed"] } });
-    // Clearing every scope returns to an unscoped effect.
-    await userEvent.selectOptions(screen.getByLabelText("Save source"), "any");
-    await userEvent.click(screen.getByRole("button", { name: "charmed" }));
-    await userEvent.click(screen.getByRole("button", { name: "WIS" }));
-    expect(current()[0]).toEqual({ kind: "save-advantage" });
+  it("scopes advantage on saves to magic, a condition and a save, and back to every save", async () => {
+    let card = await openCard([{ kind: "save-advantage" }], "Advantage on its saves");
+    await radio(card, "Against", "Spells and magic");
+    await userEvent.click(card.getByRole("button", { name: /More options/ }));
+    await chip(card, "Only against being", "charmed");
+    await chip(card, "Which saves", "WIS");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "save-advantage", ability: "wis", against: { source: "magical", conditions: ["charmed"] } }]);
+
+    card = await openCard([], "Advantage on its saves");
+    await radio(card, "Against", "Anything");
+    await userEvent.click(card.getByRole("button", { name: /More options/ }));
+    await chip(card, "Only against being", "charmed");
+    await chip(card, "Which saves", "WIS");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "save-advantage" }]);
   });
 
-  it("reads back a generated multi-ability, magic-scoped effect (Gnome Cunning)", () => {
-    render(<Harness initial={[{ kind: "save-advantage", abilities: ["int", "wis", "cha"], against: { source: "magical" } }]} />);
-    expect((screen.getByLabelText("Save source") as HTMLSelectElement).value).toBe("magical");
-    expect(screen.getByRole("button", { name: "INT" }).className).not.toBe("");
-  });
-});
-
-describe("weapon material", () => {
-  const weapon = { id: "w", name: "Dagger", attackType: "melee" as const, ability: "str" as const, range: 5, reach: 5, damage: [{ dice: "1d4", damageType: "piercing" as const }], material: "silvered" as const };
-
-  it("round-trips through the builder draft", () => {
-    const draft = weaponDraftFromDefinition(weapon);
-    expect(draft.material).toBe("silvered");
-    expect(weaponFromDraft(draft).material).toBe("silvered");
-    expect(weaponFromDraft({ ...draft, material: "none" }).material).toBeUndefined();
-  });
-});
-
-describe("limited-use effect editors", () => {
-  it("edits regeneration", async () => {
-    render(<Harness initial={[{ kind: "hp-regen", amount: 10 }]} />);
-    await userEvent.click(screen.getByLabelText(/even at 0 HP/));
-    await userEvent.click(screen.getByRole("button", { name: "acid" }));
-    await userEvent.click(screen.getByRole("button", { name: "fire" }));
-    expect(current()[0]).toEqual({ kind: "hp-regen", amount: 10, worksAtZero: true, suppressedByDamageTypes: ["acid", "fire"] });
+  it("reads back Gnome Cunning: INT, WIS and CHA saves against magic, with nothing to save", async () => {
+    const card = await openCard([{ kind: "save-advantage", abilities: ["int", "wis", "cha"], against: { source: "magical" } }], "Advantage on its saves");
+    expect(["STR", "DEX", "CON", "INT", "WIS", "CHA"].filter((ability) => pressed(card, "Which saves", ability))).toEqual(["INT", "WIS", "CHA"]);
+    expect(within(card.getByRole("radiogroup", { name: "Against" })).getByRole("radio", { name: "Spells and magic" }).getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("edits Undead Fortitude and Relentless shapes", async () => {
-    render(<Harness initial={[{ kind: "survive-lethal", save: { ability: "con", dcBase: 5 } }]} />);
-    await userEvent.click(screen.getByLabelText(/not against radiant/));
-    await userEvent.click(screen.getByLabelText(/not against a critical/));
-    expect(current()[0]).toEqual({ kind: "survive-lethal", save: { ability: "con", dcBase: 5 }, excludedDamageTypes: ["radiant"], excludeCritical: true });
-    await userEvent.click(screen.getByLabelText(/needs a saving throw/));
-    await userEvent.type(screen.getByLabelText("Largest hit covered"), "7");
-    expect(current()[0]).toMatchObject({ maxDamage: 7 });
-    expect((current()[0] as { save?: unknown }).save).toBeUndefined();
+  it("regenerates even at 0 hit points, stopped by acid", async () => {
+    const card = await openCard([{ kind: "hp-regen", amount: 10 }], "Regenerates");
+    await userEvent.click(card.getByRole("checkbox", { name: "Even at 0 hit points" }));
+    await chip(card, "Stopped by", "acid");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "hp-regen", amount: 10, worksAtZero: true, suppressedByDamageTypes: ["acid"] }]);
   });
 
-  it("edits Legendary Resistance", async () => {
-    render(<Harness initial={[{ kind: "auto-succeed-save", resourceId: "legendary-resistance" }]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Save source"), "magical");
-    expect(current()[0]).toEqual({ kind: "auto-succeed-save", resourceId: "legendary-resistance", against: { source: "magical" } });
+  it("is Undead Fortitude with a save, or Relentless Endurance without one", async () => {
+    const card = await openCard([{ kind: "survive-lethal", save: { ability: "con", dcBase: 5 } }], "Drops to 1 HP instead of 0");
+    await chip(card, "Never against", "radiant");
+    await userEvent.click(card.getByRole("checkbox", { name: "Not against a critical hit" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Needs a saving throw" }));
+    await userEvent.click(card.getByRole("button", { name: /More options/ }));
+    await userEvent.type(card.getByLabelText("Most damage it survives"), "7");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "survive-lethal", excludedDamageTypes: ["radiant"], excludeCritical: true, maxDamage: 7 }]);
+  });
+
+  it("is Legendary Resistance against spells and magic", async () => {
+    const card = await openCard([{ kind: "auto-succeed-save", resourceId: "legendary-resistance" }], "Turns a failed save into a success");
+    await radio(card, "On saves against", "Spells and magic");
+    await done(card);
+    await save();
+    expect(trait().effects).toEqual([{ kind: "auto-succeed-save", resourceId: "legendary-resistance", against: { source: "magical" } }]);
   });
 });
 
-describe("grapple rider editor", () => {
-  it("edits a hold rider", async () => {
-    const { RiderEditor } = await import("@/components/sheet/builders/RiderEditor");
-    const seen: unknown[] = [];
-    const Wrapper = () => {
-      const [riders, setRiders] = useState<import("@/engine").ActionRider[]>([{ kind: "hold", when: "on-hit", escapeDc: 13 }]);
-      seen[0] = riders;
-      return <RiderEditor value={riders} onChange={setRiders} context="weapon" hasActionSave={false} />;
-    };
-    render(<Wrapper />);
-    await userEvent.click(screen.getByLabelText(/also restrained/));
-    await userEvent.selectOptions(screen.getByLabelText("Grapple preset"), "Pincers (two at once)");
-    expect(seen[0]).toMatchObject([{ kind: "hold", escapeDc: 13, limit: 2 }]);
+describe("the grapple and swallow cards", { timeout: 20000 }, () => {
+  async function blankAttackWith(card: RegExp, label: string) {
+    render(<LiveTab />);
+    await startFromScratch("Attack");
+    const effects = await openSection("effects");
+    await userEvent.click(effects.getByRole("button", { name: "Add effect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: card }));
+    return within(screen.getByRole("group", { name: `${label} effect` }));
+  }
+  const added = () => fighter().actions.find((action) => action.name === "New attack") as Extract<ActionDefinition, { kind: "attack" }>;
+
+  it("grapples at an escape DC, restraining, and holds two at once", async () => {
+    const card = await blankAttackWith(/^Grapple/, "Grapple");
+    await userEvent.clear(card.getByLabelText("Escape DC"));
+    await userEvent.type(card.getByLabelText("Escape DC"), "15");
+    await userEvent.click(card.getByRole("checkbox", { name: "Also restrained while grappled" }));
+    await userEvent.click(card.getByRole("button", { name: /More options/ }));
+    await userEvent.clear(card.getByLabelText("Holds at once"));
+    await userEvent.type(card.getByLabelText("Holds at once"), "2");
+    await done(card);
+    await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+    expect(added().riders).toEqual([expect.objectContaining({ kind: "hold", when: "on-hit", escapeDc: 15, restrained: true, limit: 2 })]);
+  });
+
+  it("swallows any creature it hits, and spits it out after 30 damage unless it makes a DC 21 save", async () => {
+    const card = await blankAttackWith(/^Swallow/, "Swallow");
+    await userEvent.click(card.getByRole("checkbox", { name: "Only a creature it's grappling" }));
+    await userEvent.type(card.getByLabelText("Spits it out after damage"), "30");
+    const dc = card.getByLabelText("Spit-out save DC");
+    expect((dc as HTMLInputElement).value).toBe("15");
+    await userEvent.clear(dc);
+    await userEvent.type(dc, "21");
+    await done(card);
+    await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+    const swallow = added().riders?.find((rider) => rider.kind === "swallow");
+    expect(swallow).toMatchObject({ kind: "swallow", regurgitate: { damage: 30, dc: 21 } });
+    expect((swallow as { requiresHeld?: boolean }).requiresHeld).toBeUndefined();
   });
 });
 
-describe("swallow rider editor", () => {
-  it("edits a swallow rider", async () => {
-    const { RiderEditor } = await import("@/components/sheet/builders/RiderEditor");
-    const seen: unknown[] = [];
-    const Wrapper = () => {
-      const [riders, setRiders] = useState<import("@/engine").ActionRider[]>([{ kind: "swallow", when: "on-hit", requiresHeld: true, damage: [{ dice: "6d6", damageType: "acid" }] }]);
-      seen[0] = riders;
-      return <RiderEditor value={riders} onChange={setRiders} context="weapon" hasActionSave={false} />;
-    };
-    render(<Wrapper />);
-    await userEvent.click(screen.getByLabelText(/only a creature it is grappling/));
-    await userEvent.type(screen.getByLabelText("Regurgitate threshold"), "30");
-    expect(seen[0]).toMatchObject([{ kind: "swallow", regurgitate: { damage: 30, dc: 15 } }]);
-    expect((seen[0] as Array<{ requiresHeld?: boolean }>)[0]!.requiresHeld).toBeUndefined();
+describe("a weapon's material", { timeout: 20000 }, () => {
+  it("is silvered or adamantine, and back to ordinary", async () => {
+    render(<LiveTab />);
+    await startFromScratch("Weapon");
+    const damage = await openSection("damage");
+    await userEvent.click(damage.getByRole("button", { name: /More options/ }));
+    await userEvent.selectOptions(damage.getByLabelText("Material"), "silvered");
+    await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
+    const weapon = () => (fighter().weapons ?? []).find((candidate) => candidate.name === "New weapon")!;
+    expect(weapon().material).toBe("silvered");
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit New weapon" }));
+    const again = await openSection("damage");
+    await userEvent.click(again.getByRole("button", { name: /More options/ }));
+    await userEvent.selectOptions(again.getByLabelText("Material"), "");
+    await save();
+    expect(weapon().material).toBeUndefined();
   });
 });

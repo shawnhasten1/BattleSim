@@ -52,12 +52,13 @@ function combatantOf(encounter: EncounterSnapshot, id: string) {
 
 /* ─────────────────── Half-Red-Dragon Veteran — split multiattack ─────────────────── */
 
-describe("Veteran-style split multiattack (store addMultiattack → resolveMultiattackAction)", () => {
+describe("Veteran-style split multiattack (store insertAbilityRecord → resolveMultiattackAction)", () => {
   it("aims two swings at the first target and one at the second", () => {
-    useEncounterStore.getState().addMultiattack("def-fighter", {
-      name: "Veteran Multiattack",
+    useEncounterStore.getState().insertAbilityRecord("def-fighter", "actions", {
+      kind: "multiattack", id: "", name: "Veteran Multiattack", actionType: "action", automationSupport: "full",
+      // The first target is the default group; the third swing goes to a second one.
       attacks: [
-        { actionId: "longsword", count: 2, targetGroup: 0 },
+        { actionId: "longsword", count: 2 },
         { actionId: "longsword", count: 1, targetGroup: 1 }
       ]
     });
@@ -133,7 +134,7 @@ describe("Champion build (action-surge + second-wind + Extra Attack multiattack)
     const store = useEncounterStore.getState();
     store.attachSrdFeature("def-fighter", "srd:feature:action-surge");
     store.attachSrdFeature("def-fighter", "srd:feature:second-wind");
-    store.addMultiattack("def-fighter", { name: "Extra Attack", attacks: [{ actionId: "longsword", count: 2 }] });
+    store.insertAbilityRecord("def-fighter", "actions", { kind: "multiattack", id: "", name: "Extra Attack", actionType: "action", attacks: [{ actionId: "longsword", count: 2 }], automationSupport: "full" });
 
     const d = def();
     expect(d.resources?.["action-surge"]).toBe(1);

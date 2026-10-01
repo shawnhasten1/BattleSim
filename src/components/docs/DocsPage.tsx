@@ -349,7 +349,9 @@ const SECTIONS: Section[] = [
           For power users, <strong>Notes &amp; AI</strong> has <strong>Edit as JSON</strong>: the ability as JSON. Edit it and{" "}
           <strong>Check</strong>: it must parse (an error says the line and column), its parts must fit the simulator&apos;s
           schemas, and it&apos;s tidied the way a save would. You see what changes, line by line; <strong>Apply</strong> puts it
-          in the editor, and Save commits it as usual. Ids are kept, since other abilities point at them.
+          in the editor, and Save commits it as usual. Ids are kept, since other abilities point at them. It&apos;s also where
+          the rare part with no control of its own is changed, such as a bonus that adds a number, an ability modifier and
+          proficiency: the editor reads it out and says so.
         </p>
         <p>
           You can build an actor by hand on the Abilities tab, or drop in a
@@ -455,7 +457,8 @@ const SECTIONS: Section[] = [
             plus the ability they add), or what a buff grants (AC, attack rolls, saving throws, attacks against it,
             temporary hit points; resistances and a condition such as invisible under More options) and how long
             it lasts. Anything else it grants (advantage on attacks, extra damage on hits) is a card under{" "}
-            <strong>Other effects</strong>, as in <a href="#features">While active</a>. <strong>Cast before
+            <strong>Other effects</strong>, as in <a href="#features">While active</a>, and so is anything else it
+            changes (its speed, actions it can&apos;t take, an immunity or a vulnerability). <strong>Cast before
             combat</strong> (under Use &amp; cost) keeps a long buff like Mage Armor out of the fight.
           </li>
           <li>
@@ -567,8 +570,11 @@ const SECTIONS: Section[] = [
             switched on groups them by when they apply: <em>When it activates</em> (an extra action, a resource back)
             and <em>While it&apos;s active</em>. <strong>Add effect</strong> lists every kind, grouped by what it
             changes: its attacks (advantage, a bonus to hit, extra damage, damage with a save, a condition on its hits,
-            swarm damage), its defense (attacks against it, AC, resistance, Evasion, hurting what hits it in melee),
-            saving throws, staying alive (regeneration, dropping to 1 HP instead of 0, splitting) and its turn.
+            swarm damage), its defense (attacks against it, AC, a resistance, immunity or vulnerability or absorbing a
+            damage type as healing, Evasion, hurting what hits it in melee), saving throws, staying alive
+            (regeneration, dropping to 1 HP instead of 0, splitting) and its turn. A bonus is a number or an ability
+            modifier (Aura of Protection&apos;s Charisma). A feature from an older save can list bonuses the simulator
+            never applied: <strong>Make them effects</strong> turns them into cards it does.
             A card&apos;s <strong>When</strong> limits it (an ally next to the target, after a charge, while
             it&apos;s bloodied; with several picked, any one of them or all of them) and <strong>Which attacks</strong>{" "}
             limits it to melee, ranged or spell attacks and the ability they use, with specific attacks under More

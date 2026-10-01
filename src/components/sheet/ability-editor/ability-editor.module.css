@@ -870,15 +870,6 @@
   color: var(--ui-accent);
 }
 
-/* ── footer ── */
-
-.classic {
-  margin: 0;
-  padding: 10px 12px 14px;
-  font-size: 11px;
-  color: var(--ui-text-dim);
-}
-
 /* ── dice outside a damage line, cantrip growth ── */
 
 .expression {

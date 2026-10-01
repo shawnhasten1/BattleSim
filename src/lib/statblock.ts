@@ -343,7 +343,11 @@ function riderSentence(rider: ActionRider, definition: CreatureDefinition, fallb
       const save = rider.save ? `, unless it succeeds on a DC ${rider.save.dc} ${ABILITY_NAME[rider.save.ability]} saving throw` : "";
       return `It swallows ${who.object}${rider.requiresHeld ? " it is grappling" : ""}${size}${save}${qualifiers}.`
         + " A swallowed creature is blinded and restrained, and can attack only the creature that swallowed it."
-        + (rider.damage?.length ? ` It takes ${damageText(rider.damage, definition)} at the start of each of the swallower's turns.` : "");
+        + (rider.damage?.length ? ` It takes ${damageText(rider.damage, definition)} at the start of each of the swallower's turns.` : "")
+        // The engine rolls the save as soon as the damage adds up, and puts them down prone in the nearest free space.
+        + (rider.regurgitate
+          ? ` If the swallower takes ${rider.regurgitate.damage} damage or more on a single turn from a creature inside it, it must succeed on a DC ${rider.regurgitate.dc} Constitution saving throw or regurgitate all swallowed creatures, which fall prone in a space near it.`
+          : "");
     }
     case "note":
       return "";

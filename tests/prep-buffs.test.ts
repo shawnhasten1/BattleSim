@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { createEngineState, sampleEncounter, takeAutomatedTurn } from "@/engine";
 import type { BuffActionDefinition, EncounterSnapshot } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
-import { actionFromEffectDraft, effectDraftFromAction } from "@/components/sheet/builders/schemas";
 
 const CASTER = "pc-fighter";
 const CASTER_DEF = "def-fighter";
@@ -105,24 +104,5 @@ describe("prep buffs — AI never casts them in combat", () => {
     expect(state.log.some((e) => e.type === "AiDecision" && e.data?.actionId === "aid-test")).toBe(false);
     expect(actor.resources?.["slot-1"]).toBe(2);
     expect(actor.conditions ?? []).toEqual([]);
-  });
-});
-
-describe("prep buffs — builder round-trip", () => {
-  it("compiles and decompiles the prepOnly toggle", () => {
-    const draft = effectDraftFromAction(aidAction());
-    expect(draft.prepOnly).toBe(true);
-
-    const compiled = actionFromEffectDraft({ ...draft, shape: "buff" }, { spell: true });
-    expect(compiled.kind).toBe("buff");
-    expect((compiled as BuffActionDefinition).prepOnly).toBe(true);
-  });
-
-  it("defaults prepOnly to falsy for a normal buff", () => {
-    const draft = effectDraftFromAction(aidAction({ prepOnly: undefined }));
-    expect(draft.prepOnly).toBeFalsy();
-
-    const compiled = actionFromEffectDraft({ ...draft, shape: "buff" }, { spell: true });
-    expect((compiled as BuffActionDefinition).prepOnly).toBeUndefined();
   });
 });

@@ -458,7 +458,7 @@ export function normalizeWeaponDefinition(input: unknown, abilities?: CreatureDe
   return normalizeWeapons([input], new Map(), abilities)[0] as WeaponDefinition;
 }
 
-/** Normalize a single action record — the builder entry point for innate / monster actions. */
+/** Normalize a single action record: an innate or monster action the ability editor adds or saves. */
 export function normalizeActionDefinition(
   input: unknown,
   fallbackActionType: "action" | "bonus" | "reaction" = "action"
@@ -478,7 +478,7 @@ export function normalizeSpellDefinition(
   return normalized as SpellDefinition;
 }
 
-/** Normalize a single death effect record — the builder entry point. */
+/** Normalize a single death effect record, as the ability editor adds or saves one. */
 export function normalizeDeathEffectDefinition(
   input: unknown,
   featureIdByName: Map<string, string> = new Map()

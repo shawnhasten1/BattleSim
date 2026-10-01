@@ -375,6 +375,16 @@ function CardFields({ rider, kind, onChange, definition, context }: {
                 onChange={(n) => { const next = { ...rider }; delete next.regurgitate; onChange(n ? { ...next, regurgitate: { damage: n, dc: rider.regurgitate?.dc ?? 15 } } : next); }}
               />
               <span>damage in one turn</span>
+              {rider.regurgitate ? (
+                <>
+                  <span>unless it makes a DC</span>
+                  <NumberField
+                    label="Spit-out save DC" value={rider.regurgitate.dc} min={1} max={40}
+                    onChange={(n) => n !== undefined && onChange({ ...rider, regurgitate: { ...rider.regurgitate!, dc: n } })}
+                  />
+                  <span>CON save</span>
+                </>
+              ) : null}
             </span>
           </Field>
         </>

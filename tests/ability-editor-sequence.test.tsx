@@ -55,7 +55,7 @@ async function blankMultiattackEditor() {
 }
 
 async function editRoutine(attacks: Array<{ actionId: string; count: number; targetGroup?: number }>) {
-  store().addMultiattack("def-fighter", { name: "Multiattack", attacks });
+  store().insertAbilityRecord("def-fighter", "actions", { kind: "multiattack", id: "", name: "Multiattack", actionType: "action", attacks, automationSupport: "full" });
   render(<LiveTab />);
   await userEvent.click(screen.getByRole("button", { name: "Edit Multiattack" }));
 }

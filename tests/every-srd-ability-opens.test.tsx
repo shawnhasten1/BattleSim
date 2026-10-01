@@ -9,7 +9,6 @@ import { AbilityEditor } from "@/components/sheet/ability-editor/AbilityEditor";
 import { legendaryMode } from "@/lib/ability-editor/legendary";
 import { abilityList } from "@/lib/ability-editor/list";
 import { abilityRefs, findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
-import { actionOpensInEditor } from "@/lib/ability-editor/spells";
 
 /**
  * Phase 7's done-when: every SRD monster ability opens in the new editor. Every row of every monster's Abilities tab
@@ -50,20 +49,22 @@ const SAMPLES: Array<[string, CreatureDefinition, AbilityRef]> = (() => {
 afterEach(() => cleanup());
 
 describe("every SRD monster ability opens in the new editor", { timeout: 60000 }, () => {
-  it("opens every row of every monster's Abilities tab in the editor", () => {
-    const closed = MONSTERS.flatMap((monster) => abilityList(monster)
+  it("opens every row of every monster's Abilities tab in the editor: each points at its record", () => {
+    const lost = MONSTERS.flatMap((monster) => abilityList(monster)
       .flatMap((group) => [...group.rows, ...(group.levels ?? []).flatMap((level) => level.rows)])
-      .filter((row) => row.opens !== "editor")
+      .filter((row) => !findAbility(monster, row.ref))
       .map((row) => `${monster.name}: ${row.name}`));
-    expect(closed).toEqual([]);
+    expect(lost).toEqual([]);
   });
 
-  it("opens every ability a trait or an item grants, nested", () => {
-    const closed = MONSTERS.flatMap((monster) => [...(monster.features ?? []), ...(monster.traits ?? []), ...(monster.weapons ?? [])]
-      .flatMap((parent) => (parent.grantedActions ?? [])
-        .filter((action) => action.kind !== "activate-feature" && !actionOpensInEditor(action))
-        .map((action) => `${monster.name}: ${parent.name} › ${action.name}`)));
-    expect(closed).toEqual([]);
+  it("opens every ability a trait or an item grants, nested: each is found where its parent holds it", () => {
+    const lost = MONSTERS.flatMap((monster) => (abilityRefs(monster).filter((ref) => ref.list === "granted"))
+      .filter((ref) => !findAbility(monster, ref))
+      .map((ref) => `${monster.name}: ${refKey(ref)}`));
+    const granted = MONSTERS.reduce((sum, monster) => sum + [...(monster.features ?? []), ...(monster.traits ?? []), ...(monster.weapons ?? [])]
+      .reduce((count, parent) => count + (parent.grantedActions?.length ?? 0), 0), 0);
+    expect(lost).toEqual([]);
+    expect(MONSTERS.flatMap((monster) => abilityRefs(monster).filter((ref) => ref.list === "granted"))).toHaveLength(granted);
   });
 
   it("samples every kind of ability there is", () => {

@@ -26,6 +26,7 @@ import {
   grantedAbilities,
   grantedUtilities,
   groupForNew,
+  legacyBonusEffects,
   newGrantedId,
   withActivated,
   withActivation,
@@ -34,11 +35,12 @@ import {
   withGrantedAt,
   withGrantedUtility,
   withGroupEffects,
+  withModifiersAsEffects,
   type Activation,
   type UtilityMode
 } from "@/lib/ability-editor/features";
 import type { SectionId } from "@/lib/ability-editor/sections";
-import { actionOpensInEditor, withActionType } from "@/lib/ability-editor/spells";
+import { withActionType } from "@/lib/ability-editor/spells";
 import { blankAttack, blankBuff, blankHeal, blankSpecialAction } from "@/lib/ability-editor/templates";
 import { actionStatblock, componentAverage, effectShorts } from "@/lib/statblock";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
@@ -235,7 +237,8 @@ function FeatureWhileActive({ feature, onChange, definition, newPools }: {
       ? { modifiers: group.modifiers, onModifiers: (modifiers: typeof group.modifiers) => onChange(withActivationModifiers(feature, modifiers)) }
       : {})
   }));
-  const bonuses = feature.modifiers ? Object.keys(feature.modifiers).length : 0;
+  // Old bonuses the statblock prints and the simulator never applied, until they're made effects.
+  const legacy = legacyBonusEffects(feature.modifiers);
   return (
     <>
       <FeatureEffectCards
@@ -252,7 +255,12 @@ function FeatureWhileActive({ feature, onChange, definition, newPools }: {
         emptyText={activation ? "Switching it on does nothing yet: add what it does." : "It does nothing yet: add what it does."}
       />
       {activationAnswers(activation) ? <p className={styles.hint}>A reaction that {activationAnswers(activation) === "counters" ? "counters a spell" : "protects an ally"} does only that: what lasts while it&apos;s active isn&apos;t used.</p> : null}
-      {bonuses ? <p className={styles.hint}>It also lists bonuses the simulator doesn&apos;t apply (from the classic editor). Open it there to change them.</p> : null}
+      {legacy.length ? (
+        <p className={styles.hint}>
+          It also lists bonuses the simulator doesn&apos;t apply: {effectShorts(legacy, definition).join(", ")}.{" "}
+          <button type="button" className={styles.linkBtn} onClick={() => onChange(withModifiersAsEffects(feature))}>Make them effects</button>
+        </p>
+      ) : null}
     </>
   );
 }
@@ -513,24 +521,16 @@ export function GrantsSection<R extends Granting>({ record, onChange, definition
       <Field copy="grantsAbilities">
         <div className={styles.lines}>
           {granted.length === 0 ? <p className={styles.empty}>Nothing yet.</p> : null}
-          {granted.map(({ action, index }) => {
-            const editable = actionOpensInEditor(action);
-            return (
-              <div key={`${action.id}:${index}`} className={styles.grantRow}>
-                <div className={styles.grantMain}>
-                  <span className={styles.grantName}>{action.name}</span>
-                  <span className={styles.grantMeta}>
-                    {actionStatblock(action, definition).short}
-                    {editable ? "" : " · open it in the classic editor to change it"}
-                  </span>
-                </div>
-                {editable ? (
-                  <button type="button" className={styles.iconBtn} aria-label={`Edit ${action.name}`} onClick={() => onOpenGranted(index, action)}><Pencil size={12} /></button>
-                ) : null}
-                <button type="button" className={`${styles.iconBtn} ${styles.danger}`} aria-label={`Remove ${action.name}`} onClick={() => onChange(withGrantedAt(record, index, undefined))}><X size={13} /></button>
+          {granted.map(({ action, index }) => (
+            <div key={`${action.id}:${index}`} className={styles.grantRow}>
+              <div className={styles.grantMain}>
+                <span className={styles.grantName}>{action.name}</span>
+                <span className={styles.grantMeta}>{actionStatblock(action, definition).short}</span>
               </div>
-            );
-          })}
+              <button type="button" className={styles.iconBtn} aria-label={`Edit ${action.name}`} onClick={() => onOpenGranted(index, action)}><Pencil size={12} /></button>
+              <button type="button" className={`${styles.iconBtn} ${styles.danger}`} aria-label={`Remove ${action.name}`} onClick={() => onChange(withGrantedAt(record, index, undefined))}><X size={13} /></button>
+            </div>
+          ))}
           <button ref={addRef} type="button" className={styles.addLine} aria-expanded={adding} aria-haspopup="menu" onClick={() => setAdding((v) => !v)}>
             <Plus size={12} /> Add an ability it grants
           </button>

@@ -17,7 +17,6 @@ import {
   concentrates,
   printedRange,
   spellIsReference,
-  spellOpensInEditor,
   upcastOf,
   withCastingTime,
   withConcentration,
@@ -136,13 +135,6 @@ describe("a spell and its action, kept in step", () => {
     expect(spellIsReference(withSpellReference(reference, false))).toBe(false);
   });
 
-  it("opens spells that cast what the editor knows, activations (Shield, Counterspell) included", () => {
-    expect(spellOpensInEditor(spell("fireball"))).toBe(true);
-    expect(spellOpensInEditor(spell("misty-step"))).toBe(true);
-    expect(spellOpensInEditor({ ...spell("fireball"), action: undefined })).toBe(true);
-    expect(spellOpensInEditor(spell("shield"))).toBe(true);
-    expect(spellOpensInEditor(spell("counterspell"))).toBe(true);
-  });
 });
 
 describe("areas", () => {
