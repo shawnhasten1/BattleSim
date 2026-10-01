@@ -20,15 +20,17 @@ import {
   compiledWeaponAttack,
   costText,
   damageShort,
+  healingShort,
   effectShorts,
   emanationShort,
   modifierShorts,
-  riderShort,
   roundsText,
+  riderShort,
   triggerText,
   usageLabel
 } from "@/lib/statblock";
-import { actionLimit, actionTarget, attackBonusBinding, saveDcBinding, type Limit } from "./bindings";
+import { actionLimit, actionTarget, attackBonusBinding, saveDcBinding, spellLimit, type Limit } from "./bindings";
+import { upcastOf } from "./spells";
 import type { AbilityRecord, AbilityRef } from "./refs";
 
 export type SectionId =
@@ -36,6 +38,7 @@ export type SectionId =
   | "use"
   | "target"
   | "roll"
+  | "outcome"
   | "damage"
   | "effects"
   | "while-active"
@@ -109,13 +112,13 @@ const SLOT_WORDS: Record<ActionDefinition["actionType"], string> = {
   action: "Action", bonus: "Bonus action", reaction: "Reaction", free: "Free"
 };
 
-function limitText(limit: Limit, action: ActionDefinition): string {
+function limitText(limit: Limit, action: ActionDefinition | undefined): string {
   switch (limit.kind) {
     case "at-will": return "at will";
     case "slot": return costText({ resourceId: `slot-${limit.level}`, amount: 1 });
     case "pool": return costText({ resourceId: limit.resourceId, amount: limit.amount });
     case "uses":
-    case "recharge": return usageLabel("usage" in action ? action.usage : undefined);
+    case "recharge": return usageLabel(action && "usage" in action ? action.usage : undefined);
   }
 }
 
@@ -136,19 +139,26 @@ function useSummary(shape: Shape): string {
     return [slots.map((slot) => SLOT_WORDS[slot]).join(" or "), charges, noOpportunity].filter(Boolean).join(" · ");
   }
   const action = actionOf(shape);
+  if (shape.type === "spell" && !action) return [SLOT_WORDS[shape.spell.castingTime], limitText(spellLimit.get(shape.spell), undefined)].join(" · ");
   if (!action) return "—";
   const reaction = "reaction" in action && action.actionType === "reaction" && action.reaction ? `when ${triggerText(action.reaction.trigger)}` : "";
-  return [SLOT_WORDS[action.actionType], reaction, limitText(actionLimit.get(action), action)].filter(Boolean).join(" · ");
+  const upcasts = shape.type === "spell" && Object.values(upcastOf(shape.spell)?.perSlotAboveBase ?? {}).some(Boolean) ? "upcasts" : "";
+  const beforeCombat = action.kind === "buff" && action.prepOnly ? "cast before combat" : "";
+  return [SLOT_WORDS[action.actionType], reaction, limitText(actionLimit.get(action), action), upcasts, beforeCombat].filter(Boolean).join(" · ");
 }
 
 function targetSummary(action: ActionDefinition): string {
   const target = actionTarget.get(action);
   if (!target) return "—";
   switch (target.kind) {
-    case "self": return "itself";
+    case "self": return action.kind === "reposition" ? `itself, up to ${action.range} ft` : "itself";
     case "creature":
-      if (action.kind === "attack") return action.attackType === "melee" ? `reach ${target.range} ft` : `range ${target.range}${target.longRange ? `/${target.longRange}` : ""} ft`;
-      return `one creature within ${target.range} ft`;
+      if (action.kind === "attack") {
+        const beams = action.attackDelivery === "beams" ? ` · ${action.beamCount ?? 1} ${(action.beamCount ?? 1) === 1 ? "beam" : "beams"}` : "";
+        return `${action.attackType === "melee" ? `reach ${target.range} ft` : `range ${target.range}${target.longRange ? `/${target.longRange}` : ""} ft`}${beams}`;
+      }
+      if (action.kind === "reposition") return `another creature, up to ${target.range} ft`;
+      return target.range <= 5 ? "a creature it touches" : `one creature within ${target.range} ft`;
     case "creatures": return `up to ${target.count} creatures within ${target.range} ft`;
     case "area": {
       const who = action.kind === "area-save" && action.affects === "hostile" ? "enemies in it" : action.kind === "healing" ? "allies in it" : "everyone in it";
@@ -172,7 +182,27 @@ function rollSummary(action: ActionDefinition, definition: CreatureDefinition): 
     const success = onSuccess === "half" ? "half on a success" : onSuccess === "negates" ? "a success negates it" : "nothing on a success";
     return `${ABILITY_WORD[action.saveAbility]} save · DC ${resolveSaveDc(action, definition)} (${how}) · ${success}`;
   }
-  return "—";
+  switch (action.kind) {
+    case "healing": return "no roll · heals";
+    case "buff": return "no roll · grants a benefit";
+    case "reposition": return "no roll · teleports";
+    case "unsupported": return "not simulated";
+    default: return "—";
+  }
+}
+
+/** What an automatic ability does: "9 (1d8 + 4)", "+2 AC · 1 minute". */
+function outcomeSummary(action: ActionDefinition, definition: CreatureDefinition): string {
+  if (action.kind === "healing") return `heals ${healingShort(action.healing, definition)}`;
+  if (action.kind !== "buff") return "—";
+  const condition = action.appliedCondition;
+  const gains = [
+    ...modifierShorts(condition.modifiers),
+    ...(action.tempHp?.length ? [`${healingShort(action.tempHp, definition)} temp HP`] : []),
+    ...effectShorts(condition.effects, definition),
+    ...(condition.name && condition.name !== "custom" ? [condition.name] : [])
+  ];
+  return [gains.join(", ") || "nothing yet", condition.durationRounds ? roundsText(condition.durationRounds) : ""].filter(Boolean).join(" · ");
 }
 
 function damageSummary(action: ActionDefinition, definition: CreatureDefinition): string {
@@ -279,7 +309,8 @@ const KIND_WORDS: Record<ActionDefinition["kind"], string> = {
 
 interface SectionSpec {
   id: SectionId;
-  title: string;
+  /** Its heading; a few depend on the record ("Healing" or "Benefit"). */
+  title: string | ((shape: Shape) => string);
   appliesTo(shape: Shape): boolean;
   summary(shape: Shape, definition: CreatureDefinition): string;
 }
@@ -288,6 +319,9 @@ const withAction = (test: (action: ActionDefinition) => boolean) => (shape: Shap
   const action = actionOf(shape);
   return Boolean(action && test(action));
 };
+
+/** The kinds the Roll section can switch between (and a spell with nothing to cast yet). */
+const ROLL_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-save", "healing", "buff", "reposition", "unsupported"]);
 
 const SECTIONS: SectionSpec[] = [
   { id: "basics", title: "Basics", appliesTo: () => true, summary: (shape) => basicsSummary(shape) },
@@ -299,7 +333,23 @@ const SECTIONS: SectionSpec[] = [
     summary: (shape) => useSummary(shape)
   },
   { id: "target", title: "Target", appliesTo: withAction((action) => actionTarget.get(action) !== undefined), summary: (shape) => targetSummary(actionOf(shape)!) },
-  { id: "roll", title: "Roll", appliesTo: withAction((action) => action.kind === "attack" || action.kind === "save" || action.kind === "area-save"), summary: (shape, definition) => rollSummary(actionOf(shape)!, definition) },
+  {
+    id: "roll",
+    title: "Roll",
+    // A weapon is always an attack; everything else the editor handles can be switched here. A spell with nothing to
+    // cast yet gets one here too.
+    appliesTo: (shape) => shape.type === "spell" && !shape.action ? true : withAction((action) => ROLL_KINDS.has(action.kind))(shape),
+    summary: (shape, definition) => {
+      const action = actionOf(shape);
+      return action ? rollSummary(action, definition) : "not simulated";
+    }
+  },
+  {
+    id: "outcome",
+    title: (shape) => (actionOf(shape)?.kind === "healing" ? "Healing" : "Benefit"),
+    appliesTo: withAction((action) => action.kind === "healing" || action.kind === "buff"),
+    summary: (shape, definition) => outcomeSummary(actionOf(shape)!, definition)
+  },
   { id: "damage", title: "Damage", appliesTo: withAction((action) => DAMAGE_KINDS.has(action.kind)), summary: (shape, definition) => damageSummary(actionOf(shape)!, definition) },
   { id: "effects", title: "Effects", appliesTo: withAction((action) => RIDER_KINDS.has(action.kind)), summary: (shape, definition) => effectsSummary(actionOf(shape)!, definition) },
   {
@@ -320,7 +370,7 @@ export function sectionsFor(context: SectionContext): SectionSummary[] {
   const shape = shapeOf(context);
   return SECTIONS.filter((section) => section.appliesTo(shape)).map((section) => ({
     id: section.id,
-    title: section.title,
+    title: typeof section.title === "string" ? section.title : section.title(shape),
     summary: section.summary(shape, context.definition)
   }));
 }

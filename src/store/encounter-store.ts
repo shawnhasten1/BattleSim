@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   activeFactions,
   admitReinforcements,
+  spellcastingAbility,
   collectDependencies,
   findSummonCycle,
   compareInitiative,
@@ -80,6 +81,7 @@ import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
 import { findAbility, withNewAbility, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
 import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
+import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
@@ -2710,7 +2712,9 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!source || !definition) return undefined;
 
         const spellId = `spell-${crypto.randomUUID()}`;
-        const spell = normalizeSpellDefinition(structuredClone(source));
+        // Cast with this creature's spellcasting ability: a library spell's DC or to-hit follows it (D5), and a heal or
+        // damage that adds a spellcasting modifier adds this creature's.
+        const spell = normalizeSpellDefinition(castWith(structuredClone(source), spellcastingAbility(definition)));
         spell.id = spellId;
         spell.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
         if (spell.action) {
@@ -2724,7 +2728,7 @@ export const useEncounterStore = create<EncounterStore>()(
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((candidate) => candidate.id === definitionId
-            ? { ...candidate, spells: [...(candidate.spells ?? []), spell] }
+            ? withSettledSpellcasting({ ...candidate, spells: [...(candidate.spells ?? []), spell] })
             : candidate)
         });
         return spellId;
@@ -3063,8 +3067,10 @@ export const useEncounterStore = create<EncounterStore>()(
         const replaced = definition ? withReplacedAbility(definition, ref, record) : undefined;
         if (!definition || !replaced) return undefined;
         const pooled = withNewPools(replaced.definition, extras?.pools);
-        if (deepEqual(pooled.definition, definition)) return replaced.ref;
-        commitAbilityChange(encounter, definitionId, pooled.definition, { ...replaced.seeded, ...pooled.added });
+        // A spell that now follows the spellcasting ability pins the creature's (see `withSettledSpellcasting`).
+        const settled = withSettledSpellcasting(pooled.definition);
+        if (deepEqual(settled, definition)) return replaced.ref;
+        commitAbilityChange(encounter, definitionId, settled, { ...replaced.seeded, ...pooled.added });
         return replaced.ref;
       },
       insertAbilityRecord: (definitionId, where, record, extras) => {
@@ -3073,7 +3079,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const inserted = definition ? withInsertedAbility(definition, where, record) : undefined;
         if (!inserted) return undefined;
         const pooled = withNewPools(inserted.definition, extras?.pools);
-        commitAbilityChange(encounter, definitionId, pooled.definition, { ...inserted.seeded, ...pooled.added });
+        commitAbilityChange(encounter, definitionId, withSettledSpellcasting(pooled.definition), { ...inserted.seeded, ...pooled.added });
         return inserted.ref;
       },
       duplicateCombatant: (combatantId) => {

@@ -319,7 +319,11 @@ export interface LegendaryConfig {
 
 export interface NumericFormula {
   base?: number;
-  ability?: Ability;
+  /**
+   * The ability whose modifier it adds. `"spellcasting"` follows the creature's spellcasting ability
+   * (`CreatureDefinition.spellcasting`), so a spell's DC and attack bonus move with it; see `spellcastingAbility`.
+   */
+  ability?: Ability | "spellcasting";
   proficiency?: boolean;
   multiplier?: number;
 }
@@ -1127,7 +1131,7 @@ export interface RepositionActionDefinition {
   actionType: ActionType;
   /** Max feet from the caster to both the mover (in `"single"` mode) and the chosen destination. */
   range: number;
-  /** `"self"` moves the actor. Default `"single"`. */
+  /** `"single"` moves another creature within `range`. `"self"`, or leaving it out, moves the actor (`resolveRepositionAction`). */
   targeting?: { target: "single" | "self" };
   /**
    * Gate the destination behind `RuleProfile.requireLineOfEffect` like every
@@ -1593,6 +1597,12 @@ export interface CreatureDefinition {
     }>;
   };
   abilities: Record<Ability, number>;
+  /**
+   * How it casts spells. A spell whose DC or attack bonus formula names `"spellcasting"` uses `ability`; one that
+   * names an ability of its own overrides it. Absent: the ability its spells name most, else its highest of INT, WIS
+   * and CHA (`spellcastingAbility`).
+   */
+  spellcasting?: { ability: Ability };
   saves?: Partial<Record<Ability, number>>;
   damageAdjustments?: DamageAdjustment[];
   weapons?: WeaponDefinition[];
@@ -2067,6 +2077,9 @@ export const creatureDefinitionSchema = z.object({
     wis: z.number().int(),
     cha: z.number().int()
   }),
+  spellcasting: z.object({
+    ability: z.union([z.literal("str"), z.literal("dex"), z.literal("con"), z.literal("int"), z.literal("wis"), z.literal("cha")])
+  }).optional(),
   actions: z.array(z.any()),
   bonusActions: z.array(z.any()).optional(),
   reactions: z.array(z.any()).optional(),

@@ -4,7 +4,7 @@
  * and what it costs, its damage and effects, and its target where the new kind can take it. The rest of the old record
  * is parked for the session, so switching back brings it back.
  */
-import type { ActionDefinition, ActionRider, RiderGate } from "@/engine";
+import type { Ability, ActionDefinition, ActionRider, RiderGate } from "@/engine";
 import { actionTarget, supportsUsage, targetKinds } from "./bindings";
 
 /** The kinds an action can be switched between. Summons, shapechanges and multiattacks have their own editors. */
@@ -30,24 +30,39 @@ const RIDER_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save", "he
 const CONCENTRATION_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save", "buff", "reposition"]);
 const SAVE_KINDS = new Set<ConvertibleKind>(["save", "area-save"]);
 
+/** How a new kind starts when it's a spell's action: its roll follows the caster's spellcasting ability. */
+export interface ConversionOptions {
+  /** The action is a spell's. */
+  spell?: boolean;
+  /** The ability a spell's healing adds (a heal line names an ability, not the spellcasting one). */
+  spellcasting?: Ability;
+}
+
 /** A new record of `kind` with what it needs to be valid, before anything is carried over. */
-function blank(kind: ConvertibleKind, from: ActionDefinition): ActionDefinition {
+function blank(kind: ConvertibleKind, from: ActionDefinition, options: ConversionOptions): ActionDefinition {
   const base = { id: from.id, name: from.name, actionType: from.actionType, automationSupport: "full" as const };
   const range = "range" in from && typeof from.range === "number" ? from.range : 5;
+  // A spell's DC follows its caster; anything else starts from the ability the old kind used (a claw's STR), else CON.
+  const dcFormula = options.spell
+    ? { base: 8, ability: "spellcasting" as const, proficiency: true }
+    : { base: 8, ability: from.kind === "attack" ? from.ability : "con" as const, proficiency: true };
   switch (kind) {
     case "attack":
-      return { ...base, kind, attackType: "melee", ability: "str", range: 5, reach: 5, damage: [] };
+      return options.spell
+        ? { ...base, kind, attackType: "spell", ability: options.spellcasting ?? "int", attackBonusFormula: { ability: "spellcasting", proficiency: true }, range: Math.max(range, 5), damage: [] }
+        : { ...base, kind, attackType: "melee", ability: "str", range: 5, reach: 5, damage: [] };
     case "save":
-      return { ...base, kind, saveAbility: "dex", range: Math.max(range, 5), damage: [], halfDamageOnSuccess: false, onSuccess: "negates" };
+      return { ...base, kind, saveAbility: "dex", dcFormula, range: Math.max(range, 5), damage: [], halfDamageOnSuccess: false, onSuccess: "negates" };
     case "area-save":
       return {
-        ...base, kind, saveAbility: "dex", range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates",
+        ...base, kind, saveAbility: "dex", dcFormula, range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates",
         area: { type: "circle", size: 20 }, targeting: { origin: "point", range: 60 }, affects: "all"
       };
     case "healing":
-      return { ...base, kind, range: Math.max(range, 5), healing: [{ dice: "1d8" }] };
+      return { ...base, kind, range: Math.max(range, 5), healing: [{ dice: "1d8", diceCount: 1, diceSize: 8, ...(options.spellcasting ? { abilityModifier: options.spellcasting } : {}) }] };
     case "buff":
-      return { ...base, kind, range: Math.max(range, 5), appliedCondition: {} };
+      // Something to start from (Shield of Faith's +2 AC for a minute), so it isn't a buff that does nothing.
+      return { ...base, kind, range: Math.max(range, 5), appliedCondition: { name: "custom", durationRounds: 10, modifiers: { armorClass: 2 } } };
     case "reposition":
       return { ...base, kind, range: 30, targeting: { target: "self" } };
     case "unsupported":
@@ -85,6 +100,8 @@ function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: bo
     delete next[key];
     if (when && source[key] !== undefined) next[key] = source[key];
   };
+  // Its reference text always comes along: an SRD ability that wasn't simulated is built from what it says.
+  copy("description", true);
   copy("reaction", REACTION_KINDS.has(to));
   copy("magical", DAMAGE_KINDS.has(to));
   copy("concentration", CONCENTRATION_KINDS.has(to));
@@ -114,8 +131,10 @@ function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: bo
   }
   if (to !== "unsupported" && from.kind !== "unsupported") next.automationSupport = from.automationSupport;
   const converted = next as unknown as ActionDefinition;
-  // The target comes along when the new kind can take it (one creature stays one creature; an area stays an area).
+  // The target comes along when the new kind can take it (one creature stays one creature; an area stays an area). A new
+  // teleport keeps its own (itself, 30 ft): what an attack reached says nothing about how far it blinks.
   const target = actionTarget.get(from);
+  if (to === "reposition" && !restoring) return converted;
   return target && targetKinds(converted).includes(target.kind) ? actionTarget.set(converted, target) ?? converted : converted;
 }
 
@@ -123,9 +142,14 @@ function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: bo
  * The action converted to `to`, and the parked records with the old one added. Converting back to a kind it has been
  * this session starts from that version, with what the kinds share brought up to date.
  */
-export function convertAction(action: ActionDefinition, to: ConvertibleKind, parked: ParkedRecords = {}): { action: ActionDefinition; parked: ParkedRecords } {
+export function convertAction(
+  action: ActionDefinition,
+  to: ConvertibleKind,
+  parked: ParkedRecords = {},
+  options: ConversionOptions = {}
+): { action: ActionDefinition; parked: ParkedRecords } {
   if (action.kind === to || !isConvertible(action)) return { action, parked };
   const nextParked: ParkedRecords = { ...parked, [action.kind]: action };
-  const start = parked[to] ? structuredClone(parked[to]!) : blank(to, action);
+  const start = parked[to] ? structuredClone(parked[to]!) : blank(to, action, options);
   return { action: carryOver(action, start, Boolean(parked[to])), parked: nextParked };
 }

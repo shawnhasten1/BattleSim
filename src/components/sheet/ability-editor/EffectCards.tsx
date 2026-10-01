@@ -14,8 +14,9 @@ import type {
   SizeCategory,
   WeaponDefinition
 } from "@/engine";
+import { proficiencyFromDefinition } from "@/engine";
 import { CREATURE_TYPES } from "@/lib/creature-types";
-import { componentAverage, effectCardText, riderFallbackDc } from "@/lib/statblock";
+import { componentAverage, effectCardText, riderFallbackDc, type EffectContext } from "@/lib/statblock";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DamageLines } from "./DamageLines";
 import { PoolPicker, type NewPools } from "./LimitPicker";
@@ -41,12 +42,45 @@ const CARD_KINDS: Array<{ kind: CardKind; label: string; hint: string }> = [
 
 const KIND_LABEL: Record<CardKind, string> = Object.fromEntries(CARD_KINDS.map((entry) => [entry.kind, entry.label])) as Record<CardKind, string>;
 
-const GATES: Array<{ value: RiderGate; label: string; group: string }> = [
-  { value: "on-hit", label: "On a hit", group: "On a hit" },
-  { value: "on-crit", label: "On a critical hit", group: "On a critical hit" },
-  { value: "on-miss", label: "On a miss", group: "On a miss" },
-  { value: "always", label: "Hit or miss", group: "Hit or miss" }
-];
+type Gate = { value: RiderGate; label: string };
+
+/** When an effect can happen, by what it follows: an attack's hit or miss, a save's result, or (no roll) always. */
+function gatesFor(context: EffectContext): Gate[] {
+  switch (context.kind) {
+    case "attack":
+      return [
+        { value: "on-hit", label: "On a hit" },
+        { value: "on-crit", label: "On a critical hit" },
+        { value: "on-miss", label: "On a miss" },
+        { value: "always", label: "Hit or miss" }
+      ];
+    case "save":
+      return [
+        { value: "on-save-fail", label: "On a failed save" },
+        { value: "on-save-success", label: "On a successful save" },
+        { value: "always", label: "Either way" }
+      ];
+    case "automatic":
+      return [{ value: "always", label: "When it lands" }];
+  }
+}
+
+/** Where a new effect goes: on a hit, on a failed save, or with the heal. */
+const defaultGate = (context: EffectContext): RiderGate =>
+  context.kind === "attack" ? "on-hit" : context.kind === "save" ? "on-save-fail" : "always";
+
+/** Gate names for gates a context doesn't offer (a converted record keeps them until they're changed). */
+const GATE_WORDS: Record<RiderGate, string> = {
+  "on-hit": "On a hit", "on-crit": "On a critical hit", "on-miss": "On a miss", always: "Always",
+  "on-save-fail": "On a failed save", "on-save-success": "On a successful save"
+};
+
+/** The DC a rider's own save uses when it names none: the engine's 8 + the attack's ability + proficiency, or the save's DC. */
+function fallbackDcOf(context: EffectContext, definition: CreatureDefinition): number {
+  if (context.kind === "save") return context.dc;
+  if (context.kind === "attack") return riderFallbackDc(context, definition);
+  return 8 + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
+}
 
 const CONDITIONS: ConditionName[] = [
   "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "paralyzed", "petrified", "poisoned", "prone",
@@ -67,9 +101,12 @@ function cardKindOf(rider: Rider): CardKind {
   return rider.kind;
 }
 
-function blankRider(kind: CardKind, when: RiderGate, holdDc: number): Rider {
+function blankRider(kind: CardKind, when: RiderGate, holdDc: number, context: EffectContext): Rider {
   switch (kind) {
     case "condition":
+      // After a save, the save already decided it: the condition lasts until the creature shakes it off with that save.
+      if (context.kind === "save") return { kind: "condition", when, condition: "frightened", duration: { kind: "save-ends", saveAt: "turn-end" } };
+      if (context.kind === "automatic") return { kind: "condition", when, condition: "prone", duration: { kind: "until-start-of-next-turn" } };
       return { kind: "condition", when, condition: "prone", save: { ability: "str", onSuccess: "negates" }, duration: { kind: "until-start-of-next-turn" } };
     case "damage":
       return { kind: "damage", when, components: [{ dice: "1d6", damageType: "fire", diceCount: 1, diceSize: 6 }] };
@@ -92,15 +129,21 @@ export interface EffectCardsProps {
   riders: Rider[];
   onChange: (next: Rider[]) => void;
   definition: CreatureDefinition;
-  /** The ability the attack rolls with: a rider save without its own DC uses it. */
-  ability: Ability;
+  /** What the effects follow: an attack (with the ability it rolls), a saving throw (with its DC), or no roll. */
+  context: EffectContext;
   /** On a weapon, its charges are the first pool offered. */
   weapon?: WeaponDefinition;
   newPools: NewPools;
 }
 
+const EMPTY_TEXT: Record<EffectContext["kind"], string> = {
+  attack: "No effects: a hit only deals its damage.",
+  save: "No effects: a failed save only means the damage above.",
+  automatic: "No effects besides what it does."
+};
+
 /** An attack's effects as cards grouped by when they happen, each a sentence until it's opened. */
-export function EffectCards({ riders, onChange, definition, ability, weapon, newPools }: EffectCardsProps) {
+export function EffectCards({ riders, onChange, definition, context, weapon, newPools }: EffectCardsProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -126,19 +169,26 @@ export function EffectCards({ riders, onChange, definition, ability, weapon, new
     setOpenIndex(null);
   };
   function add(kind: CardKind) {
-    onChange([...riders, blankRider(kind, "on-hit", holdDc)]);
+    onChange([...riders, blankRider(kind, defaultGate(context), holdDc, context)]);
     setOpenIndex(riders.length);
     setAdding(false);
   }
 
+  const gates = gatesFor(context);
+  const indexed = riders.map((rider, index) => ({ rider, index }));
+  // Effects on a gate this kind doesn't offer (kept from before a conversion) get a heading of their own, not hidden.
+  const unusual = [...new Set(indexed.flatMap(({ rider }) => (rider.kind !== "note" && !gates.some((gate) => gate.value === rider.when) ? [rider.when] : [])))];
   const groups = [
-    ...GATES.map((gate) => ({ title: gate.group, items: riders.map((rider, index) => ({ rider, index })).filter(({ rider }) => rider.kind !== "note" && rider.when === gate.value) })),
-    { title: "Notes", items: riders.map((rider, index) => ({ rider, index })).filter(({ rider }) => rider.kind === "note") }
+    ...[...gates, ...unusual.map((value) => ({ value, label: GATE_WORDS[value] }))].map((gate) => ({
+      title: gate.label,
+      items: indexed.filter(({ rider }) => rider.kind !== "note" && rider.when === gate.value)
+    })),
+    { title: "Notes", items: indexed.filter(({ rider }) => rider.kind === "note") }
   ].filter((group) => group.items.length > 0);
 
   return (
     <div className={styles.lines}>
-      {riders.length === 0 ? <p className={styles.empty}>No effects: a hit only deals its damage.</p> : null}
+      {riders.length === 0 ? <p className={styles.empty}>{EMPTY_TEXT[context.kind]}</p> : null}
       {groups.map((group) => (
         <div key={group.title} className={styles.effectGroup}>
           <h4 className={styles.effectGroupTitle}>{group.title}</h4>
@@ -152,7 +202,7 @@ export function EffectCards({ riders, onChange, definition, ability, weapon, new
               onChange={(next) => replace(index, next)}
               onRemove={() => remove(index)}
               definition={definition}
-              ability={ability}
+              context={context}
               weapon={weapon}
               newPools={newPools}
             />
@@ -191,7 +241,7 @@ export function EffectCards({ riders, onChange, definition, ability, weapon, new
 }
 
 function EffectCard({
-  rider, open, onOpen, onClose, onChange, onRemove, definition, ability, weapon, newPools
+  rider, open, onOpen, onClose, onChange, onRemove, definition, context, weapon, newPools
 }: {
   rider: Rider;
   open: boolean;
@@ -200,13 +250,13 @@ function EffectCard({
   onChange: (next: Rider) => void;
   onRemove: () => void;
   definition: CreatureDefinition;
-  ability: Ability;
+  context: EffectContext;
   weapon?: WeaponDefinition;
   newPools: NewPools;
 }) {
   const kind = cardKindOf(rider);
   const label = KIND_LABEL[kind];
-  const sentence = effectCardText(rider, definition, { ability });
+  const sentence = effectCardText(rider, definition, context);
   if (!open) {
     return (
       <div className={`${styles.card} ${styles.cardClosed}`}>
@@ -225,11 +275,12 @@ function EffectCard({
         <strong>{label}</strong>
         <button type="button" className={`${styles.iconBtn} ${styles.danger}`} aria-label={`Remove ${label.toLowerCase()} effect`} onClick={onRemove}><X size={13} /></button>
       </div>
-      {rider.kind !== "note" ? <GateField rider={rider} onChange={onChange} /> : null}
-      <CardFields rider={rider} kind={kind} onChange={onChange} definition={definition} ability={ability} />
+      {rider.kind !== "note" ? <GateField rider={rider} onChange={onChange} gates={gatesFor(context)} /> : null}
+      <CardFields rider={rider} kind={kind} onChange={onChange} definition={definition} context={context} />
       {rider.kind !== "note" ? (
-        <CardMore rider={rider} onChange={onChange} definition={definition} weapon={weapon} newPools={newPools} extraSet={holdExtrasSet(rider)}>
+        <CardMore rider={rider} onChange={onChange} definition={definition} weapon={weapon} newPools={newPools} extraSet={holdExtrasSet(rider) + ownRepeatSet(rider, context)}>
           {rider.kind === "hold" ? <HoldExtras rider={rider} onChange={onChange} definition={definition} /> : null}
+          {rider.kind === "condition" && context.kind === "save" ? <OwnRepeatSave rider={rider} onChange={onChange} dc={context.dc} /> : null}
         </CardMore>
       ) : null}
       <p className={styles.hint} aria-live="polite">{sentence}</p>
@@ -238,24 +289,26 @@ function EffectCard({
   );
 }
 
-function GateField({ rider, onChange }: { rider: Triggered; onChange: (next: Rider) => void }) {
+function GateField({ rider, onChange, gates }: { rider: Triggered; onChange: (next: Rider) => void; gates: Gate[] }) {
   const id = useId();
+  // Nothing to choose when there's one gate (a heal's effects all land with it).
+  if (gates.length === 1 && gates[0]!.value === rider.when) return null;
   return (
     <Field copy="effectWhen" id={id}>
       <select id={id} value={rider.when} onChange={(e) => onChange({ ...rider, when: e.target.value as RiderGate })} style={{ alignSelf: "flex-start" }}>
-        {GATES.map((gate) => <option key={gate.value} value={gate.value}>{gate.label}</option>)}
-        {GATES.some((gate) => gate.value === rider.when) ? null : <option value={rider.when}>{rider.when}</option>}
+        {gates.map((gate) => <option key={gate.value} value={gate.value}>{gate.label}</option>)}
+        {gates.some((gate) => gate.value === rider.when) ? null : <option value={rider.when}>{GATE_WORDS[rider.when]}</option>}
       </select>
     </Field>
   );
 }
 
-function CardFields({ rider, kind, onChange, definition, ability }: {
+function CardFields({ rider, kind, onChange, definition, context }: {
   rider: Rider;
   kind: CardKind;
   onChange: (next: Rider) => void;
   definition: CreatureDefinition;
-  ability: Ability;
+  context: EffectContext;
 }) {
   const damageLines = (components: DamageComponent[], set: (next: DamageComponent[]) => void, label: string, empty: string) => (
     <DamageLines
@@ -272,7 +325,7 @@ function CardFields({ rider, kind, onChange, definition, ability }: {
     case "condition":
       return kind === "reactions"
         ? <p className={styles.hint}>The target can&apos;t take reactions until the start of its next turn.</p>
-        : <ConditionFields rider={rider} onChange={onChange} definition={definition} ability={ability} />;
+        : <ConditionFields rider={rider} onChange={onChange} definition={definition} context={context} />;
     case "damage":
       return damageLines(rider.components, (components) => components.length && onChange({ ...rider, components }), "Extra damage", "Add at least one line of damage.");
     case "push":
@@ -302,7 +355,7 @@ function CardFields({ rider, kind, onChange, definition, ability }: {
           <Check
             copy="swallowSave"
             checked={Boolean(rider.save)}
-            onChange={(on) => { const next = { ...rider }; delete next.save; onChange(on ? { ...next, save: { ability: "dex", dc: riderFallbackDc({ ability }, definition) } } : next); }}
+            onChange={(on) => { const next = { ...rider }; delete next.save; onChange(on ? { ...next, save: { ability: "dex", dc: fallbackDcOf(context, definition) } } : next); }}
           />
           {rider.save ? (
             <div className={styles.row}>
@@ -383,16 +436,18 @@ function holdExtrasSet(rider: Rider): number {
   return (rider.maxSize ? 1 : 0) + ((rider.limit ?? 1) > 1 ? 1 : 0) + (rider.recurringDamage?.length ? 1 : 0);
 }
 
-function ConditionFields({ rider, onChange, definition, ability }: {
+function ConditionFields({ rider, onChange, definition, context }: {
   rider: ConditionRider;
   onChange: (next: Rider) => void;
   definition: CreatureDefinition;
-  ability: Ability;
+  context: EffectContext;
 }) {
   const conditionId = useId();
   const name = typeof rider.condition === "string" ? rider.condition : rider.condition.custom;
   const choices = CONDITIONS.includes(name as ConditionName) ? CONDITIONS : [...CONDITIONS, name];
-  const autoDc = riderFallbackDc({ ability }, definition);
+  const autoDc = fallbackDcOf(context, definition);
+  // After a save, the save already decided whether it lands; a rider save of its own would never be rolled.
+  const ownGate = context.kind !== "save";
   return (
     <>
       <Field copy="condition" id={conditionId}>
@@ -414,12 +469,14 @@ function ConditionFields({ rider, onChange, definition, ability }: {
           {choices.map((condition) => <option key={condition} value={condition}>{condition}</option>)}
         </select>
       </Field>
-      <Check
-        copy="saveGate"
-        checked={Boolean(rider.save)}
-        onChange={(on) => { const next = { ...rider }; delete next.save; onChange(on ? { ...next, save: { ability: USUAL_SAVE[name] ?? "con", onSuccess: "negates" } } : next); }}
-      />
-      {rider.save ? (
+      {ownGate ? (
+        <Check
+          copy="saveGate"
+          checked={Boolean(rider.save)}
+          onChange={(on) => { const next = { ...rider }; delete next.save; onChange(on ? { ...next, save: { ability: USUAL_SAVE[name] ?? "con", onSuccess: "negates" } } : next); }}
+        />
+      ) : null}
+      {rider.save && ownGate ? (
         <div className={styles.row}>
           <AbilitySelect label="Save" value={rider.save.ability} onChange={(saveAbility) => onChange({ ...rider, save: { ...rider.save!, ability: saveAbility } })} />
           <Field copy="saveDc">
@@ -539,6 +596,41 @@ function SizeSelect({ value, onChange }: { value: SizeCategory | undefined; onCh
         {SIZES.map((size) => <option key={size} value={size}>{size} or smaller</option>)}
       </select>
     </Field>
+  );
+}
+
+/** Whether a save's condition card names its own repeat save instead of the action's. */
+function ownRepeatSet(rider: Rider, context: EffectContext): number {
+  return rider.kind === "condition" && context.kind === "save" && rider.save ? 1 : 0;
+}
+
+/**
+ * A condition after a save repeats that save (the same ability and DC) unless it names its own: a gaze the target then
+ * shakes off with a different save.
+ */
+function OwnRepeatSave({ rider, onChange, dc }: { rider: ConditionRider; onChange: (next: Rider) => void; dc: number }) {
+  const repeats = rider.duration.kind === "save-ends" || (rider.duration.kind === "rounds" && Boolean(rider.duration.repeatSaveAt));
+  if (!repeats && !rider.save) return null;
+  const name = typeof rider.condition === "string" ? rider.condition : "";
+  return (
+    <>
+      <Check
+        label="Repeats a different save"
+        checked={Boolean(rider.save)}
+        onChange={(on) => { const next = { ...rider }; delete next.save; onChange(on ? { ...next, save: { ability: USUAL_SAVE[name] ?? "con", onSuccess: "negates" } } : next); }}
+      />
+      {rider.save ? (
+        <div className={styles.row}>
+          <AbilitySelect label="Repeat save" value={rider.save.ability} onChange={(saveAbility) => onChange({ ...rider, save: { ...rider.save!, ability: saveAbility } })} />
+          <Field copy="saveDc">
+            <NumberField
+              label="Repeat save DC" value={rider.save.dc} optional min={1} max={40} placeholder={`${dc} (same)`} wide
+              onChange={(n) => { const save = { ...rider.save! }; delete save.dc; onChange({ ...rider, save: n === undefined ? save : { ...save, dc: n } }); }}
+            />
+          </Field>
+        </div>
+      ) : null}
+    </>
   );
 }
 

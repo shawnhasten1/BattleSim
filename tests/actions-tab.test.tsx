@@ -99,22 +99,20 @@ describe("ActionsTab", () => {
     expect((useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.weapons ?? [])[0]?.name).toBe("Rapier");
   });
 
-  it("a preset stamps a builder with the right shape", async () => {
+  it("a spell recipe opens the editor with its shape, and adds a spell that follows the spellcasting ability", async () => {
     renderTab();
     await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     await userEvent.click(screen.getByRole("button", { name: "Preset" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save-or-condition spell" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save or condition" }));
 
-    // the builder is now open with a spell shape of "Saving throw (one target)"
-    const shape = screen.getByLabelText("What it does") as HTMLSelectElement;
-    expect(shape.value).toBe("save");
-    // and an Effects rider list with a condition
-    expect(screen.getByRole("button", { name: "+ Add effect" })).toBeTruthy();
+    // The editor is open on a saving throw with a paralysis effect.
+    expect(screen.getByRole("radio", { name: "Saving throw" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(document.querySelector<HTMLElement>('[data-section="effects"]')!).getByText("On a failed save")).toBeTruthy();
 
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
     const spells = useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")!.spells ?? [];
     expect(spells.length).toBe(1);
-    expect(spells[0]?.action?.kind).toBe("save");
+    expect(spells[0]?.action).toMatchObject({ kind: "save", dcFormula: { ability: "spellcasting" } });
   });
 
   it("shows a weapon's own sections when editing one: no saving throw", async () => {
@@ -145,32 +143,32 @@ describe("ActionsTab", () => {
     }
   });
 
-  it("shows Spirit Guardians' zone as following the caster, and hides drift/reposition for a self-anchored zone", async () => {
+  it("shows Spirit Guardians' area moving with its caster, with no drift or bonus-action move", async () => {
     useEncounterStore.getState().attachSrdSpell("def-fighter", "srd:spell:spirit-guardians");
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Spirit Guardians" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Lingering area/ }));
 
-    expect((screen.getByLabelText("Follows") as HTMLSelectElement).value).toBe("self");
-    expect(screen.queryByLabelText("Drifts away from the caster")).toBeNull();
-    expect(screen.queryByLabelText("Caster can reposition it")).toBeNull();
+    expect(screen.getByRole("radio", { name: "Moves with it" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByLabelText("Drifts (ft)")).toBeNull();
+    expect(screen.queryByLabelText("Moves up to (ft)")).toBeNull();
   });
 
-  it("a fresh area spell's zone hides drift/reposition once set to follow the caster", async () => {
+  it("turns a blank spell into a lingering area, and drops the drift once it follows its caster", async () => {
     renderTab();
-    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     await userEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     await userEvent.click(screen.getByRole("button", { name: "Blank" }));
     await userEvent.click(screen.getByRole("button", { name: "Spell" }));
-    await userEvent.selectOptions(screen.getByLabelText("What it does"), "area");
-    await userEvent.click(screen.getByLabelText("Leaves a persistent zone"));
+    await userEvent.click(screen.getByRole("radio", { name: "Saving throw" }));
+    await userEvent.click(screen.getByRole("radio", { name: "An area" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Leaves a lingering area" }));
 
-    expect(screen.getByLabelText("Follows")).toBeTruthy();
-    expect(screen.getByLabelText("Drifts away from the caster")).toBeTruthy();
+    await userEvent.click(screen.getByRole("radio", { name: "Drifts away" }));
+    expect(screen.getByLabelText("Drifts (ft)")).toBeTruthy();
 
-    await userEvent.selectOptions(screen.getByLabelText("Follows"), "self");
-    expect(screen.queryByLabelText("Drifts away from the caster")).toBeNull();
-    expect(screen.queryByLabelText("Caster can reposition it")).toBeNull();
+    await userEvent.click(screen.getByRole("radio", { name: "Moves with it" }));
+    expect(screen.queryByLabelText("Drifts (ft)")).toBeNull();
+    expect(screen.queryByLabelText("Moves up to (ft)")).toBeNull();
   });
 });
 

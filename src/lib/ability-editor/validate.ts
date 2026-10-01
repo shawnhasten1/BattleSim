@@ -5,6 +5,7 @@
 import {
   getExecutableActions,
   spellSlotLevel,
+  withSpellcastingAttackAbility,
   type ActionDefinition,
   type CreatureDefinition,
   type FeatureDefinition,
@@ -24,7 +25,9 @@ export type WarningId =
   | "manual-reaction"
   | "partly-simulated"
   | "reference-only"
-  | "missing-step";
+  | "missing-step"
+  | "empty-buff"
+  | "dead-success-effects";
 
 export interface AbilityWarning {
   id: WarningId;
@@ -81,7 +84,7 @@ function missingPools(definition: CreatureDefinition, record: AbilityRecord): st
  * with a printed one, the roll's ability is just what a calculation would use, and statblocks have their quirks (a
  * bearded devil hits with STR and adds DEX).
  */
-function mismatchedDamage(record: AbilityRecord): string[] {
+function mismatchedDamage(record: AbilityRecord, definition: CreatureDefinition): string[] {
   const problems: string[] = [];
   const weapon = "attackType" in record && !("kind" in record) ? (record as WeaponDefinition) : undefined;
   if (weapon && weapon.attackType !== "focus") {
@@ -90,13 +93,27 @@ function mismatchedDamage(record: AbilityRecord): string[] {
       if (component.abilityModifier && !allowed.includes(component.abilityModifier)) problems.push(`${component.abilityModifier.toUpperCase()} on a ${weapon.ability === "finesse" ? "finesse" : weapon.ability.toUpperCase()} weapon`);
     }
   }
-  for (const action of actionsIn(record)) {
+  for (const raw of actionsIn(record)) {
+    // A spell attack that follows the spellcasting ability rolls with the one it resolves to.
+    const action = withSpellcastingAttackAbility(raw, definition);
     if (action.kind !== "attack" || action.attackBonus !== undefined) continue;
     for (const component of action.damage) {
       if (component.abilityModifier && component.abilityModifier !== action.ability) problems.push(`${component.abilityModifier.toUpperCase()} on a ${action.ability.toUpperCase()} attack`);
     }
   }
   return [...new Set(problems)];
+}
+
+/** A buff whose condition changes nothing and that grants no temporary hit points. */
+function grantsNothing(action: Extract<ActionDefinition, { kind: "buff" }>): boolean {
+  const condition = action.appliedCondition;
+  const modifiers = Object.entries(condition.modifiers ?? {}).some(([key, value]) => {
+    // A speed ×1 changes nothing; any other number, flag, list or per-save bonus does.
+    if (key === "movementMultiplier") return value !== undefined && value !== 1;
+    return typeof value === "object" && value !== null ? Object.keys(value).length > 0 : Boolean(value);
+  });
+  const named = Boolean(condition.name && condition.name !== "custom");
+  return !modifiers && !named && !condition.effects?.length && !action.tempHp?.length;
 }
 
 /** The creature with the record where it will be saved, so references to it resolve. */
@@ -125,11 +142,22 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
     warnings.push({ id: "missing-pool", message: `Never usable: this creature has no ${missing.join(" or ")}.`, section: "use" });
   }
 
-  for (const problem of mismatchedDamage(record)) {
+  for (const problem of mismatchedDamage(record, definition)) {
     warnings.push({ id: "damage-ability-mismatch", message: `The damage adds ${problem}.`, section: "damage" });
   }
 
   for (const action of actionsIn(record)) {
+    if (action.kind === "buff" && grantsNothing(action)) {
+      warnings.push({ id: "empty-buff", message: "It grants nothing yet, so casting it does nothing.", section: "outcome" });
+    }
+    if ((action.kind === "save" || action.kind === "area-save") && (action.onSuccess ?? (action.halfDamageOnSuccess ? "half" : "none")) === "negates"
+      && action.riders?.some((rider) => rider.kind !== "note" && rider.when === "on-save-success")) {
+      warnings.push({
+        id: "dead-success-effects",
+        message: "Its “on a successful save” effects never happen: a success avoids everything. Choose “No damage” for what a success does to keep them.",
+        section: "roll"
+      });
+    }
     if (action.kind === "area-save" && action.zone && !action.zone.trigger.length && !action.zone.applyOnCast && !action.zone.movementDamage) {
       warnings.push({ id: "inert-lingering-area", message: "The lingering area has no triggers, so it never affects anyone.", section: "lingering" });
     }

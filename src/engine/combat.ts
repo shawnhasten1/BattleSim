@@ -201,7 +201,7 @@ export function getExecutableActions(definition: CreatureDefinition): ActionDefi
 function compileExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
   const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
-    .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell)] : []));
+    .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell, definition)] : []));
   const spellUpcastActions = spellActions.flatMap((action) => spellUpcastVariants(definition, action));
   // An optional variant rule (a demon's Summon Demon) grants nothing until the DM switches it on.
   const grantedActions = [
@@ -339,12 +339,46 @@ export function findActionDefinition(definition: CreatureDefinition, actionId: I
   return getExecutableActions(definition).find((candidate) => candidate.id === actionId);
 }
 
+/** The abilities a spellcaster casts with, in the order a tie goes. */
+const SPELLCASTING_ABILITIES: Ability[] = ["int", "wis", "cha"];
+
+/**
+ * The ability a creature casts spells with when it hasn't been set: the one its spells' DC and attack bonus formulas
+ * name most (ties to the higher modifier), or else its highest of INT, WIS and CHA.
+ */
+export function inferSpellcastingAbility(definition: CreatureDefinition): Ability {
+  const named = new Map<Ability, number>();
+  for (const spell of definition.spells ?? []) {
+    const action = spell.action;
+    const formula = action?.kind === "attack" ? action.attackBonusFormula : action?.kind === "save" || action?.kind === "area-save" ? action.dcFormula : undefined;
+    if (formula?.ability && formula.ability !== "spellcasting") named.set(formula.ability, (named.get(formula.ability) ?? 0) + 1);
+  }
+  const score = (ability: Ability) => definition.abilities[ability] ?? 10;
+  const candidates = named.size ? [...named.keys()] : SPELLCASTING_ABILITIES;
+  return candidates.reduce((best, ability) => {
+    const byCount = (named.get(ability) ?? 0) - (named.get(best) ?? 0);
+    if (byCount !== 0) return byCount > 0 ? ability : best;
+    return score(ability) > score(best) ? ability : best;
+  });
+}
+
+/** The ability a creature casts spells with: its own (`spellcasting.ability`), or the inferred one. */
+export function spellcastingAbility(definition: CreatureDefinition): Ability {
+  return definition.spellcasting?.ability ?? inferSpellcastingAbility(definition);
+}
+
+/** A formula's ability as the ability it stands for: `"spellcasting"` is the creature's spellcasting ability. */
+export function formulaAbility(ability: NumericFormula["ability"], definition: CreatureDefinition): Ability | undefined {
+  return ability === "spellcasting" ? spellcastingAbility(definition) : ability;
+}
+
 export function resolveNumericFormula(formula: NumericFormula | undefined, definition: CreatureDefinition): number {
   if (!formula) {
     return 0;
   }
   const base = formula.base ?? 0;
-  const abilityBonus = formula.ability ? abilityModifier(definition.abilities[formula.ability]) : 0;
+  const ability = formulaAbility(formula.ability, definition);
+  const abilityBonus = ability ? abilityModifier(definition.abilities[ability]) : 0;
   const proficiencyBonus = formula.proficiency ? (definition.proficiencyBonus ?? proficiencyFromDefinition(definition)) : 0;
   return Math.trunc((base + abilityBonus + proficiencyBonus) * (formula.multiplier ?? 1));
 }
@@ -4236,16 +4270,29 @@ function weaponAutomationSupport(weapon: NonNullable<CreatureDefinition["weapons
   return manual ? "partial" : "full";
 }
 
+/**
+ * A spell attack whose bonus follows the creature's spellcasting ability, with `ability` set to that ability: rider DCs
+ * and ability-scoped effects (Rage's STR, a finesse check) read `ability`, not the formula.
+ */
+export function withSpellcastingAttackAbility(action: ActionDefinition, definition: CreatureDefinition): ActionDefinition {
+  if (action.kind !== "attack" || action.attackBonusFormula?.ability !== "spellcasting") {
+    return action;
+  }
+  const ability = spellcastingAbility(definition);
+  return action.ability === ability ? action : { ...action, ability };
+}
+
 /** Fold a spell's level / upcast / concentration onto its compiled action so resolvers never need the spell. */
 function stampSpellContext(
   action: ActionDefinition,
-  spell: NonNullable<CreatureDefinition["spells"]>[number]
+  spell: NonNullable<CreatureDefinition["spells"]>[number],
+  definition: CreatureDefinition
 ): ActionDefinition {
   if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition" && action.kind !== "buff") {
     return action;
   }
   const stamped = {
-    ...action,
+    ...withSpellcastingAttackAbility(action, definition),
     spellLevel: action.spellLevel ?? spell.level,
     upcast: action.upcast ?? spell.upcast,
     ...(action.kind === "area-save" && spell.zone && !action.zone ? { zone: spell.zone } : {})

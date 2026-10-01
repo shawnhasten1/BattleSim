@@ -9,6 +9,7 @@
  */
 import {
   abilityModifier,
+  formulaAbility,
   proficiencyFromDefinition,
   spellSlotLevel,
   usagePoolId,
@@ -110,6 +111,27 @@ export function diceBinding<C extends Rollable>(): Binding<C, string> {
       return next;
     }
   };
+}
+
+/** The levels a cantrip's dice grow at. */
+export const CANTRIP_LEVELS = [5, 11, 17] as const;
+
+/** A cantrip's usual growth from its dice: twice the dice at 5th level, three times at 11th, four times at 17th. */
+export function standardCantripSteps(dice: string): Array<{ atLevel: number; dice: string }> | undefined {
+  const parts = diceParts(dice);
+  if (!parts) return undefined;
+  return CANTRIP_LEVELS.map((atLevel, index) => ({ atLevel, dice: diceExpression(parts.count * (index + 2), parts.sides, parts.bonus) }));
+}
+
+/**
+ * A damage line with new dice. Growth that was the usual multiples of the old dice follows the new ones (1d10 growing
+ * to 4d10 becomes 1d8 growing to 4d8); growth set by hand stays as it is.
+ */
+export function withLineDice(line: DamageComponent, dice: string): DamageComponent {
+  const next = diceBinding<DamageComponent>().set(line, dice);
+  if (line.scaling?.mode !== "cantrip-by-level" || !deepEqual(line.scaling.steps, standardCantripSteps(line.dice))) return next;
+  const steps = standardCantripSteps(next.dice);
+  return steps ? { ...next, scaling: { mode: "cantrip-by-level", steps } } : next;
 }
 
 /* ─── limit ──────────────────────────────────────────────────────────────── */
@@ -239,8 +261,10 @@ function targetOf(action: ActionDefinition): Target | undefined {
         ? { kind: "creature", range: action.reach ?? action.range }
         : { kind: "creature", range: action.range, ...(action.longRange ? { longRange: action.longRange } : {}) };
     case "save":
-    case "reposition":
       return action.targeting?.target === "self" ? { kind: "self" } : { kind: "creature", range: action.range };
+    case "reposition":
+      // The engine moves another creature only when told to ("single"); without targeting a teleport moves itself.
+      return action.targeting?.target === "single" ? { kind: "creature", range: action.range } : { kind: "self" };
     case "buff":
       if (action.targeting?.target === "self") return { kind: "self" };
       return action.targeting?.target === "chosen"
@@ -251,7 +275,13 @@ function targetOf(action: ActionDefinition): Target | undefined {
       if (mode === "self") return { kind: "self" };
       if (mode === "chosen") return { kind: "creatures", count: action.targeting?.count ?? 1, range: action.range };
       if (mode === "area" && action.area) {
-        return { kind: "area", area: action.area, origin: action.areaTargeting?.origin ?? "point", range: action.areaTargeting?.range ?? action.range };
+        return {
+          kind: "area",
+          area: action.area,
+          origin: action.areaTargeting?.origin ?? "point",
+          range: action.areaTargeting?.range ?? action.range,
+          ...(action.areaTargeting?.aimedFromSelf ? { aimedFromSelf: true } : {})
+        };
       }
       return { kind: "creature", range: action.range };
     }
@@ -288,13 +318,17 @@ function withTarget(action: ActionDefinition, target: Target): ActionDefinition 
       delete next.longRange;
       return target.longRange ? { ...next, longRange: target.longRange } : next;
     }
-    case "save":
-    case "reposition": {
+    case "save": {
       const next = { ...action };
       delete next.targeting;
-      // "One creature" is the default: only self is written.
+      // "One creature" is a save's default: only self is written.
       return target.kind === "self" ? { ...next, targeting: { target: "self" } } : { ...next, range: (target as { range: number }).range };
     }
+    case "reposition":
+      // Both written out: the engine's default for a teleport is itself, the type's comment notwithstanding.
+      return target.kind === "self"
+        ? { ...action, targeting: { target: "self" } }
+        : { ...action, range: (target as { range: number }).range, targeting: { target: "single" } };
     case "buff": {
       if (target.kind === "self") return { ...action, targeting: { target: "self" } };
       if (target.kind === "creatures") return { ...action, range: target.range, targeting: { target: "chosen", count: target.count } };
@@ -311,7 +345,8 @@ function withTarget(action: ActionDefinition, target: Target): ActionDefinition 
       if (target.kind === "self") return { ...next, targeting: { target: "self" } };
       if (target.kind === "creatures") return { ...next, range: target.range, targeting: { target: "chosen", count: target.count } };
       if (target.kind === "area") {
-        return { ...next, range: target.range, targeting: { target: "area" }, area: target.area, areaTargeting: { origin: target.origin, range: target.range } };
+        const areaTargeting = { origin: target.origin, range: target.range, ...(target.aimedFromSelf ? { aimedFromSelf: true } : {}) };
+        return { ...next, range: target.range, targeting: { target: "area" }, area: target.area, areaTargeting };
       }
       return { ...next, range: target.range };
     }
@@ -384,6 +419,33 @@ export const saveDcBinding: Binding<SaveAction, PrintedOrCalculated> = {
   }
 };
 
+/**
+ * A save made with another ability. Effects that repeat the save with their own copy of the old ability (Hold Person's
+ * paralysis names WIS) follow it, as a damage line follows an attack's ability.
+ */
+export function withSaveAbility<A extends SaveAction>(action: A, saveAbility: Ability): A {
+  if (action.saveAbility === saveAbility) return action;
+  const riders = action.riders?.map((rider) =>
+    rider.kind === "condition" && rider.save?.ability === action.saveAbility ? { ...rider, save: { ...rider.save, ability: saveAbility } } : rider);
+  return { ...action, saveAbility, ...(riders ? { riders } : {}) };
+}
+
+/** What a success does to a save, with the older flag kept in step (the engine reads `onSuccess` first). */
+export function withOnSuccess<A extends SaveAction>(action: A, onSuccess: "half" | "none" | "negates"): A {
+  return { ...action, onSuccess, halfDamageOnSuccess: onSuccess === "half" };
+}
+
+/**
+ * The formula to calculate a printed DC with: the spell's caster's spellcasting ability, or the first ability that
+ * gives the printed number (a dragon's breath is 8 + CON + proficiency), else CON.
+ */
+export function formulaForDc(dc: number | undefined, definition: CreatureDefinition, spell: boolean): NumericFormula {
+  if (spell) return { base: 8, ability: "spellcasting", proficiency: true };
+  const proficiency = definition.proficiencyBonus ?? proficiencyFromDefinition(definition);
+  const matching = (["con", "cha", "wis", "int", "str", "dex"] as Ability[]).find((ability) => 8 + abilityModifier(definition.abilities[ability]) + proficiency === dc);
+  return { base: 8, ability: matching ?? "con", proficiency: true };
+}
+
 export interface Breakdown {
   /** "STR", "proficiency", "base". */
   parts: Array<{ label: string; value: number }>;
@@ -396,7 +458,11 @@ const ABILITY_LABEL: Record<Ability, string> = { str: "STR", dex: "DEX", con: "C
 export function formulaBreakdown(formula: NumericFormula, definition: CreatureDefinition): Breakdown {
   const parts: Breakdown["parts"] = [];
   if (formula.base) parts.push({ label: "base", value: formula.base });
-  if (formula.ability) parts.push({ label: ABILITY_LABEL[formula.ability], value: abilityModifier(definition.abilities[formula.ability]) });
+  const ability = formulaAbility(formula.ability, definition);
+  if (ability) {
+    const label = formula.ability === "spellcasting" ? `${ABILITY_LABEL[ability]} (spellcasting)` : ABILITY_LABEL[ability];
+    parts.push({ label, value: abilityModifier(definition.abilities[ability]) });
+  }
   if (formula.proficiency) parts.push({ label: "proficiency", value: definition.proficiencyBonus ?? proficiencyFromDefinition(definition) });
   const sum = parts.reduce((total, part) => total + part.value, 0);
   return { parts, total: Math.trunc(sum * (formula.multiplier ?? 1)) };

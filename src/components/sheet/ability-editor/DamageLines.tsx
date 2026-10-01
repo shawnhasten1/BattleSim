@@ -2,8 +2,8 @@
 
 import { MoreHorizontal, Plus, X } from "lucide-react";
 import { useState } from "react";
-import type { Ability, DamageComponent, DamageType, DamageTypeReference } from "@/engine";
-import { diceBinding, diceExpression, diceParts } from "@/lib/ability-editor/bindings";
+import type { Ability, DamageComponent, DamageType, DamageTypeReference, HealingComponent } from "@/engine";
+import { CANTRIP_LEVELS, diceBinding, diceExpression, diceParts, standardCantripSteps, withLineDice } from "@/lib/ability-editor/bindings";
 import { Check, NumberField, Segmented } from "./controls";
 import { COPY } from "./copy";
 import styles from "./ability-editor.module.css";
@@ -18,35 +18,47 @@ const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 export type LineAbility = Ability | "none" | "auto";
 
 type Mode = "dice" | "flat" | "expression";
+type Rollable = DamageComponent | HealingComponent;
 
 function modeOf(dice: string): Mode {
   if (/^-?\d+$/.test(dice.trim())) return "flat";
   return diceParts(dice) ? "dice" : "expression";
 }
 
-const dice = diceBinding<DamageComponent>();
+const isDamage = (line: Rollable): line is DamageComponent => "damageType" in line;
 
-export interface DamageLinesProps {
-  lines: DamageComponent[];
-  onChange: (next: DamageComponent[]) => void;
-  /** Names the lines for screen readers: "Damage", "Extra damage". */
+/** A line with new dice: damage lines keep their cantrip growth in step (see `withLineDice`). */
+function setLineDice<C extends Rollable>(line: C, dice: string): C {
+  return (isDamage(line) ? withLineDice(line, dice) : diceBinding<HealingComponent>().set(line, dice)) as C;
+}
+
+export interface DamageLinesProps<C extends Rollable> {
+  lines: C[];
+  onChange: (next: C[]) => void;
+  /** Names the lines for screen readers: "Damage", "Extra damage", "Healing". */
   label: string;
   /** What a line's average works out to, the way the engine rolls it. */
-  averageOf: (component: DamageComponent, index: number) => number;
+  averageOf: (component: C, index: number) => number;
   /** The first line's "Adds" can be "auto" (a finesse weapon). */
   autoAbility?: string;
   /** Offer "the attack's type" (a rider's extra damage). */
   allowSameAsAttack?: boolean;
   /** A new line when "Add a line" is pressed. */
-  newLine: () => DamageComponent;
+  newLine: () => C;
   /** Shown when there are no lines. */
   emptyText: string;
+  /** Healing lines have no damage type and none of damage's options. */
+  variant?: "damage" | "healing";
+  /** A cantrip's lines can grow with its caster's level. */
+  cantrip?: boolean;
 }
 
-/** Lines of damage, `[2]d[6] +4 · adds STR · slashing`, each with its average, plus "Add a line". */
-export function DamageLines({ lines, onChange, label, averageOf, autoAbility, allowSameAsAttack, newLine, emptyText }: DamageLinesProps) {
+/** Lines of damage (or healing), `[2]d[6] +4 · adds STR · slashing`, each with its average, plus "Add a line". */
+export function DamageLines<C extends Rollable>({
+  lines, onChange, label, averageOf, autoAbility, allowSameAsAttack, newLine, emptyText, variant = "damage", cantrip
+}: DamageLinesProps<C>) {
   const [open, setOpen] = useState<number | null>(null);
-  const replace = (index: number, next: DamageComponent) => onChange(lines.map((line, i) => (i === index ? next : line)));
+  const replace = (index: number, next: C) => onChange(lines.map((line, i) => (i === index ? next : line)));
   const total = lines.reduce((sum, line, index) => sum + averageOf(line, index), 0);
   return (
     <div className={styles.lines}>
@@ -55,11 +67,12 @@ export function DamageLines({ lines, onChange, label, averageOf, autoAbility, al
         <div key={index}>
           <Line
             line={line}
-            index={index}
             label={lines.length > 1 ? `${label} ${index + 1}` : label}
             average={averageOf(line, index)}
             auto={index === 0 ? autoAbility : undefined}
             allowSameAsAttack={allowSameAsAttack}
+            healing={variant === "healing"}
+            cantrip={cantrip}
             onChange={(next) => replace(index, next)}
             onRemove={() => { onChange(lines.filter((_, i) => i !== index)); setOpen(null); }}
             moreOpen={open === index}
@@ -77,16 +90,17 @@ export function DamageLines({ lines, onChange, label, averageOf, autoAbility, al
   );
 }
 
-function Line({
-  line, index, label, average, auto, allowSameAsAttack, onChange, onRemove, moreOpen, onToggleMore
+function Line<C extends Rollable>({
+  line, label, average, auto, allowSameAsAttack, healing, cantrip, onChange, onRemove, moreOpen, onToggleMore
 }: {
-  line: DamageComponent;
-  index: number;
+  line: C;
   label: string;
   average: number;
   auto?: string;
   allowSameAsAttack?: boolean;
-  onChange: (next: DamageComponent) => void;
+  healing: boolean;
+  cantrip?: boolean;
+  onChange: (next: C) => void;
   onRemove: () => void;
   moreOpen: boolean;
   onToggleMore: () => void;
@@ -96,9 +110,9 @@ function Line({
   const natural = modeOf(line.dice);
   const mode: Mode = chosen === "expression" || (chosen && chosen === natural) ? chosen : natural;
   const parts = diceParts(line.dice) ?? { count: 1, sides: 6 };
-  const setDice = (expression: string) => onChange(dice.set(line, expression));
+  const setDice = (expression: string) => onChange(setLineDice(line, expression));
   const lineAbility: LineAbility = line.abilityModifier ?? (auto ? "auto" : "none");
-  const choosing = (line.damageTypeOptions?.length ?? 0) > 0;
+  const damage = !healing && isDamage(line) ? line : undefined;
 
   function setMode(next: Mode) {
     if (next === mode) return;
@@ -140,15 +154,17 @@ function Line({
           <option value="none">no modifier</option>
           {ABILITIES.map((ability) => <option key={ability} value={ability}>+ {ability.toUpperCase()}</option>)}
         </select>
-        <select
-          className={styles.dtype}
-          aria-label={`${label} type`}
-          value={line.damageType}
-          onChange={(e) => onChange({ ...line, damageType: e.target.value as DamageTypeReference })}
-        >
-          {allowSameAsAttack || line.damageType === "same-as-attack" ? <option value="same-as-attack">the attack&apos;s type</option> : null}
-          {DAMAGE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-        </select>
+        {damage ? (
+          <select
+            className={styles.dtype}
+            aria-label={`${label} type`}
+            value={damage.damageType}
+            onChange={(e) => onChange({ ...damage, damageType: e.target.value as DamageTypeReference } as C)}
+          >
+            {allowSameAsAttack || damage.damageType === "same-as-attack" ? <option value="same-as-attack">the attack&apos;s type</option> : null}
+            {DAMAGE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+        ) : null}
         <span className={styles.average} aria-label={`${label} average`}>avg {average}</span>
         <button type="button" className={styles.iconBtn} aria-label={`More for ${label.toLowerCase()}`} aria-expanded={moreOpen} onClick={onToggleMore}>
           <MoreHorizontal size={13} />
@@ -168,39 +184,88 @@ function Line({
               onChange={setMode}
             />
           </span>
-          <Check copy="lineMagical" checked={line.magical === true} onChange={(on) => { const next = { ...line }; delete next.magical; onChange(on ? { ...next, magical: true } : next); }} />
+          {damage ? <DamageOptions line={damage} label={label} cantrip={cantrip} onChange={(next) => onChange(next as C)} /> : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** A damage line's rarer options: magical, the type chosen each time, a cantrip's growth. */
+function DamageOptions({ line, label, cantrip, onChange }: { line: DamageComponent; label: string; cantrip?: boolean; onChange: (next: DamageComponent) => void }) {
+  const choosing = (line.damageTypeOptions?.length ?? 0) > 0;
+  const growth = line.scaling?.mode === "cantrip-by-level" ? line.scaling : undefined;
+  const standard = standardCantripSteps(line.dice);
+  return (
+    <>
+      <Check copy="lineMagical" checked={line.magical === true} onChange={(on) => { const next = { ...line }; delete next.magical; onChange(on ? { ...next, magical: true } : next); }} />
+      <Check
+        copy="lineChoose"
+        checked={choosing}
+        onChange={(on) => {
+          const next = { ...line };
+          delete next.damageTypeOptions;
+          const first = line.damageType === "same-as-attack" ? "fire" : line.damageType;
+          onChange(on ? { ...next, damageTypeOptions: [first, first === "lightning" ? "thunder" : "lightning"] } : next);
+        }}
+      />
+      {choosing ? (
+        <div className={styles.typeChips} role="group" aria-label={`${label} type choices`}>
+          {DAMAGE_TYPES.map((type) => {
+            const on = line.damageTypeOptions!.includes(type);
+            return (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  const options = on ? line.damageTypeOptions!.filter((t) => t !== type) : [...line.damageTypeOptions!, type];
+                  if (options.length === 0) return;
+                  onChange({ ...line, damageTypeOptions: options });
+                }}
+              >
+                {type}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {cantrip || growth ? (
+        <>
           <Check
-            copy="lineChoose"
-            checked={choosing}
+            copy="cantripGrowth"
+            checked={Boolean(growth)}
+            disabled={!growth && !standard}
+            title={!growth && !standard ? "Write the dice as NdX first" : undefined}
             onChange={(on) => {
               const next = { ...line };
-              delete next.damageTypeOptions;
-              const first = line.damageType === "same-as-attack" ? "fire" : line.damageType;
-              onChange(on ? { ...next, damageTypeOptions: [first, first === "lightning" ? "thunder" : "lightning"] } : next);
+              delete next.scaling;
+              onChange(on && standard ? { ...next, scaling: { mode: "cantrip-by-level", steps: standard } } : next);
             }}
           />
-          {choosing ? (
-            <div className={styles.typeChips} role="group" aria-label={`${label} type choices`}>
-              {DAMAGE_TYPES.map((type) => {
-                const on = line.damageTypeOptions!.includes(type);
+          {growth ? (
+            <span className={styles.inline} role="group" aria-label={`${label} growth`}>
+              {CANTRIP_LEVELS.map((level) => {
+                const step = growth.steps.find((candidate) => candidate.atLevel === level);
                 return (
-                  <button
-                    key={type}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => {
-                      const options = on ? line.damageTypeOptions!.filter((t) => t !== type) : [...line.damageTypeOptions!, type];
-                      if (options.length === 0) return;
-                      onChange({ ...line, damageTypeOptions: options });
-                    }}
-                  >
-                    {type}
-                  </button>
+                  <label key={level} className={styles.inline}>
+                    <span>at {level}</span>
+                    <input
+                      className={styles.stepDice}
+                      aria-label={`${label} dice at level ${level}`}
+                      value={step?.dice ?? ""}
+                      onChange={(e) => {
+                        const dice = e.target.value.replace(/\s+/g, "");
+                        const steps = CANTRIP_LEVELS.map((atLevel) => ({ atLevel, dice: atLevel === level ? dice : growth.steps.find((s) => s.atLevel === atLevel)?.dice ?? line.dice }));
+                        onChange({ ...line, scaling: { mode: "cantrip-by-level", steps } });
+                      }}
+                    />
+                  </label>
                 );
               })}
-            </div>
+            </span>
           ) : null}
-        </div>
+        </>
       ) : null}
     </>
   );

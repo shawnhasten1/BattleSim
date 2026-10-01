@@ -1,8 +1,8 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { getExecutableActions, type ActionDefinition, type CreatureDefinition, type WeaponDefinition } from "@/engine";
-import { actionLimit, supportsUsage, type Limit } from "@/lib/ability-editor/bindings";
+import { getExecutableActions, type ActionDefinition, type CreatureDefinition, type SpellDefinition, type WeaponDefinition } from "@/engine";
+import { actionLimit, spellLimit, supportsUsage, type Limit } from "@/lib/ability-editor/bindings";
 import { newPoolId, poolOptions } from "@/lib/ability-editor/pools";
 import { Field, More, NumberField, Segmented } from "./controls";
 import styles from "./ability-editor.module.css";
@@ -30,38 +30,43 @@ function sharedPoolNames(definition: CreatureDefinition, action: ActionDefinitio
   return [...names];
 }
 
+type LimitTarget =
+  | { action: ActionDefinition; onChange: (next: ActionDefinition) => void; spell?: undefined; onSpellChange?: undefined }
+  /** A spell: its cost is kept in step with the one its action spends (`spellLimit`). */
+  | { spell: SpellDefinition; onSpellChange: (next: SpellDefinition) => void; action?: undefined; onChange?: undefined };
+
 /**
- * How often an ability can be used, and what it spends: at will, uses per encounter, a recharge, or a pool (a spell
- * slot shows only when it already spends one; spells get their own picker in Phase 3).
+ * How often an ability can be used, and what it spends: at will, uses per encounter, a recharge, a spell slot, or a
+ * pool. A leveled spell is offered a slot of its level; anything else only sees "Spell slot" when it already spends one.
  */
-export function LimitPicker({
-  action, onChange, definition, weapon, newPools
-}: {
-  action: ActionDefinition;
-  onChange: (next: ActionDefinition) => void;
+export function LimitPicker(props: LimitTarget & {
   definition: CreatureDefinition;
   weapon?: WeaponDefinition;
   newPools: NewPools;
 }) {
-  const limit = actionLimit.get(action);
+  const { definition, weapon, newPools, spell } = props;
+  const action = spell ? spell.action : props.action;
+  const limit = spell ? spellLimit.get(spell) : actionLimit.get(props.action!);
   // The last value of each kind this session, so switching away and back doesn't reset it.
   const remembered = useRef<Partial<Record<LimitKind, Limit>>>({ [limit.kind]: limit });
   remembered.current[limit.kind] = limit;
   // Picking "Pool" on a creature with no pools opens the new-pool form before anything is written.
   const [choosingPool, setChoosingPool] = useState(false);
   const pools = poolOptions(definition, weapon, newPools.pools);
-  const usage = supportsUsage(action);
+  const usage = Boolean(action && supportsUsage(action));
+  const slot = limit.kind === "slot" || Boolean(spell && spell.level > 0);
 
   const kinds: Array<{ value: LimitKind; label: string }> = [
     { value: "at-will", label: "At will" },
+    ...(slot ? [{ value: "slot" as const, label: "Spell slot" }] : []),
     ...(usage ? [{ value: "uses" as const, label: "Uses" }, { value: "recharge" as const, label: "Recharge" }] : []),
-    ...(limit.kind === "slot" ? [{ value: "slot" as const, label: "Spell slot" }] : []),
     { value: "pool", label: "Pool" }
   ];
 
   function set(next: Limit) {
     setChoosingPool(false);
-    onChange(actionLimit.set(action, next));
+    if (spell) props.onSpellChange!(spellLimit.set(spell, next));
+    else props.onChange!(actionLimit.set(props.action!, next));
   }
 
   function choose(kind: LimitKind) {
@@ -70,7 +75,7 @@ export function LimitPicker({
     if (kind === "at-will") return set({ kind: "at-will" });
     if (kind === "uses") return set({ kind: "uses", uses: 1 });
     if (kind === "recharge") return set({ kind: "recharge", min: 5 });
-    if (kind === "slot") return set({ kind: "slot", level: 1 });
+    if (kind === "slot") return set({ kind: "slot", level: spell?.level || 1 });
     if (pools[0]) return set({ kind: "pool", resourceId: pools[0].id, amount: 1 });
     setChoosingPool(true);
   }
@@ -90,7 +95,7 @@ export function LimitPicker({
               <span>per encounter</span>
             </span>
           </Field>
-          <SharedPool definition={definition} action={action} limit={limit} onChange={set} />
+          <SharedPool definition={definition} action={action!} limit={limit} onChange={set} />
         </>
       ) : null}
 
@@ -101,17 +106,16 @@ export function LimitPicker({
               {RECHARGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </Field>
-          <SharedPool definition={definition} action={action} limit={limit} onChange={set} />
+          <SharedPool definition={definition} action={action!} limit={limit} onChange={set} />
         </>
       ) : null}
 
       {limit.kind === "slot" && !choosingPool ? (
-        <Field copy="limit">
-          <span className={styles.inline}>
-            <span>Spell slot level</span>
-            <NumberField label="Spell slot level" value={limit.level} min={1} max={9} onChange={(n) => n !== undefined && set({ kind: "slot", level: n })} />
-          </span>
-        </Field>
+        <span className={styles.inline}>
+          <span>Spell slot level</span>
+          <NumberField label="Spell slot level" value={limit.level} min={1} max={9} onChange={(n) => n !== undefined && set({ kind: "slot", level: n })} />
+          {spell && spell.level > 0 && limit.level !== spell.level ? <span className={styles.hint}>(the spell is level {spell.level})</span> : null}
+        </span>
       ) : null}
 
       {shown === "pool" ? (

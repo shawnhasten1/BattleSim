@@ -198,13 +198,13 @@ describe("statblock numbers follow the engine", () => {
     const action: ActionDefinition = {
       kind: "save", id: "s", name: "Chill", actionType: "action", range: 30, saveAbility: "con", dc: 13, damage: [], halfDamageOnSuccess: false,
       riders: [
-        { kind: "condition", when: "on-save-fail", condition: { custom: "chilled-to-the-bone" }, duration: { kind: "rounds", rounds: 1 }, modifiers: { movementMultiplier: 0.5 } },
+        { kind: "condition", when: "on-save-fail", condition: { custom: "chilled-to-the-bone" }, duration: { kind: "rounds", rounds: 1 }, modifiers: { movementMultiplier: 2 } },
         { kind: "note", text: "Frost rimes the target's armor." }
       ],
       automationSupport: "full"
     };
     const rendered = actionStatblock(action, creature());
-    expect(rendered.text).toBe("One creature within 30 feet must succeed on a DC 13 Constitution saving throw or be chilled to the bone (speed ×0.5) for 1 round.");
+    expect(rendered.text).toBe("One creature within 30 feet must succeed on a DC 13 Constitution saving throw or be chilled to the bone (half speed) for 1 round.");
     expect(rendered.notSimulated).toEqual(["Frost rimes the target's armor."]);
 
     const manual: ActionDefinition = {

@@ -2,19 +2,23 @@
 
 import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { ActionDefinition, ActionRider, CreatureDefinition, WeaponDefinition } from "@/engine";
+import { spellcastingAbility, type ActionDefinition, type ActionRider, type CreatureDefinition, type SpellDefinition, type WeaponDefinition } from "@/engine";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { convertAction, type ConvertibleKind, type ParkedRecords } from "@/lib/ability-editor/conversions";
 import { findAbility, withAbility, withNewAbility, type AbilityList, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
 import { sectionsFor, type SectionId } from "@/lib/ability-editor/sections";
+import { withSpellAction } from "@/lib/ability-editor/spells";
 import { abilityWarnings } from "@/lib/ability-editor/validate";
 import { deepEqual } from "@/lib/deep-equal";
 import { statblockFor, type StatblockEntry } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useEditorGuard } from "../SheetGuard";
 import { UnsavedPrompt } from "../UnsavedPrompt";
-import { attackSection, useParkedReaction, weaponSection, type AttackAction } from "./AbilitySections";
+import { useParkedReaction, weaponSection } from "./AbilitySections";
+import { actionSection } from "./ActionSections";
 import { EditorSection } from "./EditorSection";
 import type { NewPools } from "./LimitPicker";
+import { spellSection } from "./SpellSections";
 import styles from "./ability-editor.module.css";
 
 /** What the editor opens on: an ability already on the creature, or a new one headed for a list. */
@@ -27,33 +31,59 @@ export interface AbilityEditorResult {
   savedRef?: AbilityRef;
 }
 
-/** The sections Phase 2's editor has fields for, per kind of record. */
-const WEAPON_SECTIONS: SectionId[] = ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"];
-const ATTACK_SECTIONS: SectionId[] = ["use", "target", "roll", "damage", "effects", "notes"];
+type RecordType = "weapon" | "spell" | "action";
+
+/** The sections the editor has fields for, per kind of record (each shows only when it applies). */
+const SECTIONS: Record<RecordType, SectionId[]> = {
+  weapon: ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"],
+  spell: ["basics", "use", "target", "roll", "outcome", "damage", "effects", "lingering", "notes"],
+  action: ["use", "target", "roll", "outcome", "damage", "effects", "lingering", "notes"]
+};
+
+/** What the ability is after switching to a kind. */
+const NOW: Record<ConvertibleKind, string> = {
+  attack: "It's an attack roll now.", save: "It's a saving throw now.", "area-save": "It's an area saving throw now.",
+  healing: "It heals now.", buff: "It grants a benefit now.", reposition: "It teleports now.", unsupported: "It's reference only now."
+};
+
+/** What a switch did, said once under "How it works". A save becoming an area (or back) needs no note. */
+function conversionNote(from: ActionDefinition["kind"], to: ConvertibleKind, fresh: boolean): string {
+  if (fresh || from === "unsupported") return `${NOW[to]} The simulator uses it: check each section below.`;
+  if ((from === "save" && to === "area-save") || (from === "area-save" && to === "save")) return "";
+  const gates = from === "attack" && (to === "save" || to === "area-save") ? " Its on-hit effects happen on a failed save now."
+    : (from === "save" || from === "area-save") && to === "attack" ? " Its failed-save effects happen on a hit now." : "";
+  return `${NOW[to]}${gates} Anything that didn't fit is kept: switch back to get it as it was.`;
+}
+
+/** The action a record's work is done by: itself, or a spell's action. */
+function actionOf(record: AbilityRecord, type: RecordType): ActionDefinition | undefined {
+  if (type === "spell") return (record as SpellDefinition).action;
+  if (type === "action") return record as ActionDefinition;
+  return undefined;
+}
+
+/** The effects (riders) a record carries: a weapon's on-hit effects, or its action's. */
+function ridersOf(record: AbilityRecord, type: RecordType): ActionRider[] {
+  if (type === "weapon") return (record as WeaponDefinition).onHit ?? [];
+  const action = actionOf(record, type);
+  return (action && "riders" in action ? action.riders : undefined) ?? [];
+}
 
 /** Which new pools a record actually spends (a pool created and then not picked isn't added). */
-function poolsUsedBy(record: AbilityRecord, pools: Record<string, number>): Record<string, number> {
+function poolsUsedBy(record: AbilityRecord, type: RecordType, pools: Record<string, number>): Record<string, number> {
   const spent = new Set<string>();
   const addCost = (cost: { resourceId: string } | undefined) => { if (cost) spent.add(cost.resourceId); };
-  const riders: ActionRider[] = [];
-  if ("kind" in record && typeof record.kind === "string") {
-    const action = record as ActionDefinition;
-    addCost("resourceCost" in action ? action.resourceCost : undefined);
-    if ("riders" in action) riders.push(...(action.riders ?? []));
-  } else if ("attackType" in record) {
-    const weapon = record as WeaponDefinition;
-    addCost(weapon.resourceCost);
-    riders.push(...(weapon.onHit ?? []));
-  }
-  for (const rider of riders) addCost(rider.kind === "note" ? undefined : rider.resourceCost);
+  if (type === "weapon") addCost((record as WeaponDefinition).resourceCost);
+  const action = actionOf(record, type);
+  addCost(action && "resourceCost" in action ? action.resourceCost : undefined);
+  for (const rider of ridersOf(record, type)) addCost(rider.kind === "note" ? undefined : rider.resourceCost);
   return Object.fromEntries(Object.entries(pools).filter(([id]) => spent.has(id)));
 }
 
 /** Something that stops a save: the DM has to fix it first. */
-function blockingProblem(record: AbilityRecord): { message: string; section?: SectionId } | null {
+function blockingProblem(record: AbilityRecord, type: RecordType): { message: string; section?: SectionId } | null {
   if (!(record as { name?: string }).name?.trim()) return { message: "Give it a name first." };
-  const riders = ("onHit" in record ? (record as WeaponDefinition).onHit : "riders" in record ? (record as { riders?: ActionRider[] }).riders : undefined) ?? [];
-  if (riders.some((rider) => rider.kind !== "note" && rider.resourceCost && !rider.resourceCost.resourceId)) {
+  if (ridersOf(record, type).some((rider) => rider.kind !== "note" && rider.resourceCost && !rider.resourceCost.resourceId)) {
     return { message: "Choose which pool an effect's charges come from.", section: "effects" };
   }
   return null;
@@ -87,8 +117,12 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
   const [error, setError] = useState<string | null>(null);
   // "Save your changes?": what Discard does, and what follows a successful save (saving itself closes the editor).
   const [leaving, setLeaving] = useState<{ message: string; discard: () => void; afterSave?: () => void; saveLabel?: string; discardLabel?: string } | null>(null);
-  const isWeapon = target.mode === "new" ? target.list === "weapons" : target.ref.list === "weapons";
-  const available = isWeapon ? WEAPON_SECTIONS : ATTACK_SECTIONS;
+  // Earlier versions of the action, one per kind it has been this session, and what the last switch did.
+  const [parked, setParked] = useState<ParkedRecords>({});
+  const [note, setNote] = useState<string | undefined>(undefined);
+  const list = target.mode === "new" ? target.list : target.ref.list;
+  const type: RecordType = list === "weapons" ? "weapon" : list === "spells" ? "spell" : "action";
+  const available = SECTIONS[type];
   const [open, setOpen] = useState<Set<SectionId>>(() => new Set(isNew ? available : []));
   const parkedReaction = useParkedReaction();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -111,17 +145,46 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
   );
   const entry = statblockFor(placed.definition, placed.ref);
   const warnings = useMemo(() => abilityWarnings(withPools, where, working), [withPools, where, working]);
-  const sections = sectionsFor({ ref: placed.ref, record: working, definition: placed.definition }).filter((section) => {
+  const sectionList = (record: AbilityRecord) => sectionsFor({ ref: placed.ref, record, definition: placed.definition }).filter((section) => {
     if (!available.includes(section.id)) return false;
-    if (section.id === "while-active") return Boolean((working as WeaponDefinition).effects?.length);
-    if (section.id === "grants") return Boolean((working as WeaponDefinition).grantedActions?.length);
+    if (section.id === "while-active") return Boolean((record as WeaponDefinition).effects?.length);
+    if (section.id === "grants") return Boolean((record as WeaponDefinition).grantedActions?.length);
     return true;
   });
+  const sections = sectionList(working);
   const flagged = new Set(warnings.map((warning) => warning.section).filter(Boolean));
 
   function update(next: AbilityRecord) {
     setWorking(next);
     setError(null);
+  }
+
+  /**
+   * Switch what kind of ability it is. A spell with nothing to cast yet gets an action of that kind, spending what the
+   * spell does. Sections the new kind brings (Healing, Lingering area) open so it's clear what to fill in.
+   */
+  function convert(to: ConvertibleKind, then?: (converted: ActionDefinition) => ActionDefinition) {
+    const spell = type === "spell" ? (working as SpellDefinition) : undefined;
+    const current: ActionDefinition = spell
+      ? spell.action ?? { kind: "unsupported", id: "", name: spell.name, actionType: spell.castingTime, automationSupport: "unsupported" }
+      : (working as ActionDefinition);
+    // "Saving throw" brings back an earlier area when an area is what it was.
+    const kind = to === "save" && parked["area-save"] && !parked.save && current.kind !== "area-save" ? "area-save" : to;
+    const options = spell ? { spell: true, spellcasting: spellcastingAbility(withPools) } : {};
+    const result = convertAction(current, kind, parked, options);
+    let action = then ? then(result.action) : result.action;
+    let next: AbilityRecord = action;
+    if (spell) {
+      if (!spell.action && spell.resourceCost && "resourceCost" in action && !action.resourceCost) action = { ...action, resourceCost: spell.resourceCost } as ActionDefinition;
+      const cast = withSpellAction(spell, action);
+      next = !spell.action || current.kind === "unsupported" ? { ...cast, automationSupport: "full" } : cast;
+    }
+    setParked(result.parked);
+    setNote(conversionNote(current.kind, kind, Boolean(spell && !spell.action)));
+    const before = new Set(sections.map((section) => section.id));
+    const added = sectionList(next).map((section) => section.id).filter((id) => !before.has(id));
+    if (added.length) setOpen((currentOpen) => new Set([...currentOpen, ...added]));
+    update(next);
   }
 
   function close(result: AbilityEditorResult = {}) {
@@ -130,7 +193,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
   }
 
   function save(): boolean {
-    const problem = blockingProblem(working);
+    const problem = blockingProblem(working, type);
     if (problem) {
       setError(problem.message);
       if (problem.section) setOpen((current) => new Set([...current, problem.section!]));
@@ -141,7 +204,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
       close();
       return true;
     }
-    const used = poolsUsedBy(working, pools);
+    const used = poolsUsedBy(working, type, pools);
     const extras = Object.keys(used).length ? { pools: used } : undefined;
     const savedRef = target.mode === "new"
       ? insertAbilityRecord(definition.id, target.list, working, extras)
@@ -215,10 +278,13 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
   });
   const allOpen = sections.every((section) => open.has(section.id));
 
-  const sectionProps = isWeapon
-    ? { weapon: working as WeaponDefinition, onChange: update, definition: withPools, newPools }
-    : { action: working as AttackAction, onChange: update, definition: withPools, newPools, parkedReaction };
-  const kindLabel = isWeapon ? "weapon" : "attack";
+  const common = { definition: withPools, newPools, parkedReaction, onConvert: convert, conversionNote: note };
+  function renderSection(id: SectionId) {
+    if (type === "weapon") return weaponSection(id, { weapon: working as WeaponDefinition, onChange: update, definition: withPools, newPools });
+    if (type === "spell") return spellSection(id, { ...common, spell: working as SpellDefinition, onChange: update });
+    return actionSection(id, { ...common, action: working as ActionDefinition, onChange: update });
+  }
+  const kindLabel = type === "weapon" ? "weapon" : type === "spell" ? "spell" : (working as ActionDefinition).kind === "attack" ? "attack" : "action";
 
   return (
     <div ref={rootRef} className={styles.editor} tabIndex={-1} onKeyDown={onKeyDown} aria-label={`Edit ${name || `new ${kindLabel}`}`} role="region">
@@ -265,7 +331,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
             <li key={`${warning.id}:${warning.message}`} className={styles.warning}>
               <AlertTriangle size={13} aria-hidden />
               <span>{warning.message}</span>
-              {warning.section && available.includes(warning.section) ? (
+              {warning.section && sections.some((section) => section.id === warning.section) ? (
                 <button type="button" className={styles.linkBtn} onClick={() => showSection(warning.section!)}>Show</button>
               ) : null}
             </li>
@@ -277,7 +343,12 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
         <label htmlFor={nameId} className={styles.label}>Name</label>
         <input
           id={nameId} ref={nameRef} value={name} aria-invalid={error !== null && !name.trim()}
-          onChange={(event) => update({ ...working, name: event.target.value } as AbilityRecord)}
+          onChange={(event) => {
+            // A spell's action carries its name too (the log and the AI show it).
+            const renamed = { ...working, name: event.target.value } as AbilityRecord;
+            const spell = type === "spell" ? (renamed as SpellDefinition) : undefined;
+            update(spell?.action && spell.action.name === (working as SpellDefinition).name ? { ...spell, action: { ...spell.action, name: event.target.value } } : renamed);
+          }}
         />
       </div>
 
@@ -296,9 +367,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
           onToggle={() => toggle(section.id)}
           flagged={flagged.has(section.id)}
         >
-          {isWeapon
-            ? weaponSection(section.id, sectionProps as Parameters<typeof weaponSection>[1])
-            : attackSection(section.id, sectionProps as Parameters<typeof attackSection>[1])}
+          {renderSection(section.id)}
           {section.id === "notes" && entry ? (
             <p className={styles.hint}>
               <SupportBadge entry={entry} />{" "}
@@ -311,7 +380,7 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic }: {
 
       {onOpenClassic && !isNew ? (
         <p className={styles.classic}>
-          Need something this editor doesn&apos;t cover yet, like turning it into a saving throw?{" "}
+          Need something this editor doesn&apos;t cover yet?{" "}
           <button
             type="button" className={styles.linkBtn}
             onClick={() => (dirty

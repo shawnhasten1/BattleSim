@@ -5,6 +5,7 @@
  */
 import {
   abilityModifier,
+  formulaAbility,
   getExecutableActions,
   parseDiceExpression,
   proficiencyFromDefinition,
@@ -14,6 +15,7 @@ import {
   resolveSaveDc,
   resolveScaledDamage,
   spellSlotLevel,
+  withSpellcastingAttackAbility,
   type Ability,
   type ActionDefinition,
   type ActionRider,
@@ -208,11 +210,17 @@ function healingText(components: HealingComponent[], definition: CreatureDefinit
   return components.map((component) => rolledText(rolled(component, definition))).join(" plus ");
 }
 
+/** "9 (1d8 + 4)": how much a heal restores, the way the engine rolls it. */
+export function healingShort(components: HealingComponent[], definition: CreatureDefinition): string {
+  return healingText(components, definition);
+}
+
 /** "+3", or "+3 (its Charisma modifier)" when the number is just an ability modifier. */
 function formulaText(formula: NumericFormula, definition: CreatureDefinition): string {
   const value = signed(resolveNumericFormula(formula, definition));
-  return formula.ability && !formula.base && !formula.proficiency && (formula.multiplier ?? 1) === 1
-    ? `${value} (its ${ABILITY_NAME[formula.ability]} modifier)`
+  const ability = formulaAbility(formula.ability, definition);
+  return ability && !formula.base && !formula.proficiency && (formula.multiplier ?? 1) === 1
+    ? `${value} (its ${formula.ability === "spellcasting" ? "spellcasting ability" : ABILITY_NAME[ability]} modifier)`
     : value;
 }
 
@@ -226,7 +234,10 @@ function bonusPhrase(amount: number | string, to: string): string {
 function saveBonusPhrases(saves: Partial<Record<Ability, number>> | undefined): string[] {
   const entries = ABILITIES.flatMap((ability) => (saves?.[ability] ? [[ability, saves[ability]!] as const] : []));
   if (entries.length === 6 && entries.every(([, value]) => value === entries[0]![1])) return [bonusPhrase(entries[0]![1], "saving throws")];
-  return entries.map(([ability, value]) => bonusPhrase(value, `${ABILITY_NAME[ability]} saving throws`));
+  // Saves with the same bonus read as one phrase: "a +2 bonus to Wisdom and Charisma saving throws".
+  const byValue = new Map<number, Ability[]>();
+  for (const [ability, value] of entries) byValue.set(value, [...(byValue.get(value) ?? []), ability]);
+  return [...byValue].map(([value, abilities]) => bonusPhrase(value, `${joinList(abilities.map((ability) => ABILITY_NAME[ability]))} saving throws`));
 }
 
 /* ─── conditions, durations, saves ───────────────────────────────────────── */
@@ -369,10 +380,23 @@ export function riderFallbackDc(action: Pick<AttackAction, "ability">, definitio
   return 8 + abilityModifier(definition.abilities[action.ability]) + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
 }
 
-/** An attack's effect as the sentence its card shows: "The target must succeed on a DC 11 Strength saving throw or be knocked prone." */
-export function effectCardText(rider: ActionRider, definition: CreatureDefinition, action: Pick<AttackAction, "ability">): string {
+/**
+ * What an effect card's effect follows: an attack (a rider save rolls on its own, its DC from the attack's ability), a
+ * saving throw (the save already decided it; repeats use `dc`), or no roll (a heal's extra effect).
+ */
+export type EffectContext =
+  | { kind: "attack"; ability: Ability }
+  | { kind: "save"; dc: number }
+  | { kind: "automatic" };
+
+/** An effect as the sentence its card shows: "The target must succeed on a DC 11 Strength saving throw or be knocked prone." */
+export function effectCardText(rider: ActionRider, definition: CreatureDefinition, context: EffectContext): string {
   if (rider.kind === "note") return rider.text.trim() || "A note for the DM.";
-  return riderSentence(rider, definition, riderFallbackDc(action, definition), true, THE_TARGET);
+  if (context.kind === "save") return riderSentence(rider, definition, context.dc, false, THE_TARGET);
+  const fallbackDc = context.kind === "attack"
+    ? riderFallbackDc(context, definition)
+    : 8 + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
+  return riderSentence(rider, definition, fallbackDc, true, THE_TARGET);
 }
 
 /** A damage or healing line's average, the way the engine rolls it (dice, ability modifier and bonus formula). */
@@ -419,10 +443,11 @@ function modifierSentences(modifiers: ConditionModifiers | undefined, who: Who):
     ...saveBonusPhrases(modifiers.savingThrows)
   ];
   if (bonuses.length) sentences.push(`${S} ${bonuses.every((phrase) => phrase.includes("penalty")) ? "takes" : "gains"} ${joinList(bonuses)}.`);
+  // The engine divides speed by the multiplier (2 halves it, 999 stops it) and ignores anything below 1.
   const speed = modifiers.movementMultiplier;
-  if (speed !== undefined && speed !== 1) {
+  if (speed !== undefined && speed > 1) {
     const P = capitalize(who.possessive);
-    sentences.push(speed === 0 ? `${P} speed is 0.` : speed === 0.5 ? `${P} speed is halved.` : speed === 2 ? `${P} speed is doubled.` : `${P} speed is multiplied by ${speed}.`);
+    sentences.push(speed >= 999 ? `${S} can't move.` : speed === 2 ? `${P} speed is halved.` : `${P} speed is divided by ${speed}.`);
   }
   if (modifiers.damageAdjustments?.length) sentences.push(...adjustmentSentences(modifiers.damageAdjustments, who));
   const denied = [
@@ -645,7 +670,10 @@ export function modifierShorts(modifiers: ConditionModifiers | undefined): strin
     ...(modifiers.armorClass ? [`${signed(modifiers.armorClass)} AC`] : []),
     ...(modifiers.attackRoll ? [`${signed(modifiers.attackRoll)} to hit`] : []),
     ...saves,
-    ...(modifiers.movementMultiplier !== undefined && modifiers.movementMultiplier !== 1 ? [modifiers.movementMultiplier === 0 ? "speed 0" : `speed ×${modifiers.movementMultiplier}`] : []),
+    // Speed is divided by the multiplier (see `modifierSentences`).
+    ...(modifiers.movementMultiplier !== undefined && modifiers.movementMultiplier > 1
+      ? [modifiers.movementMultiplier >= 999 ? "can't move" : modifiers.movementMultiplier === 2 ? "half speed" : `speed ÷${modifiers.movementMultiplier}`]
+      : []),
     ...adjustmentShorts(modifiers.damageAdjustments ?? []),
     ...(modifiers.deniesActions || modifiers.deniesBonusActions || modifiers.deniesReactions
       ? [`no ${joinList([modifiers.deniesActions ? "actions" : "", modifiers.deniesBonusActions ? "bonus actions" : "", modifiers.deniesReactions ? "reactions" : ""].filter(Boolean), "or")}`]
@@ -818,8 +846,10 @@ function saveClause(action: SaveAction | AreaAction, definition: CreatureDefinit
 
   let text: string;
   if (damage.length && onSuccess === "half") {
+    // "On a failed save, a creature is also poisoned for 1 minute."
+    const alsoIs = joinList(failConditions.map((rider) => `${isCondition(rider, definition)}${riderQualifiers(rider)}`)).replace(/^is /, "is also ");
     text = `must make a DC ${dc} ${ability} saving throw, taking ${damageText(damage, definition)} on a failed save, or half as much damage on a successful one.`
-      + (failConditions.length ? ` On a failed save, ${who.subject} also must ${conditions}.` : "");
+      + (failConditions.length ? ` On a failed save, ${who.subject} ${alsoIs}.` : "");
   } else if (damage.length) {
     text = `must succeed on a DC ${dc} ${ability} saving throw or take ${damageText(damage, definition)}${failConditions.length ? ` and ${conditions}` : ""}.`;
   } else if (failConditions.length) {
@@ -1289,8 +1319,10 @@ export function spellStatblock(spell: SpellDefinition, definition: CreatureDefin
   const level = spell.level === 0 ? "Cantrip" : `${ordinal(spell.level)}-level spell`;
   const casting = spell.castingTime === "bonus" ? "1 bonus action" : spell.castingTime === "reaction" ? "1 reaction" : "1 action";
   const range = typeof spell.range === "number" ? (spell.range === 0 ? "self" : `${spell.range} feet`) : spell.range;
-  // The spell's own zone and concentration reach its action the way the engine stamps them.
-  const action = spell.action?.kind === "area-save" && spell.zone && !spell.action.zone ? { ...spell.action, zone: spell.zone } : spell.action;
+  // The spell's own zone and concentration reach its action the way the engine stamps them, and an attack that follows
+  // the spellcasting ability rolls with it.
+  const zoned = spell.action?.kind === "area-save" && spell.zone && !spell.action.zone ? { ...spell.action, zone: spell.zone } : spell.action;
+  const action = zoned ? withSpellcastingAttackAbility(zoned, definition) : undefined;
   // What casting spends is its action's cost (the spell's own `resourceCost` is kept in step, but the engine doesn't
   // read it). Innate "3/Day" uses show in the title instead.
   const spent = action && "resourceCost" in action ? action.resourceCost : undefined;

@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getExecutableActions,
+  spellcastingAbility,
   type ActionDefinition,
   type MultiattackActionDefinition,
   type SummonActionDefinition,
@@ -21,7 +22,8 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { actionStatblock, deathEffectStatblock, featureStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
 import { multiattackLosses, type DefinitionItemType } from "@/lib/definition-edits";
-import { blankAttack, blankWeapon, WEAPON_TEMPLATES } from "@/lib/ability-editor/templates";
+import { actionOpensInEditor, spellOpensInEditor } from "@/lib/ability-editor/spells";
+import { blankAttack, blankSpecialAction, blankSpell, blankWeapon, SPELL_TEMPLATES, WEAPON_TEMPLATES } from "@/lib/ability-editor/templates";
 import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
 import { AbilityEditor, type AbilityEditorTarget } from "../ability-editor/AbilityEditor";
 import { AutomationBadge } from "@/components/ui/AutomationBadge";
@@ -199,9 +201,14 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
     const record = findAbility(useEncounterStore.getState().encounter.definitions.find((candidate) => candidate.id === definition.id) ?? definition, ref);
     if (!record) return;
     if (ref.list === "weapons") openEdit({ kind: "weapon", id: (record as WeaponDefinition).id }, weaponDraftFromDefinition(record as WeaponDefinition));
+    else if (ref.list === "spells") openEdit({ kind: "spell", id: (record as SpellDefinition).id }, spellDraftFromDefinition(record as SpellDefinition));
     else openEdit({ kind: "action", id: (record as ActionDefinition).id }, effectDraftFromAction(record as ActionDefinition));
   }
-  function editSpell(spell: SpellDefinition) { openEdit({ kind: "spell", id: spell.id }, spellDraftFromDefinition(spell)); }
+  function editSpell(spell: SpellDefinition) {
+    // Activations (Shield, Counterspell) stay with the builder until the editor handles features (Phase 4).
+    if (spellOpensInEditor(spell)) openAbilityEditor({ mode: "edit", ref: { list: "spells", id: spell.id } });
+    else openEdit({ kind: "spell", id: spell.id }, spellDraftFromDefinition(spell));
+  }
   function editDeathEffect(deathEffect: DeathEffectDefinition) { openEdit({ kind: "deathEffect", id: deathEffect.id }, deathEffectDraftFromDefinition(deathEffect)); }
   function editActionRecord(action: ActionDefinition) {
     // Summons and shapechanges have their own editors; the generic ability builder would turn them into an attack.
@@ -212,7 +219,7 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
       setSpawnEditor(action.kind);
       return;
     }
-    if (action.kind === "attack") {
+    if (actionOpensInEditor(action)) {
       openAbilityEditor({ mode: "edit", ref: actionRef(action) });
       return;
     }
@@ -532,7 +539,12 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
                     {template.label}
                   </button>
                 ))}
-                {PRESETS.filter((preset) => preset.kind !== "weapon").map((preset) => (
+                {SPELL_TEMPLATES.map((template) => (
+                  <button key={template.label} type="button" title={template.hint} onClick={() => openAbilityEditor({ mode: "new", list: "spells", record: template.record(spellcastingAbility(definition)) })}>
+                    {template.label === "Reaction" ? "Reaction spell" : template.label}
+                  </button>
+                ))}
+                {PRESETS.filter((preset) => preset.kind !== "weapon" && preset.kind !== "spell").map((preset) => (
                   <button key={preset.label} type="button" onClick={() => startNew(preset.kind, { ...preset.draft })}>
                     {preset.label}
                   </button>
@@ -544,9 +556,9 @@ export function ActionsTab({ definition, compendium }: { combatant: CombatantSta
               <div className={styles.presetGrid}>
                 <button type="button" onClick={() => openAbilityEditor({ mode: "new", list: "weapons", record: blankWeapon() })}>Weapon</button>
                 <button type="button" title="A claw, bite or slam: a natural attack" onClick={() => openAbilityEditor({ mode: "new", list: "actions", record: blankAttack() })}>Attack</button>
-                <button type="button" onClick={() => startNew("spell", spellDraftFromDefinition({ id: "", name: "New Spell", level: 1, castingTime: "action", range: 60, resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full", action: { kind: "attack", id: "", name: "New Spell", actionType: "action", attackType: "spell", ability: "int", range: 60, damage: [{ dice: "1d10", damageType: "fire" }], automationSupport: "full" } }))}>Spell</button>
+                <button type="button" title="A spell attack to start from; Roll and Target make it a save, an area, a heal or anything else" onClick={() => openAbilityEditor({ mode: "new", list: "spells", record: blankSpell(spellcastingAbility(definition)) })}>Spell</button>
                 <button type="button" onClick={() => startNew("deathEffect", deathEffectDraftFromDefinition({ id: "", name: "New Death Effect", action: { kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates", affects: "all", automationSupport: "full" }, automationSupport: "full" }))}>Death effect</button>
-                <button type="button" title="A save, an area, a heal, a buff or a teleport" onClick={() => startNew("action", effectDraftFromAction({ kind: "save", id: "", name: "New Ability", actionType: "action", saveAbility: "dex", range: 30, damage: [{ dice: "2d6", damageType: "fire" }], halfDamageOnSuccess: true, onSuccess: "half", automationSupport: "full" }))}>Other action</button>
+                <button type="button" title="A breath, a gaze, a heal, a buff or a teleport: starts as a saving throw" onClick={() => openAbilityEditor({ mode: "new", list: "actions", record: blankSpecialAction() })}>Special action</button>
                 <button type="button" onClick={() => startNew("feature", { name: "New Feature", category: "feature", featureShape: "passive", effects: [] })}>Feature / trait</button>
                 <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("summon"); }}>Summon</button>
                 <button type="button" onClick={() => { setEdit(null); setAddOpen(false); setSpawnEditing(null); setSpawnEditor("transform"); }}>Shapechange</button>

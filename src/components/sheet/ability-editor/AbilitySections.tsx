@@ -3,15 +3,17 @@
 import { useId, useRef, type ReactNode } from "react";
 import {
   abilityModifier,
-  getExecutableActions,
   proficiencyFromDefinition,
   resolveAttackBonus,
+  spellcastingAbility,
+  withSpellcastingAttackAbility,
   type Ability,
   type ActionDefinition,
   type ConditionName,
   type CreatureDefinition,
   type DamageComponent,
   type ReactionMeta,
+  type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { actionTarget, attackBonusBinding, calculatedAttackBonus, diceBinding, diceExpression, diceParts } from "@/lib/ability-editor/bindings";
@@ -20,8 +22,8 @@ import { compiledWeaponAttack, componentAverage, effectSentence } from "@/lib/st
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DamageLines } from "./DamageLines";
 import { EffectCards } from "./EffectCards";
-import { LimitPicker, type NewPools } from "./LimitPicker";
-import { ATTACK_TRIGGERS, ReactionControls, TriggerPicker } from "./ReactionControls";
+import type { NewPools } from "./LimitPicker";
+import { ATTACK_TRIGGERS, TriggerPicker } from "./ReactionControls";
 import styles from "./ability-editor.module.css";
 
 export type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
@@ -43,7 +45,7 @@ function withValue<T extends object, K extends keyof T>(record: T, key: K, value
   return value === undefined ? next : { ...next, [key]: value };
 }
 
-function Breakdown({ parts, total, printed }: { parts: Array<{ label: string; value: number }>; total: number; printed?: number }) {
+export function Breakdown({ parts, total, printed }: { parts: Array<{ label: string; value: number }>; total: number; printed?: number }) {
   const text = parts.map((part) => `${part.label} ${SIGNED(part.value)}`).join(", ");
   return (
     <p className={styles.breakdown}>
@@ -56,15 +58,6 @@ function Breakdown({ parts, total, printed }: { parts: Array<{ label: string; va
 }
 
 /* ─── monster attacks ────────────────────────────────────────────────────── */
-
-export interface AttackSectionProps {
-  action: AttackAction;
-  onChange: (next: ActionDefinition) => void;
-  definition: CreatureDefinition;
-  newPools: NewPools;
-  /** Put a reaction's settings aside when it stops being a reaction, to bring them back. */
-  parkedReaction: { current: ReactionMeta | undefined };
-}
 
 function setAttackType(action: AttackAction, attackType: AttackAction["attackType"]): AttackAction {
   if (attackType === action.attackType) return action;
@@ -88,83 +81,7 @@ function withAbility(action: AttackAction, ability: Ability): AttackAction {
   return withValue({ ...action, ability, damage }, "attackBonusFormula", formula);
 }
 
-export function attackSection(id: SectionId, props: AttackSectionProps): ReactNode {
-  const { action, onChange, definition, newPools, parkedReaction } = props;
-  switch (id) {
-    case "use":
-      return (
-        <>
-          <Field copy="takes">
-            <Segmented
-              label="Takes"
-              value={action.actionType}
-              options={[
-                { value: "action", label: "Action" },
-                { value: "bonus", label: "Bonus action" },
-                { value: "reaction", label: "Reaction" },
-                { value: "free", label: "Free" }
-              ]}
-              onChange={(actionType) => {
-                if (actionType === action.actionType) return;
-                if (action.reaction) parkedReaction.current = action.reaction;
-                const next = omit({ ...action, actionType }, "reaction");
-                onChange(actionType === "reaction" ? { ...next, reaction: parkedReaction.current ?? { trigger: { kind: "hit-by-attack" } } } : next);
-              }}
-            />
-          </Field>
-          {action.actionType === "reaction" && action.reaction ? (
-            <ReactionControls reaction={action.reaction} onChange={(reaction) => onChange({ ...action, reaction })} kinds={ATTACK_TRIGGERS} />
-          ) : null}
-          <LimitPicker action={action} onChange={onChange} definition={definition} newPools={newPools} />
-        </>
-      );
-    case "target":
-      return <AttackTarget action={action} onChange={onChange} />;
-    case "roll":
-      return <AttackRoll action={action} onChange={onChange} definition={definition} />;
-    case "damage":
-      return (
-        <>
-          <DamageLines
-            lines={action.damage}
-            onChange={(damage) => onChange({ ...action, damage })}
-            label="Damage"
-            averageOf={(component) => componentAverage(component, definition)}
-            newLine={() => ({ dice: "1d6", damageType: "fire", diceCount: 1, diceSize: 6 })}
-            emptyText="No damage: a hit only applies its effects (a roper's tendril, a net)."
-          />
-          <More set={action.bloodiedDamage?.length ? 1 : 0}>
-            <Field copy="bloodiedDamage">
-              <DamageLines
-                lines={action.bloodiedDamage ?? []}
-                onChange={(lines) => onChange(withValue(action, "bloodiedDamage", lines.length ? lines : undefined))}
-                label="Bloodied damage"
-                averageOf={(component) => componentAverage(component, definition)}
-                newLine={() => ({ ...(action.damage[0] ?? { dice: "1d6", damageType: "piercing" }) })}
-                emptyText="Same as above."
-              />
-            </Field>
-          </More>
-        </>
-      );
-    case "effects":
-      return (
-        <EffectCards
-          riders={action.riders ?? []}
-          onChange={(riders) => onChange(withValue(action, "riders", riders.length ? riders : undefined))}
-          definition={definition}
-          ability={action.ability}
-          newPools={newPools}
-        />
-      );
-    case "notes":
-      return <ActionNotes action={action} onChange={onChange} />;
-    default:
-      return null;
-  }
-}
-
-function AttackTarget({ action, onChange }: { action: AttackAction; onChange: (next: ActionDefinition) => void }) {
+export function AttackTarget({ action, onChange }: { action: AttackAction; onChange: (next: ActionDefinition) => void }) {
   const reachId = useId();
   const conditionId = useId();
   const target = actionTarget.get(action);
@@ -203,10 +120,34 @@ function AttackTarget({ action, onChange }: { action: AttackAction; onChange: (n
   );
 }
 
-function AttackRoll({ action, onChange, definition }: { action: AttackAction; onChange: (next: ActionDefinition) => void; definition: CreatureDefinition }) {
+export function AttackRoll({ action, onChange, definition, spell }: {
+  action: AttackAction;
+  onChange: (next: ActionDefinition) => void;
+  definition: CreatureDefinition;
+  /** A spell's attack: its calculated to-hit can follow the caster's spellcasting ability. */
+  spell?: SpellDefinition;
+}) {
   const mode = attackBonusBinding.get(action);
   const calculated = calculatedAttackBonus(action, definition);
   const formula = action.attackBonusFormula;
+  const following = formula?.ability === "spellcasting";
+  const casting = spellcastingAbility(definition);
+  // A spell's calculated to-hit can follow its caster; a printed one is a fixed number.
+  const offerFollow = Boolean(spell) && mode.mode === "calculated";
+  const abilityOptions = offerFollow
+    ? [{ value: "spellcasting" as const, label: `Spellcasting (${casting.toUpperCase()})`, title: "The caster's spellcasting ability, set on the Stats tab" }, ...ABILITY_OPTIONS]
+    : ABILITY_OPTIONS;
+
+  function setUses(next: Ability | "spellcasting") {
+    if (next === "spellcasting") {
+      onChange(withSpellcastingAttackAbility({ ...action, attackBonusFormula: { proficiency: true, ...formula, ability: "spellcasting" } }, definition));
+      return;
+    }
+    // Leaving the spellcasting ability: the formula takes the ability it stood for, then moves with the rest.
+    const from = following ? { ...action, attackBonusFormula: { ...formula, ability: action.ability } } : action;
+    onChange(withAbility(from, next));
+  }
+
   return (
     <>
       <Field copy="attackType">
@@ -218,7 +159,7 @@ function AttackRoll({ action, onChange, definition }: { action: AttackAction; on
         />
       </Field>
       <Field copy="attackAbility">
-        <Segmented label="Uses" value={action.ability} options={ABILITY_OPTIONS} onChange={(ability) => onChange(withAbility(action, ability))} />
+        <Segmented label="Uses" value={following && offerFollow ? "spellcasting" : action.ability} options={abilityOptions} onChange={setUses} />
       </Field>
       <Field copy="toHit">
         <Segmented
@@ -227,9 +168,12 @@ function AttackRoll({ action, onChange, definition }: { action: AttackAction; on
           options={[{ value: "printed", label: "As printed" }, { value: "calculated", label: "Calculated" }]}
           onChange={(next) => {
             if (next === mode.mode) return;
-            onChange(next === "printed"
-              ? attackBonusBinding.set(action, { mode: "printed", value: resolveAttackBonus(action, definition) })
-              : attackBonusBinding.set(action, { mode: "calculated", formula: { ability: action.ability, proficiency: true } }));
+            if (next === "printed") {
+              onChange(attackBonusBinding.set(action, { mode: "printed", value: resolveAttackBonus(action, definition) }));
+              return;
+            }
+            const calculatedFormula = spell ? { ability: "spellcasting" as const, proficiency: true } : { ability: action.ability, proficiency: true };
+            onChange(withSpellcastingAttackAbility(attackBonusBinding.set(action, { mode: "calculated", formula: calculatedFormula }) as AttackAction, definition));
           }}
         />
         {mode.mode === "printed" ? (
@@ -241,34 +185,37 @@ function AttackRoll({ action, onChange, definition }: { action: AttackAction; on
             <Breakdown parts={calculated.parts} total={calculated.total} printed={mode.value} />
           </>
         ) : (
-          <>
-            <Breakdown parts={calculated.parts} total={calculated.total} />
-            <More set={(formula?.base ? 1 : 0) + (formula && formula.proficiency === false ? 1 : 0)}>
-              <div className={styles.row}>
-                <Field copy="formulaBase">
-                  <NumberField
-                    label="Extra to-hit bonus" signed optional value={formula?.base} min={-10} max={20} placeholder="+0"
-                    onChange={(n) => onChange(attackBonusBinding.set(action, { mode: "calculated", formula: withValue({ ability: action.ability, proficiency: true, ...formula }, "base", n || undefined) }))}
-                  />
-                </Field>
-                <Check
-                  copy="proficient"
-                  checked={formula?.proficiency !== false}
-                  onChange={(on) => onChange(attackBonusBinding.set(action, { mode: "calculated", formula: { ability: action.ability, ...formula, proficiency: on } }))}
-                />
-              </div>
-            </More>
-          </>
+          <Breakdown parts={calculated.parts} total={calculated.total} />
         )}
+        {action.autoHit ? <p className={styles.hint}>It hits automatically, so the to-hit is never rolled.</p> : null}
       </Field>
-      <More set={action.magical ? 1 : 0}>
-        <Check copy="magicalSource" checked={action.magical === true} onChange={(on) => onChange(withValue(action, "magical", on ? true : undefined))} />
+      {/* One "More options" for the whole roll: the calculated to-hit's extras, magic, hitting automatically. */}
+      <More set={(mode.mode === "calculated" ? (formula?.base ? 1 : 0) + (formula && formula.proficiency === false ? 1 : 0) : 0) + (action.magical && !spell ? 1 : 0) + (action.autoHit ? 1 : 0)}>
+        {mode.mode === "calculated" ? (
+          <div className={styles.row}>
+            <Field copy="formulaBase">
+              <NumberField
+                label="Extra to-hit bonus" signed optional value={formula?.base} min={-10} max={20} placeholder="+0"
+                onChange={(n) => onChange(attackBonusBinding.set(action, { mode: "calculated", formula: withValue({ ability: action.ability, proficiency: true, ...formula }, "base", n || undefined) }))}
+              />
+            </Field>
+            <Check
+              copy="proficient"
+              checked={formula?.proficiency !== false}
+              onChange={(on) => onChange(attackBonusBinding.set(action, { mode: "calculated", formula: { ability: action.ability, ...formula, proficiency: on } }))}
+            />
+          </div>
+        ) : null}
+        {spell ? null : <Check copy="magicalSource" checked={action.magical === true} onChange={(on) => onChange(withValue(action, "magical", on ? true : undefined))} />}
+        {spell || action.autoHit ? (
+          <Check copy="autoHit" checked={action.autoHit === true} onChange={(on) => onChange(withValue(action, "autoHit", on ? true : undefined))} />
+        ) : null}
       </More>
     </>
   );
 }
 
-function ActionNotes({ action, onChange }: { action: ActionDefinition; onChange: (next: ActionDefinition) => void }) {
+export function ActionNotes({ action, onChange }: { action: ActionDefinition; onChange: (next: ActionDefinition) => void }) {
   const id = useId();
   const reference = action.automationSupport === "manual-only";
   const editable = action.automationSupport === "full" || action.automationSupport === "manual-only";
@@ -390,7 +337,7 @@ export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNo
           riders={weapon.onHit ?? []}
           onChange={(riders) => onChange(withValue(weapon, "onHit", riders.length ? riders : undefined))}
           definition={definition}
-          ability={resolvedAbility(weapon, definition)}
+          context={{ kind: "attack", ability: resolvedAbility(weapon, definition) }}
           weapon={weapon}
           newPools={newPools}
         />

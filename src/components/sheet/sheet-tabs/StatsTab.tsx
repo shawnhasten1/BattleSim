@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { abilityModifier, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
+import { abilityModifier, inferSpellcastingAbility, type Ability, type CombatantState, type ConditionImmunity, type CreatureDefinition, type CreatureType } from "@/engine";
 import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "../builders/DamageAdjustmentGroup";
 import builderStyles from "../builders/builders.module.css";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -29,6 +29,17 @@ const CREATURE_TYPE_HELP = (
 );
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+/** The spellcasting abilities first (INT, WIS, CHA), then the rest for unusual casters. */
+const SPELLCASTING_CHOICES: Ability[] = ["int", "wis", "cha", "str", "dex", "con"];
+
+const SPELLCASTING_HELP = (
+  <p>
+    The ability its spells use for their save DC and spell attack bonus (8 + this modifier + proficiency, and this
+    modifier + proficiency). A spell can use its own ability instead, set in the spell&apos;s Roll section. Auto uses the
+    ability its spells name most, or else its highest of INT, WIS and CHA.
+  </p>
+);
 
 const CONDITION_IMMUNITIES: ConditionImmunity[] = [
   "blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "paralyzed",
@@ -112,6 +123,22 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
             Prof
             <input type="number" value={definition.proficiencyBonus ?? 2} onChange={(e) => updateCreatureDefinition(definition.id, { proficiencyBonus: Number(e.target.value) })} />
           </label>
+          {definition.spells?.length || definition.spellcasting ? (
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>
+                Spellcasting
+                <InfoTooltip label="About spellcasting ability" content={SPELLCASTING_HELP} />
+              </span>
+              <select
+                aria-label="Spellcasting ability"
+                value={definition.spellcasting?.ability ?? ""}
+                onChange={(e) => updateCreatureDefinition(definition.id, { spellcasting: e.target.value ? { ability: e.target.value as Ability } : undefined })}
+              >
+                <option value="">Auto: {inferSpellcastingAbility(definition).toUpperCase()}</option>
+                {SPELLCASTING_CHOICES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+              </select>
+            </label>
+          ) : null}
           <label className={styles.field}>
             Size
             <input value={definition.size} readOnly />
