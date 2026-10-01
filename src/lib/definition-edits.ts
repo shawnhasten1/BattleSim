@@ -2,12 +2,14 @@ import {
   getExecutableActions,
   type ActionDefinition,
   type CreatureDefinition,
+  type LegendaryActionRef,
   type MultiattackActionDefinition,
   type MultiattackGeneric,
   type MultiattackStep
 } from "@/engine";
+import { legendaryUsersOf, withoutLegendaryAction } from "./ability-editor/legendary";
 
-/** A record on a creature's sheet that can be deleted on its own. */
+/** A record on a creature's sheet that can be deleted on its own. A legendary action's `itemId` is its index. */
 export type DefinitionItemType =
   | "weapon"
   | "spell"
@@ -17,7 +19,8 @@ export type DefinitionItemType =
   | "action"
   | "bonusAction"
   | "reaction"
-  | "lairAction";
+  | "lairAction"
+  | "legendary";
 
 const ACTION_BUCKET: Partial<Record<DefinitionItemType, "actions" | "bonusActions" | "reactions">> = {
   action: "actions",
@@ -37,6 +40,46 @@ function multiattacksOf(definition: CreatureDefinition): MultiattackActionDefini
  * (`id:<action>` or `any:<kind>`), the steps that used the record use it instead, and every routine is kept.
  */
 export function withoutDefinitionItem(definition: CreatureDefinition, itemType: DefinitionItemType, itemId: string, replacement?: string): CreatureDefinition {
+  // A legendary action is only itself: nothing else uses it.
+  if (itemType === "legendary") return withoutLegendaryAction(definition, Number(itemId));
+  const { itemRemoved, removedIds } = removalOf(definition, itemType, itemId);
+  const scrub = (list: ActionDefinition[] | undefined): ActionDefinition[] | undefined => list
+    ?.flatMap((action): ActionDefinition[] => {
+      if (action.kind !== "multiattack") return [action];
+      if (replacement) return [withStepsReplaced(action, removedIds, replacement)];
+      const scrubbed = withoutSteps(action, removedIds);
+      return scrubbed ? [scrubbed] : [];
+    });
+  return {
+    ...itemRemoved,
+    actions: scrub(itemRemoved.actions) ?? [],
+    bonusActions: scrub(itemRemoved.bonusActions),
+    reactions: scrub(itemRemoved.reactions),
+    ...withLegendaryUsesReplaced(definition, removedIds, replacement)
+  };
+}
+
+/**
+ * The legendary actions once the abilities in `removed` are gone: one that used one of them uses `replacement` instead
+ * (an ability, `id:<action>`), or is reference text from then on. Nothing when no legendary action used them.
+ */
+function withLegendaryUsesReplaced(definition: CreatureDefinition, removed: ReadonlySet<string>, replacement?: string): Pick<CreatureDefinition, "legendary"> | Record<string, never> {
+  const legendary = definition.legendary;
+  const users = new Set(legendaryUsersOf(definition, removed).map((user) => user.index));
+  if (!legendary || !users.size) return {};
+  const swapTo = replacement?.startsWith("id:") ? replacement.slice(3) : undefined;
+  const actions = legendary.actions.map((entry, index): LegendaryActionRef => {
+    if (!users.has(index)) return entry;
+    if (swapTo) return { ...entry, actionId: swapTo };
+    const next = { ...entry };
+    delete next.actionId;
+    return next;
+  });
+  return { legendary: { ...legendary, actions } };
+}
+
+/** The creature without the record itself, and every executable action that went with it. */
+function removalOf(definition: CreatureDefinition, itemType: Exclude<DefinitionItemType, "legendary">, itemId: string): { itemRemoved: CreatureDefinition; removedIds: Set<string> } {
   const removedIds = new Set<string>([itemId]);
   if (itemType === "weapon") {
     const weapon = (definition.weapons ?? []).find((item) => item.id === itemId);
@@ -76,19 +119,7 @@ export function withoutDefinitionItem(definition: CreatureDefinition, itemType: 
   for (const action of getExecutableActions(definition)) {
     if (!remaining.has(action.id)) removedIds.add(action.id);
   }
-  const scrub = (list: ActionDefinition[] | undefined): ActionDefinition[] | undefined => list
-    ?.flatMap((action): ActionDefinition[] => {
-      if (action.kind !== "multiattack") return [action];
-      if (replacement) return [withStepsReplaced(action, removedIds, replacement)];
-      const scrubbed = withoutSteps(action, removedIds);
-      return scrubbed ? [scrubbed] : [];
-    });
-  return {
-    ...itemRemoved,
-    actions: scrub(itemRemoved.actions) ?? [],
-    bonusActions: scrub(itemRemoved.bonusActions),
-    reactions: scrub(itemRemoved.reactions)
-  };
+  return { itemRemoved, removedIds };
 }
 
 /** A routine with every step that used a `removed` ability using `replacement` instead; counts and rules stay. */
@@ -132,6 +163,12 @@ export interface MultiattackLoss {
   after?: MultiattackActionDefinition;
   /** The creature once the record is gone, to name what the multiattack is left with. */
   definitionAfter: CreatureDefinition;
+}
+
+/** The legendary actions that use a record (or what it produces): deleting it leaves them nothing to do, so the sheet asks first. */
+export function legendaryLosses(definition: CreatureDefinition, itemType: DefinitionItemType, itemId: string): Array<{ index: number; entry: LegendaryActionRef }> {
+  if (itemType === "legendary" || !definition.legendary) return [];
+  return legendaryUsersOf(definition, removalOf(definition, itemType, itemId).removedIds);
 }
 
 /** The multiattacks that deleting a record would change or delete, so the sheet can ask first. */

@@ -51,7 +51,12 @@ export function AbilitiesList({ groups, handlers, flashId, under }: {
 
 /** The id the sheet uses for a row (its record's id; a legendary action's place). */
 export function rowId(row: ListRow): string {
-  return "id" in row.ref ? row.ref.id : `legendary-${row.ref.index}`;
+  return refRowId(row.ref);
+}
+
+/** The row id of the record a ref points at (a legendary action has no id: its place). */
+export function refRowId(ref: ListRow["ref"]): string {
+  return "id" in ref ? ref.id : `legendary-${ref.index}`;
 }
 
 function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandlers; flash: boolean; under?: (row: ListRow) => ReactNode }) {
@@ -62,7 +67,7 @@ function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandl
         <span className={styles.dot} data-automation={row.automation} role="img" aria-label={row.automationNote} title={row.automationNote} />
         <button
           type="button" className={styles.rowOpen} aria-label={`Edit ${row.name}`} disabled={!opens}
-          title={opens ? undefined : "Legendary actions get their editor in a later update."}
+          title={opens ? undefined : "It can't be opened."}
           onClick={() => handlers.onOpen(row)}
         >
           <span className={styles.rowTitle}>

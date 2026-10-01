@@ -62,14 +62,30 @@ describe("the list", { timeout: 20000 }, () => {
     expect(store().undoStack.length).toBe(depth + 1);
   });
 
-  it("lists legendary actions with their pool, without opening them yet", () => {
+  it("opens a legendary action in the editor: what it costs, how many a round, and what it uses", async () => {
     patchFighter({ legendary: { pool: 3, actions: [{ name: "Swipe", cost: 2, description: "It makes a longsword attack.", actionId: "longsword" }] } });
     render(<LiveTab />);
     const legendary = screen.getByRole("region", { name: "Legendary actions" });
     expect(legendary.textContent).toContain("3 a round");
     expect(within(legendary).getByText("2 actions")).toBeTruthy();
-    expect((within(legendary).getByRole("button", { name: "Edit Swipe" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(legendary).queryByRole("button", { name: "More for Swipe" })).toBeNull();
+    await userEvent.click(within(legendary).getByRole("button", { name: "Edit Swipe" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Does/ }));
+    expect(screen.getByRole("radiogroup", { name: "It" }).querySelector("[aria-checked=true]")?.textContent).toBe("Uses one of its abilities");
+    expect((screen.getByLabelText("Uses") as HTMLSelectElement).value).toBe("longsword");
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Costs" })).getByRole("radio", { name: "1 action" }));
+    const pool = screen.getByLabelText("Legendary actions a round");
+    await userEvent.clear(pool);
+    await userEvent.type(pool, "2");
+    const depth = store().undoStack.length;
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(fighter().legendary).toMatchObject({ pool: 2, actions: [{ name: "Swipe", cost: 1, actionId: "longsword" }] });
+    expect(store().undoStack.length).toBe(depth + 1);
+
+    await rowMenu("Swipe", "Duplicate");
+    expect(fighter().legendary!.actions.map((entry) => entry.name)).toEqual(["Swipe", "Swipe (copy)"]);
+    await rowMenu("Swipe (copy)", "Delete");
+    expect(fighter().legendary!.actions.map((entry) => entry.name)).toEqual(["Swipe"]);
   });
 
   it("switches an optional rule on and off from its row", async () => {

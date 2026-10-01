@@ -217,15 +217,22 @@ export function AttackRoll({ action, onChange, definition, spell }: {
   );
 }
 
-export function ActionNotes({ action, onChange }: { action: ActionDefinition; onChange: (next: ActionDefinition) => void }) {
+export function ActionNotes({ action, onChange, hideText }: {
+  action: ActionDefinition;
+  onChange: (next: ActionDefinition) => void;
+  /** Its reference text is kept elsewhere (a legendary action's own ability: on the legendary action). */
+  hideText?: boolean;
+}) {
   const id = useId();
   const reference = action.automationSupport === "manual-only";
   const editable = action.automationSupport === "full" || action.automationSupport === "manual-only";
   return (
     <>
-      <Field copy="description" id={id}>
-        <textarea id={id} value={action.description ?? ""} placeholder="The statblock's wording, or a reminder for yourself." onChange={(e) => onChange(withValue(action, "description", e.target.value || undefined))} />
-      </Field>
+      {hideText ? null : (
+        <Field copy="description" id={id}>
+          <textarea id={id} value={action.description ?? ""} placeholder="The statblock's wording, or a reminder for yourself." onChange={(e) => onChange(withValue(action, "description", e.target.value || undefined))} />
+        </Field>
+      )}
       {editable ? (
         <Field copy="automation">
           <Segmented
@@ -293,42 +300,79 @@ function usableAs(weapon: WeaponDefinition, parts: { action: boolean; bonus: boo
   return withValue(weapon, "usableAs", isDefault ? undefined : list);
 }
 
+/**
+ * A weapon made a focus (a staff, a wand): no attack of its own, so the attack's fields are left as they are, unused.
+ * Made a weapon again, it's a melee weapon with a reach.
+ */
+function withWeaponKind(weapon: WeaponDefinition, kind: "weapon" | "focus"): WeaponDefinition {
+  if (kind === "focus") return weapon.attackType === "focus" ? weapon : { ...weapon, attackType: "focus" };
+  if (weapon.attackType !== "focus") return weapon;
+  return { ...weapon, attackType: "melee", range: Math.max(5, weapon.reach ?? 5), reach: Math.max(5, weapon.reach ?? 5) };
+}
+
 export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNode {
   const { weapon, onChange, definition, newPools, onOpenGranted } = props;
+  const focus = weapon.attackType === "focus";
   switch (id) {
     case "basics":
       return (
         <>
-          <Field copy="category">
+          <Field copy="weaponKind">
             <Segmented
-              label="Category"
-              value={weapon.category ?? "none"}
-              options={[{ value: "none", label: "—" }, { value: "simple", label: "Simple" }, { value: "martial", label: "Martial" }]}
-              onChange={(category) => onChange(withValue(weapon, "category", category === "none" ? undefined : category))}
+              label="It's" value={focus ? "focus" : "weapon"}
+              options={[{ value: "weapon", label: "A weapon" }, { value: "focus", label: "A focus or wand" }]}
+              onChange={(kind) => onChange(withWeaponKind(weapon, kind))}
             />
           </Field>
-          <Field copy="properties">
-            <div className={styles.typeChips} role="group" aria-label="Properties">
-              {[...PROPERTIES, ...(weapon.properties ?? []).filter((property) => !PROPERTIES.includes(property))].map((property) => {
-                const on = weapon.properties?.includes(property) ?? false;
-                return (
-                  <button
-                    key={property} type="button" aria-pressed={on}
-                    onClick={() => {
-                      const list = on ? (weapon.properties ?? []).filter((p) => p !== property) : [...(weapon.properties ?? []), property];
-                      onChange(withValue(weapon, "properties", list.length ? list : undefined));
-                    }}
-                  >
-                    {property}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
+          {focus ? <p className={styles.hint}>It makes no attack of its own: give it charges in Use &amp; cost, and what it lets the creature use in Grants.</p> : null}
+          {focus ? null : <WeaponBasics weapon={weapon} onChange={onChange} />}
         </>
       );
     case "use":
       return <WeaponUse weapon={weapon} onChange={onChange} />;
+    default:
+      return weaponSectionRest(id, { weapon, onChange, definition, newPools, onOpenGranted });
+  }
+}
+
+/** A weapon's category and properties (for reference). */
+function WeaponBasics({ weapon, onChange }: { weapon: WeaponDefinition; onChange: (next: WeaponDefinition) => void }) {
+  return (
+    <>
+      <Field copy="category">
+        <Segmented
+          label="Category"
+          value={weapon.category ?? "none"}
+          options={[{ value: "none", label: "—" }, { value: "simple", label: "Simple" }, { value: "martial", label: "Martial" }]}
+          onChange={(category) => onChange(withValue(weapon, "category", category === "none" ? undefined : category))}
+        />
+      </Field>
+      <Field copy="properties">
+        <div className={styles.typeChips} role="group" aria-label="Properties">
+          {[...PROPERTIES, ...(weapon.properties ?? []).filter((property) => !PROPERTIES.includes(property))].map((property) => {
+            const on = weapon.properties?.includes(property) ?? false;
+            return (
+              <button
+                key={property} type="button" aria-pressed={on}
+                onClick={() => {
+                  const list = on ? (weapon.properties ?? []).filter((p) => p !== property) : [...(weapon.properties ?? []), property];
+                  onChange(withValue(weapon, "properties", list.length ? list : undefined));
+                }}
+              >
+                {property}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+    </>
+  );
+}
+
+/** The sections after Basics and Use & cost: the attack's (a focus has none), and what it does while carried. */
+function weaponSectionRest(id: SectionId, props: WeaponSectionProps): ReactNode {
+  const { weapon, onChange, definition, newPools, onOpenGranted } = props;
+  switch (id) {
     case "target":
       return <WeaponTarget weapon={weapon} onChange={onChange} />;
     case "roll":
@@ -368,6 +412,7 @@ export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNo
 
 function WeaponUse({ weapon, onChange }: { weapon: WeaponDefinition; onChange: (next: WeaponDefinition) => void }) {
   const melee = weapon.attackType === "melee";
+  const focus = weapon.attackType === "focus";
   const list = weapon.usableAs;
   const parts = {
     action: !list || list.includes("action"),
@@ -380,7 +425,7 @@ function WeaponUse({ weapon, onChange }: { weapon: WeaponDefinition; onChange: (
   const refill = typeof charges?.recharge === "string" ? charges.recharge : charges?.recharge ? "dice" : "never";
   return (
     <>
-      <Field copy="weaponUse">
+      {focus ? null : <Field copy="weaponUse">
         <span className={styles.inline}>
           {/* At least one: the last one ticked can't be cleared. */}
           <Check
@@ -392,7 +437,7 @@ function WeaponUse({ weapon, onChange }: { weapon: WeaponDefinition; onChange: (
             onChange={(on) => onChange(usableAs(weapon, { ...parts, bonus: on }))}
           />
         </span>
-      </Field>
+      </Field>}
       <Check
         copy="charges"
         checked={Boolean(charges)}

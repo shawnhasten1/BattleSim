@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useEncounterStore } from "@/store/encounter-store";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
+import { blankLairAction } from "@/lib/ability-editor/templates";
 import { getExecutableActions, type CreatureDefinition } from "@/engine";
 import { addFromLibrary, group, openAdd, openFromLibrary, rowMenu, searchAdd, startFromScratch, useRecipe } from "./helpers/abilities-tab";
 
@@ -44,7 +45,7 @@ describe("ActionsTab", () => {
     const filters = within(screen.getByRole("group", { name: "Show" })).getAllByRole("button").map((button) => button.textContent);
     expect(filters).toEqual(["All", "Weapons", "Spells", "Monster abilities", "Traits & features", "Recipes"]);
     const blanks = within(screen.getByRole("region", { name: "Start from scratch" })).getAllByRole("button").map((button) => button.textContent);
-    expect(blanks).toEqual(["Weapon", "Attack", "Special action", "Multiattack", "Spell", "Trait or feature", "Reaction", "Lair action", "On death", "Summon", "Shapechange"]);
+    expect(blanks).toEqual(["Weapon", "Attack", "Special action", "Multiattack", "Spell", "Trait or feature", "Reaction", "Legendary action", "Lair action", "On death", "Summon", "Shapechange"]);
   });
 
   it("adds a library entry with one click on its +, or opens it to check first and adds it on Save", async () => {
@@ -73,10 +74,16 @@ describe("ActionsTab", () => {
     expect(within(screen.getByRole("region", { name: "Library" })).getByRole("button", { name: /^Dagger ·/ })).toBeTruthy();
   });
 
-  it("keeps the Simple / Advanced toggle in the builder forms that still use it, persisted", async () => {
+  it("keeps the Simple / Advanced toggle in the classic builder forms, persisted", async () => {
+    // A lair action opens in the editor now; the classic form is one link away until Phase 8.
+    const encounter = useEncounterStore.getState().encounter;
+    useEncounterStore.setState({
+      encounter: { ...encounter, definitions: encounter.definitions.map((d) => (d.id === "def-fighter" ? { ...d, lairActions: [{ ...blankLairAction(), id: "lair-1", name: "Eruption" }] } : d)) }
+    });
     renderTab();
     expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
-    await startFromScratch("Lair action");
+    await userEvent.click(screen.getByRole("button", { name: "Edit Eruption" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open it in the classic editor" }));
     await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     expect(localStorage.getItem("actions-builder-mode")).toBe("advanced");
     await userEvent.click(screen.getByRole("button", { name: "Simple" }));

@@ -21,7 +21,8 @@ import { featureStatblock, spellStatblock, weaponStatblock } from "@/lib/statblo
 import styles from "./abilities.module.css";
 
 /** What "Start from scratch" can start. */
-export type BlankKind = "weapon" | "attack" | "special" | "multiattack" | "spell" | "feature" | "reaction" | "lair" | "death" | "summon" | "transform";
+export type BlankKind =
+  | "weapon" | "attack" | "special" | "multiattack" | "spell" | "feature" | "reaction" | "legendary" | "lair" | "death" | "summon" | "transform";
 
 const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
   { kind: "weapon", label: "Weapon", title: "A longsword-style weapon to change" },
@@ -31,18 +32,16 @@ const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
   { kind: "spell", label: "Spell", title: "A spell attack; Roll and Target make it anything else" },
   { kind: "feature", label: "Trait or feature", title: "Always on (Pack Tactics) or switched on (Rage)" },
   { kind: "reaction", label: "Reaction", title: "Something it does when it's targeted or hit (a Parry)" },
+  { kind: "legendary", label: "Legendary action", title: "Taken between other creatures' turns, for legendary actions it has a round (a dragon's tail attack)" },
   { kind: "lair", label: "Lair action", title: "Taken on initiative 20 while it's in its lair" },
   { kind: "death", label: "On death", title: "Fires once, when it drops to 0 HP" },
   { kind: "summon", label: "Summon", title: "Calls other creatures into the fight" },
   { kind: "transform", label: "Shapechange", title: "Turns into another form" }
 ];
 
-/** A recipe the builder form still handles (a death burst), until the editor does (Phase 7). */
-export interface BuilderRecipe {
-  label: string;
-  hint: string;
-  open: () => void;
-}
+
+/** What a recipe makes, beside its name. */
+const RECIPE_GROUP_WORDS: Record<Recipe["group"], string> = { weapon: "weapon", action: "monster action", spell: "spell", feature: "feature", death: "on death" };
 
 /** A library row's statblock line, without its name ("Extra Attack: 2 × any weapon attack"), which the row shows. */
 function line(entry: LibraryEntry, definition: CreatureDefinition): string {
@@ -63,10 +62,9 @@ function onSheet(definition: CreatureDefinition): Set<string> {
  * to start from scratch. A row opens the editor on a ready copy, and nothing is added until Save; a library row's "+"
  * adds it at once and leaves the panel open for the next one, and it can be dragged onto the sheet.
  */
-export function AddAbility({ definition, compendium, builderRecipes, onPrepared, onAttach, onBlank, onClose }: {
+export function AddAbility({ definition, compendium, onPrepared, onAttach, onBlank, onClose }: {
   definition: CreatureDefinition;
   compendium?: Compendium;
-  builderRecipes: BuilderRecipe[];
   onPrepared: (prepared: Prepared) => void;
   onAttach: (kind: SrdEntryKind, id: string) => void;
   onBlank: (kind: BlankKind) => void;
@@ -93,9 +91,6 @@ export function AddAbility({ definition, compendium, builderRecipes, onPrepared,
 
   const results = useMemo(() => searchAdd(query, filter, abilities), [query, filter, abilities]);
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const builders = filter === "all" || filter === "recipes"
-    ? builderRecipes.filter((entry) => tokens.every((token) => `${entry.label} ${entry.hint}`.toLowerCase().includes(token)))
-    : [];
 
   function chooseRecipe(recipe: Recipe) {
     onPrepared(recipe.prepare(definition));
@@ -136,7 +131,7 @@ export function AddAbility({ definition, compendium, builderRecipes, onPrepared,
     else if (results.monster[0]) void chooseMonster(results.monster[0]);
   }
 
-  const showRecipes = results.recipes.length > 0 || builders.length > 0;
+  const showRecipes = results.recipes.length > 0;
   const nothing = !showRecipes && !results.library.length && !results.monster.length;
   return (
     <div className={styles.add} role="region" aria-label="Add ability">
@@ -165,19 +160,12 @@ export function AddAbility({ definition, compendium, builderRecipes, onPrepared,
               {results.recipes.map((recipe) => (
                 <div key={recipe.id} className={styles.item}>
                   <button type="button" className={styles.itemOpen} onClick={() => chooseRecipe(recipe)}>
-                    <span className={styles.itemName}>{recipe.label} <span className={styles.itemMeta}>· {recipe.group === "action" ? "monster action" : recipe.group}</span></span>
+                    <span className={styles.itemName}>{recipe.label} <span className={styles.itemMeta}>· {RECIPE_GROUP_WORDS[recipe.group]}</span></span>
                     <span className={styles.itemLine}>{recipe.hint}</span>
                   </button>
                 </div>
               ))}
-              {builders.map((entry) => (
-                <div key={entry.label} className={styles.item}>
-                  <button type="button" className={styles.itemOpen} onClick={entry.open}>
-                    <span className={styles.itemName}>{entry.label} <span className={styles.itemMeta}>· on death</span></span>
-                    <span className={styles.itemLine}>{entry.hint}</span>
-                  </button>
-                </div>
-              ))}
+
             </div>
           </section>
         ) : null}

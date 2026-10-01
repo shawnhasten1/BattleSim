@@ -17,7 +17,7 @@ import {
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
-import { findAbility, withAbility, type AbilityRecord, type AbilityRef } from "./refs";
+import { DEFAULT_LEGENDARY_POOL, findAbility, withAbility, type AbilityRecord, type AbilityRef } from "./refs";
 import { effectPools } from "./features";
 
 /** Starting sizes for the class pools a feature's granted actions spend. */
@@ -117,9 +117,12 @@ export function usagePools(record: AbilityRecord): Map<string, number> {
 /** A legendary action's cost, whole and 1-3. */
 const legendaryCost = (cost: number): number => Math.min(3, Math.max(1, Math.round(cost) || 1));
 
+/** An id for a legendary action's own ability: never one another record (or another legendary action) has. */
+export const freshLegendaryActionId = () => `legendary-${crypto.randomUUID()}`;
+
 /** The creature with a new legendary action at the end of its list (a pool of 3 if it had none). */
 export function withNewLegendaryAction(definition: CreatureDefinition, entry: LegendaryActionRef, actionId: string): { definition: CreatureDefinition; ref: AbilityRef } {
-  const legendary = definition.legendary ?? { pool: 3, actions: [] };
+  const legendary = definition.legendary ?? { pool: DEFAULT_LEGENDARY_POOL, actions: [] };
   const action = entry.action ? withOwnUsagePool(normalizedAction(entry.action, actionId, "action"), entry.action.id) : undefined;
   return {
     definition: { ...definition, legendary: { ...legendary, actions: [...legendary.actions, { ...entry, cost: legendaryCost(entry.cost), action }] } },
@@ -146,6 +149,10 @@ export function withNewGrantedAction(
 /** What a save can bring along besides the record: pools the editor created for it ("New pool…"), at their starting size. */
 export interface AbilityRecordExtras {
   pools?: Record<string, number>;
+  /** How many legendary actions the creature takes a round (a legendary action's editor sets it). */
+  legendaryPool?: number;
+  /** Creatures it summons or changes into that the scene doesn't have yet, fetched while editing: embedded with it. */
+  embed?: CreatureDefinition[];
   /** A new record goes right after this one in its list (a duplicate beside its original), not at the end. */
   after?: string;
 }
@@ -210,8 +217,9 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
     case "legendary": {
       const before = existing as LegendaryActionRef;
       const entry = record as LegendaryActionRef;
+      // An ability of its own keeps the id it had; a new one (copied from another ability) gets a fresh one.
       const action = entry.action
-        ? normalizedAction(entry.action, before.action?.id ?? entry.action.id ?? `legendary-${ref.index + 1}`, "action")
+        ? normalizedAction(entry.action, before.action?.id || entry.action.id || freshLegendaryActionId(), "action")
         : undefined;
       normalized = { ...entry, cost: legendaryCost(entry.cost), action };
       break;

@@ -333,16 +333,23 @@ const SECTIONS: Section[] = [
           </li>
         </ul>
         <p>
-          Weapons, attacks, multiattacks, spells, special actions (saves, areas, heals, buffs, teleports), and features
-          and traits open in the{" "}
-          <strong>ability editor</strong>, in place of the list. Its preview at the
+          Every ability opens in the <strong>ability editor</strong>, in place of the list: weapons and focuses, attacks,
+          multiattacks, spells, special actions (saves, areas, heals, buffs, teleports), summons, shapechanges, features
+          and traits, legendary actions, lair actions and death effects. Its preview at the
           top shows the ability as a statblock entry, with whether the simulator runs all of it, and any warnings
           (a pool the creature doesn&apos;t have, a trigger that never fires) with a link to the section that fixes
           them. Below, each section (Use &amp; cost, Target, Roll, Damage, Effects, Notes &amp; AI and more; see{" "}
           <a href="#spells">Spells &amp; Attacks</a>) shows a one-line summary and opens to its settings, with the rarer
           ones under <strong>More options</strong>. Save is one undo step and does nothing until something changes;
-          Esc or leaving the sheet asks before throwing changes away. Summons, shapechanges, lair actions and death effects still
-          open the builder form (see <a href="#features">Features &amp; Traits</a> for features).
+          Esc or leaving the sheet asks before throwing changes away. See <a href="#features">Features &amp; Traits</a> for
+          features, and <a href="#traits">Monster Traits, Legendary &amp; Lair Actions</a> for legendary actions, lair actions
+          and death effects.
+        </p>
+        <p>
+          For power users, <strong>Notes &amp; AI</strong> has <strong>Edit as JSON</strong>: the ability as JSON. Edit it and{" "}
+          <strong>Check</strong>: it must parse (an error says the line and column), its parts must fit the simulator&apos;s
+          schemas, and it&apos;s tidied the way a save would. You see what changes, line by line; <strong>Apply</strong> puts it
+          in the editor, and Save commits it as usual. Ids are kept, since other abilities point at them.
         </p>
         <p>
           You can build an actor by hand on the Abilities tab, or drop in a
@@ -392,7 +399,7 @@ const SECTIONS: Section[] = [
           <li>
             <strong>Start from scratch</strong> — <em>Spell</em> starts a 1st-level spell attack, <em>Special action</em> a
             monster&apos;s saving throw, and <em>Attack</em> a claw or a bite; there are also <em>Weapon</em>,{" "}
-            <em>Multiattack</em>, <em>Trait or feature</em>, <em>Reaction</em>, <em>Lair action</em>, <em>On death</em>,{" "}
+            <em>Multiattack</em>, <em>Trait or feature</em>, <em>Reaction</em>, <em>Legendary action</em>, <em>Lair action</em>, <em>On death</em>,{" "}
             <em>Summon</em> and <em>Shapechange</em>. The Roll and Target sections turn a spell or an action into anything else.
           </li>
           <li>
@@ -437,7 +444,8 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong>Roll</strong> — <em>How it works</em>: an attack roll, a saving throw, or automatic (it heals,
-            grants a benefit or teleports). Switching keeps what the two kinds share and sets the rest aside, so
+            grants a benefit, teleports, summons, changes shape, or takes a standard action such as Dash or Disengage).
+            Switching keeps what the two kinds share and sets the rest aside, so
             switching back brings it back; a note says what moved. A saving throw sets the ability, the DC (as
             printed, or calculated from 8 + an ability + proficiency) and what a success does: half damage, no
             damage, or avoids it entirely.
@@ -449,6 +457,23 @@ const SECTIONS: Section[] = [
             it lasts. Anything else it grants (advantage on attacks, extra damage on hits) is a card under{" "}
             <strong>Other effects</strong>, as in <a href="#features">While active</a>. <strong>Cast before
             combat</strong> (under Use &amp; cost) keeps a long buff like Mage Armor out of the fight.
+          </li>
+          <li>
+            <strong>Summon</strong> — the creatures it calls up (any SRD monster or an actor in the scene, searched by
+            name), how many (a number, or dice such as 1d4), which one when there are several (its choice or at random),
+            the chance it works (a mephit&apos;s 25%), how long they stay and how far away they appear. Library creatures
+            are fetched as you pick them and added to the scene when you save; a summon that would loop back on itself
+            (A summons B, B summons A) isn&apos;t saved.
+          </li>
+          <li>
+            <strong>Shapechange</strong> — the forms it can take (each a creature: its AC, speed, actions and traits;
+            hit points and conditions stay), whether it can change back, and whether it does when it dies. Each form gets
+            the same shapechange, so a creature that has changed can change again.
+          </li>
+          <li>
+            <strong>Standard action</strong> — Dash, Disengage, Dodge, Hide, Help or escaping a grapple, taken as an
+            action or a bonus action (Nimble Escape, Aggressive). The simulator doesn&apos;t hide, and Help is only
+            partly simulated.
           </li>
           <li>
             <strong>Damage</strong> — lines of dice, the ability each adds, and a type, with averages. A
@@ -474,9 +499,16 @@ const SECTIONS: Section[] = [
             <a href="#features">Features &amp; Traits</a>.
           </li>
           <li>
-            <strong>Notes &amp; AI</strong> — reference text, and whether the simulator uses it at all.
+            <strong>Notes &amp; AI</strong> — reference text, and whether the simulator uses it at all. Edit as JSON is
+            here too.
           </li>
         </ul>
+        <p>
+          A weapon&apos;s Basics can make it <strong>a focus or wand</strong> (a staff, a holy symbol): it makes no attack
+          of its own, so it has no Target, Roll or Damage, only its charges (Use &amp; cost), what it does while carried
+          (While active) and what it lets the creature use (Grants), each opened in the editor with a breadcrumb
+          (<em>Staff of Fire › Fireball</em>).
+        </p>
         <p>
           Warnings under the preview point at the section that fixes them: a spell whose slot the creature
           doesn&apos;t have (&quot;Never usable&quot;), a lingering area that never affects anyone, a benefit that grants
@@ -717,7 +749,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: "traits",
-    label: "Monster Traits & Lair Actions",
+    label: "Monster Traits, Legendary & Lair Actions",
     content: (
       <>
         <p>
@@ -762,10 +794,43 @@ const SECTIONS: Section[] = [
           charge or after it drops a creature in Grants. See <a href="#features">Features &amp; Traits</a>.
         </p>
 
+        <h3>Legendary actions</h3>
+        <p>
+          Add one with <strong>Add ability → Start from scratch → Legendary action</strong>, or copy one from a library
+          monster in Add (one that uses its monster&apos;s tail attack comes with that attack as its own). Each lists under{" "}
+          <strong>Legendary actions</strong>, with how many the creature takes a round beside the heading. In the editor:
+        </p>
+        <ul>
+          <li>
+            <strong>Use &amp; cost</strong> — what it costs (1, 2 or 3 actions) and how many the creature takes a round
+            (3 for most, shared by all of them; the pools above the list change it too).
+          </li>
+          <li>
+            <strong>Does</strong> — it uses one of the creature&apos;s abilities as it is (a dragon&apos;s Tail Attack is its
+            tail attack), has an ability of its own set in the sections below (Wing Attack: a save around itself), or is
+            reference text you resolve (Detect). Switching keeps the others while the editor is open, and its own ability
+            starts as a copy of the one it used.
+          </li>
+        </ul>
+        <p>
+          At the end of another creature&apos;s turn, a legendary creature with actions left takes the best one that
+          reaches a target; they all come back at the start of its own turn. The AI only takes legendary actions that
+          attack, call for a saving throw or make a multiattack, and the editor says so for any other. Deleting an
+          ability a legendary action uses asks first: pick another for it, or it becomes reference text.
+        </p>
+
+        <h3>On death</h3>
+        <p>
+          Add one with <strong>Start from scratch → On death</strong>, or the <em>Death burst</em> recipe (a gas spore&apos;s
+          poison). It fires once, when the creature drops to 0 hit points, as an area around it: a sphere or a cube,
+          everyone in it or only its enemies, with the save, damage and effects of any area. Nobody aims it, so there are
+          no cones or lines, and the simulator only runs one that calls for a saving throw.
+        </p>
+
         <h3>Lair actions</h3>
         <p>
-          Give a creature lair actions in its Abilities tab (<strong>+ Lair action</strong> — any save, area or attack
-          ability). Then mark the token <strong>In its lair</strong> from its right-click menu or the Token tab. Each
+          Add one with <strong>Start from scratch → Lair action</strong>: an attack, a save or an area, the only kinds a
+          lair takes. Then mark the token <strong>In its lair</strong> from its right-click menu or the Token tab. Each
           round, on initiative 20 (after anyone who rolled 20 or more), it takes one of its lair actions — never the same
           one two rounds running — without spending any of its own actions. The initiative tracker shows the slot as a
           dashed <em>Lair actions · 20</em> row, and the combat log reads &ldquo;Lair action (initiative 20): …&rdquo;. The SRD

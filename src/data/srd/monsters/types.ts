@@ -7,10 +7,11 @@ export interface SrdMonsterAbilityEntry {
   monsterId: string;
   monster: string;
   /** Where it is on the creature. */
-  list: "actions" | "bonusActions" | "reactions" | "traits" | "features";
+  list: "actions" | "bonusActions" | "reactions" | "traits" | "features" | "legendary" | "deathEffects";
+  /** Its id; a legendary action's place in the creature's list. */
   id: string;
   name: string;
-  /** The action's kind, or "trait" / "feature". */
+  /** The action's kind, "trait" / "feature", "legendary" or "death". */
   kind: string;
   /** Its statblock line: "+14 to hit, reach 10 ft · 19 (2d10 + 8) piercing". */
   text: string;

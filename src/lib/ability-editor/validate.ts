@@ -11,16 +11,19 @@ import {
   withSpellcastingAttackAbility,
   type ActionDefinition,
   type CreatureDefinition,
+  type DeathEffectDefinition,
   type FeatureDefinition,
   type FeatureEffect,
+  type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { MANUAL_REACTION_NOTES, poolName, statblockFor } from "@/lib/statblock";
 import { firesOnActivate } from "./effects";
 import { activationOf, effectPools } from "./features";
+import { OFFENSIVE_KINDS } from "./legendary";
 import { featurePoolsToSeed } from "./records";
-import { withAbility, withNewAbility, type AbilityList, type AbilityRecord, type AbilityRef } from "./refs";
+import { withAbility, withNewAbilityAt, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "./refs";
 import type { SectionId } from "./sections";
 
 export type WarningId =
@@ -45,7 +48,14 @@ export type WarningId =
   | "aura-shares-nothing"
   | "emanation-does-nothing"
   | "needs-activation"
-  | "needs-duration";
+  | "needs-duration"
+  | "legendary-missing-ability"
+  | "legendary-never-taken"
+  | "death-not-area"
+  | "death-aimed"
+  | "lair-never-taken"
+  | "summon-empty"
+  | "transform-empty";
 
 export interface AbilityWarning {
   id: WarningId;
@@ -234,15 +244,59 @@ function grantsNothing(action: Extract<ActionDefinition, { kind: "buff" }>): boo
 }
 
 /** The creature with the record where it will be saved, so references to it resolve. */
-function placed(definition: CreatureDefinition, where: AbilityRef | AbilityList, record: AbilityRecord): CreatureDefinition {
-  return typeof where === "string" ? withNewAbility(definition, where, record).definition : withAbility(definition, where, record).definition;
+function placed(definition: CreatureDefinition, where: AbilityRef | AbilityInsertTarget, record: AbilityRecord): CreatureDefinition {
+  return isRef(where) ? withAbility(definition, where, record).definition : withNewAbilityAt(definition, where, record).definition;
+}
+
+const isRef = (where: AbilityRef | AbilityInsertTarget): where is AbilityRef => typeof where === "object" && "list" in where;
+
+/** The list a record is in, or is going into. */
+const listOfWhere = (where: AbilityRef | AbilityInsertTarget): string => (isRef(where) ? where.list : typeof where === "string" ? where : "granted");
+
+/**
+ * What the engine does with legendary, lair and death abilities that it can't run: it skips a legendary or lair action
+ * that doesn't attack, force a save or make a multiattack, and a death effect that isn't an area saving throw.
+ */
+function placementWarnings(definition: CreatureDefinition, where: AbilityRef | AbilityInsertTarget, record: AbilityRecord): AbilityWarning[] {
+  const list = listOfWhere(where);
+  const warnings: AbilityWarning[] = [];
+  if (list === "legendary") {
+    const entry = record as LegendaryActionRef;
+    const used = entry.action ?? (entry.actionId ? getExecutableActions(definition).find((action) => action.id === entry.actionId) : undefined);
+    if (!entry.action && entry.actionId && !used) {
+      warnings.push({ id: "legendary-missing-ability", message: "It uses an ability this creature doesn't have: pick another in Does, or make it reference only.", section: "does" });
+    }
+    if (used && used.kind !== "unsupported" && !OFFENSIVE_KINDS.has(used.kind)) {
+      warnings.push({
+        id: "legendary-never-taken",
+        message: "The AI never takes it: between turns it only takes legendary actions that attack, force a save or make a multiattack. Use it by hand in manual play.",
+        section: "does"
+      });
+    }
+  }
+  if (list === "deathEffects") {
+    const action = (record as DeathEffectDefinition).action;
+    if (action && action.kind !== "area-save" && action.kind !== "unsupported") {
+      warnings.push({ id: "death-not-area", message: "The simulator skips it: a death effect only works as an area around the creature that calls for a saving throw.", section: "roll" });
+    }
+    if (action?.kind === "area-save" && (action.area.type === "cone" || action.area.type === "line")) {
+      warnings.push({ id: "death-aimed", message: "Nobody aims a cone or a line when the creature dies: it points east. Make it a sphere or a cube around the creature.", section: "target" });
+    }
+  }
+  if (list === "lairActions") {
+    const action = record as ActionDefinition;
+    if (action.kind !== "unsupported" && !OFFENSIVE_KINDS.has(action.kind)) {
+      warnings.push({ id: "lair-never-taken", message: "The lair never takes it: on initiative 20 it only takes lair actions that attack or force a save.", section: "roll" });
+    }
+  }
+  return warnings;
 }
 
 /**
  * Warnings for a record as the editor holds it. `where` is where it's stored (a ref), or the list a new one is going
  * into.
  */
-export function abilityWarnings(definition: CreatureDefinition, where: AbilityRef | AbilityList, record: AbilityRecord): AbilityWarning[] {
+export function abilityWarnings(definition: CreatureDefinition, where: AbilityRef | AbilityInsertTarget, record: AbilityRecord): AbilityWarning[] {
   const warnings: AbilityWarning[] = [];
   const withRecord = placed(definition, where, record);
 
@@ -263,7 +317,15 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
     warnings.push({ id: "damage-ability-mismatch", message: `The damage adds ${problem}.`, section: "damage" });
   }
 
+  warnings.push(...placementWarnings(definition, where, record));
+
   for (const action of actionsIn(record)) {
+    if (action.kind === "summon" && !action.options.length) {
+      warnings.push({ id: "summon-empty", message: "It summons nothing yet: pick a creature in Summon.", section: "outcome" });
+    }
+    if (action.kind === "transform" && !action.forms.length) {
+      warnings.push({ id: "transform-empty", message: "It has no form to change into yet: pick one in Shapechange.", section: "outcome" });
+    }
     if (action.kind === "buff" && grantsNothing(action)) {
       warnings.push({ id: "empty-buff", message: "It grants nothing yet, so casting it does nothing.", section: "outcome" });
     }
@@ -335,7 +397,7 @@ export function abilityWarnings(definition: CreatureDefinition, where: AbilityRe
     });
   }
 
-  const ref = typeof where === "string" ? withNewAbility(definition, where, record).ref : withAbility(definition, where, record).ref;
+  const ref = isRef(where) ? withAbility(definition, where, record).ref : withNewAbilityAt(definition, where, record).ref;
   const entry = statblockFor(withRecord, ref);
   if (entry?.support === "reference") {
     warnings.push({ id: "reference-only", message: "Reference only: the simulator never uses it.", section: "notes" });

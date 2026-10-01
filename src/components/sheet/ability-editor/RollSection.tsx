@@ -16,8 +16,10 @@ import { Check, Field, More, NumberField, Segmented } from "./controls";
 import styles from "./ability-editor.module.css";
 
 type SaveAction = Extract<ActionDefinition, { kind: "save" | "area-save" }>;
-type Mode = "attack" | "save" | "automatic" | "none";
-type Outcome = "healing" | "buff" | "reposition";
+export type RollMode = "attack" | "save" | "automatic" | "none";
+type Mode = RollMode;
+type Outcome = "healing" | "buff" | "reposition" | "summon" | "transform" | "utility";
+const OUTCOMES = new Set<ActionDefinition["kind"]>(["healing", "buff", "reposition", "summon", "transform", "utility"]);
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 const ABILITY_OPTIONS = ABILITIES.map((ability) => ({ value: ability, label: ability.toUpperCase() }));
@@ -25,7 +27,7 @@ const ABILITY_OPTIONS = ABILITIES.map((ability) => ({ value: ability, label: abi
 function modeOf(kind: ActionDefinition["kind"] | undefined): Mode {
   if (kind === "attack") return "attack";
   if (kind === "save" || kind === "area-save") return "save";
-  if (kind === "healing" || kind === "buff" || kind === "reposition") return "automatic";
+  if (kind && OUTCOMES.has(kind)) return "automatic";
   return "none";
 }
 
@@ -34,22 +36,25 @@ function modeOf(kind: ActionDefinition["kind"] | undefined): Mode {
  * Picking another kind converts the record (Phase 1's conversions): what the kinds share comes along, and the rest waits
  * for the session in case the DM switches back. `note` says what the last switch did.
  */
-export function HowItWorks({ kind, onConvert, note }: {
+export function HowItWorks({ kind, onConvert, note, allow }: {
   /** The action's kind; undefined for a spell with nothing to cast yet. */
   kind: ActionDefinition["kind"] | undefined;
   onConvert: (to: ConvertibleKind) => void;
   note?: string;
+  /** The ways it can work where it is (a lair takes only attacks and saves); the one it is now always shows. */
+  allow?: RollMode[];
 }) {
   const mode = modeOf(kind);
   // "Automatic" alone isn't a kind yet: the outcome is picked before anything changes.
   const [choosing, setChoosing] = useState(false);
   const shown: Mode = choosing ? "automatic" : mode;
+  const allowed = (value: Mode) => !allow || allow.includes(value) || value === mode;
   const options: Array<{ value: Mode; label: string }> = [
-    { value: "attack", label: "Attack roll" },
-    { value: "save", label: "Saving throw" },
-    { value: "automatic", label: "Automatic" },
+    { value: "attack" as const, label: "Attack roll" },
+    { value: "save" as const, label: "Saving throw" },
+    { value: "automatic" as const, label: "Automatic" },
     ...(mode === "none" ? [{ value: "none" as const, label: "Not simulated" }] : [])
-  ];
+  ].filter((option) => allowed(option.value));
   function choose(next: Mode) {
     if (next === mode) { setChoosing(false); return; }
     if (next === "automatic") { setChoosing(true); return; }
@@ -57,7 +62,7 @@ export function HowItWorks({ kind, onConvert, note }: {
     if (next === "attack") onConvert("attack");
     else if (next === "save") onConvert("save");
   }
-  const outcome = kind === "healing" || kind === "buff" || kind === "reposition" ? kind : undefined;
+  const outcome = kind && OUTCOMES.has(kind) ? (kind as Outcome) : undefined;
   return (
     <>
       <Field copy="howItWorks">
@@ -68,7 +73,10 @@ export function HowItWorks({ kind, onConvert, note }: {
           <Segmented<Outcome>
             label="It"
             value={outcome}
-            options={[{ value: "healing", label: "Heals" }, { value: "buff", label: "Grants a benefit" }, { value: "reposition", label: "Teleports" }]}
+            options={[
+              { value: "healing", label: "Heals" }, { value: "buff", label: "Grants a benefit" }, { value: "reposition", label: "Teleports" },
+              { value: "summon", label: "Summons" }, { value: "transform", label: "Changes shape" }, { value: "utility", label: "Takes a standard action" }
+            ]}
             onChange={(next) => { setChoosing(false); if (next !== outcome) onConvert(next); }}
           />
           {choosing && !outcome ? <p className={styles.hint}>Pick what it does to switch. Until then it stays {mode === "attack" ? "an attack roll" : mode === "save" ? "a saving throw" : "as it is"}.</p> : null}

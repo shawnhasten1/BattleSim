@@ -6,7 +6,6 @@ import {
   activeFactions,
   admitReinforcements,
   spellcastingAbility,
-  collectDependencies,
   findSummonCycle,
   compareInitiative,
   createEngineState,
@@ -81,6 +80,8 @@ import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
 import { findAbility, withNewAbility, withRecordAfter, type AbilityInsertTarget, type AbilityRecord, type AbilityRef } from "@/lib/ability-editor/refs";
 import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryAction, withOwnUsagePool, withReplacedAbility, type AbilityRecordExtras } from "@/lib/ability-editor/records";
+import { withLegendaryPool } from "@/lib/ability-editor/legendary";
+import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
@@ -284,6 +285,8 @@ interface EncounterStore {
   updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
   updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
+  /** How many legendary actions a creature takes a round (1-10). One undo step; nothing for a creature without them. */
+  setLegendaryPool: (definitionId: string, pool: number) => void;
   applyConditionToCombatant: (combatantId: string, condition: ConditionName) => void;
   /**
    * Toggle one `prepOnly` buff spell "already active" on a combatant, before
@@ -541,30 +544,6 @@ function closeActionEconomy(combatant: CombatantState): void {
   combatant.actionEconomy = { ...current, action: false, bonus: false };
 }
 
-/**
- * Every creature `definition` names (what it summons, what it changes into), and what those name in turn, that
- * isn't in `known` yet. Library creatures are fetched; anything else can't be found here and is skipped (the
- * engine reports it when the action is used).
- */
-async function loadDependencies(definition: CreatureDefinition, known: CreatureDefinition[]): Promise<CreatureDefinition[]> {
-  const seen = new Set(known.map((candidate) => candidate.id));
-  seen.add(definition.id);
-  const loaded: CreatureDefinition[] = [];
-  const queue = [...collectDependencies(definition)];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    if (!isSrdMonsterId(id)) continue;
-    try {
-      const dependency = await loadSrdMonster(id);
-      if (!dependency) continue;
-      loaded.push(dependency);
-      queue.push(...collectDependencies(dependency));
-    } catch { /* an unloadable chunk just leaves that dependency out */ }
-  }
-  return loaded;
-}
 
 function defaultTacticsForDefinition(definition: CreatureDefinition): CombatantState["tacticsProfile"] {
   if (definition.defaultTactics) return definition.defaultTactics;
@@ -789,12 +768,16 @@ export const useEncounterStore = create<EncounterStore>()(
         ...extras
       });
 
-      /** Commit a creature after an ability edit; tokens of it get any pool they lack (existing values are kept). */
-      const commitAbilityChange = (encounter: EncounterSnapshot, definitionId: string, next: CreatureDefinition, seeded: Record<string, number>) => {
+      /**
+       * Commit a creature after an ability edit; tokens of it get any pool they lack (existing values are kept). The
+       * creatures it summons or changes into that the editor fetched (`embed`) come in the same step, and its forms get
+       * its shapechanges (see `withSpawnsSettled`).
+       */
+      const commitAbilityChange = (encounter: EncounterSnapshot, definitionId: string, next: CreatureDefinition, seeded: Record<string, number>, embed?: CreatureDefinition[]) => {
         const hasSeeds = Object.keys(seeded).length > 0;
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)),
+          definitions: withSpawnsSettled(encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)), next, embed),
           combatants: hasSeeds
             ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
               ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
@@ -2291,6 +2274,13 @@ export const useEncounterStore = create<EncounterStore>()(
             : definition)
         });
       },
+      setLegendaryPool: (definitionId, pool) => {
+        const encounter = get().encounter;
+        const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const next = definition ? withLegendaryPool(definition, pool) : undefined;
+        if (!definition || !next || next === definition) return;
+        commitEncounter({ ...encounter, definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)) });
+      },
       applyConditionToCombatant: (combatantId, condition) => {
         const state = get();
         const engine = createEngineState(state.encounter);
@@ -3061,11 +3051,12 @@ export const useEncounterStore = create<EncounterStore>()(
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
         const replaced = definition ? withReplacedAbility(definition, ref, record) : undefined;
         if (!definition || !replaced) return undefined;
-        const pooled = withNewPools(replaced.definition, extras?.pools);
+        // A legendary action's editor also says how many the creature takes a round.
+        const pooled = withNewPools(extras?.legendaryPool !== undefined ? withLegendaryPool(replaced.definition, extras.legendaryPool) : replaced.definition, extras?.pools);
         // A spell that now follows the spellcasting ability pins the creature's (see `withSettledSpellcasting`).
         const settled = withSettledSpellcasting(pooled.definition);
         if (deepEqual(settled, definition)) return replaced.ref;
-        commitAbilityChange(encounter, definitionId, settled, { ...replaced.seeded, ...pooled.added });
+        commitAbilityChange(encounter, definitionId, settled, { ...replaced.seeded, ...pooled.added }, extras?.embed);
         return replaced.ref;
       },
       insertAbilityRecord: (definitionId, where, record, extras) => {
@@ -3073,10 +3064,11 @@ export const useEncounterStore = create<EncounterStore>()(
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
         const inserted = definition ? withInsertedAbility(definition, where, record) : undefined;
         if (!inserted) return undefined;
-        const placed = extras?.after ? withRecordAfter(inserted.definition, inserted.ref, extras.after) : inserted.definition;
-        const pooled = withNewPools(placed, extras?.pools);
-        commitAbilityChange(encounter, definitionId, withSettledSpellcasting(pooled.definition), { ...inserted.seeded, ...pooled.added });
-        return inserted.ref;
+        const placed = extras?.after ? withRecordAfter(inserted.definition, inserted.ref, extras.after) : { definition: inserted.definition, ref: inserted.ref };
+        const sized = extras?.legendaryPool !== undefined ? withLegendaryPool(placed.definition, extras.legendaryPool) : placed.definition;
+        const pooled = withNewPools(sized, extras?.pools);
+        commitAbilityChange(encounter, definitionId, withSettledSpellcasting(pooled.definition), { ...inserted.seeded, ...pooled.added }, extras?.embed);
+        return placed.ref;
       },
       duplicateCombatant: (combatantId) => {
         const encounter = get().encounter;

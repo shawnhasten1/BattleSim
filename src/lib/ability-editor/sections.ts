@@ -36,6 +36,7 @@ import type { AbilityRecord, AbilityRef } from "./refs";
 export type SectionId =
   | "basics"
   | "use"
+  | "does"
   | "target"
   | "roll"
   | "outcome"
@@ -68,6 +69,7 @@ type Shape =
   | { type: "feature"; feature: FeatureDefinition }
   | { type: "death"; effect: DeathEffectDefinition; action: ActionDefinition }
   | { type: "legendary"; entry: LegendaryActionRef; action?: ActionDefinition }
+  | { type: "lair"; action: ActionDefinition }
   | { type: "action"; action: ActionDefinition };
 
 /** The record by what it is, with the action that does its work (a weapon's compiled attack, a spell's action …). */
@@ -93,6 +95,8 @@ function shapeOf({ ref, record, definition }: SectionContext): Shape {
       const entry = record as LegendaryActionRef;
       return { type: "legendary", entry, action: entry.action };
     }
+    case "lairActions":
+      return { type: "lair", action: record as ActionDefinition };
     default:
       return { type: "action", action: record as ActionDefinition };
   }
@@ -128,7 +132,8 @@ function limitText(limit: Limit, action: ActionDefinition | undefined): string {
   }
 }
 
-function useSummary(shape: Shape): string {
+function useSummary(shape: Shape, definition: CreatureDefinition): string {
+  if (shape.type === "lair") return "initiative 20, in its lair";
   if (shape.type === "feature") {
     const activation = activationOf(shape.feature);
     const { feature } = shape;
@@ -137,13 +142,18 @@ function useSummary(shape: Shape): string {
     const rounds = activation.kind === "activate-feature" ? activation.condition?.durationRounds : undefined;
     return [SLOT_WORDS[activation.actionType], limitText(actionLimit.get(activation), activation), rounds ? `for ${roundsText(rounds)}` : ""].filter(Boolean).join(" · ");
   }
-  if (shape.type === "legendary") return `costs ${shape.entry.cost} legendary ${shape.entry.cost === 1 ? "action" : "actions"}`;
+  if (shape.type === "legendary") {
+    const pool = definition.legendary?.pool;
+    return [`costs ${shape.entry.cost} legendary ${shape.entry.cost === 1 ? "action" : "actions"}`, pool ? `${pool} a round` : ""].filter(Boolean).join(" · ");
+  }
   if (shape.type === "weapon") {
     const { weapon } = shape;
     const slots = (weapon.usableAs ?? ["action"]).filter((slot) => slot !== "reaction");
     const charges = weapon.charges
       ? `${weapon.charges.max} ${weapon.charges.max === 1 ? "charge" : "charges"}${typeof weapon.charges.recharge === "string" ? `, refills ${weapon.charges.recharge === "dawn" ? "at dawn" : `on a ${weapon.charges.recharge.replace("-", " ")}`}` : ""}`
       : "";
+    // A focus makes no attack: all it has to say is its charges.
+    if (weapon.attackType === "focus") return charges || "no attack of its own";
     const noOpportunity = weapon.attackType === "melee" && weapon.usableAs && !weapon.usableAs.includes("reaction") ? "no opportunity attacks" : "";
     return [slots.map((slot) => SLOT_WORDS[slot]).join(" or "), charges, noOpportunity].filter(Boolean).join(" · ");
   }
@@ -195,14 +205,30 @@ function rollSummary(action: ActionDefinition, definition: CreatureDefinition): 
     case "healing": return "no roll · heals";
     case "buff": return "no roll · grants a benefit";
     case "reposition": return "no roll · teleports";
+    case "summon": return "no roll · summons";
+    case "transform": return "no roll · changes shape";
+    case "utility": return "no roll · a standard action";
     case "unsupported": return "not simulated";
     default: return "—";
   }
 }
 
-/** What an automatic ability does: "9 (1d8 + 4)", "+2 AC · 1 minute". */
+const UTILITY_WORDS = { dash: "Dash", disengage: "Disengage", dodge: "Dodge", hide: "Hide", help: "Help", escape: "Escape a grapple" } as const;
+
+/** What an automatic ability does: "9 (1d8 + 4)", "+2 AC · 1 minute", "summons 1d4 Dust Mephit", "Dash". */
 function outcomeSummary(action: ActionDefinition, definition: CreatureDefinition): string {
   if (action.kind === "healing") return `heals ${healingShort(action.healing, definition)}`;
+  if (action.kind === "summon") {
+    if (!action.options.length) return "nothing yet";
+    const options = action.options.map((option) => `${typeof option.count === "number" ? option.count : option.count.dice} ${option.label}`);
+    return [`summons ${options.join(" or ")}`, action.chance !== undefined ? `${action.chance}% chance` : "", action.durationRounds ? roundsText(action.durationRounds) : "for the fight"]
+      .filter(Boolean).join(" · ");
+  }
+  if (action.kind === "transform") {
+    if (!action.forms.length) return "no forms yet";
+    return [`becomes ${action.forms.map((form) => form.label).join(" or ")}`, action.revertOnDeath ? "reverts when it dies" : ""].filter(Boolean).join(" · ");
+  }
+  if (action.kind === "utility") return UTILITY_WORDS[action.mode];
   if (action.kind !== "buff") return "—";
   const condition = action.appliedCondition;
   const gains = [
@@ -278,6 +304,16 @@ function auraSummary(feature: FeatureDefinition, definition: CreatureDefinition)
   return parts.join(" · ") || "off";
 }
 
+/** What a legendary action does: one of the creature's abilities, one of its own, or nothing the simulator runs. */
+function doesSummary(entry: LegendaryActionRef, definition: CreatureDefinition): string {
+  if (entry.action) return `its own ability · ${KIND_WORDS[entry.action.kind]}`;
+  if (entry.actionId) {
+    const used = getExecutableActions(definition).find((action) => action.id === entry.actionId);
+    return used ? `uses its ${used.name}` : "uses an ability it doesn't have";
+  }
+  return "reference only";
+}
+
 function grantsSummary(shape: Shape): string {
   const granted = shape.type === "weapon" ? shape.weapon.grantedActions ?? [] : shape.type === "feature" ? shape.feature.grantedActions ?? [] : [];
   const shown = granted.filter((action) => action.kind !== "activate-feature");
@@ -314,6 +350,7 @@ function basicsSummary(shape: Shape): string {
     case "feature": return `${shape.feature.name} · ${shape.feature.category}${shape.feature.optional ? " · optional" : ""}`;
     case "death": return `${shape.effect.name} · on death`;
     case "legendary": return `${shape.entry.name} · legendary action`;
+    case "lair": return `${shape.action.name} · lair action`;
     case "action": return `${shape.action.name} · ${KIND_WORDS[shape.action.kind]}`;
   }
 }
@@ -340,7 +377,11 @@ const withAction = (test: (action: ActionDefinition) => boolean) => (shape: Shap
 };
 
 /** The kinds the Roll section can switch between (and a spell with nothing to cast yet). */
-const ROLL_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-save", "healing", "buff", "reposition", "unsupported"]);
+const ROLL_KINDS = new Set<ActionDefinition["kind"]>(["attack", "save", "area-save", "healing", "buff", "reposition", "summon", "transform", "utility", "unsupported"]);
+/** The kinds whose outcome has a section of its own: what it heals, grants, summons, becomes or does. */
+const OUTCOME_TITLES: Partial<Record<ActionDefinition["kind"], string>> = {
+  healing: "Healing", buff: "Benefit", summon: "Summon", transform: "Shapechange", utility: "Standard action"
+};
 
 const SECTIONS: SectionSpec[] = [
   { id: "basics", title: "Basics", appliesTo: () => true, summary: (shape) => basicsSummary(shape) },
@@ -351,7 +392,13 @@ const SECTIONS: SectionSpec[] = [
     title: "Use & cost",
     // Everything but a death effect, which fires on its own. A feature's says whether it's always on or switched on.
     appliesTo: (shape) => shape.type !== "death",
-    summary: (shape) => useSummary(shape)
+    summary: (shape, definition) => useSummary(shape, definition)
+  },
+  {
+    id: "does",
+    title: "Does",
+    appliesTo: (shape) => shape.type === "legendary",
+    summary: (shape, definition) => doesSummary((shape as Extract<Shape, { type: "legendary" }>).entry, definition)
   },
   { id: "target", title: "Target", appliesTo: withAction((action) => actionTarget.get(action) !== undefined), summary: (shape) => targetSummary(actionOf(shape)!) },
   {
@@ -367,8 +414,8 @@ const SECTIONS: SectionSpec[] = [
   },
   {
     id: "outcome",
-    title: (shape) => (actionOf(shape)?.kind === "healing" ? "Healing" : "Benefit"),
-    appliesTo: withAction((action) => action.kind === "healing" || action.kind === "buff"),
+    title: (shape) => OUTCOME_TITLES[actionOf(shape)?.kind ?? "healing"] ?? "Benefit",
+    appliesTo: withAction((action) => OUTCOME_TITLES[action.kind] !== undefined),
     summary: (shape, definition) => outcomeSummary(actionOf(shape)!, definition)
   },
   { id: "damage", title: "Damage", appliesTo: withAction((action) => DAMAGE_KINDS.has(action.kind)), summary: (shape, definition) => damageSummary(actionOf(shape)!, definition) },
@@ -382,7 +429,8 @@ const SECTIONS: SectionSpec[] = [
     summary: (shape, definition) => whileActiveSummary(shape, definition)
   },
   { id: "aura", title: "Aura", appliesTo: (shape) => shape.type === "feature", summary: (shape, definition) => auraSummary((shape as Extract<Shape, { type: "feature" }>).feature, definition) },
-  { id: "lingering", title: "Lingering area", appliesTo: withAction((action) => action.kind === "area-save"), summary: (shape) => lingeringSummary(actionOf(shape)!) },
+  // A death effect's burst is over at once: the engine makes no lingering area from it.
+  { id: "lingering", title: "Lingering area", appliesTo: (shape) => shape.type !== "death" && withAction((action) => action.kind === "area-save")(shape), summary: (shape) => lingeringSummary(actionOf(shape)!) },
   { id: "grants", title: "Grants", appliesTo: (shape) => shape.type === "weapon" || shape.type === "feature", summary: (shape) => grantsSummary(shape) },
   { id: "notes", title: "Notes & AI", appliesTo: () => true, summary: (shape) => notesSummary(shape) }
 ];

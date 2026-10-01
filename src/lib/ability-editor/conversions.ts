@@ -4,13 +4,20 @@
  * and what it costs, its damage and effects, and its target where the new kind can take it. The rest of the old record
  * is parked for the session, so switching back brings it back.
  */
-import type { Ability, ActionDefinition, ActionRider, RiderGate } from "@/engine";
+import type { Ability, ActionDefinition, ActionRider, RiderGate, UtilityActionDefinition } from "@/engine";
 import { actionTarget, supportsUsage, targetKinds } from "./bindings";
 
-/** The kinds an action can be switched between. Summons, shapechanges and multiattacks have their own editors. */
-export type ConvertibleKind = "attack" | "save" | "area-save" | "healing" | "buff" | "reposition" | "unsupported";
+/** The kinds an action can be switched between. A multiattack (and an activation) has an editor of its own. */
+export type ConvertibleKind = "attack" | "save" | "area-save" | "healing" | "buff" | "reposition" | "summon" | "transform" | "utility" | "unsupported";
 
-export const CONVERTIBLE_KINDS: readonly ConvertibleKind[] = ["attack", "save", "area-save", "healing", "buff", "reposition", "unsupported"];
+export const CONVERTIBLE_KINDS: readonly ConvertibleKind[] = [
+  "attack", "save", "area-save", "healing", "buff", "reposition", "summon", "transform", "utility", "unsupported"
+];
+
+/** How much of a standard action the simulator runs: it doesn't hide, and Help is only partly simulated. */
+export function utilitySupport(mode: UtilityActionDefinition["mode"]): UtilityActionDefinition["automationSupport"] {
+  return mode === "hide" || mode === "help" ? "partial" : "full";
+}
 
 /** Earlier versions of the record, one per kind it has been this session. */
 export type ParkedRecords = Partial<Record<ConvertibleKind, ActionDefinition>>;
@@ -27,7 +34,9 @@ export function conversionTargets(action: ActionDefinition): ConvertibleKind[] {
 const REACTION_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save"]);
 const DAMAGE_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save"]);
 const RIDER_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save", "healing"]);
-const CONCENTRATION_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save", "buff", "reposition"]);
+const CONCENTRATION_KINDS = new Set<ConvertibleKind>(["attack", "save", "area-save", "buff", "reposition", "summon"]);
+/** Kinds that can't spend anything: a shapechange has no cost of its own. */
+const COSTLESS_KINDS = new Set<ConvertibleKind>(["unsupported", "transform"]);
 const SAVE_KINDS = new Set<ConvertibleKind>(["save", "area-save"]);
 
 /** How a new kind starts when it's a spell's action: its roll follows the caster's spellcasting ability. */
@@ -65,6 +74,13 @@ function blank(kind: ConvertibleKind, from: ActionDefinition, options: Conversio
       return { ...base, kind, range: Math.max(range, 5), appliedCondition: { name: "custom", durationRounds: 10, modifiers: { armorClass: 2 } } };
     case "reposition":
       return { ...base, kind, range: 30, targeting: { target: "self" } };
+    case "summon":
+      // Nothing to summon yet: the Summon section picks the creatures. A summon lasts a minute, like most spells'.
+      return { ...base, kind, range: 60, options: [], choice: "pick", durationRounds: 10, maxGeneration: 1 };
+    case "transform":
+      return { ...base, kind, forms: [], canRevert: true, revertOnDeath: true };
+    case "utility":
+      return { ...base, kind, actionType: from.actionType === "bonus" ? "bonus" : "action", mode: "dash" };
     case "unsupported":
       return { ...base, kind, automationSupport: "unsupported" };
   }
@@ -95,7 +111,9 @@ function mapRiders(riders: ActionRider[] | undefined, to: ConvertibleKind): Acti
 function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: boolean): ActionDefinition {
   const to = into.kind as ConvertibleKind;
   const source = from as Partial<Record<string, unknown>> & ActionDefinition;
-  const next: Record<string, unknown> = { ...into, id: from.id, name: from.name, actionType: from.actionType };
+  // A standard action is an action or a bonus action.
+  const actionType = to === "utility" && from.actionType !== "bonus" ? "action" : from.actionType;
+  const next: Record<string, unknown> = { ...into, id: from.id, name: from.name, actionType };
   const copy = (key: string, when: boolean) => {
     delete next[key];
     if (when && source[key] !== undefined) next[key] = source[key];
@@ -107,7 +125,7 @@ function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: bo
   copy("concentration", CONCENTRATION_KINDS.has(to));
   copy("spellLevel", to !== "unsupported");
   copy("upcast", to !== "unsupported");
-  copy("resourceCost", to !== "unsupported");
+  copy("resourceCost", !COSTLESS_KINDS.has(to));
   copy("usage", to !== "unsupported" && supportsUsage(into));
   // A limit the kind in between couldn't carry (a recharge while it was a buff) comes back, unless a cost was set since.
   const parkedLimit = restoring && !supportsUsage(from) && !("resourceCost" in from && from.resourceCost) && "usage" in into && into.usage;
@@ -130,6 +148,8 @@ function carryOver(from: ActionDefinition, into: ActionDefinition, restoring: bo
     for (const key of ["saveAbility", "dc", "dcFormula", "halfDamageOnSuccess", "onSuccess", "immuneAfterSave"]) copy(key, true);
   }
   if (to !== "unsupported" && from.kind !== "unsupported") next.automationSupport = from.automationSupport;
+  // What a standard action can be simulated as follows from what it does.
+  if (to === "utility") next.automationSupport = utilitySupport((next as { mode: UtilityActionDefinition["mode"] }).mode);
   const converted = next as unknown as ActionDefinition;
   // The target comes along when the new kind can take it (one creature stays one creature; an area stays an area). A new
   // teleport keeps its own (itself, 30 ft): what an attack reached says nothing about how far it blinks.

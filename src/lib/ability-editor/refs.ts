@@ -38,6 +38,9 @@ export type AbilityRef =
 /** Where a new ability can go: a list, the legendary actions, or the actions a weapon or feature grants. */
 export type AbilityInsertTarget = AbilityList | "legendary" | { granted: { list: GrantingList; id: string } };
 
+/** How many legendary actions a creature takes a round when it gets its first: the 5e default. */
+export const DEFAULT_LEGENDARY_POOL = 3;
+
 /** The record type each kind of ref points at. */
 export interface AbilityRecordFor {
   weapons: WeaponDefinition;
@@ -138,15 +141,49 @@ export function withNewAbility(definition: CreatureDefinition, list: AbilityList
   return { definition: { ...definition, [target]: [...listOf(definition, target), record] }, ref: { list: target, id } };
 }
 
-/** The creature with the record at `ref` moved to just after `afterId` in its list (a duplicate beside its original). */
-export function withRecordAfter(definition: CreatureDefinition, ref: AbilityRef, afterId: string): CreatureDefinition {
-  if (ref.list === "legendary" || ref.list === "granted") return definition;
+/**
+ * The creature with `record` added where `where` says, as given (no normalizing: for the editor's preview of a record
+ * that isn't saved yet). A first legendary action brings the usual pool of 3 with it.
+ */
+export function withNewAbilityAt(definition: CreatureDefinition, where: AbilityInsertTarget, record: AbilityRecord): { definition: CreatureDefinition; ref: AbilityRef } {
+  if (where === "legendary") {
+    const legendary = definition.legendary ?? { pool: DEFAULT_LEGENDARY_POOL, actions: [] };
+    return {
+      definition: { ...definition, legendary: { ...legendary, actions: [...legendary.actions, record as LegendaryActionRef] } },
+      ref: { list: "legendary", index: legendary.actions.length }
+    };
+  }
+  if (typeof where === "object") {
+    const parent = where.granted;
+    const action = record as ActionDefinition;
+    const parents = listOf(definition, parent.list) as Array<WeaponDefinition | FeatureDefinition>;
+    const next = parents.map((owner) => (owner.id === parent.id ? { ...owner, grantedActions: [...(owner.grantedActions ?? []), action] } : owner));
+    return { definition: { ...definition, [parent.list]: next }, ref: { list: "granted", parent, id: action.id } };
+  }
+  return withNewAbility(definition, where, record);
+}
+
+/**
+ * The creature with the record at `ref` moved to just after `afterId` in its list (a duplicate beside its original), and
+ * where it is now. A legendary action's `afterId` is the index of the one it follows.
+ */
+export function withRecordAfter(definition: CreatureDefinition, ref: AbilityRef, afterId: string): { definition: CreatureDefinition; ref: AbilityRef } {
+  if (ref.list === "legendary") {
+    const legendary = definition.legendary;
+    const moving = legendary?.actions[ref.index];
+    const after = Number(afterId);
+    if (!legendary || !moving || !Number.isInteger(after) || after < 0 || after >= ref.index) return { definition, ref };
+    const rest = legendary.actions.filter((_, index) => index !== ref.index);
+    const actions = [...rest.slice(0, after + 1), moving, ...rest.slice(after + 1)];
+    return { definition: { ...definition, legendary: { ...legendary, actions } }, ref: { list: "legendary", index: after + 1 } };
+  }
+  if (ref.list === "granted") return { definition, ref };
   const list = listOf(definition, ref.list);
   const moving = list.find((item) => item.id === ref.id);
   const rest = list.filter((item) => item !== moving);
   const at = rest.findIndex((item) => item.id === afterId);
-  if (!moving || at < 0) return definition;
-  return { ...definition, [ref.list]: [...rest.slice(0, at + 1), moving, ...rest.slice(at + 1)] };
+  if (!moving || at < 0) return { definition, ref };
+  return { definition: { ...definition, [ref.list]: [...rest.slice(0, at + 1), moving, ...rest.slice(at + 1)] }, ref };
 }
 
 /** Every ability on a creature, in the order a sheet lists them within each list. */

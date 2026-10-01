@@ -17,16 +17,28 @@ import {
 import type { SrdEntryKind } from "@/data/srd";
 import { useEncounterStore } from "@/store/encounter-store";
 import { actionStatblock } from "@/lib/statblock";
-import { multiattackLosses, withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
+import { legendaryLosses, multiattackLosses, withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
 import type { Prepared } from "@/lib/ability-editor/add";
+import { blankLegendaryAction } from "@/lib/ability-editor/legendary";
 import { abilityList, duplicateOf, type ListRow, type MoveTarget } from "@/lib/ability-editor/list";
 import { blankMultiattack, stepChoices } from "@/lib/ability-editor/sequence";
 import { withActionType } from "@/lib/ability-editor/spells";
-import { blankAttack, blankFeature, blankReaction, blankSpecialAction, blankSpell, blankWeapon } from "@/lib/ability-editor/templates";
-import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
+import {
+  blankAttack,
+  blankDeathEffect,
+  blankFeature,
+  blankLairAction,
+  blankReaction,
+  blankSpecialAction,
+  blankSpell,
+  blankSummon,
+  blankTransform,
+  blankWeapon
+} from "@/lib/ability-editor/templates";
+import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
-import { AbilitiesList, rowId } from "../abilities/AbilitiesList";
-import { AddAbility, type BlankKind, type BuilderRecipe } from "../abilities/AddAbility";
+import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
+import { AddAbility, type BlankKind } from "../abilities/AddAbility";
 import { PoolsStrip } from "../abilities/PoolsStrip";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
@@ -46,50 +58,31 @@ import {
   featureDraftFromDefinition,
   featureFieldSchema,
   featureFromDraft,
-  PRESETS,
   spellDraftFromDefinition,
   spellFieldSchema,
   spellFromDraft,
   weaponDraftFromDefinition,
   weaponFieldSchema,
   weaponFromDraft,
-  type BuilderDraft,
-  type BuilderKind
+  type BuilderDraft
 } from "../builders/schemas";
 import abilityStyles from "../abilities/abilities.module.css";
 import styles from "../builders/builders.module.css";
 
+/** What the classic builder form is open on (from the editor's "Open it in the classic editor", until Phase 8). */
 type EditTarget =
   | { kind: "weapon"; id: string }
   | { kind: "spell"; id: string }
   | { kind: "deathEffect"; id: string }
   | { kind: "action"; id: string }
   | { kind: "feature"; id: string }
-  | { kind: "lairAction"; id: string }
-  | { kind: "new"; builderKind: BuilderKind | "lairAction" };
+  | { kind: "lairAction"; id: string };
 
 interface PendingRemoval {
   itemType: DefinitionItemType;
   itemId: string;
   name: string;
 }
-
-/** The starting point for a new lair action: an eruption somewhere it can see. */
-const NEW_LAIR_ACTION: ActionDefinition = {
-  kind: "area-save", id: "", name: "Lair action", actionType: "action", saveAbility: "dex", dc: 15, range: 120,
-  area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 120 }, damage: [{ dice: "3d6", damageType: "fire" }],
-  halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile", automationSupport: "full"
-};
-
-/** A blank death effect: a burst of poison when it drops. */
-const NEW_DEATH_EFFECT: DeathEffectDefinition = {
-  id: "", name: "New Death Effect", automationSupport: "full",
-  action: {
-    kind: "area-save", id: "", name: "New Death Effect", actionType: "action", saveAbility: "con", dc: 10, range: 0, area: { type: "circle", size: 10 },
-    targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "poison" }], halfDamageOnSuccess: false, onSuccess: "negates",
-    affects: "all", automationSupport: "full"
-  }
-};
 
 const MODE_KEY = "actions-builder-mode";
 const MOVE_TYPES: Record<MoveTarget, ActionDefinition["actionType"]> = { actions: "action", bonus: "bonus", reactions: "reaction" };
@@ -103,16 +96,11 @@ function readMode(): "simple" | "advanced" {
 }
 
 /**
- * The Abilities tab: what the creature has, in statblock order (plan §3.1), with its pools above, and Add (§3.2). The
- * ability editor opens in place of the list; death effects, lair actions and a spellcasting focus still use the builder
- * form, and summons and shapechanges their own editors (Phase 7).
+ * The Abilities tab: what the creature has, in statblock order (plan §3.1), with its pools above, and Add (§3.2). Every
+ * ability opens in the ability editor, in place of the list; the classic builder forms and the old summon and
+ * shapechange editors are only reached from the editor's "Open it in the classic editor" (until Phase 8).
  */
 export function ActionsTab({ combatant, definition, compendium }: { combatant: CombatantState; definition: CreatureDefinition; compendium?: Compendium }) {
-  const addWeaponV2 = useEncounterStore((s) => s.addWeaponV2);
-  const addSpellV2 = useEncounterStore((s) => s.addSpellV2);
-  const addActionV2 = useEncounterStore((s) => s.addActionV2);
-  const addFeatureV2 = useEncounterStore((s) => s.addFeatureV2);
-  const addDeathEffectV2 = useEncounterStore((s) => s.addDeathEffectV2);
   const updateWeapon = useEncounterStore((s) => s.updateWeapon);
   const updateSpell = useEncounterStore((s) => s.updateSpell);
   const updateAction = useEncounterStore((s) => s.updateAction);
@@ -121,7 +109,6 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   const definitionStatus = useEncounterStore((s) => s.definitionStatus);
   const sceneDefinitions = useEncounterStore((s) => s.encounter.definitions);
   const updateDeathEffect = useEncounterStore((s) => s.updateDeathEffect);
-  const addLairAction = useEncounterStore((s) => s.addLairAction);
   const updateLairAction = useEncounterStore((s) => s.updateLairAction);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
@@ -131,8 +118,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
 
-  const [spawnEditor, setSpawnEditor] = useState<"summon" | "transform" | null>(null);
-  // The existing summon / shapechange being edited, or none when adding a new one.
+  // The old summon / shapechange editor, open on one from "Open it in the classic editor".
   const [spawnEditing, setSpawnEditing] = useState<SummonActionDefinition | TransformActionDefinition | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">(readMode);
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -140,7 +126,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   // The draft as the builder opened, so a save writes only what changed since (see save-delta.ts).
   const [initialDraft, setInitialDraft] = useState<BuilderDraft>({});
   const [addOpen, setAddOpen] = useState(false);
-  // A delete waiting on "Delete Claws?" because a multiattack would change with it, and what its steps would use instead.
+  // A delete waiting on "Delete Claws?" because a multiattack or a legendary action uses it, and what they'd use instead.
   const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
   const [replacement, setReplacement] = useState("");
   // The ability editor, open in place of the list.
@@ -168,10 +154,6 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   const groups = useMemo(() => abilityList(definition, combatant), [definition, combatant]);
   // The feature builder picks a Pounce / Rampage follow-up from these.
   const featureContext = useMemo(() => featureBuilderContext(definition), [definition]);
-  // Recipes the builder form still handles (a death burst), until the editor does.
-  const builderRecipes: BuilderRecipe[] = PRESETS.filter((preset) => preset.kind === "deathEffect").map((preset) => ({
-    label: preset.label, hint: "Fires once, when it drops to 0 HP", open: () => startNew(preset.kind, { ...preset.draft })
-  }));
 
   useEffect(() => {
     if (!toast) return;
@@ -189,53 +171,44 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   function openAbilityEditor(target: SheetEditorTarget) {
     setEdit(null);
     setAddOpen(false);
-    setSpawnEditor(null);
     setSpawnEditing(null);
     setAbilityEditor(target);
   }
 
-  /** From the new editor to the old builder, for what the editor doesn't cover yet. */
+  /** From the new editor to the classic builder, or the old summon / shapechange editor, until Phase 8 retires them. */
   function openClassic(ref: AbilityRef) {
     setAbilityEditor(null);
-    const record = findAbility(useEncounterStore.getState().encounter.definitions.find((candidate) => candidate.id === definition.id) ?? definition, ref);
-    if (!record) return;
-    if (ref.list === "weapons") openEdit({ kind: "weapon", id: (record as WeaponDefinition).id }, weaponDraftFromDefinition(record as WeaponDefinition));
-    else if (ref.list === "spells") openEdit({ kind: "spell", id: (record as SpellDefinition).id }, spellDraftFromDefinition(record as SpellDefinition));
-    else if (ref.list === "features" || ref.list === "traits") openEdit({ kind: "feature", id: (record as FeatureDefinition).id }, featureDraftFromDefinition(record as FeatureDefinition, featureContext));
-    else openEdit({ kind: "action", id: (record as ActionDefinition).id }, effectDraftFromAction(record as ActionDefinition));
+    const current = useEncounterStore.getState().encounter.definitions.find((candidate) => candidate.id === definition.id) ?? definition;
+    const record = findAbility(current, ref);
+    if (!record || !("id" in ref)) return;
+    if (ref.list === "weapons") openEdit({ kind: "weapon", id: ref.id }, weaponDraftFromDefinition(record as WeaponDefinition));
+    else if (ref.list === "spells") openEdit({ kind: "spell", id: ref.id }, spellDraftFromDefinition(record as SpellDefinition));
+    else if (ref.list === "features" || ref.list === "traits") openEdit({ kind: "feature", id: ref.id }, featureDraftFromDefinition(record as FeatureDefinition, featureContext));
+    else if (ref.list === "deathEffects") openEdit({ kind: "deathEffect", id: ref.id }, deathEffectDraftFromDefinition(record as DeathEffectDefinition));
+    else if (ref.list === "lairActions") openEdit({ kind: "lairAction", id: ref.id }, effectDraftFromAction(record as ActionDefinition));
+    else {
+      const action = record as ActionDefinition;
+      if (action.kind === "summon" || action.kind === "transform") {
+        setEdit(null);
+        setSpawnEditing(action);
+      } else {
+        openEdit({ kind: "action", id: ref.id }, effectDraftFromAction(action));
+      }
+    }
+    setReturnTo({ id: ref.id, saved: false });
   }
 
-  /** A row: the editor, the builder form, or a summon / shapechange editor, by what it is. */
+  /** A row opens in the ability editor. */
   function openRow(row: ListRow) {
-    if (row.opens === "none" || !("id" in row.ref)) return;
-    const record = findAbility(definition, row.ref);
-    if (!record) return;
-    if (row.opens === "editor") {
-      openAbilityEditor({ mode: "edit", ref: row.ref });
-      return;
-    }
-    if (row.opens === "spawn") {
-      const action = record as SummonActionDefinition | TransformActionDefinition;
-      setEdit(null);
-      setAddOpen(false);
-      setSpawnEditing(action);
-      setSpawnEditor(action.kind);
-      return;
-    }
-    switch (row.ref.list) {
-      case "weapons": openEdit({ kind: "weapon", id: row.ref.id }, weaponDraftFromDefinition(record as WeaponDefinition)); break;
-      case "spells": openEdit({ kind: "spell", id: row.ref.id }, spellDraftFromDefinition(record as SpellDefinition)); break;
-      case "deathEffects": openEdit({ kind: "deathEffect", id: row.ref.id }, deathEffectDraftFromDefinition(record as DeathEffectDefinition)); break;
-      case "lairActions": openEdit({ kind: "lairAction", id: row.ref.id }, effectDraftFromAction(record as ActionDefinition)); break;
-      default: openEdit({ kind: "action", id: row.ref.id }, effectDraftFromAction(record as ActionDefinition));
-    }
+    if (row.opens === "none" || row.ref.list === "granted") return;
+    openAbilityEditor({ mode: "edit", ref: row.ref });
   }
 
   function duplicateRow(row: ListRow) {
     const copy = duplicateOf(definition, row.ref);
     if (!copy) return;
     const ref = insertAbilityRecord(definition.id, copy.list, copy.record, { after: copy.after });
-    if (ref && "id" in ref) setReturnTo({ id: ref.id, saved: true });
+    if (ref && ref.list !== "granted") setReturnTo({ id: refRowId(ref), saved: true });
   }
 
   function moveRow(row: ListRow, to: MoveTarget) {
@@ -246,9 +219,9 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
     if (ref && "id" in ref) setReturnTo({ id: ref.id, saved: true });
   }
 
-  /** Delete a record, but ask first when a multiattack would lose a step (or be deleted) along with it. */
+  /** Delete a record, but ask first when a multiattack would lose a step, or a legendary action what it uses. */
   function requestRemove(itemType: DefinitionItemType, itemId: string, name: string) {
-    if (multiattackLosses(definition, itemType, itemId).length > 0) {
+    if (multiattackLosses(definition, itemType, itemId).length > 0 || legendaryLosses(definition, itemType, itemId).length > 0) {
       setPendingRemoval({ itemType, itemId, name });
       setReplacement("");
       return;
@@ -267,31 +240,21 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
     setToast(null);
   }
 
-  /** The summon / shapechange editor: under Add for a new one, or under the row of the one being edited. */
+  /** The old summon / shapechange editor, under the row of the one it's open on. */
   function spawnEditorNode() {
+    if (!spawnEditing) return null;
+    const close = () => setSpawnEditing(null);
+    const onSave = async (action: SummonActionDefinition | TransformActionDefinition) => {
+      if (await addSpawnAction(definition.id, action, spawnEditing.id)) close();
+    };
     return (
       <>
-        {spawnEditor === "summon" ? (
-          <SummonEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
-            initial={spawnEditing?.kind === "summon" ? spawnEditing : undefined}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
-          />
-        ) : null}
-        {spawnEditor === "transform" ? (
-          <TransformEditor
-            ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={() => { setSpawnEditor(null); setSpawnEditing(null); }}
-            initial={spawnEditing?.kind === "transform" ? spawnEditing : undefined}
-            onSave={async (action) => { if (await addSpawnAction(definition.id, action, spawnEditing?.id)) { setSpawnEditor(null); setSpawnEditing(null); } }}
-          />
-        ) : null}
-        {spawnEditor && definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
+        {spawnEditing.kind === "summon"
+          ? <SummonEditor ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={close} initial={spawnEditing} onSave={onSave} />
+          : <TransformEditor ownerId={definition.id} sceneActors={sceneDefinitions} onCancel={close} initial={spawnEditing} onSave={onSave} />}
+        {definitionStatus ? <p role="alert" className={styles.maHint}>{definitionStatus}</p> : null}
       </>
     );
-  }
-
-  function startNew(builderKind: BuilderKind | "lairAction", initial: BuilderDraft) {
-    openEdit({ kind: "new", builderKind }, initial);
   }
 
   /**
@@ -322,13 +285,6 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
       commitEdit(features.find((feature) => feature.id === edit.id), (edited) => featureFromDraft(edited, featureContext), (record) => updateFeature(definition.id, edit.id, record));
     } else if (edit.kind === "lairAction") {
       commitEdit(lairActions.find((action) => action.id === edit.id), (edited) => actionFromEffectDraft(edited), (record) => updateLairAction(definition.id, edit.id, record));
-    } else if (edit.kind === "new") {
-      if (edit.builderKind === "weapon") addWeaponV2(definition.id, weaponFromDraft(draft));
-      else if (edit.builderKind === "spell") addSpellV2(definition.id, spellFromDraft(draft));
-      else if (edit.builderKind === "deathEffect") addDeathEffectV2(definition.id, deathEffectFromDraft(draft));
-      else if (edit.builderKind === "feature") addFeatureV2(definition.id, featureFromDraft(draft, featureContext));
-      else if (edit.builderKind === "lairAction") addLairAction(definition.id, actionFromEffectDraft(draft));
-      else addActionV2(definition.id, actionFromEffectDraft(draft));
     }
     setEdit(null);
   }
@@ -343,6 +299,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
     openAbilityEditor({ mode: "new", list: prepared.list, record: prepared.record, focus: prepared.focus, pools: prepared.pools });
   }
 
+  /** Start from scratch: every kind opens in the ability editor on a blank record. */
   function startBlank(kind: BlankKind) {
     switch (kind) {
       case "weapon": openAbilityEditor({ mode: "new", list: "weapons", record: blankWeapon() }); break;
@@ -352,20 +309,16 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
       case "spell": openAbilityEditor({ mode: "new", list: "spells", record: blankSpell(spellcastingAbility(definition)) }); break;
       case "feature": openAbilityEditor({ mode: "new", list: "features", record: blankFeature() }); break;
       case "reaction": openAbilityEditor({ mode: "new", list: "reactions", record: blankReaction() }); break;
-      case "lair": startNew("lairAction", effectDraftFromAction(NEW_LAIR_ACTION)); break;
-      case "death": startNew("deathEffect", deathEffectDraftFromDefinition(NEW_DEATH_EFFECT)); break;
-      case "summon":
-      case "transform":
-        setEdit(null);
-        setAddOpen(false);
-        setSpawnEditing(null);
-        setSpawnEditor(kind);
-        break;
+      case "legendary": openAbilityEditor({ mode: "new", list: "legendary", record: blankLegendaryAction(definition) }); break;
+      case "lair": openAbilityEditor({ mode: "new", list: "lairActions", record: blankLairAction() }); break;
+      case "death": openAbilityEditor({ mode: "new", list: "deathEffects", record: blankDeathEffect() }); break;
+      case "summon": openAbilityEditor({ mode: "new", list: "actions", record: blankSummon() }); break;
+      case "transform": openAbilityEditor({ mode: "new", list: "actions", record: blankTransform() }); break;
     }
   }
 
   function builderFor(target: EditTarget) {
-    const kind = target.kind === "new" ? target.builderKind : target.kind;
+    const kind = target.kind;
     const specs = kind === "weapon"
       ? weaponFieldSchema(draft)
       : kind === "spell"
@@ -390,7 +343,7 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
             Cancel
           </button>
           <button type="button" className={styles.builderSave} onClick={save}>
-            {target.kind === "new" ? "Add to sheet" : "Save changes"}
+            Save changes
           </button>
         </div>
       </div>
@@ -398,13 +351,15 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   }
 
   /**
-   * "Delete Claws?", under a row whose deletion would change a multiattack: what each routine is left with, or, with
-   * a replacement picked, what it uses instead ("Multiattack uses Greataxe. Replace it with…").
+   * "Delete Claws?", under a row whose deletion would change a multiattack or leave a legendary action with nothing to
+   * use: what each is left with, or, with a replacement picked, what it uses instead ("Multiattack uses Greataxe…").
    */
   function removalPrompt({ itemType, itemId, name }: PendingRemoval) {
     const losses = multiattackLosses(definition, itemType, itemId);
-    const remaining = losses[0]?.definitionAfter ?? definition;
-    const choices = stepChoices(remaining).filter((choice) => choice.group !== "ability" && !choice.missing);
+    const legendary = legendaryLosses(definition, itemType, itemId);
+    const remaining = losses[0]?.definitionAfter ?? withoutDefinitionItem(definition, itemType, itemId);
+    // A legendary action can only be given another ability, not "any attack".
+    const choices = stepChoices(remaining).filter((choice) => choice.group !== "ability" && !choice.missing && (losses.length > 0 || choice.value.startsWith("id:")));
     const chosen = choices.find((choice) => choice.value === replacement);
     const replaced = chosen ? withoutDefinitionItem(definition, itemType, itemId, chosen.value) : undefined;
     const deleted = chosen ? [] : losses.filter((loss) => !loss.after);
@@ -427,11 +382,18 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
             </p>
           );
         })}
+        {legendary.map(({ index, entry }) => (
+          <p key={`legendary-${index}`}>
+            {chosen?.value.startsWith("id:")
+              ? `${entry.name}, a legendary action, uses ${name}. With ${chosen.label} instead, it will use ${chosen.label}.`
+              : `${entry.name}, a legendary action, uses ${name}. Without it, ${entry.name} will be reference only.`}
+          </p>
+        ))}
         {choices.length ? (
           <label className={styles.fieldInlineLabel}>
             Replace it with
             <select aria-label={`Replace ${name} with`} value={chosen ? replacement : ""} onChange={(e) => setReplacement(e.target.value)}>
-              <option value="">nothing: remove the step</option>
+              <option value="">nothing: {losses.length ? "remove the step" : "make it reference only"}</option>
               {choices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
             </select>
           </label>
@@ -463,32 +425,34 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
     return () => window.clearTimeout(timer);
   }, [returnTo, abilityEditor]);
 
-  /** What sits under a row: its delete prompt, its builder form, its summon or shapechange editor. */
+  /** What sits under a row: its delete prompt, its classic builder form, its old summon or shapechange editor. */
   function underRow(row: ListRow) {
     const id = rowId(row);
-    const confirming = pendingRemoval !== null && pendingRemoval.itemType === row.itemType && pendingRemoval.itemId === id;
-    const editing = edit !== null && edit.kind !== "new" && edit.id === id;
+    const confirming = pendingRemoval !== null && pendingRemoval.itemType === row.itemType && pendingRemoval.itemId === (row.ref.list === "legendary" ? String(row.ref.index) : id);
+    const editing = edit !== null && edit.id === id;
     return (
       <>
         {confirming ? removalPrompt(pendingRemoval) : null}
         {editing ? builderFor(edit) : null}
-        {spawnEditor && spawnEditing?.id === id ? spawnEditorNode() : null}
+        {spawnEditing?.id === id ? spawnEditorNode() : null}
       </>
     );
   }
 
   if (abilityEditor) {
+    const editingRef = abilityEditor.mode === "edit" ? abilityEditor.ref : undefined;
     return (
       <AbilityEditor
-        key={abilityEditor.mode === "edit" ? `${abilityEditor.ref.list}:${"id" in abilityEditor.ref ? abilityEditor.ref.id : ""}` : `new:${abilityEditor.list}`}
+        key={editingRef ? refKey(editingRef) : `new:${abilityEditor.mode === "new" && typeof abilityEditor.list === "string" ? abilityEditor.list : "granted"}`}
         definition={definition}
         target={abilityEditor}
         onClose={({ savedRef }) => {
-          const back = savedRef ?? (abilityEditor.mode === "edit" ? abilityEditor.ref : undefined);
+          const back = savedRef ?? editingRef;
           setAbilityEditor(null);
-          if (back && "id" in back) setReturnTo({ id: back.id, saved: Boolean(savedRef) });
+          if (back && back.list !== "granted") setReturnTo({ id: refRowId(back), saved: Boolean(savedRef) });
         }}
-        onOpenClassic={abilityEditor.mode === "edit" ? () => openClassic(abilityEditor.ref) : undefined}
+        // A legendary action has nothing in the classic editor to open it in.
+        onOpenClassic={editingRef && editingRef.list !== "legendary" ? () => openClassic(editingRef) : undefined}
       />
     );
   }
@@ -510,15 +474,12 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
         <AddAbility
           definition={definition}
           compendium={compendium}
-          builderRecipes={builderRecipes}
           onPrepared={openPrepared}
           onAttach={attachFromLibrary}
           onBlank={startBlank}
           onClose={() => setAddOpen(false)}
         />
       ) : null}
-      {spawnEditor && !spawnEditing ? spawnEditorNode() : null}
-      {edit?.kind === "new" ? builderFor(edit) : null}
 
       <AbilitiesList
         groups={groups}
@@ -528,7 +489,11 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
           onOpen: openRow,
           onDuplicate: duplicateRow,
           onMove: moveRow,
-          onDelete: (row) => { if (row.itemType && "id" in row.ref) requestRemove(row.itemType, row.ref.id, row.name); },
+          onDelete: (row) => {
+            if (!row.itemType) return;
+            if (row.ref.list === "legendary") requestRemove("legendary", String(row.ref.index), row.name);
+            else if ("id" in row.ref) requestRemove(row.itemType, row.ref.id, row.name);
+          },
           onToggleOptional: (row, on) => { if ("id" in row.ref) updateFeature(definition.id, row.ref.id, { enabled: on ? true : undefined }); }
         }}
       />

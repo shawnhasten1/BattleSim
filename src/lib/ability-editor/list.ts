@@ -19,8 +19,8 @@ import type { DefinitionItemType } from "@/lib/definition-edits";
 import { costText, MANUAL_REACTION_NOTES, poolName, statblockFor, usageLabel } from "@/lib/statblock";
 import { actionLimit, spellLimit, type Limit } from "./bindings";
 import { activationOf } from "./features";
-import { findAbility, refKey, type AbilityList, type AbilityRecord, type AbilityRef } from "./refs";
-import { actionOpensInEditor, canBeReaction, spellOpensInEditor } from "./spells";
+import { findAbility, refKey, type AbilityInsertTarget, type AbilityList, type AbilityRecord, type AbilityRef } from "./refs";
+import { canBeReaction } from "./spells";
 import { abilityWarnings, type WarningId } from "./validate";
 
 export type ListGroupId = "traits" | "actions" | "bonus" | "reactions" | "spellcasting" | "legendary" | "lair" | "death";
@@ -28,8 +28,8 @@ export type ListGroupId = "traits" | "actions" | "bonus" | "reactions" | "spellc
 /** ● simulated, ◐ partly, ○ reference only or no combat effect. */
 export type Automation = "simulated" | "partial" | "reference" | "no-effect";
 
-/** Where a row opens: the ability editor, the builder form (until Phase 7), a summon or shapechange editor, or nowhere yet. */
-export type RowOpens = "editor" | "builder" | "spawn" | "none";
+/** Where a row opens: the ability editor (every kind of ability opens there since Phase 7), or nowhere. */
+export type RowOpens = "editor" | "none";
 
 /** Where Move to… can take an action. */
 export type MoveTarget = "actions" | "bonus" | "reactions";
@@ -130,7 +130,9 @@ function actionCost(action: ActionDefinition): string | undefined {
  */
 const RUNS_AS_WRITTEN = new Set<WarningId>(["free-leveled-spell", "damage-ability-mismatch", "partly-simulated", "reference-only"]);
 /** The lists the editor checks; lair actions and death effects keep the builder until Phase 7. */
-const CHECKED_LISTS = new Set<AbilityRef["list"]>(["weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions"]);
+const CHECKED_LISTS = new Set<AbilityRef["list"]>([
+  "weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions", "legendary", "lairActions", "deathEffects"
+]);
 
 function automationOf(definition: CreatureDefinition, ref: AbilityRef): { automation: Automation; automationNote: string } {
   const entry = statblockFor(definition, ref);
@@ -183,7 +185,7 @@ function row(definition: CreatureDefinition, ref: AbilityRef, name: string, fiel
     moves: [],
     opens: "editor",
     ...automationOf(definition, ref),
-    ...(ref.list !== "legendary" && ref.list !== "granted" ? { itemType: ITEM_TYPES[ref.list] } : {}),
+    ...(ref.list === "legendary" ? { itemType: "legendary" as const } : ref.list !== "granted" ? { itemType: ITEM_TYPES[ref.list] } : {}),
     ...fields
   };
 }
@@ -196,14 +198,14 @@ function weaponRow(definition: CreatureDefinition, weapon: WeaponDefinition): Li
   ];
   const cost = weapon.resourceCost ? costText(weapon.resourceCost) : weapon.charges ? `${weapon.charges.max} ${weapon.charges.max === 1 ? "charge" : "charges"}` : undefined;
   // A spellcasting focus is still built in the builder (Phase 7).
-  return row(definition, { list: "weapons", id: weapon.id }, weapon.name, { chips, cost, opens: weapon.attackType === "focus" ? "builder" : "editor" }, weaponGroup(weapon));
+  return row(definition, { list: "weapons", id: weapon.id }, weapon.name, { chips, cost }, weaponGroup(weapon));
 }
 
 function actionRow(definition: CreatureDefinition, list: "actions" | "bonusActions" | "reactions", action: ActionDefinition): ListRow {
   const group = slotGroup(action.actionType);
-  const opens: RowOpens = action.kind === "summon" || action.kind === "transform" ? "spawn" : actionOpensInEditor(action) ? "editor" : "builder";
-  const moves = opens === "spawn" ? [] : MOVE_GROUPS.filter((to) => to !== group && (to !== "reactions" || canBeReaction(action)));
-  return row(definition, { list, id: action.id }, action.name, { cost: actionCost(action), opens, moves }, group);
+  // A standard action is an action or a bonus action; anything that can carry a trigger can be a reaction too.
+  const moves = MOVE_GROUPS.filter((to) => to !== group && (to !== "reactions" || canBeReaction(action)) && (action.kind !== "utility" || to !== "reactions"));
+  return row(definition, { list, id: action.id }, action.name, { cost: actionCost(action), moves }, group);
 }
 
 function featureRow(definition: CreatureDefinition, feature: FeatureDefinition): ListRow {
@@ -222,8 +224,7 @@ function spellRow(definition: CreatureDefinition, spell: SpellDefinition): ListR
     spell.action && "usage" in spell.action ? spell.action.usage : undefined, true);
   return row(definition, { list: "spells", id: spell.id }, spell.name, {
     cost,
-    chips: spell.concentration ? ["concentration"] : [],
-    opens: spellOpensInEditor(spell) ? "editor" : "builder"
+    chips: spell.concentration ? ["concentration"] : []
   });
 }
 
@@ -268,14 +269,10 @@ export function abilityList(definition: CreatureDefinition, combatant?: Combatan
     for (const action of definition[list] ?? []) add(slotGroup(action.actionType), actionRow(definition, list, action));
   }
   (definition.legendary?.actions ?? []).forEach((entry, index) => {
-    add("legendary", row(definition, { list: "legendary", index }, entry.name, {
-      cost: `${entry.cost} ${entry.cost === 1 ? "action" : "actions"}`,
-      // Its editor comes in Phase 7.
-      opens: "none"
-    }));
+    add("legendary", row(definition, { list: "legendary", index }, entry.name, { cost: `${entry.cost} ${entry.cost === 1 ? "action" : "actions"}` }));
   });
-  for (const action of definition.lairActions ?? []) add("lair", row(definition, { list: "lairActions", id: action.id }, action.name, { opens: "builder" }));
-  for (const effect of definition.deathEffects ?? []) add("death", row(definition, { list: "deathEffects", id: effect.id }, effect.name, { opens: "builder" }));
+  for (const action of definition.lairActions ?? []) add("lair", row(definition, { list: "lairActions", id: action.id }, action.name, {}));
+  for (const effect of definition.deathEffects ?? []) add("death", row(definition, { list: "deathEffects", id: effect.id }, effect.name, {}));
 
   // As in a statblock: a multiattack (or a feature that only grants one, like Extra Attack) heads its group, then the
   // weapons, the creature's own actions, and what its features give. Each keeps its order within that.
@@ -321,12 +318,13 @@ export function abilityList(definition: CreatureDefinition, combatant?: Combatan
  * A copy of a record to insert beside it: "Bite (copy)". Saving gives it new ids, and its own uses or recharge a pool of
  * its own (`withOwnUsagePool`).
  */
-export function duplicateOf(definition: CreatureDefinition, ref: AbilityRef): { list: AbilityList; record: AbilityRecord; after: string } | undefined {
-  if (ref.list === "legendary" || ref.list === "granted") return undefined;
+export function duplicateOf(definition: CreatureDefinition, ref: AbilityRef): { list: AbilityInsertTarget; record: AbilityRecord; after: string } | undefined {
+  if (ref.list === "granted") return undefined;
   const record = findAbility(definition, ref);
   if (!record) return undefined;
   const copy = structuredClone(record) as AbilityRecord & { name: string };
-  return { list: ref.list, record: { ...copy, name: `${copy.name} (copy)` }, after: ref.id };
+  // A legendary action has no id: its copy goes after it by place.
+  return { list: ref.list === "legendary" ? "legendary" : ref.list, record: { ...copy, name: `${copy.name} (copy)` }, after: ref.list === "legendary" ? String(ref.index) : ref.id };
 }
 
 /* ─── the pools strip ────────────────────────────────────────────────────── */

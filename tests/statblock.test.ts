@@ -96,7 +96,7 @@ describe("statblock text for SRD monsters", () => {
     expect(wing.text).toBe(
       "Each creature within 10 feet of it must succeed on a DC 22 Dexterity saving throw or take 15 (2d6 + 8) bludgeoning damage and be knocked prone.");
     expect(entry("adult-red-dragon", "legendary", "Tail Attack").text).toBe(
-      "It makes a Tail attack. Melee Weapon Attack: +14 to hit, reach 15 ft., one target. Hit: 17 (2d8 + 8) bludgeoning damage.");
+      "It makes a tail attack. Melee Weapon Attack: +14 to hit, reach 15 ft., one target. Hit: 17 (2d8 + 8) bludgeoning damage.");
     expect(entry("lich", "legendary", "Cantrip").text).toMatch(/^It casts Ray of Frost\. /);
   });
 

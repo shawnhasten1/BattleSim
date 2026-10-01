@@ -1618,7 +1618,9 @@ export function legendaryStatblock(legendary: LegendaryActionRef, definition: Cr
   if (referenced) {
     const entry = actionStatblock(referenced, definition);
     const spell = "spellLevel" in referenced && referenced.spellLevel !== undefined;
-    const verb = spell ? `It casts ${referenced.name}.` : referenced.kind === "attack" ? `It makes ${article(referenced.name)} ${referenced.name} attack.` : `It uses its ${referenced.name}.`;
+    // "It makes a tail attack", the way a statblock words it.
+    const word = attackWord(referenced.name);
+    const verb = spell ? `It casts ${referenced.name}.` : referenced.kind === "attack" ? `It makes ${article(word)} ${word} attack.` : `It uses its ${referenced.name}.`;
     return { ...entry, title, text: `${verb} ${entry.text}`, short: `${spell ? "casts" : "uses"} ${referenced.name} · ${entry.short}` };
   }
   const description = legendary.description?.trim() ?? "";

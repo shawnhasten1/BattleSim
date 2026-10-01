@@ -215,8 +215,28 @@ export const COPY = {
   referenceAc: { label: "Damage vs AC", hint: "a typical AC at its challenge rating or level; change it to compare." },
   unsimulated: { label: "Not simulated", hint: "Statblock sentences the routine leaves out (a hydra's heads, a roper's Reel), one a line. The preview shows them apart." },
 
+  // Legendary actions
+  legendaryCost: { label: "Costs", hint: "Legendary actions it spends on it. It takes one at the end of another creature's turn, and gets them all back at the start of its own." },
+  legendaryPool: { label: "Legendary actions a round", hint: "How many it can spend between its own turns (3 for most). All its legendary actions share them." },
+  legendaryDoes: { label: "It", hint: "Uses one of its abilities as it is (a dragon's tail attack), has an ability of its own (Wing Attack), or is reference text you resolve (Detect)." },
+  legendaryUses: { label: "Uses" },
+
+  // Summons, shapechanges and standard actions
+  summonCreatures: { label: "Creatures", hint: "An SRD monster or one of the scene's actors. With more than one, it summons one of them." },
+  summonChoice: { label: "Which one", hint: "Its choice: the AI picks the one worth most. At random: each is as likely." },
+  summonChance: { label: "Chance it works (%)", hint: "A demon's or a mephit's summon can fail; the action is spent either way. Empty: it always works." },
+  summonDuration: { label: "They stay (rounds)", hint: "Empty: for the rest of the fight. A minute is 10 rounds." },
+  summonRange: { label: "They appear within (ft)" },
+  summonGenerations: { label: "Generations", hint: "How deep summoning can go: 1 means what it summons can't summon in turn." },
+  forms: { label: "Forms", hint: "What it can turn into: each form's AC, speed, actions and traits. Its hit points and conditions stay its own." },
+  canRevert: { label: "It can change back into its true form" },
+  revertOnDeath: { label: "It changes back when it dies", hint: "Lycanthropes and vampires return to their true form when they die." },
+  standardAction: { label: "Takes the", hint: "An action any creature has: as a bonus action, or for a cost. The simulator doesn't hide, and Help is only partly simulated." },
+  weaponKind: { label: "It's", hint: "A focus (a staff, a wand, a holy symbol) makes no attack of its own: it has charges, effects while it's carried, and abilities it grants." },
+
   // Notes & AI
   description: { label: "Reference text", hint: "Shown with the ability; the simulator doesn't read it." },
+  json: { label: "The record as JSON", hint: "Edit it, then Check: it's checked and normalized the way a save would, and you see what changes before you Apply it. Save still commits it." },
   automation: { label: "The simulator", hint: "Reference only keeps it on the sheet for you to resolve; the AI never uses it." },
   category: { label: "Category" },
   properties: { label: "Properties", hint: "For reference. Finesse, versatile and two-handed are set in Roll and Damage." }

@@ -212,6 +212,32 @@ export function StatsTab({ combatant, definition }: { combatant: CombatantState;
 
       <section className={styles.section}>
         <h3 className={styles.fieldLabel}>
+          Saving throws
+          <InfoTooltip
+            label="About saving throws"
+            content={<p>A save&apos;s whole bonus, as a statblock prints it (DEX +6). Empty: the ability&apos;s modifier.</p>}
+          />
+        </h3>
+        <div className={styles.abilities}>
+          {ABILITIES.map((ability) => (
+            <label key={ability}>
+              <span>{ability}</span>
+              <input
+                type="number" aria-label={`${ability.toUpperCase()} save`} value={definition.saves?.[ability] ?? ""}
+                placeholder={formatBonus(abilityModifier(definition.abilities[ability]))}
+                onChange={(e) => {
+                  const { [ability]: _dropped, ...rest } = definition.saves ?? {};
+                  const saves = e.target.value === "" ? rest : { ...rest, [ability]: Number(e.target.value) };
+                  updateCreatureDefinition(definition.id, { saves: Object.keys(saves).length ? saves : undefined });
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.fieldLabel}>
           Defenses
           <InfoTooltip label="About defenses" content={DEFENSES_HELP} />
         </h3>

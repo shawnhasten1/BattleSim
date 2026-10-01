@@ -30,12 +30,20 @@ const START_LABELS: Record<AreaStart, string> = { self: "Around itself", point: 
 const REACH_LABELS: Record<Target["kind"], string> = { creature: "One creature", creatures: "Several", area: "An area", self: "Itself" };
 
 /** Who or what it reaches, for every kind the editor handles. */
-export function TargetSection({ action, onChange, onConvert, spell }: {
+export function TargetSection({ action, onChange, onConvert, spell, around }: {
   action: ActionDefinition;
   onChange: (next: ActionDefinition) => void;
   onConvert: Convert;
   spell?: SpellDefinition;
+  /** A death effect: an area around the creature, which nobody aims. */
+  around?: boolean;
 }) {
+  if (around && action.kind === "area-save") {
+    const target = actionTarget.get(action);
+    return target?.kind === "area" ? (
+      <AreaFields target={target} onTarget={(next) => onChange(actionTarget.set(action, next))} affects={action.affects} onAffects={(affects) => onChange({ ...action, affects })} around />
+    ) : null;
+  }
   switch (action.kind) {
     case "attack":
       return (
@@ -116,20 +124,33 @@ function Reaches({ action, onChange, onConvert, kinds }: {
   );
 }
 
-/** An area's shape, size, where it starts, and (an area save) who it affects, with a small diagram. */
-export function AreaFields({ target, onTarget, affects, onAffects }: {
+/** The shapes an area around the creature can take: nobody aims a cone or a line when it dies. */
+const AROUND_SHAPES = SHAPES.filter((option) => option.value === "sphere" || option.value === "cube");
+
+/**
+ * An area's shape, size, where it starts, and (an area save) who it affects, with a small diagram. `around` keeps it a
+ * sphere or a cube around the creature (a death burst).
+ */
+export function AreaFields({ target, onTarget, affects, onAffects, around }: {
   target: AreaTarget;
   onTarget: (next: AreaTarget) => void;
   affects?: "hostile" | "all";
   onAffects?: (next: "hostile" | "all") => void;
+  around?: boolean;
 }) {
   const shape = areaShapeOf(target.area);
   const start = areaStartOf(target);
+  const shapes = around && AROUND_SHAPES.some((option) => option.value === shape) ? AROUND_SHAPES : SHAPES;
+  // Around itself, whatever the shape: a shape that would start elsewhere is brought back to it.
+  const reshape = (next: AreaShape) => {
+    const reshaped = withAreaShape(target, next);
+    return around && areaStartOf(reshaped) !== "self" ? withAreaStart(reshaped, "self") : reshaped;
+  };
   return (
     <div className={styles.areaRow}>
       <div className={styles.areaFields}>
         <Field copy="areaShape">
-          <Segmented label="Shape" value={shape} options={SHAPES} onChange={(next) => onTarget(withAreaShape(target, next))} />
+          <Segmented label="Shape" value={shape} options={shapes} onChange={(next) => onTarget(reshape(next))} />
         </Field>
         <div className={styles.row}>
           <label className={styles.field}>
@@ -143,14 +164,16 @@ export function AreaFields({ target, onTarget, affects, onAffects }: {
             </label>
           ) : null}
         </div>
-        <Field copy="areaStart">
-          <Segmented
-            label="Starts"
-            value={start}
-            options={areaStarts(shape, start).map((value) => ({ value, label: START_LABELS[value] }))}
-            onChange={(next) => onTarget(withAreaStart(target, next))}
-          />
-        </Field>
+        {around && start === "self" ? null : (
+          <Field copy="areaStart">
+            <Segmented
+              label="Starts"
+              value={start}
+              options={areaStarts(shape, start).filter((value) => !around || value === "self" || value === start).map((value) => ({ value, label: START_LABELS[value] }))}
+              onChange={(next) => onTarget(withAreaStart(target, next))}
+            />
+          </Field>
+        )}
         {start === "point" ? (
           <span className={styles.inline}>
             <span>within</span>

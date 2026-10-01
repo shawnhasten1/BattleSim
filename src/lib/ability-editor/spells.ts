@@ -18,10 +18,12 @@ import { actionTarget, spellLimit } from "./bindings";
 
 type Kind = ActionDefinition["kind"];
 
-/** The kinds of spell the editor edits. Summons and shapechanges keep the old builder. */
-const EDITOR_KINDS = new Set<Kind>(["attack", "save", "area-save", "healing", "buff", "reposition", "activate-feature", "unsupported"]);
+/** The kinds of ability the editor edits: every kind but a multiattack, which opens on its Sequence (below). */
+const EDITOR_KINDS = new Set<Kind>([
+  "attack", "save", "area-save", "healing", "buff", "reposition", "activate-feature", "summon", "transform", "utility", "unsupported"
+]);
 
-/** Whether a spell opens in the ability editor: one that casts an attack, save, area, heal, buff, teleport or activation (Shield), or nothing yet. */
+/** Whether a spell opens in the ability editor: one that casts any kind of ability, or nothing yet. */
 export function spellOpensInEditor(spell: SpellDefinition): boolean {
   return !spell.action || EDITOR_KINDS.has(spell.action.kind);
 }
@@ -79,7 +81,7 @@ export function withCastingTime(
 /* ─── concentration ──────────────────────────────────────────────────────── */
 
 /** Kinds whose action records concentration itself (a heal never concentrates). */
-const CONCENTRATION_KINDS = new Set<Kind>(["attack", "save", "area-save", "buff", "reposition"]);
+const CONCENTRATION_KINDS = new Set<Kind>(["attack", "save", "area-save", "buff", "reposition", "summon"]);
 
 /** Whether the spell needs concentration: the engine takes it from either the spell or its action. */
 export function concentrates(spell: SpellDefinition): boolean {

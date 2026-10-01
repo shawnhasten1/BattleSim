@@ -2,7 +2,7 @@
  * Starting points for a new ability in the editor: blank kinds and recipes. Each is a whole record; nothing is added
  * to the creature until the DM saves it.
  */
-import type { Ability, ActionDefinition, DamageComponent, FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { Ability, ActionDefinition, DamageComponent, DeathEffectDefinition, FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { followUpFrom } from "./features";
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
@@ -92,6 +92,45 @@ export function blankBuff(): Extract<ActionDefinition, { kind: "buff" }> {
     kind: "buff", id: "", name: "New benefit", actionType: "bonus", range: 0, targeting: { target: "self" },
     appliedCondition: { name: "custom", durationRounds: 10 }, automationSupport: "full"
   };
+}
+
+/* ─── on death, lair actions, summons and shapechanges ───────────────────── */
+
+/**
+ * A blank death effect: when it drops, everyone within 10 feet makes a DEX save against a burst of fire, its DC from the
+ * creature's CON and proficiency. The engine resolves a death effect as an area around the creature.
+ */
+export function blankDeathEffect(): DeathEffectDefinition {
+  return {
+    id: "", name: "Death Burst", automationSupport: "full",
+    action: {
+      kind: "area-save", id: "", name: "Death Burst", actionType: "action", saveAbility: "dex", dcFormula: { base: 8, ability: "con", proficiency: true },
+      range: 0, area: { type: "circle", size: 10 }, targeting: { origin: "self", range: 0 }, damage: [{ dice: "2d6", damageType: "fire", diceCount: 2, diceSize: 6 }],
+      halfDamageOnSuccess: true, onSuccess: "half", affects: "all", automationSupport: "full"
+    }
+  };
+}
+
+/** A blank lair action: a 10-foot burst of fire at a point within 120 feet, DEX save for half (lair DCs are printed). */
+export function blankLairAction(): Extract<ActionDefinition, { kind: "area-save" }> {
+  return {
+    kind: "area-save", id: "", name: "New lair action", actionType: "action", saveAbility: "dex", dc: 15, range: 120,
+    area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 120 }, damage: [{ dice: "3d6", damageType: "fire", diceCount: 3, diceSize: 6 }],
+    halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile", automationSupport: "full"
+  };
+}
+
+/** A blank summon: nothing to summon yet (the Summon section picks the creatures), for a minute, its choice. */
+export function blankSummon(): Extract<ActionDefinition, { kind: "summon" }> {
+  return {
+    kind: "summon", id: "", name: "Summon", actionType: "action", range: 60, options: [], choice: "pick", durationRounds: 10, maxGeneration: 1,
+    automationSupport: "full"
+  };
+}
+
+/** A blank shapechange: no forms yet (the Shapechange section picks them); it can change back, and does when it dies. */
+export function blankTransform(): Extract<ActionDefinition, { kind: "transform" }> {
+  return { kind: "transform", id: "", name: "Shapechanger", actionType: "action", forms: [], canRevert: true, revertOnDeath: true, automationSupport: "full" };
 }
 
 /* ─── monster actions ────────────────────────────────────────────────────── */

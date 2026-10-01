@@ -2014,11 +2014,14 @@ export const creatureTypeSchema = z.enum([
   "monstrosity", "ooze", "plant", "undead"
 ]) as z.ZodType<CreatureType>;
 
+const sizeSchema = z.enum(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
+
 const triggeredRiderBase = {
   id: z.string().optional(),
   oncePerTurn: z.boolean().optional(),
   when: riderGateSchema,
   resourceCost: resourceCostSchema.optional(),
+  activation: z.enum(["always", "optional"]).optional(),
   restrictToCreatureTypes: z.array(creatureTypeSchema).optional()
 };
 
@@ -2040,6 +2043,25 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
     effects: z.array(z.any()).optional()
   }),
   z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number() }),
+  z.object({
+    ...triggeredRiderBase,
+    kind: z.literal("swallow"),
+    maxSize: sizeSchema.optional(),
+    requiresHeld: z.boolean().optional(),
+    save: z.object({ ability: abilitySchema, dc: z.number().int() }).optional(),
+    damage: z.array(damageComponentSchema).optional(),
+    regurgitate: z.object({ damage: z.number().min(0), dc: z.number().int() }).optional(),
+    capacity: z.number().int().positive().optional()
+  }),
+  z.object({
+    ...triggeredRiderBase,
+    kind: z.literal("hold"),
+    escapeDc: z.number().int(),
+    maxSize: sizeSchema.optional(),
+    restrained: z.boolean().optional(),
+    limit: z.number().int().positive().optional(),
+    recurringDamage: z.array(damageComponentSchema).optional()
+  }),
   z.object({ id: z.string().optional(), oncePerTurn: z.boolean().optional(), kind: z.literal("note"), text: z.string() })
 ]) as z.ZodType<ActionRider>;
 

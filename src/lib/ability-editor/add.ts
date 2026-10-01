@@ -10,15 +10,17 @@ import {
   type ActionRider,
   type CreatureDefinition,
   type FeatureDefinition,
+  type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdSpell, findSrdWeapon, type SrdEntryKind } from "@/data/srd";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
-import type { AbilityList, AbilityRecord } from "./refs";
+import { legendaryUsed, ownAbilityFrom } from "./legendary";
+import type { AbilityInsertTarget, AbilityRecord } from "./refs";
 import type { SectionId } from "./sections";
 import { castWith } from "./spells";
-import { ACTION_TEMPLATES, FEATURE_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES } from "./templates";
+import { ACTION_TEMPLATES, FEATURE_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES, blankDeathEffect } from "./templates";
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
 
@@ -33,9 +35,9 @@ export const ADD_FILTERS: Array<{ value: AddFilter; label: string }> = [
   { value: "recipes", label: "Recipes" }
 ];
 
-/** A record ready for the editor, and the list it goes in. */
+/** A record ready for the editor, and where it goes: a list, or the legendary actions. */
 export interface Prepared {
-  list: AbilityList;
+  list: AbilityInsertTarget;
   record: AbilityRecord;
   /** Pools it spends that the creature may not have (a copied monster ability's), offered as new while editing. */
   pools?: Record<string, number>;
@@ -45,7 +47,7 @@ export interface Prepared {
 
 /* ─── recipes ────────────────────────────────────────────────────────────── */
 
-export type RecipeGroup = "weapon" | "action" | "spell" | "feature";
+export type RecipeGroup = "weapon" | "action" | "spell" | "feature" | "death";
 
 export interface Recipe {
   id: string;
@@ -87,9 +89,10 @@ const FOCUS: Record<string, SectionId[]> = {
   "feature:fire-aura": ["aura"],
   "feature:aura-of-protection": ["aura"],
   "feature:legendary-resistance": ["while-active"],
-  "feature:regeneration": ["while-active"]
+  "feature:regeneration": ["while-active"],
+  "death:death-burst": ["target", "roll", "damage"]
 };
-const GROUP_FOCUS: Record<RecipeGroup, SectionId[]> = { weapon: ["roll", "damage"], action: ["damage"], spell: ["roll"], feature: ["while-active"] };
+const GROUP_FOCUS: Record<RecipeGroup, SectionId[]> = { weapon: ["roll", "damage"], action: ["damage"], spell: ["roll"], feature: ["while-active"], death: ["damage"] };
 
 function recipe(group: RecipeGroup, label: string, hint: string, prepare: (definition: CreatureDefinition) => Omit<Prepared, "focus">): Recipe {
   const id = `${group}:${slug(label)}`;
@@ -97,7 +100,28 @@ function recipe(group: RecipeGroup, label: string, hint: string, prepare: (defin
   return { id, label, hint, group, focus, prepare: (definition) => ({ ...prepare(definition), focus }) };
 }
 
-/** Every recipe: weapons, monster actions, spells, and features and traits. */
+/**
+ * A gas spore's or a mephit's burst: when it dies, everyone within 10 feet makes a CON save against poison, and is
+ * poisoned for a minute on a failure (it repeats the save at the end of each of its turns).
+ */
+function deathBurst(): Omit<Prepared, "focus"> {
+  const blank = blankDeathEffect();
+  return {
+    list: "deathEffects",
+    record: {
+      ...blank,
+      action: {
+        ...blank.action,
+        saveAbility: "con",
+        damage: [{ dice: "3d6", damageType: "poison", diceCount: 3, diceSize: 6 }],
+        // The burst's own save gates it, and its repeats use the same save and DC.
+        riders: [{ kind: "condition", when: "on-save-fail", condition: "poisoned", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" } }]
+      } as typeof blank.action
+    }
+  };
+}
+
+/** Every recipe: weapons, monster actions, spells, features and traits, and what happens when it dies. */
 export const RECIPES: Recipe[] = [
   ...WEAPON_TEMPLATES.map((template) => recipe("weapon", template.label, template.hint, () => ({ list: "weapons", record: structuredClone(template.record) }))),
   ...ACTION_TEMPLATES.map((template) => recipe("action", template.label, template.hint, () => {
@@ -110,7 +134,8 @@ export const RECIPES: Recipe[] = [
     const attacks = getExecutableActions(definition).filter((action): action is AttackAction => action.kind === "attack");
     const record = template.record(attacks);
     return { list: record.category === "trait" ? "traits" : "features", record };
-  }))
+  })),
+  recipe("death", "Death burst", "When it dies, everyone within 10 ft makes a save or is poisoned (a gas spore, a mephit)", deathBurst)
 ];
 
 /* ─── the library ────────────────────────────────────────────────────────── */
@@ -171,12 +196,28 @@ function poolIdsIn(value: unknown, into = new Set<string>()): Set<string> {
  */
 export async function prepareMonsterAbility(entry: SrdMonsterAbilityEntry): Promise<Prepared | undefined> {
   const monster = await loadSrdMonster(entry.monsterId);
-  const record = (monster?.[entry.list] as Array<{ id: string }> | undefined)?.find((candidate) => candidate.id === entry.id) as AbilityRecord | undefined;
-  if (!monster || !record) return undefined;
+  if (!monster) return undefined;
+  const record = entry.list === "legendary" ? legendaryCopy(monster, Number(entry.id))
+    : (monster[entry.list] as Array<{ id: string }> | undefined)?.find((candidate) => candidate.id === entry.id) as AbilityRecord | undefined;
+  if (!record) return undefined;
   const pools = Object.fromEntries([...poolIdsIn(record)]
     .filter((id) => !id.startsWith("usage:") && !id.startsWith("slot-") && monster.resources?.[id] !== undefined)
     .map((id) => [id, monster.resources![id]!]));
   return { list: entry.list, record: structuredClone(record), ...(Object.keys(pools).length ? { pools } : {}) };
+}
+
+/**
+ * A monster's legendary action, for another creature: one that uses one of the monster's abilities (a dragon's tail
+ * attack) gets that ability as its own, since the creature it's copied to doesn't have the monster's.
+ */
+function legendaryCopy(monster: CreatureDefinition, index: number): LegendaryActionRef | undefined {
+  const entry = monster.legendary?.actions[index];
+  if (!entry) return undefined;
+  const copy = structuredClone(entry);
+  const used = legendaryUsed(monster, entry);
+  if (!used) return copy;
+  delete copy.actionId;
+  return { ...copy, action: ownAbilityFrom(used, entry.name) };
 }
 
 /* ─── search ─────────────────────────────────────────────────────────────── */
@@ -212,8 +253,8 @@ function ranked<T>(items: readonly T[], tokens: string[], nameOf: (item: T) => s
 }
 
 const RECIPE_GROUPS: Record<AddFilter, RecipeGroup[]> = {
-  all: ["weapon", "action", "spell", "feature"], recipes: ["weapon", "action", "spell", "feature"],
-  weapons: ["weapon"], spells: ["spell"], features: ["feature"], monster: ["action"]
+  all: ["weapon", "action", "spell", "feature", "death"], recipes: ["weapon", "action", "spell", "feature", "death"],
+  weapons: ["weapon"], spells: ["spell"], features: ["feature"], monster: ["action", "death"]
 };
 const LIBRARY_KINDS: Record<AddFilter, SrdEntryKind[]> = {
   all: ["weapon", "spell", "feature"], weapons: ["weapon"], spells: ["spell"], features: ["feature"], monster: [], recipes: []

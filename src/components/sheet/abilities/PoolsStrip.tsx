@@ -15,17 +15,18 @@ import styles from "./abilities.module.css";
 export function PoolsStrip({ definition, combatant }: { definition: CreatureDefinition; combatant: CombatantState }) {
   const updateResource = useEncounterStore((s) => s.updateResource);
   const updateDefinitionResource = useEncounterStore((s) => s.updateDefinitionResource);
+  const setLegendaryPool = useEncounterStore((s) => s.setLegendaryPool);
   const [editing, setEditing] = useState(false);
   const chips = poolsStrip(definition, combatant);
   if (!chips.length) return null;
-  const editable = chips.filter((chip) => chip.kind !== "legendary");
+  // Every pool can be changed: the legendary actions' full count is how many it takes a round.
   return (
     <>
       <div className={styles.pools} role="group" aria-label="Pools">
         {chips.map((chip) => (
           <button
             key={chip.id} type="button" className={styles.pool} aria-expanded={editing} aria-label={`${chip.label}: ${chip.state}`}
-            title={chip.kind === "legendary" ? "Legendary actions it can take each round" : "Click to change this pool"}
+            title={chip.kind === "legendary" ? "Legendary actions it can take each round: click to change" : "Click to change this pool"}
             onClick={() => setEditing((value) => !value)}
           >
             {chip.label}
@@ -35,16 +36,16 @@ export function PoolsStrip({ definition, combatant }: { definition: CreatureDefi
           </button>
         ))}
       </div>
-      {editing && editable.length ? (
+      {editing ? (
         <div className={styles.poolEditor} role="group" aria-label="Pool sizes">
           <span className={styles.poolHead}>Pool</span>
           <span className={styles.poolHead}>Now</span>
           <span className={styles.poolHead}>Full</span>
-          {editable.map((chip) => (
+          {chips.map((chip) => (
             <PoolRow
               key={chip.id} label={chip.label} now={chip.now} full={chip.full}
-              onNow={(n) => updateResource(combatant.id, chip.id, n)}
-              onFull={(n) => updateDefinitionResource(definition.id, chip.id, n)}
+              onNow={(n) => updateResource(combatant.id, chip.id, chip.kind === "legendary" ? Math.min(n, chip.full) : n)}
+              onFull={(n) => (chip.kind === "legendary" ? setLegendaryPool(definition.id, n) : updateDefinitionResource(definition.id, chip.id, n))}
             />
           ))}
           <p className={styles.poolNote}>Now is this token&apos;s; Full is every token of this creature&apos;s, and what a new fight starts with.</p>

@@ -7,16 +7,30 @@ import {
   type ActionDefinition,
   type ActionRider,
   type CreatureDefinition,
+  type DeathEffectDefinition,
   type FeatureDefinition,
+  type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { convertAction, type ConvertibleKind, type ParkedRecords } from "@/lib/ability-editor/conversions";
 import { withGrantedAt, type Activation } from "@/lib/ability-editor/features";
+import { checkRecordJson } from "@/lib/ability-editor/json";
+import { withLegendaryPool, type ParkedLegendary } from "@/lib/ability-editor/legendary";
 import { featurePoolsToSeed } from "@/lib/ability-editor/records";
-import { findAbility, withAbility, withNewAbility, type AbilityList, type AbilityRecord, type AbilityRef, type GrantingList } from "@/lib/ability-editor/refs";
+import {
+  DEFAULT_LEGENDARY_POOL,
+  findAbility,
+  withAbility,
+  withNewAbilityAt,
+  type AbilityInsertTarget,
+  type AbilityRecord,
+  type AbilityRef,
+  type GrantingList
+} from "@/lib/ability-editor/refs";
 import { sectionsFor, type SectionId } from "@/lib/ability-editor/sections";
+import { creaturesToFetch, loadCreatures, newSummonLoop } from "@/lib/ability-editor/spawns";
 import { withSpellAction } from "@/lib/ability-editor/spells";
 import { abilityWarnings } from "@/lib/ability-editor/validate";
 import { deepEqual } from "@/lib/deep-equal";
@@ -24,10 +38,13 @@ import { statblockFor, type StatblockEntry } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useEditorGuard } from "../SheetGuard";
 import { UnsavedPrompt } from "../UnsavedPrompt";
-import { useParkedReaction, weaponSection } from "./AbilitySections";
+import { ActionNotes, useParkedReaction, weaponSection } from "./AbilitySections";
 import { actionSection } from "./ActionSections";
+import { More } from "./controls";
 import { EditorSection } from "./EditorSection";
 import { featureSection } from "./FeatureSections";
+import { JsonView } from "./JsonView";
+import { DeathNotes, LegendaryDoes, LegendaryNotes, LegendaryUse } from "./LegendarySections";
 import type { NewPools } from "./LimitPicker";
 import { spellSection } from "./SpellSections";
 import styles from "./ability-editor.module.css";
@@ -40,7 +57,8 @@ export type AbilityEditorTarget =
   | { mode: "edit"; ref: AbilityRef }
   | {
     mode: "new";
-    list: AbilityList;
+    /** Where it's going: a list, the legendary actions, or what a weapon or feature grants. */
+    list: AbilityInsertTarget;
     record: AbilityRecord;
     /** A recipe's sections to fill in: they open, highlighted, and the rest stay closed. */
     focus?: SectionId[];
@@ -68,20 +86,40 @@ export interface AbilityEditorResult {
   savedRef?: AbilityRef;
 }
 
-type RecordType = "weapon" | "spell" | "action" | "feature";
+type RecordType = "weapon" | "spell" | "action" | "feature" | "legendary" | "death";
 
 /** The sections the editor has fields for, per kind of record (each shows only when it applies). */
 const SECTIONS: Record<RecordType, SectionId[]> = {
   weapon: ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"],
   spell: ["basics", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   action: ["sequence", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
-  feature: ["basics", "use", "while-active", "aura", "grants", "notes"]
+  feature: ["basics", "use", "while-active", "aura", "grants", "notes"],
+  // Its cost and what it does; an ability of its own has an action's sections.
+  legendary: ["use", "does", "sequence", "target", "roll", "outcome", "damage", "effects", "lingering", "notes"],
+  // It fires on its own when the creature dies: no cost, and no lingering area.
+  death: ["target", "roll", "outcome", "damage", "effects", "notes"]
 };
+
+/** The list a ref or an insert target names ("granted" for what a weapon or feature grants). */
+function listNameOf(where: AbilityRef | AbilityInsertTarget): string {
+  if (typeof where === "string") return where;
+  return "list" in where ? where.list : "granted";
+}
+
+/** The action that does a record's work, for the sections that edit one: itself, a spell's, a death effect's, a legendary action's own. */
+function workingAction(record: AbilityRecord, type: RecordType): ActionDefinition | undefined {
+  if (type === "action") return record as ActionDefinition;
+  if (type === "spell") return (record as SpellDefinition).action;
+  if (type === "death") return (record as DeathEffectDefinition).action;
+  if (type === "legendary") return (record as LegendaryActionRef).action;
+  return undefined;
+}
 
 /** What the ability is after switching to a kind. */
 const NOW: Record<ConvertibleKind, string> = {
   attack: "It's an attack roll now.", save: "It's a saving throw now.", "area-save": "It's an area saving throw now.",
-  healing: "It heals now.", buff: "It grants a benefit now.", reposition: "It teleports now.", unsupported: "It's reference only now."
+  healing: "It heals now.", buff: "It grants a benefit now.", reposition: "It teleports now.", summon: "It summons creatures now.",
+  transform: "It changes shape now.", utility: "It takes a standard action now.", unsupported: "It's reference only now."
 };
 
 /** What a switch did, said once under "How it works". A save becoming an area (or back) needs no note. */
@@ -96,8 +134,18 @@ function conversionNote(from: ActionDefinition["kind"], to: ConvertibleKind, fre
 /** The effects (riders) a record carries: a weapon's on-hit effects, or its action's. */
 function ridersOf(record: AbilityRecord, type: RecordType): ActionRider[] {
   if (type === "weapon") return (record as WeaponDefinition).onHit ?? [];
-  const action = type === "spell" ? (record as SpellDefinition).action : type === "action" ? (record as ActionDefinition) : undefined;
+  const action = workingAction(record, type);
   return (action && "riders" in action ? action.riders : undefined) ?? [];
+}
+
+/** A summon with nothing to summon, or a shapechange with no form, anywhere in the record. */
+function emptySpawn(value: unknown): "summon" | "transform" | undefined {
+  if (Array.isArray(value)) return value.map(emptySpawn).find(Boolean);
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as { kind?: unknown; options?: unknown[]; forms?: unknown[] };
+  if (record.kind === "summon" && Array.isArray(record.options) && !record.options.length) return "summon";
+  if (record.kind === "transform" && Array.isArray(record.forms) && !record.forms.length) return "transform";
+  return Object.values(value).map(emptySpawn).find(Boolean);
 }
 
 /** Every pool id a record mentions, anywhere inside it: costs, its effects' pools, what it grants. */
@@ -138,6 +186,8 @@ function blockingProblem(record: AbilityRecord, type: RecordType): { message: st
     || poollessEffect((record as { action?: unknown }).action) || ("kind" in record && poollessEffect(record))) {
     return { message: "Choose which pool an effect uses.", section: "while-active" };
   }
+  const spawn = emptySpawn(record);
+  if (spawn) return { message: spawn === "summon" ? "Pick a creature for it to summon first." : "Pick a form for it to change into first.", section: "outcome" };
   return null;
 }
 
@@ -182,9 +232,19 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
   // A granted ability open in this editor, nested (index null: a new one), and its edits so far.
   const [nested, setNested] = useState<{ index: number | null; record: ActionDefinition } | null>(null);
   const [nestedWorking, setNestedWorking] = useState<ActionDefinition | null>(null);
-  const list: AbilityList = target.mode === "new" ? target.list : target.mode === "edit" ? (target.ref.list === "legendary" || target.ref.list === "granted" ? "actions" : target.ref.list) : "actions";
-  const type: RecordType = list === "weapons" ? "weapon" : list === "spells" ? "spell" : list === "features" || list === "traits" ? "feature" : "action";
+  const where: AbilityRef | AbilityInsertTarget = target.mode === "new" ? target.list : target.ref;
+  const listName = listNameOf(where);
+  const type: RecordType = listName === "weapons" ? "weapon" : listName === "spells" ? "spell" : listName === "features" || listName === "traits" ? "feature"
+    : listName === "legendary" ? "legendary" : listName === "deathEffects" ? "death" : "action";
   const available = SECTIONS[type];
+  // How many legendary actions it takes a round: a legendary action's editor sets it, saved with it.
+  const currentPool = definition.legendary?.pool ?? DEFAULT_LEGENDARY_POOL;
+  const [legendaryPool, setLegendaryPool] = useState(currentPool);
+  const parkedLegendary = useRef<ParkedLegendary>({});
+  // The creatures its summons and shapechanges name that the scene doesn't have yet, fetched from the library.
+  const scene = useEncounterStore((s) => s.encounter.definitions);
+  const [fetched, setFetched] = useState<CreatureDefinition[]>([]);
+  const [unfetchable, setUnfetchable] = useState<string[]>([]);
   // A new record opens every section (a recipe only the ones to fill in); a multiattack opens on its routine.
   const focus = target.mode === "new" ? target.focus ?? [] : [];
   const [open, setOpen] = useState<Set<SectionId>>(() => new Set(focus.length ? focus
@@ -208,16 +268,20 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
   // What a save writes: the record, with a granted ability still open in it as it stands.
   const merged = nested && nestedWorking ? (withGrantedAt(working as Granting, nested.index, nestedWorking) as AbilityRecord) : working;
   const nestedChanged = Boolean(nested) && (nested!.index === null || !deepEqual(nestedWorking, nested!.record));
-  const dirty = !deepEqual(working, opened) || nestedChanged;
+  const poolChanged = type === "legendary" && legendaryPool !== currentPool;
+  const dirty = !deepEqual(working, opened) || nestedChanged || poolChanged;
 
   // New pools count as the creature's while editing, so the preview and warnings see them.
   const withPools = useMemo(
     () => (Object.keys(pools).length ? { ...definition, resources: { ...(definition.resources ?? {}), ...pools } } : definition),
     [definition, pools]
   );
-  const where: AbilityRef | AbilityList = target.mode === "new" ? target.list : target.ref;
-  const placeRecord = (record: AbilityRecord) => (target.mode === "new" ? withNewAbility(withPools, target.list, record) : withAbility(withPools, target.ref, record));
-  const placed = useMemo(() => placeRecord(working), [target, withPools, working]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A legendary action is placed with the round's pool as it is in the editor, so its summary follows the field.
+  const placeRecord = (record: AbilityRecord) => {
+    const placedRecord = target.mode === "new" ? withNewAbilityAt(withPools, target.list, record) : withAbility(withPools, target.ref, record);
+    return type === "legendary" ? { ...placedRecord, definition: withLegendaryPool(placedRecord.definition, legendaryPool) } : placedRecord;
+  };
+  const placed = useMemo(() => placeRecord(working), [target, withPools, working, legendaryPool]); // eslint-disable-line react-hooks/exhaustive-deps
   const entry = statblockFor(placed.definition, placed.ref);
   const warnings = useMemo(() => abilityWarnings(withPools, where, working), [withPools, where, working]);
   const sectionList = (record: AbilityRecord) => sectionsFor({ ref: placed.ref, record, definition: placed.definition }).filter((section) => available.includes(section.id));
@@ -228,6 +292,28 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
     setWorking(next);
     setError(null);
   }
+
+  // The library creatures it names, fetched as they're picked so a save can embed them (a nested editor's parent does).
+  const toFetch = useMemo(
+    () => (nestedTarget ? [] : creaturesToFetch(placeRecord(merged).definition, scene, fetched, unfetchable)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [merged, scene, fetched, unfetchable, withPools, nestedTarget]
+  );
+  const fetchKey = toFetch.join("|");
+  useEffect(() => {
+    if (!fetchKey) return;
+    let live = true;
+    const ids = fetchKey.split("|");
+    void loadCreatures(ids, [...scene, ...fetched]).then((found) => {
+      if (!live) return;
+      setFetched((current) => [...current, ...found.filter((creature) => !current.some((have) => have.id === creature.id))]);
+      const got = new Set(found.map((creature) => creature.id));
+      setUnfetchable((current) => [...current, ...ids.filter((id) => !got.has(id))]);
+    });
+    return () => { live = false; };
+    // Only when what it names changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchKey]);
 
   // A nested editor tells its parent about each change.
   useEffect(() => {
@@ -244,13 +330,15 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
     const spell = type === "spell" ? (working as SpellDefinition) : undefined;
     const current: ActionDefinition = spell
       ? spell.action ?? { kind: "unsupported", id: "", name: spell.name, actionType: spell.castingTime, automationSupport: "unsupported" }
-      : (working as ActionDefinition);
+      : workingAction(working, type)!;
     // "Saving throw" brings back an earlier area when an area is what it was.
     const kind = to === "save" && parked["area-save"] && !parked.save && current.kind !== "area-save" ? "area-save" : to;
     const options = spell ? { spell: true, spellcasting: spellcastingAbility(withPools) } : {};
     const result = convertAction(current, kind, parked, options);
     let action = then ? then(result.action) : result.action;
-    let next: AbilityRecord = action;
+    // A death effect's or a legendary action's own ability is converted inside it.
+    let next: AbilityRecord = type === "death" ? { ...(working as DeathEffectDefinition), action }
+      : type === "legendary" ? { ...(working as LegendaryActionRef), action } : action;
     if (spell) {
       if (!spell.action && spell.resourceCost && "resourceCost" in action && !action.resourceCost) action = { ...action, resourceCost: spell.resourceCost } as ActionDefinition;
       const cast = withSpellAction(spell, action);
@@ -294,8 +382,26 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
       close();
       return true;
     }
+    // What it summons or changes into has to be in the scene: wait for the library, and never make a summon loop.
+    if (toFetch.length) {
+      setError("Still fetching the creatures it summons or changes into from the library: try again in a moment.");
+      return false;
+    }
+    const known = [...scene, ...fetched];
+    const loop = newSummonLoop(known, placeRecord(record).definition);
+    if (loop) {
+      const names = loop.map((id) => known.find((candidate) => candidate.id === id)?.name ?? (id === definition.id ? definition.name : id));
+      setError(`That summon would loop back on itself: ${names.join(" → ")}.`);
+      setOpen((current) => new Set([...current, "outcome"]));
+      return false;
+    }
     const used = poolsUsedBy(record, pools);
-    const extras = Object.keys(used).length ? { pools: used } : undefined;
+    const embed = fetched.filter((creature) => !scene.some((candidate) => candidate.id === creature.id));
+    const extras = {
+      ...(Object.keys(used).length ? { pools: used } : {}),
+      ...(type === "legendary" && (isNew || poolChanged) ? { legendaryPool } : {}),
+      ...(embed.length ? { embed } : {})
+    };
     const savedRef = target.mode === "new"
       ? insertAbilityRecord(definition.id, target.list, record, extras)
       : target.mode === "edit" ? replaceAbilityRecord(definition.id, target.ref, record, extras) : undefined;
@@ -417,11 +523,34 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
         feature: working as FeatureDefinition, onChange: update, definition: withPools, newPools, parkedReaction, parkedActivation, onOpenGranted: openGranted
       });
     }
-    return actionSection(id, { ...common, action: working as ActionDefinition, onChange: update });
+    if (type === "legendary") {
+      const entry = working as LegendaryActionRef;
+      if (id === "use") return <LegendaryUse entry={entry} onChange={update} pool={legendaryPool} onPool={setLegendaryPool} />;
+      if (id === "does") return <LegendaryDoes entry={entry} onChange={update} definition={withPools} parked={parkedLegendary} />;
+      if (id === "notes") {
+        return (
+          <>
+            <LegendaryNotes entry={entry} onChange={update} />
+            {entry.action ? <ActionNotes action={entry.action} onChange={(action) => update({ ...entry, action })} hideText /> : null}
+          </>
+        );
+      }
+      return entry.action ? actionSection(id, { ...common, action: entry.action, onChange: (action) => update({ ...entry, action }), place: "legendary" }) : null;
+    }
+    if (type === "death") {
+      const effect = working as DeathEffectDefinition;
+      if (id === "notes") return <DeathNotes effect={effect} onChange={update} />;
+      return actionSection(id, { ...common, action: effect.action, onChange: (action) => update({ ...effect, action }), place: "death" });
+    }
+    return actionSection(id, { ...common, action: working as ActionDefinition, onChange: update, place: listName === "lairActions" ? "lair" : undefined });
   }
   const actionKind = type === "action" ? (working as ActionDefinition).kind : undefined;
-  const kindLabel = type === "weapon" ? "weapon" : type === "spell" ? "spell" : type === "feature" ? (working as FeatureDefinition).category
-    : actionKind === "attack" ? "attack" : actionKind === "multiattack" ? "multiattack" : "action";
+  const ACTION_WORDS: Partial<Record<ActionDefinition["kind"], string>> = {
+    attack: "attack", multiattack: "multiattack", summon: "summon", transform: "shapechange", utility: "standard action"
+  };
+  const kindLabel = type === "weapon" ? ((working as WeaponDefinition).attackType === "focus" ? "focus" : "weapon") : type === "spell" ? "spell"
+    : type === "feature" ? (working as FeatureDefinition).category : type === "legendary" ? "legendary action" : type === "death" ? "death effect"
+      : listName === "lairActions" ? "lair action" : (actionKind && ACTION_WORDS[actionKind]) ?? "action";
 
   return (
     <div ref={rootRef} className={styles.editor} tabIndex={-1} onKeyDown={onKeyDown} aria-label={`Edit ${name || `new ${kindLabel}`}`} role="region">
@@ -496,6 +625,12 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
               update({ ...spell, action: { ...spell.action, name: event.target.value } });
               return;
             }
+            // So does a death effect's action, and a legendary action's own ability, while they share its name.
+            const wrapped = type === "death" || type === "legendary" ? (renamed as { action?: ActionDefinition }) : undefined;
+            if (wrapped?.action && wrapped.action.name === name) {
+              update({ ...renamed, action: { ...wrapped.action, name: event.target.value } } as AbilityRecord);
+              return;
+            }
             const feature = type === "feature" ? (renamed as FeatureDefinition) : undefined;
             if (feature?.grantedActions?.some((action) => action.kind === "activate-feature" && action.name === (working as FeatureDefinition).name)) {
               update({
@@ -527,6 +662,11 @@ export function AbilityEditor({ definition, target, onClose, onOpenClassic, pool
           suggested={focus.includes(section.id)}
         >
           {renderSection(section.id)}
+          {section.id === "notes" ? (
+            <More set={0} label="Edit as JSON">
+              <JsonView record={working} check={(text) => checkRecordJson(text, working, where, withPools)} onApply={update} />
+            </More>
+          ) : null}
           {section.id === "notes" && entry ? (
             <p className={styles.hint}>
               <SupportBadge entry={entry} />{" "}
