@@ -83,6 +83,40 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+export interface ImagePixelSize {
+  widthPx: number;
+  heightPx: number;
+}
+
+/**
+ * A battlemap file as picked: its data URL and its own pixel size, measured
+ * before anything downscales it. A VTT export is exactly columns × its px per
+ * square, so this size is what a grid can be read from. `size` is null when
+ * the file can't be decoded.
+ */
+export interface MapImageFile {
+  dataUrl: string;
+  fileName: string;
+  size: ImagePixelSize | null;
+}
+
+/** Read a picked file for use as a map background. Null if the file can't be read at all. */
+export async function readMapImageFile(file: File): Promise<MapImageFile | null> {
+  const dataUrl = await readAsDataUrl(file);
+  if (!dataUrl) return null;
+  const dims = await getImageDimensions(dataUrl);
+  return { dataUrl, fileName: file.name, size: dims ? { widthPx: dims.width, heightPx: dims.height } : null };
+}
+
+function readAsDataUrl(file: Blob): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Natural pixel dimensions of a data URL, or null if it can't be decoded. */
 export async function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number } | null> {
   if (typeof document === "undefined" || !dataUrl.startsWith("data:image/")) {

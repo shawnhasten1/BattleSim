@@ -173,6 +173,21 @@ export interface MapImageSettings {
    * and canvas sizing can be derived from it without re-decoding the image. */
   naturalWidthPx?: number;
   naturalHeightPx?: number;
+  /** The pixel size `pxPerSquare` is measured against: the uploaded file's own
+   * size before any downscale when known, otherwise the stored image's. A VTT
+   * export is exactly columns × its px per square, so this is the size a grid
+   * can be read from. */
+  sourceWidthPx?: number;
+  sourceHeightPx?: number;
+  /** Pixels per grid square at the source size. Set together with the source
+   * size, it pins the image to the grid: the image covers exactly
+   * `sourceWidthPx / pxPerSquare` squares at any square size, and `offsetX`,
+   * `offsetY`, `scale` and `map.canvas` no longer place it. */
+  pxPerSquare?: number;
+  /** Where the grid's top-left corner sits in a pinned image, in source px (a
+   * map drawn with a border). Missing means 0. */
+  originX?: number;
+  originY?: number;
 }
 
 export interface MapCanvasSettings {
@@ -2214,7 +2229,12 @@ export const encounterSnapshotSchema = z.object({
       scale: z.number().positive().default(DEFAULT_MAP_IMAGE_SETTINGS.scale),
       opacity: z.number().min(0).max(1).default(DEFAULT_MAP_IMAGE_SETTINGS.opacity),
       naturalWidthPx: z.number().positive().optional(),
-      naturalHeightPx: z.number().positive().optional()
+      naturalHeightPx: z.number().positive().optional(),
+      sourceWidthPx: z.number().positive().optional(),
+      sourceHeightPx: z.number().positive().optional(),
+      pxPerSquare: z.number().positive().optional(),
+      originX: z.number().finite().optional(),
+      originY: z.number().finite().optional()
     }).default(DEFAULT_MAP_IMAGE_SETTINGS),
     canvas: z.object({
       widthPx: z.number().positive(),

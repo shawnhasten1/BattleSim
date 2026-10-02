@@ -53,6 +53,7 @@ import {
   type FeatureEffect,
   type FeatureDefinition,
   type LegendaryActionRef,
+  type MapImageSettings,
   type PlacedTemplate,
   type Point,
   type SizeCategory,
@@ -86,7 +87,7 @@ import { ownCreatureBlock } from "@/lib/actor-sheet/scope";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
-import { downscaleDataUrl, getImageDimensions } from "@/lib/imageResize";
+import { downscaleDataUrl, getImageDimensions, type ImagePixelSize, type MapImageFile } from "@/lib/imageResize";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
@@ -104,7 +105,7 @@ export const MAX_ELEVATION_FT = 500;
 /** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
 export interface NewMapOptions {
   grid?: { width: number; height: number; distancePerSquare: number; squareSizePx: number };
-  imageDataUrl?: string | null;
+  image?: MapImageFile | null;
 }
 
 export type WallUpdate = Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>;
@@ -268,7 +269,15 @@ interface EncounterStore {
   deleteActorFolder: (folderId: string) => Promise<void>;
   moveDefinitionToFolder: (definitionId: string, folderId: string | null) => Promise<void>;
   selectCombatant: (id: string | null) => void;
-  setMapImage: (dataUrl: string | null) => void;
+  /**
+   * Set or clear the current scene's background. `source` is the picked file's
+   * own pixel size (`MapImageFile.size`). Pass it for a newly picked image, as
+   * null if the file couldn't be measured: it replaces the previous image's
+   * source size and drops its grid pin, which was measured against that image.
+   * Leave it out to keep the map's own image fields (Import JSON, whose
+   * snapshot already carries them).
+   */
+  setMapImage: (dataUrl: string | null, source?: ImagePixelSize | null) => void;
   /** Load the current scene's background from IndexedDB into `mapImageDataUrl`. */
   hydrateMapImage: () => void;
   updateGrid: (updates: Partial<EncounterSnapshot["map"]["grid"]>) => void;
@@ -657,16 +666,33 @@ function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "emp
 }
 
 /**
+ * `image` with a newly picked file's own size recorded and any grid pin
+ * dropped, since px per square and origin were measured against the previous
+ * image. A null source (the file couldn't be measured) clears the old size too.
+ */
+function withImageSource(image: MapImageSettings, source: ImagePixelSize | null): MapImageSettings {
+  const { sourceWidthPx: _width, sourceHeightPx: _height, pxPerSquare: _pin, originX: _originX, originY: _originY, ...rest } = image;
+  return source ? { ...rest, sourceWidthPx: source.widthPx, sourceHeightPx: source.heightPx } : rest;
+}
+
+/**
  * Downscale an upload and decode its stored pixel dimensions, for callers that
  * need to bake a background straight into a snapshot being created (before any
  * encounter id exists to key `setMapImage`'s state-driven flow off of).
+ * `settings` records both the stored size and the file's own.
  */
-async function prepareMapImage(dataUrl: string): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number } | null> {
+async function prepareMapImage(image: MapImageFile): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number; settings: MapImageSettings } | null> {
+  const { dataUrl } = image;
   if (!dataUrl.startsWith("data:image/")) return null;
   const resized = await downscaleDataUrl(dataUrl).catch(() => dataUrl);
   const dims = await getImageDimensions(resized);
   if (!dims) return null;
-  return { value: resized, naturalWidthPx: dims.width, naturalHeightPx: dims.height };
+  return {
+    value: resized,
+    naturalWidthPx: dims.width,
+    naturalHeightPx: dims.height,
+    settings: withImageSource({ ...DEFAULT_MAP_IMAGE_SETTINGS, naturalWidthPx: dims.width, naturalHeightPx: dims.height }, image.size)
+  };
 }
 
 /**
@@ -1499,14 +1525,10 @@ export const useEncounterStore = create<EncounterStore>()(
             templates: []
           };
         }
-        const prepared = options?.imageDataUrl ? await prepareMapImage(options.imageDataUrl) : null;
+        const prepared = options?.image ? await prepareMapImage(options.image) : null;
         if (prepared) {
           snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
-          snapshot.map.image = {
-            ...DEFAULT_MAP_IMAGE_SETTINGS,
-            naturalWidthPx: prepared.naturalWidthPx,
-            naturalHeightPx: prepared.naturalHeightPx
-          };
+          snapshot.map.image = prepared.settings;
         }
         const response = await fetch("/api/encounters", {
           method: "POST",
@@ -1546,14 +1568,10 @@ export const useEncounterStore = create<EncounterStore>()(
             templates: []
           };
         }
-        const prepared = fresh && options?.imageDataUrl ? await prepareMapImage(options.imageDataUrl) : null;
+        const prepared = fresh && options?.image ? await prepareMapImage(options.image) : null;
         if (prepared) {
           snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
-          snapshot.map.image = {
-            ...DEFAULT_MAP_IMAGE_SETTINGS,
-            naturalWidthPx: prepared.naturalWidthPx,
-            naturalHeightPx: prepared.naturalHeightPx
-          };
+          snapshot.map.image = prepared.settings;
         }
         const response = await fetch("/api/encounters", {
           method: "POST",
@@ -2008,7 +2026,7 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       selectCombatant: (id) => set({ selectedCombatantId: id }),
       hydrateMapImage,
-      setMapImage: (dataUrl) => {
+      setMapImage: (dataUrl, source) => {
         const applyMapImage = (value: string | null) => {
           const key = mapImageKey(get());
           set({ mapImageDataUrl: value });
@@ -2024,19 +2042,21 @@ export const useEncounterStore = create<EncounterStore>()(
 
         // Record the image's own pixel dimensions and auto-size the canvas to
         // match, so the background is never silently cropped/stretched. Runs
-        // on every upload, including replacing an existing background.
+        // on every upload, including replacing an existing background. A newly
+        // picked file (`source` given) also records its pre-downscale size.
         const applyDims = (dims: { width: number; height: number }) => {
           const encounter = get().encounter;
+          const image: MapImageSettings = {
+            ...DEFAULT_MAP_IMAGE_SETTINGS,
+            ...encounter.map.image,
+            naturalWidthPx: dims.width,
+            naturalHeightPx: dims.height
+          };
           commitEncounter({
             ...encounter,
             map: {
               ...encounter.map,
-              image: {
-                ...DEFAULT_MAP_IMAGE_SETTINGS,
-                ...encounter.map.image,
-                naturalWidthPx: dims.width,
-                naturalHeightPx: dims.height
-              },
+              image: source === undefined ? image : withImageSource(image, source),
               canvas: { widthPx: dims.width, heightPx: dims.height }
             }
           });

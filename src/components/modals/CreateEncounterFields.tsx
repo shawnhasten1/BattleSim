@@ -2,6 +2,7 @@
 
 import { ImagePlus } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
+import { readMapImageFile, type MapImageFile } from "@/lib/imageResize";
 import styles from "./modals.module.css";
 
 export interface GridChoice {
@@ -24,8 +25,8 @@ interface CreateEncounterFieldsProps {
   onNameChange: (name: string) => void;
   grid: GridChoice;
   onGridChange: (grid: GridChoice) => void;
-  imageDataUrl: string | null;
-  onImageChange: (dataUrl: string | null) => void;
+  image: MapImageFile | null;
+  onImageChange: (image: MapImageFile | null) => void;
 }
 
 /**
@@ -34,7 +35,7 @@ interface CreateEncounterFieldsProps {
  * start). A picked preset only sets width/height; feet-per-square and
  * px-per-square stay at their defaults unless Custom is opened.
  */
-export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, imageDataUrl, onImageChange }: CreateEncounterFieldsProps) {
+export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, image, onImageChange }: CreateEncounterFieldsProps) {
   const [presetKey, setPresetKey] = useState<string>("landscape");
   const [custom, setCustom] = useState(false);
 
@@ -47,9 +48,9 @@ export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, 
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onImageChange(typeof reader.result === "string" ? reader.result : null);
-    reader.readAsDataURL(file);
+    void readMapImageFile(file).then((picked) => {
+      if (picked) onImageChange(picked);
+    });
   }
 
   return (
@@ -99,10 +100,10 @@ export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, 
 
       <h4>Background (optional)</h4>
       <label className={styles.upload}>
-        <ImagePlus size={14} /> {imageDataUrl ? "Replace background image" : "Upload background image"}
+        <ImagePlus size={14} /> {image ? "Replace background image" : "Upload background image"}
         <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onImageUpload} />
       </label>
-      {imageDataUrl ? (
+      {image ? (
         <button type="button" className={styles.secondary} onClick={() => onImageChange(null)}>
           Remove image — start with a blank grid
         </button>

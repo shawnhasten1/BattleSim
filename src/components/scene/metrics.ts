@@ -1,5 +1,20 @@
 import { DEFAULT_GRID_VISUALS, DEFAULT_MAP_IMAGE_SETTINGS, type BattleMapState, type MapImageSettings } from "@/engine";
 
+/**
+ * Where the background image is drawn inside the (unpadded) scene, in scene px.
+ * A pinned image is placed in grid squares, from its own px per square, so it
+ * scales with the grid and can't drift from it. An unpinned one fills
+ * `map.canvas` at 0,0 and the canvas applies the image offset/scale transform
+ * on top, as before pinning existed.
+ */
+export interface ImageBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  pinned: boolean;
+}
+
 export interface SceneMetrics {
   cellSize: number;
   gridLineWidth: number;
@@ -19,6 +34,14 @@ export interface SceneMetrics {
   framePixelHeight: number;
   imageSettings: MapImageSettings;
   canvasSettings: { widthPx: number; heightPx: number };
+  imageBox: ImageBox;
+}
+
+/** The image's grid fit, if it has one: px per square and the source size it's measured against. */
+function imagePin(image: MapImageSettings) {
+  const { pxPerSquare, sourceWidthPx, sourceHeightPx } = image;
+  if (!pxPerSquare || !sourceWidthPx || !sourceHeightPx) return null;
+  return { pxPerSquare, sourceWidthPx, sourceHeightPx, originX: image.originX ?? 0, originY: image.originY ?? 0 };
 }
 
 /**
@@ -39,8 +62,20 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
   const gridLineOpacity = Math.min(1, Math.max(0, gridSettings.lineOpacity ?? DEFAULT_GRID_VISUALS.lineOpacity));
   const gridPixelWidth = map.grid.width * cellSize;
   const gridPixelHeight = map.grid.height * cellSize;
-  const scenePixelWidth = Math.max(canvasSettings.widthPx, gridPixelWidth);
-  const scenePixelHeight = Math.max(canvasSettings.heightPx, gridPixelHeight);
+  const pin = imagePin(imageSettings);
+  const imageBox: ImageBox = pin
+    ? {
+        left: pin.originX ? (-pin.originX / pin.pxPerSquare) * cellSize : 0,
+        top: pin.originY ? (-pin.originY / pin.pxPerSquare) * cellSize : 0,
+        width: (pin.sourceWidthPx / pin.pxPerSquare) * cellSize,
+        height: (pin.sourceHeightPx / pin.pxPerSquare) * cellSize,
+        pinned: true
+      }
+    : { left: 0, top: 0, width: canvasSettings.widthPx, height: canvasSettings.heightPx, pinned: false };
+  // The scene covers the grid and the image's far edge. Unpinned, that's
+  // max(canvas, grid), as it always was.
+  const scenePixelWidth = Math.max(imageBox.left + imageBox.width, gridPixelWidth);
+  const scenePixelHeight = Math.max(imageBox.top + imageBox.height, gridPixelHeight);
   const paddingPx = Math.max(0, map.paddingSquares ?? 0) * cellSize;
 
   return {
@@ -56,6 +91,7 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
     framePixelWidth: scenePixelWidth + paddingPx * 2,
     framePixelHeight: scenePixelHeight + paddingPx * 2,
     imageSettings,
-    canvasSettings
+    canvasSettings,
+    imageBox
   };
 }

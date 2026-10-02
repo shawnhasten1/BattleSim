@@ -529,12 +529,27 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
             src={mapImageDataUrl}
             alt=""
             draggable={false}
-            style={{
-              width: metrics.canvasSettings.widthPx,
-              height: metrics.canvasSettings.heightPx,
-              opacity: metrics.imageSettings.opacity,
-              transform: `translate(${metrics.imageSettings.offsetX}px, ${metrics.imageSettings.offsetY}px) scale(${metrics.imageSettings.scale / 100})`
-            }}
+            style={
+              metrics.imageBox.pinned
+                ? {
+                    // The box has the image's own proportions, so `fill` neither
+                    // crops nor stretches it. `maxWidth` lifts the global img cap,
+                    // which would shrink a box that runs past the scene's edge.
+                    left: metrics.imageBox.left,
+                    top: metrics.imageBox.top,
+                    width: metrics.imageBox.width,
+                    height: metrics.imageBox.height,
+                    maxWidth: "none",
+                    objectFit: "fill",
+                    opacity: metrics.imageSettings.opacity
+                  }
+                : {
+                    width: metrics.imageBox.width,
+                    height: metrics.imageBox.height,
+                    opacity: metrics.imageSettings.opacity,
+                    transform: `translate(${metrics.imageSettings.offsetX}px, ${metrics.imageSettings.offsetY}px) scale(${metrics.imageSettings.scale / 100})`
+                  }
+            }
           />
         ) : null}
         <div

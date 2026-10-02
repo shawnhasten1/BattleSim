@@ -50,7 +50,7 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
     const id = await useEncounterStore.getState().createEncounterInCampaign(
       campaignId,
       result.name,
-      result.mode === "fresh" ? { grid: result.grid, imageDataUrl: result.imageDataUrl } : undefined
+      result.mode === "fresh" ? { grid: result.grid, image: result.image } : undefined
     );
     if (id) enterEncounter(id);
     else setStatus("Create encounter failed");

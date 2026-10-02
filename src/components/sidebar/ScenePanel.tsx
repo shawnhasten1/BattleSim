@@ -6,6 +6,7 @@ import { encounterSnapshotSchema } from "@/engine";
 import { useEncounterStore, type EditorTool } from "@/store/encounter-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import { downloadJson, safeFileName } from "@/lib/ui-helpers";
+import { readMapImageFile } from "@/lib/imageResize";
 import { ContextInspector } from "./ContextInspector";
 import styles from "./ScenePanel.module.css";
 
@@ -61,9 +62,9 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setMapImage(typeof reader.result === "string" ? reader.result : null);
-    reader.readAsDataURL(file);
+    void readMapImageFile(file).then((picked) => {
+      if (picked) setMapImage(picked.dataUrl, picked.size);
+    });
   }
 
   async function importEncounter(event: ChangeEvent<HTMLInputElement>) {

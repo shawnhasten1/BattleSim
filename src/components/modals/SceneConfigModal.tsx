@@ -5,6 +5,7 @@ import { type ChangeEvent } from "react";
 import { DEFAULT_MAP_IMAGE_SETTINGS } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
+import { readMapImageFile } from "@/lib/imageResize";
 import { Modal } from "@/components/ui/Modal";
 import styles from "./modals.module.css";
 
@@ -25,9 +26,9 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setMapImage(typeof reader.result === "string" ? reader.result : null);
-    reader.readAsDataURL(file);
+    void readMapImageFile(file).then((picked) => {
+      if (picked) setMapImage(picked.dataUrl, picked.size);
+    });
   }
 
   return (
