@@ -75,6 +75,13 @@ describe("Token › Tactics", { timeout: 20000 }, () => {
     render(<LiveToken id={knight.id} />);
     expect(await tactics().findByText("A new Knight starts as Defender, Balanced (the SRD's choice).")).toBeTruthy();
     expect(tactics().queryByRole("button", { name: /^Use these for every/ })).toBeNull();
+    cleanup();
+    // The SRD gives some monsters a spending of their own: the dragon's is Conservative.
+    await store().addSrdMonster("srd:monster:adult-red-dragon", "enemy");
+    const dragon = store().encounter.combatants.at(-1)!;
+    expect(dragon.resourceStance).toBe("conservative");
+    render(<LiveToken id={dragon.id} />);
+    expect(await tactics().findByText("A new Adult Red Dragon starts as Basic melee, Conservative (the SRD's choice).")).toBeTruthy();
   });
 
   it("makes target priority one choice, picking neither when both were set, and keeps Protect it apart", async () => {

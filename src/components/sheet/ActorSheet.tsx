@@ -53,6 +53,8 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   const [toast, setToast] = useState<SheetToast | null>(null);
   // An ability the Token tab asked to open: the Abilities tab opens it in the editor as it mounts.
   const [openFirst, setOpenFirst] = useState<AbilityRef | null>(null);
+  // A creature just made from this token: Stats focuses its name, selected, ready to rename.
+  const [focusName, setFocusName] = useState(false);
 
   // The open editor's guard, and whether it has unsaved changes (state, so the sheet re-renders to pin itself).
   const guardRef = useRef<EditorGuard | null>(null);
@@ -80,6 +82,10 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   useEffect(() => {
     if (tab === "abilities" && openFirst) setOpenFirst(null);
   }, [tab, openFirst]);
+  // Taken once Stats has focused the name (its effect runs before this one).
+  useEffect(() => {
+    if (focusName) setFocusName(false);
+  }, [focusName]);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 8000);
@@ -153,7 +159,10 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       headerExtra={
         <>
           <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
-          <SheetMenu combatant={combatant} definition={definition} status={status} guard={attempt} onToast={setToast} />
+          <SheetMenu
+            combatant={combatant} definition={definition} status={status} guard={attempt} onToast={setToast}
+            onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
+          />
           <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
         </>
       }
@@ -199,7 +208,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       onDrop={onDrop}
     >
       <SheetGuardContext.Provider value={registry}>
-        {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} /> : null}
+        {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
         {/* Keyed by creature: an ability being edited must not carry over to another creature when the selection changes. */}
         {tab === "abilities" ? (
           <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />

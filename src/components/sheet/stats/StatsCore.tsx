@@ -41,7 +41,7 @@ const SAVES_HELP = (
 );
 
 /** The top of the Stats tab, always open: who it is, its defenses and speed, and its scores with their saves. */
-export function StatsCore({ definition }: { definition: CreatureDefinition }) {
+export function StatsCore({ definition, focusName }: { definition: CreatureDefinition; focusName?: boolean }) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const updateAbility = useEncounterStore((s) => s.updateCreatureAbility);
   const movement: MovementProfile = definition.movement ?? { walk: definition.speed };
@@ -73,7 +73,7 @@ export function StatsCore({ definition }: { definition: CreatureDefinition }) {
       <p className={styles.source}>Source: {sourceLabel(definition.source)}</p>
       <label className={styles.field}>
         Name
-        <SheetText value={definition.name} onCommit={(name) => update(definition.id, { name })} />
+        <SheetText value={definition.name} autoSelect={focusName} onCommit={(name) => update(definition.id, { name })} />
       </label>
       <div className={styles.coreRow}>
         <label className={styles.field} style={{ width: 120 }}>

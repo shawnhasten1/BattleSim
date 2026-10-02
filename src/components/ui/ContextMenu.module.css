@@ -62,6 +62,29 @@
   flex: 1;
 }
 
+/* A disabled item with a hint: the label fades, and the hint says why, legibly. */
+.item.withHint:disabled {
+  opacity: 1;
+}
+
+.item.withHint {
+  align-items: flex-start;
+}
+
+.item.withHint:disabled .label {
+  color: var(--ui-text-dim);
+}
+
+.hint {
+  display: block;
+  max-width: 240px;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  color: var(--ui-text-dim);
+}
+
 .trailing {
   flex-shrink: 0;
   color: var(--ui-accent);

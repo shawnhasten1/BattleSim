@@ -288,12 +288,15 @@ const SECTIONS: Section[] = [
           <strong>+ Condition</strong> adds any of the standard ones. A downed token shows its death saves, and a
           concentrating one what it&apos;s concentrating on. The title bar counts how many of its abilities the simulator
           runs, and its <strong>⋯</strong> menu saves the creature to your library, exports the token as JSON, duplicates
-          it or deletes it.
+          it, makes it its own creature, or deletes it.
         </p>
         <p>
           The tabs are grouped by what they change. <strong>Stats</strong> and <strong>Abilities</strong> change the
           creature, which every token of it in the scene shares (the caption above them says how many);{" "}
-          <strong>Token</strong> changes this token only.
+          <strong>Token</strong> changes this token only. To give one token different stats (a goblin boss among
+          goblins), choose <strong>⋯ → Make it its own creature</strong>: it gets a copy of its creature, named after it,
+          and Stats opens with the name ready to rename. A shapechanger can&apos;t be split from its forms, nor a creature
+          that a summon makes by name, and the menu says why.
         </p>
         <ul>
           <li>

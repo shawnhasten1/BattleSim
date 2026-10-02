@@ -50,18 +50,20 @@ const PRIORITIES: Array<{ value: Priority; label: string; hint: string }> = [
 const labelOf = (profile: TacticsProfile) => TACTICS_PROFILES.find((option) => option.value === profile)?.label ?? profile;
 const stanceOf = (stance: CombatantState["resourceStance"]) => RESOURCE_STANCES.find((option) => option.value === stance)?.label ?? stance;
 
-/** The tactics the SRD statblock gives this creature, once its chunk has loaded; undefined for a creature of its own. */
-function useSrdTactics(definitionId: string): TacticsProfile | undefined {
-  const [srd, setSrd] = useState<{ id: string; tactics?: TacticsProfile }>();
+type Defaults = Pick<CreatureDefinition, "defaultTactics" | "defaultResourceStance">;
+
+/** The tactics and spending the SRD gives this creature, once its chunk has loaded; undefined for a creature of its own. */
+function useSrdDefaults(definitionId: string): Defaults | undefined {
+  const [srd, setSrd] = useState<{ id: string; defaults: Defaults }>();
   useEffect(() => {
     if (!isSrdMonsterId(definitionId)) return;
     let live = true;
     void loadSrdMonster(definitionId).then((monster) => {
-      if (live) setSrd({ id: definitionId, tactics: monster?.defaultTactics });
+      if (live && monster) setSrd({ id: definitionId, defaults: { defaultTactics: monster.defaultTactics, defaultResourceStance: monster.defaultResourceStance } });
     });
     return () => { live = false; };
   }, [definitionId]);
-  return srd?.id === definitionId ? srd.tactics : undefined;
+  return srd?.id === definitionId ? srd.defaults : undefined;
 }
 
 /** Abilities by name, each opening in the ability editor: "Greatsword, Parry (reaction)". */
@@ -99,7 +101,7 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
   const updateTags = useEncounterStore((s) => s.updateTags);
   const setCreatureBehavior = useEncounterStore((s) => s.setCreatureBehavior);
   const combatants = useEncounterStore((s) => s.encounter.combatants);
-  const srdTactics = useSrdTactics(definition.id);
+  const srd = useSrdDefaults(definition.id);
 
   const tags = combatant.tags ?? [];
   const first = tags.includes("high-priority");
@@ -119,7 +121,7 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
   const defaultTactics = defaultTacticsOf(definition);
   const defaultStance = definition.defaultResourceStance ?? "balanced";
   const from = definition.defaultTactics === undefined ? " (chosen from its attacks)"
-    : srdTactics !== undefined && definition.defaultTactics === srdTactics && definition.defaultResourceStance === undefined ? " (the SRD's choice)"
+    : srd && definition.defaultTactics === srd.defaultTactics && definition.defaultResourceStance === srd.defaultResourceStance ? " (the SRD's choice)"
       : "";
   const others = tokensOf({ combatants }, definition.id);
   const matches = (token: Pick<CombatantState, "tacticsProfile" | "resourceStance">) =>

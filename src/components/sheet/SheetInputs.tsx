@@ -125,16 +125,25 @@ export function SheetNumber(props: SheetNumberProps) {
 }
 
 /** A text box on the sheet: committed as it's typed, one undo step per edit. */
-export function SheetText({ value, onCommit, label, placeholder, style }: {
+export function SheetText({ value, onCommit, label, placeholder, style, autoSelect }: {
   value: string;
   onCommit: (next: string) => void;
   label?: string;
   placeholder?: string;
   style?: CSSProperties;
+  /** Focus the box with its text selected, ready to type over, when this turns true (a creature just made). */
+  autoSelect?: boolean;
 }) {
   const session = useEditSession();
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!autoSelect) return;
+    ref.current?.focus();
+    ref.current?.select();
+  }, [autoSelect]);
   return (
     <input
+      ref={ref}
       value={value}
       aria-label={label}
       placeholder={placeholder}

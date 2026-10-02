@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { CombatantState, CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { exportCombatant } from "@/lib/actor-sheet/export";
-import type { LibraryStatus } from "@/lib/actor-sheet/scope";
+import { ownCreatureBlock, type LibraryStatus } from "@/lib/actor-sheet/scope";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import styles from "./sheet.module.css";
 
@@ -23,20 +23,24 @@ const SAVE_LABELS: Record<LibraryStatus, string> = {
 };
 
 /**
- * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself. Every item waits on
- * `guard`, which asks first when an ability being edited has unsaved changes.
+ * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself, and Make it its own
+ * creature. Every item waits on `guard`, which asks first when an ability being edited has unsaved changes.
  */
-export function SheetMenu({ combatant, definition, status, guard, onToast }: {
+export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature }: {
   combatant: CombatantState;
   definition: CreatureDefinition;
   status: LibraryStatus;
   guard: (action: () => void) => void;
   onToast: (toast: SheetToast) => void;
+  /** After Make it its own creature: Stats, with the new creature's name ready to rename. */
+  onOwnCreature: () => void;
 }) {
   const saveDefinition = useEncounterStore((s) => s.saveDefinition);
   const copyLibraryDefinition = useEncounterStore((s) => s.copyLibraryDefinition);
   const duplicateCombatant = useEncounterStore((s) => s.duplicateCombatant);
   const removeCombatant = useEncounterStore((s) => s.removeCombatant);
+  const makeOwnCreature = useEncounterStore((s) => s.makeOwnCreature);
+  const encounter = useEncounterStore((s) => s.encounter);
   const selectCombatant = useEncounterStore((s) => s.selectCombatant);
   const undo = useEncounterStore((s) => s.undo);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -63,6 +67,19 @@ export function SheetMenu({ combatant, definition, status, guard, onToast }: {
     if (copy && copy.id !== combatant.id) onToast({ message: `Added ${copy.displayName}, a copy of ${combatant.displayName}.` });
   }
 
+  function ownCreature() {
+    if (!makeOwnCreature(combatant.id)) return;
+    onOwnCreature();
+    // Only the split it announces: anything done since would be undone instead.
+    const depth = useEncounterStore.getState().undoStack.length;
+    onToast({
+      message: `${combatant.displayName} is its own creature now: changes to it reach only this token.`,
+      undo: () => {
+        if (useEncounterStore.getState().undoStack.length === depth) undo();
+      }
+    });
+  }
+
   function remove() {
     removeCombatant(combatant.id);
     // Only the delete it announces: anything done since would be undone instead.
@@ -77,11 +94,19 @@ export function SheetMenu({ combatant, definition, status, guard, onToast }: {
     });
   }
 
+  // Only worked out while the menu is open: it looks through every creature's summons.
+  const block = menu ? ownCreatureBlock(encounter, combatant, definition) : undefined;
   const items: ContextMenuItem[] = [
     { label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) },
     { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition)) },
     { separator: true },
     { label: "Duplicate token", onSelect: () => guard(duplicate) },
+    {
+      label: "Make it its own creature",
+      disabled: Boolean(block),
+      hint: block ?? `A copy of ${definition.name} for this token alone, named ${combatant.displayName}.`,
+      onSelect: () => guard(ownCreature)
+    },
     { label: "Delete token", danger: true, onSelect: () => guard(remove) }
   ];
 

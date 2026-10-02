@@ -1,4 +1,4 @@
-import type { CombatantState, CreatureDefinition, EncounterSnapshot } from "@/engine";
+import { getExecutableActions, type ActionDefinition, type CombatantState, type CreatureDefinition, type EncounterSnapshot } from "@/engine";
 import { isSrdMonsterId } from "@/data/srd/monsters";
 
 /** The tokens showing a creature: those in its form now (a werewolf in hybrid form shows the hybrid). */
@@ -43,4 +43,39 @@ export function creatureScope(encounter: Pick<EncounterSnapshot, "combatants">, 
     caption: tokens.length > 1 ? `${tokens.length} tokens in this scene` : "its only token",
     help: `${reach} ${LIBRARY_NOTES[status]}`
   };
+}
+
+/** Every action a creature can take, with what its optional rules grant (switched on later, they name creatures too). */
+function everyAction(definition: CreatureDefinition): ActionDefinition[] {
+  const optionalGrants = [...(definition.features ?? []), ...(definition.traits ?? [])].flatMap((feature) => feature.grantedActions ?? []);
+  return [...getExecutableActions(definition), ...optionalGrants];
+}
+
+/**
+ * Why this token can't be made its own creature (the sheet's ⋯ menu), or undefined when it can: it's a shapechanger or
+ * one of its forms, which change into each other by id (checked first: a form is shared by every token that takes it,
+ * however many show it now); it's already the only token of its creature; or a summon or a shapechange names its
+ * creature (its own Summon Mephits, a Balor's Summon Demon), and would go on naming the original.
+ */
+export function ownCreatureBlock(
+  encounter: Pick<EncounterSnapshot, "combatants" | "definitions">,
+  combatant: CombatantState,
+  definition: CreatureDefinition
+): string | undefined {
+  const name = definition.name;
+  if (combatant.activeForm || definition.formOf || definition.defaultActiveForm || everyAction(definition).some((action) => action.kind === "transform")) {
+    return "A shapechanger and its forms change into each other by name, so one can't be split off.";
+  }
+  if (tokensOf(encounter, definition.id).length <= 1) return `It's the only ${name} in the scene, so changes to ${name} reach only it already.`;
+  for (const owner of encounter.definitions) {
+    for (const action of everyAction(owner)) {
+      const named = action.kind === "summon" ? action.options.some((option) => option.definitionId === definition.id)
+        : action.kind === "transform" ? action.forms.some((form) => form.definitionId === definition.id)
+          : false;
+      if (!named) continue;
+      const whose = owner.id === definition.id ? `Its own ${action.name}` : `${owner.name}'s ${action.name}`;
+      return `${whose} ${action.kind === "summon" ? "summons" : "changes into"} ${name} by name, and would go on making the original.`;
+    }
+  }
+  return undefined;
 }

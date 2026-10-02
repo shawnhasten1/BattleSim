@@ -82,6 +82,7 @@ import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
 import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
 import { defaultTacticsOf, isSurprised } from "@/lib/actor-sheet/token";
+import { ownCreatureBlock } from "@/lib/actor-sheet/scope";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -387,6 +388,12 @@ interface EncounterStore {
   setInLair: (combatantIds: string[], inLair: boolean) => void;
   /** Clone a specific combatant (fresh id, full HP, no initiative) and select the copy. */
   duplicateCombatant: (combatantId: string) => void;
+  /**
+   * Gives one token a creature of its own (the sheet's ⋯ › Make it its own creature): a copy of its creature under a new
+   * id, named after the token, which the token then shows, in one undo step. Edits to it then reach only this token.
+   * Nothing happens, and undefined comes back, when `ownCreatureBlock` says why it can't; else the copy's id.
+   */
+  makeOwnCreature: (combatantId: string) => string | undefined;
   /** Clone whatever combatant is currently selected. Thin wrapper over `duplicateCombatant`. */
   duplicateSelected: () => void;
 }
@@ -2900,6 +2907,23 @@ export const useEncounterStore = create<EncounterStore>()(
       duplicateSelected: () => {
         const selectedId = get().selectedCombatantId;
         if (selectedId) get().duplicateCombatant(selectedId);
+      },
+      makeOwnCreature: (combatantId) => {
+        const encounter = get().encounter;
+        const combatant = encounter.combatants.find((candidate) => candidate.id === combatantId);
+        if (!combatant) return undefined;
+        const definition = getDefinition(encounter, combatant);
+        if (ownCreatureBlock(encounter, combatant, definition)) return undefined;
+        // Its source stays (it's still that document's creature, changed); where it was filed in the library doesn't.
+        const { folderId: _folder, ...rest } = structuredClone(definition);
+        const copy: CreatureDefinition = { ...rest, id: `def-${crypto.randomUUID()}`, name: combatant.displayName };
+        const at = encounter.definitions.indexOf(definition) + 1;
+        commitEncounter({
+          ...encounter,
+          definitions: [...encounter.definitions.slice(0, at), copy, ...encounter.definitions.slice(at)],
+          combatants: encounter.combatants.map((candidate) => (candidate.id === combatantId ? { ...candidate, definitionId: copy.id } : candidate))
+        });
+        return copy.id;
       }
     });
     },

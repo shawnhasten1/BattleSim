@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import styles from "./ContextMenu.module.css";
 
@@ -12,6 +12,8 @@ export type ContextMenuItem =
       danger?: boolean;
       checked?: boolean;
       disabled?: boolean;
+      /** A second line under the label: for a disabled item, why it's disabled. */
+      hint?: string;
       /** Keep the menu open after choosing this item (e.g. a toggle you may flip repeatedly). */
       keepOpen?: boolean;
     }
@@ -51,6 +53,7 @@ interface ContextMenuProps {
  */
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const hintId = useId();
   const [pos, setPos] = useState({ x, y });
 
   useLayoutEffect(() => {
@@ -144,8 +147,11 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             type="button"
             role="menuitem"
             aria-checked={item.checked}
+            // With a hint, the label alone names it, and the hint describes it.
+            aria-label={item.hint ? item.label : undefined}
+            aria-describedby={item.hint ? `${hintId}-${index}` : undefined}
             disabled={item.disabled}
-            className={[styles.item, item.danger ? styles.danger : "", item.checked ? styles.checked : ""]
+            className={[styles.item, item.danger ? styles.danger : "", item.checked ? styles.checked : "", item.hint ? styles.withHint : ""]
               .filter(Boolean)
               .join(" ")}
             onClick={() => {
@@ -154,7 +160,10 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             }}
           >
             <span className={styles.icon} aria-hidden="true">{item.icon}</span>
-            <span className={styles.label}>{item.label}</span>
+            <span className={styles.label}>
+              {item.label}
+              {item.hint ? <span id={`${hintId}-${index}`} className={styles.hint}>{item.hint}</span> : null}
+            </span>
             <span className={styles.trailing} aria-hidden="true">{item.checked ? "✓" : ""}</span>
           </button>
         );
