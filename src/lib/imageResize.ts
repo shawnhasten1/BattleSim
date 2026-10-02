@@ -7,20 +7,64 @@
  * reaches the store.
  */
 
-interface DownscaleOptions {
+export interface DownscaleOptions {
   /** Longest edge of the output, in CSS pixels. */
   maxEdge?: number;
   /** JPEG quality, 0-1. */
   quality?: number;
   /** Skip work when the source is already smaller than this many bytes. */
   passthroughBytes?: number;
+  /** Most characters in the output data URL: quality, then size, steps down until it fits. */
+  maxChars?: number;
 }
 
 const DEFAULTS: Required<DownscaleOptions> = {
   maxEdge: 2048,
   quality: 0.82,
-  passthroughBytes: 600_000
+  passthroughBytes: 600_000,
+  maxChars: Number.POSITIVE_INFINITY
 };
+
+/** A map background is stored at up to about this many px per square: sharp at 3× zoom. */
+export const STORED_PX_PER_SQUARE = 100;
+/** The longest edge a map background is stored at. 4096 × 4096 is also iOS Safari's canvas limit (16.7 MP). */
+export const MAP_MAX_EDGE = 4096;
+/**
+ * The most characters a stored map background's data URL may have. The
+ * Blob sync posts it as JSON, and Vercel functions take request bodies up to
+ * 4.5 MB.
+ */
+export const MAP_MAX_DATA_URL_CHARS = 3_500_000;
+
+/**
+ * How to store a map background: about 100 px per square when its grid is
+ * known (an export at 200 px per square is halved; one at 70 is kept whole),
+ * never past a 4096 px edge, and within the Blob sync's size budget.
+ */
+export function mapStorageOptions(size: ImagePixelSize | null | undefined, pxPerSquare?: number): DownscaleOptions {
+  const options = { maxEdge: MAP_MAX_EDGE, maxChars: MAP_MAX_DATA_URL_CHARS };
+  if (!size) return options;
+  const longest = Math.max(size.widthPx, size.heightPx);
+  const perSquare = pxPerSquare && pxPerSquare > STORED_PX_PER_SQUARE ? STORED_PX_PER_SQUARE / pxPerSquare : 1;
+  return { ...options, maxEdge: Math.max(1, Math.min(MAP_MAX_EDGE, Math.floor(longest * perSquare))) };
+}
+
+/**
+ * Encode at falling quality, then falling size, until the result fits
+ * `maxChars`. `encode` draws at `scale` (of the planned size) and `quality`.
+ * Gives the last, smallest attempt if even `minScale` doesn't fit.
+ */
+export function encodeWithinBudget(encode: (scale: number, quality: number) => string, quality: number, maxChars: number, minScale = 0.25): string {
+  let scale = 1;
+  let current = quality;
+  let encoded = encode(scale, current);
+  while (encoded.length > maxChars && scale > minScale) {
+    if (current > 0.62) current = Math.round((current - 0.1) * 100) / 100;
+    else scale *= 0.85;
+    encoded = encode(scale, current);
+  }
+  return encoded;
+}
 
 /** Rough byte length of a data URL's payload without decoding it. */
 export function dataUrlBytes(dataUrl: string): number {
@@ -37,7 +81,7 @@ export function dataUrlBytes(dataUrl: string): number {
  * anything about the decode/encode fails, so an upload never hard-fails here.
  */
 export async function downscaleDataUrl(dataUrl: string, options: DownscaleOptions = {}): Promise<string> {
-  const { maxEdge, quality, passthroughBytes } = { ...DEFAULTS, ...options };
+  const { maxEdge, quality, passthroughBytes, maxChars } = { ...DEFAULTS, ...options };
 
   if (typeof document === "undefined" || !dataUrl.startsWith("data:image/")) {
     return dataUrl;
@@ -51,24 +95,22 @@ export async function downscaleDataUrl(dataUrl: string, options: DownscaleOption
     const longest = Math.max(image.naturalWidth, image.naturalHeight);
     const withinBounds = longest <= maxEdge;
 
-    if (withinBounds && dataUrlBytes(dataUrl) <= passthroughBytes) {
+    if (withinBounds && dataUrlBytes(dataUrl) <= passthroughBytes && dataUrl.length <= maxChars) {
       return dataUrl;
     }
 
-    const scale = withinBounds ? 1 : maxEdge / longest;
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
+    const planned = withinBounds ? 1 : maxEdge / longest;
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return dataUrl;
-    context.drawImage(image, 0, 0, width, height);
-
-    const encoded = canvas.toDataURL("image/jpeg", quality);
+    const encoded = encodeWithinBudget((scale, q) => {
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * planned * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * planned * scale));
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", q);
+    }, quality, maxChars);
     // Guard against pathological cases where re-encoding grew the payload.
-    return encoded.length < dataUrl.length || !withinBounds ? encoded : dataUrl;
+    return encoded.length < dataUrl.length || !withinBounds || dataUrl.length > maxChars ? encoded : dataUrl;
   } catch {
     return dataUrl;
   }

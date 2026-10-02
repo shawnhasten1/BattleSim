@@ -117,6 +117,14 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   }, [gridAlign, encounterId, cancelGridAlign]);
 
   const metrics = useMemo(() => deriveSceneMetrics(aligning ? alignedMap(map, aligning) : map), [map, aligning]);
+  const frame = { width: metrics.framePixelWidth, height: metrics.framePixelHeight };
+
+  // A scene opened for the first time (no saved view) is fitted to the stage.
+  useEffect(() => {
+    if (viewport.pendingFit) viewport.fitToView({ width: metrics.framePixelWidth, height: metrics.framePixelHeight });
+    // `viewport` is rebuilt every render; the fit only needs redoing when it's pending or the map's size changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport.pendingFit, metrics.framePixelWidth, metrics.framePixelHeight]);
   const cellSize = metrics.cellSize;
   const { tool, pendingWallStart } = scene;
   // Tokens tween between cells only while replay is scrubbing/playing; editing
@@ -502,7 +510,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
       <div className="viewport-controls" aria-label="Viewport controls">
         <button type="button" onClick={() => viewport.zoomBy(1.15)} title="Zoom in"><ZoomIn size={16} /></button>
         <button type="button" onClick={() => viewport.zoomBy(1 / 1.15)} title="Zoom out"><ZoomOut size={16} /></button>
-        <button type="button" onClick={viewport.resetViewport} title="Reset viewport"><Crosshair size={16} /></button>
+        <button type="button" onClick={() => viewport.fitToView(frame)} title="Fit the map to the view"><Crosshair size={16} /></button>
       </div>
       <div
         className={`battlemap-frame ${viewport.interacting ? "interacting" : ""}`}
@@ -517,8 +525,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
-          top: metrics.paddingPx,
-          left: metrics.paddingPx,
+          top: metrics.paddingYPx,
+          left: metrics.paddingXPx,
           // Position tween + HP-bar drain share the same beat; both are 0ms
           // outside replay so live editing is instant.
           ["--token-move-ms" as string]: `${tokenMoveMs}ms`,

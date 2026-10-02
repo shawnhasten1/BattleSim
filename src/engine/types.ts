@@ -226,6 +226,9 @@ export interface BattleMapState {
    * side (Foundry-style scene padding). Missing/undefined means 0 — only maps
    * created after this field existed get a nonzero default. */
   paddingSquares?: number;
+  /** Foundry-style padding instead: this percent of the scene's width (and, separately, its
+   * height) on each side, rounded up to whole squares. Wins over `paddingSquares` when set. */
+  paddingPercent?: number;
   walls: WallSegment[];
   terrain: TerrainZone[];
   templates?: PlacedTemplate[];
@@ -2241,6 +2244,7 @@ export const encounterSnapshotSchema = z.object({
       heightPx: z.number().positive()
     }).optional(),
     paddingSquares: z.number().min(0).optional(),
+    paddingPercent: z.number().min(0).max(100).optional(),
     walls: z.array(
       z.object({
         id: z.string(),

@@ -125,6 +125,28 @@ describe("createEncounterInCampaign records the picked file's own size", () => {
     expect(snapshot?.map.image).toMatchObject({ sourceWidthPx: 3000, sourceHeightPx: 2000, pxPerSquare: 100 });
     expect(deriveSceneMetrics(snapshot!.map).imageBox).toEqual({ left: 0, top: 0, width: 1320, height: 880, pinned: true });
   });
+
+  it("brings a Universal VTT file's walls and doors into the new map", async () => {
+    const posted: Array<{ encounter?: EncounterSnapshot }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      if (typeof init?.body === "string") posted.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ encounter: { id: "enc-uvtt" } }), { status: 200 });
+    }));
+    const walls = [
+      { id: "uvtt-wall-1", start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, blocksMovement: true, blocksSight: true, blocksProjectiles: true, cover: "total" as const },
+      { id: "uvtt-wall-2", start: { x: 5, y: 4 }, end: { x: 6, y: 4 }, blocksMovement: true, blocksSight: true, blocksProjectiles: true, cover: "total" as const, doorState: "closed" as const }
+    ];
+
+    await useEncounterStore.getState().createEncounterInCampaign("campaign-1", "Dungeon", {
+      grid: { width: 10, height: 8, distancePerSquare: 5, squareSizePx: 44, pxPerSquare: 100 },
+      image: { dataUrl: IMAGE, fileName: "dungeon.dd2vtt", size: { widthPx: 1000, heightPx: 800 } },
+      walls
+    });
+
+    const snapshot = posted.find((body) => body.encounter)?.encounter;
+    expect(snapshot?.map.walls).toEqual(walls);
+    expect(snapshot?.map.image).toMatchObject({ pxPerSquare: 100, sourceWidthPx: 1000 });
+  });
 });
 
 /** The sample encounter on a 30 × 20 grid with a background (walls and tokens are placed). */

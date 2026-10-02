@@ -95,7 +95,9 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
     if (prefsReady) writeJson("showElevation", showElevation);
   }, [prefsReady, showElevation]);
 
-  const viewport = useViewport();
+  // Each scene keeps its own view (keyed like its background image).
+  const sceneKey = useEncounterStore((state) => state.currentEncounterId ?? state.encounter.id);
+  const viewport = useViewport(sceneKey);
   const scene = useSceneInteraction({ isPanning: viewport.isPanning, isPanningRef: viewport.isPanningRef });
   const compendium = useCompendium({
     onCreatureImported: () => {

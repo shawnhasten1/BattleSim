@@ -27,6 +27,7 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
   const updateGrid = useEncounterStore((s) => s.updateGrid);
   const updateMapCanvas = useEncounterStore((s) => s.updateMapCanvas);
   const updateMapPadding = useEncounterStore((s) => s.updateMapPadding);
+  const updateMapPaddingPercent = useEncounterStore((s) => s.updateMapPaddingPercent);
   const updateMapImageSettings = useEncounterStore((s) => s.updateMapImageSettings);
   const startGridAlign = useEncounterStore((s) => s.startGridAlign);
   const [imageStatus, setImageStatus] = useState<string | null>(null);
@@ -38,8 +39,9 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
   }
 
   const grid = encounter.map.grid;
-  const { cellSize, gridLineWidth, gridLineColor, gridLineOpacity, canvasSettings, imageSettings, paddingPx, imageBox } = deriveSceneMetrics(encounter.map);
-  const paddingSquares = cellSize > 0 ? paddingPx / cellSize : 0;
+  const { cellSize, gridLineWidth, gridLineColor, gridLineOpacity, canvasSettings, imageSettings, imageBox } = deriveSceneMetrics(encounter.map);
+  const paddingPercent = encounter.map.paddingPercent;
+  const paddingChoice = paddingPercent ? "percent" : String(encounter.map.paddingSquares ?? 0);
   const fitSize = imageFitSize(imageSettings);
 
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -77,8 +79,18 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
           <label className={styles.field}>Feet / sq<input type="number" value={grid.distancePerSquare} min={1} max={20} onChange={(e) => updateGrid({ distancePerSquare: Number(e.target.value) })} /></label>
           <label className={styles.field}>Square size on screen<input type="number" value={cellSize} min={20} max={200} onChange={(e) => updateGrid({ squareSizePx: Number(e.target.value) })} /></label>
           <label className={styles.field}>
-            Padding (sq)
-            <input type="number" value={paddingSquares} min={0} max={10} step={0.5} onChange={(e) => updateMapPadding(Number(e.target.value))} />
+            Padding
+            <select
+              value={paddingChoice}
+              onChange={(e) => (e.target.value === "percent" ? updateMapPaddingPercent(25) : updateMapPadding(Number(e.target.value)))}
+            >
+              <option value="0">None</option>
+              <option value="1">1 square</option>
+              <option value="2">2 squares</option>
+              <option value="3">3 squares</option>
+              {["0", "1", "2", "3", "percent"].includes(paddingChoice) ? null : <option value={paddingChoice}>{paddingChoice} squares</option>}
+              <option value="percent">{paddingPercent ?? 25}%, like Foundry</option>
+            </select>
           </label>
           <label className={styles.field}>Line px<input type="number" value={gridLineWidth} min={0.5} max={4} step={0.5} onChange={(e) => updateGrid({ lineWidthPx: Number(e.target.value) })} /></label>
           <label className={styles.field}>Color<input type="color" value={gridLineColor} onChange={(e) => updateGrid({ lineColor: e.target.value })} /></label>

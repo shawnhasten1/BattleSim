@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { anchoredZoom, clamp, INITIAL_VIEWPORT, MAX_ZOOM, MIN_ZOOM, type ViewportState } from "@/components/scene/coords";
+import { anchoredZoom, clamp, fitViewport, INITIAL_VIEWPORT, MAX_ZOOM, MIN_ZOOM, type ViewportState } from "@/components/scene/coords";
 import { readJson, writeJson } from "@/lib/persist";
 
 const STORAGE_KEY = "viewport";
+/** Each scene keeps its own view; one opened for the first time is fitted instead. */
+const storageKeyFor = (sceneKey?: string) => (sceneKey ? `${STORAGE_KEY}:${sceneKey}` : STORAGE_KEY);
 
 interface PanStart {
   clientX: number;
@@ -38,15 +40,21 @@ export interface UseViewportResult {
     onPointerCancel: (event: PointerEvent<HTMLElement>) => void;
   };
   zoomBy: (factor: number) => void;
-  resetViewport: () => void;
+  /** The scene has no saved view yet: the canvas should call `fitToView` once it knows the map's size. */
+  pendingFit: boolean;
+  /** Centre the map in the stage, zoomed (to at most 100%) so all of it fits. */
+  fitToView: (frame: { width: number; height: number }) => void;
 }
 
 /**
  * Pan/zoom viewport for the scene stage. Wheel zoom is cursor-anchored;
- * panning is middle-mouse or Space+left-drag. No dependency on encounter state.
+ * panning is middle-mouse or Space+left-drag. Each scene (`sceneKey`) keeps
+ * its own view, per browser; a scene without one waits to be fitted. No other
+ * dependency on encounter state.
  */
-export function useViewport(): UseViewportResult {
+export function useViewport(sceneKey?: string): UseViewportResult {
   const [viewport, setViewport] = useState<ViewportState>(INITIAL_VIEWPORT);
+  const [pendingFit, setPendingFit] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [spacePanning, setSpacePanning] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
@@ -67,20 +75,23 @@ export function useViewport(): UseViewportResult {
     if (zoomIdleTimerRef.current) clearTimeout(zoomIdleTimerRef.current);
   }, []);
 
-  // Restore from localStorage after mount (not during render — avoids an SSR
-  // hydration mismatch), then persist changes, coalesced. The `hydrated` gate
-  // keeps the persist effect from clobbering the stored value before the
-  // restore has flushed.
+  // Restore this scene's view from localStorage after mount and whenever the
+  // scene changes (not during render — avoids an SSR hydration mismatch), then
+  // persist changes, coalesced. The `hydrated` gate keeps the persist effect
+  // from clobbering the stored value before the restore has flushed, and
+  // nothing is saved while a fit is pending.
   useEffect(() => {
-    const saved = readJson<ViewportState | null>(STORAGE_KEY, null);
+    const saved = readJson<ViewportState | null>(storageKeyFor(sceneKey), null);
     if (saved) setViewport(saved);
+    setPendingFit(!saved);
     setHydrated(true);
-  }, []);
+  }, [sceneKey]);
   useEffect(() => {
-    if (!hydrated) return;
-    const timer = setTimeout(() => writeJson(STORAGE_KEY, viewport), 300);
+    if (!hydrated || pendingFit) return;
+    const key = storageKeyFor(sceneKey);
+    const timer = setTimeout(() => writeJson(key, viewport), 300);
     return () => clearTimeout(timer);
-  }, [hydrated, viewport]);
+  }, [hydrated, pendingFit, viewport, sceneKey]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -190,6 +201,12 @@ export function useViewport(): UseViewportResult {
       markZooming();
       setViewport((current) => ({ ...current, zoom: clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM) }));
     },
-    resetViewport: () => setViewport(INITIAL_VIEWPORT)
+    pendingFit,
+    fitToView: (frame) => {
+      const stage = stageRef.current?.getBoundingClientRect();
+      if (!stage?.width || !stage.height || !frame.width || !frame.height) return;
+      setViewport(fitViewport({ width: stage.width, height: stage.height }, frame));
+      setPendingFit(false);
+    }
   };
 }

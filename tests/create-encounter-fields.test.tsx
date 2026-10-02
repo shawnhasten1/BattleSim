@@ -10,7 +10,9 @@ let nextSize: ImagePixelSize | null = null;
 
 vi.mock("@/lib/imageResize", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/imageResize")>()),
-  readMapImageFile: vi.fn(async (file: File) => ({ dataUrl: "data:image/png;base64,AAAA", fileName: file.name, size: nextSize }))
+  readMapImageFile: vi.fn(async (file: File) => ({ dataUrl: "data:image/png;base64,AAAA", fileName: file.name, size: nextSize })),
+  // A Universal VTT file's image can't be decoded here either: its size then comes from its grid.
+  getImageDimensions: vi.fn(async () => null)
 }));
 
 const USUAL_KEY = "battlesim:map-import:px-per-square";
@@ -135,6 +137,34 @@ describe("New Encounter reads the grid off the background", () => {
     expect(result.image).toBeNull();
     expect(result.grid).toMatchObject({ width: 40, height: 30 });
     expect(result.grid.pxPerSquare).toBeUndefined();
+  });
+
+  it("brings a Universal VTT file's grid and walls, as they are", async () => {
+    const onSubmit = renderModal();
+    const dungeon = {
+      resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: 10, y: 8 }, pixels_per_grid: 100 },
+      line_of_sight: [[{ x: 0, y: 0 }, { x: 10, y: 0 }], [{ x: 2, y: 2 }, { x: 2, y: 6 }, { x: 7, y: 6 }]],
+      portals: [{ bounds: [{ x: 5, y: 4 }, { x: 6, y: 4 }], closed: true }],
+      image: "iVBORw0KGgo"
+    };
+    await userEvent.upload(screen.getByLabelText(/background image/i), new File([JSON.stringify(dungeon)], "dungeon.dd2vtt"));
+    await waitFor(() => expect(fitText()).toContain("10 × 8 squares"));
+    expect(fitText()).toContain("100 px per square");
+    expect(fitText()).toContain("with its 3 walls and 1 door");
+    // Its grid is the file's, and its walls depend on it: no other readings to pick.
+    expect(screen.queryByRole("button", { name: "Other…" })).toBeNull();
+
+    const result = await submitted(onSubmit);
+    expect(result.grid).toMatchObject({ width: 10, height: 8, pxPerSquare: 100 });
+    expect(result.walls).toHaveLength(4);
+    expect(result.image).toMatchObject({ fileName: "dungeon.dd2vtt", size: { widthPx: 1000, heightPx: 800 } });
+  });
+
+  it("says why a Universal VTT file can't be used", async () => {
+    renderModal();
+    await userEvent.upload(screen.getByLabelText(/background image/i), new File(["{ not json"], "broken.uvtt"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("isn't a Universal VTT map"));
+    expect(screen.getByRole("button", { name: "Landscape 40×30" })).toBeTruthy();
   });
 
   it("falls back to the presets for an image whose size can't be read", async () => {

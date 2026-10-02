@@ -42,21 +42,32 @@ describe("deriveSceneMetrics", () => {
 
   it("defaults padding to 0 for maps without paddingSquares set", () => {
     const m = deriveSceneMetrics(map());
-    expect(m.paddingPx).toBe(0);
+    expect(m.paddingXPx).toBe(0);
+    expect(m.paddingYPx).toBe(0);
     expect(m.framePixelWidth).toBe(m.scenePixelWidth);
     expect(m.framePixelHeight).toBe(m.scenePixelHeight);
   });
 
   it("expands the frame by paddingSquares * cellSize on every side", () => {
     const m = deriveSceneMetrics(map({ squareSizePx: 40 }, { paddingSquares: 1 }));
-    expect(m.paddingPx).toBe(40);
+    expect(m.paddingXPx).toBe(40);
+    expect(m.paddingYPx).toBe(40);
     expect(m.framePixelWidth).toBe(m.scenePixelWidth + 80);
     expect(m.framePixelHeight).toBe(m.scenePixelHeight + 80);
   });
 
   it("clamps a negative paddingSquares to 0", () => {
     const m = deriveSceneMetrics(map({}, { paddingSquares: -2 }));
-    expect(m.paddingPx).toBe(0);
+    expect(m.paddingXPx).toBe(0);
+  });
+
+  it("pads like Foundry: a percent of each side, rounded up to whole squares", () => {
+    // 30 × 20 squares at 25%: 7.5 → 8 squares left and right, 5 top and bottom.
+    const m = deriveSceneMetrics(map({ width: 30, height: 20, squareSizePx: 44 }, { paddingPercent: 25, paddingSquares: 1 }));
+    expect(m.paddingXPx).toBe(8 * 44);
+    expect(m.paddingYPx).toBe(5 * 44);
+    expect(m.framePixelWidth).toBe((30 + 16) * 44);
+    expect(m.framePixelHeight).toBe((20 + 10) * 44);
   });
 });
 

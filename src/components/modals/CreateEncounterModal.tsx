@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import type { WallSegment } from "@/engine";
 import type { MapImageFile } from "@/lib/imageResize";
-import { CreateEncounterFields, DEFAULT_NEW_GRID, type GridChoice } from "./CreateEncounterFields";
+import { CreateEncounterFields, DEFAULT_NEW_GRID, type GridChoice, type ImportedWalls } from "./CreateEncounterFields";
 import styles from "./modals.module.css";
 
 export type CreateEncounterResult =
   | { name: string; mode: "clone" }
-  | { name: string; mode: "fresh"; grid: GridChoice; image: MapImageFile | null };
+  /** `walls` come from a Universal VTT file, when the background did. */
+  | { name: string; mode: "fresh"; grid: GridChoice; image: MapImageFile | null; walls?: WallSegment[] };
 
 interface CreateEncounterModalProps {
   onClose: () => void;
@@ -30,6 +32,7 @@ export function CreateEncounterModal({ onClose, onSubmit, defaultName = "", allo
   const [mode, setMode] = useState<"clone" | "fresh">(allowClone ? "clone" : "fresh");
   const [grid, setGrid] = useState<GridChoice>(DEFAULT_NEW_GRID);
   const [image, setImage] = useState<MapImageFile | null>(null);
+  const [imported, setImported] = useState<ImportedWalls | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -38,7 +41,7 @@ export function CreateEncounterModal({ onClose, onSubmit, defaultName = "", allo
       if (mode === "clone") {
         await onSubmit({ name, mode: "clone" });
       } else {
-        await onSubmit({ name, mode: "fresh", grid, image });
+        await onSubmit({ name, mode: "fresh", grid, image, ...(imported ? { walls: imported.walls } : {}) });
       }
       onClose();
     } finally {
@@ -84,6 +87,8 @@ export function CreateEncounterModal({ onClose, onSubmit, defaultName = "", allo
           onGridChange={setGrid}
           image={image}
           onImageChange={setImage}
+          imported={imported}
+          onImportedChange={setImported}
         />
       )}
     </Modal>

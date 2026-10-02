@@ -87,7 +87,7 @@ import { ownCreatureBlock } from "@/lib/actor-sheet/scope";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
-import { downscaleDataUrl, getImageDimensions, type ImagePixelSize, type MapImageFile } from "@/lib/imageResize";
+import { downscaleDataUrl, getImageDimensions, mapStorageOptions, type ImagePixelSize, type MapImageFile } from "@/lib/imageResize";
 import { detectGrid, imageFitSize, pinInPlace, readUsualPxPerSquare, squaresInBounds, squaresToCover, type GridFit } from "@/lib/gridInference";
 import type { AlignPin, SourcePoint } from "@/lib/gridAlign";
 import { createEncounterStorage } from "@/lib/encounterStorage";
@@ -120,6 +120,8 @@ export interface NewMapOptions {
   /** `pxPerSquare`, when the grid was read off the image, pins the image to it. */
   grid?: { width: number; height: number; distancePerSquare: number; squareSizePx: number; pxPerSquare?: number };
   image?: MapImageFile | null;
+  /** Walls and doors that came with the image (a Universal VTT file), in grid squares. */
+  walls?: WallSegment[];
 }
 
 export type WallUpdate = Partial<Pick<WallSegment, "blocksMovement" | "blocksSight" | "blocksProjectiles" | "doorState" | "cover">>;
@@ -318,7 +320,10 @@ interface EncounterStore {
   updateGrid: (updates: Partial<EncounterSnapshot["map"]["grid"]>) => void;
   updateMapImageSettings: (updates: Partial<NonNullable<EncounterSnapshot["map"]["image"]>>) => void;
   updateMapCanvas: (updates: Partial<NonNullable<EncounterSnapshot["map"]["canvas"]>>) => void;
+  /** Whole squares of padding on every side (and no Foundry-style percent). */
   updateMapPadding: (paddingSquares: number) => void;
+  /** Foundry-style padding: a percent of each side of the scene, rounded up to whole squares. */
+  updateMapPaddingPercent: (paddingPercent: number) => void;
   updateHp: (combatantId: string, hp: number) => void;
   updateTactics: (combatantId: string, tactics: EncounterSnapshot["combatants"][number]["tacticsProfile"]) => void;
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
@@ -720,7 +725,7 @@ function withImageSource(image: MapImageSettings, source: ImagePixelSize | null)
 async function prepareMapImage(image: MapImageFile, pxPerSquare?: number): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number; settings: MapImageSettings } | null> {
   const { dataUrl } = image;
   if (!dataUrl.startsWith("data:image/")) return null;
-  const resized = await downscaleDataUrl(dataUrl).catch(() => dataUrl);
+  const resized = await downscaleDataUrl(dataUrl, mapStorageOptions(image.size, pxPerSquare)).catch(() => dataUrl);
   const dims = await getImageDimensions(resized);
   if (!dims) return null;
   const settings = withImageSource({ ...DEFAULT_MAP_IMAGE_SETTINGS, naturalWidthPx: dims.width, naturalHeightPx: dims.height }, image.size);
@@ -946,7 +951,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // stored (IndexedDB) or sent anywhere. The decode is async; apply the
         // result once it's ready.
         if (dataUrl.startsWith("data:image/")) {
-          void downscaleDataUrl(dataUrl)
+          void downscaleDataUrl(dataUrl, mapStorageOptions(source, fit?.pxPerSquare))
             .then(async (resized) => {
               const dims = await getImageDimensions(resized);
               if (!fit && dims && shouldWarnBeforeReplacingImage(get().encounter, dims)) {
@@ -1681,7 +1686,7 @@ export const useEncounterStore = create<EncounterStore>()(
             canvas: { widthPx: width * squareSizePx, heightPx: height * squareSizePx },
             image: { ...DEFAULT_MAP_IMAGE_SETTINGS },
             paddingSquares: 1,
-            walls: [],
+            walls: options.walls ?? [],
             terrain: [],
             templates: []
           };
@@ -1724,7 +1729,7 @@ export const useEncounterStore = create<EncounterStore>()(
             canvas: { widthPx: width * squareSizePx, heightPx: height * squareSizePx },
             image: { ...DEFAULT_MAP_IMAGE_SETTINGS },
             paddingSquares: 1,
-            walls: [],
+            walls: options.walls ?? [],
             terrain: [],
             templates: []
           };
@@ -2315,10 +2320,12 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       updateMapPadding: (paddingSquares) => {
         const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          map: { ...encounter.map, paddingSquares: Math.max(0, paddingSquares) }
-        });
+        const { paddingPercent: _percent, ...map } = encounter.map;
+        commitEncounter({ ...encounter, map: { ...map, paddingSquares: Math.max(0, paddingSquares) } });
+      },
+      updateMapPaddingPercent: (paddingPercent) => {
+        const encounter = get().encounter;
+        commitEncounter({ ...encounter, map: { ...encounter.map, paddingPercent: Math.min(100, Math.max(0, paddingPercent)) } });
       },
       updateHp: (combatantId, hp) => {
         const state = get();

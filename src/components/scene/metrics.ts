@@ -24,9 +24,10 @@ export interface SceneMetrics {
   gridPixelHeight: number;
   scenePixelWidth: number;
   scenePixelHeight: number;
-  /** Visual buffer (Foundry-style scene padding) in px, one side. 0 for maps
-   * without `paddingSquares` set. */
-  paddingPx: number;
+  /** Visual buffer (Foundry-style scene padding) in px: left and right, then
+   * top and bottom. Whole squares; 0 for maps without padding set. */
+  paddingXPx: number;
+  paddingYPx: number;
   /** Outer frame size = scene pixels + padding on every side. What actually
    * gets rendered/panned; `scenePixelWidth/Height` stays the unpadded content
    * size so existing canvas-size consumers are unaffected. */
@@ -76,7 +77,12 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
   // max(canvas, grid), as it always was.
   const scenePixelWidth = Math.max(imageBox.left + imageBox.width, gridPixelWidth);
   const scenePixelHeight = Math.max(imageBox.top + imageBox.height, gridPixelHeight);
-  const paddingPx = Math.max(0, map.paddingSquares ?? 0) * cellSize;
+  // Foundry pads each side by a share of that axis, rounded up to whole squares.
+  const percent = map.paddingPercent;
+  const squares = Math.max(0, map.paddingSquares ?? 0);
+  const paddingFor = (scenePx: number) => (percent ? Math.ceil((percent / 100) * (scenePx / cellSize) - 1e-9) : squares) * cellSize;
+  const paddingXPx = paddingFor(scenePixelWidth);
+  const paddingYPx = paddingFor(scenePixelHeight);
 
   return {
     cellSize,
@@ -87,9 +93,10 @@ export function deriveSceneMetrics(map: BattleMapState): SceneMetrics {
     gridPixelHeight,
     scenePixelWidth,
     scenePixelHeight,
-    paddingPx,
-    framePixelWidth: scenePixelWidth + paddingPx * 2,
-    framePixelHeight: scenePixelHeight + paddingPx * 2,
+    paddingXPx,
+    paddingYPx,
+    framePixelWidth: scenePixelWidth + paddingXPx * 2,
+    framePixelHeight: scenePixelHeight + paddingYPx * 2,
     imageSettings,
     canvasSettings,
     imageBox

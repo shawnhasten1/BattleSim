@@ -100,6 +100,23 @@ export function uniqueWallNodes(
   return nodes;
 }
 
+/** Stage px kept clear around a fitted map, so it doesn't run under the HUD and controls. */
+export const FIT_MARGIN_PX = 48;
+
+/**
+ * The view that shows a whole map: centred in the stage, zoomed to fit with a
+ * margin, but never past 100% (a small map isn't blown up) or below the
+ * minimum zoom (a huge one is centred and overflows instead).
+ */
+export function fitViewport(stage: { width: number; height: number }, frame: { width: number; height: number }): ViewportState {
+  const zoom = clamp(
+    Math.min((stage.width - FIT_MARGIN_PX * 2) / frame.width, (stage.height - FIT_MARGIN_PX * 2) / frame.height),
+    MIN_ZOOM,
+    1
+  );
+  return { zoom, x: (stage.width - frame.width * zoom) / 2, y: (stage.height - frame.height * zoom) / 2 };
+}
+
 /**
  * Zoom to `nextZoom` while keeping the world point under `anchor` fixed on
  * screen. `stageRect` is the untransformed outer stage box; pass `null` (or a

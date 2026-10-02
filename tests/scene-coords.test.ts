@@ -1,11 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
   anchoredZoom,
+  FIT_MARGIN_PX,
+  fitViewport,
   getCellPoint,
   getSnappedWallPoint,
+  MIN_ZOOM,
   uniqueWallNodes,
   type ViewportState
 } from "../src/components/scene/coords";
+
+describe("fitViewport", () => {
+  const stage = { width: 1600, height: 1000 };
+
+  it("zooms a big map out to fit inside the margin, and centres it", () => {
+    // A 60 × 40 map at 44 px squares with a square of padding: 2728 × 1848.
+    const view = fitViewport(stage, { width: 2728, height: 1848 });
+    expect(view.zoom).toBeCloseTo((1000 - FIT_MARGIN_PX * 2) / 1848, 9);
+    expect(view.x).toBeCloseTo((1600 - 2728 * view.zoom) / 2, 9);
+    expect(view.y).toBeCloseTo(FIT_MARGIN_PX, 9);
+  });
+
+  it("doesn't blow a small map up past 100%", () => {
+    const view = fitViewport(stage, { width: 616, height: 440 });
+    expect(view).toEqual({ zoom: 1, x: (1600 - 616) / 2, y: (1000 - 440) / 2 });
+  });
+
+  it("stops at the minimum zoom for a huge map, still centred", () => {
+    const view = fitViewport(stage, { width: 12000, height: 9000 });
+    expect(view.zoom).toBe(MIN_ZOOM);
+    expect(view.x).toBeCloseTo((1600 - 12000 * MIN_ZOOM) / 2, 9);
+  });
+});
 
 /**
  * Stand-in for the `.battlemap` element. A `scale(zoom)` transform makes the

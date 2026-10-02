@@ -138,7 +138,7 @@ export function SceneDropdown() {
           onSubmit={async (result: CreateEncounterResult) => {
             await createEncounter(
               result.name,
-              result.mode === "fresh" ? { fresh: true, grid: result.grid, image: result.image } : undefined
+              result.mode === "fresh" ? { fresh: true, grid: result.grid, image: result.image, walls: result.walls } : undefined
             );
             setOpen(false);
           }}

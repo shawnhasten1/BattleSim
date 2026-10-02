@@ -2,10 +2,21 @@
 
 import { ImagePlus } from "lucide-react";
 import { useMemo, useState, type ChangeEvent } from "react";
+import type { WallSegment } from "@/engine";
 import { detectGrid, readUsualPxPerSquare, type GridFit, type GridGuess } from "@/lib/gridInference";
 import { readMapImageFile, type MapImageFile } from "@/lib/imageResize";
-import { describeFitReason, GridFitPicker, sameSquares } from "./GridFitPicker";
+import { isUniversalVttFile, readUniversalVttFile, UNIVERSAL_VTT_EXTENSIONS } from "@/lib/universalVtt";
+import { describeFitReason, formatPx, GridFitPicker, sameSquares } from "./GridFitPicker";
 import styles from "./modals.module.css";
+
+/** What a Universal VTT file brings besides its image and grid. */
+export interface ImportedWalls {
+  /** Walls and doors (doors are walls with a `doorState`), in grid squares. */
+  walls: WallSegment[];
+  doors: number;
+}
+
+const ACCEPT = ["image/png", "image/jpeg", "image/webp", ...UNIVERSAL_VTT_EXTENSIONS].join(",");
 
 export interface GridChoice {
   width: number;
@@ -31,6 +42,9 @@ interface CreateEncounterFieldsProps {
   onGridChange: (grid: GridChoice) => void;
   image: MapImageFile | null;
   onImageChange: (image: MapImageFile | null) => void;
+  /** Walls from a Universal VTT file, when the background came from one. */
+  imported: ImportedWalls | null;
+  onImportedChange: (imported: ImportedWalls | null) => void;
 }
 
 /** Every reading of an image's grid, best first. */
@@ -49,13 +63,15 @@ function readingsOf(image: MapImageFile | null): GridGuess[] {
  * Name + optional background + grid, shared by every "make a new map" entry
  * point (campaign create, scene-dropdown fresh start). With an image whose
  * size is known, the grid is read off it (MAP_IMPORT_PLAN.md §3.5): the best
- * reading is applied and the others are a click away. Without one, a preset
+ * reading is applied and the others are a click away. A Universal VTT file
+ * brings its own grid and walls, taken as they are. Without either, a preset
  * sets width/height, and feet-per-square and the on-screen square size stay
  * at their defaults unless Custom is opened.
  */
-export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, image, onImageChange }: CreateEncounterFieldsProps) {
+export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, image, onImageChange, imported, onImportedChange }: CreateEncounterFieldsProps) {
   const [presetKey, setPresetKey] = useState<string>("landscape");
   const [custom, setCustom] = useState(false);
+  const [fileProblem, setFileProblem] = useState<string | null>(null);
   const readings = useMemo(() => readingsOf(image), [image]);
   const [usualRemembered] = useState(() => readUsualPxPerSquare().remembered);
 
@@ -77,9 +93,24 @@ export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, 
   function onImageUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (isUniversalVttFile(file.name)) {
+      void readUniversalVttFile(file).then((read) => {
+        if ("error" in read) {
+          setFileProblem(read.error);
+          return;
+        }
+        setFileProblem(null);
+        onImageChange(read.image);
+        applyFit(read.map.fit);
+        onImportedChange({ walls: read.map.walls, doors: read.map.doors });
+      });
+      return;
+    }
     void readMapImageFile(file).then((picked) => {
       if (!picked) return;
+      setFileProblem(null);
       onImageChange(picked);
+      onImportedChange(null);
       const [best] = readingsOf(picked);
       if (best) applyFit(best);
       else onGridChange({ ...grid, ...presetSize(), pxPerSquare: undefined });
@@ -88,6 +119,7 @@ export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, 
 
   function removeImage() {
     onImageChange(null);
+    onImportedChange(null);
     onGridChange({ ...grid, ...presetSize(), pxPerSquare: undefined });
   }
 
@@ -105,17 +137,39 @@ export function CreateEncounterFields({ name, onNameChange, grid, onGridChange, 
       <h4>Background (optional)</h4>
       <label className={styles.upload}>
         <ImagePlus size={14} /> {image ? "Replace background image" : "Upload background image"}
-        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onImageUpload} />
+        <input type="file" accept={ACCEPT} onChange={onImageUpload} />
       </label>
+      {fileProblem ? <p className={styles.status} role="alert">{fileProblem}</p> : null}
       {image ? (
         <button type="button" className={styles.secondary} onClick={removeImage}>
           Remove image — start with a blank grid
         </button>
       ) : (
-        <p className={styles.status}>No image selected — the canvas will be sized to the grid below.</p>
+        <p className={styles.status}>
+          No image selected — the canvas will be sized to the grid below. A Universal VTT file (.dd2vtt, .uvtt) brings its walls too.
+        </p>
       )}
 
-      {imageSize ? (
+      {imageSize && imported && grid.pxPerSquare ? (
+        <>
+          <h4>Grid · from the Universal VTT file</h4>
+          <div className={styles.fit} role="group" aria-label="Grid from the image">
+            <p className={styles.fitLine}>
+              <strong>{grid.width} × {grid.height} squares</strong> · {grid.width * grid.distancePerSquare} × {grid.height * grid.distancePerSquare} ft
+              {" · "}{formatPx(grid.pxPerSquare)} px per square
+              <span className={styles.fitNote}>
+                {" "}— with its {imported.walls.length - imported.doors} walls and {imported.doors} {imported.doors === 1 ? "door" : "doors"}
+              </span>
+            </p>
+          </div>
+          <div className={styles.grid3}>
+            <label className={styles.field}>
+              Feet / sq
+              <input type="number" value={grid.distancePerSquare} min={1} max={20} onChange={(e) => onGridChange({ ...grid, distancePerSquare: Number(e.target.value) })} />
+            </label>
+          </div>
+        </>
+      ) : imageSize ? (
         <>
           <h4>Grid · from the {imageSize.widthPx} × {imageSize.heightPx} px image</h4>
           <GridFitPicker

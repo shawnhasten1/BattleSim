@@ -1,8 +1,8 @@
 # Map Import Plan: the grid comes from the image
 
-**Status:** On branch `map-import` (not merged into master): Phase 1 committed 2026-10-02
-(c979451), Phase 2 committed 2026-10-02 (f31ab8e), Phase 3 committed 2026-10-02. Only Phase 4's
-optional extras remain. Decided 2026-10-02:
+**Status:** Complete, on branch `map-import` (not merged into master). Phase 1 committed 2026-10-02
+(c979451), Phase 2 (f31ab8e), Phase 3 (15a1240) and Phase 4 the same day. Still to try: a real
+Inkarnate export. Decided 2026-10-02:
 
 - D1: assume 100 px per square, then remember the last size you confirm.
 - D2: when an image's size fits more than one grid, apply the best guess and show the others
@@ -429,7 +429,7 @@ Each phase ships on its own and keeps the tests green.
 
 ### Phase 3 — Align grid
 
-> **✅ Implemented 2026-10-02**, committed. The stretch goal, finding a drawn grid, is built too.
+> **✅ Implemented 2026-10-02**, committed (15a1240). The stretch goal, finding a drawn grid, is built too.
 >
 > Built:
 >
@@ -542,6 +542,81 @@ also AGENTS.md §4's "matching two known grid points".
   and with no ML.
 
 ### Phase 4 — Optional extras
+
+> **✅ Implemented 2026-10-02**, committed. All four extras.
+>
+> Built:
+>
+> - **Sharper big maps** (`src/lib/imageResize.ts`).
+>   - `mapStorageOptions` stores a background at about 100 px per square when its grid is known:
+>     an export at 200 px per square is halved, one at 70 or 100 is kept whole. It never goes past
+>     a 4096 px edge.
+>   - The 4096 edge alone keeps every image within iOS Safari's 16.7 MP canvas, so there's no
+>     separate area cap.
+>   - `encodeWithinBudget` keeps the data URL within 3.5 M characters, so the Blob sync's JSON
+>     body stays under Vercel's 4.5 MB. It lowers JPEG quality (0.82, 0.72, 0.62) first, then
+>     size. Both store upload paths use it.
+>   - A 30 × 20 map at 100 px is now stored whole (it was 68 px per square), and a 60 × 40 at
+>     4096 px (68 px per square; it was 34).
+> - **Fit to view.**
+>   - `useViewport(sceneKey)` keeps each scene's view per browser (`viewport:<scene>`). A scene with
+>     no saved view, such as a new map, is fitted once the canvas knows its size.
+>   - `fitViewport` (`coords.ts`) centres the map with a 48 px margin, zoomed to at most 100% and
+>     at least 30%.
+>   - The crosshair button is now "Fit the map to the view". The old single `viewport` key is no
+>     longer read, so each scene fits the first time it's opened.
+> - **Foundry-style padding.**
+>   - `BattleMapState.paddingPercent`, in the type and the schema.
+>   - Padding is now per axis (`paddingXPx` and `paddingYPx` in the metrics), each a percent of
+>     that side, rounded up to whole squares.
+>   - Scene Config's Padding is a select: None, 1–3 squares, or 25% like Foundry. Any other
+>     existing value shows as its own option.
+> - **Universal VTT import** (`src/lib/universalVtt.ts`).
+>   - `parseUniversalVtt` reads the grid, the walls (`line_of_sight` and `objects_line_of_sight`)
+>     and the doors (`portals`, as walls with `doorState`), measured from `map_origin`. It
+>     validates with zod.
+>   - Straight runs become one wall (Ramer–Douglas–Peucker, 2% of a square), and zero-length
+>     pieces are dropped. Lights are left out.
+>   - The New Encounter modal's background picker takes `.dd2vtt`, `.uvtt` and `.df2vtt`. The grid
+>     is the file's, with no other readings, since its walls depend on it: "10 × 8 squares ·
+>     50 × 40 ft · 100 px per square — with its 3 walls and 1 door".
+>   - `NewMapOptions.walls` puts the walls into the new map. A broken file says why.
+>
+> Tests:
+>
+> - `tests/image-resize.test.ts`, 8 new: storage sizes, and the budget loop's order (quality before
+>   size) with a stand-in encoder.
+> - `tests/scene-coords.test.ts`, 3 new: fitting a big, a small and a huge map.
+> - `tests/scene-metrics.test.ts`: padding per axis, and Foundry's 25% of 30 × 20 (8 squares across,
+>   5 down).
+> - `tests/universal-vtt.test.ts`, 11:
+>   - the grid and image.
+>   - walls with straight runs merged, and doors.
+>   - `map_origin`, objects, and zero-length pieces.
+>   - JPEG and WebP images, errors, and schema acceptance.
+>   - simplifying, and the file extensions.
+> - `tests/create-encounter-fields.test.tsx`, 2 new: a `.dd2vtt` file's grid and walls, and a broken
+>   file.
+> - `tests/map-image-pinning.test.ts`, 1 new: walls in the new snapshot.
+>
+> The full suite passes: 144 files, 1,783 tests. One run in between timed out 3 tests elsewhere
+> (5 s limit, under the load of the whole suite): the same two ability-editor weapon tests and SRD
+> monster run as in Phase 2. Alone they take 1.9 s each, and they passed on the next full run.
+>
+> Browser (Playwright with the seeded login, 18 checks, all passed):
+>
+> - **A 6000 × 4000 export (60 × 40 at 100 px)** was stored at 4096 × 2731, with a 3.06 M-character
+>   data URL; the sync request body was 3.06 MB. The map opened fitted (70.8%, centred), with image
+>   and grid still the same box.
+> - **The view per scene.** Zoomed to 93.7%, the scene came back at 93.7% after a reload, and the
+>   fit button fitted it again.
+> - **25% padding** made the frame 90 × 60 squares (15 a side, 10 top and bottom), saved as a
+>   percent. Back to 1 square, it was 62 × 42.
+> - **A `.dd2vtt` from the scene dropdown's Start fresh.** The modal said "with its 3 walls and 1
+>   door". The new scene had the 4 walls (one a closed door) drawn on their squares, the image
+>   pinned at 100 px, and opened at 100%, centred.
+>
+> Not done: doors still look like walls on the map (as they always have), and lights are ignored.
 
 - **Sharper big maps.** Store by squares instead of a flat 2048 px: keep up to about 100 px per
   square, capped at a 4096 px edge and about 16.7 MP.
