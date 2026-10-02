@@ -88,6 +88,7 @@ import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions, type ImagePixelSize, type MapImageFile } from "@/lib/imageResize";
+import { detectGrid, imageFitSize, pinInPlace, readUsualPxPerSquare, squaresInBounds, squaresToCover, type GridFit } from "@/lib/gridInference";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
@@ -104,7 +105,8 @@ export const MAX_ELEVATION_FT = 500;
 
 /** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
 export interface NewMapOptions {
-  grid?: { width: number; height: number; distancePerSquare: number; squareSizePx: number };
+  /** `pxPerSquare`, when the grid was read off the image, pins the image to it. */
+  grid?: { width: number; height: number; distancePerSquare: number; squareSizePx: number; pxPerSquare?: number };
   image?: MapImageFile | null;
 }
 
@@ -278,6 +280,19 @@ interface EncounterStore {
    * snapshot already carries them).
    */
   setMapImage: (dataUrl: string | null, source?: ImagePixelSize | null) => void;
+  /**
+   * Upload a picked file as the scene's background and set the grid from it
+   * (`planImageReplacement`): keep the grid if the image fits it, otherwise
+   * apply the detected one, asking first if anything is placed. Returns what
+   * it did; "ask" means nothing was detected and Scene Config should ask.
+   */
+  replaceMapImage: (file: MapImageFile) => ImageReplacement | { kind: "cancelled" };
+  /** Pin the background at a reading of the whole image, and size the grid to it. */
+  applyImageFit: (fit: GridFit) => void;
+  /** Size the grid to cover a pinned background, keeping its px per square and origin. */
+  fitGridToImage: () => void;
+  /** Pin an unpinned background to the grid exactly where it's drawn now. */
+  pinMapImageInPlace: () => void;
   /** Load the current scene's background from IndexedDB into `mapImageDataUrl`. */
   hydrateMapImage: () => void;
   updateGrid: (updates: Partial<EncounterSnapshot["map"]["grid"]>) => void;
@@ -679,19 +694,21 @@ function withImageSource(image: MapImageSettings, source: ImagePixelSize | null)
  * Downscale an upload and decode its stored pixel dimensions, for callers that
  * need to bake a background straight into a snapshot being created (before any
  * encounter id exists to key `setMapImage`'s state-driven flow off of).
- * `settings` records both the stored size and the file's own.
+ * `settings` records both the stored size and the file's own, and pins the
+ * image at `pxPerSquare` when its grid was read off it.
  */
-async function prepareMapImage(image: MapImageFile): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number; settings: MapImageSettings } | null> {
+async function prepareMapImage(image: MapImageFile, pxPerSquare?: number): Promise<{ value: string; naturalWidthPx: number; naturalHeightPx: number; settings: MapImageSettings } | null> {
   const { dataUrl } = image;
   if (!dataUrl.startsWith("data:image/")) return null;
   const resized = await downscaleDataUrl(dataUrl).catch(() => dataUrl);
   const dims = await getImageDimensions(resized);
   if (!dims) return null;
+  const settings = withImageSource({ ...DEFAULT_MAP_IMAGE_SETTINGS, naturalWidthPx: dims.width, naturalHeightPx: dims.height }, image.size);
   return {
     value: resized,
     naturalWidthPx: dims.width,
     naturalHeightPx: dims.height,
-    settings: withImageSource({ ...DEFAULT_MAP_IMAGE_SETTINGS, naturalWidthPx: dims.width, naturalHeightPx: dims.height }, image.size)
+    settings: pxPerSquare && image.size ? { ...settings, pxPerSquare } : settings
   };
 }
 
@@ -711,14 +728,56 @@ function mapImageKey(state: Pick<EncounterStore, "currentEncounterId" | "encount
  * Silent for maps with nothing placed yet — there's nothing to misalign.
  */
 export function shouldWarnBeforeReplacingImage(encounter: EncounterSnapshot, dims: { width: number; height: number }): boolean {
-  const map = encounter.map;
-  const prev = map.image;
+  const prev = encounter.map.image;
   if (!prev?.naturalWidthPx || !prev?.naturalHeightPx) return false;
-  const hasPlacedContent = map.walls.length > 0 || map.terrain.length > 0 || encounter.combatants.length > 0;
-  if (!hasPlacedContent) return false;
+  if (!hasPlacedContent(encounter)) return false;
   const prevRatio = prev.naturalWidthPx / prev.naturalHeightPx;
   const newRatio = dims.width / dims.height;
   return Math.abs(prevRatio - newRatio) / prevRatio > 0.02;
+}
+
+function hasPlacedContent(encounter: EncounterSnapshot): boolean {
+  const map = encounter.map;
+  return map.walls.length > 0 || map.terrain.length > 0 || encounter.combatants.length > 0;
+}
+
+/** What uploading a background does to the map's grid (MAP_IMPORT_PLAN.md §3.5). */
+export type ImageReplacement =
+  /** The image fits the map's columns × rows: pinned at `fit`, the grid unchanged. */
+  | { kind: "keep-grid"; fit: GridFit }
+  /** Another grid was read off the image; `confirm` is the question to ask first when anything is placed. */
+  | { kind: "new-grid"; fit: GridFit; confirm: string | null }
+  /** Nothing was detected: the image goes in unpinned, and Scene Config asks how many squares across it is. */
+  | { kind: "ask" }
+  /** The file's own size couldn't be read: the image goes in unpinned, as before. */
+  | { kind: "unmeasured" };
+
+export function planImageReplacement(
+  encounter: EncounterSnapshot,
+  upload: Pick<MapImageFile, "size" | "fileName">,
+  options: { hasBackground: boolean; usualPxPerSquare: number }
+): ImageReplacement {
+  if (!upload.size) return { kind: "unmeasured" };
+  const grid = encounter.map.grid;
+  const placed = hasPlacedContent(encounter);
+  const { best } = detectGrid({
+    widthPx: upload.size.widthPx,
+    heightPx: upload.size.heightPx,
+    fileName: upload.fileName,
+    usualPxPerSquare: options.usualPxPerSquare,
+    // A blank map's grid is only the preset it was made with: let the image decide.
+    current: options.hasBackground || placed ? { columns: grid.width, rows: grid.height } : undefined
+  });
+  if (!best) return { kind: "ask" };
+  const fit = { columns: best.columns, rows: best.rows, pxPerSquare: best.pxPerSquare };
+  if (fit.columns === grid.width && fit.rows === grid.height) return { kind: "keep-grid", fit };
+  return {
+    kind: "new-grid",
+    fit,
+    confirm: placed
+      ? `The new image is ${fit.columns} × ${fit.rows} squares; this map is ${grid.width} × ${grid.height}. Walls, terrain and tokens keep their squares.\n\nReplace the background anyway?`
+      : null
+  };
 }
 
 export const useEncounterStore = create<EncounterStore>()(
@@ -802,6 +861,79 @@ export const useEncounterStore = create<EncounterStore>()(
           replayIndex: null,
           ...extras
         });
+      };
+
+      /**
+       * `setMapImage`'s work, plus an optional grid fit applied in the same
+       * commit: given `fit` (and the file's size), the image is pinned at its px
+       * per square and the grid takes its columns × rows. A fit was already
+       * agreed against the grid it changes (`replaceMapImage`), so only an
+       * unpinned upload still gets the shape-change warning.
+       */
+      const uploadMapImage = (dataUrl: string | null, source: ImagePixelSize | null | undefined, fit?: GridFit) => {
+        const applyMapImage = (value: string | null) => {
+          const key = mapImageKey(get());
+          set({ mapImageDataUrl: value });
+          // IndexedDB is the source of truth for every scene's background; only
+          // the current one is mirrored into state above (for rendering).
+          if (value) void putMapImage(key, value);
+          else void deleteMapImage(key);
+          // Once the scene is actually saved, also push to Vercel Blob so it
+          // follows the encounter to any other device. Drafts sync on first save instead.
+          const encounterId = get().currentEncounterId;
+          if (encounterId) syncMapImageToServer(encounterId, value);
+        };
+
+        // Record the image's own pixel dimensions and auto-size the canvas to
+        // match, so the background is never silently cropped/stretched. Runs
+        // on every upload, including replacing an existing background. A newly
+        // picked file (`source` given) also records its pre-downscale size.
+        const applyDims = (dims: { width: number; height: number }) => {
+          const encounter = get().encounter;
+          let image: MapImageSettings = {
+            ...DEFAULT_MAP_IMAGE_SETTINGS,
+            ...encounter.map.image,
+            naturalWidthPx: dims.width,
+            naturalHeightPx: dims.height
+          };
+          if (source !== undefined) image = withImageSource(image, source);
+          const pin = fit && source ? fit : null;
+          commitEncounter({
+            ...encounter,
+            map: {
+              ...encounter.map,
+              grid: pin ? { ...encounter.map.grid, width: pin.columns, height: pin.rows } : encounter.map.grid,
+              image: pin ? { ...image, pxPerSquare: pin.pxPerSquare } : image,
+              canvas: { widthPx: dims.width, heightPx: dims.height }
+            }
+          });
+        };
+
+        if (!dataUrl) {
+          applyMapImage(null);
+          return;
+        }
+
+        // A raw upload/import data URL can be many MB. Shrink it before it is
+        // stored (IndexedDB) or sent anywhere. The decode is async; apply the
+        // result once it's ready.
+        if (dataUrl.startsWith("data:image/")) {
+          void downscaleDataUrl(dataUrl)
+            .then(async (resized) => {
+              const dims = await getImageDimensions(resized);
+              if (!fit && dims && shouldWarnBeforeReplacingImage(get().encounter, dims)) {
+                const proceed = typeof window === "undefined" || window.confirm(
+                  "This image is a different shape than the current background. Resizing the canvas to fit it won't move any walls, terrain, or tokens, but they may no longer line up with the new artwork.\n\nReplace the background anyway?"
+                );
+                if (!proceed) return;
+              }
+              applyMapImage(resized);
+              if (dims) applyDims(dims);
+            })
+            .catch(() => applyMapImage(dataUrl));
+          return;
+        }
+        applyMapImage(dataUrl);
       };
 
       /**
@@ -1525,7 +1657,7 @@ export const useEncounterStore = create<EncounterStore>()(
             templates: []
           };
         }
-        const prepared = options?.image ? await prepareMapImage(options.image) : null;
+        const prepared = options?.image ? await prepareMapImage(options.image, options.grid?.pxPerSquare) : null;
         if (prepared) {
           snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
           snapshot.map.image = prepared.settings;
@@ -1568,7 +1700,7 @@ export const useEncounterStore = create<EncounterStore>()(
             templates: []
           };
         }
-        const prepared = fresh && options?.image ? await prepareMapImage(options.image) : null;
+        const prepared = fresh && options?.image ? await prepareMapImage(options.image, options.grid?.pxPerSquare) : null;
         if (prepared) {
           snapshot.map.canvas = { widthPx: prepared.naturalWidthPx, heightPx: prepared.naturalHeightPx };
           snapshot.map.image = prepared.settings;
@@ -2026,67 +2158,57 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       selectCombatant: (id) => set({ selectedCombatantId: id }),
       hydrateMapImage,
-      setMapImage: (dataUrl, source) => {
-        const applyMapImage = (value: string | null) => {
-          const key = mapImageKey(get());
-          set({ mapImageDataUrl: value });
-          // IndexedDB is the source of truth for every scene's background; only
-          // the current one is mirrored into state above (for rendering).
-          if (value) void putMapImage(key, value);
-          else void deleteMapImage(key);
-          // Once the scene is actually saved, also push to Vercel Blob so it
-          // follows the encounter to any other device. Drafts sync on first save instead.
-          const encounterId = get().currentEncounterId;
-          if (encounterId) syncMapImageToServer(encounterId, value);
-        };
-
-        // Record the image's own pixel dimensions and auto-size the canvas to
-        // match, so the background is never silently cropped/stretched. Runs
-        // on every upload, including replacing an existing background. A newly
-        // picked file (`source` given) also records its pre-downscale size.
-        const applyDims = (dims: { width: number; height: number }) => {
-          const encounter = get().encounter;
-          const image: MapImageSettings = {
-            ...DEFAULT_MAP_IMAGE_SETTINGS,
-            ...encounter.map.image,
-            naturalWidthPx: dims.width,
-            naturalHeightPx: dims.height
-          };
-          commitEncounter({
-            ...encounter,
-            map: {
-              ...encounter.map,
-              image: source === undefined ? image : withImageSource(image, source),
-              canvas: { widthPx: dims.width, heightPx: dims.height }
-            }
-          });
-        };
-
-        if (!dataUrl) {
-          applyMapImage(null);
-          return;
+      setMapImage: (dataUrl, source) => uploadMapImage(dataUrl, source),
+      replaceMapImage: (file) => {
+        const state = get();
+        const plan = planImageReplacement(state.encounter, file, {
+          hasBackground: Boolean(state.mapImageDataUrl),
+          usualPxPerSquare: readUsualPxPerSquare().pxPerSquare
+        });
+        if (plan.kind === "new-grid" && plan.confirm && typeof window !== "undefined" && !window.confirm(plan.confirm)) {
+          return { kind: "cancelled" };
         }
-
-        // A raw upload/import data URL can be many MB. Shrink it before it is
-        // stored (IndexedDB) or sent anywhere. The decode is async; apply the
-        // result once it's ready.
-        if (dataUrl.startsWith("data:image/")) {
-          void downscaleDataUrl(dataUrl)
-            .then(async (resized) => {
-              const dims = await getImageDimensions(resized);
-              if (dims && shouldWarnBeforeReplacingImage(get().encounter, dims)) {
-                const proceed = typeof window === "undefined" || window.confirm(
-                  "This image is a different shape than the current background. Resizing the canvas to fit it won't move any walls, terrain, or tokens, but they may no longer line up with the new artwork.\n\nReplace the background anyway?"
-                );
-                if (!proceed) return;
-              }
-              applyMapImage(resized);
-              if (dims) applyDims(dims);
-            })
-            .catch(() => applyMapImage(dataUrl));
-          return;
-        }
-        applyMapImage(dataUrl);
+        uploadMapImage(file.dataUrl, file.size, plan.kind === "keep-grid" || plan.kind === "new-grid" ? plan.fit : undefined);
+        return plan;
+      },
+      applyImageFit: (fit) => {
+        const encounter = get().encounter;
+        const image = { ...DEFAULT_MAP_IMAGE_SETTINGS, ...encounter.map.image };
+        const size = imageFitSize(image);
+        if (!size) return;
+        // A reading of the whole image: the grid's corner is the image's.
+        const { originX: _originX, originY: _originY, ...rest } = image;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            grid: { ...encounter.map.grid, width: fit.columns, height: fit.rows },
+            image: { ...rest, sourceWidthPx: size.widthPx, sourceHeightPx: size.heightPx, pxPerSquare: fit.pxPerSquare }
+          }
+        });
+      },
+      fitGridToImage: () => {
+        const encounter = get().encounter;
+        const image = encounter.map.image;
+        const size = imageFitSize(image);
+        const pxPerSquare = image?.pxPerSquare;
+        if (!size || !pxPerSquare) return;
+        const width = squaresToCover(size.widthPx - (image.originX ?? 0), pxPerSquare);
+        const height = squaresToCover(size.heightPx - (image.originY ?? 0), pxPerSquare);
+        if (!squaresInBounds({ columns: width, rows: height })) return;
+        commitEncounter({ ...encounter, map: { ...encounter.map, grid: { ...encounter.map.grid, width, height } } });
+      },
+      pinMapImageInPlace: () => {
+        const encounter = get().encounter;
+        const { grid } = encounter.map;
+        const image = { ...DEFAULT_MAP_IMAGE_SETTINGS, ...encounter.map.image };
+        const canvas = encounter.map.canvas ?? {
+          widthPx: grid.width * DEFAULT_GRID_VISUALS.squareSizePx,
+          heightPx: grid.height * DEFAULT_GRID_VISUALS.squareSizePx
+        };
+        const pin = pinInPlace(image, canvas, grid.squareSizePx || DEFAULT_GRID_VISUALS.squareSizePx);
+        if (!pin) return;
+        commitEncounter({ ...encounter, map: { ...encounter.map, image: { ...image, ...pin } } });
       },
       updateGrid: (updates) => {
         const encounter = get().encounter;

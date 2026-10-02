@@ -1,6 +1,7 @@
 # Map Import Plan: the grid comes from the image
 
-**Status:** Phase 1 implemented 2026-10-02, not committed. Decided 2026-10-02:
+**Status:** On branch `map-import`: Phase 1 committed 2026-10-02 (c979451), Phase 2 committed
+2026-10-02. Phase 3 (Align grid) is next. Decided 2026-10-02:
 
 - D1: assume 100 px per square, then remember the last size you confirm.
 - D2: when an image's size fits more than one grid, apply the best guess and show the others
@@ -8,6 +9,8 @@
 - D3: padding stays in whole squares and plays no part in alignment.
 - D4: the usual size is remembered per browser, for now.
 - D5: a map made before this changes only when you click Pin image to grid.
+- D6: replacing the image of a map made before this runs detection on the new image, like any
+  other upload.
 
 Uploading a battlemap should work the way it does in Foundry. Maps are built in Inkarnate and
 exported with its VTT (Grid) option at 100 px per square; such an export should land with the
@@ -134,27 +137,27 @@ imageBox: { left: number; top: number; width: number; height: number; pinned: bo
 
 ### 3.3 Detecting the grid
 
-New `src/lib/gridInference.ts`, pure (no DOM), next to `imageResize.ts`:
+`src/lib/gridInference.ts`, next to `imageResize.ts`. Detection is pure; only the remembered
+usual size touches storage.
 
 ```ts
-export interface GridGuess {
-  columns: number;
-  rows: number;
-  pxPerSquare: number;
-  reason: "current" | "filename" | "usual" | "standard";
-}
+export interface GridFit { columns: number; rows: number; pxPerSquare: number }
+export interface GridGuess extends GridFit { reason: "current" | "filename" | "usual" | "common" }
 export interface GridDetection { best: GridGuess | null; alternatives: GridGuess[] }
 
 export function detectGrid(input: {
   widthPx: number;
   heightPx: number;
   fileName?: string;
-  usualPxPerSquare: number;                      // D1: 100 until you confirm another
+  usualPxPerSquare?: number;                     // D1: 100 until you confirm another
   current?: { columns: number; rows: number };   // see rule 1
 }): GridDetection;
 
-export function gridForPxPerSquare(widthPx: number, heightPx: number, pxPerSquare: number): { columns: number; rows: number };
-export function gridForColumns(widthPx: number, heightPx: number, columns: number): { pxPerSquare: number; rows: number };
+export function gridForPxPerSquare(size: ImagePixelSize, pxPerSquare: number): GridFit;
+export function gridForColumns(size: ImagePixelSize, columns: number): GridFit;
+export function pinInPlace(image: MapImageSettings, canvas: MapCanvasSettings, cellSize: number); // Pin image to grid
+export function readUsualPxPerSquare(): { pxPerSquare: number; remembered: boolean };
+export function rememberUsualPxPerSquare(pxPerSquare: number): void;
 ```
 
 The first rule that matches gives `best`. Every other exact fit becomes an alternative (up to 3):
@@ -164,9 +167,11 @@ The first rule that matches gives `best`. Every other exact fit becomes an alter
 | 1 | **Current grid**: only when replacing a background, or when walls, terrain or tokens are placed | The new image fits the map's columns × rows with square cells (within 1%) |
 | 2 | **File name**: `Crypt [30x20].png`, `crypt_30x20.jpg`, `30 x 20`, `100px`, `100ppi` | The counts give square cells (within 1%), or the px value divides the image |
 | 3 | **Usual px per square**: 100, or the last one you confirmed | It divides both edges exactly (±1 px) |
-| 4 | **Common VTT sizes**: 140, 70, 200, 50, 150, 300 | It divides both edges exactly (±1 px) |
+| 4 | **Common VTT sizes**: 100, 140, 70, 200, 50, 150, 300, less the usual one | It divides both edges exactly (±1 px) |
 | — | Nothing fits | `best` is `null`, and the UI asks one question |
 
+- **100 stays a common size.** Once another size is remembered, 100 is still tried right after
+  it, so a 100 px export is read right even after you picked 70 px for a one-off map.
 - **Bounds.** 4–120 squares a side, Scene Config's limits.
 - **Rounding.** Counts worked out from a typed value round to the nearest whole square when
   they're within 2% of one. Otherwise they round up, so the grid covers the whole image.
@@ -182,7 +187,8 @@ The first rule that matches gives `best`. Every other exact fit becomes an alter
 ### 3.4 Measuring the upload
 
 - New `readMapImageFile(file)` in `src/lib/imageResize.ts` returns
-  `{ dataUrl, fileName, widthPx, heightPx }`, measured before any downscale.
+  `{ dataUrl, fileName, size }` (`size` is `{ widthPx, heightPx }`, or null if the file can't be
+  decoded), measured before any downscale.
 - The three file inputs use it instead of their bare `FileReader`s: `CreateEncounterFields`,
   `SceneConfigModal` and `ScenePanel`.
 - The downscaled copy is still what gets stored. Pinning makes its resolution irrelevant to
@@ -194,16 +200,18 @@ The first rule that matches gives `best`. Every other exact fit becomes an alter
 
 - Background moves above Grid, so the form reads top-down: pick the image, then see its grid.
 - With an image, the presets give way to one line:
-  - **30 × 20 squares** · 150 × 100 ft · 100 px per square, then where the guess came from: *your
-    usual size*, *from the file name*, or *a common VTT size*.
+  - **30 × 20 squares** · 150 × 100 ft · 100 px per square, then where the guess came from: *the
+    usual VTT size* (or *the size you used last*, once one is remembered), *from the file name*,
+    *a common VTT size*, or *set by you*.
   - The alternatives sit beside it as chips: `15 × 10 · 200 px`, `60 × 40 · 50 px`. Picking one
     applies it (D2).
   - **Other…** opens two linked boxes, *Squares across* and *Image px per square*. Editing either
-    updates the other and the rows.
+    updates the other and the rows. A count outside 4–120 a side says so and isn't applied.
 - With no fit (`best` is null), it asks: "This image's size doesn't match a VTT export. How many
-  squares across is it?" The same two boxes follow, empty.
-- Feet per square stays in Custom (blank maps) or Other… (image maps), default 5. Removing the
-  image brings the presets back.
+  squares across is it?" The same two boxes follow, empty. Left blank, the map is made with the
+  preset grid, unpinned, as before.
+- Feet per square gets its own box under the reading (default 5); blank maps keep it in Custom.
+  Removing the image brings the presets back.
 - `NewMapOptions` (`encounter-store.ts`) carries the source size and `pxPerSquare` alongside
   `grid`, and `prepareMapImage` writes them into the new snapshot.
 
@@ -214,25 +222,29 @@ The first rule that matches gives `best`. Every other exact fit becomes an alter
 | The new image fits the current columns × rows (rule 1) | Swap silently. It stays pinned and the walls stay aligned, at any resolution. |
 | Something else detected, nothing placed | Apply the detected grid silently |
 | Something else detected, walls/terrain/tokens placed | The `shouldWarnBeforeReplacingImage` confirm, now saying what changes: "The new image is 32 × 20 squares; this map is 30 × 20. Walls and tokens keep their squares." Proceeding applies 32 × 20. |
-| Nothing detected | Open Scene Config at the image section with the question, filled in with the current columns |
+| Nothing detected | The image goes in unpinned, and Scene Config asks how many squares across it is, showing the current columns as a hint. From the Scene panel, Scene Config opens. |
 
-`replaceEncounter` (Import JSON) also goes through `setMapImage`. It must keep the imported map's
-own fields, not re-measure the stored image.
+Both say what happened in a status line ("Kept the grid: 30 × 20 squares, 200 px per square in
+the image."). `replaceEncounter` (Import JSON) still goes through `setMapImage`, which keeps the
+imported map's own fields.
 
 **Scene Config** (`SceneConfigModal`):
 
 - **Grid:** columns, rows, feet per square, and line width, colour and opacity.
   - "Grid px" becomes **Square size on screen**. It's a display scale, and the old name collides
     with Inkarnate's "grid size in pixels", which is something else.
-- **Image, pinned:** "3000 × 2000 image · **100 px per square** = 30 × 20 squares".
-  - Image px per square is editable. Changing it refits columns and rows to the image, with the
-    replace confirm above if anything is placed.
-  - **Fit grid to image** shows when columns and rows no longer match the image.
+- **Image, pinned:** "Image · 3000 × 2000 px, pinned to the grid", then the same reading,
+  chips and Other… as the modal.
+  - A chip or a typed value refits columns and rows to the whole image. Like the Columns and
+    Rows boxes, it applies at once with no confirm; Undo puts it back.
+  - **Fit grid to image** shows when columns and rows no longer match the image (it keeps the
+    px per square and origin).
   - **Align grid…** (Phase 3) and Opacity.
   - Scene W/H and Image X/Y/scale are hidden.
-- **Image, unpinned:** today's fields, plus **Pin image to grid**.
-  - It converts today's Scene W/H, X/Y and scale into px per square and an origin. The image stays
-    exactly where it is, and later square-size changes can't move it.
+- **Image, unpinned:** "Not pinned to the grid", the readings (or the question), then **Pin image
+  to grid, where it is now**, then today's fields.
+  - Pin converts today's Scene W/H, X/Y and scale into px per square and an origin. The image
+    stays exactly where it is, and later square-size changes can't move it.
   - The conversion is one pure function with tests. If Scene W/H had cropped the image
     (`object-fit: cover`), the cropped edge becomes visible.
 
@@ -244,7 +256,7 @@ Each phase ships on its own and keeps the tests green.
 
 ### Phase 1 — Pin the image to the grid (no visible change)
 
-> **✅ Implemented 2026-10-02**, not committed.
+> **✅ Implemented 2026-10-02**, committed (c979451).
 >
 > Built:
 >
@@ -305,6 +317,85 @@ Each phase ships on its own and keeps the tests green.
   - a snapshot round-trips through `encounterSnapshotSchema` with and without the new fields.
 
 ### Phase 2 — Uploading sets the grid
+
+> **✅ Implemented 2026-10-02**, committed.
+>
+> Built:
+>
+> - **`src/lib/gridInference.ts`** (§3.3): `detectGrid`, the typed-value helpers, `pinInPlace`
+>   and the remembered usual size.
+> - **`GridFitPicker`** (`src/components/modals/GridFitPicker.tsx`), shared by the New Encounter
+>   modal and Scene Config: the reading, the chips, Other…, and the bounds message. It remembers
+>   a chip's size or a typed px per square, not squares across.
+> - **New Encounter** (§3.5): Background above Grid; a measured image gets the reading, its chips
+>   and a Feet / sq box; a blank or unmeasurable one gets the presets. `GridChoice.pxPerSquare`
+>   carries the reading to `prepareMapImage`, which pins the new map's image.
+> - **The store.**
+>   - `planImageReplacement` (pure, exported) and `replaceMapImage`, which asks first when the
+>     grid would change under placed content.
+>   - `applyImageFit`, `fitGridToImage` and `pinMapImageInPlace`.
+>   - `setMapImage` and `replaceMapImage` share one upload helper, so a reading lands in the
+>     same commit as the image: one undo step.
+> - **Scene Config and the Scene panel** upload through `replaceMapImage` and say what it did.
+>   The Scene panel opens Scene Config when it has to ask.
+> - **Scene Config's** Grid px is now Square size on screen, and Padding moved into Grid. The
+>   image section depends on pinning, as §3.5 says.
+>
+> Found and fixed on the way:
+>
+> - **100 stays a common size** after another size is remembered. Without that, remembering 70
+>   would have read the next 100 px export (3000 × 2000) as 15 × 10 at 200 px.
+> - **The typed boxes stay open** once a typed reading applies. When the question was all there
+>   was, applying the first valid count used to collapse them mid-typing.
+> - **Order of the unpinned section.** It showed Pin image to grid before the question. Answering
+>   the question is the path for a new image, so it comes first; Pin, for maps lined up by hand,
+>   now says so.
+>
+> Tests:
+>
+> - `tests/grid-inference.test.ts`, 30:
+>   - every §5 case.
+>   - eight file-name forms, and names that shouldn't count.
+>   - rule 1.
+>   - the remembered size, and 100 after another is remembered.
+>   - ±1 px, the bounds and the rounding rule.
+>   - `pinInPlace` against the unpinned drawing maths for three placements.
+> - `tests/map-image-replace-warning.test.ts`, 7 new: `planImageReplacement` for a re-export, a
+>   blank map, placed walls, nothing detected, a file name, and an unmeasured file.
+> - `tests/map-image-pinning.test.ts`, 9 new:
+>   - `replaceMapImage`: one undo step, a blank map, declining, and asking.
+>   - `applyImageFit`, `fitGridToImage` and `pinMapImageInPlace`.
+>   - a new map pinned from its reading.
+> - `tests/create-encounter-fields.test.tsx`, 7 (happy-dom): the reading with nothing typed, a
+>   chip, Other… both ways, the bounds message, the question, removing the image, and an
+>   unmeasurable image.
+>
+> The full suite passes: 141 files, 1,729 tests. One run in between failed 3 tests elsewhere (two
+> ability-editor weapon tests and the SRD monster run). They passed alone and on the next full
+> run, most likely timeouts under load.
+>
+> Browser (Playwright with the seeded login, 28 checks, all passed), each path from a blank map:
+>
+> - **Campaign New Encounter, 3000 × 2000 test export.**
+>   - It read 30 × 20 at 100 px with nothing typed, offered 15 × 10 and 60 × 40, and hid the
+>     presets.
+>   - The map and its saved copy were pinned.
+>   - Image and grid were the same box on screen at zoom 1, 3 and 0.3, and at square size 60.
+> - **Scene dropdown → Start fresh, 4200 × 2800.**
+>   - It read 42 × 28 first; one chip made it 30 × 20 at 140 px, and 140 was remembered.
+>   - The new scene was pinned and aligned.
+> - **Scene Config, with a wall drawn.**
+>   - A 6000 × 4000 re-export kept 30 × 20 silently, at 200 px, and said so.
+>   - A 3200 × 2000 image asked "The new image is 32 × 20 squares; this map is 30 × 20.", and
+>     declining changed nothing.
+> - **Scene panel Replace, 2048 × 1536.**
+>   - Scene Config opened and asked ("This map has 30.").
+>   - Typing 40 made it 40 × 30 at 51.2 px, aligned, and 51.2 wasn't remembered.
+> - **Pin image to grid on an imported old-style map** (Image X 22). The image didn't move, and
+>   it then scaled with the grid from square size 44 to 88.
+>
+> No page errors, apart from the map-image Blob sync's 500s (no `BLOB_READ_WRITE_TOKEN` locally).
+> A real Inkarnate export is still to try.
 
 - `gridInference.ts` and the remembered usual size (§3.3).
 - The New Encounter, replace and Scene Config changes (§3.5), including Pin image to grid.
@@ -424,13 +515,7 @@ no current grid and no file name:
 | D3 | Padding | Stays in whole squares and no longer plays a part in alignment. Foundry's 25% is an optional extra (Phase 4). |
 | D4 | Where the usual size is remembered | This browser (localStorage), for now. Your account, so it follows you between devices, can come later. |
 | D5 | Pinning maps made before this | Only when you click Pin image to grid. Never automatically on load. |
-
-### To settle in Phase 2
-
-- Replacing the image of a map made before this. D5 keeps old maps as they are until you click
-  the button, but a replaced image is a new picture, and the old map's offsets don't apply to it.
-  The default is that the new image goes through detection like any other upload; the map's other
-  settings are unchanged.
+| D6 | Replacing the image of a map made before this | The new image goes through detection like any other upload: it's a new picture, and the old map's offsets don't apply to it. The rest of the map is unchanged. (The default, applied in Phase 2 with no objection.) |
 
 ---
 

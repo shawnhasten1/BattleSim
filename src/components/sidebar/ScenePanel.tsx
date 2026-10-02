@@ -1,12 +1,13 @@
 "use client";
 
 import { Download, ImagePlus, Layers, Settings, Trash2, Upload, X } from "lucide-react";
-import { type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { encounterSnapshotSchema } from "@/engine";
 import { useEncounterStore, type EditorTool } from "@/store/encounter-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import { downloadJson, safeFileName } from "@/lib/ui-helpers";
 import { readMapImageFile } from "@/lib/imageResize";
+import { replacementMessage } from "@/components/modals/GridFitPicker";
 import { ContextInspector } from "./ContextInspector";
 import styles from "./ScenePanel.module.css";
 
@@ -36,7 +37,8 @@ function toolReadout(
 export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
   const encounter = useEncounterStore((state) => state.encounter);
   const mapImageDataUrl = useEncounterStore((state) => state.mapImageDataUrl);
-  const setMapImage = useEncounterStore((state) => state.setMapImage);
+  const replaceMapImage = useEncounterStore((state) => state.replaceMapImage);
+  const [imageStatus, setImageStatus] = useState<string | null>(null);
   const pendingWallStart = useEncounterStore((state) => state.pendingWallStart);
   const cancelWallPlacement = useEncounterStore((state) => state.cancelWallPlacement);
   const deleteLastWall = useEncounterStore((state) => state.deleteLastWall);
@@ -63,7 +65,11 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
     const file = event.target.files?.[0];
     if (!file) return;
     void readMapImageFile(file).then((picked) => {
-      if (picked) setMapImage(picked.dataUrl, picked.size);
+      if (!picked) return;
+      const outcome = replaceMapImage(picked);
+      setImageStatus(replacementMessage(outcome));
+      // Nothing detected: Scene Config asks how many squares across it is.
+      if (outcome.kind === "ask") onOpenConfig();
     });
   }
 
@@ -114,6 +120,7 @@ export function ScenePanel({ scene, onOpenConfig }: ScenePanelProps) {
             <Settings size={14} /> Configure
           </button>
         </div>
+        {imageStatus ? <p className={styles.readoutDim} role="status">{imageStatus}</p> : null}
         <div className={styles.ioRow}>
           <label className={styles.upload}>
             <Upload size={14} /> Import JSON

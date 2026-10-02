@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAP_IMAGE_SETTINGS, encounterSnapshotSchema, sampleEncounter, type EncounterSnapshot, type MapImageSettings } from "@/engine";
+import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { useEncounterStore } from "@/store/encounter-store";
 
 // No canvas in node: stand in for the downscale, which shrinks every upload to 2048 x 1365 here.
@@ -105,5 +106,128 @@ describe("createEncounterInCampaign records the picked file's own size", () => {
     expect(snapshot?.map.image).toMatchObject({ naturalWidthPx: 2048, naturalHeightPx: 1365, sourceWidthPx: 3000, sourceHeightPx: 2000 });
     expect(snapshot?.map.image?.pxPerSquare).toBeUndefined();
     expect(snapshot?.map.canvas).toEqual({ widthPx: 2048, heightPx: 1365 });
+  });
+
+  it("pins the image when the grid was read off it", async () => {
+    const posted: Array<{ encounter?: EncounterSnapshot }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      if (typeof init?.body === "string") posted.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ encounter: { id: "enc-pinned" } }), { status: 200 });
+    }));
+
+    await useEncounterStore.getState().createEncounterInCampaign("campaign-1", "Crypt", {
+      grid: { width: 30, height: 20, distancePerSquare: 5, squareSizePx: 44, pxPerSquare: 100 },
+      image: { dataUrl: IMAGE, fileName: "crypt.png", size: { widthPx: 3000, heightPx: 2000 } }
+    });
+
+    const snapshot = posted.find((body) => body.encounter)?.encounter;
+    expect(snapshot?.map.grid).toMatchObject({ width: 30, height: 20 });
+    expect(snapshot?.map.image).toMatchObject({ sourceWidthPx: 3000, sourceHeightPx: 2000, pxPerSquare: 100 });
+    expect(deriveSceneMetrics(snapshot!.map).imageBox).toEqual({ left: 0, top: 0, width: 1320, height: 880, pinned: true });
+  });
+});
+
+/** The sample encounter on a 30 × 20 grid with a background (walls and tokens are placed). */
+function placedMap(image: MapImageSettings): EncounterSnapshot {
+  const encounter = encounterWithImage(image);
+  encounter.map.grid = { ...encounter.map.grid, width: 30, height: 20, squareSizePx: 44 };
+  return encounter;
+}
+
+describe("replaceMapImage sets the grid from the image", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("pins a re-export at the map's own grid, in one undo step", async () => {
+    useEncounterStore.getState().replaceEncounter(placedMap(PINNED));
+    const steps = useEncounterStore.getState().undoStack.length;
+    const outcome = useEncounterStore.getState().replaceMapImage({ dataUrl: IMAGE, fileName: "crypt-hd.png", size: { widthPx: 6000, heightPx: 4000 } });
+    expect(outcome).toEqual({ kind: "keep-grid", fit: { columns: 30, rows: 20, pxPerSquare: 200 } });
+    await vi.waitFor(() => expect(mapImage()?.sourceWidthPx).toBe(6000));
+    expect(mapImage()).toMatchObject({ sourceHeightPx: 4000, pxPerSquare: 200 });
+    expect(mapImage()?.originX).toBeUndefined();
+    expect(useEncounterStore.getState().encounter.map.grid).toMatchObject({ width: 30, height: 20 });
+    expect(useEncounterStore.getState().undoStack.length).toBe(steps + 1);
+  });
+
+  it("gives a blank map the image's grid", async () => {
+    const blank = structuredClone(sampleEncounter);
+    blank.map.walls = [];
+    blank.map.terrain = [];
+    blank.combatants = [];
+    useEncounterStore.getState().replaceEncounter(blank);
+    const outcome = useEncounterStore.getState().replaceMapImage({ dataUrl: IMAGE, fileName: "crypt.png", size: { widthPx: 3000, heightPx: 2000 } });
+    expect(outcome).toEqual({ kind: "new-grid", fit: { columns: 30, rows: 20, pxPerSquare: 100 }, confirm: null });
+    await vi.waitFor(() => expect(useEncounterStore.getState().encounter.map.grid.width).toBe(30));
+    expect(useEncounterStore.getState().encounter.map.grid.height).toBe(20);
+    expect(mapImage()).toMatchObject({ sourceWidthPx: 3000, sourceHeightPx: 2000, pxPerSquare: 100 });
+  });
+
+  it("changes nothing when the DM declines a new grid under placed walls", async () => {
+    useEncounterStore.getState().replaceEncounter(placedMap(PINNED));
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("window", { confirm });
+    const outcome = useEncounterStore.getState().replaceMapImage({ dataUrl: IMAGE, fileName: "wider.png", size: { widthPx: 3200, heightPx: 2000 } });
+    expect(outcome).toEqual({ kind: "cancelled" });
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("The new image is 32 × 20 squares; this map is 30 × 20."));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mapImage()).toMatchObject({ sourceWidthPx: 3000, pxPerSquare: 100 });
+    expect(useEncounterStore.getState().encounter.map.grid.width).toBe(30);
+  });
+
+  it("puts an image it can't read a grid off in unpinned, for Scene Config to ask about", async () => {
+    useEncounterStore.getState().replaceEncounter(placedMap(PINNED));
+    const outcome = useEncounterStore.getState().replaceMapImage({ dataUrl: IMAGE, fileName: "plain-2k.png", size: { widthPx: 2048, heightPx: 1536 } });
+    expect(outcome).toEqual({ kind: "ask" });
+    await vi.waitFor(() => expect(mapImage()?.sourceWidthPx).toBe(2048));
+    expect(mapImage()?.pxPerSquare).toBeUndefined();
+    expect(useEncounterStore.getState().encounter.map.grid.width).toBe(30);
+  });
+});
+
+describe("Scene Config's image actions", () => {
+  it("applyImageFit pins a reading of the whole image and sizes the grid to it", () => {
+    useEncounterStore.getState().replaceEncounter(placedMap({ ...PINNED, pxPerSquare: undefined }));
+    useEncounterStore.getState().applyImageFit({ columns: 15, rows: 10, pxPerSquare: 200 });
+    expect(useEncounterStore.getState().encounter.map.grid).toMatchObject({ width: 15, height: 10 });
+    expect(mapImage()).toMatchObject({ sourceWidthPx: 3000, sourceHeightPx: 2000, pxPerSquare: 200 });
+    // A whole-image reading starts at the image's corner.
+    expect(mapImage()?.originX).toBeUndefined();
+    expect(mapImage()?.originY).toBeUndefined();
+  });
+
+  it("applyImageFit measures an old upload against its stored size", () => {
+    useEncounterStore.getState().replaceEncounter(placedMap({ ...DEFAULT_MAP_IMAGE_SETTINGS, naturalWidthPx: 2048, naturalHeightPx: 1536 }));
+    useEncounterStore.getState().applyImageFit({ columns: 40, rows: 30, pxPerSquare: 51.2 });
+    expect(mapImage()).toMatchObject({ sourceWidthPx: 2048, sourceHeightPx: 1536, pxPerSquare: 51.2 });
+  });
+
+  it("fitGridToImage covers the image from the grid's corner", () => {
+    const encounter = placedMap({ ...PINNED, originX: 0, originY: 0 });
+    encounter.map.grid.width = 35;
+    useEncounterStore.getState().replaceEncounter(encounter);
+    useEncounterStore.getState().fitGridToImage();
+    expect(useEncounterStore.getState().encounter.map.grid).toMatchObject({ width: 30, height: 20 });
+
+    useEncounterStore.getState().replaceEncounter(placedMap({ ...PINNED, originX: 100, originY: 0 }));
+    useEncounterStore.getState().fitGridToImage();
+    expect(useEncounterStore.getState().encounter.map.grid).toMatchObject({ width: 29, height: 20 });
+  });
+
+  it("pinMapImageInPlace keeps the image exactly where it was drawn", () => {
+    const image: MapImageSettings = { ...DEFAULT_MAP_IMAGE_SETTINGS, offsetX: 22, offsetY: -10, scale: 110, naturalWidthPx: 2048, naturalHeightPx: 1365, sourceWidthPx: 3000, sourceHeightPx: 2000 };
+    const encounter = placedMap(image);
+    encounter.map.canvas = { widthPx: 2048, heightPx: 1365 };
+    useEncounterStore.getState().replaceEncounter(encounter);
+    useEncounterStore.getState().pinMapImageInPlace();
+    const box = deriveSceneMetrics(useEncounterStore.getState().encounter.map).imageBox;
+    expect(box.pinned).toBe(true);
+    // Unpinned it was drawn at the offset, 110% of the 2048 px canvas box.
+    expect(box.left).toBeCloseTo(22, 6);
+    expect(box.top).toBeCloseTo(-10, 6);
+    expect(box.width).toBeCloseTo(2048 * 1.1, 6);
+    // The grid itself doesn't change.
+    expect(useEncounterStore.getState().encounter.map.grid).toMatchObject({ width: 30, height: 20 });
   });
 });
