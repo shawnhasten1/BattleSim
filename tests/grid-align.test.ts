@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultBoxCounts, findDrawnGrid, normalizeOrigin, nudgePin, pinFromBox, resizePin } from "@/lib/gridAlign";
+import { defaultBoxCounts, findDrawnGrid, normalizeOrigin, pinFromBox, resizePin, shiftGrid } from "@/lib/gridAlign";
 
 describe("pinFromBox: a box over the image's own grid", () => {
   it("reads one square, corner to corner", () => {
@@ -60,9 +60,9 @@ describe("defaultBoxCounts", () => {
 describe("nudging", () => {
   const pin = { pxPerSquare: 100, originX: 37, originY: 12 };
 
-  it("moves the image right and down by lowering the origin", () => {
-    expect(nudgePin(pin, 1, 0)).toEqual({ pxPerSquare: 100, originX: 36, originY: 12 });
-    expect(nudgePin(pin, 0, -10)).toEqual({ pxPerSquare: 100, originX: 37, originY: 22 });
+  it("shifts the grid right and down over the image by raising its offset", () => {
+    expect(shiftGrid(pin, 1, 0)).toEqual({ pxPerSquare: 100, originX: 38, originY: 12 });
+    expect(shiftGrid(pin, 0, -10)).toEqual({ pxPerSquare: 100, originX: 37, originY: 2 });
   });
 
   it("resizes in tenths, never below 4 px", () => {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAP_IMAGE_SETTINGS, sampleEncounter, type EncounterSnapshot, type MapImageSettings } from "@/engine";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
-import { alignedMap, GridAlignPanel } from "@/components/scene/GridAlign";
+import { alignedMap, alignmentShift, GridAlignPanel } from "@/components/scene/GridAlign";
 import { useEncounterStore } from "@/store/encounter-store";
 
 /** The stored copy "Find the drawn grid" reads: 1024 × 768 with a line every 51.2 px from x 17, y 9 (2 px wide). */
@@ -91,18 +91,30 @@ describe("startGridAlign", () => {
 });
 
 describe("The Align grid panel", () => {
-  it("applies in one undo step: the image pinned at what was set, the grid fitted to it", async () => {
+  it("applies in one undo step: the image pinned at what was set", async () => {
     loadMap();
     store().startGridAlign();
     render(<LivePanel />);
     await typePx("51.2");
-    expect(screen.getByLabelText(/Fit columns and rows to the image: 40 × 30 squares/)).toBeTruthy();
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    // 2048 × 1536 at 51.2 px is the map's own 40 × 30: nothing to fit.
+    expect(screen.getByText("Columns and rows already fit the image: 40 × 30 squares.")).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(store().gridAlign).toBeNull();
     expect(store().encounter.map.image).toMatchObject({ pxPerSquare: 51.2, sourceWidthPx: 2048, sourceHeightPx: 1536 });
     expect(store().encounter.map.grid).toMatchObject({ width: 40, height: 30 });
     expect(store().undoStack).toHaveLength(1);
+  });
+
+  it("fits the grid by default to a new reading of the image", async () => {
+    loadMap();
+    store().startGridAlign();
+    render(<LivePanel />);
+    await typePx("64");
+    expect(screen.getByLabelText(/Fit columns and rows to the image: 32 × 24 squares \(now 40 × 30\)/)).toBeTruthy();
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(store().encounter.map.grid).toMatchObject({ width: 32, height: 24 });
   });
 
   it("cancels without touching the map", async () => {
@@ -128,14 +140,14 @@ describe("The Align grid panel", () => {
     expect(store().encounter.map.image?.pxPerSquare).toBe(100);
   });
 
-  it("moves the image with the arrow keys and resizes it with + and −", () => {
+  it("shifts the grid with the arrow keys and resizes it with + and −", () => {
     loadMap({ pxPerSquare: 51.2, originX: 18, originY: 10 });
     store().startGridAlign();
     render(<LivePanel />);
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(store().gridAlign).toMatchObject({ originX: 17, originY: 10 });
+    expect(store().gridAlign).toMatchObject({ originX: 19, originY: 10 });
     fireEvent.keyDown(window, { key: "ArrowDown", shiftKey: true });
-    expect(store().gridAlign).toMatchObject({ originX: 17, originY: 0 });
+    expect(store().gridAlign).toMatchObject({ originX: 19, originY: 20 });
     fireEvent.keyDown(window, { key: "+" });
     expect(store().gridAlign?.pxPerSquare).toBeCloseTo(51.3, 9);
     fireEvent.keyDown(window, { key: "-" });
@@ -153,7 +165,81 @@ describe("The Align grid panel", () => {
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     fireEvent.keyDown(window, { key: "Enter" });
     expect(store().gridAlign).toBeNull();
-    expect(store().encounter.map.image?.originX).toBe(19);
+    expect(store().encounter.map.image?.originX).toBe(17);
+  });
+
+  it("takes a typed grid offset, negative too, and the arrow keys in its box step it", async () => {
+    loadMap({ pxPerSquare: 51.2, originX: 18, originY: 10 });
+    store().startGridAlign();
+    render(<LivePanel />);
+    const x = screen.getByRole("textbox", { name: "Grid offset X" });
+    const y = screen.getByRole("textbox", { name: "Grid offset Y" });
+    expect((x as HTMLInputElement).value).toBe("18");
+    await userEvent.clear(x);
+    await userEvent.type(x, "-12.5");
+    expect(store().gridAlign?.originX).toBe(-12.5);
+    await userEvent.clear(y);
+    await userEvent.type(y, "25");
+    expect(store().gridAlign?.originY).toBe(25);
+    // In a box the arrows step its number, and don't shift the grid as well.
+    await userEvent.type(y, "{ArrowUp}");
+    expect(store().gridAlign).toMatchObject({ originX: -12.5, originY: 26 });
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(store().encounter.map.image).toMatchObject({ originX: -12.5, originY: 26 });
+  });
+
+  it("cancels with Escape, and applies with Enter, from inside its boxes", async () => {
+    loadMap({ pxPerSquare: 51.2, originX: 18, originY: 10 });
+    store().startGridAlign();
+    render(<LivePanel />);
+    const x = screen.getByRole("textbox", { name: "Grid offset X" });
+    await userEvent.clear(x);
+    await userEvent.type(x, "40{Escape}");
+    expect(store().gridAlign).toBeNull();
+    expect(store().encounter.map.image?.originX).toBe(18);
+
+    store().startGridAlign();
+    const again = await screen.findByRole("textbox", { name: "Grid offset X" });
+    await userEvent.clear(again);
+    await userEvent.type(again, "40{Enter}");
+    expect(store().gridAlign).toBeNull();
+    expect(store().encounter.map.image?.originX).toBe(40);
+  });
+
+  it("doesn't refit an already fitted grid when it's only shifted", async () => {
+    // 2048 × 1536 at 51.2 px is exactly the 40 × 30 grid, here already shifted a quarter square up.
+    loadMap({ pxPerSquare: 51.2, originX: 0, originY: -12.8 });
+    store().startGridAlign();
+    render(<LivePanel />);
+    // Half a square left: covering every last pixel would take 41 columns (and 31 rows).
+    store().updateGridAlign({ originX: -25.6 });
+    expect(await screen.findByLabelText(/Fit columns and rows to the image: 41 × 31 squares/)).toBeTruthy();
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(store().encounter.map.grid).toMatchObject({ width: 40, height: 30 });
+    expect(store().encounter.map.image?.originX).toBe(-25.6);
+  });
+
+  it("shifts the grid with the panel's arrows", async () => {
+    loadMap({ pxPerSquare: 51.2, originX: 18, originY: 10 });
+    store().startGridAlign();
+    render(<LivePanel />);
+    await userEvent.click(screen.getByRole("button", { name: "Shift the grid right" }));
+    await userEvent.click(screen.getByRole("button", { name: "Shift the grid up" }));
+    expect(store().gridAlign).toMatchObject({ originX: 19, originY: 9 });
+  });
+
+  it("keeps the image still on screen while the grid shifts over it", () => {
+    loadMap({ pxPerSquare: 51.2, originX: 18, originY: 10 });
+    store().startGridAlign();
+    store().updateGridAlign({ originX: 18 + 25.6 });
+    // Half a square of the image (25.6 px at 51.2 per square) is half of a 44 px square on screen.
+    const shift = alignmentShift(store().gridAlign!, 44);
+    expect(shift.x).toBeCloseTo(22, 9);
+    expect(shift.y).toBe(0);
+    // The image's own box moves the other way by as much, so it stays put.
+    const box = deriveSceneMetrics(alignedMap(store().encounter.map, store().gridAlign!)).imageBox;
+    expect(box.left + 22).toBeCloseTo(-(18 / 51.2) * 44, 9);
   });
 
   it("re-reads a box when its squares change", async () => {

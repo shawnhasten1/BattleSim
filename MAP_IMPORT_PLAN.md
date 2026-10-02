@@ -635,6 +635,61 @@ also AGENTS.md §4's "matching two known grid points".
   and walls and doors in grid units, so Dungeondraft maps would arrive with their walls drawn.
   Inkarnate doesn't export it, so it's low priority here.
 
+### Follow-up — typed grid offsets
+
+> **✅ Implemented 2026-10-02**, asked for after Phase 4: "an easier way to shift the grid on the
+> x and y axis … enter in a value to offset".
+>
+> - **Grid offset X and Y**, typed, in Scene Config's pinned image section and in the Align grid
+>   panel.
+>   - The unit is the image's own pixels (the stored `originX`/`originY`), so a value means the
+>     same at any zoom and square size. For a 100 px export, 50 is half a square.
+>   - More moves the grid right or down over the map.
+>   - `DecimalInput` (`src/components/ui`) keeps a half-typed "-" or "3." in the box and commits
+>     only numbers. Arrow keys step it (Shift: 10), and the mouse wheel can't change it.
+> - **Align grid now shifts the grid**, matching the offset: arrow keys and buttons move the grid
+>   (they moved the image). The grid visibly moves too.
+>   - While aligning, the scene (grid, walls, tokens) moves by `alignmentShift` and the image stays
+>     where it was, its whole extent shown.
+>   - On Apply, the view pans by the same amount, so nothing jumps.
+>   - Enter and Escape apply and cancel from inside the panel's boxes too.
+> - **Fitting columns and rows** in the panel defaults on only when the image's squares at the
+>   current px per square aren't the grid (a new reading, or a map that came in unpinned), and
+>   nothing is placed. Shifting an already fitted grid keeps its columns and rows. When they already
+>   fit, the panel says so instead of showing a checkbox.
+> - **Scene Config's reading** is the image's own squares, whatever the offset. The Fit button now
+>   reads "Fit grid to cover the image" and shows only when the grid isn't the image's squares;
+>   covering every last pixel can take one more, part-filled, square.
+>
+> Tests:
+>
+> - `tests/scene-config-offset.test.tsx`, 3 new:
+>   - typed offsets moving the grid over the art.
+>   - arrow steps.
+>   - a half-typed "-" kept and not committed.
+> - `tests/grid-align-panel.test.tsx`, 7 new or changed:
+>   - arrows shift the grid.
+>   - typed and negative offsets.
+>   - Escape and Enter from a box.
+>   - the panel's arrow buttons.
+>   - the image held still.
+>   - the fit defaults.
+> - `tests/grid-align.test.ts`: `shiftGrid`.
+>
+> The full suite passes apart from the known load-only timeouts: the two ability-editor weapon
+> tests (2.2 s each alone) and the SRD monster run, at the 5 s limit under full-suite load.
+>
+> Browser (10 checks, all passed):
+>
+> - **Scene Config.** Offsets of 50 and −25 put the grid half a square right and a quarter up over
+>   the art.
+> - **Align grid.** Shift+→ ×5 moved the grid 22 px while the image stayed put, and typing Y moved
+>   it down.
+> - **Apply** kept the fitted 30 × 20 grid, and nothing on screen jumped. Cancel left everything as
+>   it was.
+> - **The Phase 3 check was rerun** with arrows shifting the grid (18/18): Find after a bad 176 px
+>   box refitted the grid to 40 × 30.
+
 ---
 
 ## 5. Prototype check

@@ -7,7 +7,8 @@ import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { detectGrid, gridForPxPerSquare, imageFitSize, readUsualPxPerSquare, squaresInBounds, type GridFit, type GridGuess } from "@/lib/gridInference";
 import { readMapImageFile, type ImagePixelSize } from "@/lib/imageResize";
 import { Modal } from "@/components/ui/Modal";
-import { GridFitPicker, replacementMessage, sameSquares } from "./GridFitPicker";
+import { DecimalInput } from "@/components/ui/DecimalInput";
+import { formatPx, GridFitPicker, replacementMessage, sameSquares } from "./GridFitPicker";
 import styles from "./modals.module.css";
 
 /** Every reading of an image's grid by its size alone, best first. */
@@ -110,6 +111,7 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
             onPick={applyImageFit}
             onFitGrid={fitGridToImage}
             onAlign={alignGrid}
+            onOrigin={(origin) => updateMapImageSettings(origin)}
             onOpacity={(opacity) => updateMapImageSettings({ opacity })}
           />
         ) : mapImageDataUrl ? (
@@ -156,26 +158,29 @@ interface PinnedImageFieldsProps {
   onPick: (fit: GridFit) => void;
   onFitGrid: () => void;
   onAlign: () => void;
+  onOrigin: (origin: { originX: number } | { originY: number }) => void;
   onOpacity: (opacity: number) => void;
 }
 
 /**
  * A pinned background: the grid it was read as, the other readings a click
  * away, Fit grid to image when the grid no longer covers it square for square,
- * and Align grid to fine-tune it. Its place is set by its px per square, so
- * there's no X/Y/scale.
+ * the grid's offset over it to type, and Align grid to fine-tune it on the
+ * map. Its place is set by its px per square and offset, so there's no X/Y/scale.
  */
-function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, onFitGrid, onAlign, onOpacity }: PinnedImageFieldsProps) {
-  // The squares the image covers from the grid's corner, at its px per square.
+function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, onFitGrid, onAlign, onOrigin, onOpacity }: PinnedImageFieldsProps) {
+  // The image's own squares at its px per square, whatever the offset; and the squares the grid
+  // needs from its corner to cover all of it, which the offset can change by a partial square.
+  const reading = gridForPxPerSquare(size, pxPerSquare);
   const covered = gridForPxPerSquare({ widthPx: size.widthPx - origin.x, heightPx: size.heightPx - origin.y }, pxPerSquare);
-  const options = readingsOf(size).filter((reading) => !sameSquares(reading, covered));
-  const gridMatches = covered.columns === grid.columns && covered.rows === grid.rows;
+  const options = readingsOf(size).filter((option) => !sameSquares(option, reading));
+  const gridMatches = reading.columns === grid.columns && reading.rows === grid.rows;
   return (
     <>
       <h4>Image · {size.widthPx} × {size.heightPx} px, pinned to the grid</h4>
       <GridFitPicker
         imageSize={size}
-        value={covered}
+        value={reading}
         options={options}
         prompt=""
         distancePerSquare={grid.distancePerSquare}
@@ -183,15 +188,27 @@ function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, o
       />
       {!gridMatches && squaresInBounds(covered) ? (
         <button type="button" className={styles.secondary} onClick={onFitGrid}>
-          Fit grid to image: {covered.columns} × {covered.rows} squares (now {grid.columns} × {grid.rows})
+          Fit grid to cover the image: {covered.columns} × {covered.rows} squares (now {grid.columns} × {grid.rows})
         </button>
       ) : null}
+      <div className={styles.grid3}>
+        <label className={styles.field}>
+          Grid offset X
+          <DecimalInput value={origin.x} format={formatPx} onCommit={(originX) => onOrigin({ originX })} />
+        </label>
+        <label className={styles.field}>
+          Grid offset Y
+          <DecimalInput value={origin.y} format={formatPx} onCommit={(originY) => onOrigin({ originY })} />
+        </label>
+        <label className={styles.field}>Opacity<input type="number" value={opacity} min={0} max={1} step={0.05} onChange={(e) => onOpacity(Number(e.target.value))} /></label>
+      </div>
+      <p className={styles.status}>
+        Grid offset is in the image&apos;s own pixels ({formatPx(pxPerSquare)} to a square): more moves the grid right or down over the
+        map. Arrow keys in a box step it (Shift: 10).
+      </p>
       <button type="button" className={styles.secondary} onClick={onAlign}>
         Align grid…
       </button>
-      <div className={styles.grid3}>
-        <label className={styles.field}>Opacity<input type="number" value={opacity} min={0} max={1} step={0.05} onChange={(e) => onOpacity(Number(e.target.value))} /></label>
-      </div>
     </>
   );
 }

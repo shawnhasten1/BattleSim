@@ -63,9 +63,9 @@ export function defaultBoxCounts(a: SourcePoint, b: SourcePoint): { across: numb
   return { across: width < longer * 0.25 ? 0 : 1, down: height < longer * 0.25 ? 0 : 1 };
 }
 
-/** Move the image by (dx, dy) source px under the grid: right and down are positive. */
-export function nudgePin(pin: AlignPin, dx: number, dy: number): AlignPin {
-  return { ...pin, originX: pin.originX - dx, originY: pin.originY - dy };
+/** Shift the grid by (dx, dy) source px over the image: right and down are positive. */
+export function shiftGrid(pin: AlignPin, dx: number, dy: number): AlignPin {
+  return { ...pin, originX: pin.originX + dx, originY: pin.originY + dy };
 }
 
 /** Change px per square by `delta`, keeping the grid's corner where it is in the image. */

@@ -44,6 +44,8 @@ export interface UseViewportResult {
   pendingFit: boolean;
   /** Centre the map in the stage, zoomed (to at most 100%) so all of it fits. */
   fitToView: (frame: { width: number; height: number }) => void;
+  /** Move the view by this many screen px. */
+  panBy: (dx: number, dy: number) => void;
 }
 
 /**
@@ -207,6 +209,7 @@ export function useViewport(sceneKey?: string): UseViewportResult {
       if (!stage?.width || !stage.height || !frame.width || !frame.height) return;
       setViewport(fitViewport({ width: stage.width, height: stage.height }, frame));
       setPendingFit(false);
-    }
+    },
+    panBy: (dx, dy) => setViewport((current) => ({ ...current, x: current.x + dx, y: current.y + dy }))
   };
 }

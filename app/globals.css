@@ -358,7 +358,12 @@ img {
   z-index: 7;
 }
 
-/* Align grid (GridAlign.tsx): tokens step back so the image's own grid shows through. */
+/* Align grid (GridAlign.tsx): the whole image shows, even past the grid's edge, as context to align against. */
+.battlemap.scene-canvas.aligning {
+  overflow: visible;
+}
+
+/* Align grid: tokens step back so the image's own grid shows through. */
 .battlemap.scene-canvas.aligning .token,
 .battlemap.scene-canvas.aligning .token-shadow,
 .battlemap.scene-canvas.aligning .token-overlay-layer {

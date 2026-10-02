@@ -113,6 +113,8 @@ export interface GridAlignDraft extends AlignPin {
   sourceHeightPx: number;
   /** The last box drawn, in source px, and how many squares it spans. */
   box?: { a: SourcePoint; b: SourcePoint; across: number; down: number };
+  /** The pin when aligning began: the canvas keeps the image where it was then, and moves the grid. */
+  start: AlignPin;
 }
 
 /** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
@@ -2249,7 +2251,8 @@ export const useEncounterStore = create<EncounterStore>()(
           ? { sourceWidthPx: size.widthPx, sourceHeightPx: size.heightPx, pxPerSquare: image.pxPerSquare, originX: image.originX ?? 0, originY: image.originY ?? 0 }
           : pinInPlace(image, canvasOf(encounter.map), encounter.map.grid.squareSizePx || DEFAULT_GRID_VISUALS.squareSizePx);
         if (!pin) return;
-        set({ gridAlign: { encounterId: encounter.id, ...pin } });
+        const start = { pxPerSquare: pin.pxPerSquare, originX: pin.originX, originY: pin.originY };
+        set({ gridAlign: { encounterId: encounter.id, ...pin, start } });
       },
       updateGridAlign: (patch) => {
         const draft = get().gridAlign;
@@ -2265,7 +2268,7 @@ export const useEncounterStore = create<EncounterStore>()(
           width: squaresToCover(draft.sourceWidthPx - draft.originX, draft.pxPerSquare),
           height: squaresToCover(draft.sourceHeightPx - draft.originY, draft.pxPerSquare)
         };
-        const { box: _box, encounterId: _encounterId, ...pin } = draft;
+        const { box: _box, encounterId: _encounterId, start: _start, ...pin } = draft;
         commitEncounter({
           ...encounter,
           map: {

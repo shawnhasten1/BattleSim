@@ -1,9 +1,9 @@
 "use client";
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
-import { type CSSProperties, type DragEvent, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
-import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
+import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
@@ -14,7 +14,7 @@ import { SceneOverlays } from "@/components/scene/SceneOverlays";
 import { TokenHealthBar } from "@/components/scene/TokenHealthBar";
 import { SceneFeedbackLayer } from "@/components/scene/SceneFeedbackLayer";
 import { ElevationLegend, ElevationPalette } from "@/components/scene/ElevationPalette";
-import { alignedMap, GridAlignLayer, GridAlignPanel } from "@/components/scene/GridAlign";
+import { alignedMap, alignmentShift, GridAlignLayer, GridAlignPanel } from "@/components/scene/GridAlign";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { UseViewportResult } from "@/hooks/useViewport";
@@ -125,6 +125,27 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
     // `viewport` is rebuilt every render; the fit only needs redoing when it's pending or the map's size changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport.pendingFit, metrics.framePixelWidth, metrics.framePixelHeight]);
+
+  // Align grid shifts the grid over the image: the scene (grid, walls, tokens) moves and the
+  // image stays where it was on screen. Once applied, the grid settles back to the scene's
+  // corner, so the view pans by the same amount and nothing jumps.
+  const alignShift = aligning ? alignmentShift(aligning, metrics.cellSize) : null;
+  const lastAlignRef = useRef<{ draft: GridAlignDraft; shift: { x: number; y: number } } | null>(null);
+  useEffect(() => {
+    if (aligning) {
+      lastAlignRef.current = { draft: aligning, shift: alignShift ?? { x: 0, y: 0 } };
+      return;
+    }
+    const last = lastAlignRef.current;
+    lastAlignRef.current = null;
+    const image = map.image;
+    if (!last || !image) return;
+    const applied = image.pxPerSquare === last.draft.pxPerSquare && image.originX === last.draft.originX && image.originY === last.draft.originY;
+    const zoom = viewport.viewport.zoom;
+    if (applied && (last.shift.x || last.shift.y)) viewport.panBy(last.shift.x * zoom, last.shift.y * zoom);
+    // Runs as the draft changes and when it closes; `viewport` and `map` are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aligning]);
   const cellSize = metrics.cellSize;
   const { tool, pendingWallStart } = scene;
   // Tokens tween between cells only while replay is scrubbing/playing; editing
@@ -525,8 +546,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
-          top: metrics.paddingYPx,
-          left: metrics.paddingXPx,
+          top: metrics.paddingYPx + (alignShift?.y ?? 0),
+          left: metrics.paddingXPx + (alignShift?.x ?? 0),
           // Position tween + HP-bar drain share the same beat; both are 0ms
           // outside replay so live editing is instant.
           ["--token-move-ms" as string]: `${tokenMoveMs}ms`,
