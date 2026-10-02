@@ -115,6 +115,22 @@ describe("the Stats tab", { timeout: 20000 }, () => {
     expect(fighter().character).toEqual({ level: 5, classes: [{ name: "Fighter", level: 5 }] });
   });
 
+  it("keeps a damage defense's last type on, so the card doesn't vanish: pick another first", async () => {
+    patchFighter({ damageAdjustments: undefined });
+    render(<LiveStats />);
+    await userEvent.click(section("Defenses"));
+    await userEvent.click(screen.getByRole("button", { name: "+ Add damage defense" }));
+    expect(fighter().damageAdjustments).toEqual([{ type: "resistance", damageType: "fire" }]);
+    const fire = screen.getByRole("button", { name: "fire" });
+    expect(fire.getAttribute("aria-disabled")).toBe("true");
+    expect(fire.getAttribute("title")).toMatch(/pick another first/);
+    await userEvent.click(fire);
+    expect(fighter().damageAdjustments).toEqual([{ type: "resistance", damageType: "fire" }]);
+    await userEvent.click(screen.getByRole("button", { name: "cold" }));
+    await userEvent.click(screen.getByRole("button", { name: "fire" }));
+    expect(fighter().damageAdjustments).toEqual([{ type: "resistance", damageType: "cold" }]);
+  });
+
   it("renders every SRD monster's Stats without changing anything", async () => {
     const view = render(<StatsTab combatant={store().encounter.combatants[0]!} definition={fighter()} />);
     for (const entry of SRD_MONSTER_INDEX) {

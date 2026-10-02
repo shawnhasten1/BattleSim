@@ -245,29 +245,6 @@
   flex-direction: column;
 }
 
-.section {
-  padding: 12px;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.section:last-child {
-  border-bottom: none;
-}
-
-.section h3 {
-  margin: 0 0 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--ui-text-dim);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
 .stack {
   display: flex;
   flex-direction: column;
@@ -353,58 +330,6 @@
   border-color: var(--ui-hp-red);
 }
 
-.itemList {
-  display: flex;
-  flex-direction: column;
-  margin-top: 8px;
-}
-
-.item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.item:last-child {
-  border-bottom: none;
-}
-
-.itemMain {
-  flex: 1;
-  min-width: 0;
-}
-
-.itemMain strong {
-  display: block;
-  font-size: 12.5px;
-}
-
-.itemMain span {
-  display: block;
-  font-size: 10.5px;
-  color: var(--ui-text-dim);
-}
-
-.itemRemove {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: transparent;
-  color: var(--ui-text-dim);
-  cursor: pointer;
-}
-
-.itemRemove:hover {
-  border-color: var(--ui-hp-red);
-  color: var(--ui-hp-red);
-}
-
 .note {
   display: flex;
   flex-direction: column;
@@ -434,66 +359,6 @@
 .chips button:hover {
   border-color: var(--ui-accent);
   color: var(--ui-accent);
-}
-
-.searchRow {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.searchRow input {
-  flex: 1;
-}
-
-.searchRow button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: var(--ui-panel-2);
-  color: var(--ui-text-dim);
-  cursor: pointer;
-}
-
-.searchRow button:hover {
-  border-color: var(--ui-accent);
-  color: var(--ui-accent);
-}
-
-.resultList {
-  display: flex;
-  flex-direction: column;
-  margin-top: 6px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.resultList button {
-  padding: 6px 4px;
-  border: none;
-  border-bottom: 1px solid var(--ui-border);
-  background: transparent;
-  color: var(--ui-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.resultList button:hover {
-  background: var(--ui-panel-2);
-}
-
-.resultList strong {
-  display: block;
-  font-size: 12px;
-}
-
-.resultList span {
-  display: block;
-  font-size: 10px;
-  color: var(--ui-text-dim);
 }
 
 .upload {

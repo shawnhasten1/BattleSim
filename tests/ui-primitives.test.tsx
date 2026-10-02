@@ -2,7 +2,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AutomationBadge } from "../src/components/ui/AutomationBadge";
 import { Chip } from "../src/components/ui/ChipRow";
 import { HpBar } from "../src/components/ui/HpBar";
 import { PanelSearch } from "../src/components/ui/PanelSearch";
@@ -31,15 +30,6 @@ describe("HpBar", () => {
     expect((low.querySelector("i") as HTMLElement).style.background).toContain("hp-red");
     const { container: high } = render(<HpBar current={6} max={10} />);
     expect((high.querySelector("i") as HTMLElement).style.background).toContain("hp-green");
-  });
-});
-
-describe("AutomationBadge", () => {
-  it('shows "reference-only" for manual-only, verbatim otherwise', () => {
-    render(<AutomationBadge value="manual-only" />);
-    expect(screen.getByText("reference-only")).toBeTruthy();
-    render(<AutomationBadge value="full" />);
-    expect(screen.getByText("full")).toBeTruthy();
   });
 });
 

@@ -292,7 +292,6 @@ interface EncounterStore {
   setFactionSurprised: (faction: Faction, surprised: boolean) => void;
   updateTags: (combatantId: string, tags: CombatantState["tags"]) => void;
   updateResource: (combatantId: string, resourceId: string, amount: number) => void;
-  updateDefinitionResource: (definitionId: string, resourceId: string, amount: number) => void;
   /**
    * A resource's full size on a creature (the Resources list), kept in step everywhere it's stored: the pool, a
    * weapon's charges, the uses of the abilities spending it, or the legendary actions a round (`withResourceSize`).
@@ -317,7 +316,6 @@ interface EncounterStore {
    * actually has.
    */
   togglePrepBuff: (combatantId: string, actionId: string) => void;
-  clearConditions: (combatantId: string) => void;
   /** Take one condition off a token (the vitals strip's ×). One undo step; nothing when it doesn't have it. */
   removeCondition: (combatantId: string, conditionId: string) => void;
   replaceEncounter: (encounter: EncounterSnapshot, mapImageDataUrl?: string | null) => void;
@@ -2243,23 +2241,6 @@ export const useEncounterStore = create<EncounterStore>()(
             : combatant)
         });
       },
-      updateDefinitionResource: (definitionId, resourceId, amount) => {
-        const encounter = get().encounter;
-        const normalizedResourceId = resourceId.trim();
-        if (!normalizedResourceId) return;
-        commitEncounter({
-          ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? {
-              ...definition,
-              resources: {
-                ...(definition.resources ?? {}),
-                [normalizedResourceId]: Math.max(0, Math.floor(amount))
-              }
-            }
-            : definition)
-        });
-      },
       setResourceSize: (definitionId, resourceId, size) => {
         const encounter = get().encounter;
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
@@ -2405,15 +2386,6 @@ export const useEncounterStore = create<EncounterStore>()(
           }
         }
         commitEncounter(engine.snapshot, { log: engine.log });
-      },
-      clearConditions: (combatantId) => {
-        const encounter = get().encounter;
-        commitEncounter({
-          ...encounter,
-          combatants: encounter.combatants.map((combatant) => combatant.id === combatantId
-            ? { ...combatant, conditions: [], concentration: undefined }
-            : combatant)
-        });
       },
       replaceEncounter: (encounter, mapImageDataUrl = null) => {
         const normalizedEncounter = normalizeEncounterVisuals(encounter);

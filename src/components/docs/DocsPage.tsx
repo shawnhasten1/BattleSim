@@ -873,9 +873,10 @@ const SECTIONS: Section[] = [
         <h3>Lair actions</h3>
         <p>
           Add one with <strong>Start from scratch → Lair action</strong>: an attack, a save or an area, the only kinds a
-          lair takes. Then mark the token <strong>In its lair</strong> from its right-click menu or the Token tab. Each
-          round, on initiative 20 (after anyone who rolled 20 or more), it takes one of its lair actions — never the same
-          one two rounds running — without spending any of its own actions. The initiative tracker shows the slot as a
+          lair takes. Then mark the token <strong>In its lair</strong> from its right-click menu or the sheet&apos;s Token
+          tab, under This fight (the row shows once the creature has a lair action). Each round, on initiative 20 (after
+          anyone who rolled 20 or more), it takes one of its lair actions — never the same one two rounds running —
+          without spending any of its own actions. The initiative tracker shows the slot as a
           dashed <em>Lair actions · 20</em> row, and the combat log reads &ldquo;Lair action (initiative 20): …&rdquo;. The SRD
           statblocks don&apos;t include lair actions, so these are yours to write.
         </p>

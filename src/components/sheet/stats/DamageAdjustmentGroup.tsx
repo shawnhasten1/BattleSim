@@ -60,6 +60,7 @@ const TYPE_LABELS: Array<[DamageAdjustment["type"], string]> = [
 /** One group of damage types sharing an adjustment, on the Stats tab. */
 export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGroup; onChange: (next: AdjustmentGroup) => void }) {
   const selected = new Set(group.damageTypes);
+  const only = group.damageTypes.length === 1 ? group.damageTypes[0] : undefined;
   const materials = new Set(group.exceptMaterials ?? []);
   return (
     <>
@@ -92,10 +93,14 @@ export function AdjustmentGroupEditor({ group, onChange }: { group: AdjustmentGr
       </div>
       <div className={styles.chips}>
         {DAMAGE_TYPES.map((t) => (
+          // A card with no damage type can't be kept (each type is stored as one adjustment), so its last type stays on.
           <button
-            key={t} type="button"
+            key={t} type="button" aria-pressed={selected.has(t)}
+            aria-disabled={only === t || undefined}
+            title={only === t ? `Its only damage type: pick another first, or remove the defense with ×.` : undefined}
             className={selected.has(t) ? styles.chipOn : undefined}
             onClick={() => {
+              if (only === t) return;
               const next = new Set(selected);
               next.has(t) ? next.delete(t) : next.add(t);
               onChange({ ...group, damageTypes: DAMAGE_TYPES.filter((candidate) => next.has(candidate)) });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { effectiveAutomationSupport, getExecutableActions, type ActionDefinition, type CreatureDefinition } from "@/engine";
-import { spellAutomation, weaponAutomation } from "@/lib/sheet";
 import { findSrdSpell } from "@/data/srd";
 
 const baseSave: Extract<ActionDefinition, { kind: "save" }> = {
@@ -42,19 +41,29 @@ describe("effectiveAutomationSupport", () => {
   });
 });
 
-describe("lib/sheet automation helpers", () => {
-  it("weaponAutomation flags a note / custom on-hit rider", () => {
-    expect(weaponAutomation({ id: "w", name: "Sword", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d8", damageType: "slashing" }] })).toBe("full");
-    expect(weaponAutomation({
-      id: "w2", name: "Net", attackType: "ranged", ability: "dex", range: 5,
-      damage: [{ dice: "0", damageType: "bludgeoning" }],
-      onHit: [{ kind: "note", text: "restrained" }]
-    })).toBe("partial");
+describe("weapons and spells, as the engine compiles them", () => {
+  it("a weapon with a note on-hit rider is partly simulated; a plain one runs in full", () => {
+    const definition: CreatureDefinition = {
+      id: "d", name: "Netter", size: "medium", armorClass: 12, maxHp: 20, speed: 30,
+      abilities: { str: 10, dex: 12, con: 10, int: 10, wis: 10, cha: 10 },
+      actions: [],
+      weapons: [
+        { id: "sword", name: "Sword", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d8", damageType: "slashing" }] },
+        {
+          id: "net", name: "Net", attackType: "ranged", ability: "dex", range: 5,
+          damage: [{ dice: "0", damageType: "bludgeoning" }],
+          onHit: [{ kind: "note", text: "restrained" }]
+        }
+      ]
+    };
+    const actions = getExecutableActions(definition);
+    expect(actions.find((action) => action.name === "Sword")?.automationSupport).toBe("full");
+    expect(actions.find((action) => action.name === "Net")?.automationSupport).toBe("partial");
   });
 
-  it("spellAutomation downgrades Faerie Fire (note rider) and keeps Fireball full", () => {
-    expect(spellAutomation(findSrdSpell("srd:spell:faerie-fire")!)).toBe("partial");
-    expect(spellAutomation(findSrdSpell("srd:spell:fireball")!)).toBe("full");
-    expect(spellAutomation(findSrdSpell("srd:spell:counterspell")!)).toBe("full");
+  it("Faerie Fire's note rider makes it partly simulated; Fireball and Counterspell run in full", () => {
+    expect(effectiveAutomationSupport(findSrdSpell("srd:spell:faerie-fire")!.action!)).toBe("partial");
+    expect(effectiveAutomationSupport(findSrdSpell("srd:spell:fireball")!.action!)).toBe("full");
+    expect(effectiveAutomationSupport(findSrdSpell("srd:spell:counterspell")!.action!)).toBe("full");
   });
 });

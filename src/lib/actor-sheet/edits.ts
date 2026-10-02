@@ -29,15 +29,6 @@ export function withLevel(character: CreatureDefinition["character"], level: num
   };
 }
 
-/**
- * The character with its first class renamed, keeping that class's level, id, subclass and source, and every other
- * class. A creature with no class gets one, at `level`.
- */
-export function withClassName(character: CreatureDefinition["character"], name: string, level: number): Character {
-  const [first, ...others] = character?.classes ?? [];
-  return { ...character, classes: first ? [{ ...first, name }, ...others] : [{ name, level }] };
-}
-
 /** The character with these classes, its level their total. Without any, it keeps its level (a monster's caster level). */
 export function withClasses(character: CreatureDefinition["character"], classes: ClassEntry[]): Character {
   if (!classes.length) {
@@ -144,10 +135,15 @@ export function withProficienciesFollowing(
   return saves === after.saves && skills === after.skills ? after : { ...after, saves, skills };
 }
 
-/** A challenge rating, and the proficiency bonus it gives when the bonus was blank or what the old rating gave. */
+/**
+ * A challenge rating, and the proficiency bonus it gives when the bonus wasn't one of its own: blank, what the old rating
+ * gave, or, with no rating before, what its level gives (Create Token writes that for every creature).
+ */
 export function withChallengeRating(definition: CreatureDefinition, cr: number | undefined): Partial<CreatureDefinition> {
   const old = definition.challengeRating;
-  const followsRating = definition.proficiencyBonus === undefined || (old !== undefined && definition.proficiencyBonus === proficiencyForChallengeRating(old));
+  const bonus = definition.proficiencyBonus;
+  const followsRating = bonus === undefined
+    || bonus === (old !== undefined ? proficiencyForChallengeRating(old) : proficiencyFromDefinition(definition));
   return {
     challengeRating: cr,
     ...(cr !== undefined && followsRating ? { proficiencyBonus: proficiencyForChallengeRating(cr) } : {})

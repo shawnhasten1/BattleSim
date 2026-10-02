@@ -585,16 +585,8 @@
   gap: 5px;
 }
 
-.line .dieCount {
-  width: 46px;
-}
-
 .line .dieSize {
   width: 62px;
-}
-
-.line .flat {
-  width: 54px;
 }
 
 .line .expression {

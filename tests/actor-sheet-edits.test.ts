@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CreatureDefinition } from "@/engine";
-import { characterLevel, withClassName, withLevel } from "@/lib/actor-sheet/edits";
+import { characterLevel, withLevel } from "@/lib/actor-sheet/edits";
 import { useEncounterStore } from "@/store/encounter-store";
 
 const pristine = useEncounterStore.getState();
@@ -27,15 +27,6 @@ describe("level and class edits", () => {
     const multiclass = { level: 8, classes: [{ name: "Fighter", level: 5 }, { name: "Wizard", level: 3 }] };
     expect(withLevel(multiclass, 9)).toEqual({ ...multiclass, level: 9 });
     expect(withLevel(undefined, 9)).toEqual({ level: 9 });
-  });
-
-  it("rename the first class only, keeping everything else", () => {
-    const multiclass = { level: 8, classes: [{ id: "fighter", name: "Fighter", level: 5, subclass: { name: "Champion" } }, { name: "Wizard", level: 3 }] };
-    expect(withClassName(multiclass, "Knight", 8)).toEqual({
-      level: 8,
-      classes: [{ id: "fighter", name: "Knight", level: 5, subclass: { name: "Champion" } }, { name: "Wizard", level: 3 }]
-    });
-    expect(withClassName(undefined, "Bard", 4)).toEqual({ classes: [{ name: "Bard", level: 4 }] });
   });
 
   it("read the level from the character, its first class, or 1", () => {

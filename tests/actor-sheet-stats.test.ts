@@ -114,6 +114,10 @@ describe("level and challenge", () => {
     expect(withChallengeRating(knight, 9)).toEqual({ challengeRating: 9, proficiencyBonus: 4 });
     expect(withChallengeRating({ ...knight, proficiencyBonus: 5 }, 9)).toEqual({ challengeRating: 9 });
     expect(withChallengeRating({ ...knight, proficiencyBonus: undefined, challengeRating: undefined }, 0.25)).toEqual({ challengeRating: 0.25, proficiencyBonus: 2 });
+    // A new token from Create Token: no rating, and the +2 its level 1 gives, so a rating's bonus replaces it.
+    const fresh = { ...knight, challengeRating: undefined, proficiencyBonus: 2, character: undefined };
+    expect(withChallengeRating(fresh, 5)).toEqual({ challengeRating: 5, proficiencyBonus: 3 });
+    expect(withChallengeRating({ ...fresh, proficiencyBonus: 4 }, 5)).toEqual({ challengeRating: 5 });
   });
 
   it("classes total the level, keep what they carry, and leaving none keeps the level", () => {
