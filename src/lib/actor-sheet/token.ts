@@ -1,4 +1,4 @@
-import { getExecutableActions, type ActionDefinition, type CombatantState, type CreatureDefinition } from "@/engine";
+import { getExecutableActions, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
 
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 
@@ -34,6 +34,18 @@ export function imageSource(
   if (combatant.tokenVisuals?.imageUrl) return "token";
   if (definition.tokenVisuals?.imageUrl) return "creature";
   return undefined;
+}
+
+/**
+ * The tactics a new token of this creature starts with: the creature's default, or, without one, Basic ranged when it
+ * has a ranged or spell attack the simulator runs, and Basic melee otherwise.
+ */
+export function defaultTacticsOf(definition: CreatureDefinition): TacticsProfile {
+  if (definition.defaultTactics) return definition.defaultTactics;
+  const full = getExecutableActions(definition).filter((action) => action.automationSupport === "full");
+  return full.some((action) => action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell"))
+    ? "basic-ranged"
+    : "basic-melee";
 }
 
 /** Surprised: it loses its first turn (the condition `toggleCombatantSurprised` and the Combat panel set). */

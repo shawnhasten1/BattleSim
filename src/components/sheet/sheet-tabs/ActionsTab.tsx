@@ -24,7 +24,7 @@ import {
   blankTransform,
   blankWeapon
 } from "@/lib/ability-editor/templates";
-import { findAbility, refKey } from "@/lib/ability-editor/refs";
+import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
 import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
 import { AddAbility, type BlankKind } from "../abilities/AddAbility";
@@ -47,7 +47,13 @@ const MOVE_TYPES: Record<MoveTarget, ActionDefinition["actionType"]> = { actions
  * The Abilities tab: what the creature has, in statblock order (plan §3.1), with every resource it spends above (the
  * actor sheet plan's D5), and Add (§3.2). Every ability opens in the ability editor, in place of the list.
  */
-export function ActionsTab({ combatant, definition, compendium }: { combatant: CombatantState; definition: CreatureDefinition; compendium?: Compendium }) {
+export function ActionsTab({ combatant, definition, compendium, openFirst }: {
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  compendium?: Compendium;
+  /** An ability to open in the editor straight away (one the Token tab's What the AI will use named). */
+  openFirst?: AbilityRef;
+}) {
   const updateFeature = useEncounterStore((s) => s.updateFeature);
   const removeDefinitionItem = useEncounterStore((s) => s.removeDefinitionItem);
   const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
@@ -61,8 +67,9 @@ export function ActionsTab({ combatant, definition, compendium }: { combatant: C
   // A delete waiting on "Delete Claws?" because a multiattack or a legendary action uses it, and what they'd use instead.
   const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
   const [replacement, setReplacement] = useState("");
-  // The ability editor, open in place of the list.
-  const [abilityEditor, setAbilityEditor] = useState<SheetEditorTarget | null>(null);
+  // The ability editor, open in place of the list: on `openFirst`, when the creature has it.
+  const [abilityEditor, setAbilityEditor] = useState<SheetEditorTarget | null>(() =>
+    openFirst && openFirst.list !== "granted" && findAbility(definition, openFirst) ? { mode: "edit", ref: openFirst } : null);
   // The row the editor was on, focused when the list comes back (and highlighted, when it was saved).
   const [returnTo, setReturnTo] = useState<{ id: string; saved: boolean } | null>(null);
   // "Deleted Bite. Undo": the undo step the delete made, so Undo only ever undoes that.

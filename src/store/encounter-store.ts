@@ -81,7 +81,7 @@ import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryA
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
 import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
-import { isSurprised } from "@/lib/actor-sheet/token";
+import { defaultTacticsOf, isSurprised } from "@/lib/actor-sheet/token";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -279,6 +279,12 @@ interface EncounterStore {
   updateFactionTactics: (faction: CombatantState["faction"], tactics: CombatantState["tacticsProfile"]) => void;
   updateResourceStance: (combatantId: string, stance: CombatantState["resourceStance"]) => void;
   updateFactionResourceStance: (faction: CombatantState["faction"], stance: CombatantState["resourceStance"]) => void;
+  /**
+   * A creature's default tactics and spending (what its new tokens start with), given to every token of it in the scene
+   * too, in one undo step (the actor sheet's "Use these for every Knight"). Balanced is the default spending, so it's
+   * stored as no default.
+   */
+  setCreatureBehavior: (definitionId: string, behavior: { tactics: CombatantState["tacticsProfile"]; stance: CombatantState["resourceStance"] }) => void;
   /** Toggle the "surprised" condition on one combatant — denies its first turn, self-expires at round 2. */
   toggleCombatantSurprised: (combatantId: string) => void;
   /** Add/remove "surprised" across every combatant in a faction. */
@@ -537,14 +543,6 @@ function closeActionEconomy(combatant: CombatantState): void {
   combatant.actionEconomy = { ...current, action: false, bonus: false };
 }
 
-
-function defaultTacticsForDefinition(definition: CreatureDefinition): CombatantState["tacticsProfile"] {
-  if (definition.defaultTactics) return definition.defaultTactics;
-  const fullActions = getExecutableActions(definition).filter((action) => action.automationSupport === "full");
-  return fullActions.some((action) => action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell"))
-    ? "basic-ranged"
-    : "basic-melee";
-}
 
 function defaultResourcesForDefinition(definition: CreatureDefinition): Record<string, number> | undefined {
   if (!definition.resources || Object.keys(definition.resources).length === 0) {
@@ -2197,6 +2195,21 @@ export const useEncounterStore = create<EncounterStore>()(
           })
         });
       },
+      setCreatureBehavior: (definitionId, { tactics, stance }) => {
+        const encounter = get().encounter;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => {
+            if (definition.id !== definitionId) return definition;
+            const { defaultResourceStance: _dropped, ...rest } = definition;
+            return { ...rest, defaultTactics: tactics, ...(stance === "balanced" ? {} : { defaultResourceStance: stance }) };
+          }),
+          // The tokens showing this creature: those in its form now, as the sheet counts them.
+          combatants: encounter.combatants.map((combatant) => (combatant.activeForm?.definitionId ?? combatant.definitionId) === definitionId
+            ? { ...combatant, tacticsProfile: tactics, resourceStance: stance }
+            : combatant)
+        });
+      },
       updateTags: (combatantId, tags) => {
         const encounter = get().encounter;
         commitEncounter({
@@ -2429,7 +2442,7 @@ export const useEncounterStore = create<EncounterStore>()(
           tempHp: 0,
           resources: defaultResourcesForDefinition(definition),
           state: "active" as const,
-          tacticsProfile: defaultTacticsForDefinition(definition),
+          tacticsProfile: defaultTacticsOf(definition),
           ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
           resourceStance: definition.defaultResourceStance ?? ("balanced" as const)
         };
@@ -2470,7 +2483,7 @@ export const useEncounterStore = create<EncounterStore>()(
             tempHp: 0,
             resources: defaultResourcesForDefinition(definition),
             state: "active",
-            tacticsProfile: defaultTacticsForDefinition(definition),
+            tacticsProfile: defaultTacticsOf(definition),
             ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
             resourceStance: definition.defaultResourceStance ?? "balanced"
           });
@@ -2507,8 +2520,8 @@ export const useEncounterStore = create<EncounterStore>()(
           resources: importedResources ?? defaultResourcesForDefinition(definition),
           tokenVisuals: imported?.tokenVisuals ? structuredClone(imported.tokenVisuals) : undefined,
           state: imported?.state ?? "active",
-          tacticsProfile: imported?.tacticsProfile ?? defaultTacticsForDefinition(definition),
-          resourceStance: imported?.resourceStance ?? "balanced"
+          tacticsProfile: imported?.tacticsProfile ?? defaultTacticsOf(definition),
+          resourceStance: imported?.resourceStance ?? definition.defaultResourceStance ?? "balanced"
         };
         commitEncounter({
           ...encounter,

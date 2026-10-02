@@ -1,7 +1,7 @@
 "use client";
 
 import { ImagePlus } from "lucide-react";
-import { useId, useState, type ChangeEvent, type ReactNode } from "react";
+import { useId, useState, type ChangeEvent } from "react";
 import { DEFAULT_GRID_VISUALS, sizeFootprint, type CombatantState, type CreatureDefinition } from "@/engine";
 import { MAX_ELEVATION_FT, useEncounterStore } from "@/store/encounter-store";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -12,6 +12,7 @@ import { tokenVisualsFor } from "@/lib/ui-helpers";
 import { Segmented } from "../ability-editor/controls";
 import { SheetColor, SheetNumber } from "../SheetInputs";
 import { SheetSection } from "../SheetSection";
+import { Row } from "./Row";
 import styles from "../sheet.module.css";
 
 interface SectionProps {
@@ -19,19 +20,6 @@ interface SectionProps {
   definition: CreatureDefinition;
   open: boolean;
   onToggle: () => void;
-}
-
-/** A row of This fight: its name (labelling `htmlFor`, when it's one control) beside its controls. */
-function Row({ label, htmlFor, help, children }: { label: string; htmlFor?: string; help?: ReactNode; children: ReactNode }) {
-  return (
-    <>
-      <span className={styles.rowLabel}>
-        {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : label}
-        {help ? <InfoTooltip label={`About ${label.toLowerCase()}`} content={help} /> : null}
-      </span>
-      <div className={styles.rowBody}>{children}</div>
-    </>
-  );
 }
 
 const BEFORE_ONLY = "Set before the fight starts: restart it from the Combat panel to change this.";

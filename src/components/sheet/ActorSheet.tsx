@@ -7,6 +7,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import type { CompendiumDragPayload } from "@/lib/compendium";
 import { creatureScope, libraryStatus } from "@/lib/actor-sheet/scope";
 import { readJson, writeJson } from "@/lib/persist";
+import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
@@ -50,6 +51,8 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   const [tab, setTabState] = useState<SheetTabId>(storedTab);
   const [dropActive, setDropActive] = useState(false);
   const [toast, setToast] = useState<SheetToast | null>(null);
+  // An ability the Token tab asked to open: the Abilities tab opens it in the editor as it mounts.
+  const [openFirst, setOpenFirst] = useState<AbilityRef | null>(null);
 
   // The open editor's guard, and whether it has unsaved changes (state, so the sheet re-renders to pin itself).
   const guardRef = useRef<EditorGuard | null>(null);
@@ -73,6 +76,10 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
     if (compendium.status && compendium.status !== shownStatus.current) setToast({ message: compendium.status });
     shownStatus.current = compendium.status;
   }, [compendium.status]);
+  // Taken once the Abilities tab has opened it: it mustn't open again, nor on another creature.
+  useEffect(() => {
+    if (tab === "abilities" && openFirst) setOpenFirst(null);
+  }, [tab, openFirst]);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 8000);
@@ -194,8 +201,15 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       <SheetGuardContext.Provider value={registry}>
         {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} /> : null}
         {/* Keyed by creature: an ability being edited must not carry over to another creature when the selection changes. */}
-        {tab === "abilities" ? <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} /> : null}
-        {tab === "token" ? <TokenTab combatant={combatant} definition={definition} /> : null}
+        {tab === "abilities" ? (
+          <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
+        ) : null}
+        {tab === "token" ? (
+          <TokenTab
+            combatant={combatant} definition={definition}
+            onOpenAbility={(ref) => attempt(() => { setOpenFirst(ref); setTab("abilities"); })}
+          />
+        ) : null}
       </SheetGuardContext.Provider>
       {toast ? (
         // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.

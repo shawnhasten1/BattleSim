@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CombatantState, CreatureDefinition, Faction } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { readJson, writeJson } from "@/lib/persist";
+import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { Segmented } from "../ability-editor/controls";
 import { SheetText } from "../SheetInputs";
 import { TacticsSection } from "../token/TacticsSection";
@@ -23,7 +24,12 @@ const FACTIONS: Array<{ value: Faction; label: string }> = [
  * tactics, how it looks, and its state and square. Its HP and conditions are in the vitals strip above the tabs, and
  * what's left of its resources is in Abilities' resource list.
  */
-export function TokenTab({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
+export function TokenTab({ combatant, definition, onOpenAbility }: {
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  /** Opens an ability (from What the AI will use) in the Abilities tab's editor. */
+  onOpenAbility: (ref: AbilityRef) => void;
+}) {
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
   const [open, setOpen] = useState<string[]>(() => readJson<string[]>(OPEN_KEY, OPEN_FIRST));
   const toggle = (id: string) => () => {
@@ -47,7 +53,9 @@ export function TokenTab({ combatant, definition }: { combatant: CombatantState;
         </div>
       </div>
       <FightSection combatant={combatant} definition={definition} open={open.includes("fight")} onToggle={toggle("fight")} />
-      <TacticsSection combatant={combatant} open={open.includes("tactics")} onToggle={toggle("tactics")} />
+      <TacticsSection
+        combatant={combatant} definition={definition} open={open.includes("tactics")} onToggle={toggle("tactics")} onOpenAbility={onOpenAbility}
+      />
       {/* Keyed by token: which image scope is picked is this token's, not the last one's. */}
       <AppearanceSection key={combatant.id} combatant={combatant} definition={definition} open={open.includes("appearance")} onToggle={toggle("appearance")} />
       <StatusSection combatant={combatant} open={open.includes("status")} onToggle={toggle("status")} />
