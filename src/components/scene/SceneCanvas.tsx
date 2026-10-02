@@ -1,7 +1,7 @@
 "use client";
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
-import { type CSSProperties, type DragEvent, useMemo, useState } from "react";
+import { type CSSProperties, type DragEvent, useEffect, useMemo, useState } from "react";
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
 import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
@@ -14,6 +14,7 @@ import { SceneOverlays } from "@/components/scene/SceneOverlays";
 import { TokenHealthBar } from "@/components/scene/TokenHealthBar";
 import { SceneFeedbackLayer } from "@/components/scene/SceneFeedbackLayer";
 import { ElevationLegend, ElevationPalette } from "@/components/scene/ElevationPalette";
+import { alignedMap, GridAlignLayer, GridAlignPanel } from "@/components/scene/GridAlign";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { UseViewportResult } from "@/hooks/useViewport";
@@ -106,7 +107,16 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   }
   const { floaties, areaFlashes } = useSceneFeedback(encounter);
 
-  const metrics = useMemo(() => deriveSceneMetrics(map), [map]);
+  // Align grid: while a draft is open for this scene, the image is drawn at the draft pin.
+  const gridAlign = useEncounterStore((state) => state.gridAlign);
+  const cancelGridAlign = useEncounterStore((state) => state.cancelGridAlign);
+  const encounterId = useEncounterStore((state) => state.encounter.id);
+  const aligning = gridAlign && gridAlign.encounterId === encounterId && !replaying ? gridAlign : null;
+  useEffect(() => {
+    if (gridAlign && gridAlign.encounterId !== encounterId) cancelGridAlign();
+  }, [gridAlign, encounterId, cancelGridAlign]);
+
+  const metrics = useMemo(() => deriveSceneMetrics(aligning ? alignedMap(map, aligning) : map), [map, aligning]);
   const cellSize = metrics.cellSize;
   const { tool, pendingWallStart } = scene;
   // Tokens tween between cells only while replay is scrubbing/playing; editing
@@ -478,7 +488,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
       <div className="scene-hud">
         <div>
           <span>Tool</span>
-          <strong>{tool === "wall" && pendingWallStart ? "wall endpoint" : tool}</strong>
+          <strong>{aligning ? "align grid" : tool === "wall" && pendingWallStart ? "wall endpoint" : tool}</strong>
         </div>
         <div>
           <span>Scene</span>
@@ -503,7 +513,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         }}
       >
       <div
-        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""} ${tool === "elevation" && !replaying ? "tool-elevation" : ""}`}
+        className={`battlemap scene-canvas ${tool === "select" && !replaying ? "tool-select" : ""} ${tool === "elevation" && !replaying ? "tool-elevation" : ""} ${aligning ? "aligning" : ""}`}
         style={{
           width: metrics.scenePixelWidth,
           height: metrics.scenePixelHeight,
@@ -561,7 +571,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
             backgroundSize: `${metrics.cellSize}px ${metrics.cellSize}px`,
             borderColor: metrics.gridLineColor,
             borderWidth: metrics.gridLineWidth,
-            opacity: showGrid ? metrics.gridLineOpacity : 0
+            // Align grid draws its own, brighter grid.
+            opacity: showGrid && !aligning ? metrics.gridLineOpacity : 0
           }}
         />
         <SceneOverlays
@@ -662,10 +673,26 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         ) : null}
 
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
+
+        {aligning ? (
+          <GridAlignLayer
+            draft={aligning}
+            cellSize={cellSize}
+            gridPixelWidth={metrics.gridPixelWidth}
+            gridPixelHeight={metrics.gridPixelHeight}
+            panning={viewport.spacePanning || viewport.isPanning}
+          />
+        ) : null}
       </div>
       </div>
 
-      {tool === "elevation" && !replaying ? <ElevationPalette /> : showElevation ? <ElevationLegendCorner /> : null}
+      {aligning ? (
+        <GridAlignPanel draft={aligning} />
+      ) : tool === "elevation" && !replaying ? (
+        <ElevationPalette />
+      ) : showElevation ? (
+        <ElevationLegendCorner />
+      ) : null}
 
       {scene.wallMenu && !replaying ? (
         <ContextMenu

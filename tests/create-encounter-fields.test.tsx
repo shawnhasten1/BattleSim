@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateEncounterModal, type CreateEncounterResult } from "@/components/modals/CreateEncounterModal";
@@ -18,7 +18,7 @@ const USUAL_KEY = "battlesim:map-import:px-per-square";
 beforeEach(() => {
   try { localStorage.clear(); } catch { /* private mode */ }
 });
-afterEach(() => { document.body.innerHTML = ""; });
+afterEach(() => cleanup());
 
 function renderModal() {
   const onSubmit = vi.fn<(result: CreateEncounterResult) => void>();

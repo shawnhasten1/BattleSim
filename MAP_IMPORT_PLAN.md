@@ -1,7 +1,8 @@
 # Map Import Plan: the grid comes from the image
 
-**Status:** On branch `map-import`: Phase 1 committed 2026-10-02 (c979451), Phase 2 committed
-2026-10-02. Phase 3 (Align grid) is next. Decided 2026-10-02:
+**Status:** On branch `map-import` (not merged into master): Phase 1 committed 2026-10-02
+(c979451), Phase 2 committed 2026-10-02 (f31ab8e), Phase 3 committed 2026-10-02. Only Phase 4's
+optional extras remain. Decided 2026-10-02:
 
 - D1: assume 100 px per square, then remember the last size you confirm.
 - D2: when an image's size fits more than one grid, apply the best guess and show the others
@@ -241,12 +242,15 @@ imported map's own fields.
     px per square and origin).
   - **Align grid…** (Phase 3) and Opacity.
   - Scene W/H and Image X/Y/scale are hidden.
-- **Image, unpinned:** "Not pinned to the grid", the readings (or the question), then **Pin image
-  to grid, where it is now**, then today's fields.
-  - Pin converts today's Scene W/H, X/Y and scale into px per square and an origin. The image
+- **Image, unpinned:** "Not pinned to the grid", the readings (or the question), **Align grid…**,
+  **Pin image to grid, where it is now**, and Opacity.
+  - Pin converts the old Scene W/H, X/Y and scale into px per square and an origin. The image
     stays exactly where it is, and later square-size changes can't move it.
   - The conversion is one pure function with tests. If Scene W/H had cropped the image
     (`object-fit: cover`), the cropped edge becomes visible.
+  - Since Phase 3 the Image X/Y/scale fields are gone: Pin and Align grid replace them. A map
+    still drawn with an old offset keeps it until it's pinned.
+- **No image:** Scene W/H stay, under Canvas.
 
 ---
 
@@ -318,7 +322,7 @@ Each phase ships on its own and keeps the tests green.
 
 ### Phase 2 — Uploading sets the grid
 
-> **✅ Implemented 2026-10-02**, committed.
+> **✅ Implemented 2026-10-02**, committed (f31ab8e).
 >
 > Built:
 >
@@ -424,6 +428,97 @@ Each phase ships on its own and keeps the tests green.
   square size.
 
 ### Phase 3 — Align grid
+
+> **✅ Implemented 2026-10-02**, committed. The stretch goal, finding a drawn grid, is built too.
+>
+> Built:
+>
+> - **`src/lib/gridAlign.ts`** (pure):
+>   - `pinFromBox`: square cells from both sides at once, the longer side counting for more.
+>   - `normalizeOrigin`: a line a hair short of a whole square counts as the image's edge, so a
+>     map whose grid starts at its edge keeps its first column.
+>   - `defaultBoxCounts`, `nudgePin` and `resizePin`.
+>   - `findDrawnGrid` (see Find the drawn grid below).
+> - **The store:** a `gridAlign` draft (not saved, not undoable) with `startGridAlign`,
+>   `updateGridAlign`, `applyGridAlign` and `cancelGridAlign`.
+>   - Starting from an unpinned image uses `pinInPlace`, so nothing jumps.
+>   - Apply is one undo step.
+>   - A draft left from another scene is ignored and cleared.
+> - **`GridAlignLayer`** (`src/components/scene/GridAlign.tsx`), over the scene:
+>   - A bright copy of the grid, and the box.
+>   - The box is kept in the image's own pixels, so it moves with the image and lands on the
+>     grid once the two line up.
+>   - Drag for a box, or click two corners. Middle-drag and Space+drag still pan.
+>   - The scene's tools never see these presses: a wall tool click while aligning draws no wall.
+>   - Tokens fade and stop taking clicks.
+> - **`GridAlignPanel`**, at the bottom of the stage:
+>   - Find the drawn grid.
+>   - The box's squares, as steppers.
+>   - Image px per square: typed, or + and −.
+>   - Buttons to move the image.
+>   - Fit columns and rows, then Cancel and Apply.
+>   - Keys: arrows move the image (Shift: 10 px), + and − change px per square by 0.1, Enter
+>     applies, Escape cancels.
+> - **Scene Config:** Align grid… in the pinned and unpinned image sections. The Image X/Y/scale
+>   fields and Reset image transform are gone. Scene W/H stay for maps with no image.
+>
+> Decided while building it:
+>
+> - **No confirm dialog on Apply.** The panel has a Fit columns and rows checkbox, on by
+>   default only when nothing is placed.
+> - **A new box spans 1 × 1** (the usual way to box a grid), or 1 × 0 for two corners on one
+>   line. The steppers fix it, and changing them re-reads the box.
+> - **The origin is the middle of the drawn line**, so the grid line runs through it.
+>
+> Find the drawn grid:
+>
+> - It reads the stored copy's pixels (`readImageLuma`) and scales to the file's own size.
+> - Each column's and row's ridge strength (how much it differs from 3 px either side) makes a
+>   profile, with the art's slow changes taken out.
+> - Autocorrelation gives the spacing to a pixel, and a comb across the whole image gets closer.
+> - A weighted least-squares fit through every line's own position makes it exact. Lines with
+>   art over them weigh less; lines at the image's edge, whose ridge is cut short, are left out.
+> - It gives up when the lines don't stand out from the art (contrast below 3).
+> - On 2048 px test images it read 51.2, 68.27, 64, 37.5 and 100 px per square to within 0.005,
+>   with the origin within about 0.05 px, in 110–180 ms.
+>
+> Found and fixed on the way:
+>
+> - **The px box lagged one step behind the steppers.** It synced through an effect. It now
+>   shows the live value unless you're typing in it.
+> - **Two component-test files cleared the page instead of unmounting.** Mounted panels' window
+>   key listeners piled up across tests (one arrow press moved the image 5 px). Both now use
+>   `cleanup()`.
+>
+> Tests:
+>
+> - `tests/grid-align.test.ts`, 17:
+>   - the box and two-point maths, and the origin rule.
+>   - the default counts, nudging and resizing.
+>   - the finder on a fractional spacing, thick lines at the edge, lines on one side only, art
+>     with no grid, and an image too small.
+> - `tests/grid-align-panel.test.tsx`, 11 (happy-dom):
+>   - starting with no image, a pinned image, an unpinned one (nothing moves), and a stale draft.
+>   - Apply in one undo step with the grid fitted; Cancel leaving the map identical.
+>   - no fit by default under walls.
+>   - the keys, Enter, and re-reading a box.
+>   - Find on a stored copy half the file's size.
+>
+> The full suite passes: 143 files, 1,757 tests.
+>
+> Browser (Playwright with the seeded login, 18 checks, all passed). The test image was a
+> 2048 × 1536 map with a grid drawn every 51.2 px behind a 37 px border, among art:
+>
+> - **The New Encounter modal asked**, since its size can't be read, and the map went in unpinned.
+>   Scene Config offered Align grid and no longer had Image X or scale.
+> - **Find the drawn grid** read 51.2 px. Apply pinned it at 51.195 px from 37.1, 37.1, and every
+>   drawn line sat within 0.09 screen px of a grid line. The grid was fitted to 40 × 30.
+> - **A hand-drawn box over 3 × 3 squares**, with the steppers set to 3 and 3, read 51.33. The
+>   arrow keys moved the image, and Escape left the map unpinned.
+> - **With the wall tool selected,** two clicks made a box, not a wall, and Enter applied.
+> - **A pinned map** offered Align grid too, and Find re-aligned it to within 0.09 screen px.
+>
+> No page errors, apart from the map-image Blob sync's 500s (no `BLOB_READ_WRITE_TOKEN` locally).
 
 For images that aren't VTT exports: purchased maps, plain 2K/4K exports, maps with a border. It's
 also AGENTS.md §4's "matching two known grid points".

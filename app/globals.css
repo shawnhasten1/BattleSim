@@ -358,6 +358,14 @@ img {
   z-index: 7;
 }
 
+/* Align grid (GridAlign.tsx): tokens step back so the image's own grid shows through. */
+.battlemap.scene-canvas.aligning .token,
+.battlemap.scene-canvas.aligning .token-shadow,
+.battlemap.scene-canvas.aligning .token-overlay-layer {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
 /* Under-token health bar (see SCENE_FEEDBACK_PLAN.md, Phase A). Geometry mirrors
    battlesim-ui-shell.html: a thin strip pinned just below the token disc. It is
    positioned absolutely in battlemap space (left/top/width set inline) since it

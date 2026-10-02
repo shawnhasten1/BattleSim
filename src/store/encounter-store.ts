@@ -89,6 +89,7 @@ import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
 import { downscaleDataUrl, getImageDimensions, type ImagePixelSize, type MapImageFile } from "@/lib/imageResize";
 import { detectGrid, imageFitSize, pinInPlace, readUsualPxPerSquare, squaresInBounds, squaresToCover, type GridFit } from "@/lib/gridInference";
+import type { AlignPin, SourcePoint } from "@/lib/gridAlign";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
@@ -102,6 +103,17 @@ export type ElevationMode = "set" | "raise" | "lower" | "ramp" | "flatten";
 export const ELEVATION_STEP_FT = 5;
 /** The tallest ground the editor will paint; airborne creatures are separate (altitude). */
 export const MAX_ELEVATION_FT = 500;
+
+/** A background being aligned with Align grid: a pin in progress, in the image's own pixels. */
+export interface GridAlignDraft extends AlignPin {
+  /** The scene being aligned; a draft left over from another scene is ignored. */
+  encounterId: string;
+  /** The size the pin is measured against (`imageFitSize`). */
+  sourceWidthPx: number;
+  sourceHeightPx: number;
+  /** The last box drawn, in source px, and how many squares it spans. */
+  box?: { a: SourcePoint; b: SourcePoint; across: number; down: number };
+}
 
 /** Grid + optional background for a brand-new (non-clone) map, chosen up front in the create-encounter flow. */
 export interface NewMapOptions {
@@ -159,6 +171,14 @@ interface EncounterStore {
   redoStack: EncounterSnapshot[];
   tool: EditorTool;
   pendingWallStart: Point | null;
+  /** Align grid: the pin being lined up on the canvas, until applied or cancelled. Never saved. */
+  gridAlign: GridAlignDraft | null;
+  /** Start Align grid on the background, from its pin (or from where an unpinned one is drawn now). */
+  startGridAlign: () => void;
+  updateGridAlign: (patch: Partial<Pick<GridAlignDraft, "pxPerSquare" | "originX" | "originY" | "box">>) => void;
+  /** Pin the background at the aligned values, in one undo step; `fitGrid` also sizes the grid to cover it. */
+  applyGridAlign: (fitGrid: boolean) => void;
+  cancelGridAlign: () => void;
   setTool: (tool: EditorTool) => void;
   handleMapClick: (point: Point) => void;
   rollInitiativeNow: () => void;
@@ -736,7 +756,15 @@ export function shouldWarnBeforeReplacingImage(encounter: EncounterSnapshot, dim
   return Math.abs(prevRatio - newRatio) / prevRatio > 0.02;
 }
 
-function hasPlacedContent(encounter: EncounterSnapshot): boolean {
+/** The map's canvas box, with the default `deriveSceneMetrics` falls back to. */
+function canvasOf(map: EncounterSnapshot["map"]): { widthPx: number; heightPx: number } {
+  return map.canvas ?? {
+    widthPx: map.grid.width * DEFAULT_GRID_VISUALS.squareSizePx,
+    heightPx: map.grid.height * DEFAULT_GRID_VISUALS.squareSizePx
+  };
+}
+
+export function hasPlacedContent(encounter: EncounterSnapshot): boolean {
   const map = encounter.map;
   return map.walls.length > 0 || map.terrain.length > 0 || encounter.combatants.length > 0;
 }
@@ -979,6 +1007,7 @@ export const useEncounterStore = create<EncounterStore>()(
       redoStack: [],
       tool: "select",
       pendingWallStart: null,
+      gridAlign: null,
       wallCoverDraft: "total",
       setWallCoverDraft: (cover) => set({ wallCoverDraft: cover }),
       terrainBrush: "difficult",
@@ -2200,16 +2229,48 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       pinMapImageInPlace: () => {
         const encounter = get().encounter;
-        const { grid } = encounter.map;
         const image = { ...DEFAULT_MAP_IMAGE_SETTINGS, ...encounter.map.image };
-        const canvas = encounter.map.canvas ?? {
-          widthPx: grid.width * DEFAULT_GRID_VISUALS.squareSizePx,
-          heightPx: grid.height * DEFAULT_GRID_VISUALS.squareSizePx
-        };
-        const pin = pinInPlace(image, canvas, grid.squareSizePx || DEFAULT_GRID_VISUALS.squareSizePx);
+        const pin = pinInPlace(image, canvasOf(encounter.map), encounter.map.grid.squareSizePx || DEFAULT_GRID_VISUALS.squareSizePx);
         if (!pin) return;
         commitEncounter({ ...encounter, map: { ...encounter.map, image: { ...image, ...pin } } });
       },
+      startGridAlign: () => {
+        const { encounter, mapImageDataUrl } = get();
+        if (!mapImageDataUrl) return;
+        const image = { ...DEFAULT_MAP_IMAGE_SETTINGS, ...encounter.map.image };
+        const size = imageFitSize(image);
+        // From the pin, or from where an unpinned image is drawn now, so nothing jumps.
+        const pin = image.pxPerSquare && size
+          ? { sourceWidthPx: size.widthPx, sourceHeightPx: size.heightPx, pxPerSquare: image.pxPerSquare, originX: image.originX ?? 0, originY: image.originY ?? 0 }
+          : pinInPlace(image, canvasOf(encounter.map), encounter.map.grid.squareSizePx || DEFAULT_GRID_VISUALS.squareSizePx);
+        if (!pin) return;
+        set({ gridAlign: { encounterId: encounter.id, ...pin } });
+      },
+      updateGridAlign: (patch) => {
+        const draft = get().gridAlign;
+        if (draft) set({ gridAlign: { ...draft, ...patch } });
+      },
+      applyGridAlign: (fitGrid) => {
+        const { gridAlign: draft, encounter } = get();
+        if (!draft || draft.encounterId !== encounter.id) {
+          set({ gridAlign: null });
+          return;
+        }
+        const covered = {
+          width: squaresToCover(draft.sourceWidthPx - draft.originX, draft.pxPerSquare),
+          height: squaresToCover(draft.sourceHeightPx - draft.originY, draft.pxPerSquare)
+        };
+        const { box: _box, encounterId: _encounterId, ...pin } = draft;
+        commitEncounter({
+          ...encounter,
+          map: {
+            ...encounter.map,
+            grid: fitGrid && squaresInBounds({ columns: covered.width, rows: covered.height }) ? { ...encounter.map.grid, ...covered } : encounter.map.grid,
+            image: { ...DEFAULT_MAP_IMAGE_SETTINGS, ...encounter.map.image, ...pin }
+          }
+        }, { gridAlign: null });
+      },
+      cancelGridAlign: () => set({ gridAlign: null }),
       updateGrid: (updates) => {
         const encounter = get().encounter;
         commitEncounter({

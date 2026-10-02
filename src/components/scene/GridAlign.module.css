@@ -1,0 +1,175 @@
+/* Align grid: the layer over the scene, and its floating panel. */
+
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* A bright copy of the grid, so the image's own grid lines can be matched against it. */
+.lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(0, 214, 255, 0.85) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 214, 255, 0.85) 1px, transparent 1px);
+  box-shadow: inset -1px -1px 0 rgba(0, 214, 255, 0.85);
+}
+
+.marks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.box {
+  fill: rgba(255, 196, 0, 0.14);
+  stroke: #ffc400;
+  stroke-width: 2;
+}
+
+.corner {
+  fill: #ffc400;
+  stroke: #1a1206;
+  stroke-width: 1;
+}
+
+.panel {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 12;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(520px, calc(100% - 28px));
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  font-size: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header strong {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.header span,
+.hint {
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
+.hint {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stepper output {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.stepper button,
+.nudges button,
+.actions button,
+.find {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.stepper button:hover,
+.nudges button:hover,
+.actions button:hover,
+.find:hover {
+  border-color: var(--ui-accent);
+}
+
+.stepper button:disabled,
+.find:disabled {
+  color: var(--ui-text-dim);
+  cursor: default;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field input {
+  width: 76px;
+  padding: 4px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+}
+
+.nudges {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.check input {
+  accent-color: var(--ui-accent);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.actions .apply {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: #1a1206;
+  font-weight: 700;
+}

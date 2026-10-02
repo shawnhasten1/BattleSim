@@ -2,7 +2,6 @@
 
 import { ImagePlus } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
-import { DEFAULT_MAP_IMAGE_SETTINGS } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { detectGrid, gridForPxPerSquare, imageFitSize, readUsualPxPerSquare, squaresInBounds, type GridFit, type GridGuess } from "@/lib/gridInference";
@@ -29,7 +28,14 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
   const updateMapCanvas = useEncounterStore((s) => s.updateMapCanvas);
   const updateMapPadding = useEncounterStore((s) => s.updateMapPadding);
   const updateMapImageSettings = useEncounterStore((s) => s.updateMapImageSettings);
+  const startGridAlign = useEncounterStore((s) => s.startGridAlign);
   const [imageStatus, setImageStatus] = useState<string | null>(null);
+
+  /** Align grid happens on the map itself, so the modal gets out of the way. */
+  function alignGrid() {
+    startGridAlign();
+    onClose();
+  }
 
   const grid = encounter.map.grid;
   const { cellSize, gridLineWidth, gridLineColor, gridLineOpacity, canvasSettings, imageSettings, paddingPx, imageBox } = deriveSceneMetrics(encounter.map);
@@ -82,7 +88,7 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
           </label>
         </div>
 
-        {imageBox.pinned && fitSize && imageSettings.pxPerSquare ? (
+        {mapImageDataUrl && imageBox.pinned && fitSize && imageSettings.pxPerSquare ? (
           <PinnedImageFields
             size={fitSize}
             pxPerSquare={imageSettings.pxPerSquare}
@@ -91,41 +97,37 @@ export function SceneConfigModal({ onClose }: { onClose: () => void }) {
             opacity={imageSettings.opacity}
             onPick={applyImageFit}
             onFitGrid={fitGridToImage}
+            onAlign={alignGrid}
             onOpacity={(opacity) => updateMapImageSettings({ opacity })}
           />
+        ) : mapImageDataUrl ? (
+          <>
+            <h4>Image{fitSize ? ` · ${fitSize.widthPx} × ${fitSize.heightPx} px` : ""}</h4>
+            <p className={styles.status}>
+              Not pinned to the grid: it&apos;s placed in screen pixels, so changing the square size moves it off the grid.
+            </p>
+            {fitSize ? (
+              <UnpinnedFitPicker size={fitSize} columns={grid.width} distancePerSquare={grid.distancePerSquare} onPick={applyImageFit} />
+            ) : null}
+            <p className={styles.status}>A map with its own grid drawn on, or a border? Line that grid up on the map.</p>
+            <button type="button" className={styles.secondary} onClick={alignGrid}>
+              Align grid…
+            </button>
+            <p className={styles.status}>Lined it up by hand? This keeps it exactly where it is.</p>
+            <button type="button" className={styles.secondary} onClick={pinMapImageInPlace}>
+              Pin image to grid, where it is now
+            </button>
+            <div className={styles.grid3}>
+              <label className={styles.field}>Opacity<input type="number" value={imageSettings.opacity} min={0} max={1} step={0.05} onChange={(e) => updateMapImageSettings({ opacity: Number(e.target.value) })} /></label>
+            </div>
+          </>
         ) : (
           <>
-            {mapImageDataUrl ? (
-              <>
-                <h4>Image{fitSize ? ` · ${fitSize.widthPx} × ${fitSize.heightPx} px` : ""}</h4>
-                <p className={styles.status}>
-                  Not pinned to the grid: it&apos;s placed in screen pixels, so changing the square size moves it off the grid.
-                </p>
-                {fitSize ? (
-                  <UnpinnedFitPicker size={fitSize} columns={grid.width} distancePerSquare={grid.distancePerSquare} onPick={applyImageFit} />
-                ) : null}
-                <p className={styles.status}>Lined it up by hand? This keeps it exactly where it is.</p>
-                <button type="button" className={styles.secondary} onClick={pinMapImageInPlace}>
-                  Pin image to grid, where it is now
-                </button>
-              </>
-            ) : null}
-
-            <h4>Canvas & image</h4>
+            <h4>Canvas</h4>
             <div className={styles.grid3}>
               <label className={styles.field}>Scene W<input type="number" value={Math.round(canvasSettings.widthPx)} min={120} max={8000} onChange={(e) => updateMapCanvas({ widthPx: Number(e.target.value) })} /></label>
               <label className={styles.field}>Scene H<input type="number" value={Math.round(canvasSettings.heightPx)} min={120} max={8000} onChange={(e) => updateMapCanvas({ heightPx: Number(e.target.value) })} /></label>
-              <label className={styles.field}>Opacity<input type="number" value={imageSettings.opacity} min={0} max={1} step={0.05} onChange={(e) => updateMapImageSettings({ opacity: Number(e.target.value) })} /></label>
-              <label className={styles.field}>Image X<input type="number" value={imageSettings.offsetX} min={-1000} max={1000} onChange={(e) => updateMapImageSettings({ offsetX: Number(e.target.value) })} /></label>
-              <label className={styles.field}>Image Y<input type="number" value={imageSettings.offsetY} min={-1000} max={1000} onChange={(e) => updateMapImageSettings({ offsetY: Number(e.target.value) })} /></label>
-              <label className={`${styles.field} ${styles.wide}`}>
-                Image scale {Math.round(imageSettings.scale)}%
-                <input type="range" value={imageSettings.scale} min={25} max={400} step={1} onChange={(e) => updateMapImageSettings({ scale: Number(e.target.value) })} />
-              </label>
             </div>
-            <button type="button" className={styles.secondary} onClick={() => updateMapImageSettings(DEFAULT_MAP_IMAGE_SETTINGS)}>
-              Reset image transform
-            </button>
           </>
         )}
       </div>
@@ -141,15 +143,17 @@ interface PinnedImageFieldsProps {
   opacity: number;
   onPick: (fit: GridFit) => void;
   onFitGrid: () => void;
+  onAlign: () => void;
   onOpacity: (opacity: number) => void;
 }
 
 /**
  * A pinned background: the grid it was read as, the other readings a click
- * away, and, when the grid no longer covers it square for square, Fit grid to
- * image. Its place is set by its px per square, so there's no X/Y/scale.
+ * away, Fit grid to image when the grid no longer covers it square for square,
+ * and Align grid to fine-tune it. Its place is set by its px per square, so
+ * there's no X/Y/scale.
  */
-function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, onFitGrid, onOpacity }: PinnedImageFieldsProps) {
+function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, onFitGrid, onAlign, onOpacity }: PinnedImageFieldsProps) {
   // The squares the image covers from the grid's corner, at its px per square.
   const covered = gridForPxPerSquare({ widthPx: size.widthPx - origin.x, heightPx: size.heightPx - origin.y }, pxPerSquare);
   const options = readingsOf(size).filter((reading) => !sameSquares(reading, covered));
@@ -170,6 +174,9 @@ function PinnedImageFields({ size, pxPerSquare, origin, grid, opacity, onPick, o
           Fit grid to image: {covered.columns} × {covered.rows} squares (now {grid.columns} × {grid.rows})
         </button>
       ) : null}
+      <button type="button" className={styles.secondary} onClick={onAlign}>
+        Align grid…
+      </button>
       <div className={styles.grid3}>
         <label className={styles.field}>Opacity<input type="number" value={opacity} min={0} max={1} step={0.05} onChange={(e) => onOpacity(Number(e.target.value))} /></label>
       </div>

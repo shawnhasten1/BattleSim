@@ -117,6 +117,31 @@ function readAsDataUrl(file: Blob): Promise<string | null> {
   });
 }
 
+/**
+ * An image's luma (0–255, row by row) at its own size, for finding a grid
+ * drawn on it. Null if it can't be decoded or read back.
+ */
+export async function readImageLuma(src: string): Promise<{ luma: Float32Array; width: number; height: number } | null> {
+  if (typeof document === "undefined") return null;
+  try {
+    const image = await loadImage(src);
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context || !width || !height) return null;
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, width, height);
+    const luma = new Float32Array(width * height);
+    for (let i = 0, j = 0; i < luma.length; i++, j += 4) luma[i] = 0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2];
+    return { luma, width, height };
+  } catch {
+    return null;
+  }
+}
+
 /** Natural pixel dimensions of a data URL, or null if it can't be decoded. */
 export async function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number } | null> {
   if (typeof document === "undefined" || !dataUrl.startsWith("data:image/")) {
