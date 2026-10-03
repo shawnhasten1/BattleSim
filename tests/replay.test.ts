@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runAutomatedEncounter, sampleEncounter } from "@/engine";
+import { createEngineState, event, runAutomatedEncounter, sampleEncounter } from "@/engine";
 import type { CombatantState, EncounterSnapshot } from "@/engine";
 import { clampReplayIndex, describeEvent, dwellForEvent, replayTo } from "@/lib/replay";
 
@@ -83,6 +83,17 @@ describe("replayTo", () => {
       }
       previous = next;
     }
+  });
+});
+
+describe("log entries", () => {
+  it("keep what their data said when they were logged, however the live objects change later", () => {
+    const state = createEngineState(sampleEncounter);
+    const zone = { id: "zone-1", origin: { x: 1, y: 1 } };
+    const entry = event(state, "ZoneMoved", "The cloud drifts", { zone });
+    zone.origin = { x: 5, y: 5 };
+    zone.origin.x = 9;
+    expect(entry.data).toEqual({ zone: { id: "zone-1", origin: { x: 1, y: 1 } } });
   });
 });
 

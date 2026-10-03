@@ -246,6 +246,22 @@ describe("replay", () => {
     const partial = replayTo(start, state.log, spawnIndex);
     expect(partial.combatants.some((combatant) => combatant.id === created!.id)).toBe(false);
   });
+
+  it("shows a summon as it was summoned, not as it ended the fight", () => {
+    const start = scene(summonAction());
+    const state = createEngineState(start);
+    const [created] = resolveSummonAction(state, "caster", "call");
+    const summonedAt = { ...created!.position };
+    // Later in the fight it moves and is cut down.
+    created!.position = { x: 0, y: 0 };
+    created!.currentHp = 0;
+    created!.state = "defeated";
+    const spawnIndex = state.log.findIndex((entry) => entry.type === "CombatantSpawned");
+    const atSpawn = replayTo(start, state.log, spawnIndex + 1).combatants.find((combatant) => combatant.id === created!.id)!;
+    expect(atSpawn.position).toEqual(summonedAt);
+    expect(atSpawn.currentHp).toBe(imp.maxHp);
+    expect(atSpawn.state).toBe("active");
+  });
 });
 
 describe("battle text", () => {

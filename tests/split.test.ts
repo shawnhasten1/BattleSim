@@ -59,6 +59,24 @@ describe("split-on-damage", () => {
     expect(wrongType.snapshot.combatants).toHaveLength(2);
   });
 
+  it("replay shows the copy as it was when it split off, not as it ended the fight", async () => {
+    const { replayTo } = await import("@/lib/replay");
+    const start = scene(jelly({ maxHp: 40 }), striker("20", "slashing"), "replay");
+    const state = createEngineState(start);
+    get(state, "target").currentHp = 40;
+    strike(state);
+    const copy = state.snapshot.combatants.find((combatant) => combatant.id !== "target" && combatant.id !== "striker")!;
+    const splitAt = { ...copy.position };
+    copy.position = { x: 15, y: 7 };
+    copy.currentHp = 0;
+    copy.state = "defeated";
+    const splitIndex = state.log.findIndex((entry) => entry.type === "CombatantSplit");
+    const atSplit = replayTo(start, state.log, splitIndex + 1).combatants.find((combatant) => combatant.id === copy.id)!;
+    expect(atSplit.position).toEqual(splitAt);
+    expect(atSplit.currentHp).toBe(10);
+    expect(atSplit.state).toBe("active");
+  });
+
   it("the copy is placed on an open adjacent cell, not stacked on the original", () => {
     const state = createEngineState(scene(jelly({ maxHp: 40 }), striker("20", "slashing"), "d"));
     strike(state);

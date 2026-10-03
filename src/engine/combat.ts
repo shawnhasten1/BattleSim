@@ -3213,7 +3213,7 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
       combatantId: caster.id, actionId, summonerId: casterId, definitionId: summonedDefinition.id, initiative, insertIndex,
       chance: action.chance, roll: chanceRoll, success: true,
       // The full combatant objects, not just ids: replay reconstructs board state purely by folding the log
-      // forward over the pre-run snapshot, which never had these combatants in it.
+      // forward over the pre-run snapshot, which never had these combatants in it. (`event` keeps a copy.)
       combatants: created
     }));
   return created;
@@ -3322,7 +3322,9 @@ export function event(
     turnIndex: state.snapshot.turnIndex,
     type,
     message,
-    data
+    // A copy: callers pass live objects (a zone, a condition, a summoned creature) that keep changing for the rest of
+    // the fight, and replay rebuilds the board from what each event says happened at the time.
+    data: data === undefined ? undefined : structuredClone(data)
   };
 }
 

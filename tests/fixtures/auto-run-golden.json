@@ -16,7 +16,7 @@
   },
   {
    "seed": "golden:sample:2",
-   "hash": "e0dc3dc8fce8c491d788ca47127536f362053006",
+   "hash": "605c9cdd19c7f79641b3c247d3da7f5c70292520",
    "events": 127,
    "winner": "party",
    "rounds": 9
@@ -51,7 +51,7 @@
   },
   {
    "seed": "golden:sample:7",
-   "hash": "2023195b3a7db28c0d3e0190abc3528125dc4ce8",
+   "hash": "253118ec801667a68672631d76a571b82bcd65bd",
    "events": 109,
    "winner": "party",
    "rounds": 7
@@ -144,35 +144,35 @@
  "casters": [
   {
    "seed": "golden:casters:0",
-   "hash": "6a7044020a8bb7be45ee03a84db258973492be40",
+   "hash": "6fd1efe3f5132533620dbfd2b0681d3ee4fa7254",
    "events": 170,
    "winner": "enemy",
    "rounds": 7
   },
   {
    "seed": "golden:casters:1",
-   "hash": "cda4df674e777dc4004efb7387671f7768400e90",
+   "hash": "6c707d7d7e57bebb285191b3f43af61215a5f4c5",
    "events": 153,
    "winner": "party",
    "rounds": 4
   },
   {
    "seed": "golden:casters:2",
-   "hash": "e5929705e4f13358e6b5a56f6556e91bff825173",
+   "hash": "0325bb10e1ca90bdb4de28ab5f08eee21979dc31",
    "events": 145,
    "winner": "party",
    "rounds": 4
   },
   {
    "seed": "golden:casters:3",
-   "hash": "6172daff529dadebe48ad900d9762a361a8e629f",
+   "hash": "0621f9f44f7932dd5f97646d7f82228a05b7cd86",
    "events": 158,
    "winner": "party",
    "rounds": 3
   },
   {
    "seed": "golden:casters:4",
-   "hash": "a70fd7dd73123ebf1f7037f9edbc56c4e56764d5",
+   "hash": "82a3a7799e05182419f348d4a4f24d774a9cedfa",
    "events": 244,
    "winner": "enemy",
    "rounds": 14
@@ -181,21 +181,21 @@
  "monsters": [
   {
    "seed": "golden:monsters:0",
-   "hash": "25c37c704ccda0961fd96e0538a1966e6929caaa",
+   "hash": "7780f40ec42c3a241187cfcf91bcb396102b29bf",
    "events": 772,
    "winner": null,
    "rounds": 20
   },
   {
    "seed": "golden:monsters:1",
-   "hash": "f25a3a854758fc14cf905966a7934a8cb0ad3448",
+   "hash": "2e3d0857d8e350e3f795674368855519325524c1",
    "events": 670,
    "winner": "enemy",
    "rounds": 19
   },
   {
    "seed": "golden:monsters:2",
-   "hash": "5842f9d7c322bea23d9fc1e5c4d0409d65b04895",
+   "hash": "44235d3c5540a4e4a66be5da370a83dad752413a",
    "events": 639,
    "winner": null,
    "rounds": 20
@@ -204,21 +204,21 @@
  "legendary": [
   {
    "seed": "golden:legendary:0",
-   "hash": "8bd8caa4a1e1e7542f10e8621587d42835ef817b",
+   "hash": "251a9701b1e08d1505ff92e49418f8a878f6d1e2",
    "events": 191,
    "winner": "enemy",
    "rounds": 6
   },
   {
    "seed": "golden:legendary:1",
-   "hash": "329afc475edf5bbd8a71bc9392e48ab6824272ce",
+   "hash": "6a2bc30d74fdf81f7c27b21a6a61f335e482ab1b",
    "events": 193,
    "winner": "enemy",
    "rounds": 10
   },
   {
    "seed": "golden:legendary:2",
-   "hash": "1df8017d66046b930ff03370ec0ab22d550db868",
+   "hash": "20179806a46aa5cc2aedcfc5953794f78627cca8",
    "events": 138,
    "winner": "enemy",
    "rounds": 6
@@ -227,21 +227,21 @@
  "reinforcements": [
   {
    "seed": "golden:reinforcements:0",
-   "hash": "53cd8320e677f9d75bb81e0b5a20fbc89d899b7e",
+   "hash": "d3824d227c05c9d6a52f2478c7c32aed9b0298c7",
    "events": 359,
    "winner": "enemy",
    "rounds": 8
   },
   {
    "seed": "golden:reinforcements:1",
-   "hash": "7464036bb3b3dfe1580ca69cdaa62a2304e3ac62",
+   "hash": "33acbbdbd6b40f7da60da1c07f351ece44d4a2b9",
    "events": 494,
    "winner": "enemy",
    "rounds": 9
   },
   {
    "seed": "golden:reinforcements:2",
-   "hash": "803d03898fc55092e7957a0439b4c258d1181803",
+   "hash": "02a681327c19028e62ef93cf4c7b99fcf5ad71a6",
    "events": 655,
    "winner": null,
    "rounds": 20
