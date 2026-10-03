@@ -1,4 +1,4 @@
-import { runAutomatedEncounter, type SimulationRunResult } from "./simulation";
+import { runAutomatedEncounter, type SimulationRunResult } from "./turns";
 import type { CombatLogEvent, EncounterSnapshot, Faction, Id } from "./types";
 
 export interface CombatantMetrics {

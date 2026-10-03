@@ -11,4 +11,5 @@ export * from "./multiattack";
 export * from "./report";
 export * from "./rng";
 export * from "./simulation";
+export * from "./turns";
 export * from "./types";

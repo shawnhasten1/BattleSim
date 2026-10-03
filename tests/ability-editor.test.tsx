@@ -277,7 +277,8 @@ describe("Effects", () => {
   });
 });
 
-describe("weapons", () => {
+// Each builds a weapon through the whole editor: well under 5 s alone, but not under a full parallel run.
+describe("weapons", { timeout: 20_000 }, () => {
   const weapons = () => fighter().weapons ?? [];
 
   async function newWeapon() {

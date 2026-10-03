@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status (2026-10-03):** draft for review. Nothing built yet. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phase 0 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -575,6 +575,60 @@ Done when:
 - The turn-loop, reinforcement, lair, summon, insertion and stepped-reaction tests pass.
 - Step's differences from before are listed.
 - In the browser, Step, Auto Run and Batch still play the zones and lair fixtures the same way.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **Golden logs** (36a5fe4): five fights built through the store (`tests/helpers/golden-fixtures.ts`), 34 runs,
+>   each log and outcome hashed into `tests/fixtures/auto-run-golden.json`. `UPDATE_GOLDEN=1` regenerates it and
+>   `GOLDEN_DUMP=<dir>` writes the logs for diffing. Rounds capped at 20 to keep it under half a minute.
+> - **`src/engine/turns.ts`:**
+>   - `openNextTurn` and `closeTurn`.
+>   - `ensureInitiative` (Auto Run's old `rollIfNeeded`) and `syncTurnOrder` (Step, and later Play).
+>   - `stepAutomatedTurn` (the Step button) and `combatOutcome`.
+>   - `hasOpenActionEconomy` and `closeActionEconomy`.
+>   - `runAutomatedEncounter` and its result types, moved from `simulation.ts`.
+> - **Step** is now one call to `stepAutomatedTurn`. The store's own copies of the helpers are gone. Outside the
+>   tests, only `turns.ts` calls the turn-boundary functions.
+>
+> Found on the way, and fixed in commits of their own before the refactor, so the golden logs could prove the refactor
+> changed nothing:
+>
+> - **Fear Aura** (26b801b): `applyEmanation` asked whether the bearer could still take an action, so a pit fiend's
+>   aura went quiet once it had acted. It now only checks for incapacitation.
+> - **Log entries keep what happened at the time** (775ac4f): `event()` kept references to live objects. A finished
+>   log showed every death save with the final tally, and replay drew a drifting zone at its last spot and a summon as
+>   it ended the fight. `event()` now stores a copy. The flow of every golden run was unchanged; only what the entries
+>   record. About 8% slower.
+>
+> Step's differences from before (Auto Run's golden logs are unchanged):
+>
+> - `TurnStarted` reads "X started a turn" and comes after the start-of-turn rules. Before, it read "started an
+>   automated turn", came before them, and carried `mode: "automated"`.
+> - A downed character's death save no longer takes a Step of its own. It's rolled on the way to the next creature's
+>   turn, with no `TurnStarted`, as Auto Run always did.
+> - Reinforcements, zone expiry and summon expiry happen when the round wraps. Before, they were re-checked every Step.
+> - A token added mid-fight rolls its own initiative and joins the order. Before, everyone re-rolled.
+> - Once one side is left, Step does nothing more; before, the winners kept taking turns. A turn that ends the fight
+>   no longer runs the end-of-turn rules or the legendary window, as in Auto Run.
+>
+> Kept as it was: Auto Run sorts a pre-rolled order by initiative then id, while `compareInitiative` breaks ties by
+> Dex. Changing that would change every Batch over a pre-rolled order (noted at `ensureInitiative`).
+>
+> Tests:
+>
+> - `tests/turn-sequencer.test.ts` (14), including stepping a whole fight turn by turn giving exactly Auto Run's log.
+> - The golden logs (2), the Fear Aura test, and replay tests for summons, splits and copied entries.
+> - Two heavy tests that timed out under a full parallel run before this branch got longer limits.
+> - The full suite passes: 152 files, 1,839 tests.
+>
+> Browser (Playwright, the default scene), all passed:
+>
+> - eight Steps play turns in initiative order into round 2, with roll cues on the map.
+> - Auto Run from the half-fought board goes into replay.
+> - Batch 100 reports.
+> - no page errors.
 
 ### Phase 1 — Commands and decisions, headless (engine; large)
 

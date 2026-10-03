@@ -56,7 +56,7 @@ const lairEruption: ActionDefinition = {
 
 const lairTremor: ActionDefinition = {
   kind: "save", id: "golden-lair-tremor", name: "Tremor", actionType: "action", saveAbility: "dex", dc: 15, range: 120,
-  damage: [], riders: [{ id: "golden-lair-tremor-prone", kind: "condition", when: "on-save-fail", condition: "prone", duration: { kind: "until-start-of-next-turn" } }],
+  damage: [], halfDamageOnSuccess: false, riders: [{ id: "golden-lair-tremor-prone", kind: "condition", when: "on-save-fail", condition: "prone", duration: { kind: "until-start-of-next-turn" } }],
   automationSupport: "full"
 };
 

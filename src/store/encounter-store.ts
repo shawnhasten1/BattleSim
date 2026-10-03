@@ -3,13 +3,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
-  activeFactions,
-  admitReinforcements,
   spellcastingAbility,
-  compareInitiative,
   createEngineState,
   applyCondition,
-  despawnExpiredSummons,
   defaultConditionModifiers,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
@@ -26,15 +22,10 @@ import {
   rollInitiative,
   runAutomatedEncounter,
   runBatchSimulations,
-  runDownedTurn,
-  finishTurn,
-  runTurnStart,
-  runLairWindow,
   sampleEncounter,
   sizeFootprint,
-  takeAutomatedTurn,
+  stepAutomatedTurn,
   terrainAtCell,
-  tickZones,
   updateDefeatState,
   type BatchSimulationSummary,
   type CombatantExportPackage,
@@ -447,15 +438,6 @@ interface EncounterStore {
   duplicateSelected: () => void;
 }
 
-function canTakeTurn(encounter: EncounterSnapshot, combatant: CombatantState): boolean {
-  return combatant.state === "active"
-    || (combatant.state === "downed" && combatant.downedRegen === true)
-    || (encounter.rules.playerDeathSaves
-      && combatant.faction === "party"
-      && combatant.state === "downed"
-      && !combatant.deathSaves?.stable);
-}
-
 export { isSurprised };
 
 /** Currently fighting for its dominator's side (Dominate Person/Beast, Planar Binding). */
@@ -581,25 +563,6 @@ function terrainTilePolygon(cell: Point): Point[] {
   ];
 }
 
-function hasOpenActionEconomy(combatant: CombatantState): boolean {
-  const actionEconomy = combatant.actionEconomy;
-  // The reaction is deliberately excluded: a finished turn keeps its reaction
-  // available (see `closeActionEconomy`), so it is not a signal that the turn's
-  // end-of-turn bookkeeping still needs to run.
-  return Boolean(actionEconomy && (actionEconomy.action || actionEconomy.bonus));
-}
-
-function closeActionEconomy(combatant: CombatantState): void {
-  // Ending a turn spends the remaining action + bonus action, but NOT the
-  // reaction: a creature keeps its reaction from the end of its turn until the
-  // start of its next one — that is the whole window in which opportunity
-  // attacks, Shield, Counterspell and Hellish Rebuke fire. `resetActionEconomy`
-  // refreshes it at the start of the creature's next turn.
-  const current = combatant.actionEconomy ?? { action: true, bonus: true, reaction: true };
-  combatant.actionEconomy = { ...current, action: false, bonus: false };
-}
-
-
 function defaultResourcesForDefinition(definition: CreatureDefinition): Record<string, number> | undefined {
   if (!definition.resources || Object.keys(definition.resources).length === 0) {
     return undefined;
@@ -661,28 +624,6 @@ function prepareWeaponForAttach(weapon: WeaponDefinition, weaponId: string): { w
   }
 
   return { weapon: next, seeded };
-}
-
-function steppedOutcome(engine: ReturnType<typeof createEngineState>): SimulationOutcome | null {
-  const factions = [...activeFactions(engine.snapshot)];
-  if (factions.length > 1) {
-    return null;
-  }
-  const winner = factions[0] ?? null;
-  if (!engine.log.some((entry) => entry.type === "CombatEnded")) {
-    engine.log.push(event(engine, "CombatEnded", winner ? `${winner} wins` : "Combat has no active factions", {
-      winner,
-      rounds: engine.snapshot.round
-    }));
-  }
-  return {
-    winner,
-    rounds: engine.snapshot.round,
-    completed: winner !== null,
-    warnings: engine.log
-      .filter((entry) => entry.type === "AutomationWarning")
-      .map((entry) => entry.message)
-  };
 }
 
 function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "empty" | "duplicate"): EncounterSnapshot {
@@ -1098,83 +1039,16 @@ export const useEncounterStore = create<EncounterStore>()(
         }, { log: [] });
       },
       advanceTurn: () => {
+        // One pass of the engine's turn loop (`stepAutomatedTurn`), the same one Auto Run makes, played on the live board.
         const state = get();
-        const previousActorId = state.encounter.combatants[state.encounter.turnIndex]?.id;
-        const hadInitiative = state.encounter.combatants.every((combatant) => typeof combatant.initiative === "number");
         const engine = createEngineState({ ...state.encounter, seed: `${state.encounter.seed}:turn:${state.log.length}` });
         engine.log = [...state.log];
-        if (!hadInitiative) {
-          rollInitiative(engine);
-        } else {
-          engine.snapshot.combatants.sort((a, b) => compareInitiative(engine.snapshot, a, b));
-          const sortedCurrentIndex = engine.snapshot.round > 0
-            ? engine.snapshot.combatants.findIndex((combatant) => combatant.id === previousActorId)
-            : -1;
-          if (sortedCurrentIndex >= 0) {
-            engine.snapshot.turnIndex = sortedCurrentIndex;
-          }
-        }
-        const encounter = engine.snapshot;
-        const turnHasStarted = hadInitiative && encounter.round > 0;
-        const currentActor = turnHasStarted ? encounter.combatants[encounter.turnIndex] : undefined;
-        if (currentActor && hasOpenActionEconomy(currentActor)) {
-          finishTurn(engine, currentActor.id);
-          closeActionEconomy(currentActor);
-        }
-
-        const eligibleIndexes = () => encounter.combatants
-          .map((combatant, index) => ({ combatant, index }))
-          .filter(({ combatant }) => canTakeTurn(encounter, combatant));
-
-        let turnIndexes = eligibleIndexes();
-        if (turnIndexes.length === 0 && !encounter.combatants.some((c) => c.state === "reserve")) return;
-        const current = encounter.turnIndex;
-        const prospectiveNext = turnHasStarted
-          ? turnIndexes.find(({ index }) => index > current)?.index ?? turnIndexes[0]?.index ?? 0
-          : turnIndexes[0]?.index ?? 0;
-        const wrapped = turnHasStarted && (turnIndexes.length === 0 || prospectiveNext <= current);
-        encounter.round = encounter.round <= 0 ? 1 : wrapped ? encounter.round + 1 : encounter.round;
-
-        // Scheduled reinforcements enter at the start of the round they are due.
-        // Re-derive the eligible set afterward so an arrival takes its turn now.
-        admitReinforcements(engine);
-        // Idempotent within a round (a zone only expires once `round >=
-        // expiresAtRound`), so — like `admitReinforcements` above — it's safe
-        // to call on every step rather than only when `wrapped`.
-        tickZones(engine);
-        despawnExpiredSummons(engine);
-        turnIndexes = eligibleIndexes();
-        if (turnIndexes.length === 0) return;
-        const next = wrapped || !turnHasStarted
-          ? turnIndexes[0]?.index ?? 0
-          : turnIndexes.find(({ index }) => index > current)?.index ?? turnIndexes[0]?.index ?? 0;
-        encounter.turnIndex = next;
-
-        const combatant = encounter.combatants[next];
-        if (combatant) {
-          // Lair actions on initiative 20 come before this turn if it's the first one below 20 (same as Auto Run).
-          runLairWindow(engine, combatant);
-          engine.log.push(event(engine, "TurnStarted", `${combatant.displayName} started an automated turn`, { combatantId: combatant.id, mode: "automated" }));
-          // A regenerating monster stands up and takes a normal turn; anyone else rolls a death save.
-          if (combatant.state === "downed" && runDownedTurn(engine, combatant) === "done") {
-            closeActionEconomy(combatant);
-            commitEncounter(encounter, { log: engine.log, selectedCombatantId: combatant.id, outcome: steppedOutcome(engine) });
-            return;
-          }
-
-          runTurnStart(engine, combatant);
-          try {
-            takeAutomatedTurn(engine, combatant);
-          } catch (error) {
-            engine.log.push(event(engine, "AutomationWarning", `${combatant.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
-          }
-          finishTurn(engine, combatant.id);
-          closeActionEconomy(combatant);
-        }
-        commitEncounter(encounter, {
+        const { actor, outcome } = stepAutomatedTurn(engine);
+        if (!actor && engine.log.length === state.log.length) return;
+        commitEncounter(engine.snapshot, {
           log: engine.log,
-          selectedCombatantId: combatant?.id ?? state.selectedCombatantId,
-          outcome: steppedOutcome(engine)
+          selectedCombatantId: actor?.id ?? state.selectedCombatantId,
+          outcome
         });
       },
       runAuto: async () => {

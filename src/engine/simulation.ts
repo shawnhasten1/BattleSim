@@ -224,121 +224,9 @@ function resourceStanceMultiplier(stance: ResourceStance): number {
   }
 }
 
-export interface SimulationOutcome {
-  winner: string | null;
-  rounds: number;
-  completed: boolean;
-  warnings: string[];
-}
-
-export interface SimulationRunResult {
-  snapshot: EncounterSnapshot;
-  log: CombatLogEvent[];
-  outcome: SimulationOutcome;
-}
-
-export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 50): SimulationRunResult {
-  const state = createEngineState(snapshot);
-  const warnings: string[] = [];
-  rollIfNeeded(state);
-
-  // Resume from wherever the incoming snapshot's turn order already stands
-  // (e.g. the DM stepped a few turns by hand before clicking Auto Run) instead
-  // of always restarting at a fresh round. Otherwise anyone who hasn't gone
-  // yet this round gets skipped straight into "round + 1": already-acted
-  // combatants can get a phantom extra turn, and round-scoped state (like a
-  // "surprised" bearer who hasn't had their round-1 turn denied yet) desyncs
-  // and can resolve early.
-  let nextIndex = state.snapshot.round > 0 ? state.snapshot.turnIndex + 1 : 0;
-
-  while (activeFactions(state.snapshot).size > 1 && state.snapshot.round < maxRounds) {
-    if (nextIndex >= state.snapshot.combatants.length) {
-      nextIndex = 0;
-    }
-    if (nextIndex === 0) {
-      state.snapshot.round += 1;
-      admitReinforcements(state);
-      tickZones(state);
-      despawnExpiredSummons(state);
-    }
-    // The update clause re-reads `state.snapshot.turnIndex` (rather than a plain `index += 1`) so a mid-turn
-    // `insertIntoTurnOrder` (a summon, a split) that bumps it is picked up: every `continue`/fall-through jumps
-    // through this clause, and when nothing was inserted `turnIndex` still just equals `index`, so it's a no-op.
-    for (let index = nextIndex; index < state.snapshot.combatants.length; index = state.snapshot.turnIndex + 1) {
-      state.snapshot.turnIndex = index;
-      const actor = state.snapshot.combatants[index];
-      if (!actor) {
-        continue;
-      }
-      runLairWindow(state, actor);
-      if (activeFactions(state.snapshot).size <= 1) {
-        break;
-      }
-      if (actor.state === "downed") {
-        // A regenerating monster stands up and carries on into a normal turn; anyone else rolls a death save.
-        if (runDownedTurn(state, actor) !== "recovered") {
-          if (activeFactions(state.snapshot).size <= 1) {
-            break;
-          }
-          continue;
-        }
-      }
-      if (actor.state !== "active") {
-        continue;
-      }
-      runTurnStart(state, actor);
-      // A zone can down/kill an actor before its turn body runs (Insect Plague
-      // on a low-HP combatant) — bail out the same way the pre-turn state check
-      // above does, rather than letting `takeAutomatedTurn` act on a corpse.
-      if (actor.state !== "active") {
-        if (activeFactions(state.snapshot).size <= 1) {
-          break;
-        }
-        continue;
-      }
-      state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`, { combatantId: actor.id }));
-      // A resolver throw from an AI mispick must not abort the whole run (and,
-      // through it, an entire batch) — contain it to a lost turn + a warning.
-      let warning: string | undefined;
-      try {
-        warning = takeAutomatedTurn(state, actor);
-      } catch (error) {
-        warning = `${actor.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`;
-        state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));
-      }
-      if (warning) {
-        warnings.push(warning);
-      }
-      if (activeFactions(state.snapshot).size <= 1) {
-        break;
-      }
-      finishTurn(state, actor.id);
-    }
-    nextIndex = 0;
-  }
-
-  const factions = [...activeFactions(state.snapshot)];
-  const winner = factions.length === 1 ? factions[0] ?? null : null;
-  state.log.push(event(state, "CombatEnded", winner ? `${winner} wins` : "Combat reached the round limit", {
-    winner,
-    rounds: state.snapshot.round
-  }));
-
-  return {
-    snapshot: state.snapshot,
-    log: state.log,
-    outcome: {
-      winner,
-      rounds: state.snapshot.round,
-      completed: winner !== null,
-      warnings
-    }
-  };
-}
-
 /**
- * Everything that closes a creature's turn: the shared turn-end rules, then the legendary-action window —
- * legendary creatures other than the one who just acted get to act. Auto Run and Step both end turns here.
+ * The rules that close a creature's turn: the shared turn-end rules, then the legendary-action window —
+ * legendary creatures other than the one who just acted get to act. Called only by `closeTurn` (turns.ts).
  */
 export function finishTurn(state: EngineState, actorId: Id): void {
   runTurnEnd(state, actorId);
@@ -379,8 +267,8 @@ export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
 export const LAIR_INITIATIVE = 20;
 
 /**
- * Each creature fighting in its lair (`inLair`, with `lairActions`) takes one lair action on initiative 20: call this
- * just before a turn begins, in every turn loop. It fires before the first creature whose initiative is below 20 (so
+ * Each creature fighting in its lair (`inLair`, with `lairActions`) takes one lair action on initiative 20. The turn
+ * sequencer (`openNextTurn`) calls this just before each turn begins. It fires before the first creature whose initiative is below 20 (so
  * a creature that rolled exactly 20 still goes first); if nobody is below 20 it fires before the round's first turn.
  * The AI picks the best one that reaches a target, never the one it used last round.
  */
@@ -1708,14 +1596,6 @@ function resolveConfusedTurn(state: EngineState, actor: CombatantState): string 
     reason: "confused"
   }));
   return undefined;
-}
-
-function rollIfNeeded(state: EngineState): void {
-  if (state.snapshot.combatants.every((combatant) => typeof combatant.initiative === "number")) {
-    state.snapshot.combatants.sort((a, b) => (b.initiative ?? 0) - (a.initiative ?? 0) || a.id.localeCompare(b.id));
-    return;
-  }
-  rollInitiative(state);
 }
 
 function selectNearestHostile(snapshot: EncounterSnapshot, actor: CombatantState): CombatantState | undefined {

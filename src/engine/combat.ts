@@ -429,9 +429,9 @@ export function applyTimedFeatureEffects(state: EngineState, combatantId: Id, ti
 }
 
 /**
- * The one turn-order comparator: initiative, then Dex modifier, then id. `rollInitiative`, the store's `advanceTurn`
- * re-sort and `insertIntoTurnOrder`'s splice position all use this — they used to differ (the store's inline sort
- * dropped the Dex tiebreak), which could reorder a tied pair between Step and Auto Run.
+ * The turn-order comparator: initiative, then Dex modifier, then id. `rollInitiative`, `syncTurnOrder`'s re-sort (Step,
+ * Play) and `insertIntoTurnOrder`'s splice position all use this. Auto Run's `ensureInitiative` still sorts initiative
+ * that was rolled before the run by initiative then id, as it always has — see there.
  */
 export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState, b: CombatantState): number {
   const aDefinition = getDefinition(snapshot, a);
@@ -2652,21 +2652,6 @@ export function repositionZone(state: EngineState, casterId: Id, zoneId: Id, des
   state.log.push(event(state, "ZoneMoved", `${caster.displayName} moves ${zone.name}`, { zone }));
 }
 
-/**
- * Everything that happens at the start of `actor`'s turn, before an AI (or a
- * manual driver) picks an action: refresh their own action economy first,
- * then anything that reacts to conditions/effects already on them, then
- * anything that reacts to where they're standing (zone triggers), then
- * anything that moves because their turn started (zone drift). Only call
- * this for an actor already confirmed `state === "active"` — callers are
- * responsible for handling downed/reserve combatants separately (death
- * saves, admitting reinforcements, etc.) before reaching this.
- *
- * Shared by `runAutomatedEncounter` (Auto Run) and the Step button's
- * `advanceTurn` — previously each hand-rolled this sequence separately,
- * which let their orderings drift (Step mode used to reset the action
- * economy *last* instead of first).
- */
 /** The hidden pool an action's `usage` spends from; actions sharing a `poolId` share it. */
 export function usagePoolId(action: { id: string; usage?: ActionUsage }): string {
   return `usage:${action.usage?.poolId ?? action.id}`;
@@ -2969,6 +2954,20 @@ function standUpFromProne(state: EngineState, actor: CombatantState): void {
   }));
 }
 
+/**
+ * Everything that happens at the start of `actor`'s turn, before an AI (or a
+ * manual driver) picks an action: refresh their own action economy first,
+ * then anything that reacts to conditions/effects already on them, then
+ * anything that reacts to where they're standing (zone triggers), then
+ * anything that moves because their turn started (zone drift). Only call
+ * this for an actor already confirmed `state === "active"` — callers are
+ * responsible for handling downed/reserve combatants separately (death
+ * saves, admitting reinforcements, etc.) before reaching this.
+ *
+ * Called only by the turn sequencer (`openNextTurn`, turns.ts), which Auto Run,
+ * Step and Play share. Auto Run and Step used to hand-roll this sequence
+ * separately, and their orderings drifted (Step reset the action economy *last*).
+ */
 export function runTurnStart(state: EngineState, actor: CombatantState): void {
   resetActionEconomy(actor);
   rollRecharges(state, actor);
@@ -2987,9 +2986,8 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
 }
 
 /**
- * Everything that happens at the end of `actorId`'s turn. Shared by
- * `runAutomatedEncounter` and `advanceTurn` for the same reason as
- * `runTurnStart` — see its doc comment.
+ * Everything that happens at the end of `actorId`'s turn. Called by `finishTurn`, which only the turn sequencer's
+ * `closeTurn` calls — see `runTurnStart`.
  */
 export function runTurnEnd(state: EngineState, actorId: Id): void {
   applyTimedFeatureEffects(state, actorId, "turn-end");

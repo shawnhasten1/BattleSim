@@ -59,7 +59,7 @@ describe("every SRD monster runs in the engine", () => {
       if (runnable && monster.speed > 0 && hadTurn && !acted) failures.push(`${monster.id}: took a turn with runnable actions but never used one`);
     }
     expect(failures).toEqual([]);
-  });
+  }, 30_000); // Every SRD monster fights: seconds alone, longer under a full parallel run.
 
   it("a recharge ability is only used again after it recharges", () => {
     // Fire breath must not be fired every round: one use, plus one more per successful recharge roll.
