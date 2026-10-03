@@ -10,20 +10,24 @@ import { playbackLog } from "@/store/play-slice";
 import { playStatusText } from "./PlayControls";
 import { PlaySegmented, SPEED_OPTIONS } from "./PlaySegmented";
 import { TurnBar } from "./TurnBar";
+import { TurnDock } from "./TurnDock";
+import type { PlayMoveView } from "@/hooks/usePlayMove";
 import styles from "./play.module.css";
 
 /**
  * Everything Play puts over the map: the turn bar and a banner at the top (whose turn, its buttons, the AI's playback
  * speed and Skip), a question for you, and the card at the end. It also runs the AI's turns' playback.
  */
-export function PlayOverlay({ onOpenReport }: { onOpenReport?: () => void }) {
+export function PlayOverlay({ onOpenReport, move }: { onOpenReport?: () => void; move?: PlayMoveView | null }) {
   usePlayPlayback();
   return (
     <>
       <div className={styles.overlayTop}>
         <TurnBar />
         <PlayBanner />
+        <PlayNote />
       </div>
+      <TurnDock move={move} />
       <PromptCard />
       <PlayEndCard onOpenReport={onOpenReport} />
     </>
@@ -36,18 +40,9 @@ function PlayBanner() {
   const continuePlay = useEncounterStore((state) => state.continuePlay);
   const skipPlayback = useEncounterStore((state) => state.skipPlayback);
   const setPlaybackSpeed = useEncounterStore((state) => state.setPlaybackSpeed);
-  const dismissPlayMessage = useEncounterStore((state) => state.dismissPlayMessage);
   const board = useDisplayEncounter();
   const log = useEncounterStore(playbackLog);
   if (!play) return null;
-  if (play.message) {
-    return (
-      <div className={styles.banner} data-tone="note" role="alert">
-        <span>{play.message}</span>
-        <button type="button" className={styles.button} onClick={dismissPlayMessage} aria-label="Dismiss"><X size={13} /></button>
-      </div>
-    );
-  }
   // A question has its own card, and the end its own; the banner stays out of the way.
   if (!play.playback && (play.pending || play.status.kind === "over")) return null;
   const status = playStatusText(play, board, log);
@@ -83,6 +78,19 @@ function PlayBanner() {
       <button type="button" className={styles.primary} onClick={continuePlay}>
         <PlayIcon size={13} /> {board.round > 0 ? "Continue" : "Begin"}
       </button>
+    </div>
+  );
+}
+
+/** Why the last command didn't happen (out of reach, no action left…), under the banner until the next one does. */
+function PlayNote() {
+  const message = useEncounterStore((state) => state.play?.message);
+  const dismissPlayMessage = useEncounterStore((state) => state.dismissPlayMessage);
+  if (!message) return null;
+  return (
+    <div className={styles.banner} data-tone="note" role="alert">
+      <span>{message}</span>
+      <button type="button" className={styles.button} onClick={dismissPlayMessage} aria-label="Dismiss"><X size={13} /></button>
     </div>
   );
 }

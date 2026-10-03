@@ -4,6 +4,9 @@ import { Droplet, Flame, Snowflake, TriangleAlert, type LucideIcon } from "lucid
 import { cellsInArea, lineOfEffect, wallCover, type ActiveZone, type BattleMapState } from "@/engine";
 import { pointsMatch } from "@/components/scene/coords";
 import { ElevationLayer } from "@/components/scene/ElevationLayer";
+import { PlayMoveLayer } from "@/components/play/PlayMoveLayer";
+import type { PlayMoveView } from "@/hooks/usePlayMove";
+import type { EncounterSnapshot } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { ActiveAreaFlash } from "@/hooks/useSceneFeedback";
@@ -39,6 +42,11 @@ interface SceneOverlaysProps {
   round?: number;
   /** Ground heights and cliff edges; forced on while the Elevation tool is active. */
   showElevation?: boolean;
+  /** A fight in Play: the editor's path and target line give way to the move being planned. */
+  playing?: boolean;
+  playMove?: PlayMoveView | null;
+  /** The board the move is planned on (for who gets an opportunity attack). */
+  board?: EncounterSnapshot;
 }
 
 /**
@@ -48,7 +56,7 @@ interface SceneOverlaysProps {
  * gizmo. Wall hit-targets and nodes only render (and only accept clicks)
  * while the Wall tool is active — the Select tool owns tokens exclusively.
  */
-export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0, showElevation = true }: SceneOverlaysProps) {
+export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0, showElevation = true, playing = false, playMove = null, board }: SceneOverlaysProps) {
   const {
     tool,
     pendingWallStart,
@@ -167,7 +175,7 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           ))}
         </g>
       ))}
-      {!replaying && previewPath?.cells.map((cell, index) => (
+      {!replaying && !playing && previewPath?.cells.map((cell, index) => (
         <rect key={`${cell.x}-${cell.y}-${index}`} x={cell.x + 0.16} y={cell.y + 0.16} width="0.68" height="0.68" className="path-cell" />
       ))}
       {!replaying && measuredPath?.cells.map((cell, index) => (
@@ -269,7 +277,8 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           </g>
         );
       })}
-      {!replaying && selectedCombatant && nearestEnemy ? (
+      {playMove && board ? <PlayMoveLayer view={playMove} board={board} /> : null}
+      {!replaying && !playing && selectedCombatant && nearestEnemy ? (
         <line
           x1={selectedCombatant.position.x + 0.5}
           y1={selectedCombatant.position.y + 0.5}

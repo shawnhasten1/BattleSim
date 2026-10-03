@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–3 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–4 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -855,6 +855,88 @@ Done when:
 - A move that provokes an AI opportunity attack plays it out.
 - A move out of reach is refused with the reason.
 - Other tokens move only with Alt, and that move is logged.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **Engine:**
+>   - `reachableCells`: every square a creature can move to with what it has left (or from a stop, with a given
+>     budget). It follows `plannedPath`'s routes: round a hazard where a detour costs about the same, costed on the real
+>     map.
+>   - `previewMove` now says:
+>     - which squares cost more than open ground, and how many times more.
+>     - what goes off on the way: hazard tiles and zones it enters, and zones that hurt each step.
+>     - what's left, in feet, and whether distance is the only thing in the way (`tooFar`).
+>     - why it can't move: grappled, can't fly, someone is there, nothing can stand there.
+>   - `turnMovementBudget`, `routeStepCosts`, `standingProblem` and `heldInPlaceBy`.
+>   - **The DM's hand:** a `dm` command (`DmChange`, `place` for now) and `placeByDm`. It puts a token on a free square
+>     with no movement spent and nothing provoked or set off, and logs `CombatantMoved` with `source: "dm"`. It doesn't
+>     change whose turn it is.
+> - **`src/store/play-ui-store.ts`:** what a person is doing on their turn: the stops planned, the height to fly at,
+>   the square under the cursor, where a dragged token would land. Not persisted. A plan belongs to the board it was
+>   made on.
+> - **`src/hooks/usePlayMove.ts`:** who can be moved now (`movingActorId`), the plan, the reachable squares and the
+>   preview for the square pointed at (`usePlayMoveView`), and `makePlayMove`.
+> - **On the map** (`PlayMoveLayer`, `PlayMoveMarks`):
+>   - under the tokens: the reachable squares, the route, where it ends, and a dashed line from each creature that gets
+>     an opportunity attack to where it gets it.
+>   - above the tokens: the stops, ×2 on squares that cost double, a warning where something goes off, a ring where
+>     each opportunity attack comes with the weapon's name over its attacker, and the cost ("20 ft", "45 ft · too
+>     far").
+>   - the editor's path to the nearest enemy and its target line are hidden while playing.
+> - **Moving:**
+>   - click a square to move there, and Shift-click to plan a stop on the way. Esc or right-click takes back the last
+>     stop.
+>   - drag the creature whose turn it is; dropped out of reach, it stays put and says why.
+>   - Alt-drag any token as the DM. A plain drag of another token only selects it.
+>   - a big creature stands centred on the cursor.
+> - **The dock** at the bottom of the map on a person's turn:
+>   - the creature, its HP and AC.
+>   - action, bonus action and reaction (struck through once used).
+>   - a movement bar ("25 of 30 ft") that shows what a move would leave, with Dashed and Disengaged tags.
+>   - ▲ ▼ for the height a flier flies at, and Rise here, Drop here or Land here.
+>   - Dash, Disengage, Dodge, and Escape while grappled; bonus-action versions too, each greyed out with its reason.
+>   - a line saying what's planned, what the move sets off ("Opportunity attack from Goblin 1 (Scimitar)."), or why it
+>     can't be made.
+> - **The turn:** when a person's creature's turn starts, it's selected and brought into view if it's off the edge.
+>
+> Differences from the plan:
+>
+> - The hotbar isn't here yet, so the movement bar, the altitude and the moving actions live in this dock. Phase 5
+>   grows the dock into the hotbar.
+> - **A person's move plays back too**, at the AI's speed: the token walks its route.
+> - **An opportunity attack plays out where it happens,** in Play and in Auto Run's replay alike. The replay puts the
+>   mover where the attack caught it (`OpportunityAttackTriggered` carries the square). The token walks there first,
+>   then on to the end of its route (`walkSegment`). The engine's log is unchanged.
+> - **A refused command's reason** shows under the banner. It used to replace the banner until it was dismissed.
+> - **The Combat panel's Latest** reads "Nothing yet this turn" in Play, not "Step to begin".
+>
+> Tests:
+>
+> - `tests/play-moving.test.ts` (11):
+>   - the route previewed is the one walked: round a wall, through rubble at double cost, and round lava or through it
+>     by way of a stop.
+>   - the reachable squares match the preview on every square of four boards: the sample, beside rubble, among lava,
+>     and a Large creature.
+>   - an AI goblin's opportunity attack is played out where it happens.
+>   - refusals, with their reasons.
+>   - Dash and Disengage, flying, and a grappled creature.
+>   - the DM's hand.
+> - `tests/play-moving-ui.test.tsx` (6): the dock, the route on the map, click, Shift-click, Esc and right-click,
+>   dragging with and without Alt, and a refusal under the banner.
+> - The full suite passes: 159 files, 1,914 tests. The golden logs are unchanged.
+>
+> Browser (Playwright, the default scene, the party yours, 4×), all passed:
+>
+> - the tint and the route, with its cost, on hover; "67.5 ft · too far" and its reason.
+> - Alt-drag of a goblin, logged as "The DM moved Goblin 1".
+> - a stop beside the goblin with "Scimitar" over it, then the move: played back, the goblin's attack on the way, 12.5 of
+>   30 ft left.
+> - Dash to 42.5 of 60 ft, then a drag of the archer's own token.
+> - a plain drag of another goblin did nothing.
+> - End turn: the goblins played, and the fighter's turn opened, selected.
+> - no page errors.
 
 ### Phase 5 — The hotbar and creature targets (UI; large)
 

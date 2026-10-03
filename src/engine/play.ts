@@ -186,11 +186,14 @@ function withSeed(snapshot: EncounterSnapshot, seed: string): EncounterSnapshot 
 function runStep(state: EngineState, step: PlayStep, control: PlayControl): PlayStatus {
   const controller = (combatant: CombatantState) => controllerOf(state.snapshot, control, combatant);
   if (step.kind === "command") {
-    executeCommand(state, step.command);
+    const command = step.command;
+    executeCommand(state, command);
+    // The DM's hand changes nothing about whose turn it is.
+    if (command.kind === "dm") return playStatusOf(state.snapshot, control);
     if (activeFactions(state.snapshot).size <= 1) return over(state);
-    return step.command.kind === "end-turn" || step.command.kind === "ai-turn"
+    return command.kind === "end-turn" || command.kind === "ai-turn"
       ? { kind: "advance" }
-      : { kind: "your-turn", actorId: step.command.actorId };
+      : { kind: "your-turn", actorId: command.actorId };
   }
 
   // A token may have been added by hand since the last step, or the order edited.

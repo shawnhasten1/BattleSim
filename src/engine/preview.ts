@@ -1,4 +1,4 @@
-import { cellsInArea } from "./areas";
+import { cellIntersectsArea, cellsInArea } from "./areas";
 import {
   actionSaveContext,
   altitudeMoveCost,
@@ -11,6 +11,7 @@ import {
   getDefinition,
   getExecutableActions,
   hasLegendaryResistanceFor,
+  heldInPlaceBy,
   isImmuneAfterSave,
   opportunityAttackThreats,
   plannedPath,
@@ -18,14 +19,17 @@ import {
   resolveAreaTargeting,
   resolveOnSuccess,
   resolveSaveDc,
+  routeStepCosts,
   saveDamageOutcome,
   saveActionCoverBonus,
   saveRollInputs,
+  standingProblem,
   targetingProblem,
   validateOriginTargeting,
   type EngineState,
   type OpportunityThreat
 } from "./combat";
+import { movementProfileOf, terrainAtCell } from "./geometry";
 import { defaultSwingAttack, swingCandidates, swingsOf, stepAbility } from "./multiattack";
 import { averageDamage } from "./simulation";
 import type {
@@ -300,12 +304,19 @@ export interface MovePreview {
   /** It can get there with the movement it has left. */
   reachable: boolean;
   problem?: string;
+  /** The only thing in the way is how far it is. */
+  tooFar: boolean;
   /** The whole route, square by square, from where it stands. */
   cells: Point[];
-  /** What it costs, in squares and in feet, and what's left after. */
+  /** What it costs, in squares and in feet, and what's left after (in squares and feet; all of it, if it can't go). */
   cost: number;
   costFeet: number;
   remaining: number;
+  remainingFeet: number;
+  /** Squares on the way that cost more than open ground — difficult terrain, another creature's space, a climb — and how many times more. */
+  slowed: Array<{ cell: Point; multiplier: number }>;
+  /** What goes off on the way: a hazard or a zone it walks into, a zone that hurts each step taken in it. */
+  hazards: Array<{ cell: Point; name: string }>;
   /** Who gets an opportunity attack on the way, with what, and where. */
   opportunityAttacks: OpportunityThreat[];
 }
@@ -324,8 +335,14 @@ export function previewMove(snapshot: EncounterSnapshot, combatantId: Id, waypoi
   const cells: Point[] = [{ ...mover.position }];
   let cost = 0;
   let from = mover.position;
-  let problem: string | undefined;
+  const held = heldInPlaceBy(mover);
+  let problem: string | undefined = !canAct(mover, "free") ? `${mover.displayName} can't move right now`
+    : held ? `${mover.displayName} is ${held.name === "custom" ? `held by ${held.sourceName ?? "something"}` : held.name} and can't move`
+      : undefined;
   for (const waypoint of waypoints) {
+    if (problem) break;
+    problem = standingProblem(snapshot, combatantId, waypoint);
+    if (problem) break;
     const path = plannedPath(snapshot, combatantId, waypoint, from);
     if (!path.reachable) {
       problem = "There's no way through to there";
@@ -336,20 +353,57 @@ export function previewMove(snapshot: EncounterSnapshot, combatantId: Id, waypoi
     from = waypoint;
   }
   const verticalFt = altitude === undefined ? 0 : Math.abs(Math.max(0, altitude) - (mover.altitude ?? 0));
-  cost += altitudeMoveCost(snapshot, definition, verticalFt);
-  if (!problem && !canAct(mover, "free")) {
-    problem = `${mover.displayName} can't move right now`;
+  if (!problem && verticalFt > 0 && !movementProfileOf(definition).fly) {
+    problem = `${mover.displayName} can't fly`;
   }
-  if (!problem && cost > budget + 1e-9) {
+  if (!problem) {
+    cost += altitudeMoveCost(snapshot, definition, verticalFt);
+  }
+  const tooFar = !problem && cost > budget + 1e-9;
+  if (tooFar) {
     problem = `That's ${feet(cost * perSquare)} ft. of movement; ${mover.displayName} has ${feet(budget * perSquare)} ft. left`;
   }
+  const remaining = problem ? budget : Math.max(0, budget - cost);
   return {
     reachable: !problem,
     problem,
+    tooFar,
     cells,
     cost,
     costFeet: feet(cost * perSquare),
-    remaining: Math.max(0, budget - cost),
+    remaining,
+    remainingFeet: feet(remaining * perSquare),
+    slowed: routeStepCosts(snapshot, combatantId, cells)
+      .map((step, index) => ({ cell: cells[index + 1]!, multiplier: step.cost / step.open }))
+      .filter((step) => step.multiplier > 1 + 1e-9 && Number.isFinite(step.multiplier)),
+    hazards: moveHazards(snapshot, mover, cells),
     opportunityAttacks: opportunityAttackThreats(snapshot, combatantId, cells)
   };
+}
+
+/** What a move along `cells` sets off, as `moveCombatant` would: hazard tiles and zones it enters, and zones that hurt each step. */
+function moveHazards(snapshot: EncounterSnapshot, mover: CombatantState, cells: Point[]): Array<{ cell: Point; name: string }> {
+  const hazards: Array<{ cell: Point; name: string }> = [];
+  const steps = cells.slice(1);
+  const seenTiles = new Set<string>();
+  for (const cell of steps) {
+    const tile = terrainAtCell(snapshot.map.terrain, cell);
+    if (tile?.hazard?.trigger.includes("on-enter") && !seenTiles.has(tile.id)) {
+      seenTiles.add(tile.id);
+      hazards.push({ cell, name: tile.name });
+    }
+  }
+  const per = snapshot.map.grid.distancePerSquare;
+  const side = effectiveFaction(snapshot, mover);
+  for (const zone of snapshot.activeZones ?? []) {
+    const source = snapshot.combatants.find((combatant) => combatant.id === zone.sourceCombatantId);
+    if (zone.affects === "hostile" && source && effectiveFaction(snapshot, source) === side) continue;
+    const inside = steps.filter((cell) => cellIntersectsArea(cell, zone.origin, zone.area, per));
+    if (zone.movementDamage) {
+      hazards.push(...inside.map((cell) => ({ cell, name: zone.name })));
+    } else if (zone.trigger.includes("on-enter") && inside.length > 0) {
+      hazards.push({ cell: inside[0]!, name: zone.name });
+    }
+  }
+  return hazards;
 }

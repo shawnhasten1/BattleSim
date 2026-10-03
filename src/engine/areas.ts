@@ -224,7 +224,7 @@ export function hazardPathingOverlay(map: BattleMapState): BattleMapState {
 }
 
 /** How many times pricier than open ground a hazard tile is treated as, for `hazardPathingOverlay`'s route-selection purposes only. */
-const HAZARD_PATHING_MULTIPLIER = 10;
+export const HAZARD_PATHING_MULTIPLIER = 10;
 
 /** Whether the segment `from`→`to` (grid coordinates) passes through any `blocksSight` zone, sampled along its length. */
 export function zoneBlocksSightBetween(zones: ActiveZone[] | undefined, from: Point, to: Point, distancePerSquare: number): boolean {

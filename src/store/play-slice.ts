@@ -118,9 +118,17 @@ export function sessionStatusOf(status: PlayStatus): PlaySessionStatus {
       : { kind: "ai" };
 }
 
-/** A command the AI plays out (handing a turn to it) is played back like its own turns; a person's own commands aren't. */
+/**
+ * What's played back on the map: the AI's turns (and a turn handed to it), and a person's move — the token walks its
+ * route, and an opportunity attack on the way happens where it does. A person's other commands show at once.
+ */
 function animates(step: PlayStep): boolean {
-  return step.kind === "advance" || step.command.kind === "ai-turn" || step.command.kind === "end-turn";
+  return step.kind === "advance" || ["ai-turn", "end-turn", "move"].includes(step.command.kind);
+}
+
+/** The DM's hand on the board: it changes nothing about whose turn it is, and sets no turns going. */
+function byTheDm(step: PlayStep): boolean {
+  return step.kind === "command" && step.command.kind === "dm";
 }
 
 export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): PlayActions {
@@ -159,8 +167,9 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       playback,
       status,
       message: undefined,
-      // The steps up to the next person's turn join this one's undo step.
-      undoGroup: status.kind === "ai" ? group : undefined,
+      // The steps up to the next person's turn join this one's undo step (not the DM's: a turn going on after it is
+      // its own).
+      undoGroup: status.kind === "ai" && !byTheDm(step) ? group : byTheDm(step) ? play.undoGroup : undefined,
       skipping: status.kind === "ai" ? play.skipping : false
     });
   };
@@ -193,7 +202,7 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       if (!play || play.pending || play.playback) return;
       const step: PlayStep = { kind: "command", command };
       handle(runPlayStep({ snapshot: encounter, log, step, control: play.control }), step, { base: encounter, from: log.length }, newGroup(command.kind));
-      runAiTurns();
+      if (!byTheDm(step)) runAiTurns();
     },
 
     answerPrompt: (answer) => {

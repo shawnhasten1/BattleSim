@@ -144,7 +144,7 @@ export function CombatPanel() {
         <div><span>Current</span><strong>{currentCombatant?.displayName ?? "Not started"}</strong></div>
         <div><span>Tactic</span><strong>{currentCombatant ? labelTactics(currentCombatant.tacticsProfile) : "-"}</strong></div>
         <div><span>HP</span><strong>{currentCombatant && currentDefinition ? `${currentCombatant.currentHp}/${currentDefinition.maxHp}` : "-"}</strong></div>
-        <div className={styles.latest}><span>Latest</span><strong>{latestTurnEvent?.message ?? "Step to begin"}</strong></div>
+        <div className={styles.latest}><span>Latest</span><strong>{latestTurnEvent?.message ?? (play ? "Nothing yet this turn" : "Step to begin")}</strong></div>
       </div>
 
       {play ? <PlayControls /> : (

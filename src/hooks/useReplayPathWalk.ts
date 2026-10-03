@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Point } from "@/engine";
 import { clamp } from "@/components/scene/coords";
 import { usePlaybackCursor } from "@/hooks/useDisplayEncounter";
+import { walkSegment } from "@/lib/replay";
 
 export interface ReplayPathWalk {
   /** Transient per-combatant cell position while a move is being traced. */
@@ -54,13 +55,13 @@ export function useReplayPathWalk(slideMs: number): ReplayPathWalk {
     prevIndexRef.current = replayIndex;
 
     const steppedForward = prev != null && replayIndex != null && replayIndex === prev + 1;
-    const moveEvent = steppedForward && replayIndex != null ? log[replayIndex - 1] : undefined;
-    const data = moveEvent?.data ?? {};
-    const combatantId = typeof data.combatantId === "string" ? data.combatantId : null;
-    const cells = Array.isArray(data.cells) ? (data.cells as Point[]) : null;
+    // A move, or the part of one that brings the mover to an opportunity attack.
+    const segment = steppedForward && replayIndex != null ? walkSegment(log, replayIndex - 1) : null;
+    const combatantId = segment?.combatantId ?? null;
+    const cells = segment?.cells ?? null;
 
     // < 3 cells is a single hop — the plain slide already traces it correctly.
-    if (moveEvent?.type !== "CombatantMoved" || !replaying || !combatantId || !cells || cells.length < 3) {
+    if (!replaying || !combatantId || !cells || cells.length < 3) {
       return;
     }
 

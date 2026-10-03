@@ -5,11 +5,13 @@ import {
   findCombatant,
   getDefinition,
   moveCombatant,
+  placeByDm,
   repositionZone,
   resolveAreaTargeting,
   resolveManualAction,
   resolveUse,
   spatialDistanceToPoint,
+  standingProblem,
   targetingProblem,
   validateBuffTargeting,
   validateHealingTargeting,
@@ -40,7 +42,14 @@ export type CombatCommand =
   | { kind: "move-zone"; actorId: Id; zoneId: Id; destination: Point }
   /** Hand the rest of this turn to the AI, then end it. */
   | { kind: "ai-turn"; actorId: Id }
-  | { kind: "end-turn"; actorId: Id };
+  | { kind: "end-turn"; actorId: Id }
+  /** The DM changes the board by hand, whoever's turn it is. Logged as the DM's. */
+  | { kind: "dm"; change: DmChange };
+
+/** What the DM can change by hand in a fight. */
+export type DmChange =
+  /** Put a creature on a square: no movement spent, nothing provoked or set off. */
+  { kind: "place"; combatantId: Id; destination: Point };
 
 /** The creature whose turn is open, if the fight has started and it can still act. */
 export function currentTurnActor(snapshot: EncounterSnapshot): CombatantState | undefined {
@@ -56,6 +65,10 @@ function notYourTurn(snapshot: EncounterSnapshot, actorId: Id): string {
 
 /** Do `command` on the open turn. Throws when it can't be done; nothing it did is kept then (the caller discards the state). */
 export function executeCommand(state: EngineState, command: CombatCommand): void {
+  if (command.kind === "dm") {
+    applyDmChange(state, command.change);
+    return;
+  }
   const actor = currentTurnActor(state.snapshot);
   if (!actor || actor.id !== command.actorId) {
     throw new Error(notYourTurn(state.snapshot, command.actorId));
@@ -91,6 +104,14 @@ export function executeCommand(state: EngineState, command: CombatCommand): void
   }
 }
 
+function applyDmChange(state: EngineState, change: DmChange): void {
+  switch (change.kind) {
+    case "place":
+      placeByDm(state, change.combatantId, change.destination);
+      return;
+  }
+}
+
 /** Close the turn — unless the fight just ended on it, when only the spent action and bonus action are closed (as Auto Run does). */
 function endTurn(state: EngineState, actor: CombatantState): void {
   if (activeFactions(state.snapshot).size > 1) {
@@ -102,6 +123,13 @@ function endTurn(state: EngineState, actor: CombatantState): void {
 
 /** Why `command` can't be done right now, or undefined if it can. */
 export function commandProblem(snapshot: EncounterSnapshot, command: CombatCommand): string | undefined {
+  if (command.kind === "dm") {
+    const change = command.change;
+    const combatant = snapshot.combatants.find((candidate) => candidate.id === change.combatantId);
+    if (!combatant) return "That creature isn't in the fight";
+    if (combatant.position.x === change.destination.x && combatant.position.y === change.destination.y) return `${combatant.displayName} is already there`;
+    return standingProblem(snapshot, combatant.id, change.destination);
+  }
   const actor = currentTurnActor(snapshot);
   if (!actor || actor.id !== command.actorId) {
     return notYourTurn(snapshot, command.actorId);

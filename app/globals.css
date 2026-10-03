@@ -907,6 +907,117 @@ img {
   stroke: rgba(184, 69, 54, 0.45);
 }
 
+/* Play: a move being planned (PlayMoveLayer) — where the creature can still go, the route to the square pointed at,
+   its cost, what costs more, what goes off on the way, and who gets an opportunity attack. Never takes a click. */
+.play-move {
+  pointer-events: none;
+}
+
+.play-reach {
+  fill: rgba(217, 138, 61, 0.14);
+  stroke: rgba(217, 138, 61, 0.3);
+  stroke-width: 0.02;
+}
+
+.play-path {
+  fill: none;
+  stroke: #f0b06a;
+  stroke-width: 0.09;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.play-path.blocked {
+  stroke: #d0605a;
+  stroke-dasharray: 0.18 0.12;
+}
+
+.play-dest {
+  fill: rgba(240, 176, 106, 0.2);
+  stroke: #f0b06a;
+  stroke-width: 0.06;
+}
+
+.play-dest.blocked {
+  fill: rgba(208, 96, 90, 0.16);
+  stroke: #d0605a;
+}
+
+.play-cost,
+.play-slowed,
+.play-oa-label,
+.play-waypoint-label {
+  paint-order: stroke;
+  stroke: rgba(10, 11, 13, 0.85);
+  stroke-width: 0.1;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.play-cost {
+  fill: #f6d3a6;
+  font-size: 0.34px;
+}
+
+.play-cost.blocked {
+  fill: #f0a29b;
+}
+
+.play-slowed {
+  fill: #e9c46a;
+  font-size: 0.22px;
+}
+
+.play-hazard {
+  color: #ff9f43;
+}
+
+.play-waypoint {
+  fill: #f0b06a;
+  stroke: rgba(10, 11, 13, 0.8);
+  stroke-width: 0.04;
+}
+
+.play-waypoint-label {
+  fill: #1a1006;
+  stroke: none;
+  font-size: 0.24px;
+}
+
+.play-oa-ring {
+  fill: none;
+  stroke: #d0605a;
+  stroke-width: 0.07;
+}
+
+.play-oa-line {
+  stroke: #d0605a;
+  stroke-width: 0.05;
+  stroke-dasharray: 0.12 0.08;
+}
+
+.play-oa-mark {
+  fill: none;
+  stroke: #d0605a;
+  stroke-width: 0.07;
+}
+
+.play-oa-icon {
+  color: #f0a29b;
+}
+
+.play-oa-label {
+  fill: #f0a29b;
+  font-size: 0.24px;
+  text-anchor: start;
+}
+
+/* The marks and labels sit above the tokens and their health bars. */
+.overlay.play-move-marks {
+  z-index: 6;
+}
+
 .placed-template {
   opacity: 0.35;
 }

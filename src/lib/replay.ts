@@ -97,6 +97,16 @@ function applyEvent(
       return;
     }
 
+    case "OpportunityAttackTriggered": {
+      // The attack comes as the mover leaves the reach, where it stands then. Its move is logged after.
+      const mover = byId.get(String(data.moverId));
+      const at = data.from as Point | undefined;
+      if (mover && at) {
+        mover.position = { x: at.x, y: at.y };
+      }
+      return;
+    }
+
     case "DamageApplied": {
       const combatant = byId.get(String(data.targetId));
       if (!combatant) return;
@@ -351,6 +361,8 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
       // instead of falling into the 160ms default (DICE_ROLL_FEEDBACK_PLAN.md).
       return 500;
     case "CombatantMoved":
+    case "OpportunityAttackTriggered":
+      // A walk: to the end of the route, or to where an opportunity attack catches the mover.
       return 750;
     case "CombatantFell":
       return 800;
@@ -387,6 +399,56 @@ export function dwellForEvent(entry: CombatLogEvent | undefined): number {
     default:
       return 160;
   }
+}
+
+function cellsOf(value: unknown): Point[] | null {
+  return Array.isArray(value) ? (value as Point[]) : null;
+}
+
+const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+
+/**
+ * Where along `cells` (its move's route) a mover stands just before `log[index]`: where the last opportunity attack
+ * on this move caught it, or the start.
+ */
+function walkedSoFar(log: CombatLogEvent[], index: number, moverId: string, cells: Point[]): number {
+  for (let back = index - 1; back >= 0; back -= 1) {
+    const entry = log[back]!;
+    if (entry.type === "TurnStarted" || (entry.type === "CombatantMoved" && entry.data?.combatantId === moverId)) break;
+    if (entry.type === "OpportunityAttackTriggered" && entry.data?.moverId === moverId) {
+      const at = entry.data.from as Point | undefined;
+      const found = at ? cells.findIndex((cell) => samePoint(cell, at)) : -1;
+      return Math.max(0, found);
+    }
+  }
+  return 0;
+}
+
+/**
+ * The stretch of a route a token walks when playback steps onto `log[index]`, square by square: a move, from wherever
+ * an opportunity attack on the way left the mover; or, stepping onto an opportunity attack, the part of the move that
+ * gets it there (the move itself is logged after).
+ */
+export function walkSegment(log: CombatLogEvent[], index: number): { combatantId: string; cells: Point[] } | null {
+  const entry = log[index];
+  if (entry?.type === "CombatantMoved") {
+    const combatantId = String(entry.data?.combatantId ?? "");
+    const cells = cellsOf(entry.data?.cells);
+    if (!combatantId || !cells) return null;
+    return { combatantId, cells: cells.slice(walkedSoFar(log, index, combatantId, cells)) };
+  }
+  if (entry?.type === "OpportunityAttackTriggered") {
+    const moverId = String(entry.data?.moverId ?? "");
+    const at = entry.data?.from as Point | undefined;
+    if (!moverId || !at) return null;
+    const move = log.slice(index + 1).find((later) => later.type === "CombatantMoved" && later.data?.combatantId === moverId);
+    const cells = cellsOf(move?.data?.cells);
+    const end = cells ? cells.findIndex((cell) => samePoint(cell, at)) : -1;
+    if (!cells || end < 0) return null;
+    const start = walkedSoFar(log, index, moverId, cells);
+    return start < end ? { combatantId: moverId, cells: cells.slice(start, end + 1) } : null;
+  }
+  return null;
 }
 
 const CONDITION_NOUN = (entry: CombatLogEvent): string => {

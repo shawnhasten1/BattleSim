@@ -12,11 +12,14 @@ import {
   combatantsInArea,
   DEFAULT_GRID_VISUALS,
   findPath,
+  getDefinition,
   gridDistance,
   sizeFootprint,
   zoneTerrainOverlay
 } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
+import { usePlayUiStore } from "@/store/play-ui-store";
+import { makePlayMove, movingActorId, planKeyOf, standingSquare } from "@/hooks/usePlayMove";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
   clamp,
@@ -61,8 +64,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const paintElevationCells = useEncounterStore((state) => state.paintElevationCells);
   const applyRamp = useEncounterStore((state) => state.applyRamp);
   const elevationMode = useEncounterStore((state) => state.elevationMode);
-  // A played fight moves tokens through the rules (Phase 4), not by dragging them.
+  // A played fight moves tokens through the rules: the creature whose turn it is by clicking or dragging (`movingId`),
+  // any token freely with Alt, as the DM.
   const playing = useEncounterStore((state) => state.play !== null);
+  const movingId = useEncounterStore(movingActorId);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
   const grid = encounter.map.grid;
@@ -97,9 +102,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
   // A token being dragged with the Select tool. `pixel` is the live cursor-tracked
   // top-left (battlemap px) for a 1:1 feel; `cell` is where it will snap. The
-  // move is committed to the store once, on pointer-up.
+  // move is committed to the store once, on pointer-up. In Play, `mode` says how:
+  // a move by the rules ("move") or the DM's free placement ("dm").
   const [draggedToken, setDraggedToken] = useState<
-    { id: string; cell: GridPoint; pixel: { x: number; y: number } | null } | null
+    { id: string; cell: GridPoint; pixel: { x: number; y: number } | null; mode?: "move" | "dm" } | null
   >(null);
   // The token that was just dropped — briefly tagged so it eases into its cell
   // and fades back to full opacity instead of snapping.
@@ -450,6 +456,11 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
         state.cancelWallPlacement();
         return;
       }
+      const moving = movingActorId(state);
+      if (event.key === "Escape" && moving && usePlayUiStore.getState().popWaypoint(planKeyOf(moving, state.log.length))) {
+        event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         clearWallSelection();
         clearTerrainSelection();
@@ -472,9 +483,20 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       return;
     }
     const state = useEncounterStore.getState();
+    if (movingId) {
+      usePlayUiStore.getState().popWaypoint(planKeyOf(movingId, state.log.length));
+      return;
+    }
     if (state.tool === "wall" && state.pendingWallStart) {
       state.cancelWallPlacement();
     }
+  }
+
+  /** Where the creature being moved stands for a cursor on `cell`. */
+  function standingFor(actorId: string, cell: GridPoint): GridPoint {
+    const actor = encounter.combatants.find((combatant) => combatant.id === actorId);
+    const footprint = actor ? sizeFootprint(getDefinition(encounter, actor).size) : 1;
+    return standingSquare(cell, footprint, grid);
   }
 
   /** If a wall chain is being drawn, finish it and report that we handled the right-click. */
@@ -565,6 +587,20 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (!(event.target instanceof HTMLElement) || event.target.closest(".token")) {
       return;
     }
+    if (movingId) {
+      // Play, the creature's turn: a click moves it there; Shift-click plans a stop on the way.
+      const cell = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      if (cell.x < 0 || cell.y < 0 || cell.x >= grid.width || cell.y >= grid.height) {
+        return;
+      }
+      const destination = standingFor(movingId, cell);
+      if (event.shiftKey) {
+        usePlayUiStore.getState().addWaypoint(planKeyOf(movingId, useEncounterStore.getState().log.length), destination);
+      } else {
+        makePlayMove(destination);
+      }
+      return;
+    }
     // A plain click on empty canvas (walls / nodes / terrain / tokens stop their
     // own propagation) drops the wall/node selection and collapses a token
     // multi-selection back to the primary — except while drawing walls.
@@ -636,6 +672,11 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (isPanning || isPanningRef.current) {
       return;
     }
+    if (movingId && !draggedToken) {
+      const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      const inside = point.x >= 0 && point.y >= 0 && point.x < grid.width && point.y < grid.height;
+      usePlayUiStore.getState().setHover(inside ? point : null);
+    }
     if (tool === "elevation") {
       const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
       const inside = point.x >= 0 && point.y >= 0 && point.x < grid.width && point.y < grid.height;
@@ -681,6 +722,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
         y: clamp(Math.round(rawY / cellSize), 0, grid.height - 1)
       };
       setDraggedToken((current) => (current ? { ...current, pixel, cell } : current));
+      if (draggedToken.mode === "move") {
+        usePlayUiStore.getState().setDragAnchor(cell);
+      }
       return;
     }
     if (tool === "measure" && measureStart) {
@@ -708,6 +752,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   function onMapPointerLeave() {
     setWallCursorPoint(null);
     setHoverCell(null);
+    usePlayUiStore.getState().setHover(null);
   }
 
   function onMapPointerUp(event: PointerEvent<HTMLDivElement>) {
@@ -740,11 +785,21 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-      // No-op inside the store when the cell is unchanged, so a plain click that
-      // didn't move adds no undo entry.
-      placeCombatant(draggedToken.id, draggedToken.cell);
       const droppedId = draggedToken.id;
       const moved = draggedToken.pixel !== null;
+      if (draggedToken.mode === "move") {
+        // Play: the creature walks there by the rules, or snaps back with the reason.
+        usePlayUiStore.getState().setDragAnchor(null);
+        if (moved) makePlayMove(draggedToken.cell);
+      } else if (draggedToken.mode === "dm") {
+        if (moved) {
+          useEncounterStore.getState().playCommand({ kind: "dm", change: { kind: "place", combatantId: droppedId, destination: draggedToken.cell } });
+        }
+      } else {
+        // No-op inside the store when the cell is unchanged, so a plain click that
+        // didn't move adds no undo entry.
+        placeCombatant(draggedToken.id, draggedToken.cell);
+      }
       setDraggedToken(null);
       if (moved) {
         // Ease the token into its cell + back to full opacity.
@@ -846,7 +901,16 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     event.preventDefault();
     suppressNextMapClickRef.current = true;
     selectCombatantOnBoard(combatantId, false);
-    if (playing) return;
+    // In Play only the creature whose turn it is can be dragged, and it moves by the rules; with Alt, any token can be
+    // put anywhere, as the DM (logged). Anything else is just selected.
+    let mode: "move" | "dm" | undefined;
+    if (playing) {
+      const play = useEncounterStore.getState().play;
+      const idle = Boolean(play && !play.pending && !play.playback);
+      if (event.altKey && idle) mode = "dm";
+      else if (combatantId === movingId) mode = "move";
+      else return;
+    }
     const battlemap = event.currentTarget.closest<HTMLElement>(".battlemap");
     const local = battlemap ? getLocalPoint(battlemap, event.clientX, event.clientY) : null;
     // Where inside the token the grab landed, so it doesn't jump under the cursor.
@@ -855,7 +919,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       : { x: cellSize / 2, y: cellSize / 2 };
     battlemap?.setPointerCapture?.(event.pointerId);
     setDroppingTokenId(null);
-    setDraggedToken({ id: combatantId, cell: combatant.position, pixel: null });
+    setDraggedToken({ id: combatantId, cell: combatant.position, pixel: null, ...(mode ? { mode } : {}) });
   }
 
   function onTemplatePointerDown(event: PointerEvent<SVGRectElement>, templateId: string) {

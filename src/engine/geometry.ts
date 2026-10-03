@@ -562,6 +562,18 @@ function footprintMovementCost(
   return terrainCost * (options.occupiedMovementMultiplier ?? 2);
 }
 
+/** What one step of a route, `from` to the next square `to`, costs on `map`, in squares. */
+export function stepCost(
+  map: BattleMapState,
+  from: Point,
+  to: Point,
+  footprint: number,
+  occupied: Point[] = [],
+  options: OccupancyMovementOptions = {}
+): number {
+  return stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options, from);
+}
+
 /**
  * The real movement cost of an already-decided route (`cells`, start to
  * finish) against `map`'s own terrain — the counterpart to a route chosen on
@@ -626,7 +638,8 @@ function neighbors(cell: Point): Point[] {
   return cells;
 }
 
-function stepDistance(a: Point, b: Point): number {
+/** A step's length on open ground, in squares: a diagonal costs half again. */
+export function stepDistance(a: Point, b: Point): number {
   return a.x !== b.x && a.y !== b.y ? 1.5 : 1;
 }
 

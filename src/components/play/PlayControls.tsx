@@ -12,7 +12,8 @@ import styles from "./play.module.css";
 
 /**
  * Whose turn a playback is showing: the latest turn started before where it has got to, or — at its very start, before
- * any of it is shown — the first turn it's about to show.
+ * any of it is shown — the first turn it's about to show. A playback that starts no turn (a person's move) is of the
+ * turn already open.
  */
 export function playbackActorId(play: PlaySession, log: CombatLogEvent[]): string | undefined {
   const playback = play.playback;
@@ -24,7 +25,8 @@ export function playbackActorId(play: PlaySession, log: CombatLogEvent[]): strin
     if (actorId === undefined || index < playback.index) actorId = String(entry.data?.combatantId);
     else break;
   }
-  return actorId;
+  const base = playback.base;
+  return actorId ?? (base.round > 0 ? base.combatants[base.turnIndex]?.id : undefined);
 }
 
 /** Where the fight stands, in words: whose turn, what's being waited on. */

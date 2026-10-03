@@ -1,6 +1,6 @@
-import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
+import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
@@ -795,6 +795,109 @@ export function plannedPath(snapshot: EncounterSnapshot, combatantId: Id, destin
   return hazardAwarePath(map, hazardPathingOverlay(map), from ?? combatant.position, destination, sizeFootprint(definition.size), occupiedCells(snapshot, combatantId), movementOptionsFor(definition));
 }
 
+/**
+ * Every square `combatantId` could end a move on with `budget` squares of movement (by default what it has left this
+ * turn), setting off from `from` (by default where it stands), and what getting there costs. The routes are the ones
+ * `plannedPath` takes — round a hazard where a detour costs about the same, costed on the real map — so a square
+ * listed here is one a move there reaches.
+ */
+export function reachableCells(
+  snapshot: EncounterSnapshot,
+  combatantId: Id,
+  options: { from?: Point; budget?: number } = {}
+): Array<{ cell: Point; cost: number }> {
+  const combatant = findCombatant(snapshot, combatantId);
+  const definition = getDefinition(snapshot, combatant);
+  const footprint = sizeFootprint(definition.size);
+  const occupied = occupiedCells(snapshot, combatantId);
+  const pathOptions = movementOptionsFor(definition);
+  const start = options.from ?? combatant.position;
+  // To within a hair, as a move's own check is.
+  const budget = (options.budget ?? remainingMovementBudget(snapshot, combatant)) + 1e-9;
+  const map = zoneTerrainOverlay(snapshot.map, snapshot.activeZones);
+  const routeMap = hazardPathingOverlay(map);
+  if (routeMap === map) {
+    return findReachableCells(map, start, footprint, budget, occupied, pathOptions).map(({ cell, cost }) => ({ cell, cost }));
+  }
+  // Planning a route that keeps off hazards costs at most HAZARD_PATHING_MULTIPLIER times what walking it does. Each
+  // square's route is its parent's plus one step, so its real cost is too.
+  const realCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const keyOf = (cell: Point) => `${cell.x},${cell.y}`;
+  const costAlong = (cells: Point[]): number => {
+    let known = cells.length - 1;
+    while (known > 0 && !realCost.has(keyOf(cells[known]!))) known -= 1;
+    let total = realCost.get(keyOf(cells[known]!)) ?? 0;
+    for (let next = known + 1; next < cells.length; next += 1) {
+      total += stepCost(map, cells[next - 1]!, cells[next]!, footprint, occupied, pathOptions);
+      realCost.set(keyOf(cells[next]!), total);
+    }
+    return total;
+  };
+  return findReachableCells(routeMap, start, footprint, budget * HAZARD_PATHING_MULTIPLIER, occupied, pathOptions)
+    .map(({ cell, cells }) => ({ cell, cost: costAlong(cells) }))
+    .filter(({ cost }) => cost <= budget);
+}
+
+/** What each step along `cells` (a route `combatantId` takes) costs it, in squares, beside what the step would cost on open ground. */
+export function routeStepCosts(snapshot: EncounterSnapshot, combatantId: Id, cells: Point[]): Array<{ cost: number; open: number }> {
+  const combatant = findCombatant(snapshot, combatantId);
+  const definition = getDefinition(snapshot, combatant);
+  const footprint = sizeFootprint(definition.size);
+  const occupied = occupiedCells(snapshot, combatantId);
+  const pathOptions = movementOptionsFor(definition);
+  const map = zoneTerrainOverlay(snapshot.map, snapshot.activeZones);
+  return cells.slice(1).map((cell, index) => ({
+    cost: stepCost(map, cells[index]!, cell, footprint, occupied, pathOptions),
+    open: stepDistance(cells[index]!, cell)
+  }));
+}
+
+/** Why `combatantId` can't stand at `destination` — off the map, another creature there, or ground nothing stands on — if it can't. */
+export function standingProblem(snapshot: EncounterSnapshot, combatantId: Id, destination: Point): string | undefined {
+  const combatant = findCombatant(snapshot, combatantId);
+  const footprint = sizeFootprint(getDefinition(snapshot, combatant).size);
+  const map = zoneTerrainOverlay(snapshot.map, snapshot.activeZones);
+  const cells = footprintCells(destination, footprint);
+  if (cells.some((cell) => cell.x < 0 || cell.y < 0 || cell.x >= map.grid.width || cell.y >= map.grid.height)) {
+    return "That's off the map";
+  }
+  const there = snapshot.combatants.find((other) => other.id !== combatantId && other.state === "active"
+    && footprintCells(other.position, sizeFootprint(getDefinition(snapshot, other).size)).some((cell) => cells.some((own) => pointsEqual(own, cell))));
+  if (there) {
+    return `${there.displayName} is there`;
+  }
+  if (cells.some((cell) => terrainAtCell(map.terrain, cell)?.type === "impassable")) {
+    return "Nothing can stand there";
+  }
+  return undefined;
+}
+
+/**
+ * The DM puts a creature on a square in the middle of a fight: no movement spent, nothing provoked, nothing on the way
+ * or where it lands goes off. An aura it carries goes with it. Logged (`source: "dm"`), so a replay and the report
+ * see it.
+ */
+export function placeByDm(state: EngineState, combatantId: Id, destination: Point): void {
+  const combatant = findCombatant(state.snapshot, combatantId);
+  if (pointsEqual(combatant.position, destination)) {
+    throw new Error(`${combatant.displayName} is already there`);
+  }
+  const problem = standingProblem(state.snapshot, combatantId, destination);
+  if (problem) {
+    throw new Error(problem);
+  }
+  const from = { ...combatant.position };
+  combatant.position = { ...destination };
+  for (const inside of state.snapshot.combatants) if (inside.containedBy === combatant.id) inside.position = { ...destination };
+  const footprint = sizeFootprint(getDefinition(state.snapshot, combatant).size);
+  for (const zone of state.snapshot.activeZones ?? []) {
+    if (zone.sourceCombatantId === combatant.id && zone.anchor === "self") zone.origin = selfOriginFor(combatant.position, footprint);
+  }
+  state.log.push(event(state, "CombatantMoved", `The DM moved ${combatant.displayName}`, {
+    combatantId, destination: { ...destination }, cells: [from, { ...destination }], cost: 0, source: "dm"
+  }));
+}
+
 /** Movement (in squares of the creature's fastest speed) spent rising or dropping `feet` while flying. */
 export function altitudeMoveCost(snapshot: EncounterSnapshot, definition: CreatureDefinition, feet: number): number {
   if (feet <= 0) return 0;
@@ -1382,11 +1485,24 @@ export function dashFactor(combatant: CombatantState): number {
  * a turn has one real movement pool instead of each caller granting a fresh full move.
  */
 export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
+  return Math.max(0, turnMovementBudget(snapshot, combatant) - (combatant.turnFlags?.movementUsed ?? 0));
+}
+
+/** A turn's whole movement, in squares: its fastest speed (slowed or Dashed, as it is now), plus any granted this turn. */
+export function turnMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
   const definition = getDefinition(snapshot, combatant);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
   const fullBudget = movementReference(movementProfileOf(definition)) / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
-  return Math.max(0, fullBudget + (combatant.turnFlags?.bonusMovement ?? 0) - (combatant.turnFlags?.movementUsed ?? 0));
+  return fullBudget + (combatant.turnFlags?.bonusMovement ?? 0);
 }
+
+/** The condition holding `combatant` where it is (grappled, restrained, paralyzed…), if one is. */
+export function heldInPlaceBy(combatant: CombatantState): ConditionInstance | undefined {
+  return (combatant.conditions ?? []).find((condition) => (condition.modifiers?.movementMultiplier ?? 1) >= HELD_IN_PLACE);
+}
+
+/** A condition that divides speed by this much or more leaves none to speak of (grappled, restrained: 999). */
+const HELD_IN_PLACE = 100;
 
 function coverLabel(level: CoverLevel): string {
   return level === "half" ? "half cover"

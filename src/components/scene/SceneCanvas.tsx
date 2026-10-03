@@ -7,6 +7,8 @@ import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, typ
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsPlayingBack, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { PlayOverlay } from "@/components/play/PlayOverlay";
+import { PlayMoveMarks } from "@/components/play/PlayMoveLayer";
+import { usePlayMoveView } from "@/hooks/usePlayMove";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
 import { clamp, pointsMatch } from "@/components/scene/coords";
@@ -93,6 +95,12 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const playing = useEncounterStore((state) => state.play !== null);
   const questionOpen = useEncounterStore((state) => Boolean(state.play?.pending) && !state.play?.playback);
   const replaying = reviewing || playingBack || questionOpen;
+  const playSpeed = useEncounterStore((state) => state.play?.playbackSpeed ?? 1);
+  // The move a person is planning on their creature's turn: drawn on the map, summed up on the dock.
+  const playMove = usePlayMoveView();
+  const yourTurnId = useEncounterStore((state) =>
+    state.play && !state.play.pending && !state.play.playback && state.play.status.kind === "your-turn" ? state.play.status.actorId : null);
+  const selectCombatant = useEncounterStore((state) => state.selectCombatant);
 
   function onTokenSrdDragOver(event: DragEvent<HTMLButtonElement>, combatantId: string) {
     if (replaying || !event.dataTransfer.types.includes(SRD_DRAG_MIME)) return;
@@ -155,9 +163,28 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   }, [aligning]);
   const cellSize = metrics.cellSize;
   const { tool, pendingWallStart } = scene;
+
+  // A person's creature's turn: select it, and bring it into view if it's off the edge.
+  useEffect(() => {
+    if (!yourTurnId) return;
+    selectCombatant(yourTurnId);
+    const actor = encounter.combatants.find((combatant) => combatant.id === yourTurnId);
+    const stage = viewport.stageRef.current?.getBoundingClientRect();
+    if (!actor || !stage?.width || !stage.height) return;
+    const half = sizeFootprint(getDefinition(encounter, actor).size) / 2;
+    const { x, y, zoom } = viewport.viewport;
+    const screenX = x + (metrics.paddingXPx + (actor.position.x + half) * cellSize) * zoom;
+    const screenY = y + (metrics.paddingYPx + (actor.position.y + half) * cellSize) * zoom;
+    const margin = Math.min(120, stage.width / 4, stage.height / 4);
+    if (screenX < margin || screenY < margin || screenX > stage.width - margin || screenY > stage.height - margin) {
+      viewport.panBy(stage.width / 2 - screenX, stage.height / 2 - screenY);
+    }
+    // Only when the turn changes hands; the board and view are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yourTurnId]);
   // Tokens tween between cells only while replay is scrubbing/playing; editing
   // stays instant. Faster playback → snappier tween.
-  const slideMs = replaying ? Math.round(clamp(620 / Math.max(0.1, replaySpeed), 90, 900)) : 0;
+  const slideMs = replaying ? Math.round(clamp(620 / Math.max(0.1, playingBack ? Math.max(1, playSpeed) : replaySpeed), 90, 900)) : 0;
   // While playback steps onto a move, the token walks its recorded path one cell
   // at a time (each hop = `walk.hopMs`); otherwise it slides straight over `slideMs`.
   const walk = useReplayPathWalk(slideMs);
@@ -522,7 +549,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
       {...viewport.stageProps}
     >
       {reviewing ? <div className="scene-replay-banner" aria-hidden="true">▶ Replay</div> : null}
-      {playing && !reviewing ? <PlayOverlay onOpenReport={onOpenReport} /> : null}
+      {playing && !reviewing ? <PlayOverlay onOpenReport={onOpenReport} move={playMove} /> : null}
       <div className="scene-hud">
         <div>
           <span>Tool</span>
@@ -623,6 +650,9 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           areaFlashes={areaFlashes}
           activeZones={encounter.activeZones}
           round={encounter.round}
+          playing={playing}
+          playMove={playMove}
+          board={encounter}
         />
         {tokenLayouts.filter((layout) => layout.altitude > 0).map(({ combatant, size, x, y }) => (
           <div
@@ -708,6 +738,17 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
               />
             ))}
           </div>
+        ) : null}
+
+        {/* A move being planned: its marks and labels, above the tokens and their bars. */}
+        {playMove ? (
+          <svg
+            className="overlay play-move-marks"
+            viewBox={`0 0 ${map.grid.width} ${map.grid.height}`}
+            style={{ width: metrics.gridPixelWidth, height: metrics.gridPixelHeight }}
+          >
+            <PlayMoveMarks view={playMove} board={encounter} />
+          </svg>
         ) : null}
 
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
