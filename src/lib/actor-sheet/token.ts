@@ -1,3 +1,4 @@
+import { tokenImageSource, type TokenImageSource } from "@/lib/token-image";
 import { getExecutableActions, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
 
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
@@ -26,14 +27,13 @@ export function prepBuffs(definition: CreatureDefinition, combatant: Pick<Combat
     });
 }
 
-/** Where the image a token shows comes from: its own, its creature's (every token of it), or nowhere. */
+/** Where the image a token shows comes from (see `TokenImageSource`), or undefined when it shows its initials. */
 export function imageSource(
-  definition: Pick<CreatureDefinition, "tokenVisuals">,
-  combatant: Pick<CombatantState, "tokenVisuals">
-): "token" | "creature" | undefined {
-  if (combatant.tokenVisuals?.imageUrl) return "token";
-  if (definition.tokenVisuals?.imageUrl) return "creature";
-  return undefined;
+  definition: Pick<CreatureDefinition, "tokenVisuals" | "source">,
+  combatant: Pick<CombatantState, "tokenVisuals">,
+  deviceImages?: Readonly<Record<string, string>>
+): TokenImageSource | undefined {
+  return tokenImageSource(definition, combatant, deviceImages);
 }
 
 /**

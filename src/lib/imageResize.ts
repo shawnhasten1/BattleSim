@@ -196,3 +196,33 @@ export async function getImageDimensions(dataUrl: string): Promise<{ width: numb
     return null;
   }
 }
+
+/** Imported token art is stored at up to this many px on its longest side: a token is rarely drawn past 4 squares. */
+export const TOKEN_MAX_EDGE = 512;
+
+/**
+ * Shrink imported token art to `maxEdge`, keeping transparency (WebP where the browser can encode
+ * it, else PNG). Small images, SVGs, and anything that fails to decode are kept as they are.
+ */
+export async function downscaleTokenImage(file: Blob, maxEdge = TOKEN_MAX_EDGE): Promise<Blob> {
+  if (typeof document === "undefined" || file.type === "image/svg+xml") return file;
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(url);
+    const longest = Math.max(image.naturalWidth, image.naturalHeight);
+    if (longest <= maxEdge && file.size <= 300_000) return file;
+    const scale = Math.min(1, maxEdge / longest);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.9));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Copy, Folder, Lock, Minus, Plus, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Folder, Image as ImageIcon, Lock, Minus, Plus, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { Chip, ChipRow } from "@/components/ui/ChipRow";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/srd-monster-filter";
 import { SRD_ROOT_FOLDER_ID, buildSrdMonsterTree, formatChallengeRating } from "@/lib/srd-monster-tree";
 import { MAX_TOKEN_BATCH } from "@/store/encounter-store";
+import { TokenArtModal } from "./TokenArtModal";
 import styles from "./ActorsPanel.module.css";
 
 interface SrdMonsterFoldersProps {
@@ -58,6 +60,7 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
   // How many tokens each add / drag creates. The text box keeps what's being typed; `quantity` is always valid.
   const [quantityDraft, setQuantityDraft] = useState("1");
   const quantity = clampQuantity(quantityDraft);
+  const [tokenArtOpen, setTokenArtOpen] = useState(false);
 
   const activeCount = activeSrdFilterCount(filters);
   const filtering = activeCount > 0;
@@ -225,10 +228,15 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                 {tree.count} of {total} monsters
               </p>
             ) : null}
-            {/* Opens in a new tab so the encounter being edited isn't left. */}
-            <a className={styles.srdCreditLink} href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">
-              SRD 5.1 credits · CC-BY-4.0
-            </a>
+            <div className={styles.srdFooterLinks}>
+              {/* Opens in a new tab so the encounter being edited isn't left. */}
+              <a className={styles.srdCreditLink} href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">
+                SRD 5.1 credits · CC-BY-4.0
+              </a>
+              <button type="button" className={styles.srdCreditLink} onClick={() => setTokenArtOpen(true)}>
+                <ImageIcon size={11} /> Token art
+              </button>
+            </div>
           </div>
 
           <ul className={styles.list}>
@@ -254,7 +262,7 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                     <ul className={styles.list}>
                       {type.monsters.map((monster) => (
                         <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster, quantity)} title={gapSummary(monster)}>
-                          <ActorThumbnail definition={{ name: monster.name }} />
+                          <ActorThumbnail definition={{ name: monster.name, source: { provider: "srd", slug: monster.slug } }} />
                           <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy", quantity)}>
                             <strong>{monster.name}</strong>
                             <span>
@@ -275,6 +283,8 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
           </ul>
         </>
       ) : null}
+      {/* Portaled: the sidebar must not become the dialog's containing block. */}
+      {tokenArtOpen ? createPortal(<TokenArtModal onClose={() => setTokenArtOpen(false)} />, document.body) : null}
     </li>
   );
 }

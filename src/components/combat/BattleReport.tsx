@@ -3,7 +3,9 @@
 import { Check, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { buildBattleReport, type ActorReport, type EncounterSnapshot } from "@/engine";
+import { tokenVisualsFor } from "@/lib/ui-helpers";
 import { useEncounterStore } from "@/store/encounter-store";
+import { useDeviceTokenImages } from "@/store/token-pack-store";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { HpBar } from "@/components/ui/HpBar";
 import { Thumb } from "@/components/ui/Thumb";
@@ -33,6 +35,7 @@ export function BattleReport({ onClose }: { onClose: () => void }) {
   const encounter = useEncounterStore((state) => state.encounter);
   const log = useEncounterStore((state) => state.log);
   const report = useMemo(() => buildBattleReport(encounter, log), [encounter, log]);
+  const deviceImages = useDeviceTokenImages();
   const [copied, setCopied] = useState(false);
 
   const groups = FACTION_ORDER.map((faction) => ({
@@ -88,7 +91,7 @@ export function BattleReport({ onClose }: { onClose: () => void }) {
         <section key={group.faction} className={styles.group}>
           <h4>{FACTION_LABEL[group.faction] ?? group.faction}</h4>
           {group.actors.map((actor) => (
-            <ActorEntry key={actor.combatantId} actor={actor} portrait={portraitFor(encounter, actor.combatantId)} />
+            <ActorEntry key={actor.combatantId} actor={actor} portrait={portraitFor(encounter, actor.combatantId, deviceImages)} />
           ))}
         </section>
       ))}
@@ -96,9 +99,12 @@ export function BattleReport({ onClose }: { onClose: () => void }) {
   );
 }
 
-function portraitFor(encounter: EncounterSnapshot, id: string): string | undefined {
+function portraitFor(encounter: EncounterSnapshot, id: string, deviceImages: Readonly<Record<string, string>>): string | undefined {
   const combatant = encounter.combatants.find((c) => c.id === id);
-  return combatant?.tokenVisuals?.portraitUrl ?? combatant?.tokenVisuals?.imageUrl;
+  if (!combatant) return undefined;
+  if (combatant.tokenVisuals?.portraitUrl) return combatant.tokenVisuals.portraitUrl;
+  const definition = encounter.definitions.find((candidate) => candidate.id === combatant.definitionId);
+  return definition ? tokenVisualsFor(definition, combatant, deviceImages).imageUrl : combatant.tokenVisuals?.imageUrl;
 }
 
 function ActorEntry({ actor, portrait }: { actor: ActorReport; portrait?: string }) {

@@ -118,11 +118,18 @@ export function tacticsLine(combatant: Pick<CombatantState, "tacticsProfile" | "
   return [profile, stance, targeted, ...(tags.includes("protected") ? ["protected"] : [])].join(" · ");
 }
 
+const IMAGE_LABELS: Record<NonNullable<ReturnType<typeof imageSource>>, (name: string) => string> = {
+  token: () => "image (this token)",
+  creature: (name) => `image (every ${name})`,
+  device: () => "your token art (this device)",
+  placeholder: () => "SRD token"
+};
+
 /** How it looks on the map: "image (every Goblin) · white border", or "initials · custom border · nameplate". */
-export function appearanceLine(definition: CreatureDefinition, combatant: CombatantState): string {
-  const visuals = tokenVisualsFor(definition, combatant);
-  const source = imageSource(definition, combatant);
-  const parts = [source === "token" ? "image (this token)" : source === "creature" ? `image (every ${definition.name})` : "initials"];
+export function appearanceLine(definition: CreatureDefinition, combatant: CombatantState, deviceImages?: Readonly<Record<string, string>>): string {
+  const visuals = tokenVisualsFor(definition, combatant, deviceImages);
+  const source = imageSource(definition, combatant, deviceImages);
+  const parts = [source ? IMAGE_LABELS[source](definition.name) : "initials"];
   parts.push(visuals.borderColor ? "custom border" : "white border");
   if (source) {
     // Scale and glow only change an image (plan §3.4).

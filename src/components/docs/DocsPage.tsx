@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, LayoutGrid, Swords } from "lucide-react";
 import type { GuideSummary } from "@/lib/guides";
 import { SrdAttribution } from "./SrdAttribution";
+import { TokenIconCredits } from "./TokenIconCredits";
 import styles from "./docs.module.css";
 
 interface Section {
@@ -894,6 +895,11 @@ const SECTIONS: Section[] = [
           BattleSim is compatible with fifth edition.
         </p>
         <SrdAttribution />
+        <TokenIconCredits />
+        <p>
+          Token art you import for SRD monsters stays in your browser on this device: it isn&apos;t uploaded, saved
+          with your actors, or shown to anyone else.
+        </p>
       </>
     )
   }

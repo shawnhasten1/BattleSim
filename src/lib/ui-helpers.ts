@@ -1,4 +1,5 @@
 import type { CombatantState, CreatureDefinition, TokenVisuals } from "@/engine";
+import { resolveTokenVisuals } from "@/lib/token-image";
 
 /** Trigger a browser download of `payload` as pretty-printed JSON. */
 export function downloadJson(filename: string, payload: unknown): void {
@@ -20,9 +21,16 @@ export function defaultFactionForDefinition(definition: CreatureDefinition): "pa
   return definition.character ? "party" : "enemy";
 }
 
-/** Combatant-level token visuals win over definition-level defaults. */
-export function tokenVisualsFor(definition: Pick<CreatureDefinition, "tokenVisuals">, combatant?: CombatantState): TokenVisuals {
-  return { ...(definition.tokenVisuals ?? {}), ...(combatant?.tokenVisuals ?? {}) };
+/**
+ * Combatant-level token visuals win over definition-level defaults; with no image of their own, an
+ * SRD monster shows this browser's imported art for it (`deviceImages`) or its placeholder token.
+ */
+export function tokenVisualsFor(
+  definition: Pick<CreatureDefinition, "tokenVisuals" | "source">,
+  combatant?: Pick<CombatantState, "tokenVisuals">,
+  deviceImages?: Readonly<Record<string, string>>
+): TokenVisuals {
+  return resolveTokenVisuals(definition, combatant, deviceImages);
 }
 
 export function formatBonus(value: number): string {

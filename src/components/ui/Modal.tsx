@@ -10,6 +10,8 @@ interface ModalProps {
   children: ReactNode;
   /** Optional footer content, typically action buttons. */
   footer?: ReactNode;
+  /** Widest the panel grows, in px (default 460). */
+  maxWidth?: number;
 }
 
 const FOCUSABLE =
@@ -22,7 +24,7 @@ const FOCUSABLE =
  * transformed ancestor. Revisit with createPortal if a stacking-context issue
  * appears.
  */
-export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, maxWidth }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -66,6 +68,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       <div
         ref={panelRef}
         className={styles.panel}
+        style={maxWidth ? { maxWidth } : undefined}
         role="dialog"
         aria-modal="true"
         aria-label={title}

@@ -174,3 +174,12 @@ https://creativecommons.org/licenses/by/4.0/legalcode.
   monster (`adoptSrdDefinition`), "Copy to my library" and dropping a row on a user folder
   (`saveSrdMonsterCopy`) all mint a fresh `def-<uuid>` (and re-point the scene's tokens), and
   `POST /api/definitions` rejects any `srd:` id.
+
+## Monster tokens
+
+Every monster in `monsters/` has a placeholder token at `public/tokens/srd/<slug>.svg`: a
+[game-icons.net](https://game-icons.net) icon (CC BY 3.0) on a disc coloured by creature type.
+Pick a monster's icon in `scripts/srd-tokens/icon-map.ts`, then run `npm run srd:tokens` (and
+commit the SVGs and `monsters/generated/token-icons.json`). The Docs credits list the icon
+authors from that manifest. Art a DM imports for a monster lives only in their browser
+(`src/lib/tokenPackStore.ts`). See `SRD_TOKEN_IMAGES_PLAN.md`.

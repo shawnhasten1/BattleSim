@@ -9,6 +9,9 @@ import { COMBATANT_STATE_HELP } from "@/lib/sheet-help";
 import { appearanceLine, fightLine, statusLine } from "@/lib/actor-sheet/summaries";
 import { imageSource, isSurprised, prepBuffs } from "@/lib/actor-sheet/token";
 import { tokenVisualsFor } from "@/lib/ui-helpers";
+import { srdSlugOf } from "@/lib/token-image";
+import { TWIN_SLUGS } from "@/lib/token-pack-match";
+import { useDeviceTokenImages, useTokenPackStore } from "@/store/token-pack-store";
 import { Segmented } from "../ability-editor/controls";
 import { SheetColor, SheetNumber } from "../SheetInputs";
 import { SheetSection } from "../SheetSection";
@@ -141,7 +144,8 @@ export function FightSection({ combatant, definition, open, onToggle }: SectionP
 /** The token as the map draws it (the map's own `.token` styles), at its size on the map up to four squares. */
 function TokenPreview({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const squarePx = useEncounterStore((s) => s.encounter.map.grid.squareSizePx ?? DEFAULT_GRID_VISUALS.squareSizePx);
-  const visuals = tokenVisualsFor(definition, combatant);
+  const deviceImages = useDeviceTokenImages();
+  const visuals = tokenVisualsFor(definition, combatant, deviceImages);
   const size = Math.min(4 * DEFAULT_GRID_VISUALS.squareSizePx, sizeFootprint(definition.size) * squarePx);
   const scale = Math.min(1.5, Math.max(0.5, visuals.scale ?? 1));
   return (
@@ -175,8 +179,14 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
   const id = useId();
   const updateCombatantVisuals = useEncounterStore((s) => s.updateCombatantVisuals);
   const updateDefinitionVisuals = useEncounterStore((s) => s.updateDefinitionVisuals);
-  const visuals = tokenVisualsFor(definition, combatant);
-  const source = imageSource(definition, combatant);
+  const deviceImages = useDeviceTokenImages();
+  const visuals = tokenVisualsFor(definition, combatant, deviceImages);
+  const source = imageSource(definition, combatant, deviceImages);
+  const srdSlug = srdSlugOf(definition);
+  const removeDeviceArt = async (slug: string) => {
+    const remove = useTokenPackStore.getState().remove;
+    for (const each of [slug, ...(TWIN_SLUGS[slug] ?? [])]) await remove(each);
+  };
   const [scope, setScope] = useState<"token" | "creature">(source === "token" ? "token" : "creature");
   const scopedImage = scope === "token" ? combatant.tokenVisuals?.imageUrl : definition.tokenVisuals?.imageUrl;
   const every = `every ${definition.name}`;
@@ -199,10 +209,13 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
 
   const imageNote = source === "token"
     ? definition.tokenVisuals?.imageUrl ? `This token has its own image, in place of the one ${every} has.` : "This token has its own image."
-    : source === "creature" ? `Every ${definition.name} shows this image, unless a token has its own.` : "No image: it shows its initials.";
+    : source === "creature" ? `Every ${definition.name} shows this image, unless a token has its own.`
+    : source === "device" ? "Your imported token art for this SRD monster, kept on this device only."
+    : source === "placeholder" ? "The SRD monster's placeholder token. Upload an image, or import token art from the SRD Monsters folder."
+    : "No image: it shows its initials.";
 
   return (
-    <SheetSection title="Appearance" summary={appearanceLine(definition, combatant)} open={open} onToggle={onToggle}>
+    <SheetSection title="Appearance" summary={appearanceLine(definition, combatant, deviceImages)} open={open} onToggle={onToggle}>
       <div className={styles.appearance}>
         <TokenPreview combatant={combatant} definition={definition} />
         <div className={styles.stack}>
@@ -221,6 +234,11 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
             <button type="button" className={styles.upload} disabled={!scopedImage} onClick={() => setImage(undefined)}>
               Clear
             </button>
+            {source === "device" && srdSlug ? (
+              <button type="button" className={styles.upload} onClick={() => void removeDeviceArt(srdSlug)}>
+                Remove your art
+              </button>
+            ) : null}
           </div>
           <p className={styles.note}>{imageNote}</p>
         </div>

@@ -16,6 +16,8 @@ import { SceneFeedbackLayer } from "@/components/scene/SceneFeedbackLayer";
 import { ElevationLegend, ElevationPalette } from "@/components/scene/ElevationPalette";
 import { alignedMap, alignmentShift, GridAlignLayer, GridAlignPanel } from "@/components/scene/GridAlign";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { tokenVisualsFor } from "@/lib/ui-helpers";
+import { useDeviceTokenImages } from "@/store/token-pack-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
 import type { UseViewportResult } from "@/hooks/useViewport";
 
@@ -50,10 +52,6 @@ interface SceneCanvasProps {
   onCanvasDrop: (event: DragEvent<HTMLDivElement>) => void;
   /** Open the floating actor sheet (owned by the page). Invoked from the token context menu. */
   onEditActor?: () => void;
-}
-
-function tokenVisualsFor(definition: CreatureDefinition, combatant: CombatantState) {
-  return { ...(definition.tokenVisuals ?? {}), ...(combatant.tokenVisuals ?? {}) };
 }
 
 /**
@@ -163,6 +161,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   // `x`/`y` from here, so they move together.
   const draggedToken = scene.draggedToken;
   const droppingTokenId = scene.droppingTokenId;
+  const deviceImages = useDeviceTokenImages();
   const tokenLayouts = useMemo(
     () =>
       encounter.combatants.map((combatant) => {
@@ -191,7 +190,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           y: px.y,
           dragging: Boolean(drag),
           dropping: droppingTokenId === combatant.id,
-          visuals: tokenVisualsFor(definition, combatant),
+          visuals: tokenVisualsFor(definition, combatant, deviceImages),
           hpOut: combatant.currentHp <= 0 || combatant.state !== "active",
           inActiveZone,
           altitude: combatant.altitude ?? 0,
@@ -199,7 +198,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           lift: Math.min(8, 3 + (combatant.altitude ?? 0) / 10)
         };
       }),
-    [encounter, cellSize, draggedToken, droppingTokenId, walk.positions, map.grid.distancePerSquare]
+    [encounter, cellSize, draggedToken, droppingTokenId, walk.positions, map.grid.distancePerSquare, deviceImages]
   );
 
   function wallMenuItems(): ContextMenuItem[] {

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img">
+<title>Gelatinous Cube</title>
+<defs><radialGradient id="disc" cx="50%" cy="36%" r="70%">
+<stop offset="0" stop-color="#6c9c65"/><stop offset="1" stop-color="#2c5326"/>
+</radialGradient></defs>
+<circle cx="256" cy="256" r="256" fill="url(#disc)"/>
+<circle cx="256" cy="256" r="236" fill="none" stroke="#f3eee4" stroke-opacity=".18" stroke-width="5"/>
+<g color="#f3eee4" transform="translate(104 104) scale(.59375)"><path fill="currentColor" d="M256 24.585L51.47 118.989L256 213.394l204.53-94.405zM38.998 133.054v258.353L247 487.415V229.063zm434.004 0L265 229.062v258.353l208.002-96.008z"/></g>
+</svg>
