@@ -59,6 +59,7 @@ import {
   normalizeSpellDefinition,
   normalizeActionDefinition,
   normalizeDeathEffectDefinition,
+  migrateDefinition,
   type ActionRider,
   type CoverLevel,
   type WallSegment
@@ -460,8 +461,11 @@ function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnaps
     ...DEFAULT_GRID_VISUALS,
     ...encounter.map.grid
   };
+  // Creatures saved before an engine change come up to date (the same objects when they already are).
+  const definitions = encounter.definitions.map(migrateDefinition);
   return {
     ...encounter,
+    definitions: definitions.some((definition, index) => definition !== encounter.definitions[index]) ? definitions : encounter.definitions,
     map: {
       ...encounter.map,
       grid,
@@ -1829,7 +1833,7 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         const data = await response.json() as { definitions: CreatureDefinition[]; templateIds?: string[] };
         set({
-          definitionsLibrary: data.definitions,
+          definitionsLibrary: data.definitions.map(migrateDefinition),
           templateDefinitionIds: data.templateIds ?? [],
           definitionStatus: `${data.definitions.length} saved definitions`
         });

@@ -67,13 +67,13 @@ export function blankSpecialAction(): SaveAction {
 }
 
 /**
- * A blank reaction: when it's targeted by an attack, it gains something for a round, the way a Parry does. While active
+ * A blank reaction: when an attack would hit it, it gains something for a round, the way Shield does. While active
  * says what; Use & cost changes when it fires.
  */
 export function blankReaction(): Extract<ActionDefinition, { kind: "activate-feature" }> {
   return {
     kind: "activate-feature", id: "", name: "New reaction", actionType: "reaction", featureId: "",
-    reaction: { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" },
+    reaction: { trigger: { kind: "would-be-hit" }, target: "self", priority: "always" },
     condition: { name: "custom", durationRounds: 1 }, automationSupport: "full"
   };
 }
@@ -202,10 +202,10 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
   },
   {
     label: "Parry",
-    hint: "A reaction: +2 AC against a melee attack that targets it",
+    hint: "A reaction: +2 AC against a melee attack that would hit it",
     record: () => ({
       kind: "activate-feature", id: "", name: "Parry", actionType: "reaction", featureId: "parry",
-      reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+      reaction: { trigger: { kind: "would-be-hit", meleeOnly: true }, target: "self", priority: "always", lastsFor: "triggering-attack" },
       condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 2 } }, automationSupport: "full"
     })
   }

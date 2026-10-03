@@ -241,6 +241,27 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     expect(parry).toMatchObject({ kind: "activate-feature", condition: { id: "parry-active", durationRounds: 1, modifiers: { armorClass: 3 } }, reaction: { priority: "always" } });
   });
 
+  it("a Parry saved before waits for an attack that would hit it, for that attack only; how long it lasts can change", async () => {
+    // Inserted as an old save had it (before the roll); the store brings it up to date.
+    store().insertAbilityRecord("def-fighter", "reactions", {
+      kind: "activate-feature", id: "", name: "Parry", actionType: "reaction", featureId: "parry",
+      reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+      condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 2 } }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Parry" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    const use = inSection("use");
+    expect((use.getByRole("combobox", { name: "When" }) as HTMLSelectElement).value).toBe("would-be-hit");
+    expect((use.getByRole("checkbox", { name: "Melee attacks only" }) as HTMLInputElement).checked).toBe(true);
+    expect(within(use.getByRole("radiogroup", { name: "What it gives lasts" })).getByRole("radio", { name: "For that attack" }).getAttribute("aria-checked")).toBe("true");
+    expect(use.getByText(/Offered only when the AC it gives makes the attack miss/)).toBeTruthy();
+    await radio(use, "What it gives lasts", "Until its next turn");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    const parry = (fighter().reactions ?? []).find((action) => action.name === "Parry")!;
+    expect(parry).toMatchObject({ reaction: { trigger: { kind: "would-be-hit", meleeOnly: true }, lastsFor: "until-start-of-next-turn" } });
+  });
+
   it("gives a buff's other effects as cards: advantage on attacks while it lasts", async () => {
     render(<LiveTab />);
     await startFromScratch("Spell");

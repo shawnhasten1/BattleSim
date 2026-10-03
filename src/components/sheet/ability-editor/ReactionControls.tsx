@@ -7,8 +7,9 @@ import styles from "./ability-editor.module.css";
 
 const TRIGGERS: Array<{ value: ReactionTrigger["kind"]; label: string }> = [
   { value: "enemy-leaves-reach", label: "A creature leaves its reach (an opportunity attack)" },
-  { value: "targeted-by-attack", label: "It's targeted by an attack" },
-  { value: "hit-by-attack", label: "It's hit by an attack" },
+  { value: "targeted-by-attack", label: "It's targeted by an attack (before the roll)" },
+  { value: "would-be-hit", label: "An attack would hit it (after the roll, before damage)" },
+  { value: "hit-by-attack", label: "It's hit by an attack (after damage)" },
   { value: "ally-targeted-by-attack", label: "An ally near it is targeted by an attack" },
   { value: "enemy-casts-spell", label: "An enemy near it casts a spell" },
   { value: "manual", label: "Something else (described; never fires on its own)" }
@@ -33,7 +34,7 @@ export const ATTACK_TRIGGERS: Array<ReactionTrigger["kind"]> = ["enemy-leaves-re
  * The triggers an activation (Shield, Parry, Counterspell) answers. "An enemy casts a spell" counters the spell and "an
  * ally is targeted" gives the attack disadvantage, whatever the activation holds.
  */
-export const ACTIVATION_TRIGGERS: Array<ReactionTrigger["kind"]> = ["targeted-by-attack", "hit-by-attack", "ally-targeted-by-attack", "enemy-casts-spell", "manual"];
+export const ACTIVATION_TRIGGERS: Array<ReactionTrigger["kind"]> = ["would-be-hit", "targeted-by-attack", "hit-by-attack", "ally-targeted-by-attack", "enemy-casts-spell", "manual"];
 
 /** What sets the reaction off, with the trigger's own details (melee only, how near, what it says). */
 export function TriggerPicker({ value, onChange, label = "When", kinds }: {
@@ -50,7 +51,7 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
       <select id={selectId} aria-label={label} value={value.kind} onChange={(e) => onChange(blankTrigger(e.target.value as ReactionTrigger["kind"]))}>
         {offered.map((trigger) => <option key={trigger.value} value={trigger.value}>{trigger.label}</option>)}
       </select>
-      {value.kind === "targeted-by-attack" || value.kind === "hit-by-attack" ? (
+      {value.kind === "targeted-by-attack" || value.kind === "would-be-hit" || value.kind === "hit-by-attack" ? (
         <Check label="Melee attacks only" checked={Boolean(value.meleeOnly)} onChange={(on) => onChange(on ? { ...value, meleeOnly: true } : { kind: value.kind })} />
       ) : null}
       {value.kind === "ally-targeted-by-attack" || value.kind === "enemy-casts-spell" ? (
@@ -81,9 +82,23 @@ export function ReactionControls({ reaction, onChange, kinds, actsOn = true }: {
   actsOn?: boolean;
 }) {
   const eagerness = reaction.priority ?? "worthwhile";
+  // An activation's gift (Shield's +5, a Parry's +2) can last for the attack that set it off, or until its next turn.
+  const lasting = !actsOn && (reaction.trigger.kind === "would-be-hit" || reaction.trigger.kind === "targeted-by-attack" || reaction.trigger.kind === "hit-by-attack");
   return (
     <>
       <TriggerPicker value={reaction.trigger} onChange={(trigger) => onChange({ ...reaction, trigger })} kinds={kinds} />
+      {lasting ? <Field copy="reactionLasts">
+        <Segmented
+          label="What it gives lasts"
+          value={reaction.lastsFor ?? "duration"}
+          options={[
+            { value: "duration", label: "As While active says" },
+            { value: "triggering-attack", label: "For that attack" },
+            { value: "until-start-of-next-turn", label: "Until its next turn" }
+          ]}
+          onChange={(lastsFor) => { const next = { ...reaction }; delete next.lastsFor; onChange(lastsFor === "duration" ? next : { ...next, lastsFor }); }}
+        />
+      </Field> : null}
       {actsOn ? <Field copy="reactionActsOn">
         <Segmented
           label="It acts on"

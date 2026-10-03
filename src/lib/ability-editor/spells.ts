@@ -30,7 +30,7 @@ export function canBeReaction(action: ActionDefinition | undefined): boolean {
 /**
  * The action taken as `actionType`. A reaction's trigger is set aside (`parked`) when it stops being one, and brought
  * back when it's a reaction again. A new reaction starts on "it's hit by an attack"; a new activation (Shield, Parry)
- * on "it's targeted by an attack", on itself, taken whenever it can: the AI only weighs whether a damaging reaction is
+ * on "an attack would hit it", on itself, taken whenever it can: the AI only weighs whether a damaging reaction is
  * worth it.
  */
 export function withActionType(
@@ -45,7 +45,7 @@ export function withActionType(
   delete next.reaction;
   if (actionType === "reaction" && canBeReaction(action)) {
     next.reaction = nextParked ?? (action.kind === "activate-feature"
-      ? { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" }
+      ? { trigger: { kind: "would-be-hit" }, target: "self", priority: "always" }
       : { trigger: { kind: "hit-by-attack" } });
   }
   return { action: next as ActionDefinition, parked: nextParked };

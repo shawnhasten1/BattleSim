@@ -134,6 +134,7 @@ export function activationAnswers(activation: Activation | undefined): "counters
 export function TriggerNote({ trigger }: { trigger: ReactionTrigger }) {
   if (trigger.kind === "enemy-casts-spell") return <p className={styles.hint}>It counters the spell. Nothing else it holds is used.</p>;
   if (trigger.kind === "ally-targeted-by-attack") return <p className={styles.hint}>The attack on the ally has disadvantage. Nothing else it holds is used.</p>;
+  if (trigger.kind === "would-be-hit") return <p className={styles.hint}>Offered only when the AC it gives makes the attack miss; never against a critical hit.</p>;
   return null;
 }
 

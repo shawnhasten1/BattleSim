@@ -111,7 +111,85 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
     features,
     traits
   };
-  return creatureDefinitionSchema.parse(normalized);
+  return migrateDefinition(creatureDefinitionSchema.parse(normalized));
+}
+
+/* ─── Bringing saved creatures up to date ──────────────────────────────────────── */
+
+/**
+ * A saved creature as the engine models it now. Returns the same object when nothing needs to change, so a creature
+ * that's already current keeps its identity (the compiled-actions cache is keyed on it). Run wherever creatures come in:
+ * imports, saved encounters, the library.
+ *
+ * - Shield- and Parry-style reactions used to fire before the attack roll (`targeted-by-attack`). An activation whose
+ *   only effect is a higher AC now waits for the roll (`would-be-hit`), as the rules say. The library's Shield lasts until
+ *   the start of its caster's next turn and a Parry for the one attack; any other keeps its own duration.
+ */
+export function migrateDefinition(definition: CreatureDefinition): CreatureDefinition {
+  let changed = false;
+  const migrate = <T extends ActionDefinition>(action: T): T => {
+    const next = migrateAction(action);
+    if (next !== action) changed = true;
+    return next;
+  };
+  const list = <T extends ActionDefinition>(actions: T[] | undefined): T[] | undefined => {
+    if (!actions) return actions;
+    const next = actions.map(migrate);
+    return next.some((action, index) => action !== actions[index]) ? next : actions;
+  };
+  const withGrants = <T extends { grantedActions?: ActionDefinition[] }>(records: T[] | undefined): T[] | undefined => {
+    if (!records) return records;
+    const next = records.map((record) => {
+      const grantedActions = list(record.grantedActions);
+      return grantedActions === record.grantedActions ? record : { ...record, grantedActions };
+    });
+    return next.some((record, index) => record !== records[index]) ? next : records;
+  };
+  const next: CreatureDefinition = {
+    ...definition,
+    actions: list(definition.actions) ?? [],
+    bonusActions: list(definition.bonusActions),
+    reactions: list(definition.reactions),
+    lairActions: list(definition.lairActions),
+    features: withGrants(definition.features),
+    traits: withGrants(definition.traits),
+    weapons: withGrants(definition.weapons),
+    spells: definition.spells?.map((spell) => {
+      const action = spell.action ? migrate(spell.action) : spell.action;
+      return action === spell.action ? spell : { ...spell, action };
+    }),
+    legendary: definition.legendary
+      ? {
+        ...definition.legendary,
+        actions: definition.legendary.actions.map((ref) => {
+          const action = ref.action ? migrate(ref.action) : ref.action;
+          return action === ref.action ? ref : { ...ref, action };
+        })
+      }
+      : definition.legendary
+  };
+  return changed ? next : definition;
+}
+
+/** An AC-only reaction that fired before the roll now waits for a hit it can turn into a miss. */
+function migrateAction<T extends ActionDefinition>(action: T): T {
+  if (action.kind !== "activate-feature" || action.reaction?.trigger.kind !== "targeted-by-attack") return action;
+  const modifiers = action.condition?.modifiers;
+  const armorClassOnly = (modifiers?.armorClass ?? 0) > 0
+    && Object.keys(modifiers ?? {}).every((key) => key === "armorClass")
+    && !action.condition?.effects?.length;
+  if (!armorClassOnly) return action;
+  const lastsFor = action.featureId === "srd:spell:shield" ? "until-start-of-next-turn" as const
+    : action.featureId === "parry" ? "triggering-attack" as const
+      : action.reaction.lastsFor;
+  return {
+    ...action,
+    reaction: {
+      ...action.reaction,
+      trigger: { kind: "would-be-hit", ...(action.reaction.trigger.meleeOnly ? { meleeOnly: true } : {}) },
+      ...(lastsFor ? { lastsFor } : {})
+    }
+  };
 }
 
 function normalizeCombatantInput(input: Record<string, unknown>, definition: CreatureDefinition): Record<string, unknown> {
@@ -840,6 +918,8 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
       return { kind: "enemy-leaves-reach" };
     case "targeted-by-attack":
       return { kind: "targeted-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
+    case "would-be-hit":
+      return { kind: "would-be-hit", meleeOnly: input.meleeOnly === true ? true : undefined };
     case "hit-by-attack":
       return { kind: "hit-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
     case "ally-targeted-by-attack":
@@ -871,7 +951,8 @@ function normalizeReactionMeta(input: unknown): ReactionMeta | undefined {
   const priority = input.priority === "always" || input.priority === "manual" || input.priority === "worthwhile"
     ? input.priority
     : undefined;
-  return { trigger, target, priority };
+  const lastsFor = input.lastsFor === "triggering-attack" || input.lastsFor === "until-start-of-next-turn" ? input.lastsFor : undefined;
+  return { trigger, target, priority, ...(lastsFor ? { lastsFor } : {}) };
 }
 
 function normalizeRiderSave(input: unknown): RiderSave | undefined {

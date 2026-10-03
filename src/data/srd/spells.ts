@@ -1355,14 +1355,13 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   {
     id: "srd:spell:shield", name: "Shield", level: 1, school: "abjuration", castingTime: "reaction", range: "self",
     resourceCost: { resourceId: "slot-1", amount: 1 },
-    description: "As a reaction when you are targeted by an attack, gain +5 AC until the start of your next turn.",
+    description: "As a reaction when you are hit by an attack, gain +5 AC until the start of your next turn, including against the triggering attack.",
     automationSupport: "full",
     action: {
       kind: "activate-feature", id: "srd:spell:shield:action", name: "Shield", actionType: "reaction",
       featureId: "srd:spell:shield",
-      // Pre-roll window has no roll to gate on, so v1 fires whenever an attack
-      // targets the caster and a slot is available (mirrors Protection's "always").
-      reaction: { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "always" },
+      // Cast once the roll is known and it hits, and only when +5 makes it miss.
+      reaction: { trigger: { kind: "would-be-hit" }, target: "self", priority: "always", lastsFor: "until-start-of-next-turn" },
       resourceCost: { resourceId: "slot-1", amount: 1 },
       condition: { id: "shield-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 5 } },
       automationSupport: "full"

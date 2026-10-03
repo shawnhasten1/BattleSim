@@ -9,6 +9,7 @@ export const COPY = {
   takes: { label: "Takes", hint: "What using it spends from the creature's turn." },
   reactionTrigger: { label: "When" },
   reactionActsOn: { label: "It acts on" },
+  reactionLasts: { label: "What it gives lasts", hint: "Parry's +2 is for that attack; Shield's +5 lasts until the start of its next turn." },
   reactionEagerness: { label: "The AI uses it", hint: "“Never on its own” keeps it for you to trigger by hand." },
   limit: { label: "Limit" },
   uses: { label: "Uses per encounter", hint: "The simulator gives it back at the start of every fight." },

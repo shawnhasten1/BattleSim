@@ -284,6 +284,40 @@ describe("Counterspell, asked", () => {
   });
 });
 
+describe("Shield, asked once the roll is known", () => {
+  const shield = findSrdSpell("srd:spell:shield")!;
+  const wizard = blank("wizard", { armorClass: 12, spells: [structuredClone(shield)], resources: { "slot-1": 2 } });
+  const ogre = blank("ogre", { actions: [melee("club", { attackBonus: 4, damage: [{ dice: "2d8", damageType: "bludgeoning" }] })] });
+  const start = () => open(scene([
+    { id: "ogre", def: ogre, faction: "enemy", at: [5, 4], initiative: 20 },
+    { id: "wizard", def: wizard, faction: "party", at: [4, 4], initiative: 10 }
+  ], "shield-ask"));
+
+  it("asks only when +5 would make the hit a miss, showing the roll against the AC", () => {
+    const opened = start();
+    const club = command({ kind: "use", actorId: "ogre", actionId: "club", target: { targetIds: ["wizard"] } });
+    // Look for a seed where the ogre's swing hits and Shield would turn it.
+    let found = false;
+    for (let attempt = 0; attempt < 40 && !found; attempt += 1) {
+      const snapshot = { ...opened.snapshot, seed: `shield-ask-${attempt}` };
+      const asked = runPlayStep({ snapshot, log: opened.log, step: club, control: EVERYONE_PLAYS });
+      if (asked.kind !== "needs-decision") continue;
+      found = true;
+      expect(asked.request).toMatchObject({
+        kind: "reaction", reactorId: "wizard", trigger: "would-be-hit",
+        context: { attack: { actionName: "Club", targetAc: 12 } },
+        options: [{ name: "Shield", resourceCost: { resourceId: "slot-1", amount: 1 } }]
+      });
+      const total = (asked.request as { context: { attack: { total: number } } }).context.attack.total;
+      expect(total).toBeGreaterThanOrEqual(12);
+      expect(total).toBeLessThan(17);
+      const shielded = runStep(snapshot, opened.log, club, EVERYONE_PLAYS).result;
+      expect(shielded.log.find((entry) => entry.type === "AttackRolled")!.data).toMatchObject({ hit: false, targetAc: 17 });
+    }
+    expect(found).toBe(true);
+  });
+});
+
 describe("previews agree with what happens", () => {
   const trials = 2000;
   const rate = (hits: number) => hits / trials;

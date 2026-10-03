@@ -646,11 +646,19 @@ const SECTIONS: Section[] = [
           <strong>While active</strong>: how long it lasts and its cards (Shield&apos;s +5 AC). Counterspell and
           Protection do one thing (counter the spell, give the attack disadvantage), so they have none.
         </p>
+        <p>
+          Shield and Parry go off on <strong>An attack would hit it</strong>: once the attack is rolled and hits, before
+          any damage, and only when the AC they give makes it miss. Nothing stops a critical hit. Under{" "}
+          <strong>What it gives lasts</strong>, a Parry&apos;s +2 is <em>for that attack</em> and Shield&apos;s +5 lasts{" "}
+          <em>until its next turn</em>. Creatures saved before this used to raise their AC as soon as an attack was aimed
+          at them; they&apos;re brought up to date when they&apos;re loaded.
+        </p>
 
         <h3>What the AI does with them</h3>
         <p>
           The AI switches a feature on when it costs a bonus action and improves its attacks or defenses (Rage), and
-          takes reactions when their trigger happens. It never switches on one that costs an action or nothing
+          takes reactions when their trigger happens (Shield and Parry only when they turn a hit into a miss). It never
+          switches on one that costs an action or nothing
           (Reckless Attack, Action Surge): use those by hand when you play the fight. The editor warns about this,
           and about anything that can&apos;t work where it is: an aura with nothing it can share, an extra action on a
           feature that&apos;s always on, or &ldquo;hits against it deal more&rdquo; on something that never ends.

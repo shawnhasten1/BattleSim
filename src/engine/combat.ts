@@ -1535,7 +1535,8 @@ function resolveAttackCore(
   }).imposedDisadvantage === true;
 
   const inputs = attackRollInputs(state, attacker, target, action, { ...options, forcedDisadvantage }, cover);
-  const { featureAdvantage, longRange, rollMode, attackBonus, featureAttackBonus, targetAc } = inputs;
+  const { featureAdvantage, longRange, rollMode, attackBonus, featureAttackBonus } = inputs;
+  let targetAc = inputs.targetAc;
   const d20 = rollD20(state.rng, { advantage: inputs.advantage, disadvantage: inputs.disadvantage });
   const total = d20.total + inputs.totalBonus;
   const natural = d20.total;
@@ -1549,6 +1550,20 @@ function resolveAttackCore(
   if (overridden) {
     hit = overridden !== "failure";
     critical = overridden === "critical";
+  }
+  // Shield, Parry: the roll is known and it hits — the target may raise its AC to make it miss. Nothing stops a
+  // critical hit, and a DM's ruling on the roll stands.
+  let endsAfterAttack: ReactionWindowResult["endsAfterAttack"];
+  if (hit && !critical && !overridden) {
+    endsAfterAttack = runReactionWindow(state, {
+      kind: "would-be-hit", sourceId: attacker.id, targetId: target.id, attackType: action.attackType, actionId: action.id, actionName: action.name,
+      attackTotal: total, attackNatural: natural, targetAc
+    }).endsAfterAttack;
+    const raisedAc = effectiveArmorClass(state, targetDefinition, target) + inputs.cover.acBonus;
+    if (raisedAc !== targetAc) {
+      targetAc = raisedAc;
+      hit = total >= raisedAc;
+    }
   }
   const featureDamage = hit
     ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical })
@@ -1628,6 +1643,16 @@ function resolveAttackCore(
     attacker.turnFlags = { ...(attacker.turnFlags ?? {}), droppedCreature: true, bonusMovement: (attacker.turnFlags?.bonusMovement ?? 0) + extraSquares };
   }
   if (hit) applyMeleeRetaliation(state, attacker, target, action);
+  // A Parry's bonus is for this attack only.
+  for (const { combatantId, conditionId } of endsAfterAttack ?? []) {
+    const bearer = state.snapshot.combatants.find((combatant) => combatant.id === combatantId);
+    const condition = bearer?.conditions?.find((candidate) => candidate.id === conditionId);
+    if (!bearer || !condition) continue;
+    bearer.conditions = bearer.conditions!.filter((candidate) => candidate.id !== conditionId);
+    state.log.push(event(state, "ConditionExpired", `${bearer.displayName}'s ${condition.sourceName ?? "reaction"} ends with the attack`, {
+      combatantId, conditionId, condition, reason: "triggering-attack-resolved"
+    }));
+  }
 
   return { hit, critical, attackRoll: d20, total, targetAc, damageApplied };
 }
@@ -6337,6 +6362,8 @@ export interface ReactionWindowResult {
   countered?: boolean;
   /** A Protection-style reaction forces the triggering attack roll to disadvantage. */
   imposedDisadvantage?: boolean;
+  /** Conditions a reaction gave that last for the triggering attack only (Parry): removed once it's resolved. */
+  endsAfterAttack?: Array<{ combatantId: Id; conditionId: Id }>;
 }
 
 /** The reaction `reactor` will spend on `event`, plus the resolved reaction target, or `undefined`. */
@@ -6376,6 +6403,14 @@ function reactionTriggerPasses(
     case "hit-by-attack":
       return reactor.id === event.targetId
         && (!trigger.meleeOnly || event.attackType === "melee");
+    case "would-be-hit": {
+      // Only when it would turn this hit into a miss: what it gives must lift the AC past the roll.
+      const gain = reactionArmorClassGain(action);
+      return reactor.id === event.targetId
+        && (!trigger.meleeOnly || event.attackType === "melee")
+        && gain > 0 && event.attackTotal !== undefined && event.targetAc !== undefined
+        && event.attackTotal < event.targetAc + gain;
+    }
     case "ally-targeted-by-attack": {
       if (!event.targetId || reactor.id === event.targetId) {
         return false;
@@ -6419,9 +6454,18 @@ function roughAverageDamage(components: ReadonlyArray<{ dice: string }> | undefi
   return total;
 }
 
+/** How much a reaction raises its reactor's AC while it lasts (Shield's +5, a Parry's +2). */
+function reactionArmorClassGain(action: ActionDefinition): number {
+  return action.kind === "activate-feature" ? action.condition?.modifiers?.armorClass ?? 0 : 0;
+}
+
 /** Value gate for `priority: "worthwhile"`: fire only when the reaction is clearly worth the slot. */
 function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, event: ReactionEvent): boolean {
   const { action, meta } = reaction;
+  if (meta.trigger.kind === "would-be-hit") {
+    // It's only offered when it turns a hit into a miss: always worth it.
+    return true;
+  }
   if (meta.trigger.kind === "enemy-casts-spell") {
     // Counter a real spell; let a cantrip / 1st-level through.
     return (event.spellLevel ?? 0) >= 2;
@@ -6577,6 +6621,9 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
       if (outcome.imposedDisadvantage) {
         result.imposedDisadvantage = true;
       }
+      if (outcome.endsAfterAttack) {
+        result.endsAfterAttack = [...(result.endsAfterAttack ?? []), ...outcome.endsAfterAttack];
+      }
       if (ev.kind === "enemy-casts-spell" && result.countered) {
         break;
       }
@@ -6623,9 +6670,17 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
       case "area-save":
         resolveAreaSaveAction(state, reactor.id, findCombatant(state.snapshot, targetId).position, action.id);
         return {};
-      case "activate-feature":
-        resolveActivateFeatureAction(state, reactor.id, action.id);
+      case "activate-feature": {
+        const { conditionId } = resolveActivateFeatureAction(state, reactor.id, action.id);
+        if (!conditionId || !meta.lastsFor) return {};
+        if (meta.lastsFor === "triggering-attack") return { endsAfterAttack: [{ combatantId: reactor.id, conditionId }] };
+        const condition = reactor.conditions?.find((candidate) => candidate.id === conditionId);
+        if (condition) {
+          const reactorIndex = state.snapshot.combatants.findIndex((combatant) => combatant.id === reactor.id);
+          condition.expiresAt = riderDurationToExpiry(state, { kind: "until-start-of-next-turn" }, reactorIndex >= 0 ? reactorIndex : undefined).expiresAt;
+        }
         return {};
+      }
       default:
         return {};
     }

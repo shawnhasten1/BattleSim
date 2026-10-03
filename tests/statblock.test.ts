@@ -130,7 +130,7 @@ describe("statblock text for SRD monsters", () => {
   });
 
   it("prints reactions and death effects", () => {
-    expect(entry("knight", "reactions", "Parry").text).toBe("When it is targeted by a melee attack (reaction): it gains a +2 bonus to AC for 1 round.");
+    expect(entry("knight", "reactions", "Parry").text).toBe("When a melee attack would hit it (reaction): it gains a +2 bonus to AC against that attack.");
     expect(entry("balor", "deathEffects", "Death Throes").text).toBe(
       "When it dies: Each creature within 30 feet of it must make a DC 20 Dexterity saving throw, "
       + "taking 70 (20d6) fire damage on a failed save, or half as much damage on a successful one.");

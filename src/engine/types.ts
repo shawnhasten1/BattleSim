@@ -802,8 +802,13 @@ export type ActionRider =
 export type ReactionTrigger =
   /** An enemy the reactor threatens leaves its melee reach (opportunity attack). */
   | { kind: "enemy-leaves-reach" }
-  /** The reactor is targeted by an attack, before it resolves (Shield). */
+  /** The reactor is targeted by an attack, before the roll. */
   | { kind: "targeted-by-attack"; meleeOnly?: boolean }
+  /**
+   * An attack roll against the reactor hits, before damage, and the reaction would make it miss (Shield, Parry). Never
+   * on a critical hit. Offered only when what the reaction gives raises the reactor's AC past the roll.
+   */
+  | { kind: "would-be-hit"; meleeOnly?: boolean }
   /** The reactor was hit by an attack (Hellish Rebuke). */
   | { kind: "hit-by-attack"; meleeOnly?: boolean }
   /** An ally within `withinFt` is targeted by an attack (Protection fighting style). */
@@ -823,6 +828,12 @@ export interface ReactionMeta {
   target?: "trigger-source" | "self" | "trigger-target";
   /** How eagerly the AI spends the reaction. `"manual"` never auto-fires. Default `"worthwhile"`. */
   priority?: "always" | "worthwhile" | "manual";
+  /**
+   * How long what an activation gives lasts, in place of its condition's own duration: `"triggering-attack"` only
+   * against the attack that set it off (Parry); `"until-start-of-next-turn"` until the start of the reactor's next
+   * turn (Shield).
+   */
+  lastsFor?: "triggering-attack" | "until-start-of-next-turn";
 }
 
 export interface AttackActionDefinition {
@@ -2087,6 +2098,7 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
 export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("enemy-leaves-reach") }),
   z.object({ kind: z.literal("targeted-by-attack"), meleeOnly: z.boolean().optional() }),
+  z.object({ kind: z.literal("would-be-hit"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
   z.object({ kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional() }),
@@ -2096,7 +2108,8 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
 export const reactionMetaSchema: z.ZodType<ReactionMeta> = z.object({
   trigger: reactionTriggerSchema,
   target: z.enum(["trigger-source", "self", "trigger-target"]).optional(),
-  priority: z.enum(["always", "worthwhile", "manual"]).optional()
+  priority: z.enum(["always", "worthwhile", "manual"]).optional(),
+  lastsFor: z.enum(["triggering-attack", "until-start-of-next-turn"]).optional()
 });
 
 const tacticsProfileSchema = z.preprocess(

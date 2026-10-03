@@ -264,13 +264,13 @@ export function parseMonster(row: Record<string, string>): ParsedMonster {
         });
         continue;
       }
-      // "Parry. The knight adds 2 to its AC against one melee attack that would hit it": a Shield-style
-      // reaction, taken when a melee attack targets it (the engine has no "would hit" window before the roll).
+      // "Parry. The knight adds 2 to its AC against one melee attack that would hit it": taken once the roll is known
+      // and it hits, when +2 makes it miss, and good for that attack only.
       const parryBonus = /^Parry$/i.test(entry.name) ? Number(/adds (\d+) to its AC/i.exec(entry.desc)?.[1]) : NaN;
       if (parryBonus > 0) {
         reactions.push({
           kind: "activate-feature", id: uniqueId(ctx, "parry"), name: "Parry", actionType: "reaction", featureId: "parry",
-          reaction: { trigger: { kind: "targeted-by-attack", meleeOnly: true }, target: "self", priority: "always" },
+          reaction: { trigger: { kind: "would-be-hit", meleeOnly: true }, target: "self", priority: "always", lastsFor: "triggering-attack" },
           condition: { id: "parry-active", name: "custom", durationRounds: 1, modifiers: { armorClass: parryBonus } },
           automationSupport: "full"
         });

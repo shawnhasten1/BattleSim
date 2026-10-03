@@ -742,6 +742,7 @@ export function triggerText(trigger: ReactionTrigger): string {
   switch (trigger.kind) {
     case "enemy-leaves-reach": return "an enemy leaves its reach";
     case "targeted-by-attack": return `it is targeted by ${trigger.meleeOnly ? "a melee" : "an"} attack`;
+    case "would-be-hit": return `${trigger.meleeOnly ? "a melee" : "an"} attack would hit it`;
     case "hit-by-attack": return `it is hit by ${trigger.meleeOnly ? "a melee" : "an"} attack`;
     case "ally-targeted-by-attack": return `an ally within ${trigger.withinFt} feet is targeted by an attack`;
     case "enemy-casts-spell": return `an enemy within ${trigger.withinFt} feet casts a spell${trigger.maxSpellLevel ? ` of ${ordinal(trigger.maxSpellLevel)} level or lower` : ""}`;
@@ -1042,7 +1043,11 @@ function onActivatePhrases(feature: FeatureDefinition | undefined, definition: C
 function activationText(action: ActivateAction, definition: CreatureDefinition, feature = featureById(definition, action.featureId)): { text: string; short: string } {
   const now = onActivatePhrases(feature, definition);
   const lasting = [...modifierSentences(action.condition?.modifiers, IT), ...effectSentences(action.condition?.effects, definition, IT)];
-  const lasts = action.condition?.durationRounds ? ` for ${roundsText(action.condition.durationRounds)}` : "";
+  // A reaction's own "lasts for" (a Parry's one attack, Shield's until its next turn) wins over the condition's rounds.
+  const lastsFor = action.actionType === "reaction" ? action.reaction?.lastsFor : undefined;
+  const lasts = lastsFor === "triggering-attack" ? " against that attack"
+    : lastsFor === "until-start-of-next-turn" ? " until the start of its next turn"
+      : action.condition?.durationRounds ? ` for ${roundsText(action.condition.durationRounds)}` : "";
   const nowText = now.length ? `It can ${joinList(now)}.` : "";
   if (!lasting.length) {
     return { text: nowText || "It activates this.", short: now.length ? joinList(now) : "activates" };

@@ -109,7 +109,7 @@ describe("srd:spell:hellish-rebuke — hit-by-attack retaliation", () => {
 
 /* ───────────────────────── Shield ───────────────────────── */
 
-describe("srd:spell:shield — targeted-by-attack AC bump", () => {
+describe("srd:spell:shield — +5 AC once a hit is rolled", () => {
   function shieldEncounter(seed: string) {
     const encounter = base(seed);
     combatantOf(encounter, "pc-fighter").position = { x: 1, y: 1 };
@@ -130,12 +130,44 @@ describe("srd:spell:shield — targeted-by-attack AC bump", () => {
     state.rng = scriptedRng({ 20: [16] }); // 16 beats AC 15, not AC 20
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
 
-    expect(state.log.some((e) => e.type === "ReactionTriggered" && e.data?.trigger === "targeted-by-attack")).toBe(true);
+    expect(state.log.some((e) => e.type === "ReactionTriggered" && e.data?.trigger === "would-be-hit")).toBe(true);
     const attack = state.log.find((e) => e.type === "AttackRolled");
     expect(attack?.data?.hit).toBe(false);
     expect(attack?.data?.targetAc).toBe(20);
     expect(combatantOf(state.snapshot, "enemy-goblin-1").actionEconomy?.reaction).toBe(false);
     expect(combatantOf(state.snapshot, "enemy-goblin-1").resources?.["slot-1"]).toBe(0);
+  });
+
+  it("isn't cast on a miss, on a hit +5 can't turn, or on a critical hit", () => {
+    for (const roll of [10, 20]) {
+      const state = createEngineState(shieldEncounter(`shield-${roll}`));
+      state.rng = scriptedRng({ 20: [roll] });
+      resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+      expect(state.log.some((e) => e.type === "ReactionTriggered"), `rolled ${roll}`).toBe(false);
+      expect(combatantOf(state.snapshot, "enemy-goblin-1").resources?.["slot-1"]).toBe(1);
+    }
+    const strong = shieldEncounter("shield-strong");
+    (defOf(strong, "def-fighter").actions[0] as { attackBonus?: number }).attackBonus = 10;
+    const state = createEngineState(strong);
+    state.rng = scriptedRng({ 20: [15] }); // 25: beats AC 20 too
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+    expect(state.log.some((e) => e.type === "ReactionTriggered")).toBe(false);
+  });
+
+  it("lasts until the start of the caster's next turn", () => {
+    const encounter = shieldEncounter("shield-lasts");
+    encounter.round = 1;
+    encounter.turnIndex = encounter.combatants.findIndex((combatant) => combatant.id === "pc-fighter");
+    const goblinIndex = encounter.combatants.findIndex((combatant) => combatant.id === "enemy-goblin-1");
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [16] });
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "longsword");
+    const shield = combatantOf(state.snapshot, "enemy-goblin-1").conditions?.find((condition) => condition.id === "shield-active");
+    expect(shield?.expiresAt).toEqual({
+      round: goblinIndex > encounter.turnIndex ? 1 : 2,
+      turnIndex: goblinIndex,
+      timing: "start"
+    });
   });
 });
 

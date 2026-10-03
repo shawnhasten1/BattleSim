@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0 and 1 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–2 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -548,7 +548,7 @@ play: {
 - **Duration:**
   - Parry's bonus lasts for the triggering attack only (`reaction.lastsFor: "triggering-attack"`, cleared once that
     attack resolves).
-  - Shield's lasts until the start of the caster's next turn, as now.
+  - Shield's lasts until the start of the caster's next turn (it used to last a round from the attacker's turn).
 - **Data:**
   - Shield in `spells.ts`.
   - Parry in the generator (`monster.ts`), then regenerate the monsters.
@@ -716,6 +716,55 @@ Done when:
 - A saved actor with the old Shield loads with the new trigger.
 - `parry.test.ts`, `reaction-spells.test.ts` and the SRD fight tests are updated.
 - Batch numbers for a Mage and a Knight are noted before and after.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **The trigger `would-be-hit`** (types, schema, normalizer), and `ReactionMeta.lastsFor`:
+>   `"triggering-attack"` or `"until-start-of-next-turn"`.
+> - **The window**, in `resolveAttackCore`, after the roll and any DM override. It doesn't open on a critical hit, and
+>   a DM-ruled roll stands. The AC is read again afterwards and the hit decided again.
+> - **The trigger passes only when the reaction's AC bonus turns the hit into a miss**, for the AI and for a person's
+>   prompt alike.
+> - **Durations:** a Parry's condition is removed once the attack resolves (`ConditionExpired`, reason
+>   `triggering-attack-resolved`). Shield's +5 now lasts until the start of its caster's next turn; it used to last a
+>   round from the attacker's turn.
+> - **Data:**
+>   - the library's Shield.
+>   - the generator's Parry, regenerated: only the Shield and Parry entries changed.
+>   - the editor's templates and the default for a new activation reaction.
+> - **The editor's trigger picker:** "An attack would hit it (after the roll, before damage)", with "before the roll"
+>   and "after damage" on the other two; "Melee attacks only"; **What it gives lasts** (As While active says, For that
+>   attack, Until its next turn); and a note on the trigger.
+> - **The statblock** reads "When a melee attack would hit it (reaction): it gains a +2 bonus to AC against that
+>   attack."
+> - **`migrateDefinition`** (`import-normalize.ts`) moves saved AC-only `targeted-by-attack` activations to
+>   `would-be-hit`. The library's Shield and Parry copies get their durations, and anything else keeps its own. It
+>   returns the same object when there's nothing to change, and runs on import, on every load and commit of an
+>   encounter (`normalizeEncounterVisuals`), and on loading the library.
+> - **Docs:** "Shield, Parry and Counterspell" and "What the AI does with them".
+>
+> Batch numbers, 200 runs each:
+>
+> | Fight | Before | After |
+> |---|---|---|
+> | Mage vs 2 veterans | party wins 77%, 4.25 rounds, Shield cast 2.77 times a run, 19.9 HP left | 78%, 4.25 rounds, 1.38 a run, 19.8 HP left |
+> | Knight vs 2 orcs | party wins 99%, 3.63 rounds, Parry 3.02 times a run, 36.7 HP left | 99%, 3.62 rounds, 0.37 a run, 36.2 HP left |
+>
+> The golden logs were regenerated. The casters, monsters and legendary fights changed (they have Mages and
+> Knights); the sample and reinforcements fights didn't.
+>
+> Tests:
+>
+> - `parry.test.ts` rewritten with scripted d20s: a hit it turns, a hit it can't, a miss, a critical hit, a ranged
+>   attack, that attack only, once a round.
+> - Shield in `reaction-spells.test.ts`: only on a hit it turns, not on a critical hit, lasts until its caster's next
+>   turn.
+> - `reaction-migration.test.ts` (5).
+> - In Play, Shield's question shows the roll against the AC.
+> - The editor: an old Parry comes up to date, and its lasting can change.
+> - The full suite passes: 155 files, 1,880 tests.
 
 ### Phase 3 — The Play frame (UI; medium to large)
 
