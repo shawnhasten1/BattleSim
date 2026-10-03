@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, FastForward, Flag, Play as PlayIcon, RotateCcw, ScrollText, Square, X } from "lucide-react";
+import { FastForward, Play as PlayIcon, RotateCcw, ScrollText, Square, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useDisplayEncounter } from "@/hooks/useDisplayEncounter";
 import { usePlayPlayback } from "@/hooks/usePlayPlayback";
@@ -9,14 +9,16 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { playbackLog } from "@/store/play-slice";
 import { playStatusText } from "./PlayControls";
 import { PlaySegmented, SPEED_OPTIONS } from "./PlaySegmented";
+import { Hotbar } from "./Hotbar";
+import { SwingCard } from "./SwingCard";
 import { TurnBar } from "./TurnBar";
-import { TurnDock } from "./TurnDock";
 import type { PlayMoveView } from "@/hooks/usePlayMove";
 import styles from "./play.module.css";
 
 /**
- * Everything Play puts over the map: the turn bar and a banner at the top (whose turn, its buttons, the AI's playback
- * speed and Skip), a question for you, and the card at the end. It also runs the AI's turns' playback.
+ * Everything Play puts over the map: the turn bar and a banner at the top (whose turn, the AI's playback speed and
+ * Skip), the hotbar on your creature's turn, a question for you, and the card at the end. It also runs the AI's turns'
+ * playback.
  */
 export function PlayOverlay({ onOpenReport, move }: { onOpenReport?: () => void; move?: PlayMoveView | null }) {
   usePlayPlayback();
@@ -27,7 +29,7 @@ export function PlayOverlay({ onOpenReport, move }: { onOpenReport?: () => void;
         <PlayBanner />
         <PlayNote />
       </div>
-      <TurnDock move={move} />
+      <Hotbar move={move} />
       <PromptCard />
       <PlayEndCard onOpenReport={onOpenReport} />
     </>
@@ -58,17 +60,12 @@ function PlayBanner() {
     );
   }
   if (play.status.kind === "your-turn") {
-    const actorId = play.status.actorId;
+    // The turn's own buttons are on the hotbar.
     return (
       <div className={styles.banner} data-tone="you" aria-live="polite">
         <span>Your turn:</span>
         <strong>{status.text}</strong>
-        <button type="button" className={styles.primary} onClick={() => playCommand({ kind: "end-turn", actorId })}>
-          <Flag size={13} /> End turn
-        </button>
-        <button type="button" className={styles.button} onClick={() => playCommand({ kind: "ai-turn", actorId })} title="The AI plays the rest of this turn, then ends it">
-          <Bot size={13} /> AI: take this turn
-        </button>
+        <span className={styles.bannerRound}>{`Round ${board.round}`}</span>
       </div>
     );
   }
@@ -104,6 +101,8 @@ function PromptCard() {
     primaryRef.current?.focus({ preventScroll: true });
   }, [pending?.request.key]);
   if (!pending) return null;
+  // A swing is aimed on the map, so its card keeps out of the way.
+  if (pending.request.kind === "multiattack-swing") return <SwingCard request={pending.request} board={pending.board} />;
   const text = describeQuestion(pending.request, pending.board);
   return (
     <div className={styles.prompt} role="dialog" aria-label={`${text.who} can choose`}>

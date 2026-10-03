@@ -1013,6 +1013,72 @@ img {
   text-anchor: start;
 }
 
+/* Play: an ability or a swing being aimed (PlayAimLayer) — its range, and who it can be aimed at. */
+.play-aim {
+  pointer-events: none;
+}
+
+.play-range {
+  fill: rgba(110, 160, 220, 0.13);
+  stroke: rgba(110, 160, 220, 0.22);
+  stroke-width: 0.02;
+}
+
+.play-target {
+  fill: none;
+  stroke: #7fd18b;
+  stroke-width: 0.06;
+  stroke-dasharray: 0.16 0.08;
+}
+
+.play-target.hovered {
+  stroke-width: 0.1;
+  stroke-dasharray: none;
+}
+
+.play-target.blocked {
+  stroke: #d0605a;
+}
+
+.play-pick {
+  fill: #7fd18b;
+  stroke: rgba(10, 11, 13, 0.85);
+  stroke-width: 0.04;
+}
+
+.play-pick-label {
+  fill: #0f2414;
+  font-size: 0.22px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.play-aim-tooltip {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  gap: 2px;
+  max-width: 260px;
+  padding: 6px 9px;
+  border: 1px solid #7fd18b;
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.play-aim-tooltip[data-ok="false"] {
+  border-color: #d0605a;
+}
+
+.play-aim-tooltip[data-ok="false"] span {
+  color: #f0a29b;
+}
+
 /* The marks and labels sit above the tokens and their health bars. */
 .overlay.play-move-marks {
   z-index: 6;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Swords, TriangleAlert } from "lucide-react";
-import { findActionDefinition, getDefinition, sizeFootprint, type EncounterSnapshot, type Point } from "@/engine";
+import { findActionDefinition, getDefinition, sizeFootprint, type Point } from "@/engine";
 import type { PlayMoveView } from "@/hooks/usePlayMove";
 
 /** Size of the warning on a square where something goes off, in grid units. */
@@ -24,9 +24,9 @@ function keepOnMap(x: number, width: number, gridWidth: number): number {
  * each creature that gets an opportunity attack to where it gets it. The marks and labels go above the tokens, in
  * `PlayMoveMarks`.
  */
-export function PlayMoveLayer({ view, board }: { view: PlayMoveView; board: EncounterSnapshot }) {
-  const { plan, reach, destination, preview } = view;
-  const half = plan.footprint / 2;
+export function PlayMoveLayer({ view }: { view: PlayMoveView }) {
+  const { board, footprint, reach, destination, preview } = view;
+  const half = footprint / 2;
   const centre = (cell: Point) => `${cell.x + half},${cell.y + half}`;
   return (
     <g className="play-move" aria-hidden="true">
@@ -41,8 +41,8 @@ export function PlayMoveLayer({ view, board }: { view: PlayMoveView; board: Enco
           className={preview.reachable ? "play-dest" : "play-dest blocked"}
           x={destination.x + 0.05}
           y={destination.y + 0.05}
-          width={plan.footprint - 0.1}
-          height={plan.footprint - 0.1}
+          width={footprint - 0.1}
+          height={footprint - 0.1}
           rx="0.12"
         />
       ) : null}
@@ -67,9 +67,9 @@ export function PlayMoveLayer({ view, board }: { view: PlayMoveView; board: Enco
  * planned, the squares on the route that cost more and what goes off there, where each opportunity attack comes and
  * with what, and what the move costs.
  */
-export function PlayMoveMarks({ view, board }: { view: PlayMoveView; board: EncounterSnapshot }) {
-  const { plan, destination, preview } = view;
-  const half = plan.footprint / 2;
+export function PlayMoveMarks({ view }: { view: PlayMoveView }) {
+  const { board, footprint, waypoints, destination, preview } = view;
+  const half = footprint / 2;
   const gridWidth = board.map.grid.width;
   const label = !preview ? ""
     : preview.reachable ? `${preview.costFeet} ft`
@@ -77,7 +77,7 @@ export function PlayMoveMarks({ view, board }: { view: PlayMoveView; board: Enco
         : "can't go there";
   return (
     <g className="play-move" aria-hidden="true">
-      {plan.waypoints.map((waypoint, index) => (
+      {waypoints.map((waypoint, index) => (
         <g key={`waypoint-${index}`}>
           <circle className="play-waypoint" cx={waypoint.x + half} cy={waypoint.y + half} r="0.2" />
           <text className="play-waypoint-label" x={waypoint.x + half} y={waypoint.y + half}>{index + 1}</text>

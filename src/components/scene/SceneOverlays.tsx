@@ -5,7 +5,9 @@ import { cellsInArea, lineOfEffect, wallCover, type ActiveZone, type BattleMapSt
 import { pointsMatch } from "@/components/scene/coords";
 import { ElevationLayer } from "@/components/scene/ElevationLayer";
 import { PlayMoveLayer } from "@/components/play/PlayMoveLayer";
+import { PlayAimLayer } from "@/components/play/PlayAimLayer";
 import type { PlayMoveView } from "@/hooks/usePlayMove";
+import type { AimView } from "@/hooks/usePlayAim";
 import type { EncounterSnapshot } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import type { SceneInteraction } from "@/hooks/useSceneInteraction";
@@ -45,6 +47,8 @@ interface SceneOverlaysProps {
   /** A fight in Play: the editor's path and target line give way to the move being planned. */
   playing?: boolean;
   playMove?: PlayMoveView | null;
+  /** An ability or a swing being aimed. */
+  playAim?: AimView | null;
   /** The board the move is planned on (for who gets an opportunity attack). */
   board?: EncounterSnapshot;
 }
@@ -56,7 +60,7 @@ interface SceneOverlaysProps {
  * gizmo. Wall hit-targets and nodes only render (and only accept clicks)
  * while the Wall tool is active — the Select tool owns tokens exclusively.
  */
-export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0, showElevation = true, playing = false, playMove = null, board }: SceneOverlaysProps) {
+export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, replaying = false, areaFlashes = [], activeZones = [], round = 0, showElevation = true, playing = false, playMove = null, playAim = null }: SceneOverlaysProps) {
   const {
     tool,
     pendingWallStart,
@@ -277,7 +281,8 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
           </g>
         );
       })}
-      {playMove && board ? <PlayMoveLayer view={playMove} board={board} /> : null}
+      {playAim ? <PlayAimLayer view={playAim} /> : null}
+      {playMove ? <PlayMoveLayer view={playMove} /> : null}
       {!replaying && !playing && selectedCombatant && nearestEnemy ? (
         <line
           x1={selectedCombatant.position.x + 0.5}

@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–4 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–5 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -960,6 +960,86 @@ Done when:
 - A level-5 fighter's Attack makes two swings with a move between them.
 - An upcast Scorching Ray fires four rays at chosen targets.
 - Using an ability by hand spends its slot and logs it.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **`src/lib/play/hotbar.ts`** (pure): everything the creature can use on its turn.
+>   - **Tabs:**
+>     - Attacks: weapons, natural attacks, a multiattack first, breath weapons.
+>     - Spells: by level, with the slots left.
+>     - Bonus.
+>     - Features: Second Wind, Action Surge, Rage.
+>     - Common: Dash, Disengage, Dodge, Hide, Help, and Escape while grappled.
+>   - **One button per ability,** its variants folded in: the slot to cast at, Power Attack, spend a charge, a
+>     multiattack's other routines.
+>   - **On each button:** its cost (a slot, a pool, "Recharge 5–6", "2 attacks"), whether the engine runs it in part or
+>     not at all, and how it's aimed.
+>   - **Greyed out,** it says why, in the engine's words.
+>   - **Not on it:** reactions, and legendary and lair copies, which are asked for when they come up.
+> - **`src/lib/play/targeting.ts`:** what an ability would do to a creature, from the engine's previews ("55% to hit · +5
+>   against AC 15 · 6.5 damage on a hit", "40% to fail a DC 13 Wisdom save · …"), or why it can't be aimed there.
+> - **Engine:**
+>   - `actionProblem` names what can't be paid: "No 3rd-level slots left", "Fire Breath is recharging", "Not enough
+>     rage left".
+>   - `targetCapacity` (rays and beams, an upcast Hold Person's extra targets, Bless's three), which `targetProblem` now
+>     enforces.
+>   - `upcastExtraTargetCapacity` and `averageHealing` exported.
+> - **`src/hooks/usePlayAim.ts`:** an ability armed or a swing being aimed (`usePlayAimView`), and what a press, a
+>   creature clicked, Enter and Esc do.
+> - **`src/components/play/Hotbar.tsx`**, which replaces Phase 4's dock:
+>   - the creature, what it's concentrating on, its action, bonus action, reaction, movement and height.
+>   - the tabs, the slot pips and the buttons with their variant chips.
+>   - Undo, AI: take this turn, and End turn (moved here from the banner).
+>   - a line saying what to do next.
+>   - keys: 1–0 press the tab's buttons, and Enter uses the creatures picked or ends the turn.
+>   - its buttons don't keep the focus after a click, so Enter stays End turn.
+> - **Aiming on the map** (`PlayAimLayer`):
+>   - the range is tinted, and a ring goes on each creature on the side it's meant for that it can be aimed at.
+>   - a badge marks each pick (×2 for a ray picked twice).
+>   - a tooltip by the creature under the cursor says what it would do there.
+>   - a click on a creature it can't be aimed at is refused, with the reason.
+> - **A multiattack swing by swing** (`SwingCard`, at the bottom of the map):
+>   - the first target is clicked; each later swing asks which attack (where the routine allows a choice), then a
+>     creature.
+>   - or first a square to step to, with the movement left (Esc takes the step back), and Skip this swing.
+>   - a swing's question leaves the map live.
+>
+> Differences from the plan:
+>
+> - Areas, places and options (Fireball, Misty Step, a summon's or a form's choice) are on the hotbar but are aimed in
+>   Phase 6; pressing one says so.
+> - A spell is on the Spells tab whatever it takes. A bonus-action spell says "bonus action" on its button.
+> - The Reactions tab comes with the reaction settings, in Phase 7.
+> - Not built: the optional approach-and-attack, and "What would the AI do?".
+> - Rays and beams go where they were aimed. One aimed at a creature an earlier ray dropped is lost, as the engine
+>   resolves them.
+>
+> Tests:
+>
+> - `tests/play-hotbar.test.ts` (10):
+>   - each kind of ability on its tab, with its cost and variants.
+>   - reasons for buttons greyed out.
+>   - a mage's spells by level and slot.
+>   - what rays, an upcast Hold Person and Bless aim at.
+>   - the line over a creature.
+>   - an upcast Scorching Ray's four rays at the creatures picked, spending the 3rd-level slot.
+>   - Enter and Esc while aiming, and a creature out of range refused.
+>   - a level-5 fighter's Extra Attack: two swings with a step between them.
+>   - an ability used by hand: its bonus action and cost spent, and logged.
+> - `tests/play-hotbar-ui.test.tsx` (4): the tabs and buttons, keys, the rings and tooltip, the swing card, Skip.
+> - The full suite passes: 161 files, 1,928 tests.
+>
+> Browser (Playwright, the default scene, the party yours, 4×), all passed:
+>
+> - the archer's hotbar: Attacks, Common.
+> - 1 armed the shortbow. Both goblins were behind the wall: "Line of effect is blocked", and a click on one was
+>   refused with that reason.
+> - after the DM brought a goblin round, the tooltip read "55% to hit · +5 against AC 15 · 6.5 damage on a hit", and a
+>   click made the attack. Action was struck through and the buttons greyed out.
+> - Hide and Help marked by hand; Enter ended the turn and opened the fighter's.
+> - no page errors.
 
 ### Phase 6 — Areas, places and options (UI; medium)
 

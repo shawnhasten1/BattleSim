@@ -1,6 +1,7 @@
 import {
   activeFactions,
   canAct,
+  casterLevelOf,
   findActionDefinition,
   findCombatant,
   getDefinition,
@@ -9,8 +10,10 @@ import {
   repositionZone,
   resolveAreaTargeting,
   resolveManualAction,
+  resolveBeamCount,
   resolveUse,
   spatialDistanceToPoint,
+  spellSlotLevel,
   standingProblem,
   targetingProblem,
   validateBuffTargeting,
@@ -22,6 +25,7 @@ import {
 } from "./combat";
 import { canPayFor } from "./multiattack";
 import { previewMove, previewRoutine } from "./preview";
+import { upcastExtraTargetCapacity } from "./simulation";
 import { closeActionEconomy, closeTurn, playAutomatedTurn } from "./turns";
 import type { ActionDefinition, CombatantState, EncounterSnapshot, Id, Point } from "./types";
 
@@ -168,11 +172,36 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   const slot = action.actionType;
   if (slot !== "free" && actor.actionEconomy?.[slot] === false) return `${actor.displayName} has already used its ${SLOT_NAME[slot]}`;
   if (!canAct(actor, slot)) return slot === "free" ? `${actor.displayName} can't act right now` : `${actor.displayName} can't take a ${SLOT_NAME[slot]} right now`;
-  if (!canPayFor(actor, action as { resourceCost?: { resourceId: string; amount: number } })) return `Not enough left to use ${action.name}`;
+  if (!canPayFor(actor, action as { resourceCost?: { resourceId: string; amount: number } })) return costProblem(action);
   if (action.kind === "utility" && action.mode === "escape" && !(actor.conditions ?? []).some((condition) => condition.hold)) {
     return `${actor.displayName} isn't grappled`;
   }
   return undefined;
+}
+
+const ORDINALS = ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];
+
+/** Why an ability can't be paid for: no slot of its level left, recharging, no uses left, or not enough of a pool. */
+function costProblem(action: ActionDefinition): string {
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  if (!cost) return `Not enough left to use ${action.name}`;
+  const slot = spellSlotLevel(cost.resourceId);
+  if (slot !== undefined) return `No ${ORDINALS[slot] ?? `${slot}th`}-level slots left`;
+  if (cost.resourceId.startsWith("usage:")) {
+    return "usage" in action && action.usage?.kind === "recharge" ? `${action.name} is recharging` : `${action.name} has no uses left`;
+  }
+  return `Not enough ${cost.resourceId.slice(cost.resourceId.lastIndexOf(":") + 1).replace(/[-_]+/g, " ")} left`;
+}
+
+/** How many creatures one use of `action` can be aimed at: its beams, or a save's target and the extras an upcast slot adds. */
+export function targetCapacity(action: ActionDefinition, casterLevel: number): number {
+  if (action.kind === "attack") return action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
+  if (action.kind === "save") return action.targeting?.target === "self" ? 1 : 1 + upcastExtraTargetCapacity(action);
+  if (action.kind === "healing" || action.kind === "buff") {
+    const mode = action.targeting?.target ?? "single";
+    return mode === "chosen" ? action.targeting?.count ?? 1 : 1;
+  }
+  return 1;
 }
 
 function thrown(check: () => void): string | undefined {
@@ -198,9 +227,11 @@ export function targetProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   const tooMany = (count: number | undefined, fallback: number) =>
     targets.length > (count ?? fallback) ? `${action.name} can target up to ${count ?? fallback}` : undefined;
 
+  const capacity = targetCapacity(action, casterLevelOf(actorDefinition));
   switch (action.kind) {
     case "attack": {
       if (targets.length === 0) return `Pick a target for ${action.name}`;
+      if (targets.length > capacity) return `${action.name} can target up to ${capacity}`;
       for (const candidate of targets) {
         const problem = targetingProblem(snapshot, actor, candidate, action);
         if (problem) return problem;
@@ -213,6 +244,8 @@ export function targetProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
     case "save": {
       if (action.targeting?.target === "self") return undefined;
       if (targets.length === 0) return `Pick a target for ${action.name}`;
+      if (targets.length > capacity) return `${action.name} can target up to ${capacity}`;
+      if (new Set(ids).size < ids.length) return "Each creature can be picked only once";
       for (const candidate of targets) {
         const problem = targetingProblem(snapshot, actor, candidate, action);
         if (problem) return problem;

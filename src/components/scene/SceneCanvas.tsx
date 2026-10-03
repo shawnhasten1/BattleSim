@@ -8,6 +8,9 @@ import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsPlayingBack, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { PlayOverlay } from "@/components/play/PlayOverlay";
 import { PlayMoveMarks } from "@/components/play/PlayMoveLayer";
+import { PlayAimMarks, PlayAimTooltip } from "@/components/play/PlayAimLayer";
+import { usePlayAimView } from "@/hooks/usePlayAim";
+import { swingQuestion } from "@/hooks/usePlayMove";
 import { usePlayMoveView } from "@/hooks/usePlayMove";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
@@ -94,10 +97,13 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const playingBack = useIsPlayingBack();
   const playing = useEncounterStore((state) => state.play !== null);
   const questionOpen = useEncounterStore((state) => Boolean(state.play?.pending) && !state.play?.playback);
-  const replaying = reviewing || playingBack || questionOpen;
+  // A multiattack's next swing is aimed on the map, so the map stays live for it.
+  const swingAiming = useEncounterStore((state) => swingQuestion(state) !== null);
+  const replaying = reviewing || playingBack || (questionOpen && !swingAiming);
   const playSpeed = useEncounterStore((state) => state.play?.playbackSpeed ?? 1);
   // The move a person is planning on their creature's turn: drawn on the map, summed up on the dock.
   const playMove = usePlayMoveView();
+  const playAim = usePlayAimView();
   const yourTurnId = useEncounterStore((state) =>
     state.play && !state.play.pending && !state.play.playback && state.play.status.kind === "your-turn" ? state.play.status.actorId : null);
   const selectCombatant = useEncounterStore((state) => state.selectCombatant);
@@ -652,7 +658,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           round={encounter.round}
           playing={playing}
           playMove={playMove}
-          board={encounter}
+          playAim={playAim}
         />
         {tokenLayouts.filter((layout) => layout.altitude > 0).map(({ combatant, size, x, y }) => (
           <div
@@ -740,16 +746,18 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           </div>
         ) : null}
 
-        {/* A move being planned: its marks and labels, above the tokens and their bars. */}
-        {playMove ? (
+        {/* A move being planned, or an ability being aimed: marks and labels above the tokens and their bars. */}
+        {playMove || playAim ? (
           <svg
             className="overlay play-move-marks"
             viewBox={`0 0 ${map.grid.width} ${map.grid.height}`}
             style={{ width: metrics.gridPixelWidth, height: metrics.gridPixelHeight }}
           >
-            <PlayMoveMarks view={playMove} board={encounter} />
+            {playMove ? <PlayMoveMarks view={playMove} /> : null}
+            {playAim ? <PlayAimMarks view={playAim} /> : null}
           </svg>
         ) : null}
+        {playAim ? <PlayAimTooltip view={playAim} cellSize={cellSize} /> : null}
 
         <SceneFeedbackLayer floaties={floaties} cellSize={cellSize} />
 

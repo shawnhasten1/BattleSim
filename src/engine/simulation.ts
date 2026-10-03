@@ -3336,7 +3336,7 @@ function expectedRiderControl(
   return total;
 }
 
-function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
+export function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
   const base = action.healing.reduce((sum, component) => {
     const parsed = parseDiceExpression(component.dice);
     const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
@@ -3375,7 +3375,7 @@ export function averageDamage(
 }
 
 /** How many extra targets a save action's upcast grants for free at whatever slot tier its own `resourceCost` implies (Hold Person-style). 0 for a base cast or an action with no `upcast.targets`. */
-function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { kind: "save" }>): number {
+export function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { kind: "save" }>): number {
   const perSlotTargets = action.upcast?.perSlotAboveBase?.targets;
   if (!perSlotTargets || action.spellLevel == null) {
     return 0;

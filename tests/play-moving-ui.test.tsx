@@ -50,8 +50,8 @@ function MoveScreen() {
   const board = useEncounterStore((state) => state.encounter);
   return (
     <>
-      <svg aria-label="Map">{move ? <PlayMoveLayer view={move} board={board} /> : null}</svg>
-      <svg aria-label="Marks">{move ? <PlayMoveMarks view={move} board={board} /> : null}</svg>
+      <svg aria-label="Map">{move ? <PlayMoveLayer view={move} /> : null}</svg>
+      <svg aria-label="Marks">{move ? <PlayMoveMarks view={move} /> : null}</svg>
       <PlayOverlay move={move} />
     </>
   );
@@ -87,8 +87,9 @@ describe("the dock on your creature's turn", () => {
     render(<MoveScreen />);
     const dock = screen.getByRole("region", { name: "Fighter's turn" });
     expect(within(dock).getByText("30 of 30 ft")).toBeTruthy();
+    await userEvent.click(within(dock).getByRole("tab", { name: /^Common/ }));
     for (const name of ["Dash", "Disengage", "Dodge"]) expect(within(dock).getByRole("button", { name })).toBeTruthy();
-    expect(within(dock).queryByRole("button", { name: "Escape" })).toBeNull();
+    expect(within(dock).queryByRole("button", { name: /Escape/ })).toBeNull();
 
     await userEvent.click(within(dock).getByRole("button", { name: "Dash" }));
     expect(within(dock).getByText("60 of 60 ft")).toBeTruthy();

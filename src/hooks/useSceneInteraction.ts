@@ -14,12 +14,15 @@ import {
   findPath,
   getDefinition,
   gridDistance,
+  previewMove,
   sizeFootprint,
   zoneTerrainOverlay
 } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { usePlayUiStore } from "@/store/play-ui-store";
-import { makePlayMove, movingActorId, planKeyOf, standingSquare } from "@/hooks/usePlayMove";
+import { combatantAt, makePlayMove, movingActorId, planKeyOf, standingSquare, swingQuestion } from "@/hooks/usePlayMove";
+import { aimAtCreature, backOutOfAiming, planSwingStep } from "@/hooks/usePlayAim";
+import { armedFor } from "@/store/play-ui-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
   clamp,
@@ -457,6 +460,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
         return;
       }
       const moving = movingActorId(state);
+      if (event.key === "Escape" && state.play && backOutOfAiming()) {
+        event.preventDefault();
+        return;
+      }
       if (event.key === "Escape" && moving && usePlayUiStore.getState().popWaypoint(planKeyOf(moving, state.log.length))) {
         event.preventDefault();
         return;
@@ -483,6 +490,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       return;
     }
     const state = useEncounterStore.getState();
+    if (state.play && backOutOfAiming()) {
+      return;
+    }
     if (movingId) {
       usePlayUiStore.getState().popWaypoint(planKeyOf(movingId, state.log.length));
       return;
@@ -587,6 +597,29 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (!(event.target instanceof HTMLElement) || event.target.closest(".token")) {
       return;
     }
+    const swing = playing && tool === "select" ? swingQuestion(useEncounterStore.getState()) : null;
+    if (swing) {
+      // A multiattack's next swing: a square is where to step before it (a creature is clicked on its token).
+      const cell = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      if (cell.x < 0 || cell.y < 0 || cell.x >= grid.width || cell.y >= grid.height) {
+        return;
+      }
+      const there = combatantAt(swing.board, cell, ["active"]);
+      if (there) {
+        aimAtCreature(there.id);
+        return;
+      }
+      const attacker = swing.board.combatants.find((combatant) => combatant.id === swing.request.attackerId);
+      const footprint = attacker ? sizeFootprint(getDefinition(swing.board, attacker).size) : 1;
+      const square = standingSquare(cell, footprint, grid);
+      const step = previewMove(swing.board, swing.request.attackerId, [square]);
+      planSwingStep(square, step.reachable, step.problem);
+      return;
+    }
+    if (movingId && armedFor(usePlayUiStore.getState(), planKeyOf(movingId, useEncounterStore.getState().log.length))) {
+      // Aiming: creatures are clicked on their tokens; the ground does nothing.
+      return;
+    }
     if (movingId) {
       // Play, the creature's turn: a click moves it there; Shift-click plans a stop on the way.
       const cell = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
@@ -672,7 +705,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     if (isPanning || isPanningRef.current) {
       return;
     }
-    if (movingId && !draggedToken) {
+    if (playing && tool === "select" && !draggedToken) {
+      // The square under the cursor: what a move goes to, or which creature an ability is aimed at.
       const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
       const inside = point.x >= 0 && point.y >= 0 && point.x < grid.width && point.y < grid.height;
       usePlayUiStore.getState().setHover(inside ? point : null);
@@ -900,6 +934,10 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     }
     event.preventDefault();
     suppressNextMapClickRef.current = true;
+    // Aiming (an armed ability, or a multiattack's next swing): a creature clicked is a target.
+    if (playing && aimAtCreature(combatantId)) {
+      return;
+    }
     selectCombatantOnBoard(combatantId, false);
     // In Play only the creature whose turn it is can be dragged, and it moves by the rules; with Alt, any token can be
     // put anywhere, as the DM (logged). Anything else is just selected.
