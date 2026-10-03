@@ -140,6 +140,12 @@ export function runPlayStep(input: PlayStepInput): PlayStepResult {
     if (!subject || controllerOf(state.snapshot, input.control, subject) === "ai") {
       return undefined;
     }
+    // A person's own answer to this very question stands, even if they've since set the reaction to always or never.
+    const answer = pending ? undefined : given[used.length];
+    if (answer?.key === request.key) {
+      used.push(answer);
+      return answer.answer;
+    }
     if (request.kind === "reaction") {
       const ruled = ruleReaction(input.control, request);
       if (ruled === "ai") return undefined;
@@ -147,14 +153,9 @@ export function runPlayStep(input: PlayStepInput): PlayStepResult {
     }
     // Past the first unanswered question the run is thrown away: the AI's choices will do.
     if (pending) return undefined;
-    const answer = given[used.length];
     if (answer) {
-      if (answer.key !== request.key) {
-        desync ??= `expected ${answer.key}, reached ${request.key}`;
-        return undefined;
-      }
-      used.push(answer);
-      return answer.answer;
+      desync ??= `expected ${answer.key}, reached ${request.key}`;
+      return undefined;
     }
     pending = { request, board: withSeed(structuredClone(state.snapshot), input.snapshot.seed), log: [...state.log] };
     return undefined;

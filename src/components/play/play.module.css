@@ -317,6 +317,41 @@
   transform: translate(-50%, -50%);
 }
 
+/* A question sits up under the turn bar, so the board it's about stays in view. */
+.prompt {
+  top: 120px;
+  transform: translateX(-50%);
+}
+
+.promptPolicies {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.promptPolicies .row > span {
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
+.hotbarReactions {
+  display: grid;
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.hotbarReactions .row strong {
+  font-size: 12px;
+}
+
+.hotbarReactions .row small {
+  margin-left: 6px;
+  color: var(--ui-text-dim);
+  font-size: 10px;
+}
+
 .promptWho {
   color: var(--ui-accent);
   font-size: 11px;

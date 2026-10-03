@@ -66,7 +66,7 @@ describe("the hotbar", () => {
     render(<Screen />);
     const bar = screen.getByRole("region", { name: "Fighter's turn" });
     const tabs = within(bar).getByRole("tablist", { name: "Abilities" });
-    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Attacks2", "Spells", "Bonus", "Features2", "Common5"]);
+    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Attacks2", "Spells", "Bonus", "Features2", "Common5", "Reactions1"]);
     const panel = within(bar).getByRole("tabpanel", { name: "Attacks" });
     expect(within(panel).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Extra Attack2 attacks", "2Longsword"]);
 

@@ -4,11 +4,12 @@ import { FastForward, Play as PlayIcon, RotateCcw, ScrollText, Square, X } from 
 import { useEffect, useRef } from "react";
 import { useDisplayEncounter } from "@/hooks/useDisplayEncounter";
 import { usePlayPlayback } from "@/hooks/usePlayPlayback";
-import { describeQuestion } from "@/lib/play/questions";
+import { describeQuestion, type PromptPolicy } from "@/lib/play/questions";
+import type { ReactionPolicy } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { playbackLog } from "@/store/play-slice";
 import { playStatusText } from "./PlayControls";
-import { PlaySegmented, SPEED_OPTIONS } from "./PlaySegmented";
+import { PlaySegmented, POLICY_OPTIONS, SPEED_OPTIONS } from "./PlaySegmented";
 import { Hotbar } from "./Hotbar";
 import { SwingCard } from "./SwingCard";
 import { TurnBar } from "./TurnBar";
@@ -93,10 +94,15 @@ function PlayNote() {
   );
 }
 
-/** A question for you, over the map: the trigger and its numbers, and an answer per button. No timer. */
+/**
+ * A question for you, over the map: the trigger and its numbers, and an answer per button. No timer. A reaction's
+ * question also sets how it's handled for the rest of the fight: Always and Never answer this one too.
+ */
 function PromptCard() {
   const pending = useEncounterStore((state) => (state.play && !state.play.playback ? state.play.pending : undefined));
   const answerPrompt = useEncounterStore((state) => state.answerPrompt);
+  const control = useEncounterStore((state) => state.play?.control);
+  const setPlayControl = useEncounterStore((state) => state.setPlayControl);
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     primaryRef.current?.focus({ preventScroll: true });
@@ -105,6 +111,12 @@ function PromptCard() {
   // A swing is aimed on the map, so its card keeps out of the way.
   if (pending.request.kind === "multiattack-swing") return <SwingCard request={pending.request} board={pending.board} />;
   const text = describeQuestion(pending.request, pending.board);
+  const setPolicy = (policy: PromptPolicy, value: ReactionPolicy) => {
+    if (!control) return;
+    setPlayControl({ ...control, reactions: { ...(control.reactions ?? {}), [policy.key]: value } });
+    if (value === "use") answerPrompt(policy.use);
+    else if (value === "never") answerPrompt({ kind: "reaction", actionId: null });
+  };
   return (
     <div className={styles.prompt} role="dialog" aria-label={`${text.who} can choose`}>
       <span className={styles.promptWho}>{text.who}</span>
@@ -124,6 +136,21 @@ function PromptCard() {
           </button>
         ))}
       </div>
+      {text.policies?.length ? (
+        <div className={styles.promptPolicies}>
+          {text.policies.map((policy) => (
+            <div key={policy.key} className={styles.row}>
+              <span>{`${policy.label}, this fight`}</span>
+              <PlaySegmented
+                label={`${policy.label}, this fight`}
+                value={control?.reactions?.[policy.key] ?? "ask"}
+                options={POLICY_OPTIONS}
+                onChange={(value) => setPolicy(policy, value)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@
 import {
   actionProblem,
   BASE_FORM_ID,
+  OPPORTUNITY_ATTACKS,
   casterLevelOf,
   getDefinition,
   getExecutableActions,
@@ -25,14 +26,15 @@ import {
 } from "@/engine";
 import { actionStatblock, costText, usageLabel } from "@/lib/statblock";
 
-export type HotbarTab = "attacks" | "spells" | "bonus" | "features" | "common";
+export type HotbarTab = "attacks" | "spells" | "bonus" | "features" | "common" | "reactions";
 
 export const HOTBAR_TABS: ReadonlyArray<{ id: HotbarTab; label: string }> = [
   { id: "attacks", label: "Attacks" },
   { id: "spells", label: "Spells" },
   { id: "bonus", label: "Bonus" },
   { id: "features", label: "Features" },
-  { id: "common", label: "Common" }
+  { id: "common", label: "Common" },
+  { id: "reactions", label: "Reactions" }
 ];
 
 /** How an ability is aimed once it's armed. */
@@ -90,8 +92,19 @@ export interface HotbarButton {
   concentration?: boolean;
 }
 
+/** One of the creature's reactions, as the Reactions tab lists it: its setting is `reactionPolicyKey(actorId, key)`. */
+export interface HotbarReaction {
+  /** `OPPORTUNITY_ATTACKS`, or the reaction's id. */
+  key: string;
+  name: string;
+  /** When it's offered, and what it costs. */
+  detail?: string;
+}
+
 export interface HotbarModel {
   actorId: Id;
+  /** Its reactions, for the Reactions tab (they're asked for when they come up; the tab sets how). */
+  reactions: HotbarReaction[];
   tabs: Array<{ id: HotbarTab; label: string; buttons: HotbarButton[] }>;
   /** Spell slots by level: what's left and the full count. */
   slots: Array<{ level: number; left: number; full: number }>;
@@ -223,6 +236,32 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition): string 
   return parts.length ? parts.join(" + ") : "Normal";
 }
 
+const TRIGGER_WORDS: Partial<Record<string, string>> = {
+  "would-be-hit": "when an attack would hit it",
+  "targeted-by-attack": "when it's attacked",
+  "hit-by-attack": "when an attack hits it",
+  "ally-targeted-by-attack": "when a friend nearby is attacked",
+  "enemy-casts-spell": "when an enemy casts a spell"
+};
+
+/** Its reactions: opportunity attacks as one (if it has a melee attack to make them with), then each other reaction. */
+function reactionsOf(executables: ActionDefinition[]): HotbarReaction[] {
+  const melee = executables.filter((action): action is Extract<ActionDefinition, { kind: "attack" }> => action.kind === "attack" && action.attackType === "melee"
+    && !isLegendaryVariant(action) && !isLairVariant(action)
+    && ((action.actionType === "action" && action.opportunityAttack !== false) || (action.actionType === "reaction" && action.reaction?.trigger.kind === "enemy-leaves-reach")));
+  const weapons = [...new Set(melee.filter((action) => action.actionType === "action").map((action) => action.name))];
+  const others = executables.filter((action) => action.actionType === "reaction" && !isLegendaryVariant(action) && !isLairVariant(action)
+    && !("reaction" in action && action.reaction?.trigger.kind === "enemy-leaves-reach"));
+  return [
+    ...(melee.length ? [{ key: OPPORTUNITY_ATTACKS, name: "Opportunity attacks", detail: weapons.length ? `with ${weapons.join(", ")}` : undefined }] : []),
+    ...others.map((action) => {
+      const trigger = "reaction" in action ? action.reaction?.trigger.kind : undefined;
+      const cost = costOf(action);
+      return { key: action.id, name: action.name, detail: [trigger ? TRIGGER_WORDS[trigger] : undefined, cost].filter(Boolean).join(" · ") || undefined };
+    })
+  ];
+}
+
 /** What the creature is concentrating on: the condition or zone it keeps going. */
 export function concentrationOf(board: EncounterSnapshot, actor: CombatantState): string | undefined {
   const conditionId = actor.concentration?.sourceConditionId;
@@ -329,5 +368,5 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     .sort((a, b) => a.level - b.level)
     .map(({ resourceId, level }) => ({ level, left: actor.resources?.[resourceId] ?? 0, full: definition.resources?.[resourceId] ?? 0 }));
 
-  return { actorId, tabs, slots, concentration: concentrationOf(board, actor) };
+  return { actorId, tabs, slots, reactions: reactionsOf(executables), concentration: concentrationOf(board, actor) };
 }

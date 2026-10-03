@@ -1,10 +1,16 @@
 import {
   findActionDefinition,
   getDefinition,
+  OPPORTUNITY_ATTACKS,
+  previewAttack,
+  previewSave,
+  reactionPolicyKey,
+  spatialDistance,
   type Ability,
   type DecisionAnswer,
   type DecisionRequest,
   type EncounterSnapshot,
+  type ReactionOption,
   type ReactionRequest
 } from "@/engine";
 import { costText } from "@/lib/statblock";
@@ -23,6 +29,16 @@ export interface PromptOption {
   primary?: boolean;
 }
 
+/** A standing order a prompt can set for the rest of the fight (D3): ask each time, always take it, or never. */
+export interface PromptPolicy {
+  /** `reactionPolicyKey(reactor, OPPORTUNITY_ATTACKS or the reaction's id)`. */
+  key: string;
+  /** What it covers: "Opportunity attacks", "Shield". */
+  label: string;
+  /** The answer "always" gives this time. */
+  use: DecisionAnswer;
+}
+
 export interface PromptText {
   /** The creature whose choice it is. */
   who: string;
@@ -30,6 +46,8 @@ export interface PromptText {
   /** The question itself, under the title. */
   ask: string;
   options: PromptOption[];
+  /** The standing orders it can set. */
+  policies?: PromptPolicy[];
 }
 
 const ABILITY_NAMES: Record<Ability, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
@@ -94,64 +112,91 @@ export function describeQuestion(request: DecisionRequest, board: EncounterSnaps
   }
 }
 
+const percent = (chance: number) => `${Math.round(chance * 100)}%`;
+const amount = (value: number) => `${Math.round(value * 10) / 10}`;
+
+/** What taking `option` would do, in numbers: the chance to hit or to fail and the damage, the AC it gives, the slot it spends. */
+function optionDetail(request: ReactionRequest, board: EncounterSnapshot, option: ReactionOption): string | undefined {
+  const reactor = board.combatants.find((combatant) => combatant.id === request.reactorId);
+  if (!reactor) return undefined;
+  const action = findActionDefinition(getDefinition(board, reactor), option.actionId);
+  const attack = request.context.attack;
+  const parts: string[] = [];
+  try {
+    if (action?.kind === "attack") {
+      const preview = previewAttack(board, reactor.id, option.targetId, option.actionId);
+      if (!preview.problem) parts.push(`${percent(preview.hitChance)} to hit`, `${amount(preview.damageOnHit)} damage`);
+    } else if (action?.kind === "save" && option.targetId !== reactor.id) {
+      const preview = previewSave(board, reactor.id, option.targetId, option.actionId);
+      if (!preview.problem) parts.push(`${percent(preview.failChance)} to fail`, `${amount(preview.damageOnFail)} damage`);
+    }
+  } catch {
+    // A preview that can't be made leaves the numbers out.
+  }
+  // Shield, Parry: the AC it gives, and whether that turns the hit.
+  const gain = action?.kind === "activate-feature" ? action.condition?.modifiers?.armorClass ?? 0 : 0;
+  if (request.trigger === "would-be-hit" && gain > 0 && attack?.targetAc !== undefined && attack.total !== undefined) {
+    const ac = attack.targetAc + gain;
+    parts.push(`AC ${ac}: ${attack.total < ac ? "the attack misses" : "it still hits"}`);
+  }
+  if (request.trigger === "enemy-casts-spell") parts.push("it's countered");
+  if (request.trigger === "ally-targeted-by-attack") parts.push("the attack has disadvantage");
+  const cost = option.resourceCost;
+  if (cost) {
+    const left = reactor.resources?.[cost.resourceId];
+    parts.push(`${costText(cost)}${left !== undefined ? ` (${left} left)` : ""}`);
+  }
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
 function describeReaction(request: ReactionRequest, board: EncounterSnapshot): PromptText {
   const reactor = nameOf(board, request.reactorId);
   const source = nameOf(board, request.sourceId);
   const attack = request.context.attack;
   const reactorCombatant = board.combatants.find((combatant) => combatant.id === request.reactorId);
-  const reactorDefinition = reactorCombatant ? getDefinition(board, reactorCombatant) : undefined;
-  // What a reaction raises the AC to, when that's what it does (Shield, Parry).
-  const raisedAc = (actionId: string) => {
-    const action = reactorDefinition ? findActionDefinition(reactorDefinition, actionId) : undefined;
-    const gain = action?.kind === "activate-feature" ? action.condition?.modifiers?.armorClass ?? 0 : 0;
-    return gain > 0 && attack?.targetAc !== undefined ? attack.targetAc + gain : undefined;
+  const sourceCombatant = board.combatants.find((combatant) => combatant.id === request.sourceId);
+  const distance = (otherId: string | undefined) => {
+    const other = board.combatants.find((combatant) => combatant.id === otherId);
+    return reactorCombatant && other ? spatialDistance(board, reactorCombatant, other) : undefined;
   };
-  const options: PromptOption[] = request.options.map((option, index) => {
-    const ac = request.trigger === "would-be-hit" ? raisedAc(option.actionId) : undefined;
-    const details = [
-      option.resourceCost ? costText(option.resourceCost) : undefined,
-      ac !== undefined && attack?.total !== undefined ? `AC ${ac}: ${attack.total < ac ? "the attack misses" : "it still hits"}` : undefined
-    ].filter(Boolean);
-    return {
-      label: option.name,
-      detail: details.length ? details.join(" · ") : undefined,
-      answer: { kind: "reaction", actionId: option.actionId },
-      primary: index === 0
-    };
-  });
+  const options: PromptOption[] = request.options.map((option, index) => ({
+    label: option.name,
+    detail: optionDetail(request, board, option),
+    answer: { kind: "reaction", actionId: option.actionId },
+    primary: index === 0
+  }));
   options.push({ label: "Don't", answer: { kind: "reaction", actionId: null } });
+  // Opportunity attacks are set as one; any other reaction on its own.
+  const policies: PromptPolicy[] = request.trigger === "enemy-leaves-reach"
+    ? [{ key: reactionPolicyKey(request.reactorId, OPPORTUNITY_ATTACKS), label: "Opportunity attacks", use: { kind: "reaction", actionId: request.aiChoice ?? request.options[0]?.actionId ?? null } }]
+    : request.options.map((option) => ({ key: reactionPolicyKey(request.reactorId, option.actionId), label: option.name, use: { kind: "reaction", actionId: option.actionId } }));
+  const text = (title: string, ask: string): PromptText => ({ who: reactor, title, ask, options, policies });
 
   switch (request.trigger) {
     case "enemy-leaves-reach":
-      return { who: reactor, title: `${source} is leaving ${reactor}'s reach.`, ask: "Make an opportunity attack?", options };
+      return text(`${source} is leaving ${reactor}'s reach.`, "Make an opportunity attack?");
     case "would-be-hit":
-      return {
-        who: reactor,
-        title: `${source}'s ${attack?.actionName ?? "attack"} hits ${reactor}${attack?.total !== undefined && attack.targetAc !== undefined ? `: ${attack.total} against AC ${attack.targetAc}` : ""}.`,
-        ask: "React before the damage?",
-        options
-      };
+      return text(
+        `${source}'s ${attack?.actionName ?? "attack"} hits ${reactor}${attack?.total !== undefined && attack.targetAc !== undefined ? `: ${attack.total} against AC ${attack.targetAc}` : ""}.`,
+        "React before the damage?"
+      );
     case "targeted-by-attack":
-      return { who: reactor, title: `${source} attacks ${reactor}${attack ? ` with ${attack.actionName}` : ""}.`, ask: "React before the roll?", options };
+      return text(`${source} attacks ${reactor}${attack ? ` with ${attack.actionName}` : ""}.`, "React before the roll?");
     case "hit-by-attack":
-      return {
-        who: reactor,
-        title: `${source} hit ${reactor}${request.context.damageTaken !== undefined ? ` for ${request.context.damageTaken}` : ""}.`,
-        ask: "React?",
-        options
-      };
-    case "ally-targeted-by-attack":
-      return { who: reactor, title: `${source} attacks ${nameOf(board, request.targetId)}, near ${reactor}.`, ask: "Give the attack disadvantage?", options };
+      return text(`${source} hit ${reactor}${request.context.damageTaken !== undefined ? ` for ${request.context.damageTaken}` : ""}.`, `${request.options.length === 1 ? `${request.options[0]!.name} ${source}` : "React"}?`);
+    case "ally-targeted-by-attack": {
+      const away = distance(request.targetId);
+      return text(`${source} attacks ${nameOf(board, request.targetId)}${away !== undefined ? `, ${away} ft. from ${reactor}` : ""}.`, "Give the attack disadvantage?");
+    }
     case "enemy-casts-spell": {
       const spell = request.context.spell;
-      return {
-        who: reactor,
-        title: `${source} is casting ${spell?.name ?? "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}.`,
-        ask: "Counter it?",
-        options
-      };
+      const away = sourceCombatant ? distance(sourceCombatant.id) : undefined;
+      return text(
+        `${source} is casting ${spell?.name ?? "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}${away !== undefined ? ` ${away} ft. away` : ""}.`,
+        "Counter it?"
+      );
     }
     case "manual":
-      return { who: reactor, title: `${reactor} can react.`, ask: "React?", options };
+      return text(`${reactor} can react.`, "React?");
   }
 }

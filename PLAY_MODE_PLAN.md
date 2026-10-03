@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–6 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–7 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -1119,6 +1119,51 @@ Done when:
 - Yes and No both finish the step.
 - Always and Never stop the asking for that creature.
 - A prompt during an AI turn shows the board at that moment, and the playback carries on after it.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **Each choice's numbers** (`questions.ts`), from the engine's previews:
+>   - an opportunity attack's chance to hit and damage, per attack.
+>   - Hellish Rebuke's chance to fail and damage.
+>   - the AC Shield or Parry gives and whether the attack then misses.
+>   - "it's countered", "the attack has disadvantage".
+>   - the slot each spends, with how many are left.
+> - **Questions name the moment:**
+>   - "Goblin 1 hit Fighter for 6. Hellish Rebuke Goblin 1?"
+>   - "Goblin 1 attacks Fighter, 5 ft. from Archer."
+>   - "Mage is casting Fireball (3rd level) 30 ft. away."
+> - **"This fight: Ask · Always · Never"** on each reaction's question: one setting for all a creature's opportunity
+>   attacks, one per other reaction. Always and Never also answer the question in front of you.
+> - **The hotbar's Reactions tab** lists the creature's reactions (opportunity attacks with which weapons, Shield,
+>   Counterspell…) with the same setting, and says when asking is off in the setup.
+> - **The question card** sits under the turn bar, so the board it's about stays in view.
+> - **Engine:** in a step run again, a person's own answer to a question stands even if they've since set that
+>   reaction to Always or Never, so answering and setting together can't throw the step out of step.
+> - **The You/AI chips** wait while a question is open.
+>
+> Already there from Phase 3: a question during the AI's turn waits until the playback reaches it, shows the board as it
+> was then, and the playback carries on from there after the answer. It's tested here.
+>
+> Tests:
+>
+> - `tests/play-prompts.test.tsx` (7):
+>   - the words and numbers of an opportunity attack, Hellish Rebuke after a hit, Protection and Counterspell.
+>   - a question during the AI's turn: held until its lead-up has played back, over the board then, then the rest of
+>     the turn played back from there with the answer's effect (disadvantage).
+>   - Always on a question answers it and stops the asking; Never answers no.
+>   - the hotbar's Reactions tab sets the same.
+> - The full suite passes: 163 files, 1,945 tests.
+>
+> Browser (Playwright, the default scene, everyone played by you), all passed:
+>
+> - the DM brought Goblin 1 beside the fighter, and the fighter walked away. The card read "Fighter is leaving Goblin
+>   1's reach. Make an opportunity attack?" with "Scimitar: 45% to hit · 5.5 damage", and "Opportunity attacks, this
+>   fight: Ask · Always · Never".
+> - Always answered it; the goblin made its attack.
+> - the fighter's Reactions tab: "Opportunity attacks with Longsword", Ask · Always · Never.
+> - no page errors.
 
 ### Phase 8 — Legendary and lair actions, DM tools, the end (UI; medium)
 

@@ -295,6 +295,7 @@ export function CombatPanel() {
                     type="button"
                     className={styles.controllerToggle}
                     data-controller={controller}
+                    disabled={Boolean(play.pending)}
                     onClick={() => setPlayControl({ ...play.control, tokens: { ...(play.control.tokens ?? {}), [combatant.id]: next } })}
                     title={controller === "human" ? `You play ${combatant.displayName}: hand it to the AI` : `The AI plays ${combatant.displayName}: play it yourself`}
                     aria-label={`${combatant.displayName}: played by ${controller === "human" ? "you" : "the AI"}`}

@@ -2,7 +2,8 @@
 
 import { Bot, ChevronDown, ChevronUp, Flag, Undo2, X } from "lucide-react";
 import { useEffect, useMemo } from "react";
-import { findActionDefinition, getDefinition, type EncounterSnapshot, type MovePreview } from "@/engine";
+import { findActionDefinition, getDefinition, reactionPolicyKey, type EncounterSnapshot, type MovePreview, type ReactionPolicy } from "@/engine";
+import { PlaySegmented, POLICY_OPTIONS } from "./PlaySegmented";
 import { chooseOption, finishAiming, pressHotbar, type AimView } from "@/hooks/usePlayAim";
 import { makePlayMove, planKeyOf, usePlayMovePlan, type PlayMoveView } from "@/hooks/usePlayMove";
 import { hotbarFor, type HotbarButton, type HotbarModel } from "@/lib/play/hotbar";
@@ -51,6 +52,8 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
   const plan = usePlayMovePlan();
   const encounter = useEncounterStore((state) => state.encounter);
   const playCommand = useEncounterStore((state) => state.playCommand);
+  const control = useEncounterStore((state) => state.play?.control);
+  const setPlayControl = useEncounterStore((state) => state.setPlayControl);
   const undo = useEncounterStore((state) => state.undo);
   const canUndo = useEncounterStore((state) => state.undoStack.length > 0);
   const tab = usePlayUiStore((state) => state.tab);
@@ -163,23 +166,45 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
               type="button"
               role="tab"
               aria-selected={entry.id === current.id}
-              disabled={entry.buttons.length === 0}
+              disabled={(entry.id === "reactions" ? model.reactions.length : entry.buttons.length) === 0}
               onClick={() => setTab(entry.id)}
             >
               {entry.label}
-              {entry.buttons.length ? <small>{entry.buttons.length}</small> : null}
+              {(entry.id === "reactions" ? model.reactions.length : entry.buttons.length) ? <small>{entry.id === "reactions" ? model.reactions.length : entry.buttons.length}</small> : null}
             </button>
           ))}
         </div>
         {current.id === "spells" && model.slots.length ? <SlotPips slots={model.slots} /> : null}
       </div>
 
-      <div className={styles.hotbarButtons} role="tabpanel" aria-label={current.label}>
-        {current.buttons.map((button, index) => (
-          <HotbarItem key={`${button.key}-${button.slot}`} button={button} index={index} armedActionId={armed && armed.key === button.key ? armed.actionId : undefined} />
-        ))}
-        {current.buttons.length === 0 ? <span className={styles.hint}>Nothing here.</span> : null}
-      </div>
+      {current.id === "reactions" ? (
+        <div className={styles.hotbarReactions} role="tabpanel" aria-label={current.label}>
+          {model.reactions.map((reaction) => {
+            const key = reactionPolicyKey(actor.id, reaction.key);
+            return (
+              <div key={reaction.key} className={styles.row}>
+                <span><strong>{reaction.name}</strong>{reaction.detail ? <small>{reaction.detail}</small> : null}</span>
+                <PlaySegmented
+                  label={`${reaction.name}, this fight`}
+                  value={control?.reactions?.[key] ?? "ask"}
+                  options={POLICY_OPTIONS}
+                  onChange={(value: ReactionPolicy) => control && setPlayControl({ ...control, reactions: { ...(control.reactions ?? {}), [key]: value } })}
+                />
+              </div>
+            );
+          })}
+          {control && (control.askReactions === false || control.askOpportunityAttacks === false) ? (
+            <span className={styles.hint}>Asking is off in the setup: the AI decides any left on Ask.</span>
+          ) : null}
+        </div>
+      ) : (
+        <div className={styles.hotbarButtons} role="tabpanel" aria-label={current.label}>
+          {current.buttons.map((button, index) => (
+            <HotbarItem key={`${button.key}-${button.slot}`} button={button} index={index} armedActionId={armed && armed.key === button.key ? armed.actionId : undefined} />
+          ))}
+          {current.buttons.length === 0 ? <span className={styles.hint}>Nothing here.</span> : null}
+        </div>
+      )}
 
       <HotbarHint
         model={model}

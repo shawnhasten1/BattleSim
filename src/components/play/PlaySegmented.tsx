@@ -33,6 +33,13 @@ export function PlaySegmented<T extends string | number>({ label, value, options
   );
 }
 
+/** How one of a person's creatures' reactions is handled for the rest of the fight (D3). */
+export const POLICY_OPTIONS: Array<PlaySegment<"ask" | "use" | "never">> = [
+  { value: "ask", label: "Ask", title: "Ask each time it could be taken" },
+  { value: "use", label: "Always", title: "Take it every time it's offered, without asking" },
+  { value: "never", label: "Never", title: "Never take it" }
+];
+
 export const SPEED_OPTIONS: Array<PlaySegment<0 | 1 | 2 | 4>> = [
   { value: 0, label: "Instant", title: "The AI's turns happen at once" },
   { value: 1, label: "1×" },
