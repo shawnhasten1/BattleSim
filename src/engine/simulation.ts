@@ -1,9 +1,6 @@
 import {
   activeFactions,
-  admitReinforcements,
-  despawnExpiredSummons,
   canAct,
-  createEngineState,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   effectiveFaction,
@@ -25,13 +22,11 @@ import {
   resolveAreaTargeting,
   resolveAttackBonus,
   resolveBeamCount,
-  rollInitiative,
   remainingMovementBudget,
   resolveAttack,
   resolveBuffAction,
   resolveSummonAction,
   isTargetable,
-  runDownedTurn,
   resolveHealingAction,
   resolveHealingBurstAction,
   resolveActivateFeatureAction,
@@ -52,17 +47,17 @@ import {
   attackPrerequisitesMet,
   hasChargedAt,
   refillLegendaryPoints,
-  runTurnStart,
+  resolveUse,
   spellSlotLevel,
-  tickZones,
   type EngineState
 } from "./combat";
+import { askDecision, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
 import { footprintGroundHeight, movementProfileOf, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -244,22 +239,77 @@ export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
     const definition = getDefinition(state.snapshot, combatant);
     if (!definition.legendary || !canAct(combatant, "free")) continue;
     if (combatant.resources?.[LEGENDARY_POINTS] === undefined) refillLegendaryPoints(state, combatant);
-    if ((combatant.resources?.[LEGENDARY_POINTS] ?? 0) < 1) continue;
-    const options = getExecutableActions(definition).filter((action): action is OffensiveAction =>
-      isLegendaryVariant(action) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"));
-    if (options.length === 0) continue;
-    const plan = selectOffensivePlan(state.snapshot, combatant, tacticsSettings(combatant.tacticsProfile), "action", { actions: options, mustReachNow: true });
-    if (!plan || plan.expectedDamage <= 0 && plan.score <= 0) continue;
-    const cost = "resourceCost" in plan.action ? plan.action.resourceCost?.amount ?? 1 : 1;
-    state.log.push(event(state, "LegendaryActionUsed", `${combatant.displayName} uses ${plan.action.name} (legendary, ${cost} point${cost === 1 ? "" : "s"})`, {
-      combatantId: combatant.id, actionId: plan.action.id, cost, after: endedActorId
+    const points = combatant.resources?.[LEGENDARY_POINTS] ?? 0;
+    if (points < 1) continue;
+    const legendary = getExecutableActions(definition).filter(isLegendaryVariant);
+    const options = legendary.filter((action): action is OffensiveAction =>
+      action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack");
+    const plan = options.length > 0
+      ? selectOffensivePlan(state.snapshot, combatant, tacticsSettings(combatant.tacticsProfile), "action", { actions: options, mustReachNow: true })
+      : undefined;
+    const aiPlan = plan && !(plan.expectedDamage <= 0 && plan.score <= 0) ? plan : undefined;
+
+    // A player who plays this creature picks any legendary action it can afford, or passes (Play).
+    if (state.decide) {
+      const affordable = legendary.filter((action) => canPayFor(combatant, action as { resourceCost?: { resourceId: string; amount: number } }));
+      const answer = affordable.length > 0
+        ? askDecision<TurnOptionRequest>(state, {
+          kind: "legendary-action", combatantId: combatant.id, afterId: endedActorId, pointsLeft: points,
+          options: affordable.map((action) => ({ actionId: action.id, name: action.name, cost: turnOptionCost(action) })),
+          aiChoice: aiPlan ? planPick(aiPlan) : null
+        }, combatant.id)
+        : undefined;
+      if (answer) {
+        if (answer.pick) takeChosenTurnAction(state, combatant, answer.pick, endedActorId);
+        if (activeFactions(state.snapshot).size <= 1) return;
+        continue;
+      }
+    }
+
+    if (!aiPlan) continue;
+    const cost = "resourceCost" in aiPlan.action ? aiPlan.action.resourceCost?.amount ?? 1 : 1;
+    state.log.push(event(state, "LegendaryActionUsed", `${combatant.displayName} uses ${aiPlan.action.name} (legendary, ${cost} point${cost === 1 ? "" : "s"})`, {
+      combatantId: combatant.id, actionId: aiPlan.action.id, cost, after: endedActorId
     }));
     try {
-      executeOffensivePlan(state, combatant, plan);
+      executeOffensivePlan(state, combatant, aiPlan);
     } catch (error) {
       state.log.push(event(state, "AutomationWarning", `${combatant.displayName}: legendary action failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: combatant.id }));
     }
     if (activeFactions(state.snapshot).size <= 1) return;
+  }
+}
+
+/** What a legendary or lair action costs from its pool: legendary points, or 1 for a lair action. */
+function turnOptionCost(action: ActionDefinition): number {
+  return "resourceCost" in action && action.resourceCost?.resourceId === LEGENDARY_POINTS ? action.resourceCost.amount : 1;
+}
+
+/** An AI plan, as the pick a player would have made. */
+function planPick(plan: OffensivePlan): TurnPick {
+  return plan.action.kind === "area-save"
+    ? { actionId: plan.action.id, aim: plan.target.position }
+    : { actionId: plan.action.id, targetIds: [plan.target.id] };
+}
+
+/** A legendary action (after `afterId`'s turn) or a lair action a player picked: logged as the AI's are, then used as aimed. */
+function takeChosenTurnAction(state: EngineState, creature: CombatantState, pick: TurnPick, afterId?: Id): void {
+  const action = findActionDefinition(getDefinition(state.snapshot, creature), pick.actionId);
+  if (!action) return;
+  if (afterId !== undefined) {
+    const cost = turnOptionCost(action);
+    state.log.push(event(state, "LegendaryActionUsed", `${creature.displayName} uses ${action.name} (legendary, ${cost} point${cost === 1 ? "" : "s"})`, {
+      combatantId: creature.id, actionId: action.id, cost, after: afterId
+    }));
+  } else {
+    state.log.push(event(state, "LairAction", `Lair action (initiative ${LAIR_INITIATIVE}): ${creature.displayName} uses ${action.name}`, {
+      combatantId: creature.id, actionId: action.id, targetId: pick.targetIds?.[0]
+    }));
+  }
+  try {
+    resolveUse(state, creature.id, pick.actionId, pick);
+  } catch (error) {
+    state.log.push(event(state, "AutomationWarning", `${creature.displayName}: ${action.name} failed — ${error instanceof Error ? error.message : String(error)}`, { combatantId: creature.id }));
   }
 }
 
@@ -285,12 +335,36 @@ export function runLairWindow(state: EngineState, nextActor: CombatantState): vo
     // A lair acts through its master: an incapacitated (or dead) creature takes no lair action.
     if (creature.state !== "active" || !canAct(creature, "free")) continue;
     const definition = getDefinition(state.snapshot, creature);
-    const options = getExecutableActions(definition).filter((action): action is OffensiveAction =>
-      isLairVariant(action) && action.id !== creature.lastLairActionId
-      && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"));
+    const fresh = getExecutableActions(definition).filter((action) => isLairVariant(action) && action.id !== creature.lastLairActionId);
+    const options = fresh.filter((action): action is OffensiveAction =>
+      action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack");
     const plan = options.length > 0
       ? selectOffensivePlan(state.snapshot, creature, tacticsSettings(creature.tacticsProfile), "action", { actions: options, mustReachNow: true })
       : undefined;
+
+    // A player who plays the lair's master picks one (never last round's) or lets it pass (Play).
+    if (state.decide && fresh.length > 0) {
+      const aiPlan = plan && !(plan.expectedDamage <= 0 && plan.score <= 0) ? plan : undefined;
+      const answer = askDecision<TurnOptionRequest>(state, {
+        kind: "lair-action", combatantId: creature.id,
+        options: fresh.map((action) => ({ actionId: action.id, name: action.name, cost: 1 })),
+        aiChoice: aiPlan ? planPick(aiPlan) : null
+      }, creature.id);
+      if (answer) {
+        if (answer.pick) {
+          creature.lastLairActionId = answer.pick.actionId;
+          takeChosenTurnAction(state, creature, answer.pick);
+        } else {
+          state.log.push(event(state, "LairAction", `${creature.displayName}'s lair is quiet this round (initiative ${LAIR_INITIATIVE})`, {
+            combatantId: creature.id, actionId: null
+          }));
+          creature.lastLairActionId = undefined;
+        }
+        if (activeFactions(state.snapshot).size <= 1) return;
+        continue;
+      }
+    }
+
     if (!plan || (plan.expectedDamage <= 0 && plan.score <= 0)) {
       state.log.push(event(state, "LairAction", `${creature.displayName}'s lair stirs, but nothing is in reach (initiative ${LAIR_INITIATIVE})`, {
         combatantId: creature.id, actionId: null
@@ -3276,11 +3350,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function averageDamage(
+/** An action's average damage on a hit (or a failed save): the AI's estimate, and the previews'. */
+export function averageDamage(
   action: ActionDefinition,
   source: ReturnType<typeof getDefinition>,
   /** The target's defenses: each component's average is scaled by how much of that damage type gets through. */
-  targetAdjustments?: CreatureDefinition["damageAdjustments"]
+  targetAdjustments?: CreatureDefinition["damageAdjustments"],
+  /** A critical hit: every die rolled twice. */
+  critical = false
 ): number {
   if (action.kind === "healing" || action.kind === "reposition" || action.kind === "buff" || action.kind === "unsupported" || action.kind === "activate-feature" || action.kind === "utility" || action.kind === "summon" || action.kind === "transform") {
     return 0;
@@ -3290,11 +3367,11 @@ function averageDamage(
     const actions = getExecutableActions(source);
     return swingsOf(action.attacks).reduce((sum, swing) => {
       const attack = defaultSwingAttack(swing.step, swingCandidates(swing.step, actions));
-      return sum + (attack ? averageDamage(attack, source, targetAdjustments) : 0);
+      return sum + (attack ? averageDamage(attack, source, targetAdjustments, critical) : 0);
     }, 0);
   }
-  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source) * defenseMultiplier(component, targetAdjustments), 0);
-  return base + averageUpcastDiceBonus(action);
+  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source, critical) * defenseMultiplier(component, targetAdjustments), 0);
+  return base + averageUpcastDiceBonus(action) * (critical ? 2 : 1);
 }
 
 /** How many extra targets a save action's upcast grants for free at whatever slot tier its own `resourceCost` implies (Hold Person-style). 0 for a base cast or an action with no `upcast.targets`. */
@@ -3445,10 +3522,10 @@ function defenseMultiplier(
   return component.damageType === "same-as-attack" ? 1 : damageAdjustmentMultiplier(component.damageType, targetAdjustments, origin);
 }
 
-function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>): number {
+function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>, critical = false): number {
   const casterLevel = source.character?.level ?? 1;
   const parsed = parseDiceExpression(resolveScaledDamage(component.dice, component.scaling, { casterLevel }));
-  const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
+  const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) * (critical ? 2 : 1) + parsed.modifier;
   const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
   const formulaBonus = resolveNumericFormula(component.bonusFormula, source);
   return diceAverage + abilityBonus + formulaBonus;

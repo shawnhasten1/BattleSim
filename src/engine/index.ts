@@ -12,4 +12,8 @@ export * from "./report";
 export * from "./rng";
 export * from "./simulation";
 export * from "./turns";
+export * from "./decisions";
+export * from "./commands";
+export * from "./preview";
+export * from "./play";
 export * from "./types";

@@ -9,7 +9,6 @@ import {
   defaultConditionModifiers,
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
-  event,
   footprintCells,
   getDefinition,
   groundHeightAt,
@@ -1012,7 +1011,8 @@ export const useEncounterStore = create<EncounterStore>()(
         const engine = createEngineState({ ...state.encounter, seed: `${state.encounter.seed}:initiative:${state.log.length}` });
         engine.log = [...state.log];
         rollInitiative(engine);
-        commitEncounter(engine.snapshot, { log: engine.log });
+        // That seed was for these dice only: the encounter keeps its own.
+        commitEncounter({ ...engine.snapshot, seed: state.encounter.seed }, { log: engine.log });
       },
       restartCombat: () => {
         const encounter = get().encounter;
@@ -1045,7 +1045,8 @@ export const useEncounterStore = create<EncounterStore>()(
         engine.log = [...state.log];
         const { actor, outcome } = stepAutomatedTurn(engine);
         if (!actor && engine.log.length === state.log.length) return;
-        commitEncounter(engine.snapshot, {
+        // The turn's seed was for its dice only: the encounter keeps its own (it used to grow with every Step).
+        commitEncounter({ ...engine.snapshot, seed: state.encounter.seed }, {
           log: engine.log,
           selectedCombatantId: actor?.id ?? state.selectedCombatantId,
           outcome

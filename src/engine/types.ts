@@ -1906,6 +1906,7 @@ export interface CombatLogEvent {
     | "Transformed"
     | "SpellCountered"
     | "UtilityActionResolved"
+    | "ManualActionUsed"
     | "ActionEconomyRefreshed"
     | "AiDecision"
     | "CombatantDowned"

@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phase 0 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0 and 1 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -260,8 +260,9 @@ the creature could take, and waits for your choice. There's no timer.
 - **Legendary Resistance:** "The dragon failed a DC 15 Wisdom save against Hold Person (rolled 9). Use Legendary
   Resistance (3 left) to succeed instead?"
 - **The "This fight" setting** (D3). Every reaction asks by default, opportunity attacks included. Each prompt has
-  *This fight: Ask · Always use · Never* for that reaction on that creature. *Always use* hands the reaction back to the
-  AI's rule. The hotbar's Reactions tab shows and changes the same setting, as BG3 does.
+  *This fight: Ask · Always use · Never* for that reaction on that creature. *Always use* takes it every time it's
+  offered, without asking. The hotbar's Reactions tab shows and changes the same setting, as BG3 does. Turning off "Ask
+  before my creatures react" in the setup leaves the ones without a setting of their own to the AI's rule.
 - **A prompt that shows a roll** (Shield, Legendary Resistance) also lets you overrule that roll (§2.10).
 - **The AI's creatures never prompt.** It decides their reactions itself.
 
@@ -653,6 +654,54 @@ Done when (all headless):
   - a miss made a hit deals its damage and runs its riders.
   - a failed save made a success takes half damage or none.
   - the dice before the overridden roll are unchanged, and the log keeps the number rolled.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **`src/engine/decisions.ts`:** the request and answer types, and `askDecision`, which every decision point calls.
+>   Keys are `${n}:${kind}:${subject}`, counting every point in the step, rolls included.
+> - **Decision points**, each falling back to the AI's choice. With no decider, the golden logs are unchanged.
+>   - the reaction windows offer every eligible reaction, including those the AI's value bar would skip and
+>     `priority: "manual"` ones; opportunity attacks offer one option per attack.
+>   - Legendary Resistance, after the save's roll (and its override).
+>   - legendary and lair windows: a person picks from every affordable option, with targets, or passes.
+>   - multiattack swings: `askingSwingHook` makes the first swing as aimed and asks before each later one (whom, with
+>     what, a move first, or skip).
+>   - rolls: attack rolls, saves, death saves, escape checks and recharges. They never pause; an override changes the
+>     outcome, not the die, and the log says "(DM override)".
+> - **`src/engine/commands.ts`:** `executeCommand` (move with waypoints, use, use by hand, move a zone, AI: take this
+>   turn, end turn), and `commandProblem`, `actionProblem` and `targetProblem`, worded as the resolvers throw.
+> - **`src/engine/combat.ts`:**
+>   - `resolveUse`, the one dispatcher for a person's abilities, legendary and lair picks included.
+>   - `resolveManualAction` and its `ManualActionUsed` event.
+>   - the reaction event carries the attack or spell and the roll, for prompts.
+> - **`src/engine/preview.ts`:** `previewAttack`, `previewRoutine`, `previewSave`, `previewArea` and `previewMove`.
+>   They're built from inputs extracted from the resolvers, which now use them too: `attackRollInputs`,
+>   `saveRollInputs`, `actionSaveContext`, `areaSaveTargets` and `plannedPath`. `averageDamage` (the AI's) gained a
+>   critical-hit option.
+> - **`src/engine/play.ts`:**
+>   - `PlayControl` and `controllerOf`: a dominator's player, then a token's own setting, then a summoner's player,
+>     then the side's.
+>   - `runPlayStep`: re-runs a step with its answers and overrides, and reports the step's rolls for the roll strip.
+>   - reaction policies: *Always use*, *Never*, ask, or the AI's rule when asking is off.
+>
+> Fixed on the way: Step and the Initiative button kept the seed they derived for their dice, so the encounter's seed
+> grew with every Step (`seed:turn:0:turn:12:…`). The encounter now keeps its own seed.
+>
+> Differences from the plan:
+>
+> - Reference-only legendary actions (Detect) aren't offered by hand yet; Phase 8.
+> - The scripted fight uses moves, attacks and End turn. Spells and areas are covered by their own tests (Fireball
+>   and Counterspell, an area, a save).
+>
+> Tests:
+>
+> - `tests/play-headless.test.ts` (16): fights played by a person, commands, opportunity-attack questions and
+>   policies, who plays what.
+> - `tests/play-decisions.test.ts` (15): Legendary Resistance, legendary and lair picks, swings, overrides,
+>   Counterspell, and previews against 2,000 seeded rolls and against the resolvers.
+> - The full suite passes: 154 files, 1,870 tests. The golden logs are unchanged.
 - With no decider, Auto Run's golden logs still match.
 - The previews agree with 2,000 seeded rolls to within 2 percentage points.
 

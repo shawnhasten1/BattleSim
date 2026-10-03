@@ -1,6 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
-import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type OccupancyMovementOptions, type PathResult } from "./geometry";
+import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, pathCostAlong, sizeFootprint, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
@@ -52,8 +52,19 @@ import type {
   UtilityActionDefinition,
   ZoneTrigger
 } from "./types";
+import {
+  askDecision,
+  type DecisionHost,
+  type LegendaryResistanceRequest,
+  type ReactionContext,
+  type ReactionOption,
+  type ReactionRequest,
+  type RollOutcome,
+  type RollRequest,
+  type SwingRequest
+} from "./decisions";
 
-export interface EngineState {
+export interface EngineState extends DecisionHost {
   snapshot: EncounterSnapshot;
   log: CombatLogEvent[];
   rng: RandomSource;
@@ -537,7 +548,7 @@ export function attackPrerequisitesMet(actor: CombatantState, action: ActionDefi
 }
 
 /** Evasion: a Dexterity save for half damage negates it on a success and halves it on a failure. */
-function saveDamageOutcome(
+export function saveDamageOutcome(
   state: EngineState,
   target: CombatantState,
   ability: Ability | undefined,
@@ -706,7 +717,7 @@ export function moveCombatant(
   const map = zoneTerrainOverlay(state.snapshot.map, state.snapshot.activeZones);
   const routeMap = hazardPathingOverlay(map);
   const pathOptions = movementOptionsFor(definition);
-  const path = hazardAwarePath(map, routeMap, start, destination, footprint, occupied, pathOptions);
+  const path = plannedPath(state.snapshot, combatantId, destination);
   const movementBudget = remainingMovementBudget(state.snapshot, combatant);
 
   // Rising or dropping is flying, and costs movement like any other flying.
@@ -770,6 +781,18 @@ export function moveCombatant(
   checkTerrainHazardOnEnter(state, combatant, movedCells);
   recenterSelfAnchoredZones(state, combatant);
   return movedCells;
+}
+
+/**
+ * The route `moveCombatant` takes from where `combatantId` stands to `destination`, and what it costs (in squares):
+ * around walls and other creatures, preferring a way round hazards when one costs about the same. A move preview
+ * shows this, so it can't disagree with the move.
+ */
+export function plannedPath(snapshot: EncounterSnapshot, combatantId: Id, destination: Point, from?: Point): PathResult {
+  const combatant = findCombatant(snapshot, combatantId);
+  const definition = getDefinition(snapshot, combatant);
+  const map = zoneTerrainOverlay(snapshot.map, snapshot.activeZones);
+  return hazardAwarePath(map, hazardPathingOverlay(map), from ?? combatant.position, destination, sizeFootprint(definition.size), occupiedCells(snapshot, combatantId), movementOptionsFor(definition));
 }
 
 /** Movement (in squares of the creature's fastest speed) spent rising or dropping `feet` while flying. */
@@ -1205,6 +1228,148 @@ export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: 
   }));
 }
 
+/* ─── Using an ability by hand (Play) ─────────────────────────────────────────── */
+
+/** What a player aims an ability at: creatures, a point, a destination square, or one of its options. */
+export interface UseTarget {
+  /** Creatures, in order: the target (and any more a spell allows), or one per beam. */
+  targetIds?: Id[];
+  /** Where an area is centred, or the point a cone or line is aimed at. */
+  aim?: Point;
+  /** Where a teleport takes its mover. */
+  destination?: Point;
+  /** Who a teleport moves, when it isn't the user. */
+  moverId?: Id;
+  /** Which creature to summon, or which form to take. */
+  optionId?: Id;
+}
+
+/**
+ * Use one of `actorId`'s abilities the way a player chose: the same resolver the AI's plan would call for it, aimed
+ * where the player aimed it. A multiattack asks for each swing after the first through `askingSwingHook`.
+ * Throws (as the resolvers do) when the choice isn't legal.
+ */
+export function resolveUse(state: EngineState, actorId: Id, actionId: Id, use: UseTarget = {}): void {
+  const actor = findCombatant(state.snapshot, actorId);
+  const action = findActionDefinition(getDefinition(state.snapshot, actor), actionId);
+  if (!action) {
+    throw new Error(`${actor.displayName} has no ${actionId}`);
+  }
+  const ids = use.targetIds ?? [];
+  const first = ids[0];
+  const needTarget = (): Id => {
+    if (!first) throw new Error(`${action.name} needs a target`);
+    return first;
+  };
+  switch (action.kind) {
+    case "attack":
+      resolveAttack(state, actorId, action.attackDelivery === "beams" ? (ids.length ? ids : [needTarget()]) : needTarget(), actionId);
+      return;
+    case "multiattack":
+      resolveMultiattackAction(state, actorId, [needTarget()], actionId, { beforeSwing: askingSwingHook(state, actorId, actionId, { targetId: needTarget() }) });
+      return;
+    case "save":
+      resolveSaveAction(state, actorId, action.targeting?.target === "self" ? actorId : needTarget(), actionId, { bonusTargetIds: ids.slice(1) });
+      return;
+    case "area-save":
+      if (!use.aim && action.targeting?.origin !== "self") throw new Error(`${action.name} needs a point to aim at`);
+      resolveAreaSaveAction(state, actorId, use.aim ?? actor.position, actionId);
+      return;
+    case "healing":
+      if (action.targeting?.target === "chosen" || action.targeting?.target === "area") {
+        resolveHealingBurstAction(state, actorId, actionId, ids, use.aim);
+      } else {
+        resolveHealingAction(state, actorId, action.targeting?.target === "self" ? actorId : needTarget(), actionId);
+      }
+      return;
+    case "buff":
+      resolveBuffAction(state, actorId, actionId, action.targeting?.target === "self" || ids.length === 0 ? [actorId] : ids);
+      return;
+    case "reposition":
+      if (!use.destination) throw new Error(`${action.name} needs a destination`);
+      resolveRepositionAction(state, actorId, action.targeting?.target === "single" ? use.moverId ?? needTarget() : actorId, use.destination, actionId);
+      return;
+    case "activate-feature":
+      resolveActivateFeatureAction(state, actorId, actionId);
+      return;
+    case "utility":
+      resolveUtilityAction(state, actorId, actionId);
+      return;
+    case "summon":
+      resolveSummonAction(state, actorId, actionId, use.optionId);
+      return;
+    case "transform":
+      resolveTransformAction(state, actorId, actionId, use.optionId ?? BASE_FORM_ID);
+      return;
+    case "unsupported":
+      throw new Error(`${action.name} isn't simulated: use it by hand`);
+  }
+}
+
+/**
+ * The swing-by-swing choices of a multiattack a player is making: the first swing at `first` (what the player aimed
+ * the routine at), then a `multiattack-swing` decision before each later one — whom, with what, a move first, or skip.
+ * With no answer the routine's own default applies.
+ */
+export function askingSwingHook(
+  state: EngineState,
+  attackerId: Id,
+  actionId: Id,
+  first: { targetId?: Id; actionId?: Id }
+): (context: MultiattackSwingContext) => MultiattackSwingChoice | undefined {
+  const attacker = findCombatant(state.snapshot, attackerId);
+  const executables = getExecutableActions(getDefinition(state.snapshot, attacker));
+  const action = executables.find((candidate) => candidate.id === actionId);
+  const attackSwings = action?.kind === "multiattack"
+    ? swingsOf(action.attacks).filter((swing) => !stepAbility(swing.step, executables)).map((swing) => swing.index)
+    : [];
+  let calls = 0;
+  return (context) => {
+    calls += 1;
+    if (calls === 1) {
+      return { targetId: first.targetId, actionId: first.actionId };
+    }
+    const answer = askDecision<SwingRequest>(state, {
+      kind: "multiattack-swing", attackerId, actionId,
+      swing: attackSwings.indexOf(context.swing.index) + 1, of: attackSwings.length,
+      candidates: context.candidates.map((candidate) => candidate.id), previous: context.previous, targetedIds: context.targetedIds
+    }, attackerId);
+    if (!answer) {
+      return undefined;
+    }
+    if (answer.skip) {
+      return { skip: true };
+    }
+    if (answer.moveTo) {
+      moveCombatant(state, attackerId, answer.moveTo, { altitude: answer.altitude });
+    }
+    return { targetId: answer.targetId, actionId: answer.actionId };
+  };
+}
+
+/**
+ * Use an ability the engine doesn't (fully) run, by hand: it takes its slot and its cost and is logged, and the DM
+ * applies what it does. Abilities that are only reference text, partly simulated ones, Hide and Help.
+ */
+export function resolveManualAction(state: EngineState, actorId: Id, actionId: Id, options: { targetIds?: Id[]; note?: string } = {}): void {
+  const actor = findCombatant(state.snapshot, actorId);
+  const action = findActionDefinition(getDefinition(state.snapshot, actor), actionId);
+  if (!action) {
+    throw new Error(`${actor.displayName} has no ${actionId}`);
+  }
+  validateAndSpendAction(actor, action);
+  if ("concentration" in action && action.concentration) {
+    breakConcentration(state, actorId);
+  }
+  const targets = (options.targetIds ?? []).map((id) => findCombatant(state.snapshot, id));
+  declareAction(state, actor, action, { target: targets[0] });
+  const on = targets.length ? ` on ${targets.map((target) => target.displayName).join(", ")}` : "";
+  state.log.push(event(state, "ManualActionUsed", `${actor.displayName} uses ${action.name}${on}: resolve it by hand`, {
+    actorId, actionId, actionName: action.name, targetIds: options.targetIds ?? [], note: options.note,
+    description: "description" in action ? action.description : undefined
+  }));
+}
+
 /** Movement-budget multiplier from the Dash action (turn flag set by `resolveUtilityAction`). */
 export function dashFactor(combatant: CombatantState): number {
   return combatant.turnFlags?.dashed ? 2 : 1;
@@ -1271,6 +1436,56 @@ function coverAgainst(
   return { level: result.level, acBonus, sources: result.sources };
 }
 
+/** Everything an attack roll adds to the d20 and is measured against: shared by `resolveAttackCore` and the previews. */
+export interface AttackRollInputs {
+  advantage: boolean;
+  disadvantage: boolean;
+  rollMode: AttackRollMode;
+  /** Features giving advantage or disadvantage (Pack Tactics). */
+  featureAdvantage: { advantage: boolean; disadvantage: boolean; sources: string[] };
+  /** Beyond normal range, within long range: disadvantage. */
+  longRange: boolean;
+  /** The attack's own bonus. */
+  attackBonus: number;
+  featureAttackBonus: { total: number; sources: string[] };
+  /** All of it: what the d20 is added to. */
+  totalBonus: number;
+  /** The target's AC with cover. */
+  targetAc: number;
+  cover: { level: CoverLevel; acBonus: number; sources: string[] };
+}
+
+/**
+ * What `attacker`'s attack roll against `target` adds and must beat, right now: advantage and disadvantage and why,
+ * the bonus, and the AC with cover. Pure. `resolveAttackCore` rolls against it after the pre-roll reactions (a Shield
+ * raises the AC it reads), and the previews read it to give a chance to hit.
+ */
+export function attackRollInputs(
+  state: EngineState,
+  attacker: CombatantState,
+  target: CombatantState,
+  action: AttackActionDefinition,
+  options: { advantage?: boolean; disadvantage?: boolean; coverBonus?: number; forcedDisadvantage?: boolean } = {},
+  knownCover?: { level: CoverLevel; acBonus: number; sources: string[] }
+): AttackRollInputs {
+  const attackerDefinition = getDefinition(state.snapshot, attacker);
+  const targetDefinition = getDefinition(state.snapshot, target);
+  const cover = knownCover ?? (options.coverBonus === undefined && action.attackType !== "melee"
+    ? coverAgainst(state.snapshot, attacker, target)
+    : { level: "none" as const, acBonus: options.coverBonus ?? 0, sources: [] as string[] });
+  const featureAdvantage = featureAttackAdvantage(state, attacker, target, action, attackerDefinition);
+  const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
+  const advantage = Boolean(options.advantage || featureAdvantage.advantage);
+  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage);
+  const rollMode = attackRollMode({ advantage, disadvantage });
+  const attackBonus = resolveAttackBonus(action, attackerDefinition);
+  const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
+  const totalBonus = attackBonus + conditionAttackModifier(attacker)
+    + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
+  const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
+  return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover };
+}
+
 /** The result a spell resolver returns when the spell was countered before it could take effect. */
 function emptyAttackResult(): AttackResult {
   return {
@@ -1313,31 +1528,28 @@ function resolveAttackCore(
   // Pre-roll reactions: Shield raises `target`'s AC (a condition `effectiveArmorClass`
   // reads below); Protection forces the roll to disadvantage.
   runReactionWindow(state, {
-    kind: "targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+    kind: "targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType, actionId: action.id, actionName: action.name
   });
   const forcedDisadvantage = runReactionWindow(state, {
-    kind: "ally-targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+    kind: "ally-targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType, actionId: action.id, actionName: action.name
   }).imposedDisadvantage === true;
 
-  const featureAdvantage = featureAttackAdvantage(state, attacker, target, action, attackerDefinition);
-  const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
-  const attackOptions = {
-    ...options,
-    advantage: options.advantage || featureAdvantage.advantage,
-    disadvantage: options.disadvantage || longRange || forcedDisadvantage || featureAdvantage.disadvantage
-  };
-  const rollMode = attackRollMode({
-    ...attackOptions
-  });
-  const d20 = rollD20(state.rng, attackOptions);
-  const attackBonus = resolveAttackBonus(action, attackerDefinition);
-  const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
-  const total = d20.total + attackBonus + conditionAttackModifier(attacker)
-    + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
-  const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
+  const inputs = attackRollInputs(state, attacker, target, action, { ...options, forcedDisadvantage }, cover);
+  const { featureAdvantage, longRange, rollMode, attackBonus, featureAttackBonus, targetAc } = inputs;
+  const d20 = rollD20(state.rng, { advantage: inputs.advantage, disadvantage: inputs.disadvantage });
+  const total = d20.total + inputs.totalBonus;
   const natural = d20.total;
-  const critical = natural === 20;
-  const hit = critical || (natural !== 1 && total >= targetAc);
+  let critical = natural === 20;
+  let hit = critical || (natural !== 1 && total >= targetAc);
+  // A DM may overrule the roll (Play): a hit, a critical hit or a miss, whatever the die said.
+  const overridden = askDecision<RollRequest>(state, {
+    kind: "roll", rollerId: attacker.id, purpose: "attack", natural, total, against: targetAc,
+    outcome: critical ? "critical" : hit ? "success" : "failure", targetId: target.id, label: action.name
+  }, attacker.id)?.outcome;
+  if (overridden) {
+    hit = overridden !== "failure";
+    critical = overridden === "critical";
+  }
   const featureDamage = hit
     ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical })
     : { entries: [], sources: [] };
@@ -1373,12 +1585,14 @@ function resolveAttackCore(
   // Post-hit reactions — Hellish Rebuke: `target` retaliates against `attacker`.
   if (hit) {
     runReactionWindow(state, {
-      kind: "hit-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType
+      kind: "hit-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType, actionId: action.id, actionName: action.name,
+      attackTotal: total, attackNatural: natural, targetAc, damageTaken: damageApplied
     });
   }
 
   const coverNote = cover.level !== "none" ? ` (${target.displayName} had ${coverLabel(cover.level)})` : "";
-  state.log.push(event(state, "AttackRolled", `${attacker.displayName} ${hit ? "hit" : "missed"} ${target.displayName} with ${action.name}${coverNote}`, {
+  const overrideNote = overridden ? " (DM override)" : "";
+  state.log.push(event(state, "AttackRolled", `${attacker.displayName} ${hit ? "hit" : "missed"} ${target.displayName} with ${action.name}${coverNote}${overrideNote}`, {
     attackerId: attacker.id,
     targetId: target.id,
     actionId: action.id,
@@ -1399,7 +1613,8 @@ function resolveAttackCore(
     targetAc,
     hit,
     critical,
-    damageApplied
+    damageApplied,
+    ...(overridden ? { overridden } : {})
   }));
 
   // Rampage: dropping a creature with a melee attack on its own turn unlocks the follow-up bite (and its move).
@@ -1475,9 +1690,7 @@ function resolveSaveAgainstTarget(
   const targetDefinition = getDefinition(state.snapshot, target);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
-  const save = rollSavingThrow(state, target, {
-    ability: action.saveAbility, dc, kind: "action", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
-  });
+  const save = rollSavingThrow(state, target, actionSaveContext(action, dc, coverSaveBonus));
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   if (success) recordSavedAgainst(attacker, target, action);
   const onSuccess = resolveOnSuccess(action);
@@ -1564,26 +1777,9 @@ export function resolveAreaSaveAction(
 
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const onSuccess = resolveOnSuccess(action);
-  const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
-  const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
-    ? coverBetween(
-      state.snapshot.map,
-      origin,
-      1,
-      target.position,
-      sizeFootprint(getDefinition(state.snapshot, target).size),
-      { blockers: coverBlockersFor(state.snapshot, attacker.id, target.id) }
-    )
-    : null;
-  const affected = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, aimVector)
-    .filter((target) => action.affects === "all" || effectiveFaction(state.snapshot, target) !== effectiveFaction(state.snapshot, attacker))
-    // A self-origin template (cone / line / burst centred on the caster) emanates
-    // *from* the caster — it never catches them, even when `affects: "all"`.
-    .filter((target) => !(placement.fromSelf && target.id === attacker.id))
-    // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
-    .filter((target) => !(state.snapshot.rules.requireLineOfEffect && areaCoverFor(target)?.blocksTargeting))
-    // Someone who already made the save against this action is immune to it (Frightful Presence).
-    .filter((target) => !isImmuneAfterSave(attacker, target, action));
+  const caught = areaSaveTargets(state.snapshot, attacker, action, placement);
+  const affected = caught.map(({ target }) => target);
+  const areaCoverFor = (target: CombatantState) => caught.find((entry) => entry.target === target)?.cover ?? null;
 
   // 5e: roll the blast's damage once — every creature takes the same numbers,
   // differing only by resistance / vulnerability and whether they saved.
@@ -1598,9 +1794,7 @@ export function resolveAreaSaveAction(
     const targetDefinition = getDefinition(state.snapshot, target);
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
-    const save = rollSavingThrow(state, target, {
-      ability: action.saveAbility, dc, kind: "area", sourceAction: saveSourceOf(action), conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus
-    });
+    const save = rollSavingThrow(state, target, actionSaveContext(action, dc, coverSaveBonus));
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     if (success) recordSavedAgainst(attacker, target, action);
     const outcome = saveDamageOutcome(state, target, action.saveAbility, onSuccess, success);
@@ -1645,6 +1839,55 @@ export function resolveAreaSaveAction(
     createZone(state, attacker, action, origin, dc);
   }
   return { targets };
+}
+
+/**
+ * Who an area save catches with its template at `placement`, and the cover each has from its origin: everyone in it of
+ * the sides it affects, never the caster of a template that comes from it, nobody behind total cover from the origin
+ * (when line of effect is enforced), and nobody who has already made its save (Frightful Presence). Shared by
+ * `resolveAreaSaveAction` and the previews. Pure.
+ */
+export function areaSaveTargets(
+  snapshot: EncounterSnapshot,
+  attacker: CombatantState,
+  action: AreaSaveActionDefinition,
+  placement: { origin: Point; aimVector?: { x: number; y: number }; fromSelf: boolean }
+): Array<{ target: CombatantState; cover: CoverResult | null }> {
+  const definitionsById = new Map(snapshot.definitions.map((definition) => [definition.id, definition]));
+  const coverFor = (target: CombatantState) => snapshot.rules.cover
+    ? coverBetween(
+      snapshot.map,
+      placement.origin,
+      1,
+      target.position,
+      sizeFootprint(getDefinition(snapshot, target).size),
+      { blockers: coverBlockersFor(snapshot, attacker.id, target.id) }
+    )
+    : null;
+  return combatantsInArea(snapshot.map, placement.origin, action.area, snapshot.combatants, definitionsById, placement.aimVector)
+    .filter((target) => action.affects === "all" || effectiveFaction(snapshot, target) !== effectiveFaction(snapshot, attacker))
+    // A self-origin template (cone / line / burst centred on the caster) emanates
+    // *from* the caster — it never catches them, even when `affects: "all"`.
+    .filter((target) => !(placement.fromSelf && target.id === attacker.id))
+    .map((target) => ({ target, cover: coverFor(target) }))
+    // Total cover from the blast origin shields a target entirely (when line of effect is enforced).
+    .filter(({ cover }) => !(snapshot.rules.requireLineOfEffect && cover?.blocksTargeting))
+    // Someone who already made the save against this action is immune to it (Frightful Presence).
+    .filter(({ target }) => !isImmuneAfterSave(attacker, target, action));
+}
+
+/** The saving throw a save or area-save action calls for (`dc` resolved, a Dexterity save's cover bonus given). Shared with the previews. */
+export function actionSaveContext(action: SaveActionDefinition | AreaSaveActionDefinition, dc: number, coverSaveBonus = 0): SaveContext {
+  return {
+    ability: action.saveAbility, dc, kind: action.kind === "save" ? "action" : "area", sourceAction: saveSourceOf(action),
+    conditions: conditionsOfRiders(action.riders), expectedDamage: expectedFailureDamage(action), situationalBonus: coverSaveBonus,
+    label: action.name
+  };
+}
+
+/** A Dexterity save's cover bonus against a single-target save action from `attacker` (none for other abilities). */
+export function saveActionCoverBonus(snapshot: EncounterSnapshot, attacker: CombatantState, target: CombatantState, action: SaveActionDefinition): number {
+  return action.saveAbility === "dex" ? coverAgainst(snapshot, attacker, target).acBonus : 0;
 }
 
 const savedKey = (attackerId: Id, action: { id: Id }) => `${attackerId}:${action.id}`;
@@ -1811,7 +2054,7 @@ export function resolveRepositionAction(
   return { moved: true, from, to: destination };
 }
 
-function validateRepositionTargeting(
+export function validateRepositionTargeting(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   mover: CombatantState,
@@ -1929,7 +2172,7 @@ export function resolveBuffAction(
   return { targetIds: targets.map((target) => target.id), tempHpApplied: tempHpAmount || undefined };
 }
 
-function validateBuffTargeting(
+export function validateBuffTargeting(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   target: CombatantState,
@@ -2115,7 +2358,15 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
 
   const roll = rollDice("1d20", state.rng);
   const natural = roll.rolls[0]?.value ?? roll.total;
-  if (natural === 20) {
+  // A DM may overrule it (Play): one success or one failure, without a natural 20's or 1's extra effect.
+  const overridden = askDecision<RollRequest>(state, {
+    kind: "roll", rollerId: combatant.id, purpose: "death-save", natural, total: natural, against: 10,
+    outcome: natural >= 10 ? "success" : "failure", label: "Death save"
+  }, combatant.id)?.outcome;
+  if (overridden) {
+    if (overridden === "failure") combatant.deathSaves.failures += 1;
+    else combatant.deathSaves.successes += 1;
+  } else if (natural === 20) {
     combatant.currentHp = 1;
     combatant.state = "active";
     combatant.deathSaves = { successes: 0, failures: 0, stable: false };
@@ -2136,11 +2387,12 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
     state.log.push(event(state, "CombatantStabilized", `${combatant.displayName} stabilized`, { combatantId }));
   }
 
-  state.log.push(event(state, "DeathSaveRolled", `${combatant.displayName} rolled a death save`, {
+  state.log.push(event(state, "DeathSaveRolled", `${combatant.displayName} rolled a death save${overridden ? " (DM override)" : ""}`, {
     combatantId,
     roll,
     deathSaves: combatant.deathSaves,
-    state: combatant.state
+    state: combatant.state,
+    ...(overridden ? { overridden } : {})
   }));
 
   return {
@@ -2672,7 +2924,11 @@ export function rollRecharges(state: EngineState, actor: CombatantState): void {
     seen.add(poolId);
     const die = usage.recharge.die ?? 6;
     const roll = rollDice(`1d${die}`, state.rng);
-    const recharged = roll.total >= usage.recharge.min;
+    const overridden = askDecision<RollRequest>(state, {
+      kind: "roll", rollerId: actor.id, purpose: "recharge", natural: roll.total, total: roll.total, against: usage.recharge.min,
+      outcome: roll.total >= usage.recharge.min ? "success" : "failure", label: action.name
+    }, actor.id)?.outcome;
+    const recharged = overridden ? overridden !== "failure" : roll.total >= usage.recharge.min;
     if (recharged) {
       actor.resources = { ...(actor.resources ?? {}), [poolId]: 1 };
     }
@@ -2786,9 +3042,13 @@ function attemptEscape(state: EngineState, actor: CombatantState): void {
   const target = holds.reduce((easiest, condition) => (condition.hold!.escapeDc < easiest.hold!.escapeDc ? condition : easiest));
   const definition = getDefinition(state.snapshot, actor);
   const roll = rollDice(withBonus("1d20", escapeBonus(definition)), state.rng);
-  const success = roll.total >= target.hold!.escapeDc;
-  state.log.push(event(state, "EscapeAttempted", `${actor.displayName} ${success ? "breaks free" : "fails to break free"} (rolled ${roll.total} vs DC ${target.hold!.escapeDc})`, {
-    combatantId: actor.id, roll, dc: target.hold!.escapeDc, success
+  const overridden = askDecision<RollRequest>(state, {
+    kind: "roll", rollerId: actor.id, purpose: "check", natural: roll.total - roll.modifier, total: roll.total, against: target.hold!.escapeDc,
+    outcome: roll.total >= target.hold!.escapeDc ? "success" : "failure", label: "Escape a grapple"
+  }, actor.id)?.outcome;
+  const success = overridden ? overridden !== "failure" : roll.total >= target.hold!.escapeDc;
+  state.log.push(event(state, "EscapeAttempted", `${actor.displayName} ${success ? "breaks free" : "fails to break free"} (rolled ${roll.total} vs DC ${target.hold!.escapeDc}${overridden ? ", DM override" : ""})`, {
+    combatantId: actor.id, roll, dc: target.hold!.escapeDc, success, ...(overridden ? { overridden } : {})
   }));
   if (success) releaseHold(state, actor, target.sourceCombatantId, target.sourceId, "escaped");
 }
@@ -3419,7 +3679,7 @@ function attackIsAtLongRange(
   return distance > action.range && distance <= action.longRange;
 }
 
-function validateOriginTargeting(
+export function validateOriginTargeting(
   snapshot: EncounterSnapshot,
   attacker: CombatantState,
   origin: Point,
@@ -3434,7 +3694,7 @@ function validateOriginTargeting(
   }
 }
 
-function validateHealingTargeting(
+export function validateHealingTargeting(
   snapshot: EncounterSnapshot,
   healer: CombatantState,
   target: CombatantState,
@@ -5329,7 +5589,7 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
   combatant.conditions = surviving;
 }
 
-function resolveOnSuccess(action: SaveActionDefinition | AreaSaveActionDefinition): "half" | "none" | "negates" {
+export function resolveOnSuccess(action: SaveActionDefinition | AreaSaveActionDefinition): "half" | "none" | "negates" {
   return action.onSuccess ?? (action.halfDamageOnSuccess ? "half" : "none");
 }
 
@@ -5443,6 +5703,8 @@ export interface SaveContext {
   situationalBonus?: number;
   /** Roughly how much damage failing would cost — lets a Legendary Resistance decide whether the save is worth it. */
   expectedDamage?: number;
+  /** What forced the save ("Fireball"), for a prompt or the roll strip. */
+  label?: string;
 }
 
 export interface SavingThrowResult {
@@ -5453,6 +5715,8 @@ export interface SavingThrowResult {
   featureAdvantage: { applied: boolean; sources: string[] };
   /** Set when the target failed the roll and a Legendary Resistance turned it into a success. */
   legendaryResistance?: { feature: string; resourceId: string; remaining: number };
+  /** Set when a DM overruled how the roll came out. */
+  overridden?: RollOutcome;
 }
 
 /** Relative disabling value of a condition, 0..1. */
@@ -5520,17 +5784,30 @@ function wantsLegendaryResistance(target: CombatantState, ctx: SaveContext): boo
  */
 export function rollSavingThrow(state: EngineState, target: CombatantState, ctx: SaveContext): SavingThrowResult {
   const definition = getDefinition(state.snapshot, target);
-  const base = (definition.saves?.[ctx.ability] ?? abilityModifier(definition.abilities[ctx.ability]))
-    + conditionSaveModifier(target, ctx.ability);
-  const featureBonus = featureSaveModifier(state, definition, target, ctx.ability);
-  const featureAdvantage = featureSaveAdvantageModifier(state, definition, target, ctx);
-  const roll = rollD20WithBonus(state.rng, base + featureBonus.total + (ctx.situationalBonus ?? 0), {
+  const { bonus, featureBonus, featureAdvantage } = saveRollInputs(state, target, ctx);
+  const roll = rollD20WithBonus(state.rng, bonus, {
     advantage: featureAdvantage.applied
   });
   const result: SavingThrowResult = { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
+  // A DM may overrule the roll (Play). Legendary Resistance below then sees the outcome as ruled.
+  const overridden = askDecision<RollRequest>(state, {
+    kind: "roll", rollerId: target.id, purpose: "save", natural: roll.total - roll.modifier, total: roll.total, against: ctx.dc,
+    outcome: result.success ? "success" : "failure", label: ctx.label
+  }, target.id)?.outcome;
+  if (overridden) {
+    result.success = overridden !== "failure";
+    result.overridden = overridden;
+  }
   if (!result.success && ctx.kind !== "concentration") {
     const resistance = legendaryResistanceFor(state, definition, target, ctx);
-    if (resistance && wantsLegendaryResistance(target, ctx)) {
+    const usesLeft = resistance ? target.resources?.[resistance.resourceId] ?? 0 : 0;
+    const use = resistance
+      ? askDecision<LegendaryResistanceRequest>(state, {
+        kind: "legendary-resistance", combatantId: target.id, feature: resistance.feature, ability: ctx.ability, dc: ctx.dc,
+        rolled: roll.total, usesLeft, against: ctx.label, aiChoice: wantsLegendaryResistance(target, ctx)
+      }, target.id)?.use ?? wantsLegendaryResistance(target, ctx)
+      : false;
+    if (resistance && use) {
       const remaining = (target.resources?.[resistance.resourceId] ?? 0) - 1;
       target.resources = { ...(target.resources ?? {}), [resistance.resourceId]: remaining };
       result.success = true;
@@ -5541,6 +5818,25 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
     }
   }
   return result;
+}
+
+/** What `target`'s saving throw adds to the d20, and whether it has advantage: shared by `rollSavingThrow` and the previews. Pure. */
+export function saveRollInputs(state: EngineState, target: CombatantState, ctx: SaveContext): {
+  bonus: number;
+  featureBonus: { total: number; sources: string[] };
+  featureAdvantage: { applied: boolean; sources: string[] };
+} {
+  const definition = getDefinition(state.snapshot, target);
+  const base = (definition.saves?.[ctx.ability] ?? abilityModifier(definition.abilities[ctx.ability]))
+    + conditionSaveModifier(target, ctx.ability);
+  const featureBonus = featureSaveModifier(state, definition, target, ctx.ability);
+  const featureAdvantage = featureSaveAdvantageModifier(state, definition, target, ctx);
+  return { bonus: base + featureBonus.total + (ctx.situationalBonus ?? 0), featureBonus, featureAdvantage };
+}
+
+/** Whether `target` could turn a failed save like this into a success with Legendary Resistance (and has a use left). */
+export function hasLegendaryResistanceFor(state: EngineState, target: CombatantState, ctx: SaveContext): boolean {
+  return legendaryResistanceFor(state, getDefinition(state.snapshot, target), target, ctx) !== undefined;
 }
 
 /** The first `auto-succeed-save` feature this creature can still pay for that covers this save. */
@@ -5942,8 +6238,24 @@ function findLeaveReachReaction(
   to: Point,
   altitudes?: { from?: number; to?: number }
 ): AttackActionDefinition | undefined {
+  return preferredLeaveReach(leaveReachReactions(snapshot, reactor, mover, from, to, altitudes));
+}
+
+/**
+ * Every melee attack `reactor` could punish `mover` with for leaving its reach on the step `from → to`: compiled
+ * `"reaction"` copies (authored / weapon-derived, trigger `enemy-leaves-reach`) and plain `"action"`-typed melee attacks
+ * (the universal "any melee weapon threatens an OA" rule) unless explicitly barred (`opportunityAttack === false`).
+ */
+function leaveReachReactions(
+  snapshot: EncounterSnapshot,
+  reactor: CombatantState,
+  mover: CombatantState,
+  from: Point,
+  to: Point,
+  altitudes?: { from?: number; to?: number }
+): AttackActionDefinition[] {
   if (effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || !canAct(reactor, "reaction")) {
-    return undefined;
+    return [];
   }
   const definition = getDefinition(snapshot, reactor);
   const eligible = (action: ActionDefinition): action is AttackActionDefinition => {
@@ -5966,9 +6278,23 @@ function findLeaveReachReaction(
     return wasInReach && leavesReach
       && (!snapshot.rules.requireLineOfEffect || lineOfEffect(snapshot.map, reactor.position, from));
   };
-  const actions = getExecutableActions(definition).filter(eligible);
-  // Prefer an authored reaction copy over the synthesised "any melee attack" one.
+  return getExecutableActions(definition).filter(eligible);
+}
+
+/** The opportunity attack the AI makes: an authored reaction copy over the synthesised "any melee attack" one. */
+function preferredLeaveReach(actions: AttackActionDefinition[]): AttackActionDefinition | undefined {
   return actions.find((action) => action.actionType === "reaction") ?? actions[0];
+}
+
+/** The opportunity attacks to offer a player: one per attack, the reaction copy rather than the action it was compiled from. */
+function distinctOpportunityAttacks(actions: AttackActionDefinition[]): AttackActionDefinition[] {
+  const byAttack = new Map<string, AttackActionDefinition>();
+  for (const action of actions) {
+    const key = action.id.replace(/:reaction(?=:|$)/, "");
+    const seen = byAttack.get(key);
+    if (!seen || (seen.actionType !== "reaction" && action.actionType === "reaction")) byAttack.set(key, action);
+  }
+  return [...byAttack.values()];
 }
 
 /* ─── Reaction windows ─────────────────────────────────────────────────────────
@@ -5996,6 +6322,14 @@ export interface ReactionEvent {
   /** The mover's altitude before / after the step, when the step is (or includes) rising or dropping. */
   fromAltitude?: number;
   toAltitude?: number;
+  /** The triggering attack or spell, for a prompt: what it is, and the roll against the AC once it's been made. */
+  actionId?: Id;
+  actionName?: string;
+  attackTotal?: number;
+  attackNatural?: number;
+  targetAc?: number;
+  /** Damage the triggering hit dealt (`hit-by-attack`). */
+  damageTaken?: number;
 }
 
 export interface ReactionWindowResult {
@@ -6102,24 +6436,26 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
     && roughAverageDamage(action.damage) >= 4;
 }
 
-function eligibleReactionFor(
+/**
+ * Every reaction `reactor` could take for `event`, whatever the AI would make of it, in the creature's own order.
+ * A player is offered all of them; `aiReactionPick` is the AI's choice among them.
+ */
+function reactionOptionsFor(
   state: EngineState,
   reactor: CombatantState,
   event: ReactionEvent
-): EligibleReaction | undefined {
+): EligibleReaction[] {
   if (!canAct(reactor, "reaction")) {
-    return undefined;
+    return [];
   }
   const definition = getDefinition(state.snapshot, reactor);
+  const options: EligibleReaction[] = [];
   for (const action of getExecutableActions(definition)) {
     if (action.actionType !== "reaction" || action.automationSupport !== "full" || !canSpendResource(reactor, action)) {
       continue;
     }
     const meta = reactionMetaFor(action);
-    if (!meta || meta.priority === "manual") {
-      continue;
-    }
-    if (!reactionTriggerPasses(state, reactor, meta.trigger, event, action)) {
+    if (!meta || !reactionTriggerPasses(state, reactor, meta.trigger, event, action)) {
       continue;
     }
     const targetId = meta.target === "self"
@@ -6127,13 +6463,32 @@ function eligibleReactionFor(
       : meta.target === "trigger-target"
         ? event.targetId ?? event.sourceId
         : event.sourceId;
-    const reaction: EligibleReaction = { reactor, action: action as EligibleReaction["action"], meta, targetId };
-    if (meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event)) {
-      continue;
-    }
-    return reaction;
+    options.push({ reactor, action: action as EligibleReaction["action"], meta, targetId });
   }
-  return undefined;
+  return options;
+}
+
+/** The reaction the AI takes: the first that isn't left to a human (`"manual"`) and, if only `"worthwhile"`, is worth it. */
+function aiReactionPick(state: EngineState, options: EligibleReaction[], event: ReactionEvent): EligibleReaction | undefined {
+  return options.find((reaction) => reaction.meta.priority !== "manual"
+    && !(reaction.meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event)));
+}
+
+function reactionContext(ev: ReactionEvent): ReactionContext {
+  return {
+    attack: ev.actionId && ev.attackType
+      ? { actionId: ev.actionId, actionName: ev.actionName ?? "", attackType: ev.attackType, total: ev.attackTotal, natural: ev.attackNatural, targetAc: ev.targetAc }
+      : undefined,
+    spell: ev.kind === "enemy-casts-spell" && ev.actionId
+      ? { actionId: ev.actionId, name: ev.actionName ?? "", level: ev.spellLevel ?? 0 }
+      : undefined,
+    step: ev.from && ev.to ? { from: ev.from, to: ev.to } : undefined,
+    damageTaken: ev.damageTaken
+  };
+}
+
+function reactionOptionOf(action: ActionDefinition, targetId: Id): ReactionOption {
+  return { actionId: action.id, name: action.name, resourceCost: "resourceCost" in action ? action.resourceCost : undefined, targetId };
 }
 
 /**
@@ -6164,9 +6519,23 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
         if (source.state !== "active") {
           break;
         }
-        const action = findLeaveReachReaction(state.snapshot, reactor, source, ev.from, ev.to, { from: ev.fromAltitude, to: ev.toAltitude });
+        const actions = leaveReachReactions(state.snapshot, reactor, source, ev.from, ev.to, { from: ev.fromAltitude, to: ev.toAltitude });
+        let action = preferredLeaveReach(actions);
         if (!action) {
           continue;
+        }
+        if (state.decide) {
+          const answer = askDecision<ReactionRequest>(state, {
+            kind: "reaction", reactorId: reactor.id, trigger: "enemy-leaves-reach", sourceId: source.id,
+            options: distinctOpportunityAttacks(actions).map((option) => reactionOptionOf(option, source.id)),
+            aiChoice: action.id, context: reactionContext(ev)
+          }, reactor.id);
+          if (answer) {
+            action = answer.actionId === null ? undefined : actions.find((option) => option.id === answer.actionId) ?? action;
+          }
+          if (!action) {
+            continue;
+          }
         }
         const reactorDefinition = getDefinition(state.snapshot, reactor);
         const reactionAction: AttackActionDefinition = action.actionType === "reaction"
@@ -6182,7 +6551,21 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
     }
 
     for (const reactor of orderedByInitiative(state.snapshot.combatants)) {
-      const reaction = eligibleReactionFor(state, reactor, ev);
+      const options = reactionOptionsFor(state, reactor, ev);
+      if (options.length === 0) {
+        continue;
+      }
+      let reaction = aiReactionPick(state, options, ev);
+      if (state.decide) {
+        const answer = askDecision<ReactionRequest>(state, {
+          kind: "reaction", reactorId: reactor.id, trigger: ev.kind, sourceId: ev.sourceId, targetId: ev.targetId,
+          options: options.map((option) => reactionOptionOf(option.action, option.targetId)),
+          aiChoice: reaction?.action.id ?? null, context: reactionContext(ev)
+        }, reactor.id);
+        if (answer) {
+          reaction = answer.actionId === null ? undefined : options.find((option) => option.action.id === answer.actionId) ?? reaction;
+        }
+      }
       if (!reaction) {
         continue;
       }
@@ -6267,7 +6650,9 @@ function counterspellWindow(state: EngineState, caster: CombatantState, action: 
     kind: "enemy-casts-spell",
     sourceId: caster.id,
     origin: caster.position,
-    spellLevel: action.spellLevel
+    spellLevel: action.spellLevel,
+    actionId: action.id,
+    actionName: action.name
   });
   if (countered) {
     state.log.push(event(state, "SpellCountered", `${caster.displayName}'s ${action.name} was countered`, {

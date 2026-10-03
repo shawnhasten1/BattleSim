@@ -45,6 +45,8 @@ export type TurnOpening =
 export interface OpenTurnOptions {
   /** The fight stops before a round past this one would start. Default: no limit. */
   maxRounds?: number;
+  /** Play: who plays each creature. Recorded on `TurnStarted` as `controller`. */
+  controllerOf?: (combatant: CombatantState) => "human" | "ai";
 }
 
 /** How many rounds one `openNextTurn` may wrap without anyone getting a turn before it gives up. */
@@ -165,7 +167,8 @@ export function openNextTurn(state: EngineState, options: OpenTurnOptions = {}):
       next = snapshot.turnIndex + 1;
       continue;
     }
-    state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`, { combatantId: actor.id }));
+    state.log.push(event(state, "TurnStarted", `${actor.displayName} started a turn`,
+      options.controllerOf ? { combatantId: actor.id, controller: options.controllerOf(actor) } : { combatantId: actor.id }));
     return { kind: "turn", actor };
   }
 }
@@ -221,7 +224,7 @@ export function combatOutcome(state: EngineState): SimulationOutcome | null {
 }
 
 /** Let the AI play `actor`'s open turn. A resolver throw from an AI mispick is contained to a lost turn and a warning. */
-function playAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
+export function playAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   try {
     return takeAutomatedTurn(state, actor);
   } catch (error) {
