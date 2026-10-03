@@ -3,7 +3,7 @@
 import { Bot, ChevronDown, ChevronUp, Flag, Undo2, X } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { findActionDefinition, getDefinition, type EncounterSnapshot, type MovePreview } from "@/engine";
-import { finishAiming, pressHotbar } from "@/hooks/usePlayAim";
+import { chooseOption, finishAiming, pressHotbar, type AimView } from "@/hooks/usePlayAim";
 import { makePlayMove, planKeyOf, usePlayMovePlan, type PlayMoveView } from "@/hooks/usePlayMove";
 import { hotbarFor, type HotbarButton, type HotbarModel } from "@/lib/play/hotbar";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -47,7 +47,7 @@ function typingIn(target: EventTarget | null): boolean {
  * says why. Keys 1–0 press the tab's first ten buttons; Enter uses an ability on the creatures picked so far, or ends
  * the turn when nothing is armed.
  */
-export function Hotbar({ move }: { move?: PlayMoveView | null }) {
+export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimView | null }) {
   const plan = usePlayMovePlan();
   const encounter = useEncounterStore((state) => state.encounter);
   const playCommand = useEncounterStore((state) => state.playCommand);
@@ -185,6 +185,7 @@ export function Hotbar({ move }: { move?: PlayMoveView | null }) {
         model={model}
         armedButton={armedButton}
         armed={armed}
+        aim={aim ?? null}
         note={note}
         preview={preview}
         board={encounter}
@@ -256,10 +257,11 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
   );
 }
 
-function HotbarHint({ model, armedButton, armed, note, preview, board, waypoints, onTakeBack, onClear }: {
+function HotbarHint({ model, armedButton, armed, aim, note, preview, board, waypoints, onTakeBack, onClear }: {
   model: HotbarModel;
   armedButton?: HotbarButton;
   armed: ReturnType<typeof armedFor>;
+  aim: AimView | null;
   note: string | null;
   preview: MovePreview | null;
   board: EncounterSnapshot;
@@ -267,6 +269,45 @@ function HotbarHint({ model, armedButton, armed, note, preview, board, waypoints
   onTakeBack: () => void;
   onClear: () => void;
 }) {
+  if (armed && armed.aim.kind === "option") {
+    const name = armedButton?.name ?? "it";
+    return (
+      <div className={styles.dockHint} role="group" aria-label={`${name}: which`}>
+        <span>{`${name}: which?`}</span>
+        {armed.aim.options.map((option) => (
+          <button key={option.id} type="button" className={styles.button} onClick={() => chooseOption(option.id)}>{option.label}</button>
+        ))}
+        <span>Esc puts it away.</span>
+      </div>
+    );
+  }
+  if (armed && (armed.aim.kind === "area" || armed.aim.kind === "place" || armed.aim.kind === "zone")) {
+    const name = armedButton?.name ?? "it";
+    const area = aim?.area;
+    const problem = area?.problem ?? aim?.place?.problem;
+    let lead: string;
+    let warning = "";
+    if (armed.aim.kind === "area") {
+      const names = (ids: string[]) => ids.map((id) => board.combatants.find((combatant) => combatant.id === id)?.displayName ?? id);
+      const foes = names(area?.caught.filter((caught) => caught.hostile).map((caught) => caught.id) ?? []);
+      const friends = names(area?.caught.filter((caught) => !caught.hostile).map((caught) => caught.id) ?? []);
+      lead = area?.heals
+        ? `Click where to put ${name}.${friends.length ? ` It heals ${listOf(friends)}.` : ""}`
+        : `Click where to put ${name}.${foes.length ? ` It catches ${listOf(foes)}.` : ""}${area?.settlesOnly ? " It settles as a lasting zone." : ""}`;
+      if (!area?.heals && friends.length) warning = ` It will catch ${listOf(friends)} too.`;
+    } else if (armed.aim.kind === "place") {
+      const mover = armed.picked[0] ? board.combatants.find((combatant) => combatant.id === armed.picked[0])?.displayName : undefined;
+      lead = armed.aim.moves === "other" && !mover ? `Pick who ${name} moves.` : `Click where ${name} takes ${mover ?? "it"}.`;
+    } else {
+      lead = `Click where ${name.replace(/^Move /, "")} goes (up to ${armed.aim.maxFeet} ft).`;
+    }
+    return (
+      <p className={styles.dockHint} data-problem={Boolean(problem)} data-warning={Boolean(warning) && !problem}>
+        <span>{problem ? `${problem}.` : `${lead}${warning}`} Esc puts it away.</span>
+        {note && note !== problem ? <span className={styles.dockNote}>{note}</span> : null}
+      </p>
+    );
+  }
   if (armed) {
     const name = armedButton?.name ?? "it";
     const variant = armedButton?.variants.find((candidate) => candidate.actionId === armed.actionId);

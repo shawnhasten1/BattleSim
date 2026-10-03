@@ -1,7 +1,8 @@
-import { cellIntersectsArea, cellsInArea } from "./areas";
+import { cellIntersectsArea, cellsInArea, combatantsInArea } from "./areas";
 import {
   actionSaveContext,
   altitudeMoveCost,
+  spatialDistanceToPoint,
   areaSaveTargets,
   attackRollInputs,
   canAct,
@@ -31,7 +32,8 @@ import {
 } from "./combat";
 import { movementProfileOf, terrainAtCell } from "./geometry";
 import { defaultSwingAttack, swingCandidates, swingsOf, stepAbility } from "./multiattack";
-import { averageDamage } from "./simulation";
+import { averageDamage, averageHealing } from "./simulation";
+import { lineOfEffect } from "./geometry";
 import type {
   AreaSaveActionDefinition,
   AttackActionDefinition,
@@ -297,6 +299,47 @@ export function previewArea(snapshot: EncounterSnapshot, casterId: Id, actionId:
         advantage: save.advantage
       };
     })
+  };
+}
+
+export interface HealingAreaPreview {
+  /** Why it can't be put there (range, line of effect to the point). */
+  problem?: string;
+  origin: Point;
+  aimVector?: { x: number; y: number };
+  cells: Point[];
+  /** The friends it heals: everyone of the healer's side in it, the fallen included. */
+  healed: Id[];
+  /** About how much each is healed. */
+  healing: number;
+}
+
+/** A healing area (Mass Cure Wounds) put at `aim`: as `resolveHealingBurstAction` places it, and who it heals. */
+export function previewHealingArea(snapshot: EncounterSnapshot, healerId: Id, actionId: Id, aim: Point): HealingAreaPreview {
+  const healer = findCombatant(snapshot, healerId);
+  const definition = getDefinition(snapshot, healer);
+  const action = findActionDefinition(definition, actionId);
+  if (!action || action.kind !== "healing" || action.targeting?.target !== "area" || !action.area) {
+    throw new Error(`${actionId} isn't a healing area`);
+  }
+  const placement = resolveAreaTargeting(healer, definition, { targeting: action.areaTargeting }, aim);
+  let problem: string | undefined;
+  if (!placement.fromSelf) {
+    const distance = spatialDistanceToPoint(snapshot, healer, placement.origin);
+    if (distance > (action.areaTargeting?.range ?? action.range)) problem = `Origin is ${distance} ft. away, beyond range`;
+    else if (snapshot.rules.requireLineOfEffect && !lineOfEffect(snapshot.map, healer.position, placement.origin)) problem = "Line of effect to area origin is blocked";
+  }
+  const definitionsById = new Map(snapshot.definitions.map((entry) => [entry.id, entry]));
+  const side = effectiveFaction(snapshot, healer);
+  return {
+    problem,
+    origin: placement.origin,
+    aimVector: placement.aimVector,
+    cells: cellsInArea(snapshot.map, placement.origin, action.area, placement.aimVector),
+    healed: combatantsInArea(snapshot.map, placement.origin, action.area, snapshot.combatants, definitionsById, placement.aimVector, { includeDowned: true })
+      .filter((target) => effectiveFaction(snapshot, target) === side)
+      .map((target) => target.id),
+    healing: averageHealing(action, definition)
   };
 }
 

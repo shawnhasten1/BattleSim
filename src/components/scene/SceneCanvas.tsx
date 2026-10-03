@@ -555,7 +555,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
       {...viewport.stageProps}
     >
       {reviewing ? <div className="scene-replay-banner" aria-hidden="true">▶ Replay</div> : null}
-      {playing && !reviewing ? <PlayOverlay onOpenReport={onOpenReport} move={playMove} /> : null}
+      {playing && !reviewing ? <PlayOverlay onOpenReport={onOpenReport} move={playMove} aim={playAim} /> : null}
       <div className="scene-hud">
         <div>
           <span>Tool</span>

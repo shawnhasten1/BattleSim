@@ -6,6 +6,7 @@
  */
 import {
   actionProblem,
+  BASE_FORM_ID,
   casterLevelOf,
   getDefinition,
   getExecutableActions,
@@ -15,6 +16,7 @@ import {
   spellSlotLevel,
   swingsOf,
   targetCapacity,
+  zoneMoveProblem,
   type ActionDefinition,
   type CombatantState,
   type CreatureDefinition,
@@ -41,10 +43,13 @@ export type Aim =
   | { kind: "creatures"; who: "foes" | "allies"; count: number; repeat: boolean; range: number }
   /** A multiattack: its first target; each swing after it is asked for. */
   | { kind: "routine"; range: number }
-  /** A place on the map: an area's point or direction, or where a teleport goes. Phase 6. */
+  /** An area: where it's put (or, from itself, which way it's aimed). */
   | { kind: "area" }
+  /** Where a teleport takes the user, or (`other`) first who it moves and then where. */
   | { kind: "place"; moves: "self" | "other" }
-  /** One of a list: a creature to summon, a form to take. Phase 6. */
+  /** Where a zone the creature controls moves to (Moonbeam), up to `maxFeet`. */
+  | { kind: "zone"; zoneId: Id; maxFeet: number }
+  /** One of a list: a creature to summon, a form to take. */
   | { kind: "option"; options: Array<{ id: Id; label: string }> };
 
 export interface HotbarVariant {
@@ -135,7 +140,7 @@ function attackRange(action: Extract<ActionDefinition, { kind: "attack" }>): num
   return action.attackType === "melee" ? action.reach ?? action.range : action.longRange ?? action.range;
 }
 
-function aimOf(action: ActionDefinition, definition: CreatureDefinition, executables: ActionDefinition[]): Aim {
+function aimOf(action: ActionDefinition, definition: CreatureDefinition, executables: ActionDefinition[], actor: CombatantState): Aim {
   const casterLevel = casterLevelOf(definition);
   switch (action.kind) {
     case "attack": {
@@ -159,7 +164,8 @@ function aimOf(action: ActionDefinition, definition: CreatureDefinition, executa
         ? { kind: "none" }
         : { kind: "creatures", who: "foes", count: targetCapacity(action, casterLevel), repeat: false, range: action.range };
     case "area-save":
-      return action.targeting?.origin === "self" && !action.targeting.aimedFromSelf ? { kind: "none" } : { kind: "area" };
+      // Even one centred on itself is shown before it's cast: who it catches.
+      return { kind: "area" };
     case "healing": {
       const mode = action.targeting?.target ?? "single";
       if (mode === "self") return { kind: "none" };
@@ -178,8 +184,12 @@ function aimOf(action: ActionDefinition, definition: CreatureDefinition, executa
       return action.choice === "pick" && action.options.length > 1
         ? { kind: "option", options: action.options.map((option) => ({ id: option.id, label: option.label })) }
         : { kind: "none" };
-    case "transform":
-      return { kind: "option", options: action.forms.map((form) => ({ id: form.id, label: form.label })) };
+    case "transform": {
+      // The forms it isn't in now, and its own form when it can go back to it.
+      const current = actor.activeForm?.definitionId;
+      const forms = action.forms.filter((form) => form.definitionId !== current).map((form) => ({ id: form.id, label: form.label }));
+      return { kind: "option", options: [...forms, ...(action.canRevert && current ? [{ id: BASE_FORM_ID, label: "Its own form" }] : [])] };
+    }
     case "activate-feature":
     case "utility":
     case "unsupported":
@@ -253,7 +263,7 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       label: variantLabel(action, base),
       cost: costOf(action),
       problem: actionProblem(board, actorId, action.id, { byHand: automation === "by-hand" }),
-      aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables),
+      aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables, actor),
       ...(spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) !== undefined
         ? { slotLevel: spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) }
         : {})
@@ -276,6 +286,30 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       ...("concentration" in base && base.concentration ? { concentration: true } : {})
     };
   });
+
+  // A zone the creature controls and can move (Moonbeam): a bonus action of its own.
+  for (const zone of board.activeZones ?? []) {
+    if (zone.sourceCombatantId !== actorId || !zone.repositionable) continue;
+    const problem = zoneMoveProblem(board, actor, zone.id);
+    buttons.push({
+      key: `zone:${zone.id}`,
+      tab: "bonus",
+      name: `Move ${zone.name}`,
+      slot: "bonus",
+      variants: [{
+        actionId: `zone:${zone.id}`,
+        label: "Normal",
+        problem,
+        aim: { kind: "zone", zoneId: zone.id, maxFeet: zone.repositionable.maxFeetPerCasterTurn }
+      }],
+      defaultVariant: 0,
+      cost: `up to ${zone.repositionable.maxFeetPerCasterTurn} ft`,
+      automation: "full",
+      problem,
+      title: `Move ${zone.name}`,
+      text: `Moves ${zone.name} up to ${zone.repositionable.maxFeetPerCasterTurn} ft.`
+    });
+  }
 
   // Spells by level, cantrips first; a multiattack heads the attacks, as in a statblock; the rest as the creature has them.
   const routine = (button: HotbarButton) => (button.variants[0]!.aim.kind === "routine" ? 0 : 1);

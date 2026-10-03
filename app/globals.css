@@ -1054,6 +1054,74 @@ img {
   dominant-baseline: central;
 }
 
+.play-area {
+  fill: rgba(232, 112, 64, 0.32);
+  stroke: rgba(232, 112, 64, 0.7);
+  stroke-width: 0.03;
+}
+
+.play-area.heals {
+  fill: rgba(127, 209, 139, 0.28);
+  stroke: rgba(127, 209, 139, 0.7);
+}
+
+.play-area.zone {
+  fill: rgba(169, 198, 236, 0.3);
+  stroke: rgba(169, 198, 236, 0.75);
+}
+
+.play-area.blocked {
+  fill: rgba(208, 96, 90, 0.16);
+  stroke: rgba(208, 96, 90, 0.55);
+  stroke-dasharray: 0.12 0.08;
+}
+
+.play-area-origin {
+  fill: #fff;
+  stroke: rgba(10, 11, 13, 0.8);
+  stroke-width: 0.03;
+}
+
+.play-caught {
+  fill: none;
+  stroke-width: 0.08;
+}
+
+.play-caught.foe {
+  stroke: #f08a4b;
+}
+
+.play-caught.friend {
+  stroke: #f2d04b;
+  stroke-dasharray: 0.14 0.08;
+}
+
+.play-caught.heals {
+  stroke: #7fd18b;
+}
+
+.play-caught-label {
+  paint-order: stroke;
+  stroke: rgba(10, 11, 13, 0.85);
+  stroke-width: 0.1;
+  font-size: 0.24px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.play-caught-label.foe {
+  fill: #f6c3a0;
+}
+
+.play-caught-label.friend {
+  fill: #f2d04b;
+}
+
+.play-caught-label.heals {
+  fill: #b7ecbf;
+}
+
 .play-aim-tooltip {
   position: absolute;
   z-index: 8;

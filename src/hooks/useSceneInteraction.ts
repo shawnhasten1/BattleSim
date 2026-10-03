@@ -21,7 +21,7 @@ import {
 import { useEncounterStore } from "@/store/encounter-store";
 import { usePlayUiStore } from "@/store/play-ui-store";
 import { combatantAt, makePlayMove, movingActorId, planKeyOf, standingSquare, swingQuestion } from "@/hooks/usePlayMove";
-import { aimAtCreature, backOutOfAiming, planSwingStep } from "@/hooks/usePlayAim";
+import { aimAtCreature, aimAtSquare, backOutOfAiming, planSwingStep } from "@/hooks/usePlayAim";
 import { armedFor } from "@/store/play-ui-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
@@ -617,7 +617,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       return;
     }
     if (movingId && armedFor(usePlayUiStore.getState(), planKeyOf(movingId, useEncounterStore.getState().log.length))) {
-      // Aiming: creatures are clicked on their tokens; the ground does nothing.
+      // Aiming: where an area goes, a teleport lands, a zone moves (an ability aimed at creatures ignores the ground).
+      const cell = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
+      if (cell.x >= 0 && cell.y >= 0 && cell.x < grid.width && cell.y < grid.height) aimAtSquare(cell);
       return;
     }
     if (movingId) {

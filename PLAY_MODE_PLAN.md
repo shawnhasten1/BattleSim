@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–5 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–6 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -1055,6 +1055,56 @@ Done when:
 - A cone aimed between two foes catches both.
 - A zone spell settles, then moves with its bonus action.
 - A summon appears and plays on its side.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **Areas** (Fireball, Burning Hands, Mass Cure Wounds):
+>   - the template follows the cursor: a point within range, or a cone or line turning around its caster. One centred
+>     on its caster is shown before it's cast too.
+>   - foes it catches are ringed with each one's chance to fail; friends are ringed in a warning colour.
+>   - the hotbar says "It catches Goblin 1 and Goblin 2. It will catch Archer too." A healing area marks the friends
+>     it heals and by how much.
+>   - a point it can't reach turns red and is refused with the reason. A creature clicked puts the area on it.
+> - **Places:** Misty Step shows where it lands. A teleport that moves another creature asks who first (within its
+>   range), then where.
+> - **Zones:** a "Move Moonbeam" button on the Bonus tab while the creature controls a zone it can move. The zone's new
+>   squares follow the cursor, as far as it can go (60 ft for Moonbeam).
+> - **Options:** a summon's choice ("the demon chooses") and a form to take, as buttons in the hotbar. "Its own form"
+>   is offered once it's transformed, and the form it's in isn't.
+> - **Engine:**
+>   - `previewHealingArea`.
+>   - `zoneMoveProblem`, which `commandProblem` now uses for move-zone: the bonus action and the distance, as
+>     `repositionZone` refuses.
+> - **`usePlayAim`:** areas, places and zones in the aim view (`area`, `place`), and `aimAtSquare` and `chooseOption`.
+>
+> Differences from the plan:
+>
+> - Summons still appear where the engine places them (§7).
+> - The hotbar's own line gives the area's summary and warning. The map shows each creature's chance.
+>
+> Tests:
+>
+> - `tests/play-areas.test.ts` (8):
+>   - Fireball's preview catches exactly who `resolveAreaSaveAction` rolls saves for, at every square of the map (more
+>     than 50 aim points), and throws where the preview names a problem.
+>   - a cone aimed between two goblins catches both and flags the archer beside them; cast, all three save.
+>   - a point out of range refused.
+>   - Misty Step; a teleport that moves the archer.
+>   - Moonbeam put down, then moved with a bonus action (refused past 60 ft, then refused again for the spent bonus
+>     action).
+>   - a summon picked from its options appears, and its turn is the person's.
+> - `tests/play-hotbar-ui.test.tsx` (2 more): the area's squares, rings and line; a choice made from the hotbar.
+> - The full suite passes: 162 files, 1,938 tests.
+>
+> Browser (Playwright, the default scene with an SRD Mage added to the party, Instant), all passed:
+>
+> - the Mage's Spells tab by level, Shield and Counterspell left off; the slot pips; the level chips.
+> - Fireball over Goblin 1: 26 squares, the goblin ringed with "55%"; "Click where to put Fireball. It catches Goblin
+>   1." Cast, the goblin rolled its save.
+> - Misty Step's landing square, then the Mage 3 squares along.
+> - no page errors.
 
 ### Phase 7 — Prompts (UI; medium)
 

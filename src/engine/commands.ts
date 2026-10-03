@@ -145,12 +145,8 @@ export function commandProblem(snapshot: EncounterSnapshot, command: CombatComma
       return actionProblem(snapshot, actor.id, command.actionId) ?? targetProblem(snapshot, actor.id, command.actionId, command.target ?? {});
     case "use-by-hand":
       return actionProblem(snapshot, actor.id, command.actionId, { byHand: true });
-    case "move-zone": {
-      const zone = snapshot.activeZones?.find((candidate) => candidate.id === command.zoneId);
-      if (!zone || zone.sourceCombatantId !== actor.id || !zone.repositionable) return "That isn't a zone it can move";
-      if (!canAct(actor, "bonus")) return `${actor.displayName} has no bonus action left`;
-      return undefined;
-    }
+    case "move-zone":
+      return zoneMoveProblem(snapshot, actor, command.zoneId, command.destination);
     case "ai-turn":
     case "end-turn":
       return undefined;
@@ -158,6 +154,19 @@ export function commandProblem(snapshot: EncounterSnapshot, command: CombatComma
 }
 
 const SLOT_NAME: Record<"action" | "bonus" | "reaction", string> = { action: "action", bonus: "bonus action", reaction: "reaction" };
+
+/** Why `actor` can't move its zone `zoneId` (Moonbeam) to `destination`, as `repositionZone` would refuse; leave it out to ask about the zone alone. */
+export function zoneMoveProblem(snapshot: EncounterSnapshot, actor: CombatantState, zoneId: Id, destination?: Point): string | undefined {
+  const zone = snapshot.activeZones?.find((candidate) => candidate.id === zoneId);
+  if (!zone || zone.sourceCombatantId !== actor.id || !zone.repositionable) return "That isn't a zone it can move";
+  if (!canAct(actor, "bonus") || actor.actionEconomy?.bonus === false) return `${actor.displayName} has no bonus action to move ${zone.name}`;
+  if (!destination) return undefined;
+  const squares = Math.hypot(destination.x - zone.origin.x, destination.y - zone.origin.y);
+  if (squares > zone.repositionable.maxFeetPerCasterTurn / snapshot.map.grid.distancePerSquare + 1e-6) {
+    return `${zone.name} can only move ${zone.repositionable.maxFeetPerCasterTurn} ft`;
+  }
+  return undefined;
+}
 
 /**
  * Why `actorId` can't use `actionId` at all right now, whatever it's aimed at: its slot is spent or denied, it can't

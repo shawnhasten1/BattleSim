@@ -60,6 +60,8 @@ export interface PlayUiState {
   pick: (id: Id) => void;
   /** Take back the last pick. False when there wasn't one. */
   unpick: () => boolean;
+  /** The picks, outright (who a teleport moves). */
+  setPicked: (picked: Id[]) => void;
   setSwing: (swing: SwingAim | null) => void;
   setNote: (note: string | null) => void;
 }
@@ -133,6 +135,10 @@ export const usePlayUiStore = create<PlayUiState>()((set, get) => ({
     if (!armed || armed.picked.length === 0) return false;
     set({ armed: { ...armed, picked: armed.picked.slice(0, -1) } });
     return true;
+  },
+  setPicked: (picked) => {
+    const armed = get().armed;
+    if (armed) set({ armed: { ...armed, picked }, note: null });
   },
   setSwing: (swing) => set({ swing, note: null }),
   setNote: (note) => set({ note })

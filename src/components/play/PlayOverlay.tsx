@@ -13,6 +13,7 @@ import { Hotbar } from "./Hotbar";
 import { SwingCard } from "./SwingCard";
 import { TurnBar } from "./TurnBar";
 import type { PlayMoveView } from "@/hooks/usePlayMove";
+import type { AimView } from "@/hooks/usePlayAim";
 import styles from "./play.module.css";
 
 /**
@@ -20,7 +21,7 @@ import styles from "./play.module.css";
  * Skip), the hotbar on your creature's turn, a question for you, and the card at the end. It also runs the AI's turns'
  * playback.
  */
-export function PlayOverlay({ onOpenReport, move }: { onOpenReport?: () => void; move?: PlayMoveView | null }) {
+export function PlayOverlay({ onOpenReport, move, aim }: { onOpenReport?: () => void; move?: PlayMoveView | null; aim?: AimView | null }) {
   usePlayPlayback();
   return (
     <>
@@ -29,7 +30,7 @@ export function PlayOverlay({ onOpenReport, move }: { onOpenReport?: () => void;
         <PlayBanner />
         <PlayNote />
       </div>
-      <Hotbar move={move} />
+      <Hotbar move={move} aim={aim} />
       <PromptCard />
       <PlayEndCard onOpenReport={onOpenReport} />
     </>

@@ -3,8 +3,8 @@ import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sampleEncounter, type EncounterSnapshot, type PlayControl, type Point } from "@/engine";
-import { findSrdFeature } from "@/data/srd";
-import { PlayAimMarks, PlayAimTooltip } from "@/components/play/PlayAimLayer";
+import { findSrdFeature, findSrdSpell } from "@/data/srd";
+import { PlayAimLayer, PlayAimMarks, PlayAimTooltip } from "@/components/play/PlayAimLayer";
 import { PlayOverlay } from "@/components/play/PlayOverlay";
 import { aimAtCreature, usePlayAimView } from "@/hooks/usePlayAim";
 import { usePlayMoveView } from "@/hooks/usePlayMove";
@@ -51,9 +51,10 @@ function Screen() {
   const aim = usePlayAimView();
   return (
     <>
+      <svg aria-label="Ground">{aim ? <PlayAimLayer view={aim} /> : null}</svg>
       <svg aria-label="Marks">{aim ? <PlayAimMarks view={aim} /> : null}</svg>
       {aim ? <PlayAimTooltip view={aim} cellSize={50} /> : null}
-      <PlayOverlay move={move} />
+      <PlayOverlay move={move} aim={aim} />
     </>
   );
 }
@@ -131,5 +132,46 @@ describe("the hotbar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Skip this swing" }));
     expect(store().log.some((entry) => entry.type === "MultiattackSwingSkipped" && entry.data?.reason === "its controller passed")).toBe(true);
     expect(screen.getByRole("region", { name: "Fighter's turn" })).toBeTruthy();
+  });
+
+  it("an area follows the cursor: its squares, the foes it catches with their chances, and a warning for a friend", async () => {
+    load((encounter) => {
+      const fighter = encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+      fighter.spells = [structuredClone(findSrdSpell("srd:spell:burning-hands")!)];
+      fighter.resources = { ...fighter.resources, "slot-1": 2 };
+      encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!.resources = { "slot-1": 2 };
+      place(encounter, "pc-fighter", { x: 3, y: 3 });
+      place(encounter, "enemy-goblin-1", { x: 5, y: 2 });
+      place(encounter, "enemy-goblin-2", { x: 5, y: 4 });
+      place(encounter, "pc-archer", { x: 6, y: 3 });
+    });
+    store().startPlay({ control: PARTY, playbackSpeed: 0 });
+    const { container } = render(<Screen />);
+    const bar = screen.getByRole("region", { name: "Fighter's turn" });
+    await userEvent.click(within(bar).getByRole("tab", { name: /^Spells/ }));
+    await userEvent.click(within(bar).getByRole("button", { name: /Burning Hands/ }));
+    act(() => ui().setHover({ x: 6, y: 3 }));
+    expect(container.querySelectorAll(".play-area").length).toBeGreaterThan(3);
+    expect(container.querySelectorAll(".play-caught.foe")).toHaveLength(2);
+    expect(container.querySelectorAll(".play-caught.friend")).toHaveLength(1);
+    expect(within(bar).getByText(/^Click where to put Burning Hands\. It catches Goblin 1 and Goblin 2\. It will catch Archer too\. Esc puts it away\.$/)).toBeTruthy();
+  });
+
+  it("a choice is made from buttons in the hotbar", async () => {
+    load((encounter) => {
+      const fighter = encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+      fighter.actions = [...fighter.actions, {
+        kind: "summon", id: "call-help", name: "Call for Help", actionType: "action", range: 30, choice: "pick", automationSupport: "full",
+        options: [{ id: "one", definitionId: "def-archer", label: "An archer", count: 1 }, { id: "two", definitionId: "def-archer", label: "Two archers", count: 2 }]
+      } as never];
+    });
+    store().startPlay({ control: PARTY, playbackSpeed: 0 });
+    render(<Screen />);
+    const bar = screen.getByRole("region", { name: "Fighter's turn" });
+    await userEvent.click(within(bar).getByRole("tab", { name: /^Features/ }));
+    await userEvent.click(within(bar).getByRole("button", { name: /Call for Help/ }));
+    const choice = within(bar).getByRole("group", { name: "Call for Help: which" });
+    await userEvent.click(within(choice).getByRole("button", { name: "An archer" }));
+    expect(store().encounter.combatants.filter((combatant) => combatant.summon?.summonerId === "pc-fighter")).toHaveLength(1);
   });
 });

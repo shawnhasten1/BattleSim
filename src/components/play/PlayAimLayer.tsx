@@ -10,10 +10,27 @@ import type { AimView } from "@/hooks/usePlayAim";
 export function PlayAimLayer({ view }: { view: AimView }) {
   const step = view.step;
   const half = (step?.footprint ?? 1) / 2;
+  const area = view.area;
+  const place = view.place;
+  const areaClass = `play-area${area?.heals ? " heals" : ""}${area?.problem ? " blocked" : ""}`;
   return (
     <g className="play-aim" aria-hidden="true">
       {view.rangeCells.map((cell) => (
         <rect key={`range-${cell.x}-${cell.y}`} className="play-range" x={cell.x} y={cell.y} width="1" height="1" />
+      ))}
+      {area?.cells.map((cell) => (
+        <rect key={`area-${cell.x}-${cell.y}`} className={areaClass} x={cell.x} y={cell.y} width="1" height="1" />
+      ))}
+      {area ? <circle className="play-area-origin" cx={area.origin.x + 0.5} cy={area.origin.y + 0.5} r="0.12" /> : null}
+      {place?.cells.map((cell) => (
+        <rect
+          key={`place-${cell.x}-${cell.y}`}
+          className={`${view.kind === "zone" ? "play-area zone" : "play-dest"}${place.problem ? " blocked" : ""}`}
+          x={cell.x + (view.kind === "zone" ? 0 : 0.05)}
+          y={cell.y + (view.kind === "zone" ? 0 : 0.05)}
+          width={view.kind === "zone" ? 1 : 0.9}
+          height={view.kind === "zone" ? 1 : 0.9}
+        />
       ))}
       {step && step.cells.length > 1 ? (
         <>
@@ -34,6 +51,22 @@ export function PlayAimMarks({ view }: { view: AimView }) {
   for (const id of view.picked) counts.set(id, (counts.get(id) ?? 0) + 1);
   return (
     <g className="play-aim" aria-hidden="true">
+      {view.area?.caught.map((caught) => {
+        const combatant = view.board.combatants.find((candidate) => candidate.id === caught.id);
+        if (!combatant) return null;
+        const size = sizeFootprint(getDefinition(view.board, combatant).size);
+        const cx = combatant.position.x + size / 2;
+        // A friend caught by a harmful area is warned of; one healed is just marked.
+        const tone = view.area?.heals ? "heals" : caught.hostile ? "foe" : "friend";
+        return (
+          <g key={`caught-${caught.id}`}>
+            <circle className={`play-caught ${tone}`} cx={cx} cy={combatant.position.y + size / 2} r={size / 2 + 0.1} />
+            <text className={`play-caught-label ${tone}`} x={cx} y={combatant.position.y > 0 ? combatant.position.y - 0.16 : combatant.position.y + size + 0.16}>
+              {caught.label}
+            </text>
+          </g>
+        );
+      })}
       {view.board.combatants.map((combatant) => {
         const line = view.lines.get(combatant.id);
         if (!line) return null;
