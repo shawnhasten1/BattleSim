@@ -2,7 +2,7 @@
 
 Give every bundled SRD monster a token image, without shipping art we have no licence to distribute.
 
-**Status (2026-10-03):** phases 1–3 built on branch `srd-token-images` (not yet committed).
+**Status (2026-10-03):** phases 1–3 committed (d2545c5) and fast-forwarded into master.
 Browser-verified: placeholders on the map, sheet and SRD folder; the import → review → save flow;
 art surviving a reload; "Remove your art"; credits. Additions beyond the plan: matching ignores
 spacing ("Owl Bear" → Owlbear), the two-name creatures (Deep Gnome, Drow) share imported art
