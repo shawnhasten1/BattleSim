@@ -1,11 +1,13 @@
 "use client";
 
-import { Dices, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
-import { Fragment, useEffect, useRef } from "react";
-import { getDefinition, type CombatantState, type Faction } from "@/engine";
+import { Dices, Gamepad2, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { controllerOf, getDefinition, type CombatantState, type Faction } from "@/engine";
+import { PlayControls } from "@/components/play/PlayControls";
+import { PlaySetup } from "@/components/play/PlaySetup";
 import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
-import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { useDisplayEncounter, useIsReplaying, usePlaybackCursor } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { prepBuffs } from "@/lib/actor-sheet/token";
@@ -65,7 +67,12 @@ export function CombatPanel() {
     : lairOwners.length === 1 ? `${lairOwners[0]!.displayName}'s lair` : `${lairOwners.length} lairs`;
   const firstBelow20 = displayEncounter.combatants.findIndex((combatant) => (combatant.initiative ?? Number.NEGATIVE_INFINITY) < 20);
   const lairMarkerIndex = firstBelow20 < 0 ? displayEncounter.combatants.length : firstBelow20;
-  const log = useEncounterStore((state) => state.log);
+  const committedLog = useEncounterStore((state) => state.log);
+  // What's been shown so far: a playback shows the log up to where it has got, and a question in Play the lead-up to
+  // it. Reading further ahead would give away what's about to happen.
+  const cursor = usePlaybackCursor();
+  const questionLog = useEncounterStore((state) => (state.play && !state.play.playback ? state.play.pending?.log : undefined));
+  const log = cursor.mode ? cursor.log.slice(0, cursor.index ?? 0) : questionLog ?? committedLog;
   const outcome = useEncounterStore((state) => state.outcome);
   const batchSummary = useEncounterStore((state) => state.batchSummary);
   const rollInitiativeNow = useEncounterStore((state) => state.rollInitiativeNow);
@@ -79,6 +86,9 @@ export function CombatPanel() {
   const updateFactionTactics = useEncounterStore((state) => state.updateFactionTactics);
   const updateFactionResourceStance = useEncounterStore((state) => state.updateFactionResourceStance);
   const setFactionSurprised = useEncounterStore((state) => state.setFactionSurprised);
+  const play = useEncounterStore((state) => state.play);
+  const setPlayControl = useEncounterStore((state) => state.setPlayControl);
+  const [playSetupOpen, setPlaySetupOpen] = useState(false);
   const { selectedCombatant } = useSelectedCombatant();
 
   const logEndRef = useRef<HTMLLIElement | null>(null);
@@ -137,11 +147,16 @@ export function CombatPanel() {
         <div className={styles.latest}><span>Latest</span><strong>{latestTurnEvent?.message ?? "Step to begin"}</strong></div>
       </div>
 
+      {play ? <PlayControls /> : (
+      <>
       <div className={styles.controls}>
         <button type="button" onClick={rollInitiativeNow}><Dices size={15} /> Initiative</button>
         <button type="button" onClick={advanceTurn}><SkipForward size={15} /> Step</button>
         <button type="button" data-primary onClick={() => void runAuto()}><Swords size={15} /> Auto Run</button>
         <button type="button" onClick={() => runBatch(100)}><Waypoints size={15} /> Batch 100</button>
+        <button type="button" onClick={() => setPlaySetupOpen((open) => !open)} aria-expanded={playSetupOpen} title="Run the fight by hand: you play your sides, the AI the rest">
+          <Gamepad2 size={15} /> Play
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -154,8 +169,11 @@ export function CombatPanel() {
           <RotateCcw size={15} /> Restart
         </button>
       </div>
+      {playSetupOpen ? <PlaySetup onCancel={() => setPlaySetupOpen(false)} /> : null}
+      </>
+      )}
 
-      <ReplayBar />
+      {play ? null : <ReplayBar />}
 
       <div className={styles.tactics}>
         <label>
@@ -248,7 +266,7 @@ export function CombatPanel() {
                 <span className={styles.hp}>{lairMarker}</span>
               </li>
             ) : null}
-            <li>
+            <li className={play ? styles.withController : undefined}>
               <button
                 type="button"
                 className={[
@@ -268,6 +286,23 @@ export function CombatPanel() {
                   {reserve ? `arrives R${combatant.arrivesRound ?? "?"}` : `${combatant.currentHp}/${definition.maxHp}`}
                 </span>
               </button>
+              {play ? (() => {
+                // Who plays this one: click to hand it to the other.
+                const controller = controllerOf(displayEncounter, play.control, combatant);
+                const next = controller === "human" ? "ai" : "human";
+                return (
+                  <button
+                    type="button"
+                    className={styles.controllerToggle}
+                    data-controller={controller}
+                    onClick={() => setPlayControl({ ...play.control, tokens: { ...(play.control.tokens ?? {}), [combatant.id]: next } })}
+                    title={controller === "human" ? `You play ${combatant.displayName}: hand it to the AI` : `The AI plays ${combatant.displayName}: play it yourself`}
+                    aria-label={`${combatant.displayName}: played by ${controller === "human" ? "you" : "the AI"}`}
+                  >
+                    {controller === "human" ? "You" : "AI"}
+                  </button>
+                );
+              })() : null}
               {preCombat ? (
                 <div className={styles.arrival} title="Round this token enters play">
                   <button

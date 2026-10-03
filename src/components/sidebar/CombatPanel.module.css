@@ -449,3 +449,30 @@
   font-weight: 700;
   list-style: none;
 }
+
+/* Play: each row gets a chip for who plays it. */
+.withController {
+  display: flex;
+  align-items: stretch;
+}
+
+.withController > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.initiative .controllerToggle {
+  flex: none;
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  border-left: 1px solid var(--ui-border);
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.initiative .controllerToggle[data-controller="human"] {
+  color: var(--ui-accent);
+}

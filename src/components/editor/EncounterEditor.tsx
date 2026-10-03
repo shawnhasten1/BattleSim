@@ -213,6 +213,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
             onCanvasDragOver={onCanvasDragOver}
             onCanvasDrop={onCanvasDrop}
             onEditActor={() => setSheetOpen(true)}
+            onOpenReport={() => setReportOpen(true)}
           />
         }
         sidebar={

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CombatLogEvent, EncounterSnapshot, Point } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
-import { useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { usePlaybackCursor } from "@/hooks/useDisplayEncounter";
 import { areaFlashForEvent, combatTextForEvent, selectStepBatchCues, type FeedbackKind } from "@/lib/combatFeedback";
 
 const TTL_MS = 1300;
@@ -56,9 +56,13 @@ export function useSceneFeedback(encounter: EncounterSnapshot): {
   floaties: ActiveFloatie[];
   areaFlashes: ActiveAreaFlash[];
 } {
-  const replayIndex = useEncounterStore((state) => state.replayIndex);
+  // A review replay, or Play playing back the AI's turns: cues follow whichever is stepping through the log.
+  const cursor = usePlaybackCursor();
+  const replayIndex = cursor.index;
+  const playbackLog = cursor.log;
+  const replaying = cursor.mode !== null;
+  // The committed log: a Step, or a person's command in Play, appends to it in one go.
   const log = useEncounterStore((state) => state.log);
-  const replaying = useIsReplaying();
 
   const [floaties, setFloaties] = useState<ActiveFloatie[]>([]);
   const [areaFlashes, setAreaFlashes] = useState<ActiveAreaFlash[]>([]);
@@ -120,20 +124,21 @@ export function useSceneFeedback(encounter: EncounterSnapshot): {
       return;
     }
     if (prev != null && replayIndex === prev + 1) {
-      const event = log[replayIndex - 1];
+      const event = playbackLog[replayIndex - 1];
       if (event) spawn([event], false);
     }
-  }, [replayIndex, log, spawn]);
+  }, [replayIndex, playbackLog, spawn]);
 
-  // Step mode: the store appends a whole turn at once. Replay drives itself via
-  // the index above, so skip this path while replaying.
+  // Step mode (and a person's command in Play): the store appends a whole turn at once. A playback drives itself via
+  // the index above, so skip this path while one runs — and skip what a playback is about to step through.
+  const playingBackFrom = useEncounterStore((state) => state.play?.playback?.from);
   useEffect(() => {
     const prevLen = prevLenRef.current;
     prevLenRef.current = log.length;
-    if (replaying || log.length <= prevLen) return;
+    if (replaying || playingBackFrom !== undefined || log.length <= prevLen) return;
     const fresh = selectStepBatchCues(log.slice(prevLen), STEP_BATCH_CAP);
     if (fresh.length) spawn(fresh, true);
-  }, [log, replaying, spawn]);
+  }, [log, replaying, playingBackFrom, spawn]);
 
   // Sweep expired cues. One timer, only while something is on screen.
   useEffect(() => {

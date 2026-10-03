@@ -1,0 +1,360 @@
+/* Play mode: the setup and controls in the Combat panel, and what sits over the map (turn bar, banner, prompt, end). */
+
+/* ── Combat panel ──────────────────────────────────────────────────────────── */
+
+.section {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionTitle strong {
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
+.sectionTitle span,
+.hint {
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ui-text);
+  font-size: 12px;
+}
+
+.row > span:first-child {
+  min-width: 0;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.button,
+.primary,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled),
+.danger:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.primary {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-weight: 700;
+}
+
+.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.danger {
+  color: #e6a29f;
+}
+
+.button:disabled,
+.primary:disabled,
+.danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 4px 9px;
+  border: 0;
+  border-left: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.segmented button:first-child {
+  border-left: 0;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-weight: 700;
+}
+
+.status {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.status span {
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.status strong {
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
+.controller {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.controller[data-controller="human"] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* ── Over the map ──────────────────────────────────────────────────────────── */
+
+.overlayTop {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 14;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: calc(100% - 260px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.turnBar {
+  display: flex;
+  gap: 4px;
+  max-width: 100%;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  pointer-events: auto;
+  scrollbar-width: thin;
+}
+
+.portrait {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: 54px;
+  padding: 4px 3px 3px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.portrait:hover {
+  background: var(--ui-panel-2);
+}
+
+.portrait[data-current="true"] {
+  border-color: var(--ui-accent);
+  background: rgba(217, 138, 61, 0.12);
+  transform: translateY(2px);
+}
+
+.portrait[data-out="true"] {
+  opacity: 0.4;
+}
+
+.portrait[data-faction="party"] .portraitName {
+  color: #a9c6ec;
+}
+
+.portrait[data-faction="enemy"] .portraitName {
+  color: #e6a29f;
+}
+
+.portraitName {
+  width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portraitHp {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.portraitHp i {
+  display: block;
+  height: 100%;
+  background: var(--ui-hp-high);
+}
+
+.portraitBadge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--ui-text-dim);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.portraitBadge[data-controller="human"] {
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.lairSlot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  color: var(--ui-accent-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  pointer-events: auto;
+}
+
+.banner strong {
+  white-space: nowrap;
+}
+
+.banner[data-tone="you"] {
+  border-color: var(--ui-accent);
+}
+
+.banner[data-tone="note"] {
+  border-color: #a1423f;
+}
+
+.prompt,
+.endCard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 16;
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100% - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--ui-accent);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+}
+
+.promptWho {
+  color: var(--ui-accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.promptTitle {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.promptAsk {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 12px;
+}
+
+.promptOptions {
+  display: grid;
+  gap: 6px;
+}
+
+.promptOptions button {
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+}
+
+.promptOptions small {
+  opacity: 0.8;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.endTitle {
+  margin: 0;
+  font-size: 18px;
+}

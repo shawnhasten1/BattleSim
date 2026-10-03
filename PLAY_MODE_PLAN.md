@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–2 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–3 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -784,6 +784,64 @@ Done when:
 - Undoing End turn returns to your creature's turn, and the log is cut back with it.
 - A reload mid-fight resumes on the same turn, prompt included.
 - Reset to setup restores positions, HP, conditions and resources.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **`src/store/play-slice.ts`**, composed into the encounter store:
+>   - starting and stopping Play, a person's commands, answering a question.
+>   - the AI-turn loop: one `advance` step at a time, each played back before the next runs.
+>   - Skip, the playback speed, and handing a creature to the other player.
+>   - commits: a step's board, log and Play state go in one store update. The steps an End turn sets off join its
+>     undo step (`mergeEdits`).
+> - **The store:**
+>   - `undoLogLengths` and `redoLogTails`, paired with the undo stacks. Undo in Play cuts the log back, and redo puts it
+>     back.
+>   - an edit by hand while a question is open drops the question.
+>   - loading another scene ends Play.
+>   - while playing, a click never places a token.
+>   - `play` is persisted without its playback; a question is rebuilt on reload by running its step again
+>     (`persistedPlay`, `restorePlay`).
+> - **`playStatusOf`** (engine): where a fight stands after an undo or a reload.
+> - **`src/lib/playSetupStore.ts`:** the setup board in IndexedDB, in a database of its own.
+> - **One playback cursor** (`usePlaybackCursor`) drives the board (`useDisplayEncounter`), the token path walk and
+>   the floating cues, for a review replay and for Play alike. `replayTo` folds from any point.
+> - **`usePlayPlayback`** steps Play's playback.
+> - **UI** (`src/components/play/`):
+>   - `PlaySetup` in the Combat panel: who plays each side in the scene, both prompt toggles, the AI's speed,
+>     remembered per browser.
+>   - `PlayControls`, which replaces Step, Auto Run, Batch and Restart while playing.
+>   - a You/AI chip on each initiative row.
+>   - over the map: `TurnBar`; a banner with whose turn it is, End turn, AI: take this turn, Continue, speed and Skip;
+>     a basic `PromptCard`; and the end card.
+> - **`src/lib/play/questions.ts`:** what each question says, and its answers.
+> - **Locked while playing:** the wall, terrain and elevation tools, and dragging tokens.
+> - **The Combat panel's Latest and log** show only what has been played back, so nothing is given away ahead of the
+>   map.
+>
+> Differences from the plan:
+>
+> - A basic prompt is here already, so a question never leaves a fight stuck. Legendary and lair actions offer the AI's
+>   own pick or Pass, and a swing offers Swing or Skip, until targeting arrives (Phases 5 and 8). Phase 7 makes it
+>   rich.
+> - The opening of a person's turn is played back too: it can hold a lair action, a death save or a zone's damage.
+>
+> Tests:
+>
+> - `tests/play-store.test.ts` (11): a fight played through, playback, Skip, undo and redo with the log, the same
+>   dice after an undo, questions and hand edits, a reload, handing over, Reset to setup and Keep the board.
+> - `tests/play-ui.test.tsx` (6): setup, End turn and Skip, the chips, a question, the end card, the wording.
+> - The full suite passes: 157 files, 1,897 tests.
+>
+> Browser (Playwright, the default scene, the party yours and the goblins the AI's, 4×), all passed:
+>
+> - the turn bar and the banner; End turn three times with the goblins' turns played back in between.
+> - Undo from the Fighter's turn (24 log entries) back to the Archer's (16).
+> - a reload resumed on the Archer's turn.
+> - every turn handed to the AI reached "The party won in round 3".
+> - Reset to setup took the board back to round 0.
+> - no page errors.
 
 ### Phase 4 — Moving (UI; medium)
 

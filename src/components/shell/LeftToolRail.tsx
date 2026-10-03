@@ -69,6 +69,8 @@ export function LeftToolRail({ showGrid, onToggleGrid, showElevation = true, onT
   const setWallCoverDraft = useEncounterStore((state) => state.setWallCoverDraft);
   const terrainBrush = useEncounterStore((state) => state.terrainBrush);
   const setTerrainBrush = useEncounterStore((state) => state.setTerrainBrush);
+  // While a fight is played the map isn't edited: only selecting and measuring.
+  const playing = useEncounterStore((state) => state.play !== null);
 
   return (
     <div className={styles.rail} aria-label="Scene tools">
@@ -76,8 +78,9 @@ export function LeftToolRail({ showGrid, onToggleGrid, showElevation = true, onT
         <Fragment key={entry.tool}>
           <RailButton
             icon={entry.icon}
-            label={entry.tool === "wall" && pendingWallStart ? "Finish wall (Enter or right-click)" : entry.label}
+            label={playing && LOCKED_IN_PLAY.has(entry.tool) ? `${entry.label} (not while playing a fight)` : entry.tool === "wall" && pendingWallStart ? "Finish wall (Enter or right-click)" : entry.label}
             active={tool === entry.tool}
+            disabled={playing && LOCKED_IN_PLAY.has(entry.tool)}
             onClick={() => setTool(entry.tool)}
           />
           {entry.tool === "wall" && tool === "wall" ? (
@@ -137,24 +140,30 @@ export function LeftToolRail({ showGrid, onToggleGrid, showElevation = true, onT
   );
 }
 
+/** The tools that edit the map, put away while a fight is played. */
+const LOCKED_IN_PLAY = new Set(["wall", "terrain", "elevation"]);
+
 function RailButton({
   icon,
   label,
   active,
   onClick,
-  small = false
+  small = false,
+  disabled = false
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
   small?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       className={[styles.tool, small ? styles.small : "", active ? styles.active : ""].filter(Boolean).join(" ")}
       onClick={onClick}
+      disabled={disabled}
       title={label}
       aria-label={label}
       aria-pressed={active}

@@ -32,7 +32,9 @@ export function clampReplayIndex(index: number, logLength: number): number {
 export function replayTo(
   base: EncounterSnapshot,
   log: CombatLogEvent[],
-  index: number
+  index: number,
+  /** The log index `base` stands at: Play plays back one turn from the board before it. Default the start. */
+  from = 0
 ): EncounterSnapshot {
   const snapshot = structuredClone(base);
   const end = clampReplayIndex(index, log.length);
@@ -41,7 +43,7 @@ export function replayTo(
     byId.set(combatant.id, combatant);
   }
 
-  for (let cursor = 0; cursor < end; cursor += 1) {
+  for (let cursor = Math.max(0, from); cursor < end; cursor += 1) {
     const entry = log[cursor];
     if (!entry) continue;
     // Every event is stamped with the round/turn that was current when it fired.

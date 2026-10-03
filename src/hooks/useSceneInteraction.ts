@@ -61,6 +61,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   const paintElevationCells = useEncounterStore((state) => state.paintElevationCells);
   const applyRamp = useEncounterStore((state) => state.applyRamp);
   const elevationMode = useEncounterStore((state) => state.elevationMode);
+  // A played fight moves tokens through the rules (Phase 4), not by dragging them.
+  const playing = useEncounterStore((state) => state.play !== null);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
   const grid = encounter.map.grid;
@@ -844,6 +846,7 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     event.preventDefault();
     suppressNextMapClickRef.current = true;
     selectCombatantOnBoard(combatantId, false);
+    if (playing) return;
     const battlemap = event.currentTarget.closest<HTMLElement>(".battlemap");
     const local = battlemap ? getLocalPoint(battlemap, event.clientX, event.clientY) : null;
     // Where inside the token the grab landed, so it doesn't jump under the cursor.

@@ -5,7 +5,8 @@ import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useStat
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
 import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
-import { useDisplayEncounter, useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { useDisplayEncounter, useIsPlayingBack, useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { PlayOverlay } from "@/components/play/PlayOverlay";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
 import { clamp, pointsMatch } from "@/components/scene/coords";
@@ -52,6 +53,8 @@ interface SceneCanvasProps {
   onCanvasDrop: (event: DragEvent<HTMLDivElement>) => void;
   /** Open the floating actor sheet (owned by the page). Invoked from the token context menu. */
   onEditActor?: () => void;
+  /** Open the battle report (owned by the page): Play's end card offers it. */
+  onOpenReport?: () => void;
 }
 
 /**
@@ -61,7 +64,7 @@ interface SceneCanvasProps {
  * Interaction state and pointer logic live in `useSceneInteraction` /
  * `useViewport`; this component only wires them to the DOM and renders.
  */
-export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, showHealthBars, onCanvasDragOver, onCanvasDrop, onEditActor }: SceneCanvasProps) {
+export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, showHealthBars, onCanvasDragOver, onCanvasDrop, onEditActor, onOpenReport }: SceneCanvasProps) {
   const map = useEncounterStore((state) => state.encounter.map);
   const replaySpeed = useEncounterStore((state) => state.replaySpeed);
   const mapImageDataUrl = useEncounterStore((state) => state.mapImageDataUrl);
@@ -83,7 +86,13 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const attachSrdSpell = useEncounterStore((state) => state.attachSrdSpell);
   const [srdDropTokenId, setSrdDropTokenId] = useState<string | null>(null);
   const encounter = useDisplayEncounter();
-  const replaying = useIsReplaying();
+  const reviewing = useIsReplaying();
+  // A review replay or Play's playback of the AI's turns drives the board; and while Play waits on a question the board
+  // shows the moment it came up. The map can't be edited during either.
+  const playingBack = useIsPlayingBack();
+  const playing = useEncounterStore((state) => state.play !== null);
+  const questionOpen = useEncounterStore((state) => Boolean(state.play?.pending) && !state.play?.playback);
+  const replaying = reviewing || playingBack || questionOpen;
 
   function onTokenSrdDragOver(event: DragEvent<HTMLButtonElement>, combatantId: string) {
     if (replaying || !event.dataTransfer.types.includes(SRD_DRAG_MIME)) return;
@@ -512,7 +521,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
       aria-label="Battlemap scene"
       {...viewport.stageProps}
     >
-      {replaying ? <div className="scene-replay-banner" aria-hidden="true">▶ Replay</div> : null}
+      {reviewing ? <div className="scene-replay-banner" aria-hidden="true">▶ Replay</div> : null}
+      {playing && !reviewing ? <PlayOverlay onOpenReport={onOpenReport} /> : null}
       <div className="scene-hud">
         <div>
           <span>Tool</span>

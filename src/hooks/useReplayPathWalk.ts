@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Point } from "@/engine";
-import { useEncounterStore } from "@/store/encounter-store";
 import { clamp } from "@/components/scene/coords";
-import { useIsReplaying } from "@/hooks/useDisplayEncounter";
+import { usePlaybackCursor } from "@/hooks/useDisplayEncounter";
 
 export interface ReplayPathWalk {
   /** Transient per-combatant cell position while a move is being traced. */
@@ -31,9 +30,11 @@ const IDLE: ReplayPathWalk = { positions: new Map(), hopMs: null };
  *   rest of replay.
  */
 export function useReplayPathWalk(slideMs: number): ReplayPathWalk {
-  const replaying = useIsReplaying();
-  const replayIndex = useEncounterStore((state) => state.replayIndex);
-  const log = useEncounterStore((state) => state.log);
+  // A review replay or Play's playback of the AI's turns: whichever is stepping through the log.
+  const cursor = usePlaybackCursor();
+  const replaying = cursor.mode !== null;
+  const replayIndex = cursor.index;
+  const log = cursor.log;
   const [walk, setWalk] = useState<ReplayPathWalk>(IDLE);
   const prevIndexRef = useRef<number | null>(replayIndex);
   const timersRef = useRef<{ interval: number; settle: number } | null>(null);

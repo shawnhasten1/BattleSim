@@ -60,6 +60,7 @@ import {
   normalizeActionDefinition,
   normalizeDeathEffectDefinition,
   migrateDefinition,
+  playStatusOf,
   type ActionRider,
   type CoverLevel,
   type WallSegment
@@ -82,6 +83,8 @@ import { downscaleDataUrl, getImageDimensions, mapStorageOptions, type ImagePixe
 import { detectGrid, imageFitSize, pinInPlace, readUsualPxPerSquare, squaresInBounds, squaresToCover, type GridFit } from "@/lib/gridInference";
 import type { AlignPin, SourcePoint } from "@/lib/gridAlign";
 import { createEncounterStorage } from "@/lib/encounterStorage";
+import { getPlaySetup } from "@/lib/playSetupStore";
+import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type PlayActions, type PlaySession } from "./play-slice";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
@@ -136,9 +139,15 @@ export interface EncounterSummary {
   mapImageUrl?: string | null;
 }
 
-interface EncounterStore {
+interface EncounterStore extends PlayActions {
   encounter: EncounterSnapshot;
   log: CombatLogEvent[];
+  /** A fight being played by hand (PLAY_MODE_PLAN.md), or null. */
+  play: PlaySession | null;
+  /** The board as it stood when Play started: what Reset to setup puts back. Kept in IndexedDB, not localStorage. */
+  playSetup: EncounterSnapshot | null;
+  /** Pull this scene's Play setup out of IndexedDB (after a reload). */
+  hydratePlaySetup: () => void;
   outcome: SimulationOutcome | null;
   batchSummary: BatchSimulationSummary | null;
   /** Pre-run board that the replay reducer folds the event log over. Null = not in replay. */
@@ -164,6 +173,10 @@ interface EncounterStore {
   folderStatus: string;
   undoStack: EncounterSnapshot[];
   redoStack: EncounterSnapshot[];
+  /** The log's length before each undo step (paired with `undoStack`): undo in Play cuts the log back to it. */
+  undoLogLengths: number[];
+  /** What undo cut off the log (paired with `redoStack`): redo in Play puts it back. */
+  redoLogTails: CombatLogEvent[][];
   tool: EditorTool;
   pendingWallStart: Point | null;
   /** Align grid: the pin being lined up on the canvas, until applied or cancelled. Never saved. */
@@ -824,16 +837,29 @@ export const useEncounterStore = create<EncounterStore>()(
       /** The encounter as it was before the edit in progress began: the undo step a merged edit is joining, or now. */
       const editBase = (): EncounterSnapshot => (continuesMerge() ? get().undoStack[0]! : get().encounter);
 
+      // Set while the Play actions commit a step: any other commit during a fight is an edit by hand.
+      let playCommitting = false;
+
       const commitEncounter = (
         encounter: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
       ) => {
-        const undoStack = continuesMerge() ? get().undoStack : [structuredClone(get().encounter), ...get().undoStack].slice(0, 50);
+        const continuing = continuesMerge();
+        const undoStack = continuing ? get().undoStack : [structuredClone(get().encounter), ...get().undoStack].slice(0, 50);
+        const undoLogLengths = continuing ? get().undoLogLengths : [get().log.length, ...get().undoLogLengths].slice(0, 50);
         lastMerge = mergingKey ? { key: mergingKey, step: undoStack[0]! } : null;
+        // An edit by hand during a fight changes the board an open question's step would run on again: drop the question.
+        const play = get().play;
+        const handEdited = play && !playCommitting && (play.pending || play.playback)
+          ? { play: { ...play, pending: undefined, playback: undefined, status: sessionStatusOf(playStatusOf(encounter, play.control)) } }
+          : {};
         set({
           encounter: normalizeEncounterVisuals(encounter),
           undoStack,
+          undoLogLengths,
           redoStack: [],
+          redoLogTails: [],
+          ...handEdited,
           outcome: null,
           batchSummary: null,
           replayBase: null,
@@ -934,9 +960,46 @@ export const useEncounterStore = create<EncounterStore>()(
       };
 
 
+      const playActions = createPlayActions<EncounterStore>({
+        get,
+        set: (partial) => set(partial),
+        commitPlay: (encounter, log, group, outcome, play) => {
+          playCommitting = true;
+          try {
+            get().mergeEdits(group, () => commitEncounter(encounter, { log, outcome, play }));
+          } finally {
+            playCommitting = false;
+          }
+        },
+        commitBoard: (encounter) => {
+          playCommitting = true;
+          try {
+            commitEncounter(encounter, { log: [], outcome: null });
+          } finally {
+            playCommitting = false;
+          }
+        },
+        setupKey: () => mapImageKey(get())
+      });
+
       return ({
       encounter: normalizeEncounterVisuals(structuredClone(sampleEncounter)),
       log: [],
+      play: null,
+      playSetup: null,
+      ...playActions,
+      startPlay: (options) => {
+        // The map isn't edited during a fight, and a review replay makes way.
+        set({ tool: "select", pendingWallStart: null, replayBase: null, replayIndex: null });
+        playActions.startPlay(options);
+      },
+      hydratePlaySetup: () => {
+        const key = mapImageKey(get());
+        if (!get().play) return;
+        void getPlaySetup(key).then((setup) => {
+          if (mapImageKey(get()) === key && get().play && setup) set({ playSetup: setup });
+        });
+      },
       outcome: null,
       batchSummary: null,
       replayBase: null,
@@ -956,6 +1019,8 @@ export const useEncounterStore = create<EncounterStore>()(
       folderStatus: "",
       undoStack: [],
       redoStack: [],
+      undoLogLengths: [],
+      redoLogTails: [],
       tool: "select",
       pendingWallStart: null,
       gridAlign: null,
@@ -1004,7 +1069,8 @@ export const useEncounterStore = create<EncounterStore>()(
         }
 
         const selectedId = state.selectedCombatantId;
-        if (state.tool !== "select" || !selectedId) {
+        // A played fight moves tokens through the rules, never by placing them.
+        if (state.tool !== "select" || !selectedId || state.play) {
           return;
         }
         // Free placement: drop the token wherever clicked, no range / OA / cost.
@@ -1105,6 +1171,8 @@ export const useEncounterStore = create<EncounterStore>()(
         void deleteMapImage(mapImageKey(get()));
         commitEncounter(structuredClone(sampleEncounter), {
           log: [],
+          play: null,
+          playSetup: null,
           outcome: null,
           batchSummary: null,
           replayBase: null,
@@ -1118,10 +1186,30 @@ export const useEncounterStore = create<EncounterStore>()(
       undo: () => {
         const [previous, ...rest] = get().undoStack;
         if (!previous) return;
+        const play = get().play;
+        if (play) {
+          // In a fight the log goes back with the board; an open question or playback goes too.
+          const [logLength = get().log.length, ...lengths] = get().undoLogLengths;
+          const log = get().log;
+          set({
+            encounter: previous,
+            undoStack: rest,
+            undoLogLengths: lengths,
+            redoStack: [structuredClone(get().encounter), ...get().redoStack].slice(0, 50),
+            redoLogTails: [log.slice(logLength), ...get().redoLogTails].slice(0, 50),
+            log: log.slice(0, logLength),
+            outcome: null,
+            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, status: sessionStatusOf(playStatusOf(previous, play.control)) }
+          });
+          lastMerge = null;
+          return;
+        }
         set({
           encounter: previous,
           undoStack: rest,
+          undoLogLengths: get().undoLogLengths.slice(1),
           redoStack: [structuredClone(get().encounter), ...get().redoStack].slice(0, 50),
+          redoLogTails: [[] as CombatLogEvent[], ...get().redoLogTails].slice(0, 50),
           replayBase: null,
           replayIndex: null,
           log: [...get().log, {
@@ -1136,10 +1224,27 @@ export const useEncounterStore = create<EncounterStore>()(
       redo: () => {
         const [next, ...rest] = get().redoStack;
         if (!next) return;
+        const play = get().play;
+        if (play) {
+          const [tail = [], ...tails] = get().redoLogTails;
+          set({
+            encounter: next,
+            redoStack: rest,
+            redoLogTails: tails,
+            undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
+            undoLogLengths: [get().log.length, ...get().undoLogLengths].slice(0, 50),
+            log: [...get().log, ...tail],
+            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, status: sessionStatusOf(playStatusOf(next, play.control)) }
+          });
+          lastMerge = null;
+          return;
+        }
         set({
           encounter: next,
           redoStack: rest,
+          redoLogTails: get().redoLogTails.slice(1),
           undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
+          undoLogLengths: [get().log.length, ...get().undoLogLengths].slice(0, 50),
           replayBase: null,
           replayIndex: null,
           log: [...get().log, {
@@ -1526,6 +1631,10 @@ export const useEncounterStore = create<EncounterStore>()(
           mapImageUrl: data.project.encounters[0]?.mapImageUrl ?? null,
           undoStack: [],
           redoStack: [],
+          undoLogLengths: [],
+          redoLogTails: [],
+          play: null,
+          playSetup: null,
           log: [],
           outcome: null,
           batchSummary: null,
@@ -1640,6 +1749,10 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: null,
           undoStack: [],
           redoStack: [],
+          undoLogLengths: [],
+          redoLogTails: [],
+          play: null,
+          playSetup: null,
           log: [],
           outcome: null,
           batchSummary: null,
@@ -1699,6 +1812,10 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
+          undoLogLengths: [],
+          redoLogTails: [],
+          play: null,
+          playSetup: null,
           log: [],
           outcome: null,
           batchSummary: null,
@@ -1778,6 +1895,10 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
+          undoLogLengths: [],
+          redoLogTails: [],
+          play: null,
+          playSetup: null,
           log: [],
           outcome: null,
           batchSummary: null,
@@ -2997,6 +3118,7 @@ export const useEncounterStore = create<EncounterStore>()(
       partialize: (state) => ({
         encounter: state.encounter,
         log: state.log,
+        play: persistedPlay(state.play),
         // Map backgrounds live in IndexedDB (see mapImageStore), never here.
         selectedCombatantId: state.selectedCombatantId,
         currentProjectId: state.currentProjectId,
@@ -3018,16 +3140,20 @@ export const useEncounterStore = create<EncounterStore>()(
           }
         }
         delete persisted.mapImagesByEncounterId;
+        const encounter = normalizeEncounterVisuals(persisted.encounter ?? currentState.encounter);
         return {
           ...currentState,
           ...persisted,
           mapImageDataUrl: null,
-          encounter: normalizeEncounterVisuals(persisted.encounter ?? currentState.encounter)
+          encounter,
+          // A fight in progress comes back on the same turn, its open question asked again.
+          play: restorePlay(persisted.play, encounter, persisted.log ?? currentState.log)
         };
       },
       onRehydrateStorage: () => (state) => {
-        // localStorage is back; now pull this scene's background out of IndexedDB.
+        // localStorage is back; now pull this scene's background (and a fight's setup) out of IndexedDB.
         state?.hydrateMapImage();
+        state?.hydratePlaySetup();
       }
     }
   )

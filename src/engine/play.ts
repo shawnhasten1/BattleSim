@@ -218,6 +218,24 @@ function runStep(state: EngineState, step: PlayStep, control: PlayControl): Play
   return { kind: "advance" };
 }
 
+/**
+ * Where a fight in Play stands on `snapshot`, without running anything: after an undo, or a reload. A person's
+ * creature with its turn open waits for them; otherwise the next step is `advance` (which also closes a turn the AI
+ * left open), unless one side is left.
+ */
+export function playStatusOf(snapshot: EncounterSnapshot, control: PlayControl): PlayStatus {
+  const factions = [...activeFactions(snapshot)];
+  if (snapshot.round > 0 && factions.length <= 1) {
+    const winner = factions[0] ?? null;
+    return { kind: "over", outcome: { winner, rounds: snapshot.round, completed: winner !== null, warnings: [] } };
+  }
+  const actor = currentTurnActor(snapshot);
+  if (actor && hasOpenActionEconomy(actor) && controllerOf(snapshot, control, actor) === "human" && playableByHand(actor)) {
+    return { kind: "your-turn", actorId: actor.id };
+  }
+  return { kind: "advance" };
+}
+
 function over(state: EngineState): PlayStatus {
   return { kind: "over", outcome: combatOutcome(state)! };
 }
