@@ -2,7 +2,7 @@
 
 This walkthrough runs the default scene the way you'd run it at the table: you play the party, the AI plays the goblins, and a dragon of your own joins in to show legendary actions. It takes about five minutes.
 
-> **What you'll do:** start a fight in Play, move and attack on the map, cast an area spell, answer a reaction's question, take a legendary action, and use the DM's hand.
+> **What you'll do:** start a fight in Play, move and attack on the map, cast an area spell, answer a reaction's question, take a legendary action, use the DM's hand, and overrule a roll.
 
 ---
 
@@ -74,7 +74,20 @@ Right-click any token to change it as the DM: HP, temporary HP, conditions, its 
 
 Each of these is logged as the DM's, so the battle report counts them and a replay shows them.
 
-## 8. Finish
+## 8. Overrule a roll
+
+The rolls made since your last command sit under the turn banner, newest first: who rolled, the total against the AC or DC, and how it came out.
+
+![The goblin's missed shot, about to be overruled](img/play-a-fight-by-hand/08-overrule.png)
+
+Click a roll's **⋯** to rule it the other way: **Hit**, **Critical hit** or **Miss** for an attack, **Success** or **Failure** for a save, a check or a death save. The step it was rolled in runs again with the roll as you ruled it, and everything after it plays out again from there.
+
+- The number rolled stays. The log marks the roll **(DM override)**, and so does its chip.
+- A question that came after the roll is asked again, if it still comes up. The dice after it can fall differently: a hit rolls damage a miss didn't.
+- A card that shows a roll, like Shield's, has its own **Overrule the roll…**, and the same **⋯** is on the roll's entry in the Combat log.
+- **Undo** puts the roll back the way it came out. The battle report counts the rolls overruled.
+
+## 9. Finish
 
 - **Undo** (on the hotbar) takes back your last command, or an **End turn** with the AI turns after it. The same command again rolls the same dice.
 - **Odds from here** in the Combat panel lets the AI play out the rest of the fight from the board as it stands, 100 times over.

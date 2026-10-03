@@ -66,7 +66,7 @@ async function dragonFight(options: { lair?: boolean } = {}): Promise<EncounterS
     }
   ];
   encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!.position = { x: 1, y: 1 };
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
   return encounter;
 }
 
@@ -164,7 +164,7 @@ describe("the DM's hand", () => {
     }];
     const initiative: Record<string, number> = { "pc-fighter": 20, "pc-archer": 15, "enemy-goblin-1": 12, "enemy-goblin-2": 8 };
     encounter.combatants = encounter.combatants.map((entry) => ({ ...entry, initiative: initiative[entry.id] }));
-    useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [], currentEncounterId: "enc-saved" });
+    useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [], currentEncounterId: "enc-saved" });
     return encounter;
   }
 

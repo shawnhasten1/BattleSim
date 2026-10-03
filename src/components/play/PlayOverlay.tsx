@@ -11,6 +11,9 @@ import { playbackLog } from "@/store/play-slice";
 import { playStatusText } from "./PlayControls";
 import { PlaySegmented, POLICY_OPTIONS, SPEED_OPTIONS } from "./PlaySegmented";
 import { Hotbar } from "./Hotbar";
+import { overruleItems, RollStrip } from "./RollStrip";
+import { ContextMenu } from "@/components/ui/ContextMenu";
+import { recentRolls } from "@/lib/play/rolls";
 import { SwingCard } from "./SwingCard";
 import { TurnOptionCard } from "./TurnOptionCard";
 import { TurnBar } from "./TurnBar";
@@ -31,6 +34,7 @@ export function PlayOverlay({ onOpenReport, move, aim }: { onOpenReport?: () => 
         <TurnBar />
         <PlayBanner />
         <PlayNote />
+        <RollStrip />
       </div>
       <Hotbar move={move} aim={aim} />
       <PromptCard />
@@ -104,6 +108,9 @@ function PromptCard() {
   const answerPrompt = useEncounterStore((state) => state.answerPrompt);
   const control = useEncounterStore((state) => state.play?.control);
   const setPlayControl = useEncounterStore((state) => state.setPlayControl);
+  const play = useEncounterStore((state) => state.play);
+  const overrideRoll = useEncounterStore((state) => state.overrideRoll);
+  const [rollMenu, setRollMenu] = useState<{ x: number; y: number } | null>(null);
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     primaryRef.current?.focus({ preventScroll: true });
@@ -113,6 +120,13 @@ function PromptCard() {
   if (pending.request.kind === "multiattack-swing") return <SwingCard request={pending.request} board={pending.board} />;
   if (pending.request.kind === "legendary-action" || pending.request.kind === "lair-action") return <TurnOptionCard request={pending.request} board={pending.board} />;
   const text = describeQuestion(pending.request, pending.board);
+  // A question that shows a roll (Shield's attack roll, Legendary Resistance's save) can have that roll overruled.
+  const request = pending.request;
+  const shownRoll = request.kind === "reaction" && request.trigger === "would-be-hit"
+    ? recentRolls(play).find((item) => item.request.purpose === "attack" && item.request.rollerId === request.sourceId && item.request.targetId === request.reactorId)
+    : request.kind === "legendary-resistance"
+      ? recentRolls(play).find((item) => item.request.purpose === "save" && item.request.rollerId === request.combatantId)
+      : undefined;
   const setPolicy = (policy: PromptPolicy, value: ReactionPolicy) => {
     if (!control) return;
     setPlayControl({ ...control, reactions: { ...(control.reactions ?? {}), [policy.key]: value } });
@@ -123,6 +137,12 @@ function PromptCard() {
     <div className={styles.prompt} role="dialog" aria-label={`${text.who} can choose`}>
       <span className={styles.promptWho}>{text.who}</span>
       <p className={styles.promptTitle}>{text.title}</p>
+      {shownRoll ? (
+        <button type="button" className={styles.dockLink} onClick={(event) => setRollMenu({ x: event.clientX, y: event.clientY })}>
+          Overrule the roll…
+        </button>
+      ) : null}
+      {shownRoll && rollMenu ? <ContextMenu x={rollMenu.x} y={rollMenu.y} items={overruleItems(shownRoll, overrideRoll)} onClose={() => setRollMenu(null)} /> : null}
       <p className={styles.promptAsk}>{text.ask}</p>
       <div className={styles.promptOptions}>
         {text.options.map((option, index) => (

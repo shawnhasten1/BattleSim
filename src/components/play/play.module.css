@@ -317,6 +317,70 @@
   transform: translate(-50%, -50%);
 }
 
+/* The rolls since your last command, under the banner: each can be overruled. */
+.rollStrip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  pointer-events: auto;
+}
+
+.rollChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 3px 2px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rollChip[data-outcome="failure"] {
+  color: var(--ui-text-dim);
+}
+
+.rollChip[data-outcome="critical"] {
+  border-color: var(--ui-accent);
+}
+
+.rollChip[data-overridden] {
+  border-style: dashed;
+}
+
+.rollChip button {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.rollChip button:hover:not(:disabled) {
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+}
+
+.rollChip button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rollMore {
+  align-self: center;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
 /* A question sits up under the turn bar, so the board it's about stays in view. */
 .prompt {
   top: 120px;

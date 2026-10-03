@@ -51,7 +51,7 @@ function load(spells: string[], change?: (encounter: EncounterSnapshot, fighter:
     ...(combatant.id === "pc-fighter" ? { resources: { ...combatant.resources, ...slots } } : {})
   }));
   change?.(encounter, fighter);
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
   return encounter;
 }
 

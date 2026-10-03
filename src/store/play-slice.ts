@@ -12,6 +12,8 @@ import {
   type PlayStep,
   type PlayStepResult,
   type RecordedAnswer,
+  type RollOutcome,
+  type RollRecord,
   type SimulationOutcome
 } from "@/engine";
 import { deletePlaySetup, putPlaySetup } from "@/lib/playSetupStore";
@@ -44,6 +46,24 @@ export interface PendingQuestion {
   log: CombatLogEvent[];
   /** The undo step it will join. */
   group: string;
+  /** Rolls a DM has ruled in its step, which a run of it again keeps. */
+  overrides?: Record<string, RollOutcome>;
+}
+
+/**
+ * A step since a person's last command (that command, the AI turns after it): what it started from and what it rolled,
+ * so a roll in it can be overruled — the step runs again from there with the roll ruled (PLAY_MODE_PLAN.md §2.10).
+ */
+export interface RecentStep {
+  step: PlayStep;
+  /** The answers it was given, and the rolls a DM ruled. */
+  answers: RecordedAnswer[];
+  overrides: Record<string, RollOutcome>;
+  /** The board it started from, and where in the log. */
+  before: EncounterSnapshot;
+  from: number;
+  /** Its rolls (up to its question, while one is open). */
+  rolls: RollRecord[];
 }
 
 export interface PlaybackState {
@@ -68,6 +88,8 @@ export interface PlaySession {
   undoGroup?: string;
   /** Why the last command didn't happen. */
   message?: string;
+  /** The steps since a person's last command, oldest first: their rolls can be overruled. Not persisted. */
+  recent?: RecentStep[];
 }
 
 /** The part of the store the Play actions read and write. */
@@ -97,6 +119,12 @@ export interface PlayActions {
   dismissPlayMessage: () => void;
   /** Stop playing: keep the board as it is, or put back the setup. */
   endPlay: (options: { restoreSetup: boolean }) => void;
+  /**
+   * Overrule a roll made since the last command (`recent[stepIndex]`'s roll `rollKey`): its step runs again from where
+   * it began, with the roll ruled and only the answers given before it; whatever followed (questions, the AI's turns)
+   * plays again from there. An undo step of its own.
+   */
+  overrideRoll: (stepIndex: number, rollKey: string, outcome: RollOutcome) => void;
   /**
    * Keep the finished fight with its scene, as Auto Run's runs are kept: the board it started from (so a replay folds
    * the log onto it), the log, and `metrics.mode: "manual"` with who played what. False if it couldn't be.
@@ -148,21 +176,33 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
     if (play) set({ play: { ...play, ...patch } } as Partial<S>);
   };
 
+  /** Where a step ran from, and the steps before it since the last command, for `recent`. */
+  interface Track {
+    before: EncounterSnapshot;
+    from: number;
+    overrides: Record<string, RollOutcome>;
+    recent: RecentStep[];
+  }
+
   /** Apply a step's result: commit what finished, keep a question open, start the playback of what the AI did. */
-  const handle = (result: PlayStepResult, step: PlayStep, playFrom: { base: EncounterSnapshot; from: number }, group: string) => {
+  const handle = (result: PlayStepResult, step: PlayStep, playFrom: { base: EncounterSnapshot; from: number }, group: string, track: Track) => {
     const play = get().play;
     if (!play) return;
     if (result.kind === "refused") {
       update({ message: result.reason });
       return;
     }
+    const recent = [...track.recent, { step, answers: result.answers, overrides: track.overrides, before: track.before, from: track.from, rolls: result.rolls }];
     const animate = play.playbackSpeed > 0 && !play.skipping && animates(step);
     if (result.kind === "needs-decision") {
-      const pending: PendingQuestion = { step, answers: result.answers, request: result.request, board: result.board, log: result.log, group };
+      const pending: PendingQuestion = {
+        step, answers: result.answers, request: result.request, board: result.board, log: result.log, group,
+        ...(Object.keys(track.overrides).length ? { overrides: track.overrides } : {})
+      };
       const playback: PlaybackState | undefined = animate && result.log.length > playFrom.from
         ? { base: playFrom.base, from: playFrom.from, index: playFrom.from, source: "pending" }
         : undefined;
-      update({ pending, playback, message: undefined });
+      update({ pending, playback, message: undefined, recent });
       return;
     }
     const status = sessionStatusOf(result.status);
@@ -178,8 +218,17 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       // The steps up to the next person's turn join this one's undo step (not the DM's: a turn going on after it is
       // its own).
       undoGroup: status.kind === "ai" && !byTheDm(step) ? group : byTheDm(step) ? play.undoGroup : undefined,
-      skipping: status.kind === "ai" ? play.skipping : false
+      skipping: status.kind === "ai" ? play.skipping : false,
+      recent
     });
+  };
+
+  /** Run `step` on the live board and apply it, as the steps since the last command say. */
+  const run = (step: PlayStep, group: string, recent: RecentStep[]) => {
+    const { play, encounter, log } = get();
+    if (!play) return;
+    handle(runPlayStep({ snapshot: encounter, log, step, control: play.control }), step, { base: encounter, from: log.length }, group,
+      { before: encounter, from: log.length, overrides: {}, recent });
   };
 
   /** Run `advance` steps while the AI has the next turn and nothing (a playback, a question) is in the way. */
@@ -188,8 +237,8 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       const { play, encounter, log } = get();
       if (!play || play.pending || play.playback || play.status.kind !== "ai") return;
       const group = play.undoGroup ?? newGroup("advance");
-      const step: PlayStep = { kind: "advance" };
-      handle(runPlayStep({ snapshot: encounter, log, step, control: play.control }), step, { base: encounter, from: log.length }, group);
+      run({ kind: "advance" }, group, play.recent ?? []);
+      if (get().log.length === log.length && get().encounter === encounter && !get().play?.pending) return;
     }
   };
 
@@ -206,10 +255,11 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
     },
 
     playCommand: (command) => {
-      const { play, encounter, log } = get();
+      const { play } = get();
       if (!play || play.pending || play.playback) return;
       const step: PlayStep = { kind: "command", command };
-      handle(runPlayStep({ snapshot: encounter, log, step, control: play.control }), step, { base: encounter, from: log.length }, newGroup(command.kind));
+      // A new command: the rolls before it can't be overruled any more.
+      run(step, newGroup(command.kind), []);
       if (!byTheDm(step)) runAiTurns();
     },
 
@@ -218,12 +268,15 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       const pending = play?.pending;
       if (!play || !pending || play.playback) return;
       const answers = [...pending.answers, { key: pending.request.key, answer }];
+      const overrides = pending.overrides ?? {};
       handle(
-        runPlayStep({ snapshot: encounter, log, step: pending.step, control: play.control, answers }),
+        runPlayStep({ snapshot: encounter, log, step: pending.step, control: play.control, answers, overrides }),
         pending.step,
         // What's still to show starts where the question's lead-up ended.
         { base: pending.board, from: pending.log.length },
-        pending.group
+        pending.group,
+        // The question's step was the last one; this run of it takes its place.
+        { before: encounter, from: log.length, overrides, recent: (play.recent ?? []).slice(0, -1) }
       );
       runAiTurns();
     },
@@ -261,14 +314,50 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
       const status = play.status;
       if (status.kind === "your-turn" && !play.pending && !play.playback
         && playStatusOf(get().encounter, control).kind !== "your-turn") {
-        const step: PlayStep = { kind: "command", command: { kind: "ai-turn", actorId: status.actorId } };
-        const { encounter, log } = get();
-        handle(runPlayStep({ snapshot: encounter, log, step, control }), step, { base: encounter, from: log.length }, newGroup("ai-turn"));
+        run({ kind: "command", command: { kind: "ai-turn", actorId: status.actorId } }, newGroup("ai-turn"), []);
         runAiTurns();
       }
     },
 
     dismissPlayMessage: () => update({ message: undefined }),
+
+    overrideRoll: (stepIndex, rollKey, outcome) => {
+      const { play, log } = get();
+      const entry = play?.recent?.[stepIndex];
+      const roll = entry?.rolls.find((record) => record.key === rollKey);
+      if (!play || !entry || !roll || play.playback) return;
+      // The answers given and the rolls ruled before the roll stand; whatever's after it is rolled and asked again, if
+      // it still comes up.
+      const n = Number(rollKey.split(":")[0]);
+      const beforeIt = (key: string) => Number(key.split(":")[0]) < n;
+      const answers = entry.answers.filter((answer) => beforeIt(answer.key));
+      const overrides = Object.fromEntries(Object.entries(entry.overrides).filter(([key]) => beforeIt(key)));
+      // Ruled back to how the dice had it, it's no override.
+      if (outcome !== roll.request.outcome) overrides[rollKey] = outcome;
+      const earlier = (play.recent ?? []).slice(0, stepIndex);
+      const group = newGroup("override");
+      const before = entry.before;
+      const kept = log.slice(0, entry.from);
+      // Back to where the step began (with what followed it gone), then the step again with the roll ruled: one undo step.
+      api.commitPlay(structuredClone(before), kept, group, null, {
+        ...play,
+        pending: undefined,
+        playback: undefined,
+        skipping: false,
+        message: undefined,
+        undoGroup: undefined,
+        status: sessionStatusOf(playStatusOf(before, play.control)),
+        recent: earlier
+      });
+      handle(
+        runPlayStep({ snapshot: before, log: kept, step: entry.step, control: play.control, answers, overrides }),
+        entry.step,
+        { base: before, from: entry.from },
+        group,
+        { before, from: entry.from, overrides, recent: earlier }
+      );
+      runAiTurns();
+    },
 
     savePlayedRun: async () => {
       const { play, playSetup, encounter, log } = get();
@@ -316,11 +405,11 @@ export function playbackLog(state: PlayStoreState): CombatLogEvent[] {
  */
 export function persistedPlay(play: PlaySession | null): PlaySession | null {
   if (!play) return null;
-  const { playback: _playback, pending, ...rest } = play;
+  const { playback: _playback, pending, recent: _recent, ...rest } = play;
   return {
     ...rest,
     skipping: false,
-    ...(pending ? { pending: { step: pending.step, answers: pending.answers, group: pending.group } as PendingQuestion } : {})
+    ...(pending ? { pending: { step: pending.step, answers: pending.answers, group: pending.group, ...(pending.overrides ? { overrides: pending.overrides } : {}) } as PendingQuestion } : {})
   };
 }
 
@@ -330,7 +419,7 @@ export function restorePlay(play: PlaySession | null | undefined, encounter: Enc
   const restored: PlaySession = { ...play, playback: undefined, skipping: false };
   if (!play.pending) return restored;
   try {
-    const result = runPlayStep({ snapshot: encounter, log, step: play.pending.step, control: play.control, answers: play.pending.answers });
+    const result = runPlayStep({ snapshot: encounter, log, step: play.pending.step, control: play.control, answers: play.pending.answers, overrides: play.pending.overrides });
     if (result.kind === "needs-decision") {
       return { ...restored, pending: { ...play.pending, request: result.request, board: result.board, log: result.log, answers: result.answers } };
     }

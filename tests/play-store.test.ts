@@ -18,7 +18,7 @@ function load(seed = "play-store"): EncounterSnapshot {
   encounter.seed = seed;
   encounter.map.walls = [];
   encounter.combatants = encounter.combatants.map((combatant) => ({ ...combatant, initiative: INITIATIVE[combatant.id] }));
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
   return encounter;
 }
 

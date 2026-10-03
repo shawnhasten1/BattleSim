@@ -72,6 +72,11 @@ export interface EngineState extends DecisionHost {
   reactionDepth?: number;
   /** Re-entrancy guard for `resolveDeathEffect` — one death effect's blast can kill another creature and trigger its death effect in turn, up to `MAX_DEATH_EFFECT_DEPTH`. */
   deathEffectDepth?: number;
+  /**
+   * A save a DM just overruled (Play), until it's logged: whoever logs the save (a dozen places do) gets it marked,
+   * "(DM override)", by `event`.
+   */
+  saveOverride?: { targetId: Id; outcome: RollOutcome };
 }
 
 /** How deep reaction windows may nest (a counter-counterspell is legal; a third is not). */
@@ -3155,8 +3160,8 @@ export function rollRecharges(state: EngineState, actor: CombatantState): void {
     if (recharged) {
       actor.resources = { ...(actor.resources ?? {}), [poolId]: 1 };
     }
-    state.log.push(event(state, "AbilityRecharged", `${actor.displayName} ${recharged ? "recharged" : "failed to recharge"} ${action.name} (rolled ${roll.total}, needs ${usage.recharge.min}+)`, {
-      combatantId: actor.id, actionId: action.id, resourceId: poolId, roll: roll.total, min: usage.recharge.min, recharged
+    state.log.push(event(state, "AbilityRecharged", `${actor.displayName} ${recharged ? "recharged" : "failed to recharge"} ${action.name} (rolled ${roll.total}, needs ${usage.recharge.min}+${overridden ? ", DM override" : ""})`, {
+      combatantId: actor.id, actionId: action.id, resourceId: poolId, roll: roll.total, min: usage.recharge.min, recharged, ...(overridden ? { overridden } : {})
     }));
   }
 }
@@ -3797,6 +3802,14 @@ export function event(
   message: string,
   data?: Record<string, unknown>
 ): CombatLogEvent {
+  // A save just overruled (Play) is logged as such, wherever it's logged.
+  const ruled = state.saveOverride;
+  const savedFor = data?.targetId ?? data?.combatantId;
+  if (ruled && (type === "SaveRolled" || type === "ConcentrationChecked") && savedFor === ruled.targetId) {
+    state.saveOverride = undefined;
+    message = `${message} (DM override)`;
+    data = { ...data, overridden: ruled.outcome };
+  }
   return {
     id: `${type}-${state.log.length + 1}`,
     round: state.snapshot.round,
@@ -6014,9 +6027,10 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
   const result: SavingThrowResult = { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
   // A DM may overrule the roll (Play). Legendary Resistance below then sees the outcome as ruled.
   const overridden = askDecision<RollRequest>(state, {
-    kind: "roll", rollerId: target.id, purpose: "save", natural: roll.total - roll.modifier, total: roll.total, against: ctx.dc,
+    kind: "roll", rollerId: target.id, purpose: ctx.kind === "concentration" ? "concentration" : "save", natural: roll.total - roll.modifier, total: roll.total, against: ctx.dc,
     outcome: result.success ? "success" : "failure", label: ctx.label
   }, target.id)?.outcome;
+  state.saveOverride = overridden ? { targetId: target.id, outcome: overridden } : undefined;
   if (overridden) {
     result.success = overridden !== "failure";
     result.overridden = overridden;

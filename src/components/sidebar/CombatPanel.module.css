@@ -450,6 +450,19 @@
   list-style: none;
 }
 
+/* Play: a roll since the last command can be overruled from its log entry. */
+.overrule {
+  justify-self: start;
+  padding: 0 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* Play: each row gets a chip for who plays it. */
 .withController {
   display: flex;

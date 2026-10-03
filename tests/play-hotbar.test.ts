@@ -53,7 +53,7 @@ function load(change?: (encounter: EncounterSnapshot) => void): EncounterSnapsho
     resources: combatant.id === "pc-fighter" ? { ...combatant.resources, rage: 3 } : combatant.resources
   }));
   change?.(encounter);
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
   return encounter;
 }
 

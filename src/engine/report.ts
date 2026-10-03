@@ -72,6 +72,8 @@ export interface BattleReport {
   warnings: string[];
   /** Changes the DM made by hand in Play: HP set, conditions, a token moved, a door. */
   dmEdits: number;
+  /** Rolls the DM overruled in Play. */
+  overrides: number;
   factionTotals: Record<string, FactionTotals>;
   /** Roster order (initiative order once the fight has started). */
   actors: ActorReport[];
@@ -155,10 +157,12 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
   const warnings: string[] = [];
 
   let dmEdits = 0;
+  let overrides = 0;
   for (const entry of log) {
     const data: EventData = entry.data ?? {};
     rounds = Math.max(rounds, entry.round);
     if (data.source === "dm") dmEdits += 1;
+    if (data.overridden) overrides += 1;
 
     switch (entry.type) {
       case "AttackRolled": {
@@ -335,5 +339,5 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
     totals.hpRemaining += Math.max(0, actor.endingHp);
   }
 
-  return { winner, rounds, completed, warnings, dmEdits, factionTotals, actors: orderedActors };
+  return { winner, rounds, completed, warnings, dmEdits, overrides, factionTotals, actors: orderedActors };
 }

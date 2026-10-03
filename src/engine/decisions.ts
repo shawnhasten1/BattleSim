@@ -119,7 +119,8 @@ export interface RollRequest extends RequestBase {
   kind: "roll";
   /** Who rolled: the attacker, or the creature making the save or check. */
   rollerId: Id;
-  purpose: "attack" | "save" | "death-save" | "check" | "recharge";
+  /** A save to keep concentration is "concentration": it's logged apart from other saves (`ConcentrationChecked`). */
+  purpose: "attack" | "save" | "concentration" | "death-save" | "check" | "recharge";
   /** The d20 (or recharge die) as it fell, and the total with bonuses. */
   natural: number;
   total: number;

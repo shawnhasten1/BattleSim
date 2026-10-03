@@ -27,7 +27,7 @@ function load(change?: (encounter: EncounterSnapshot) => void) {
   fighter.features = [...(fighter.features ?? []), { ...structuredClone(findSrdFeature("srd:feature:extra-attack")!), id: "f-extra" }];
   encounter.combatants = encounter.combatants.map((combatant) => ({ ...combatant, initiative: INITIATIVE[combatant.id] }));
   change?.(encounter);
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
 }
 
 function place(encounter: EncounterSnapshot, id: string, position: Point) {

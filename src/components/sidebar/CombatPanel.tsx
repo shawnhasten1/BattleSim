@@ -1,9 +1,12 @@
 "use client";
 
 import { Dices, Gamepad2, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { controllerOf, getDefinition, type CombatantState, type Faction } from "@/engine";
 import { PlayControls } from "@/components/play/PlayControls";
+import { overruleItems } from "@/components/play/RollStrip";
+import { ContextMenu } from "@/components/ui/ContextMenu";
+import { recentRolls, rollsByLogIndex, type RollItem } from "@/lib/play/rolls";
 import { PlaySetup } from "@/components/play/PlaySetup";
 import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
@@ -88,7 +91,11 @@ export function CombatPanel() {
   const setFactionSurprised = useEncounterStore((state) => state.setFactionSurprised);
   const play = useEncounterStore((state) => state.play);
   const setPlayControl = useEncounterStore((state) => state.setPlayControl);
+  const overrideRoll = useEncounterStore((state) => state.overrideRoll);
   const [playSetupOpen, setPlaySetupOpen] = useState(false);
+  const [rollMenu, setRollMenu] = useState<{ x: number; y: number; item: RollItem } | null>(null);
+  // In Play, which log entries are rolls since the last command (they can be overruled).
+  const rollEntries = useMemo(() => (play ? rollsByLogIndex(log, recentRolls(play)) : new Map<number, RollItem>()), [play, log]);
   const { selectedCombatant } = useSelectedCombatant();
 
   const logEndRef = useRef<HTMLLIElement | null>(null);
@@ -416,10 +423,21 @@ export function CombatPanel() {
         <details className={styles.section}>
           <summary>Combat log{outcome ? ` · ${outcome.winner ?? "no winner"} after ${outcome.rounds}` : ""}</summary>
           <ol className={styles.logList}>
-            {log.map((entry) => (
+            {log.map((entry, index) => (
               <li key={entry.id}>
                 <span>{entry.message}</span>
                 <small>{entry.type}</small>
+                {play && !play.playback && rollEntries.get(index) ? (
+                  <button
+                    type="button"
+                    className={styles.overrule}
+                    title="Overrule this roll"
+                    aria-label={`Overrule: ${entry.message}`}
+                    onClick={(event) => setRollMenu({ x: event.clientX, y: event.clientY, item: rollEntries.get(index)! })}
+                  >
+                    ⋯
+                  </button>
+                ) : null}
                 {entry.data ? (
                   <details>
                     <summary>details</summary>
@@ -430,6 +448,7 @@ export function CombatPanel() {
             ))}
             <li ref={logEndRef} aria-hidden="true" />
           </ol>
+          {rollMenu ? <ContextMenu x={rollMenu.x} y={rollMenu.y} items={overruleItems(rollMenu.item, overrideRoll)} onClose={() => setRollMenu(null)} /> : null}
         </details>
       ) : null}
     </div>

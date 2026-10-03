@@ -1,7 +1,7 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–8 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
-other decisions have recommended defaults (§6).
+**Status:** on branch `play-mode`. Phases 0–9 committed 2026-10-03: the plan is built. D2, D3, D5 and D10 were
+decided on 2026-10-03; the other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
 the fight turn by turn like a tactics RPG:
@@ -1255,6 +1255,72 @@ Done when:
 - A goblin's failed save against Fireball made a success takes half damage.
 - A prompt answered after the overridden roll comes back if it still happens, and doesn't if it no longer does.
 - Undo after an override puts the roll back the way it came out.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **The engine** (the roll questions themselves came with Phase 1):
+>   - a save is marked "(DM override)" and `overridden` wherever it's logged (a dozen places log saves): `rollSavingThrow`
+>     leaves `EngineState.saveOverride`, and `event` marks the save's entry. A recharge is marked the same way.
+>   - a save to keep concentrating has its own purpose, `concentration`, so its `ConcentrationChecked` entry isn't taken
+>     for another save's.
+>   - Legendary Resistance sees a save as ruled: made a failure, it can still be turned.
+>   - the battle report counts the rolls overruled (`overrides`).
+> - **The store** (`play-slice.ts`):
+>   - `recent`: the steps since a person's last command (that command, the AI turns after it, a question's step), each
+>     with the board and log length it began from, its answers, its overrides and its rolls. Not persisted.
+>   - `overrideRoll(stepIndex, rollKey, outcome)`: back to where the roll's step began, then the step again with the
+>     roll ruled and the answers and overrides from before it, then the AI turns after it, all one undo step. Ruled back
+>     to how the dice had it, it's no override.
+>   - undo and redo in Play put back the whole log when a step rewrote it, and the rolls that could be overruled then
+>     (`undoPlay`/`redoPlay`, which were `undoLogLengths`/`redoLogTails`).
+>   - an edit by hand during a fight ends overruling the rolls before it; undoing the edit brings them back.
+> - **The UI:**
+>   - **the roll strip** (`RollStrip`) under the turn banner: the rolls since your last command, newest first, up to
+>     four ("Goblin 1 → Archer: 8 vs AC 16, miss"), each with a ⋯ menu of what it can be ruled to. During a playback
+>     each roll shows as the playback reaches it, and the ⋯ waits for the playback to finish. A roll overruled reads
+>     "hit (DM override)", outlined in dashes.
+>   - **the Combat log:** those rolls' entries have the same ⋯.
+>   - **questions:** a card that shows a roll (Shield's and Parry's the attack, Legendary Resistance's the save) has
+>     **Overrule the roll…**.
+>   - the battle report's "Rolls overruled".
+> - **Docs:** "Overruling a roll" in the Play section, and step 8 of the guide, with a picture.
+>
+> Differences from the plan:
+>
+> - The strip sits under the turn banner, not above the hotbar: it's needed on the AI's turns too, when there's no
+>   hotbar.
+> - The answers and overrides after the overruled roll are dropped. The dice after it can fall differently (a hit rolls
+>   damage a miss didn't), so a later key may be a different roll by then.
+> - Log entries are matched to rolls by their kind and roller, from where each was rolled (`rollsByLogIndex`): log
+>   entries don't carry roll keys.
+>
+> Tests:
+>
+> - `tests/play-overrides.test.tsx` (11):
+>   - an AI goblin's miss made a hit: the fighter is damaged, the number rolled is kept, the archer's turn comes round
+>     again, and the report counts 1. Undo puts the log back as it was, with the rolls to overrule; redo, the override.
+>   - the strip shows a roll as ruled, with the outcomes left. Ruled back to the dice, the fight is as it was.
+>   - an edit by hand ends overruling; its undo brings the rolls back.
+>   - a goblin's failed save against Fireball made a success takes half damage; the other goblin's save is untouched.
+>   - a legendary goblin's save made a failure is turned by Legendary Resistance: a use spent, half damage.
+>   - during a playback each roll shows as it's reached, and none can be overruled until it's done.
+>   - Hellish Rebuke's question comes back when the first of two slashes, made a plain hit, still hits; and doesn't when
+>     the second, made a miss, no longer does.
+>   - Shield's question: **Overrule the roll…** made it a miss, nothing is asked and the slot is kept.
+>   - which log entry is which roll, with a concentration save among them.
+>   - on screen: the strip, a roll in words, and its ⋯ ruling a critical hit.
+> - The full suite passes: 165 files, 1,964 tests. The golden logs are unchanged.
+>
+> Browser (Playwright, the default scene, Instant), all passed:
+>
+> - after End turn, the strip: "Goblin 1 → Archer: 8 vs AC 16, miss"; its menu offered Hit and Critical hit.
+> - Hit: the archer took 5, the log read "Goblin 1 hit Archer with Shortbow (Archer had half cover) (DM override)",
+>   and the chip "hit (DM override)".
+> - the log entry's ⋯ offered Critical hit and Miss.
+> - Undo: the miss back, no override in the log, the strip back.
+> - the Docs section and the guide's picture; no page errors.
 
 ---
 

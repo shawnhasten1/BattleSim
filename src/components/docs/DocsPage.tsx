@@ -880,6 +880,18 @@ const SECTIONS: Section[] = [
           anywhere; right-click a door to open or close it. In a played fight each of these is logged as the DM's,
           so the battle report counts them and a replay shows them.
         </p>
+        <h3>Overruling a roll</h3>
+        <p>
+          The rolls made since your last command sit under the turn banner, newest first: who rolled, the total
+          against the AC or DC, and how it came out. A roll's <strong>⋯</strong> rules it the other way (a hit, a
+          critical hit or a miss; a save, a check or a death save made or failed; a recharge or not), and the same ⋯
+          is on its entry in the Combat log. The step it was rolled in runs again with the roll as ruled, and
+          everything after plays out again from there: the number rolled stays and the log marks it{" "}
+          <em>DM override</em>, a question after it is asked again if it still comes up, and the dice after it can
+          fall differently (a hit rolls damage a miss didn&rsquo;t). A card that shows a roll, like Shield&rsquo;s,
+          has its own <strong>Overrule the roll…</strong>. Undo puts the roll back the way it came out; the battle
+          report counts the rolls overruled.
+        </p>
         <h3>The end</h3>
         <ul>
           <li>

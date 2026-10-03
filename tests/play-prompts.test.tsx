@@ -58,7 +58,7 @@ function board(initiative: Record<string, number>, positions: Record<string, Poi
 }
 
 function load(encounter: EncounterSnapshot) {
-  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoLogLengths: [], redoLogTails: [] });
+  useEncounterStore.setState({ encounter, log: [], undoStack: [], redoStack: [], undoPlay: [], redoPlay: [] });
 }
 
 function drainPlayback(limit = 5000) {

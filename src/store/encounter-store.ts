@@ -84,7 +84,7 @@ import { detectGrid, imageFitSize, pinInPlace, readUsualPxPerSquare, squaresInBo
 import type { AlignPin, SourcePoint } from "@/lib/gridAlign";
 import { createEncounterStorage } from "@/lib/encounterStorage";
 import { getPlaySetup } from "@/lib/playSetupStore";
-import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type PlayActions, type PlaySession } from "./play-slice";
+import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type PlayActions, type PlaySession, type RecentStep } from "./play-slice";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 
@@ -139,6 +139,22 @@ export interface EncounterSummary {
   mapImageUrl?: string | null;
 }
 
+/**
+ * Undo in Play: the log before a step (its length, or the whole of it when the step rewrote it: a roll overruled), and
+ * the rolls that could be overruled then.
+ */
+interface PlayUndoMark {
+  log: number | CombatLogEvent[];
+  recent?: RecentStep[];
+}
+
+/** Redo in Play: what undo cut off the log (or, `whole`, the log it replaced), and the rolls that could be overruled then. */
+interface PlayRedoMark {
+  tail: CombatLogEvent[];
+  whole?: boolean;
+  recent?: RecentStep[];
+}
+
 interface EncounterStore extends PlayActions {
   encounter: EncounterSnapshot;
   log: CombatLogEvent[];
@@ -173,10 +189,10 @@ interface EncounterStore extends PlayActions {
   folderStatus: string;
   undoStack: EncounterSnapshot[];
   redoStack: EncounterSnapshot[];
-  /** The log's length before each undo step (paired with `undoStack`): undo in Play cuts the log back to it. */
-  undoLogLengths: number[];
-  /** What undo cut off the log (paired with `redoStack`): redo in Play puts it back. */
-  redoLogTails: CombatLogEvent[][];
+  /** What undo in Play puts back besides the board (paired with `undoStack`): the log, and the rolls that could be overruled. */
+  undoPlay: PlayUndoMark[];
+  /** What undo in Play took away besides the board (paired with `redoStack`): redo puts it back. */
+  redoPlay: PlayRedoMark[];
   tool: EditorTool;
   pendingWallStart: Point | null;
   /** Align grid: the pin being lined up on the canvas, until applied or cancelled. Never saved. */
@@ -845,25 +861,39 @@ export const useEncounterStore = create<EncounterStore>()(
       // Set while the Play actions commit a step: any other commit during a fight is an edit by hand.
       let playCommitting = false;
 
+      /** The log as undo needs it back: its length if `next` only adds to it, the whole of it if `next` rewrites it (a roll overruled). */
+      const logBefore = (next: CombatLogEvent[] | undefined): PlayUndoMark["log"] => {
+        const log = get().log;
+        const rewritten = next !== undefined && (next.length < log.length || (log.length > 0 && next[log.length - 1] !== log[log.length - 1]));
+        return rewritten ? log : log.length;
+      };
+
       const commitEncounter = (
         encounter: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
       ) => {
         const continuing = continuesMerge();
         const undoStack = continuing ? get().undoStack : [structuredClone(get().encounter), ...get().undoStack].slice(0, 50);
-        const undoLogLengths = continuing ? get().undoLogLengths : [get().log.length, ...get().undoLogLengths].slice(0, 50);
-        lastMerge = mergingKey ? { key: mergingKey, step: undoStack[0]! } : null;
-        // An edit by hand during a fight changes the board an open question's step would run on again: drop the question.
         const play = get().play;
-        const handEdited = play && !playCommitting && (play.pending || play.playback)
-          ? { play: { ...play, pending: undefined, playback: undefined, status: sessionStatusOf(playStatusOf(encounter, play.control)) } }
+        const undoPlay = continuing ? get().undoPlay : [{ log: logBefore(extras.log), recent: play?.recent }, ...get().undoPlay].slice(0, 50);
+        lastMerge = mergingKey ? { key: mergingKey, step: undoStack[0]! } : null;
+        // An edit by hand during a fight changes the board an open question's step would run on again, as an overruled
+        // roll's would: the question goes, and the rolls before the edit can't be overruled any more.
+        const handEdited = play && !playCommitting
+          ? {
+            play: {
+              ...play,
+              recent: undefined,
+              ...(play.pending || play.playback ? { pending: undefined, playback: undefined, status: sessionStatusOf(playStatusOf(encounter, play.control)) } : {})
+            }
+          }
           : {};
         set({
           encounter: normalizeEncounterVisuals(encounter),
           undoStack,
-          undoLogLengths,
+          undoPlay,
           redoStack: [],
-          redoLogTails: [],
+          redoPlay: [],
           ...handEdited,
           outcome: null,
           batchSummary: null,
@@ -1025,8 +1055,8 @@ export const useEncounterStore = create<EncounterStore>()(
       folderStatus: "",
       undoStack: [],
       redoStack: [],
-      undoLogLengths: [],
-      redoLogTails: [],
+      undoPlay: [],
+      redoPlay: [],
       tool: "select",
       pendingWallStart: null,
       gridAlign: null,
@@ -1194,18 +1224,23 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!previous) return;
         const play = get().play;
         if (play) {
-          // In a fight the log goes back with the board; an open question or playback goes too.
-          const [logLength = get().log.length, ...lengths] = get().undoLogLengths;
+          // In a fight the log goes back with the board (the whole of it, if the step rewrote it), and the rolls that
+          // could be overruled then come back; an open question or playback goes.
+          const [mark = { log: get().log.length }, ...marks] = get().undoPlay;
+          const saved = mark.log;
           const log = get().log;
           set({
             encounter: previous,
             undoStack: rest,
-            undoLogLengths: lengths,
+            undoPlay: marks,
             redoStack: [structuredClone(get().encounter), ...get().redoStack].slice(0, 50),
-            redoLogTails: [log.slice(logLength), ...get().redoLogTails].slice(0, 50),
-            log: log.slice(0, logLength),
+            redoPlay: [
+              typeof saved === "number" ? { tail: log.slice(saved), recent: play.recent } : { tail: log, whole: true, recent: play.recent },
+              ...get().redoPlay
+            ].slice(0, 50),
+            log: typeof saved === "number" ? log.slice(0, saved) : saved,
             outcome: null,
-            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, status: sessionStatusOf(playStatusOf(previous, play.control)) }
+            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, recent: mark.recent, status: sessionStatusOf(playStatusOf(previous, play.control)) }
           });
           lastMerge = null;
           return;
@@ -1213,9 +1248,9 @@ export const useEncounterStore = create<EncounterStore>()(
         set({
           encounter: previous,
           undoStack: rest,
-          undoLogLengths: get().undoLogLengths.slice(1),
+          undoPlay: get().undoPlay.slice(1),
           redoStack: [structuredClone(get().encounter), ...get().redoStack].slice(0, 50),
-          redoLogTails: [[] as CombatLogEvent[], ...get().redoLogTails].slice(0, 50),
+          redoPlay: [{ tail: [] }, ...get().redoPlay].slice(0, 50),
           replayBase: null,
           replayIndex: null,
           log: [...get().log, {
@@ -1232,15 +1267,16 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!next) return;
         const play = get().play;
         if (play) {
-          const [tail = [], ...tails] = get().redoLogTails;
+          const [mark = { tail: [] }, ...marks] = get().redoPlay;
+          const log = get().log;
           set({
             encounter: next,
             redoStack: rest,
-            redoLogTails: tails,
+            redoPlay: marks,
             undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
-            undoLogLengths: [get().log.length, ...get().undoLogLengths].slice(0, 50),
-            log: [...get().log, ...tail],
-            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, status: sessionStatusOf(playStatusOf(next, play.control)) }
+            undoPlay: [{ log: mark.whole ? log : log.length, recent: play.recent }, ...get().undoPlay].slice(0, 50),
+            log: mark.whole ? mark.tail : [...log, ...mark.tail],
+            play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, recent: mark.recent, status: sessionStatusOf(playStatusOf(next, play.control)) }
           });
           lastMerge = null;
           return;
@@ -1248,9 +1284,9 @@ export const useEncounterStore = create<EncounterStore>()(
         set({
           encounter: next,
           redoStack: rest,
-          redoLogTails: get().redoLogTails.slice(1),
+          redoPlay: get().redoPlay.slice(1),
           undoStack: [structuredClone(get().encounter), ...get().undoStack].slice(0, 50),
-          undoLogLengths: [get().log.length, ...get().undoLogLengths].slice(0, 50),
+          undoPlay: [{ log: get().log.length }, ...get().undoPlay].slice(0, 50),
           replayBase: null,
           replayIndex: null,
           log: [...get().log, {
@@ -1637,8 +1673,8 @@ export const useEncounterStore = create<EncounterStore>()(
           mapImageUrl: data.project.encounters[0]?.mapImageUrl ?? null,
           undoStack: [],
           redoStack: [],
-          undoLogLengths: [],
-          redoLogTails: [],
+          undoPlay: [],
+          redoPlay: [],
           play: null,
           playSetup: null,
           log: [],
@@ -1755,8 +1791,8 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: null,
           undoStack: [],
           redoStack: [],
-          undoLogLengths: [],
-          redoLogTails: [],
+          undoPlay: [],
+          redoPlay: [],
           play: null,
           playSetup: null,
           log: [],
@@ -1820,8 +1856,8 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
-          undoLogLengths: [],
-          redoLogTails: [],
+          undoPlay: [],
+          redoPlay: [],
           play: null,
           playSetup: null,
           log: [],
@@ -1903,8 +1939,8 @@ export const useEncounterStore = create<EncounterStore>()(
           selectedCombatantId: normalizedSnapshot.combatants[0]?.id ?? null,
           undoStack: [],
           redoStack: [],
-          undoLogLengths: [],
-          redoLogTails: [],
+          undoPlay: [],
+          redoPlay: [],
           play: null,
           playSetup: null,
           log: [],
