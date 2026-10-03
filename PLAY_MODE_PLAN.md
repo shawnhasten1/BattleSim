@@ -1,6 +1,6 @@
 # Play Mode Plan: run a fight by hand, BG3-style
 
-**Status:** on branch `play-mode`. Phases 0–7 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
+**Status:** on branch `play-mode`. Phases 0–8 committed 2026-10-03. D2, D3, D5 and D10 were decided on 2026-10-03; the
 other decisions have recommended defaults (§6).
 
 A **Play** mode for the encounter editor. You choose which sides you control (one faction, several, or all) and run
@@ -1177,6 +1177,67 @@ Done when:
 - A dragon you play takes a Tail Attack after the fighter's turn, and its points come back on its own turn.
 - A lair action you pick fires on initiative 20.
 - DM edits show in the report and in a replay of the saved run.
+
+> **✅ Implemented 2026-10-03**, committed on `play-mode`.
+>
+> Built:
+>
+> - **Legendary and lair actions** (`TurnOptionCard`, at the bottom of the map):
+>   - every option the creature can afford, each with its cost and its statblock line, and Pass.
+>   - picking one that needs aiming arms it on the map with the usual targeting, answering the question when it's
+>     aimed. Esc comes back to the card.
+>   - **by hand:** options the engine can't run (Detect, a lair action that's only text) are offered too. Taken, their
+>     points are spent and they're logged (`LEGENDARY_BY_HAND`, `LAIR_BY_HAND`; `TurnOption.byHand`).
+>   - a question is aimed on the board it came up on, so the map stays live for it, as for a swing.
+>   - `usePlayAim`'s "armed" now covers a question's pick as well as a turn's ability (`pickTurnOption`).
+> - **The DM's hand** (`DmChange`), each logged with `source: "dm"`:
+>   - HP and temporary HP (`setHpByDm`): dropping to 0 downs or defeats a creature as damage would, and healing above
+>     0 stands it up.
+>   - conditions on and off (`conditionByDm`).
+>   - a reaction given back (`restoreReactionByDm`).
+>   - doors opened and closed (`toggleDoorByDm`, the new `DoorToggled` event).
+>   - in Play, a token's right-click menu becomes these, and a door can be right-clicked.
+>   - the replay reads `DoorToggled` and `TempHpChanged`, and the battle report counts DM edits.
+> - **The end:**
+>   - **Save this run** posts the fight to the scene's runs, as Auto Run's are kept: the board it started from (so a
+>     replay folds the log onto it), the log, and `metrics.mode: "manual"` with who played what and the DM's edits.
+>   - **Odds from here** in the Combat panel: `runBatchSimulations(…, { fromHere })` with `runAutomatedFromHere`, which
+>     lets the AI finish the open turn and play on to the end, 100 times over.
+>   - **D8:** saving the scene while playing saves its setup, and says so.
+> - **Docs:** a "Playing a Fight by Hand" section, and the guide `docs/guides/play-a-fight-by-hand.md` with seven
+>   pictures.
+>
+> Differences from the plan:
+>
+> - A saved run's `snapshot` is the board the fight started from, not the end board Auto Run stores. A replay needs
+>   the start, and nothing reads saved runs back yet.
+> - The DM can't add or remove tokens from the menu in Play; the editor still can, outside Play.
+>
+> Tests:
+>
+> - `tests/play-legendary.test.tsx` (8):
+>   - the dragon's Tail Attack aimed at the fighter after its turn, points 3 → 2, asked again after the archer's turn,
+>     points back to 3 on its own turn.
+>   - Detect by hand.
+>   - the card: options, costs, aiming and back.
+>   - a lair action picked and aimed on initiative 20.
+>   - the DM's HP, condition, door and temp HP edits: logged, counted in the report (4, then 6), shown by a replay
+>     from the setup, and kept with a saved run.
+>   - saving the scene mid-fight keeps the setup.
+>   - Odds from here, in the engine and in the Combat panel.
+> - The full suite passes: 164 files, 1,953 tests. The golden logs are unchanged.
+>
+> Browser (Playwright, the default scene with an SRD Adult Red Dragon added, Instant), all passed:
+>
+> - the dragon's card after the fighter's turn: Tail Attack (1 action), Wing Attack (2 actions), Detect (1 action, by
+>   hand), Pass.
+> - Tail Attack aimed at the fighter: "95% to hit · +14 against AC 16 · 17 damage on a hit"; the attack was made and
+>   logged.
+> - a goblin's DM menu: HP, temp HP, conditions, the reaction, Alt-drag. HP −1 was logged as "The DM took Goblin 1 down
+>   to 6 HP".
+> - Odds from here: "the party wins 0%, the enemies 100%, in about 1.8 more rounds (100 runs)" (a red dragon).
+> - the Docs section and the guide, with its seven pictures.
+> - no page errors.
 
 ### Phase 9 — Overriding a roll (UI; medium)
 

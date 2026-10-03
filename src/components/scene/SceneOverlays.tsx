@@ -93,7 +93,8 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
     onWallNodePointerDown,
     onTemplatePointerDown,
     rampDrag,
-    hoverCell
+    hoverCell,
+    openDoorMenu
   } = scene;
   const elevationMode = useEncounterStore((state) => state.elevationMode);
   const elevationHeight = useEncounterStore((state) => state.elevationHeight);
@@ -217,6 +218,23 @@ export function SceneOverlays({ scene, map, gridPixelWidth, gridPixelHeight, rep
       ))}
       {displayWalls.map((wall) => (
         <g key={wall.id}>
+          {playing && !replaying && wall.doorState ? (
+            // A door in a played fight: right-click it to open or close it, as the DM.
+            <line
+              x1={wall.start.x}
+              y1={wall.start.y}
+              x2={wall.end.x}
+              y2={wall.end.y}
+              className="door-hit"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openDoorMenu(wall.id, event.clientX, event.clientY);
+              }}
+            >
+              <title>{`Door (${wall.doorState}): right-click to ${wall.doorState === "open" ? "close" : "open"} it`}</title>
+            </line>
+          ) : null}
           {tool === "wall" ? (
             // Invisible fat stroke so thin low/marker walls are actually clickable.
             // Only hit-testable in the Wall tool — the Select tool must not be

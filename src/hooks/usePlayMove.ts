@@ -15,7 +15,8 @@ import {
   type Id,
   type MovePreview,
   type Point,
-  type SwingRequest
+  type SwingRequest,
+  type TurnOptionRequest
 } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import type { PlaySession } from "@/store/play-slice";
@@ -49,6 +50,26 @@ export function swingQuestion(state: { play: PlaySession | null }): { request: S
   const play = state.play;
   if (!play || play.playback || !play.pending || play.pending.request.kind !== "multiattack-swing") return null;
   return { request: play.pending.request, board: play.pending.board };
+}
+
+/** A legendary or lair action a person is choosing: its question, and the board it came up on. */
+export function turnOptionQuestion(state: { play: PlaySession | null }): { request: TurnOptionRequest; board: EncounterSnapshot } | null {
+  const play = state.play;
+  const request = play && !play.playback ? play.pending?.request : undefined;
+  return request && (request.kind === "legendary-action" || request.kind === "lair-action") ? { request, board: play!.pending!.board } : null;
+}
+
+/** `turnOptionQuestion`, for a component: the same object until the question changes. */
+export function useTurnOptionQuestion(): { request: TurnOptionRequest; board: EncounterSnapshot } | null {
+  const pending = useEncounterStore((state) => (state.play && !state.play.playback ? state.play.pending : undefined));
+  return useMemo(() => (pending && (pending.request.kind === "legendary-action" || pending.request.kind === "lair-action")
+    ? { request: pending.request, board: pending.board }
+    : null), [pending]);
+}
+
+/** The plan key of an ability armed to answer a question (a legendary or lair action), rather than on a turn. */
+export function questionPlanKey(requestKey: string): string {
+  return `question:${requestKey}`;
 }
 
 /** `swingQuestion`, for a component: the same object until the question changes. */

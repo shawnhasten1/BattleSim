@@ -1,7 +1,7 @@
 "use client";
 
-import { FastForward, Play as PlayIcon, RotateCcw, ScrollText, Square, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { FastForward, Play as PlayIcon, RotateCcw, Save, ScrollText, Square, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useDisplayEncounter } from "@/hooks/useDisplayEncounter";
 import { usePlayPlayback } from "@/hooks/usePlayPlayback";
 import { describeQuestion, type PromptPolicy } from "@/lib/play/questions";
@@ -12,6 +12,7 @@ import { playStatusText } from "./PlayControls";
 import { PlaySegmented, POLICY_OPTIONS, SPEED_OPTIONS } from "./PlaySegmented";
 import { Hotbar } from "./Hotbar";
 import { SwingCard } from "./SwingCard";
+import { TurnOptionCard } from "./TurnOptionCard";
 import { TurnBar } from "./TurnBar";
 import type { PlayMoveView } from "@/hooks/usePlayMove";
 import type { AimView } from "@/hooks/usePlayAim";
@@ -108,8 +109,9 @@ function PromptCard() {
     primaryRef.current?.focus({ preventScroll: true });
   }, [pending?.request.key]);
   if (!pending) return null;
-  // A swing is aimed on the map, so its card keeps out of the way.
+  // A swing, and a legendary or lair action, are aimed on the map, so their cards keep out of the way.
   if (pending.request.kind === "multiattack-swing") return <SwingCard request={pending.request} board={pending.board} />;
+  if (pending.request.kind === "legendary-action" || pending.request.kind === "lair-action") return <TurnOptionCard request={pending.request} board={pending.board} />;
   const text = describeQuestion(pending.request, pending.board);
   const setPolicy = (policy: PromptPolicy, value: ReactionPolicy) => {
     if (!control) return;
@@ -160,6 +162,9 @@ function PlayEndCard({ onOpenReport }: { onOpenReport?: () => void }) {
   const play = useEncounterStore((state) => state.play);
   const playSetup = useEncounterStore((state) => state.playSetup);
   const endPlay = useEncounterStore((state) => state.endPlay);
+  const savePlayedRun = useEncounterStore((state) => state.savePlayedRun);
+  const encounterId = useEncounterStore((state) => state.currentEncounterId);
+  const [saving, setSaving] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const board = useDisplayEncounter();
   if (!play || play.playback || play.status.kind !== "over") return null;
   const status = playStatusText(play, board);
@@ -173,6 +178,18 @@ function PlayEndCard({ onOpenReport }: { onOpenReport?: () => void }) {
             <ScrollText size={14} /> Battle report
           </button>
         ) : null}
+        <button
+          type="button"
+          className={styles.button}
+          disabled={!encounterId || saving === "saving" || saving === "saved"}
+          title={encounterId ? "Keep this fight with the scene: its log, who played what" : "Save the scene first: a run is kept with its scene"}
+          onClick={async () => {
+            setSaving("saving");
+            setSaving((await savePlayedRun()) ? "saved" : "failed");
+          }}
+        >
+          <Save size={14} /> {saving === "saved" ? "Saved" : saving === "failed" ? "Couldn't save: try again" : "Save this run"}
+        </button>
         <button type="button" className={styles.danger} disabled={!playSetup} onClick={() => endPlay({ restoreSetup: true })}>
           <RotateCcw size={14} /> Reset to setup
         </button>

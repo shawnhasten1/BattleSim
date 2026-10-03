@@ -77,6 +77,7 @@ export function BattleReport({ onClose }: { onClose: () => void }) {
         <div><span>Downs</span><strong>{report.factionTotals.party?.downs ?? 0}</strong></div>
         <div><span>Deaths</span><strong>{report.factionTotals.party?.deaths ?? 0}</strong></div>
         <div><span>Party HP left</span><strong>{report.factionTotals.party?.hpRemaining ?? 0}</strong></div>
+        {report.dmEdits > 0 ? <div><span>DM edits</span><strong>{report.dmEdits}</strong></div> : null}
       </div>
 
       {report.warnings.length ? (

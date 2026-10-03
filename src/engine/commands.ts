@@ -5,9 +5,13 @@ import {
   findActionDefinition,
   findCombatant,
   getDefinition,
+  conditionByDm,
   moveCombatant,
   placeByDm,
   repositionZone,
+  restoreReactionByDm,
+  setHpByDm,
+  toggleDoorByDm,
   resolveAreaTargeting,
   resolveManualAction,
   resolveBeamCount,
@@ -27,7 +31,7 @@ import { canPayFor } from "./multiattack";
 import { previewMove, previewRoutine } from "./preview";
 import { upcastExtraTargetCapacity } from "./simulation";
 import { closeActionEconomy, closeTurn, playAutomatedTurn } from "./turns";
-import type { ActionDefinition, CombatantState, EncounterSnapshot, Id, Point } from "./types";
+import type { ActionDefinition, CombatantState, ConditionName, EncounterSnapshot, Id, Point } from "./types";
 
 /* ─── Commands ──────────────────────────────────────────────────────────────────
  * What a player does on their creature's turn in Play. Each one calls the resolvers the AI calls (through
@@ -50,10 +54,18 @@ export type CombatCommand =
   /** The DM changes the board by hand, whoever's turn it is. Logged as the DM's. */
   | { kind: "dm"; change: DmChange };
 
-/** What the DM can change by hand in a fight. */
+/** What the DM can change by hand in a fight. Each is logged as the DM's (`source: "dm"`). */
 export type DmChange =
   /** Put a creature on a square: no movement spent, nothing provoked or set off. */
-  { kind: "place"; combatantId: Id; destination: Point };
+  | { kind: "place"; combatantId: Id; destination: Point }
+  /** Set its hit points, and its temporary ones if given. */
+  | { kind: "hp"; combatantId: Id; hp: number; tempHp?: number }
+  /** Put a condition on it, or take one off. */
+  | { kind: "condition"; combatantId: Id; add?: ConditionName; removeId?: Id }
+  /** Give it back the reaction it has used. */
+  | { kind: "reaction"; combatantId: Id }
+  /** Open or close a door. */
+  | { kind: "door"; wallId: Id; open: boolean };
 
 /** The creature whose turn is open, if the fight has started and it can still act. */
 export function currentTurnActor(snapshot: EncounterSnapshot): CombatantState | undefined {
@@ -113,6 +125,18 @@ function applyDmChange(state: EngineState, change: DmChange): void {
     case "place":
       placeByDm(state, change.combatantId, change.destination);
       return;
+    case "hp":
+      setHpByDm(state, change.combatantId, change.hp, change.tempHp);
+      return;
+    case "condition":
+      conditionByDm(state, change.combatantId, change);
+      return;
+    case "reaction":
+      restoreReactionByDm(state, change.combatantId);
+      return;
+    case "door":
+      toggleDoorByDm(state, change.wallId, change.open);
+      return;
   }
 }
 
@@ -129,8 +153,13 @@ function endTurn(state: EngineState, actor: CombatantState): void {
 export function commandProblem(snapshot: EncounterSnapshot, command: CombatCommand): string | undefined {
   if (command.kind === "dm") {
     const change = command.change;
+    if (change.kind === "door") {
+      const wall = snapshot.map.walls.find((candidate) => candidate.id === change.wallId);
+      return !wall?.doorState ? "That isn't a door" : wall.doorState === "destroyed" ? "That door is destroyed" : undefined;
+    }
     const combatant = snapshot.combatants.find((candidate) => candidate.id === change.combatantId);
     if (!combatant) return "That creature isn't in the fight";
+    if (change.kind !== "place") return undefined;
     if (combatant.position.x === change.destination.x && combatant.position.y === change.destination.y) return `${combatant.displayName} is already there`;
     return standingProblem(snapshot, combatant.id, change.destination);
   }

@@ -1,4 +1,4 @@
-import { runAutomatedEncounter, type SimulationRunResult } from "./turns";
+import { runAutomatedEncounter, runAutomatedFromHere, type SimulationRunResult } from "./turns";
 import type { CombatLogEvent, EncounterSnapshot, Faction, Id } from "./types";
 
 export interface CombatantMetrics {
@@ -52,12 +52,15 @@ export interface BatchSimulationSummary {
 export function runBatchSimulations(
   snapshot: EncounterSnapshot,
   runCount: number,
-  options: { seedPrefix?: string; maxRounds?: number } = {}
+  /** `fromHere`: each run carries on from the board as it is (Play's "Odds from here"), rather than starting the fight over. */
+  options: { seedPrefix?: string; maxRounds?: number; fromHere?: boolean } = {}
 ): BatchSimulationSummary {
   const runs: SimulationRunResult[] = [];
   for (let index = 0; index < runCount; index += 1) {
     const seed = `${options.seedPrefix ?? snapshot.seed}-batch-${index + 1}`;
-    runs.push(runAutomatedEncounter({ ...structuredClone(snapshot), seed, round: 0, turnIndex: 0 }, options.maxRounds ?? 50));
+    runs.push(options.fromHere
+      ? runAutomatedFromHere({ ...structuredClone(snapshot), seed }, options.maxRounds ?? 50)
+      : runAutomatedEncounter({ ...structuredClone(snapshot), seed, round: 0, turnIndex: 0 }, options.maxRounds ?? 50));
   }
   return summarizeBatch(snapshot, runs);
 }

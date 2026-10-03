@@ -701,6 +701,11 @@ async function prepareMapImage(image: MapImageFile, pxPerSquare?: number): Promi
  * the scene has been saved, otherwise the snapshot's own id while it is a draft.
  * The save flows migrate the draft key to the DB key.
  */
+/** What saving the scene keeps: while a fight is played, its setup, not the half-fought board (PLAY_MODE_PLAN.md D8). */
+function boardToSave(state: Pick<EncounterStore, "encounter" | "play" | "playSetup">): EncounterSnapshot {
+  return state.play && state.playSetup ? state.playSetup : state.encounter;
+}
+
 function mapImageKey(state: Pick<EncounterStore, "currentEncounterId" | "encounter">): string {
   return state.currentEncounterId ?? state.encounter.id;
 }
@@ -979,7 +984,8 @@ export const useEncounterStore = create<EncounterStore>()(
             playCommitting = false;
           }
         },
-        setupKey: () => mapImageKey(get())
+        setupKey: () => mapImageKey(get()),
+        encounterId: () => get().currentEncounterId
       });
 
       return ({
@@ -1565,7 +1571,7 @@ export const useEncounterStore = create<EncounterStore>()(
         }
         const payload = {
           name: state.encounter.name,
-          encounter: state.encounter
+          encounter: boardToSave(state)
         };
         if (state.currentProjectId) {
           const response = await fetch("/api/encounters", {
@@ -1781,13 +1787,15 @@ export const useEncounterStore = create<EncounterStore>()(
         const response = await fetch(`/api/encounters/${encodeURIComponent(state.currentEncounterId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: state.encounter.name, encounter: state.encounter })
+          body: JSON.stringify({ name: state.encounter.name, encounter: boardToSave(state) })
         });
         // The background is already in IndexedDB under this scene's id (written
         // by `setMapImage`); nothing image-related to do on save.
         set({ projectStatus: response.ok ? "Scene saved" : "Scene save failed" });
         if (response.ok) {
           await get().loadProjects();
+          // While a fight is played, say what was kept: the list's count would hide it.
+          if (state.play && state.playSetup) set({ projectStatus: "Scene saved as it was set up (the fight in progress isn't saved)" });
         }
       },
       loadEncounter: async (encounterId) => {

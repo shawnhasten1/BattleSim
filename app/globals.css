@@ -1147,6 +1147,14 @@ img {
   color: #f0a29b;
 }
 
+/* A door in a played fight: right-click to open or close it. */
+.door-hit {
+  stroke: transparent;
+  stroke-width: 0.3;
+  pointer-events: stroke;
+  cursor: context-menu;
+}
+
 /* The marks and labels sit above the tokens and their health bars. */
 .overlay.play-move-marks {
   z-index: 6;

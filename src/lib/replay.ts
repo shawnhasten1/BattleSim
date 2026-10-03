@@ -97,6 +97,18 @@ function applyEvent(
       return;
     }
 
+    case "DoorToggled": {
+      const wall = snapshot.map.walls.find((candidate) => candidate.id === data.wallId);
+      if (wall && typeof data.doorState === "string") wall.doorState = data.doorState as typeof wall.doorState;
+      return;
+    }
+
+    case "TempHpChanged": {
+      const combatant = byId.get(String(data.targetId));
+      if (combatant && typeof data.tempHp === "number") combatant.tempHp = data.tempHp;
+      return;
+    }
+
     case "OpportunityAttackTriggered": {
       // The attack comes as the mover leaves the reach, where it stands then. Its move is logged after.
       const mover = byId.get(String(data.moverId));

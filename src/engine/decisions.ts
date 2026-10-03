@@ -85,6 +85,8 @@ export interface TurnOption {
   name: string;
   /** Legendary points it costs (1 for a lair action). */
   cost: number;
+  /** The engine doesn't run it (Detect): taken, it spends its cost and is logged, and the DM applies it. */
+  byHand?: boolean;
 }
 
 export interface TurnOptionRequest extends RequestBase {

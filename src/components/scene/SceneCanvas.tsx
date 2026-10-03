@@ -2,7 +2,7 @@
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type CoverLevel, type CreatureDefinition, type TerrainZone, type WallSegment } from "@/engine";
+import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type ConditionName, type CoverLevel, type CreatureDefinition, type DmChange, type TerrainZone, type WallSegment } from "@/engine";
 import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsPlayingBack, useIsReplaying } from "@/hooks/useDisplayEncounter";
@@ -10,7 +10,7 @@ import { PlayOverlay } from "@/components/play/PlayOverlay";
 import { PlayMoveMarks } from "@/components/play/PlayMoveLayer";
 import { PlayAimMarks, PlayAimTooltip } from "@/components/play/PlayAimLayer";
 import { usePlayAimView } from "@/hooks/usePlayAim";
-import { swingQuestion } from "@/hooks/usePlayMove";
+import { swingQuestion, turnOptionQuestion } from "@/hooks/usePlayMove";
 import { usePlayMoveView } from "@/hooks/usePlayMove";
 import { useReplayPathWalk } from "@/hooks/useReplayPathWalk";
 import { useSceneFeedback } from "@/hooks/useSceneFeedback";
@@ -32,6 +32,11 @@ const WALL_COVER_ITEMS: Array<{ cover: CoverLevel; label: string }> = [
   { cover: "three-quarters", label: "High wall — ¾ cover" },
   { cover: "half", label: "Low wall — ½ cover" },
   { cover: "none", label: "Marker — no cover" }
+];
+
+/** Conditions the DM can put on or take off a creature in a played fight. */
+const DM_CONDITIONS: ConditionName[] = [
+  "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "poisoned", "prone", "restrained", "stunned"
 ];
 
 const TERRAIN_TYPE_ITEMS: Array<{ brush: Exclude<TerrainBrushId, "eraser">; label: string }> = [
@@ -82,6 +87,8 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const setInLair = useEncounterStore((state) => state.setInLair);
   const setArrivesRound = useEncounterStore((state) => state.setArrivesRound);
   const toggleCombatantSurprised = useEncounterStore((state) => state.toggleCombatantSurprised);
+  const playCommand = useEncounterStore((state) => state.playCommand);
+  const playIdle = useEncounterStore((state) => Boolean(state.play && !state.play.pending && !state.play.playback));
   const combatRound = useEncounterStore((state) => state.encounter.round);
   const updateWalls = useEncounterStore((state) => state.updateWalls);
   const removeWalls = useEncounterStore((state) => state.removeWalls);
@@ -97,9 +104,9 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const playingBack = useIsPlayingBack();
   const playing = useEncounterStore((state) => state.play !== null);
   const questionOpen = useEncounterStore((state) => Boolean(state.play?.pending) && !state.play?.playback);
-  // A multiattack's next swing is aimed on the map, so the map stays live for it.
-  const swingAiming = useEncounterStore((state) => swingQuestion(state) !== null);
-  const replaying = reviewing || playingBack || (questionOpen && !swingAiming);
+  // A multiattack's next swing, and a legendary or lair action, are aimed on the map, so the map stays live for them.
+  const aimedQuestion = useEncounterStore((state) => swingQuestion(state) !== null || turnOptionQuestion(state) !== null);
+  const replaying = reviewing || playingBack || (questionOpen && !aimedQuestion);
   const playSpeed = useEncounterStore((state) => state.play?.playbackSpeed ?? 1);
   // The move a person is planning on their creature's turn: drawn on the map, summed up on the dock.
   const playMove = usePlayMoveView();
@@ -397,7 +404,91 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
     ];
   }
 
+  /**
+   * A token's menu while a fight is played: the DM's hand on it — HP, temporary HP, conditions, its reaction back —
+   * each logged as the DM's, so the report and a replay see it. (Alt-drag moves it.)
+   */
+  function playTokenMenuItems(combatantId: string): ContextMenuItem[] {
+    const combatant = encounter.combatants.find((entry) => entry.id === combatantId);
+    if (!combatant) return [];
+    const maxHp = getDefinition(encounter, combatant).maxHp;
+    const hp = combatant.currentHp;
+    const temp = combatant.tempHp ?? 0;
+    const dm = (change: DmChange) => playCommand({ kind: "dm", change });
+    const others = (combatant.conditions ?? []).filter((condition) => !DM_CONDITIONS.includes(condition.name));
+    const label = (name: string) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+    return [
+      { heading: combatant.displayName },
+      {
+        label: "Edit sheet",
+        onSelect: () => {
+          scene.selectCombatantOnBoard(combatant.id, false);
+          onEditActor?.();
+        }
+      },
+      { separator: true },
+      { heading: playIdle ? "The DM's hand (logged)" : "The DM's hand: when the fight is waiting on you" },
+      {
+        stepper: {
+          label: "HP",
+          value: hp,
+          sub: `/ ${maxHp}`,
+          steps: [-5, -1, 1, 5],
+          disabled: !playIdle,
+          onStep: (delta) => dm({ kind: "hp", combatantId, hp: clamp(hp + delta, 0, maxHp) })
+        }
+      },
+      {
+        stepper: {
+          label: "Temp HP",
+          value: temp,
+          steps: [-5, -1, 1, 5],
+          disabled: !playIdle,
+          onStep: (delta) => dm({ kind: "hp", combatantId, hp, tempHp: Math.max(0, temp + delta) })
+        }
+      },
+      { label: "Set to full", disabled: !playIdle || hp >= maxHp, onSelect: () => dm({ kind: "hp", combatantId, hp: maxHp }) },
+      { label: "Down (0 HP)", disabled: !playIdle || hp <= 0, onSelect: () => dm({ kind: "hp", combatantId, hp: 0 }) },
+      { separator: true },
+      { heading: "Conditions" },
+      ...DM_CONDITIONS.map((name): ContextMenuItem => {
+        const has = (combatant.conditions ?? []).find((condition) => condition.name === name);
+        return {
+          label: label(name),
+          checked: Boolean(has),
+          keepOpen: true,
+          disabled: !playIdle,
+          onSelect: () => dm(has ? { kind: "condition", combatantId, removeId: has.id } : { kind: "condition", combatantId, add: name })
+        };
+      }),
+      ...others.map((condition): ContextMenuItem => ({
+        label: `Take off ${condition.name === "custom" ? condition.sourceName ?? "an effect" : condition.name}`,
+        disabled: !playIdle,
+        onSelect: () => dm({ kind: "condition", combatantId, removeId: condition.id })
+      })),
+      { separator: true },
+      { label: "Give back its reaction", disabled: !playIdle || combatant.actionEconomy?.reaction !== false, onSelect: () => dm({ kind: "reaction", combatantId }) },
+      { label: "Move it freely", hint: "Alt-drag the token", disabled: true, onSelect: () => {} }
+    ];
+  }
+
+  /** A door's menu while a fight is played: open or close it, as the DM. */
+  function doorMenuItems(wallId: string): ContextMenuItem[] {
+    const wall = map.walls.find((candidate) => candidate.id === wallId);
+    if (!wall?.doorState) return [];
+    const open = wall.doorState === "open";
+    return [
+      { heading: `Door (${wall.doorState})` },
+      {
+        label: open ? "Close the door" : "Open the door",
+        disabled: !playIdle || wall.doorState === "destroyed",
+        onSelect: () => playCommand({ kind: "dm", change: { kind: "door", wallId, open: !open } })
+      }
+    ];
+  }
+
   function tokenMenuItems(combatantId: string): ContextMenuItem[] {
+    if (playing) return playTokenMenuItems(combatantId);
     // Right-clicking a member of a 2+ selection acts on the whole set; anything
     // else acts on just the right-clicked token.
     const ids = scene.selectedCombatantIds.includes(combatantId)
@@ -796,6 +887,15 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
           y={scene.tokenMenu.y}
           items={tokenMenuItems(scene.tokenMenu.combatantId)}
           onClose={scene.closeTokenMenu}
+        />
+      ) : null}
+
+      {scene.doorMenu && playing && !replaying ? (
+        <ContextMenu
+          x={scene.doorMenu.x}
+          y={scene.doorMenu.y}
+          items={doorMenuItems(scene.doorMenu.wallId)}
+          onClose={scene.closeDoorMenu}
         />
       ) : null}
 

@@ -210,6 +210,17 @@ function aimOf(action: ActionDefinition, definition: CreatureDefinition, executa
   }
 }
 
+/** How `actionId` of `actorId` is aimed (a legendary or lair action picked from a question): as the hotbar would aim it. */
+export function aimForAction(board: EncounterSnapshot, actorId: Id, actionId: Id): Aim {
+  const actor = board.combatants.find((combatant) => combatant.id === actorId);
+  if (!actor) return { kind: "none" };
+  const definition = getDefinition(board, actor);
+  const executables = getExecutableActions(definition);
+  const action = executables.find((candidate) => candidate.id === actionId);
+  if (!action || automationOf(action) === "by-hand") return { kind: "none" };
+  return aimOf(action, definition, executables, actor);
+}
+
 /** What using it costs, as a short chip: its slot, its pool, its recharge or uses, or how many attacks a routine makes. */
 function costOf(action: ActionDefinition): string | undefined {
   if (action.kind === "multiattack") {

@@ -40,6 +40,7 @@ import {
   resolveUtilityAction,
   runTurnEnd,
   LEGENDARY_POINTS,
+  LEGENDARY_SUFFIX,
   escapeChance,
   isImmuneAfterSave,
   isLegendaryVariant,
@@ -57,7 +58,7 @@ import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
 import { footprintGroundHeight, movementProfileOf, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -249,13 +250,18 @@ export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
       : undefined;
     const aiPlan = plan && !(plan.expectedDamage <= 0 && plan.score <= 0) ? plan : undefined;
 
-    // A player who plays this creature picks any legendary action it can afford, or passes (Play).
+    // A player who plays this creature picks any legendary action it can afford — those the engine can't run by
+    // hand — or passes (Play).
     if (state.decide) {
       const affordable = legendary.filter((action) => canPayFor(combatant, action as { resourceCost?: { resourceId: string; amount: number } }));
-      const answer = affordable.length > 0
+      const byHand = legendaryByHand(definition, legendary).filter(({ ref }) => ref.cost <= points);
+      const answer = affordable.length + byHand.length > 0
         ? askDecision<TurnOptionRequest>(state, {
           kind: "legendary-action", combatantId: combatant.id, afterId: endedActorId, pointsLeft: points,
-          options: affordable.map((action) => ({ actionId: action.id, name: action.name, cost: turnOptionCost(action) })),
+          options: [
+            ...affordable.map((action) => ({ actionId: action.id, name: action.name, cost: turnOptionCost(action) })),
+            ...byHand.map(({ id, ref }) => ({ actionId: id, name: ref.name, cost: ref.cost, byHand: true }))
+          ],
           aiChoice: aiPlan ? planPick(aiPlan) : null
         }, combatant.id)
         : undefined;
@@ -280,6 +286,52 @@ export function runLegendaryWindow(state: EngineState, endedActorId: Id): void {
   }
 }
 
+/** A by-hand legendary action's option id: its place among the creature's legendary actions. */
+export const LEGENDARY_BY_HAND = "legendary-by-hand:";
+/** A by-hand lair action's option id: the lair action's own id after it. */
+export const LAIR_BY_HAND = "lair-by-hand:";
+
+/** A creature's legendary actions the engine can't run (Detect, a description only): a person can take them by hand. */
+function legendaryByHand(definition: CreatureDefinition, compiled: ActionDefinition[]): Array<{ id: string; ref: LegendaryActionRef }> {
+  const ids = new Set(compiled.map((action) => action.id));
+  return (definition.legendary?.actions ?? []).flatMap((ref, index) => {
+    const baseId = ref.action?.id ?? ref.actionId;
+    return baseId && ids.has(`${baseId}${LEGENDARY_SUFFIX}`) ? [] : [{ id: `${LEGENDARY_BY_HAND}${index}`, ref }];
+  });
+}
+
+/** A legendary or lair action taken by hand: its cost spent and logged, for the DM to apply. */
+function takeTurnActionByHand(state: EngineState, creature: CombatantState, pick: TurnPick, afterId?: Id): boolean {
+  const definition = getDefinition(state.snapshot, creature);
+  if (pick.actionId.startsWith(LEGENDARY_BY_HAND)) {
+    const ref = definition.legendary?.actions[Number(pick.actionId.slice(LEGENDARY_BY_HAND.length))];
+    const points = creature.resources?.[LEGENDARY_POINTS] ?? 0;
+    if (!ref || points < ref.cost) return true;
+    creature.resources = { ...(creature.resources ?? {}), [LEGENDARY_POINTS]: points - ref.cost };
+    state.log.push(event(state, "LegendaryActionUsed", `${creature.displayName} uses ${ref.name} (legendary, ${ref.cost} point${ref.cost === 1 ? "" : "s"})`, {
+      combatantId: creature.id, actionId: pick.actionId, cost: ref.cost, after: afterId
+    }));
+    state.log.push(event(state, "ManualActionUsed", `${creature.displayName} uses ${ref.name}: resolve it by hand`, {
+      actorId: creature.id, actionId: pick.actionId, actionName: ref.name, targetIds: pick.targetIds ?? [], description: ref.description
+    }));
+    return true;
+  }
+  if (pick.actionId.startsWith(LAIR_BY_HAND)) {
+    const action = (definition.lairActions ?? []).find((candidate) => candidate.id === pick.actionId.slice(LAIR_BY_HAND.length));
+    if (!action) return true;
+    creature.lastLairActionId = pick.actionId;
+    state.log.push(event(state, "LairAction", `Lair action (initiative ${LAIR_INITIATIVE}): ${creature.displayName} uses ${action.name}`, {
+      combatantId: creature.id, actionId: pick.actionId
+    }));
+    state.log.push(event(state, "ManualActionUsed", `${creature.displayName}'s lair: ${action.name}, resolve it by hand`, {
+      actorId: creature.id, actionId: pick.actionId, actionName: action.name, targetIds: pick.targetIds ?? [],
+      description: "description" in action ? action.description : undefined
+    }));
+    return true;
+  }
+  return false;
+}
+
 /** What a legendary or lair action costs from its pool: legendary points, or 1 for a lair action. */
 function turnOptionCost(action: ActionDefinition): number {
   return "resourceCost" in action && action.resourceCost?.resourceId === LEGENDARY_POINTS ? action.resourceCost.amount : 1;
@@ -294,6 +346,7 @@ function planPick(plan: OffensivePlan): TurnPick {
 
 /** A legendary action (after `afterId`'s turn) or a lair action a player picked: logged as the AI's are, then used as aimed. */
 function takeChosenTurnAction(state: EngineState, creature: CombatantState, pick: TurnPick, afterId?: Id): void {
+  if (takeTurnActionByHand(state, creature, pick, afterId)) return;
   const action = findActionDefinition(getDefinition(state.snapshot, creature), pick.actionId);
   if (!action) return;
   if (afterId !== undefined) {
@@ -342,12 +395,17 @@ export function runLairWindow(state: EngineState, nextActor: CombatantState): vo
       ? selectOffensivePlan(state.snapshot, creature, tacticsSettings(creature.tacticsProfile), "action", { actions: options, mustReachNow: true })
       : undefined;
 
-    // A player who plays the lair's master picks one (never last round's) or lets it pass (Play).
-    if (state.decide && fresh.length > 0) {
+    // A player who plays the lair's master picks one (never last round's) — those the engine can't run by hand — or
+    // lets it pass (Play).
+    const freshByHand = (definition.lairActions ?? []).filter((action) => action.kind === "unsupported" && `${LAIR_BY_HAND}${action.id}` !== creature.lastLairActionId);
+    if (state.decide && fresh.length + freshByHand.length > 0) {
       const aiPlan = plan && !(plan.expectedDamage <= 0 && plan.score <= 0) ? plan : undefined;
       const answer = askDecision<TurnOptionRequest>(state, {
         kind: "lair-action", combatantId: creature.id,
-        options: fresh.map((action) => ({ actionId: action.id, name: action.name, cost: 1 })),
+        options: [
+          ...fresh.map((action) => ({ actionId: action.id, name: action.name, cost: 1 })),
+          ...freshByHand.map((action) => ({ actionId: `${LAIR_BY_HAND}${action.id}`, name: action.name, cost: 1, byHand: true }))
+        ],
         aiChoice: aiPlan ? planPick(aiPlan) : null
       }, creature.id);
       if (answer) {

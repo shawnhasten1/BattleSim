@@ -898,6 +898,88 @@ export function placeByDm(state: EngineState, combatantId: Id, destination: Poin
   }));
 }
 
+/**
+ * The DM sets a creature's hit points (and, if given, its temporary hit points), in a fight. Logged as damage or healing
+ * with `source: "dm"`, so the report and a replay see it; dropping to 0 downs or defeats it as damage would, and
+ * bringing a fallen creature above 0 stands it back up, as healing would.
+ */
+export function setHpByDm(state: EngineState, combatantId: Id, hp: number, tempHp?: number): void {
+  const target = findCombatant(state.snapshot, combatantId);
+  const definition = getDefinition(state.snapshot, target);
+  const before = target.currentHp;
+  const next = Math.min(definition.maxHp, Math.max(0, Math.round(hp)));
+  const temp = tempHp === undefined ? target.tempHp : Math.max(0, Math.round(tempHp));
+  if (next === before && temp === target.tempHp) {
+    throw new Error(`${target.displayName} already has that`);
+  }
+  if (temp !== target.tempHp) {
+    target.tempHp = temp;
+    state.log.push(event(state, "TempHpChanged", `The DM set ${target.displayName}'s temporary HP to ${temp}`, {
+      targetId: target.id, tempHp: temp, source: "dm"
+    }));
+  }
+  if (next < before) {
+    target.currentHp = next;
+    state.log.push(event(state, "DamageApplied", `The DM took ${target.displayName} down to ${next} HP`, {
+      targetId: target.id, totalApplied: before - next, currentHp: next, tempHp: target.tempHp, source: "dm"
+    }));
+    updateDefeatState(state, target);
+  } else if (next > before) {
+    target.currentHp = next;
+    if (target.state === "downed" || target.state === "defeated") {
+      target.state = "active";
+      target.deathSaves = { successes: 0, failures: 0, stable: false };
+      target.conditions = (target.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+    }
+    state.log.push(event(state, "HealingApplied", `The DM brought ${target.displayName} up to ${next} HP`, {
+      targetId: target.id, healingApplied: next - before, currentHp: next, source: "dm"
+    }));
+  }
+}
+
+/** The DM puts a condition on a creature (with its usual effects), or takes one off it. Logged as the engine logs conditions, with `source: "dm"`. */
+export function conditionByDm(state: EngineState, combatantId: Id, change: { add?: ConditionName; removeId?: Id }): void {
+  const target = findCombatant(state.snapshot, combatantId);
+  if (change.add) {
+    const applied = applyCondition(state, target.id, {
+      id: `${target.id}:dm:${change.add}:${state.log.length}`,
+      name: change.add,
+      sourceName: "the DM",
+      startedRound: state.snapshot.round,
+      modifiers: defaultConditionModifiers(change.add)
+    }, { force: true });
+    if (!applied) throw new Error(`${target.displayName} can't be ${change.add}`);
+    const logged = state.log.at(-1);
+    if (logged?.type === "ConditionApplied") logged.data = { ...(logged.data ?? {}), source: "dm" };
+    return;
+  }
+  const condition = (target.conditions ?? []).find((candidate) => candidate.id === change.removeId);
+  if (!condition) throw new Error(`${target.displayName} has no such condition`);
+  target.conditions = (target.conditions ?? []).filter((candidate) => candidate.id !== condition.id);
+  state.log.push(event(state, "ConditionExpired", `The DM took ${condition.name === "custom" ? condition.sourceName ?? "an effect" : condition.name} off ${target.displayName}`, {
+    combatantId: target.id, condition, source: "dm"
+  }));
+}
+
+/** The DM gives a creature back the reaction it has used this round. */
+export function restoreReactionByDm(state: EngineState, combatantId: Id): void {
+  const target = findCombatant(state.snapshot, combatantId);
+  if (target.actionEconomy?.reaction !== false) throw new Error(`${target.displayName} still has its reaction`);
+  target.actionEconomy = { ...target.actionEconomy, reaction: true };
+  state.log.push(event(state, "ReactionRestored", `The DM gave ${target.displayName} its reaction back`, { combatantId: target.id, source: "dm" }));
+}
+
+/** The DM opens or closes a door (a wall with a door state). */
+export function toggleDoorByDm(state: EngineState, wallId: Id, open: boolean): void {
+  const wall = state.snapshot.map.walls.find((candidate) => candidate.id === wallId);
+  if (!wall?.doorState) throw new Error("That isn't a door");
+  if (wall.doorState === "destroyed") throw new Error("That door is destroyed");
+  const doorState = open ? "open" : "closed";
+  if (wall.doorState === doorState) throw new Error(`The door is already ${doorState}`);
+  wall.doorState = doorState;
+  state.log.push(event(state, "DoorToggled", `The DM ${open ? "opened" : "closed"} a door`, { wallId, doorState, source: "dm" }));
+}
+
 /** Movement (in squares of the creature's fastest speed) spent rising or dropping `feet` while flying. */
 export function altitudeMoveCost(snapshot: EncounterSnapshot, definition: CreatureDefinition, feet: number): number {
   if (feet <= 0) return 0;

@@ -48,7 +48,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong>Run it</strong> — roll initiative and step through, auto-play, or batch-simulate the fight
-            from the Combat panel.
+            from the Combat panel; or play it yourself (see <a href="#play">Playing a Fight by Hand</a>).
           </li>
         </ol>
         <p>
@@ -796,6 +796,105 @@ const SECTIONS: Section[] = [
           While a token is standing inside an active zone, it gets a visible highlight on the map so it's
           obvious at a glance who's currently affected.
         </p>
+      </>
+    )
+  },
+  {
+    id: "play",
+    label: "Playing a Fight by Hand",
+    content: (
+      <>
+        <p>
+          <strong>Play</strong>, in the Combat panel, runs a fight the way you'll run it at the table: you play the
+          sides you choose, turn by turn, and the AI plays the rest. Everything goes through the same rules the
+          simulator uses, so what you see is what the AI would have to deal with. There's a walkthrough in the{" "}
+          <a href="/docs/guides/play-a-fight-by-hand">Play a fight by hand</a> guide.
+        </p>
+        <h3>Starting</h3>
+        <ul>
+          <li>
+            <strong>Who plays each side</strong>: <em>You</em> or <em>AI</em>. A creature can be handed to the other
+            player from its row in the initiative list (the You/AI chip); a dominated creature is played by whoever
+            plays its dominator, a summon by whoever plays its summoner.
+          </li>
+          <li>
+            <strong>Ask before my creatures react</strong> (and the same for opportunity attacks): on, every reaction
+            your creatures could take is asked about. Off, the AI decides those you haven't set yourself.
+          </li>
+          <li>
+            <strong>How the AI's turns play out</strong>: at 1×, 2× or 4× on the map, or instantly. Skip jumps to your
+            next turn.
+          </li>
+          <li>
+            <strong>Start</strong> keeps the board as it is as the fight's setup, for <em>Reset to setup</em>.
+          </li>
+        </ul>
+        <h3>Your creature's turn</h3>
+        <ul>
+          <li>
+            <strong>The hotbar</strong>, at the bottom of the map, shows what's left of the turn and everything the
+            creature can use, by tab: Attacks, Spells (with the slots left), Bonus, Features, Common (Dash,
+            Disengage, Dodge…) and Reactions. A button greyed out says why. Keys 1–0 press the tab's first ten.
+          </li>
+          <li>
+            <strong>Moving</strong>: the squares it can still reach are tinted; over a square, the route, its cost,
+            the squares that cost double, hazards on the way, and who gets an opportunity attack where. Click to go
+            there, Shift-click to plan a stop on the way (Esc or right-click takes it back), or drag the token.
+          </li>
+          <li>
+            <strong>Aiming</strong>: an armed ability tints its range and rings the creatures it can be aimed at;
+            over one, it says the chance to hit or to fail the save and the damage, or why it can't. An area follows
+            the cursor and rings who it catches, friends included. Esc puts it away; Enter uses it on the creatures
+            picked so far.
+          </li>
+          <li>
+            <strong>Variants</strong> sit under their ability: the slot to cast at, Power Attack, spend a charge.
+          </li>
+          <li>
+            <strong>A multiattack</strong> takes its first target, then asks for each swing: which attack, which
+            creature, or a square to step to first.
+          </li>
+          <li>
+            <strong>By hand</strong>: an ability the simulator doesn't run takes its slot and its cost and is logged;
+            you apply what it does.
+          </li>
+          <li>
+            <strong>End turn</strong> (or Enter), <strong>AI: take this turn</strong>, and <strong>Undo</strong>,
+            which takes back your last command (or an End turn and the AI turns after it). The same command again
+            rolls the same dice.
+          </li>
+        </ul>
+        <h3>Questions</h3>
+        <p>
+          When one of your creatures can react — an opportunity attack, Shield, Parry, Hellish Rebuke, Protection,
+          Counterspell — or use Legendary Resistance, a card asks, with the numbers: the roll against the AC, the
+          chance to hit, the slot it spends. Each reaction's card sets how it's handled for the rest of the fight:{" "}
+          <em>Ask</em>, <em>Always</em> or <em>Never</em> (the hotbar's Reactions tab shows and changes the same).
+          A question during the AI's turn waits until its playback gets there. A legendary creature you play is
+          asked after each other creature's turn, and a lair you play on initiative 20; options the simulator can't
+          run are taken by hand.
+        </p>
+        <h3>The DM's hand</h3>
+        <p>
+          Right-click a token for its HP, temporary HP, conditions and its reaction back; Alt-drag it to put it
+          anywhere; right-click a door to open or close it. In a played fight each of these is logged as the DM's,
+          so the battle report counts them and a replay shows them.
+        </p>
+        <h3>The end</h3>
+        <ul>
+          <li>
+            <strong>Battle report</strong>, <strong>Save this run</strong> (kept with the scene, marked as played by
+            hand), <strong>Reset to setup</strong> or <strong>Keep the board</strong>.
+          </li>
+          <li>
+            <strong>Odds from here</strong>, in the Combat panel, lets the AI play the rest of the fight from the
+            board as it stands, 100 times over.
+          </li>
+          <li>
+            A fight in progress survives a reload. Saving the scene while playing saves its setup, not the
+            half-fought board.
+          </li>
+        </ul>
       </>
     )
   },

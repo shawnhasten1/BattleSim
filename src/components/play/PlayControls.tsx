@@ -1,8 +1,8 @@
 "use client";
 
-import { Bot, FastForward, Flag, Play as PlayIcon, RotateCcw, Square } from "lucide-react";
+import { Bot, Dices, FastForward, Flag, Play as PlayIcon, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
-import type { CombatLogEvent, EncounterSnapshot } from "@/engine";
+import { runBatchSimulations, type CombatLogEvent, type EncounterSnapshot } from "@/engine";
 import { useDisplayEncounter } from "@/hooks/useDisplayEncounter";
 import { describeQuestion } from "@/lib/play/questions";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -59,6 +59,9 @@ export function PlayControls() {
   const board = useDisplayEncounter();
   const log = useEncounterStore(playbackLog);
   const [stopping, setStopping] = useState(false);
+  const encounter = useEncounterStore((state) => state.encounter);
+  const logLength = useEncounterStore((state) => state.log.length);
+  const [odds, setOdds] = useState<{ text: string; at: number } | null>(null);
   const status = playStatusText(play, board, log);
   const idle = !play.playback && !play.pending;
   const yourTurn = idle && play.status.kind === "your-turn" ? play.status.actorId : undefined;
@@ -91,7 +94,24 @@ export function PlayControls() {
             <FastForward size={14} /> Skip
           </button>
         ) : null}
+        {idle && play.status.kind !== "over" ? (
+          <button
+            type="button"
+            className={styles.button}
+            title="Let the AI play the rest of this fight from here, 100 times over"
+            onClick={() => {
+              const runs = 100;
+              const summary = runBatchSimulations(encounter, runs, { fromHere: true, seedPrefix: `${encounter.seed}:odds:${logLength}` });
+              const percent = (rate: number) => `${Math.round(rate * 100)}%`;
+              const more = Math.max(0, Math.round((summary.rounds.average - encounter.round) * 10) / 10);
+              setOdds({ text: `From here: the party wins ${percent(summary.partyWinRate)}, the enemies ${percent(summary.enemyWinRate)}, in about ${more} more rounds (${runs} runs).`, at: logLength });
+            }}
+          >
+            <Dices size={14} /> Odds from here
+          </button>
+        ) : null}
       </div>
+      {odds && odds.at === logLength ? <p className={styles.hint} role="status">{odds.text}</p> : null}
       <div className={styles.row}>
         <span>The AI's turns</span>
         <PlaySegmented label="How the AI's turns play out" value={play.playbackSpeed} options={SPEED_OPTIONS} onChange={setPlaybackSpeed} />

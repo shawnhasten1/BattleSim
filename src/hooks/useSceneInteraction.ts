@@ -22,7 +22,6 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { usePlayUiStore } from "@/store/play-ui-store";
 import { combatantAt, makePlayMove, movingActorId, planKeyOf, standingSquare, swingQuestion } from "@/hooks/usePlayMove";
 import { aimAtCreature, aimAtSquare, backOutOfAiming, planSwingStep } from "@/hooks/usePlayAim";
-import { armedFor } from "@/store/play-ui-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
   clamp,
@@ -103,6 +102,8 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   // Right-click-a-token menu. Carries the target id so the menu can act on it
   // even before a future multi-selection model exists.
   const [tokenMenu, setTokenMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
+  // Right-click a door in Play: open or close it, as the DM.
+  const [doorMenu, setDoorMenu] = useState<{ x: number; y: number; wallId: string } | null>(null);
   // A token being dragged with the Select tool. `pixel` is the live cursor-tracked
   // top-left (battlemap px) for a 1:1 feel; `cell` is where it will snap. The
   // move is committed to the store once, on pointer-up. In Play, `mode` says how:
@@ -483,10 +484,11 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
   /** Right-click on empty canvas: never show the browser menu; dismiss any open wall menu, else end a wall chain. */
   function onMapContextMenu(event: MouseEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (wallMenu || tokenMenu || terrainMenu) {
+    if (wallMenu || tokenMenu || terrainMenu || doorMenu) {
       setWallMenu(null);
       setTokenMenu(null);
       setTerrainMenu(null);
+      setDoorMenu(null);
       return;
     }
     const state = useEncounterStore.getState();
@@ -586,6 +588,17 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     setTokenMenu(null);
   }, []);
 
+  /** Right-click a door while a fight is played: the DM opens or closes it. */
+  function openDoorMenu(wallId: string, x: number, y: number) {
+    setTokenMenu(null);
+    setWallMenu(null);
+    setDoorMenu({ x, y, wallId });
+  }
+
+  const closeDoorMenu = useCallback(() => {
+    setDoorMenu(null);
+  }, []);
+
   function onMapClick(event: MouseEvent<HTMLDivElement>) {
     if (isPanning || isPanningRef.current) {
       return;
@@ -616,11 +629,11 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
       planSwingStep(square, step.reachable, step.problem);
       return;
     }
-    if (movingId && armedFor(usePlayUiStore.getState(), planKeyOf(movingId, useEncounterStore.getState().log.length))) {
+    if (playing && tool === "select") {
       // Aiming: where an area goes, a teleport lands, a zone moves (an ability aimed at creatures ignores the ground).
       const cell = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
-      if (cell.x >= 0 && cell.y >= 0 && cell.x < grid.width && cell.y < grid.height) aimAtSquare(cell);
-      return;
+      const inside = cell.x >= 0 && cell.y >= 0 && cell.x < grid.width && cell.y < grid.height;
+      if (inside && aimAtSquare(cell)) return;
     }
     if (movingId) {
       // Play, the creature's turn: a click moves it there; Shift-click plans a stop on the way.
@@ -1035,6 +1048,9 @@ export function useSceneInteraction({ isPanning, isPanningRef }: UseSceneInterac
     tokenMenu,
     openTokenMenu,
     closeTokenMenu,
+    doorMenu,
+    openDoorMenu,
+    closeDoorMenu,
     draggedToken,
     droppingTokenId,
 

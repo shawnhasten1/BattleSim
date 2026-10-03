@@ -1,4 +1,5 @@
 import {
+  buildBattleReport,
   playStatusOf,
   runPlayStep,
   type CombatCommand,
@@ -96,6 +97,11 @@ export interface PlayActions {
   dismissPlayMessage: () => void;
   /** Stop playing: keep the board as it is, or put back the setup. */
   endPlay: (options: { restoreSetup: boolean }) => void;
+  /**
+   * Keep the finished fight with its scene, as Auto Run's runs are kept: the board it started from (so a replay folds
+   * the log onto it), the log, and `metrics.mode: "manual"` with who played what. False if it couldn't be.
+   */
+  savePlayedRun: () => Promise<boolean>;
 }
 
 export interface PlayApi<S extends PlayStoreState> {
@@ -110,6 +116,8 @@ export interface PlayApi<S extends PlayStoreState> {
   commitBoard: (encounter: EncounterSnapshot) => void;
   /** Where this scene's setup is kept (as its map image is). */
   setupKey: () => string;
+  /** The saved scene this fight belongs to, if it's saved. */
+  encounterId: () => string | null;
 }
 
 export function sessionStatusOf(status: PlayStatus): PlaySessionStatus {
@@ -261,6 +269,32 @@ export function createPlayActions<S extends PlayStoreState>(api: PlayApi<S>): Pl
     },
 
     dismissPlayMessage: () => update({ message: undefined }),
+
+    savePlayedRun: async () => {
+      const { play, playSetup, encounter, log } = get();
+      const encounterId = api.encounterId();
+      if (!play || play.status.kind !== "over" || !encounterId) return false;
+      const outcome = play.status.outcome;
+      const start = playSetup ?? encounter;
+      try {
+        const response = await fetch("/api/simulation-runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            encounterId,
+            seed: encounter.seed,
+            outcome: outcome.winner ?? "round-limit",
+            rounds: outcome.rounds,
+            snapshot: start,
+            metrics: { ...outcome, mode: "manual", control: play.control, dmEdits: buildBattleReport(start, log).dmEdits },
+            eventLog: log
+          })
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
 
     endPlay: ({ restoreSetup }) => {
       const { playSetup } = get();

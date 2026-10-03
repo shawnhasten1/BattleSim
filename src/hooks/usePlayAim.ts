@@ -23,11 +23,22 @@ import {
   type SwingRequest,
   type UseTarget
 } from "@/engine";
-import type { Aim, HotbarButton, HotbarVariant } from "@/lib/play/hotbar";
+import { aimForAction, type Aim, type HotbarButton, type HotbarVariant } from "@/lib/play/hotbar";
 import { targetLine, type TargetLine } from "@/lib/play/targeting";
 import { useEncounterStore } from "@/store/encounter-store";
 import { armedFor, swingFor, usePlayUiStore, type ArmedAbility, type SwingAim } from "@/store/play-ui-store";
-import { combatantAt, planKeyOf, standingSquare, swingQuestion, useSwingQuestion, yourTurnActorId } from "./usePlayMove";
+import {
+  combatantAt,
+  planKeyOf,
+  questionPlanKey,
+  standingSquare,
+  swingQuestion,
+  turnOptionQuestion,
+  useSwingQuestion,
+  useTurnOptionQuestion,
+  yourTurnActorId
+} from "./usePlayMove";
+import type { TurnOption } from "@/engine";
 
 /* ─── Aiming in Play (PLAY_MODE_PLAN.md §2.4) ───────────────────────────────────────
  * An ability armed from the hotbar, or a multiattack's next swing, is aimed on the map. At creatures: the map shows
@@ -157,25 +168,34 @@ export function usePlayAimView(): AimView | null {
   const logLength = useEncounterStore((state) => state.log.length);
   const selectTool = useEncounterStore((state) => state.tool === "select" && state.replayIndex == null);
   const swingAsked = useSwingQuestion();
-  const armed = usePlayUiStore((state) => (actorId ? armedFor(state, planKeyOf(actorId, logLength)) : null));
+  const turnAsked = useTurnOptionQuestion();
+  const turnArmed = usePlayUiStore((state) => (turnAsked ? armedFor(state, questionPlanKey(turnAsked.request.key)) : null));
+  const yourArmed = usePlayUiStore((state) => (actorId ? armedFor(state, planKeyOf(actorId, logLength)) : null));
+  // A legendary or lair action being aimed answers its question, on the board it came up on; otherwise it's the turn's.
+  const armed = turnArmed ?? yourArmed;
+  const aimingFor = useMemo(
+    () => (turnAsked && turnArmed ? { actorId: turnAsked.request.combatantId, board: turnAsked.board } : actorId ? { actorId, board: encounter } : null),
+    [turnAsked, turnArmed, actorId, encounter]
+  );
   const swingAim = usePlayUiStore((state) => (swingAsked ? swingFor(state, swingAsked.request.key) : null));
   const hover = usePlayUiStore((state) => state.hover);
 
   const base = useMemo(() => {
     if (!selectTool) return null;
-    if (actorId && armed && armed.aim.kind !== "none" && armed.aim.kind !== "option") {
-      const actor = encounter.combatants.find((combatant) => combatant.id === actorId);
-      const action = actor ? getExecutableActions(getDefinition(encounter, actor)).find((candidate) => candidate.id === armed.actionId) : undefined;
+    if (aimingFor && armed && armed.aim.kind !== "none" && armed.aim.kind !== "option") {
+      const { actorId: aimerId, board } = aimingFor;
+      const actor = board.combatants.find((combatant) => combatant.id === aimerId);
+      const action = actor ? getExecutableActions(getDefinition(board, actor)).find((candidate) => candidate.id === armed.actionId) : undefined;
       const aim = armed.aim;
-      const zone = aim.kind === "zone" ? encounter.activeZones?.find((candidate) => candidate.id === aim.zoneId) : undefined;
+      const zone = aim.kind === "zone" ? board.activeZones?.find((candidate) => candidate.id === aim.zoneId) : undefined;
       const range = aim.kind === "creatures" || aim.kind === "routine" ? aim.range
         : aim.kind === "zone" ? aim.maxFeet
           : action && "areaTargeting" in action && action.areaTargeting?.range != null ? action.areaTargeting.range
             : action && action.kind === "area-save" && action.targeting?.range != null ? action.targeting.range
               : action && "range" in action ? action.range : 0;
       return {
-        board: encounter,
-        actorId,
+        board,
+        actorId: aimerId,
         actionId: armed.actionId,
         name: zone ? `Move ${zone.name}` : action?.name ?? armed.actionId,
         kind: aim.kind,
@@ -214,7 +234,7 @@ export function usePlayAimView(): AimView | null {
       };
     }
     return null;
-  }, [selectTool, actorId, armed, swingAsked, swingAim, encounter]);
+  }, [selectTool, aimingFor, armed, swingAsked, swingAim]);
 
   const rangeCells = useMemo((): Point[] => {
     if (!base) return [];
@@ -319,12 +339,46 @@ function commitUse(actorId: Id, actionId: Id, byHand: boolean, target: UseTarget
     : { kind: "use", actorId, actionId, ...(Object.keys(target).length ? { target } : {}) });
 }
 
-/** The ability armed on the board as it is, with whose turn it is. */
-function armedNow(): { actorId: Id; armed: ArmedAbility } | null {
+/**
+ * What's armed and being aimed right now: an ability on a person's turn, or a legendary or lair action picked from a
+ * question — who aims it, on which board, and what using it does (the turn's command, or the question's answer).
+ */
+function armedNow(): { actorId: Id; armed: ArmedAbility; board: EncounterSnapshot; commit: (target: UseTarget) => void } | null {
   const state = useEncounterStore.getState();
+  const ui = usePlayUiStore.getState();
+  const question = turnOptionQuestion(state);
+  if (question) {
+    const armed = armedFor(ui, questionPlanKey(question.request.key));
+    if (!armed) return null;
+    return {
+      actorId: question.request.combatantId,
+      armed,
+      board: question.board,
+      commit: (target) => {
+        usePlayUiStore.getState().disarm();
+        state.answerPrompt({ kind: question.request.kind, pick: { actionId: armed.actionId, ...target } });
+      }
+    };
+  }
   const actorId = yourTurnActorId(state);
-  const armed = actorId ? armedFor(usePlayUiStore.getState(), planKeyOf(actorId, state.log.length)) : null;
-  return actorId && armed ? { actorId, armed } : null;
+  const armed = actorId ? armedFor(ui, planKeyOf(actorId, state.log.length)) : null;
+  return actorId && armed ? { actorId, armed, board: state.encounter, commit: (target) => commitUse(actorId, armed.actionId, false, target) } : null;
+}
+
+/**
+ * One of a legendary or lair action's options picked from its question: taken at once if it needs no aiming (or is
+ * taken by hand), else armed to be aimed on the map — Esc comes back to the question.
+ */
+export function pickTurnOption(option: TurnOption): void {
+  const state = useEncounterStore.getState();
+  const question = turnOptionQuestion(state);
+  if (!question) return;
+  const aim = option.byHand ? { kind: "none" as const } : aimForAction(question.board, question.request.combatantId, option.actionId);
+  if (aim.kind === "none") {
+    state.answerPrompt({ kind: question.request.kind, pick: { actionId: option.actionId } });
+    return;
+  }
+  usePlayUiStore.getState().arm({ planKey: questionPlanKey(question.request.key), key: option.actionId, actionId: option.actionId, aim });
 }
 
 /**
@@ -353,7 +407,7 @@ export function pressHotbar(button: HotbarButton, variant: HotbarVariant = butto
 export function chooseOption(optionId: Id): boolean {
   const now = armedNow();
   if (!now || now.armed.aim.kind !== "option") return false;
-  commitUse(now.actorId, now.armed.actionId, false, { optionId });
+  now.commit({ optionId });
   return true;
 }
 
@@ -361,7 +415,7 @@ export function chooseOption(optionId: Id): boolean {
 export function finishAiming(): boolean {
   const now = armedNow();
   if (!now || now.armed.aim.kind !== "creatures" || now.armed.picked.length === 0) return false;
-  commitUse(now.actorId, now.armed.actionId, false, { targetIds: now.armed.picked });
+  now.commit({ targetIds: now.armed.picked });
   return true;
 }
 
@@ -390,15 +444,14 @@ export function backOutOfAiming(): boolean {
 export function aimAtSquare(cell: Point): boolean {
   const now = armedNow();
   if (!now) return false;
-  const { actorId, armed } = now;
+  const { actorId, armed, board } = now;
   const state = useEncounterStore.getState();
   const ui = usePlayUiStore.getState();
-  const board = state.encounter;
   switch (armed.aim.kind) {
     case "area": {
       const area = areaShapeFor(board, actorId, armed.actionId, cell);
       if (area?.problem) ui.setNote(area.problem);
-      else commitUse(actorId, armed.actionId, false, { aim: cell });
+      else now.commit({ aim: cell });
       return true;
     }
     case "place": {
@@ -408,7 +461,7 @@ export function aimAtSquare(cell: Point): boolean {
       }
       const place = placeShapeFor(board, actorId, armed, cell);
       if (place.problem) ui.setNote(place.problem);
-      else commitUse(actorId, armed.actionId, false, place.moverId === actorId ? { destination: place.destination } : { destination: place.destination, moverId: place.moverId });
+      else now.commit(place.moverId === actorId ? { destination: place.destination } : { destination: place.destination, moverId: place.moverId });
       return true;
     }
     case "zone": {
@@ -452,8 +505,7 @@ export function aimAtCreature(combatantId: Id): boolean {
   }
   const now = armedNow();
   if (!now) return false;
-  const { actorId, armed } = now;
-  const board = state.encounter;
+  const { actorId, armed, board } = now;
   const clicked = board.combatants.find((combatant) => combatant.id === combatantId);
   if (!clicked) return true;
   if (armed.aim.kind === "area" || armed.aim.kind === "zone") return aimAtSquare(middleOf(board, clicked));
@@ -477,13 +529,13 @@ export function aimAtCreature(combatantId: Id): boolean {
     return true;
   }
   if (armed.aim.kind === "routine") {
-    commitUse(actorId, armed.actionId, false, { targetIds: [combatantId] });
+    now.commit({ targetIds: [combatantId] });
     return true;
   }
   ui.pick(combatantId);
   const after = armedFor(usePlayUiStore.getState(), armed.planKey);
   if (after && after.picked.length >= armed.aim.count) {
-    commitUse(actorId, after.actionId, false, { targetIds: after.picked });
+    now.commit({ targetIds: after.picked });
   }
   return true;
 }

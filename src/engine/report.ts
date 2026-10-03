@@ -70,6 +70,8 @@ export interface BattleReport {
   rounds: number;
   completed: boolean;
   warnings: string[];
+  /** Changes the DM made by hand in Play: HP set, conditions, a token moved, a door. */
+  dmEdits: number;
   factionTotals: Record<string, FactionTotals>;
   /** Roster order (initiative order once the fight has started). */
   actors: ActorReport[];
@@ -152,9 +154,11 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
   let completed = false;
   const warnings: string[] = [];
 
+  let dmEdits = 0;
   for (const entry of log) {
     const data: EventData = entry.data ?? {};
     rounds = Math.max(rounds, entry.round);
+    if (data.source === "dm") dmEdits += 1;
 
     switch (entry.type) {
       case "AttackRolled": {
@@ -331,5 +335,5 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
     totals.hpRemaining += Math.max(0, actor.endingHp);
   }
 
-  return { winner, rounds, completed, warnings, factionTotals, actors: orderedActors };
+  return { winner, rounds, completed, warnings, dmEdits, factionTotals, actors: orderedActors };
 }

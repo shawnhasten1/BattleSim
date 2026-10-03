@@ -273,7 +273,28 @@ export function runAutomatedEncounter(snapshot: EncounterSnapshot, maxRounds = 5
   const state = createEngineState(snapshot);
   const warnings: string[] = [];
   ensureInitiative(state);
+  return playToTheEnd(state, maxRounds, warnings);
+}
 
+/**
+ * Auto Run from a fight in progress (Play's "Odds from here"): the turn that's open is played out by the AI and closed,
+ * then on to the end as Auto Run goes.
+ */
+export function runAutomatedFromHere(snapshot: EncounterSnapshot, maxRounds = 50): SimulationRunResult {
+  const state = createEngineState(snapshot);
+  const warnings: string[] = [];
+  ensureInitiative(state);
+  const open = state.snapshot.round > 0 ? state.snapshot.combatants[state.snapshot.turnIndex] : undefined;
+  if (open && open.state === "active" && hasOpenActionEconomy(open) && activeFactions(state.snapshot).size > 1) {
+    const warning = playAutomatedTurn(state, open);
+    if (warning) warnings.push(warning);
+    if (activeFactions(state.snapshot).size > 1) closeTurn(state, open.id);
+  }
+  return playToTheEnd(state, maxRounds, warnings);
+}
+
+/** The rest of a fight, turn by turn, every creature played by the AI; then its outcome. */
+function playToTheEnd(state: EngineState, maxRounds: number, warnings: string[]): SimulationRunResult {
   if (activeFactions(state.snapshot).size > 1 && state.snapshot.round < maxRounds) {
     for (;;) {
       const opening = openNextTurn(state, { maxRounds });
