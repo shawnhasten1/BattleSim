@@ -596,7 +596,8 @@ function applyEmanation(state: EngineState, bearer: CombatantState, feature: Fea
   if (target.containedBy || bearer.containedBy) return;
   if (emanation.affects === "hostile" && effectiveFaction(state.snapshot, bearer) === effectiveFaction(state.snapshot, target)) return;
   if (spatialDistance(state.snapshot, bearer, target) > emanation.range) return;
-  if (emanation.suppressedWhenIncapacitated && !canAct(bearer, "action")) return;
+  // "free": incapacitated or not. Its action is spent once its own turn is over, which mustn't silence the aura.
+  if (emanation.suppressedWhenIncapacitated && !canAct(bearer, "free")) return;
   const immunityKey = `${bearer.id}:${feature.id}`;
   if (emanation.immuneOnSave && (target.savedAgainst ?? []).includes(immunityKey)) return;
   const bearerDefinition = getDefinition(state.snapshot, bearer);

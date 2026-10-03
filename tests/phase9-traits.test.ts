@@ -239,6 +239,25 @@ describe("trait auras", () => {
     expect(state.log.filter((entry) => entry.type === "SaveRolled")).toHaveLength(1);
   });
 
+  it("Fear Aura works after its bearer has taken its turn, and only stops while it is incapacitated", () => {
+    const fearAura = trait("Fear Aura", { emanation: { range: 20, timing: "target-turn-start", affects: "hostile", save: { ability: "wis", dc: 99 }, condition: "frightened", suppressedWhenIncapacitated: true } });
+    const fiend = creature("fiend", { traits: [fearAura] });
+    const frightened = (state: ReturnType<typeof createEngineState>) => (get(state, "hero").conditions ?? []).some((condition) => condition.name === "frightened");
+
+    // Its own turn is over: the action and bonus action are spent, as at the end of any turn.
+    const spent = createEngineState(scene([fiend, hero], [
+      { id: "fiend", def: "fiend", x: 4, extra: { actionEconomy: { action: false, bonus: false, reaction: true } } },
+      { id: "hero", def: "hero", faction: "party", x: 6 }
+    ]));
+    runTurnStart(spent, get(spent, "hero"));
+    expect(frightened(spent)).toBe(true);
+
+    const stunned = createEngineState(scene([fiend, hero], [{ id: "fiend", def: "fiend", x: 4 }, { id: "hero", def: "hero", faction: "party", x: 6 }]));
+    applyCondition(stunned, "fiend", { id: "s", name: "stunned", startedRound: 1 });
+    runTurnStart(stunned, get(stunned, "hero"));
+    expect(frightened(stunned)).toBe(false);
+  });
+
   it("Fire Aura: at the start of the bearer's turn everyone next to it burns", () => {
     const balor = creature("balor", { traits: [trait("Fire Aura", { emanation: { range: 5, timing: "bearer-turn-start", affects: "all", damage: [{ dice: "10", damageType: "fire" }] } })] });
     const state = createEngineState(scene([balor, hero], [
