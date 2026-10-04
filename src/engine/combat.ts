@@ -5759,6 +5759,41 @@ function applyConditionRider(
   return conditionName;
 }
 
+/**
+ * Whether a rider can affect a creature of `target`'s type (Dominate Person: humanoids only). A creature with no
+ * type set never matches a restriction — set one on its sheet. The AI's scoring asks the same question.
+ */
+export function riderAffectsCreatureType(rider: ActionRider, target: CreatureDefinition): boolean {
+  if (rider.kind === "note" || !rider.restrictToCreatureTypes?.length) {
+    return true;
+  }
+  return Boolean(target.type && rider.restrictToCreatureTypes.includes(target.type));
+}
+
+/** Say why a type-restricted rider did nothing, so a failed save with no effect after it isn't a mystery. */
+function logRiderSkippedForType(
+  state: EngineState,
+  source: CombatantState,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition,
+  rider: ActionRider,
+  actionId: Id,
+  index: number
+): void {
+  const allowed = rider.kind === "note" ? [] : rider.restrictToCreatureTypes ?? [];
+  const actionName = findActionDefinition(getDefinition(state.snapshot, source), upcastBaseId(actionId))?.name ?? actionId;
+  const effect = rider.kind === "condition"
+    ? (typeof rider.condition === "string" ? rider.condition : rider.condition.custom)
+    : rider.kind === "damage" ? "extra damage" : rider.kind;
+  const why = targetDefinition.type ? `${target.displayName} is ${targetDefinition.type}` : `${target.displayName} has no creature type set`;
+  const allowedText = allowed.length > 1 ? `${allowed.slice(0, -1).join(", ")} or ${allowed[allowed.length - 1]}` : allowed[0];
+  state.log.push(event(state, "RiderSkipped",
+    `${target.displayName} is unaffected by ${actionName} (${effect}): it only affects ${allowedText} creatures, and ${why}`, {
+      sourceId: source.id, targetId: target.id, actionId, riderKind: rider.kind, riderUseKey: riderUseKey(actionId, rider, index),
+      reason: "creature-type", allowedTypes: allowed, targetType: targetDefinition.type ?? null
+    }));
+}
+
 function applyActionRiders(
   state: EngineState,
   source: CombatantState,
@@ -5781,8 +5816,8 @@ function applyActionRiders(
     if (rider.oncePerTurn && wasRiderUsedThisTurn(state, source.id, useKey)) {
       return;
     }
-    if (rider.restrictToCreatureTypes?.length
-      && (!targetDefinition.type || !rider.restrictToCreatureTypes.includes(targetDefinition.type))) {
+    if (!riderAffectsCreatureType(rider, targetDefinition)) {
+      logRiderSkippedForType(state, source, target, targetDefinition, rider, ctx.actionId, index);
       return;
     }
     if (rider.resourceCost) {

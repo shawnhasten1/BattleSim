@@ -270,6 +270,7 @@
           "provider": "homebrew"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 16,
         "maxHp": 32,
         "speed": 30,
@@ -310,6 +311,7 @@
           "provider": "homebrew"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 14,
         "maxHp": 24,
         "speed": 30,
@@ -353,6 +355,7 @@
           "importedAt": "2026-09-06T00:00:00.000Z"
         },
         "size": "small",
+        "type": "humanoid",
         "armorClass": 15,
         "maxHp": 7,
         "speed": 30,
@@ -415,6 +418,7 @@
           "importedAt": "2026-09-07T21:50:33.810Z"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 12,
         "maxHp": 67,
         "speed": 30,
@@ -1120,6 +1124,7 @@
           "importedAt": "2026-09-07T22:04:09.816Z"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 18,
         "maxHp": 65,
         "speed": 30,
@@ -1196,6 +1201,7 @@
           "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 16,
         "maxHp": 45,
         "speed": 30,
@@ -1434,6 +1440,7 @@
           "provider": "homebrew"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 15,
         "maxHp": 45,
         "speed": 30,
@@ -1761,6 +1768,7 @@
           "provider": "homebrew"
         },
         "size": "medium",
+        "type": "humanoid",
         "armorClass": 15,
         "maxHp": 65,
         "speed": 40,

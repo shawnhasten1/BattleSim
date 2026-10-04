@@ -9,6 +9,7 @@
       "provider": "homebrew"
     },
     "size": "medium",
+    "type": "humanoid",
     "armorClass": 13,
     "maxHp": 110,
     "speed": 30,

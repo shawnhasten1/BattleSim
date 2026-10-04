@@ -129,6 +129,20 @@ describe("domination — restrictToCreatureTypes gating", () => {
     state.rng = scriptedRng({ 20: [1] }); // fails the save
     resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", "dom-beast-test");
     expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.conditions ?? []).toHaveLength(0);
+    // ...and says why, rather than leaving a failed save with nothing after it.
+    const skipped = state.log.find((e) => e.type === "RiderSkipped");
+    expect(skipped?.message).toBe("Goblin 1 is unaffected by Dominate Beast (dominated): it only affects beast creatures, and Goblin 1 is humanoid");
+    expect(skipped?.data).toMatchObject({ targetId: "enemy-goblin-1", reason: "creature-type", allowedTypes: ["beast"], targetType: "humanoid" });
+  });
+
+  it("explains a skip against a creature with no type set", () => {
+    const encounter = dominateBeastEncounter();
+    encounter.definitions.find((d) => d.id === "def-goblin")!.type = undefined;
+    const state = createEngineState(encounter);
+    state.rng = scriptedRng({ 20: [1] });
+    resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", "dom-beast-test");
+    expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.conditions ?? []).toHaveLength(0);
+    expect(state.log.find((e) => e.type === "RiderSkipped")?.message).toContain("Goblin 1 has no creature type set");
   });
 
   it("applies the rider once the target's type matches", () => {
@@ -223,6 +237,37 @@ describe("domination — AI valuation", () => {
     takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
 
     expect(state.snapshot.combatants.find((c) => c.id === "enemy-goblin-1")!.conditions?.some((c) => c.name === "dominated")).toBe(true);
+  });
+
+  it("won't spend a dominate on a creature the spell can't affect, even with nothing else to do", () => {
+    function setup(goblinType: "humanoid" | "beast" | undefined) {
+      const encounter = baseEncounter("domination-wrong-type");
+      const archer = encounter.combatants.find((c) => c.id === "pc-archer")!;
+      archer.tacticsProfile = "controller";
+      archer.position = { x: 1, y: 1 };
+      encounter.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 1, y: 2 };
+      encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+      encounter.definitions.find((d) => d.id === "def-goblin")!.type = goblinType;
+      encounter.definitions.find((d) => d.id === "def-archer")!.actions = [{
+        kind: "save", id: "dominate-test", name: "Dominate Person", actionType: "action",
+        saveAbility: "wis", dc: 15, range: 60, damage: [], halfDamageOnSuccess: false, onSuccess: "negates", concentration: true,
+        riders: [{
+          kind: "condition", when: "on-save-fail", condition: "dominated",
+          duration: { kind: "save-ends", saveAt: "turn-end" },
+          save: { ability: "wis", onSuccess: "negates" },
+          restrictToCreatureTypes: ["humanoid"]
+        }],
+        automationSupport: "full"
+      }];
+      const state = createEngineState(encounter);
+      state.rng = scriptedRng({ 20: [1] });
+      takeAutomatedTurn(state, state.snapshot.combatants.find((c) => c.id === "pc-archer")!);
+      return state.log.some((e) => e.type === "ActionDeclared" && e.data?.actionId === "dominate-test");
+    }
+
+    expect(setup(undefined)).toBe(false);
+    expect(setup("beast")).toBe(false);
+    expect(setup("humanoid")).toBe(true);
   });
 
   it("does not recast a concentration spell on a new target while an earlier domination is still live", () => {

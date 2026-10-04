@@ -11,6 +11,7 @@ import {
   simulatedFeatures,
   targetingProblem,
   isImmuneToCondition,
+  riderAffectsCreatureType,
   saveAdvantageApplies,
   event,
   getDefinition,
@@ -2465,7 +2466,8 @@ function selectOffensivePlan(
         // Hold Person-style upcast: extra in-range hostiles caught for free, valued like the primary target.
         const capacity = upcastExtraTargetCapacity(action);
         if (capacity > 0) {
-          const extraTargets = hostiles.filter((hostile) => hostile.id !== target.id && isValidTarget(snapshot, actor, hostile, range));
+          const extraTargets = hostiles.filter((hostile) => hostile.id !== target.id && isValidTarget(snapshot, actor, hostile, range)
+            && !actionAffectsNothing(action, getDefinition(snapshot, hostile)));
           const bonusCount = Math.min(capacity, extraTargets.length);
           if (bonusCount > 0) {
             score += bonusCount * (expectedDamage + controlValue) * 0.85;
@@ -2481,6 +2483,8 @@ function selectOffensivePlan(
     .filter((plan) => !(plan.action.kind === "attack" && plan.action.requiresHeld && !(plan.target.conditions ?? []).some((condition) => condition.hold && condition.sourceCombatantId === actor.id)))
     // Someone who already resisted an `immuneAfterSave` action (Frightful Presence) can't be affected by it again.
     .filter((plan) => plan.action.kind === "attack" || plan.action.kind === "multiattack" || !isImmuneAfterSave(actor, plan.target, plan.action))
+    // Dominate Person on a construct: nothing it does can touch the target, so don't spend the slot.
+    .filter((plan) => !actionAffectsNothing(plan.action, getDefinition(snapshot, plan.target)))
     // A bonus action is normally a follow-up: the actor has already moved / acted,
     // so only targets it can hit from where it stands count. `mustReachNow` applies
     // the same rule after the action-phase move is already spent. `relaxReachability`
@@ -2601,6 +2605,7 @@ function saveBonusTargetIds(
   }
   return snapshot.combatants
     .filter((c) => effectiveFaction(snapshot, c) !== effectiveFaction(snapshot, actor) && isTargetable(c) && c.id !== primary.id && isValidTarget(snapshot, actor, c, range))
+    .filter((c) => !actionAffectsNothing(action, getDefinition(snapshot, c)))
     .sort((a, b) => spatialDistance(snapshot, actor, a) - spatialDistance(snapshot, actor, b))
     .slice(0, capacity)
     .map((c) => c.id);
@@ -3163,11 +3168,24 @@ function actionMatchesPreference(
   return tactics.preferred === "ranged";
 }
 
+/**
+ * A single-target action that can't touch this creature at all: no damage of its own, and every effect it carries is
+ * for other creature types (Dominate Person on anything but a humanoid). Area actions aren't judged by their aim point.
+ */
+function actionAffectsNothing(action: OffensiveAction, target: ReturnType<typeof getDefinition>): boolean {
+  if ((action.kind !== "save" && action.kind !== "attack") || action.damage.length) {
+    return false;
+  }
+  const effects = (action.riders ?? []).filter((rider) => rider.kind !== "note");
+  return effects.length > 0 && effects.every((rider) => !riderAffectsCreatureType(rider, target));
+}
+
 /** True when the action (or a multiattack child) carries a `condition` rider. */
 function actionImposesConditions(action: OffensiveAction, source: ReturnType<typeof getDefinition>, target?: ReturnType<typeof getDefinition>): boolean {
-  // A condition rider counts unless the target is known to be immune to that condition.
+  // A condition rider counts unless the target is known to be immune to that condition, or of a type it skips.
   const lands = (rider: ActionRider) => rider.kind === "condition"
-    && !(target && isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom));
+    && !(target && (isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom)
+      || !riderAffectsCreatureType(rider, target)));
   if (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") {
     return (action.riders ?? []).some(lands);
   }
@@ -3284,13 +3302,13 @@ function riderComponentAverage(components: Array<{ dice: string; scaling?: unkno
 function expectedRiderDamage(
   action: OffensiveAction,
   source: ReturnType<typeof getDefinition>,
-  _target: ReturnType<typeof getDefinition>,
+  target: ReturnType<typeof getDefinition>,
   ctx: { landChance?: number; failChance?: number; beams?: number }
 ): number {
   const riders = "riders" in action ? action.riders ?? [] : [];
   let total = 0;
   for (const rider of riders) {
-    if (rider.kind !== "damage") {
+    if (rider.kind !== "damage" || !riderAffectsCreatureType(rider, target)) {
       continue;
     }
     const average = riderComponentAverage(rider.components, source);
@@ -3368,8 +3386,9 @@ function expectedRiderControl(
       continue;
     }
     const name: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
-    // A Hold Person on something immune to paralysis is worth nothing.
-    if (isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom)) {
+    // A Hold Person on something immune to paralysis is worth nothing; so is a Dominate Person on a non-humanoid.
+    if (isImmuneToCondition(target, typeof rider.condition === "string" ? rider.condition : rider.condition.custom)
+      || !riderAffectsCreatureType(rider, target)) {
       continue;
     }
     const severity = conditionSeverity(name);
@@ -3729,7 +3748,7 @@ function conditionsLanding(
   for (const rider of action.riders ?? []) {
     if (rider.kind !== "condition") continue;
     const name = typeof rider.condition === "string" ? rider.condition : rider.condition.custom;
-    if (isImmuneToCondition(target, name)) continue;
+    if (isImmuneToCondition(target, name) || !riderAffectsCreatureType(rider, target)) continue;
     const chance = riderLandChance(action, rider, source, target);
     if (chance <= 0) continue;
     out.push({ name, chance, turns: turnsHeld(action, rider, source, target) });

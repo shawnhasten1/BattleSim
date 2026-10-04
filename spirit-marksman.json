@@ -10,6 +10,7 @@
       "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
     },
     "size": "medium",
+    "type": "humanoid",
     "armorClass": 16,
     "maxHp": 45,
     "speed": 30,

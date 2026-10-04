@@ -1944,6 +1944,7 @@ export interface CombatLogEvent {
     | "ZoneExpired"
     | "FeatureEffectApplied"
     | "RiderApplied"
+    | "RiderSkipped"
     | "BeamsResolved"
     | "OpportunityAttackTriggered"
     | "ReactionTriggered"

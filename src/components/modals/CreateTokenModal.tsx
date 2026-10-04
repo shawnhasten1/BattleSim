@@ -64,6 +64,9 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
     proficiencyBonus: 2,
     abilities: { str: 12, dex: 12, con: 12, int: 10, wis: 10, cha: 10 } as CreatureDefinition["abilities"]
   });
+  // Until a type is picked by hand it follows the faction: a party member is almost always humanoid, and a type-restricted
+  // spell (Dominate Person, Charm Person) skips a creature with none.
+  const [typeChosen, setTypeChosen] = useState(false);
   const [query, setQuery] = useState("goblin");
   const [results, setResults] = useState<CreatureSearchResult[]>([]);
 
@@ -128,7 +131,13 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               <label className={styles.field}>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
               <label className={styles.field}>
                 Faction
-                <select value={form.faction} onChange={(e) => setForm({ ...form, faction: e.target.value as "party" | "enemy" })}>
+                <select
+                  value={form.faction}
+                  onChange={(e) => {
+                    const faction = e.target.value as "party" | "enemy";
+                    setForm({ ...form, faction, type: typeChosen ? form.type : faction === "party" ? "humanoid" : undefined });
+                  }}
+                >
                   <option value="party">Party</option>
                   <option value="enemy">Enemy</option>
                 </select>
@@ -145,7 +154,10 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                 Type
                 <select
                   value={form.type ?? ""}
-                  onChange={(e) => setForm({ ...form, type: e.target.value ? (e.target.value as CreatureType) : undefined })}
+                  onChange={(e) => {
+                    setTypeChosen(true);
+                    setForm({ ...form, type: e.target.value ? (e.target.value as CreatureType) : undefined });
+                  }}
                 >
                   <option value="">Unspecified</option>
                   {CREATURE_TYPES.map((option) => (
