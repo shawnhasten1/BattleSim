@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { requireUserId } from "@/server/require-user";
+import { parseCampaignRules } from "@/lib/campaign-rules";
 
 /**
  * Lean encounter listing for the campaign picker UI — id/name/updatedAt/
@@ -15,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id },
-    select: { id: true, name: true, ownerId: true }
+    select: { id: true, name: true, ownerId: true, rulesJson: true }
   });
   if (!project || project.ownerId !== userId) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -27,5 +28,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     select: { id: true, name: true, updatedAt: true, mapImageUrl: true }
   });
 
-  return NextResponse.json({ campaign: { id: project.id, name: project.name }, encounters });
+  return NextResponse.json({ campaign: { id: project.id, name: project.name, rules: parseCampaignRules(project.rulesJson) }, encounters });
 }

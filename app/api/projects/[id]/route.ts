@@ -3,11 +3,14 @@ import { z } from "zod";
 import { prisma } from "@/server/prisma";
 import { requireUserId } from "@/server/require-user";
 import { encounterSnapshotSchema } from "@/engine";
+import { campaignRulesSchema, parseCampaignRules } from "@/lib/campaign-rules";
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  encounter: encounterSnapshotSchema.optional()
+  encounter: encounterSnapshotSchema.optional(),
+  /** The campaign's rules (counterspellers know the spell, …), replacing what it had. */
+  rules: campaignRulesSchema.optional()
 });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -47,6 +50,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     data: {
       name: body.name ?? existing.name,
       description: body.description,
+      ...(body.rules ? { rulesJson: JSON.stringify(body.rules) } : {}),
       ...(body.encounter
         ? {
           encounters: {
@@ -112,9 +116,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return NextResponse.json({ ok: true });
 }
 
-function deserializeProject<T extends { maps: Array<{ wallsJson: string; terrainJson: string }>; encounters: Array<{ snapshotJson: string; simulationRuns?: Array<{ snapshotJson: string; metricsJson: string; eventLogJson: string }> }> }>(project: T) {
+function deserializeProject<T extends { rulesJson?: string | null; maps: Array<{ wallsJson: string; terrainJson: string }>; encounters: Array<{ snapshotJson: string; simulationRuns?: Array<{ snapshotJson: string; metricsJson: string; eventLogJson: string }> }> }>(project: T) {
   return {
     ...project,
+    rules: parseCampaignRules(project.rulesJson),
     maps: project.maps.map((map) => ({
       ...map,
       wallsJson: JSON.parse(map.wallsJson),

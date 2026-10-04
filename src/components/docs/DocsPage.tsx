@@ -473,7 +473,10 @@ const SECTIONS: Section[] = [
             <strong>Use &amp; cost</strong> — what it takes (an action, a bonus action or a reaction) and what it
             spends: at will, a spell slot (of its level to begin with), uses per encounter, a recharge, or a pool you
             pick or create. A reaction shows its trigger: hit by an attack, targeted by an attack, a creature leaving
-            its reach, or something described. With a slot, <strong>Stronger with a higher slot</strong> adds dice,
+            its reach, or something described. Any leveled spell can be cast with a higher slot, once its own are gone
+            or by choice in Play; <strong>Casting with a higher slot</strong> says so, and offers the SRD&apos;s
+            upcasting for a spell of the same name that has none (never taken by itself). With a slot,{" "}
+            <strong>Stronger with a higher slot</strong> adds dice,
             beams or targets for each level above.
           </li>
           <li>
@@ -652,6 +655,22 @@ const SECTIONS: Section[] = [
           <strong>What it gives lasts</strong>, a Parry&apos;s +2 is <em>for that attack</em> and Shield&apos;s +5 lasts{" "}
           <em>until its next turn</em>. Creatures saved before this used to raise their AC as soon as an attack was aimed
           at them; they&apos;re brought up to date when they&apos;re loaded.
+        </p>
+        <p>
+          Counterspell stops a spell no higher than the slot it&apos;s cast with. Above that it makes a check with its
+          caster&apos;s spellcasting ability, DC 10 + the spell&apos;s level, and the slot is spent whether or not it
+          works. A spell is the level of the slot it&apos;s cast with: Fireball with a 5th-level slot is a 5th-level
+          spell. Under <strong>When</strong>, a counter&apos;s check can have a bonus of its own, or be switched off (then
+          it can&apos;t stop anything above its slot).
+        </p>
+        <p>
+          The AI counters what&apos;s worth countering: it weighs what the spell would do to its side if let through
+          (damage across everyone it catches, who it would drop, the conditions it would land and for how long, less
+          what it does to the caster&apos;s own side) against the slot it would spend, its chance of stopping it and its
+          resource stance. The log says why it did or didn&apos;t. A campaign sets whether counterspellers{" "}
+          <strong>know what&apos;s being cast and at whom</strong> (on its page, under Campaign rules). On, the default,
+          they see the spell and its targets; off, as the rules are written, they only see that a spell is being cast,
+          and weigh it by what the caster could cast. The Combat panel says which, when something there can counter.
         </p>
 
         <h3>What the AI does with them</h3>

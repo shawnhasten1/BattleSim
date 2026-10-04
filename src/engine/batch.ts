@@ -41,6 +41,8 @@ export interface BatchSimulationSummary {
   remainingHpByFaction: Record<string, number>;
   damageByCombatant: CombatantMetrics[];
   warnings: string[];
+  /** The rules the batch ran under (the campaign's among them), so the report can say. */
+  rules: EncounterSnapshot["rules"];
   runs: Array<{
     seed: string;
     winner: string | null;
@@ -83,6 +85,7 @@ export function summarizeBatch(baseSnapshot: EncounterSnapshot, runs: Simulation
 
   return {
     runCount: runs.length,
+    rules: baseSnapshot.rules,
     partyWinRate,
     enemyWinRate,
     tpkRate,

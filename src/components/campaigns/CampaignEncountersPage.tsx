@@ -7,6 +7,8 @@ import { signOut } from "next-auth/react";
 import { ArrowLeft, LogOut, Map, Plus, Trash2 } from "lucide-react";
 import { useEncounterStore } from "@/store/encounter-store";
 import { CreateEncounterModal, type CreateEncounterResult } from "@/components/modals/CreateEncounterModal";
+import type { CampaignRules as Rules } from "@/lib/campaign-rules";
+import { CampaignRules } from "./CampaignRules";
 import styles from "./campaigns.module.css";
 
 interface EncounterSummary {
@@ -19,6 +21,7 @@ interface EncounterSummary {
 export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
   const router = useRouter();
   const [campaignName, setCampaignName] = useState("");
+  const [rules, setRules] = useState<Rules | null>(null);
   const [encounters, setEncounters] = useState<EncounterSummary[]>([]);
   const [status, setStatus] = useState("Loading encounters…");
   const [creatingOpen, setCreatingOpen] = useState(false);
@@ -30,8 +33,9 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
       setStatus(response.status === 404 ? "Campaign not found" : "Failed to load encounters");
       return;
     }
-    const data = (await response.json()) as { campaign: { name: string }; encounters: EncounterSummary[] };
+    const data = (await response.json()) as { campaign: { name: string; rules?: Rules }; encounters: EncounterSummary[] };
     setCampaignName(data.campaign.name);
+    setRules(data.campaign.rules ?? {});
     setEncounters(data.encounters);
     setStatus(data.encounters.length === 0 ? "No encounters yet — create your first one below." : "");
   }
@@ -82,6 +86,8 @@ export function CampaignEncountersPage({ campaignId }: { campaignId: string }) {
             <Plus size={14} /> New Encounter
           </button>
         </div>
+
+        {rules ? <CampaignRules campaignId={campaignId} rules={rules} onChange={setRules} /> : null}
 
         {creatingOpen ? (
           <CreateEncounterModal onClose={() => setCreatingOpen(false)} onSubmit={onCreate} />

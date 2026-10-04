@@ -4,6 +4,7 @@ import { encounterSnapshotSchema } from "@/engine";
 import { prisma } from "@/server/prisma";
 import { requireUserId } from "@/server/require-user";
 import { isOwnEncounter } from "@/server/encounter-access";
+import { parseCampaignRules } from "@/lib/campaign-rules";
 
 const updateEncounterSchema = z.object({
   name: z.string().min(1).optional(),
@@ -21,13 +22,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const encounter = await prisma.encounter.findUnique({
     where: { id },
     include: {
-      simulationRuns: { orderBy: { createdAt: "desc" }, take: 10 }
+      simulationRuns: { orderBy: { createdAt: "desc" }, take: 10 },
+      project: { select: { rulesJson: true } }
     }
   });
   if (!encounter) {
     return NextResponse.json({ error: "Encounter not found" }, { status: 404 });
   }
-  return NextResponse.json({ encounter: deserializeEncounter(encounter) });
+  const { project, ...record } = encounter;
+  return NextResponse.json({ encounter: { ...deserializeEncounter(record), campaignRules: parseCampaignRules(project.rulesJson) } });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {

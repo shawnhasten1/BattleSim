@@ -15,6 +15,7 @@ import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { prepBuffs } from "@/lib/actor-sheet/token";
 import styles from "./CombatPanel.module.css";
+import { hasCounterspellers, ruleInForce } from "@/lib/campaign-rules";
 
 const TACTICS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "basic-melee", label: "Basic melee" },
@@ -61,6 +62,9 @@ function percent(value: number): string {
 
 export function CombatPanel() {
   const encounter = useEncounterStore((state) => state.encounter);
+  const currentProjectId = useEncounterStore((state) => state.currentProjectId);
+  // The campaign's rule on counters, said where it matters: when something here can counter a spell.
+  const counterspellRule = hasCounterspellers(encounter) ? ruleInForce(encounter, "counterspellReadsSpell") : undefined;
   const displayEncounter = useDisplayEncounter();
   const replaying = useIsReplaying();
   // Who is fighting in a lair: the tracker shows where initiative 20 falls, and whose lair it is.
@@ -153,6 +157,13 @@ export function CombatPanel() {
         <div><span>HP</span><strong>{currentCombatant && currentDefinition ? `${currentCombatant.currentHp}/${currentDefinition.maxHp}` : "-"}</strong></div>
         <div className={styles.latest}><span>Latest</span><strong>{latestTurnEvent?.message ?? (play ? "Nothing yet this turn" : "Step to begin")}</strong></div>
       </div>
+
+      {counterspellRule ? (
+        <p className={styles.ruleLine}>
+          {counterspellRule} ·{" "}
+          {currentProjectId ? <a href={`/campaigns/${currentProjectId}`} title="Set on the campaign's page">campaign rule</a> : "campaign rule"}
+        </p>
+      ) : null}
 
       {play ? <PlayControls /> : (
       <>
@@ -382,6 +393,9 @@ export function CombatPanel() {
               <div><span>P90 rounds</span><strong>{batchSummary.rounds.p90}</strong></div>
               <div><span>HP left</span><strong>{batchSummary.remainingHpByFaction.party ?? 0}</strong></div>
             </div>
+            {counterspellRule && batchSummary.rules ? (
+              <p className={styles.ruleLine}>Ran with: {ruleInForce(batchSummary, "counterspellReadsSpell")}</p>
+            ) : null}
 
             {batchSummary.roundDistribution.length ? (
               <div className={styles.histogram} aria-label="Round-count distribution">

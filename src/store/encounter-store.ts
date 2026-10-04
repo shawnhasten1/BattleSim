@@ -89,6 +89,7 @@ import { getPlaySetup } from "@/lib/playSetupStore";
 import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type PlayActions, type PlaySession, type RecentStep } from "./play-slice";
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
+import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
 
@@ -279,6 +280,15 @@ interface EncounterStore extends PlayActions {
   createEncounter: (name: string, options?: NewMapOptions & { fresh?: boolean }) => Promise<void>;
   saveCurrentEncounter: () => Promise<void>;
   loadEncounter: (encounterId: string) => Promise<void>;
+  /**
+   * The open encounter's campaign's rules, as loaded with it (`withCampaignRules` writes them into its snapshot). Null
+   * until an encounter from a campaign is opened.
+   */
+  campaignRules: CampaignRules | null;
+  /** Save a campaign's rules; the open encounter, if it's that campaign's, takes them at once. Whether it saved. */
+  setCampaignRules: (projectId: string, rules: CampaignRules) => Promise<boolean>;
+  /** Fetch a campaign's rules again and give them to its open encounter (one opened earlier, kept in the store). */
+  refreshCampaignRules: (projectId: string) => Promise<void>;
   renameEncounter: (encounterId: string, name: string) => Promise<void>;
   duplicateEncounter: (encounterId?: string) => Promise<void>;
   deleteEncounter: (encounterId: string) => Promise<void>;
@@ -1055,6 +1065,7 @@ export const useEncounterStore = create<EncounterStore>()(
       mapImageDataUrl: null,
       mapImageUrl: null,
       currentProjectId: null,
+      campaignRules: null,
       currentEncounterId: null,
       projects: [],
       projectStatus: "",
@@ -1845,20 +1856,43 @@ export const useEncounterStore = create<EncounterStore>()(
           if (state.play && state.playSetup) set({ projectStatus: "Scene saved as it was set up (the fight in progress isn't saved)" });
         }
       },
+      setCampaignRules: async (projectId, rules) => {
+        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rules })
+        });
+        if (!response.ok) return false;
+        if (get().currentProjectId === projectId) {
+          set({ campaignRules: rules, encounter: withCampaignRules(get().encounter, rules) });
+        }
+        return true;
+      },
+      refreshCampaignRules: async (projectId) => {
+        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/encounters`);
+        if (!response.ok) return;
+        const data = await response.json() as { campaign: { rules?: CampaignRules } };
+        if (get().currentProjectId !== projectId) return;
+        const rules = data.campaign.rules ?? {};
+        const encounter = withCampaignRules(get().encounter, rules);
+        set(encounter === get().encounter ? { campaignRules: rules } : { campaignRules: rules, encounter });
+      },
       loadEncounter: async (encounterId) => {
         const response = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`);
         if (!response.ok) {
           set({ projectStatus: "Scene load failed" });
           return;
         }
-        const data = await response.json() as { encounter: EncounterSummary };
+        const data = await response.json() as { encounter: EncounterSummary & { campaignRules?: CampaignRules } };
         const snapshot = data.encounter.snapshotJson;
         if (!snapshot) {
           set({ projectStatus: "Scene has no snapshot" });
           return;
         }
-        const normalizedSnapshot = normalizeEncounterVisuals(snapshot);
+        // The campaign's rules are its own: the encounter takes them as it opens.
+        const normalizedSnapshot = withCampaignRules(normalizeEncounterVisuals(snapshot), data.encounter.campaignRules);
         set({
+          campaignRules: data.encounter.campaignRules ?? {},
           currentProjectId: data.encounter.projectId ?? get().currentProjectId,
           currentEncounterId: data.encounter.id,
           encounter: normalizedSnapshot,

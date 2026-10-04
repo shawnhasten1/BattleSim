@@ -21,6 +21,8 @@ export default function EncounterRoutePage({
   useEffect(() => {
     if (useEncounterStore.getState().currentEncounterId === encounterId) {
       setStatus("ready");
+      // Kept from before: its campaign's rules may have changed since (the campaign page, another device).
+      void useEncounterStore.getState().refreshCampaignRules(campaignId);
       return;
     }
     let cancelled = false;
