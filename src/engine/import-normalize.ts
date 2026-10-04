@@ -23,6 +23,7 @@ import {
   type HealingComponent,
   type NumericFormula,
   type ReactionMeta,
+  type CounterCheck,
   type ReactionTrigger,
   type ResourceCost,
   type RiderDuration,
@@ -171,8 +172,16 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
   return changed ? next : definition;
 }
 
-/** An AC-only reaction that fired before the roll now waits for a hit it can turn into a miss. */
+/**
+ * An AC-only reaction that fired before the roll now waits for a hit it can turn into a miss. A counter with no cap on
+ * the level it stops takes Counterspell's check against a spell above its slot (DC 10 + the spell's level), where it
+ * used to let such a spell through.
+ */
 function migrateAction<T extends ActionDefinition>(action: T): T {
+  const trigger = "reaction" in action ? action.reaction?.trigger : undefined;
+  if (trigger?.kind === "enemy-casts-spell" && trigger.checkAbove === undefined && trigger.maxSpellLevel == null && "reaction" in action && action.reaction) {
+    return { ...action, reaction: { ...action.reaction, trigger: { ...trigger, checkAbove: { dcBase: 10 } } } };
+  }
   if (action.kind !== "activate-feature" || action.reaction?.trigger.kind !== "targeted-by-attack") return action;
   const modifiers = action.condition?.modifiers;
   const armorClassOnly = (modifiers?.armorClass ?? 0) > 0
@@ -928,13 +937,24 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
       return {
         kind: "enemy-casts-spell",
         withinFt: numberField(input, "withinFt") ?? 60,
-        maxSpellLevel: numberField(input, "maxSpellLevel")
+        maxSpellLevel: numberField(input, "maxSpellLevel"),
+        checkAbove: normalizeCounterCheck(input.checkAbove)
       };
     case "manual":
       return { kind: "manual", note: stringField(input, "note") ?? "" };
     default:
       return undefined;
   }
+}
+
+/** A counter's check against a spell above its slot (`{ dcBase, bonus? }`), or `false` for none. Absent stays absent. */
+function normalizeCounterCheck(input: unknown): CounterCheck | false | undefined {
+  if (input === false) return false;
+  if (!isRecord(input)) return undefined;
+  const dcBase = numberField(input, "dcBase");
+  if (dcBase === undefined) return undefined;
+  const bonus = numberField(input, "bonus");
+  return bonus ? { dcBase, bonus } : { dcBase };
 }
 
 function normalizeReactionMeta(input: unknown): ReactionMeta | undefined {

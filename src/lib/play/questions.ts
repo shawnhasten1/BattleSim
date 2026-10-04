@@ -189,10 +189,11 @@ function describeReaction(request: ReactionRequest, board: EncounterSnapshot): P
       return text(`${source} attacks ${nameOf(board, request.targetId)}${away !== undefined ? `, ${away} ft. from ${reactor}` : ""}.`, "Give the attack disadvantage?");
     }
     case "enemy-casts-spell": {
-      const spell = request.context.spell;
+      // With the campaign's rule off, a counterer only sees that a spell is being cast.
+      const spell = request.context.spell?.known === false ? undefined : request.context.spell;
       const away = sourceCombatant ? distance(sourceCombatant.id) : undefined;
       return text(
-        `${source} is casting ${spell?.name ?? "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}${away !== undefined ? ` ${away} ft. away` : ""}.`,
+        `${source} is casting ${spell?.name || "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}${away !== undefined ? ` ${away} ft. away` : ""}.`,
         "Counter it?"
       );
     }

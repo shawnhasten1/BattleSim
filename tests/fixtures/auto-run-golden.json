@@ -144,17 +144,17 @@
  "casters": [
   {
    "seed": "golden:casters:0",
-   "hash": "1e86666c9bfa4f8affd81eb86e177e21f02522af",
-   "events": 199,
+   "hash": "24f99e7eda522da60330b0d3e203e73ed415de35",
+   "events": 202,
    "winner": "party",
    "rounds": 5
   },
   {
    "seed": "golden:casters:1",
-   "hash": "dfed7cf0ab9579dfd2fe9592418f1310ebdd4bfb",
-   "events": 127,
-   "winner": "party",
-   "rounds": 3
+   "hash": "98d6561847c2599203c6d2c4270df6303128a367",
+   "events": 215,
+   "winner": "enemy",
+   "rounds": 7
   },
   {
    "seed": "golden:casters:2",
@@ -165,8 +165,8 @@
   },
   {
    "seed": "golden:casters:3",
-   "hash": "8a7aed136679e0c11855af0583bcca1b5a6f1bcb",
-   "events": 184,
+   "hash": "7e3b42dd6ea75220671056ac44c63356e1b05985",
+   "events": 187,
    "winner": "party",
    "rounds": 4
   },

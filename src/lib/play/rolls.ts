@@ -85,7 +85,7 @@ function matches(entry: CombatLogEvent, request: RollRequest): boolean {
     case "save": return entry.type === "SaveRolled" && data.targetId === request.rollerId;
     case "concentration": return entry.type === "ConcentrationChecked" && data.combatantId === request.rollerId;
     case "death-save": return entry.type === "DeathSaveRolled" && data.combatantId === request.rollerId;
-    case "check": return entry.type === "EscapeAttempted" && data.combatantId === request.rollerId;
+    case "check": return (entry.type === "EscapeAttempted" || entry.type === "CounterspellCheck") && data.combatantId === request.rollerId;
     case "recharge": return entry.type === "AbilityRecharged" && data.combatantId === request.rollerId;
   }
 }

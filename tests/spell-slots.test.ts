@@ -193,7 +193,7 @@ describe("a spell is the level of the slot it's cast with", () => {
     fighter.resources = { "slot-3": 1, "slot-5": 1 };
     encounter.definitions.find((d) => d.id === CASTER_DEF)!.resources = { "slot-3": 1, "slot-5": 1 };
     const goblin = encounter.combatants.find((c) => c.id === TARGET)!;
-    goblin.position = { x: 4, y: 1 };
+    goblin.position = { x: 8, y: 1 };
     goblin.currentHp = 40;
     goblin.actionEconomy = { action: true, bonus: true, reaction: true };
     goblin.resources = reactorSlots;
@@ -208,7 +208,7 @@ describe("a spell is the level of the slot it's cast with", () => {
   it("a Fireball cast with a 5th-level slot is a 5th-level spell, and a 5th-level Counterspell stops it", () => {
     const state = createEngineState(counterEncounter({ "slot-3": 1, "slot-5": 1 }));
     state.rng = scriptedRng({ 20: [10] });
-    resolveAreaSaveAction(state, CASTER, { x: 4, y: 1 }, "srd:spell:fireball:action:upcast-5");
+    resolveAreaSaveAction(state, CASTER, { x: 8, y: 1 }, "srd:spell:fireball:action:upcast-5");
     expect(state.log.find((e) => e.type === "SpellCountered")?.data).toMatchObject({ spellLevel: 5 });
     expect(state.snapshot.combatants.find((c) => c.id === TARGET)!.resources).toMatchObject({ "slot-3": 1, "slot-5": 0 });
   });

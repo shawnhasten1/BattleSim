@@ -648,7 +648,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "reaction",
     range: 60,
     resourceCost: { resourceId: "slot-3", amount: 1 },
-    description: "When a creature within 60 ft casts a spell, interrupt it. v1: succeeds while your slot's level is at least the spell's.",
+    description: "When a creature within 60 ft casts a spell, interrupt it. A spell of your slot's level or lower fails; above it, make a spellcasting ability check, DC 10 + the spell's level.",
     automationSupport: "full",
     action: {
       kind: "activate-feature",
@@ -656,7 +656,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       name: "Counterspell",
       actionType: "reaction",
       featureId: "srd:spell:counterspell",
-      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60 }, priority: "worthwhile" },
+      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60, checkAbove: { dcBase: 10 } }, priority: "worthwhile" },
       resourceCost: { resourceId: "slot-3", amount: 1 },
       automationSupport: "full"
     }

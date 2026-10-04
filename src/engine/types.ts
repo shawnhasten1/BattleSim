@@ -813,10 +813,22 @@ export type ReactionTrigger =
   | { kind: "hit-by-attack"; meleeOnly?: boolean }
   /** An ally within `withinFt` is targeted by an attack (Protection fighting style). */
   | { kind: "ally-targeted-by-attack"; withinFt: number }
-  /** An enemy within `withinFt` casts a spell of level ≤ `maxSpellLevel` (Counterspell). */
-  | { kind: "enemy-casts-spell"; withinFt: number; maxSpellLevel?: number }
+  /**
+   * An enemy within `withinFt` casts a spell of level ≤ `maxSpellLevel` (Counterspell). A spell no higher than the
+   * reaction's slot is stopped outright; one above it takes a check with the reactor's spellcasting ability against
+   * `checkAbove.dcBase` + the spell's level (Counterspell: 10). `false`: it can't counter above its slot at all. A saved
+   * counter without it is given Counterspell's (`migrateDefinition`).
+   */
+  | { kind: "enemy-casts-spell"; withinFt: number; maxSpellLevel?: number; checkAbove?: CounterCheck | false }
   /** Author-described — reference only, never auto-fires. */
   | { kind: "manual"; note: string };
+
+/** The check a counter makes against a spell above its slot's level: DC `dcBase` + the spell's level. */
+export interface CounterCheck {
+  dcBase: number;
+  /** Added to the roll (an Abjurer's proficiency bonus, a homebrew item). */
+  bonus?: number;
+}
 
 export interface ReactionMeta {
   trigger: ReactionTrigger;
@@ -1860,6 +1872,12 @@ export interface RuleProfile {
   coverFromCreatures?: boolean;
   /** 5e: damage left over after reaching 0 HP that is at least the creature's maximum HP kills it outright. Off when absent (older saves). */
   massiveDamage?: boolean;
+  /**
+   * A creature that can counter a spell sees which spell it is, at what level and at whom, and weighs whether it's
+   * worth stopping. Off, it only sees that a spell is being cast, as the rules are written. On when absent. Set by the
+   * encounter's campaign (`withCampaignRules`).
+   */
+  counterspellReadsSpell?: boolean;
 }
 
 export interface EncounterSnapshot {
@@ -1903,6 +1921,7 @@ export interface CombatLogEvent {
     | "ConditionResisted"
     | "AbilityRecharged"
     | "EscapeAttempted"
+    | "CounterspellCheck"
     | "HoldApplied"
     | "Swallowed"
     | "Regurgitated"
@@ -2114,7 +2133,10 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
   z.object({ kind: z.literal("would-be-hit"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
-  z.object({ kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional() }),
+  z.object({
+    kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional(),
+    checkAbove: z.union([z.literal(false), z.object({ dcBase: z.number().int(), bonus: z.number().int().optional() })]).optional()
+  }),
   z.object({ kind: z.literal("manual"), note: z.string() })
 ]) as z.ZodType<ReactionTrigger>;
 
@@ -2334,7 +2356,8 @@ export const encounterSnapshotSchema = z.object({
     requireLineOfEffect: z.boolean(),
     cover: z.boolean().default(true),
     coverFromCreatures: z.boolean().optional(),
-    massiveDamage: z.boolean().optional()
+    massiveDamage: z.boolean().optional(),
+    counterspellReadsSpell: z.boolean().optional()
   }),
   definitions: z.array(z.any()),
   activeZones: z.array(z.any()).optional(),

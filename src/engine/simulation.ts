@@ -52,9 +52,14 @@ import {
   spellSlotLevel,
   isDominatedUpcast,
   upcastBaseId,
+  setCounterAdvisor,
+  threatByLevel,
+  type CounterAdvice,
+  type CounterAssessment,
+  type DeclaredCast,
   type EngineState
 } from "./combat";
-import { askDecision, type TurnOptionRequest, type TurnPick } from "./decisions";
+import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
@@ -3367,37 +3372,47 @@ function expectedRiderControl(
       continue;
     }
     const severity = conditionSeverity(name);
-
-    let pApplied: number;
-    if (rider.when === "always") {
-      pApplied = 1;
-    } else if (rider.when === "on-save-fail") {
-      pApplied = (action.kind === "save" || action.kind === "area-save")
-        ? chanceToFailSave(
-          resolveSaveDc(action, source),
-          target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
-          targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action))
-        )
-        : 0.5;
-    } else if (rider.when === "on-hit") {
-      const hitChance = action.kind === "attack"
-        ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass))
-        : 1;
-      // a rider that negates on its own save only lands when that save fails
-      const negateChance = rider.save && rider.save.onSuccess === "negates"
-        ? 1 - chanceToFailSave(
-          riderSaveDc(rider, source, riderFallbackAbility(action)),
-          target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]),
-          targetHasSaveAdvantage(target, action, rider.save.ability, typeof rider.condition === "string" ? [rider.condition] : [])
-        )
-        : 0;
-      pApplied = hitChance * (1 - negateChance);
-    } else {
-      pApplied = 0;
-    }
-    total += tactics.controlWeight * pApplied * severity;
+    total += tactics.controlWeight * riderLandChance(action, rider, source, target) * severity;
   }
   return total;
+}
+
+type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
+
+/** Chance a `condition` rider lands on `target`: always, on a failed save, or on a hit it doesn't save against. */
+function riderLandChance(
+  action: OffensiveAction,
+  rider: ConditionRider,
+  source: ReturnType<typeof getDefinition>,
+  target: ReturnType<typeof getDefinition>
+): number {
+  if (rider.when === "always") {
+    return 1;
+  }
+  if (rider.when === "on-save-fail") {
+    return (action.kind === "save" || action.kind === "area-save")
+      ? chanceToFailSave(
+        resolveSaveDc(action, source),
+        target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
+        targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action))
+      )
+      : 0.5;
+  }
+  if (rider.when === "on-hit") {
+    const hitChance = action.kind === "attack"
+      ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), target.armorClass))
+      : 1;
+    // a rider that negates on its own save only lands when that save fails
+    const negateChance = rider.save && rider.save.onSuccess === "negates"
+      ? 1 - chanceToFailSave(
+        riderSaveDc(rider, source, riderFallbackAbility(action)),
+        target.saves?.[rider.save.ability] ?? abilityModifier(target.abilities[rider.save.ability]),
+        targetHasSaveAdvantage(target, action, rider.save.ability, typeof rider.condition === "string" ? [rider.condition] : [])
+      )
+      : 0;
+    return hitChance * (1 - negateChance);
+  }
+  return 0;
 }
 
 export function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
@@ -3608,3 +3623,177 @@ function actionRange(action: OffensiveAction, source: ReturnType<typeof getDefin
   }
   return action.kind === "attack" && action.attackType === "melee" ? action.reach ?? action.range : action.kind === "attack" ? action.longRange ?? action.range : action.range;
 }
+
+/* ─── Counters: is a spell worth stopping? ─────────────────────────────────────
+ * The engine knows which slot stops which spell and the chance of a check (`counterOutlook`, combat.ts); this decides
+ * whether to, and with which slot. It weighs what the spell would do if let through (`spellThreat`) against the slot,
+ * priced the way the AI prices a slot when spending it on its own spells.
+ */
+
+/** What dropping a creature is worth, in expected hit points: the AI's default kill weight. */
+const DOWN_VALUE = 18;
+/** A buff put up on one of the caster's side: the base `selectBuffAction` gives putting one up. */
+const BUFF_TARGET_VALUE = 15;
+/** The longest a condition is counted as lasting, in turns. */
+const MAX_TURNS_HELD = 3;
+/** A slot's price per level: the ×4 `selectOffensivePlan` pays for one (`resourceCostWeight` of a slot is its level). */
+const SLOT_PRICE = 4;
+/** Spending the reaction when it may still want it for something else before its next turn (Shield, an opportunity attack). */
+const REACTION_COST = 2;
+
+/**
+ * What a spell being cast would do to `reactor`'s side if it isn't stopped — `areaPlanValue` seen from the other side.
+ * For each creature it's declared at: expected damage (with the save, half on a save, resistances, riders and upcast
+ * dice of the copy being cast), the chance it drops it, and each condition it would land × how bad it is × what the
+ * creature is worth to its side × how many turns it would likely last. Harm to the caster's own side counts against
+ * stopping it; healing and buffs it gives them count for. A spell whose effect can't be read is valued by its level.
+ */
+export function spellThreat(
+  snapshot: EncounterSnapshot,
+  reactor: CombatantState,
+  caster: CombatantState,
+  action: ActionDefinition,
+  declared: DeclaredCast,
+  level: number
+): SpellThreat {
+  const casterDefinition = getDefinition(snapshot, caster);
+  const ours = effectiveFaction(snapshot, reactor);
+  const counts = new Map<Id, number>();
+  for (const id of declared.targetIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const creatures: SpellThreatLine[] = [];
+  const sideOf = (combatant: CombatantState): "ours" | "theirs" => (effectiveFaction(snapshot, combatant) === ours ? "ours" : "theirs");
+
+  if (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") {
+    const beams = action.kind === "attack" && action.attackDelivery === "beams" ? Math.max(1, declared.targetIds.length) : 1;
+    for (const [id, count] of counts) {
+      const target = snapshot.combatants.find((combatant) => combatant.id === id);
+      if (!target || target.state === "dead" || target.state === "fled") continue;
+      const targetDefinition = getDefinition(snapshot, target);
+      const damage = expectedDamageAgainst(action, casterDefinition, caster, targetDefinition, target) / beams * count;
+      const conditions = conditionsLanding(action, casterDefinition, targetDefinition);
+      const likelyDown = target.currentHp > 0 && damage >= target.currentHp;
+      // Hit while down: a failed death save, or worse.
+      const downValue = target.currentHp <= 0 ? (damage > 0 ? DOWN_VALUE : 0)
+        : likelyDown ? DOWN_VALUE : DOWN_VALUE / 3 * damage / Math.max(1, target.currentHp);
+      const worth = allyValue(targetDefinition);
+      const held = conditions.reduce((sum, condition) => sum + condition.chance * conditionSeverity(condition.name as ConditionName) * worth * condition.turns, 0);
+      const harm = damage + downValue + held;
+      const side = sideOf(target);
+      creatures.push({ combatantId: id, side, damage, likelyDown, conditions, value: side === "ours" ? harm : -harm });
+    }
+    let total = creatures.reduce((sum, line) => sum + line.value, 0);
+    // A lingering area also holds the routes into it.
+    if (action.kind === "area-save" && action.zone && declared.origin) {
+      const caught = creatures.flatMap((line) => snapshot.combatants.filter((combatant) => combatant.id === line.combatantId));
+      total += predictedZoneApproachValue(snapshot, caster, casterDefinition, action, declared.origin, declared.aimVector, caught, tacticsSettings(caster.tacticsProfile));
+    }
+    return { total, basis: "effect", creatures };
+  }
+
+  if (action.kind === "healing") {
+    const average = averageHealing(action, casterDefinition);
+    for (const id of counts.keys()) {
+      const target = snapshot.combatants.find((combatant) => combatant.id === id);
+      if (!target || target.state === "dead" || target.state === "fled") continue;
+      const missing = Math.max(0, getDefinition(snapshot, target).maxHp - target.currentHp);
+      const healing = Math.min(average, missing);
+      const gain = healing + (target.currentHp <= 0 && healing > 0 ? DOWN_VALUE : 0);
+      const side = sideOf(target);
+      creatures.push({ combatantId: id, side, damage: 0, likelyDown: false, conditions: [], healing, value: side === "theirs" ? gain : -gain });
+    }
+    return { total: creatures.reduce((sum, line) => sum + line.value, 0), basis: "effect", creatures };
+  }
+
+  if (action.kind === "buff") {
+    for (const id of counts.keys()) {
+      const target = snapshot.combatants.find((combatant) => combatant.id === id);
+      if (!target) continue;
+      const side = sideOf(target);
+      creatures.push({ combatantId: id, side, damage: 0, likelyDown: false, conditions: [], value: side === "theirs" ? BUFF_TARGET_VALUE : -BUFF_TARGET_VALUE });
+    }
+    return { total: creatures.reduce((sum, line) => sum + line.value, 0), basis: "effect", creatures };
+  }
+
+  // A teleport, a summons, anything partly by hand: its effect can't be read, so its level stands in.
+  return threatByLevel(level);
+}
+
+/** The conditions a spell's riders would land on a target: the chance of each, and the turns it would likely last. */
+function conditionsLanding(
+  action: Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" }>,
+  source: CreatureDefinition,
+  target: CreatureDefinition
+): SpellThreatLine["conditions"] {
+  const out: SpellThreatLine["conditions"] = [];
+  for (const rider of action.riders ?? []) {
+    if (rider.kind !== "condition") continue;
+    const name = typeof rider.condition === "string" ? rider.condition : rider.condition.custom;
+    if (isImmuneToCondition(target, name)) continue;
+    const chance = riderLandChance(action, rider, source, target);
+    if (chance <= 0) continue;
+    out.push({ name, chance, turns: turnsHeld(action, rider, source, target) });
+  }
+  return out;
+}
+
+/** How many turns a condition would likely hold its target: its rounds, or until it saves (1 ÷ the chance it does). */
+function turnsHeld(
+  action: Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" }>,
+  rider: ConditionRider,
+  source: CreatureDefinition,
+  target: CreatureDefinition
+): number {
+  const duration = rider.duration;
+  const saveOutChance = (): number => {
+    const ability = rider.save?.ability ?? (action.kind === "attack" ? undefined : action.saveAbility);
+    if (!ability) return 0;
+    const dc = rider.save ? riderSaveDc(rider, source, riderFallbackAbility(action)) : action.kind === "attack" ? 10 : resolveSaveDc(action, source);
+    return 1 - chanceToFailSave(dc, target.saves?.[ability] ?? abilityModifier(target.abilities[ability]), false);
+  };
+  switch (duration.kind) {
+    case "until-start-of-next-turn":
+      return 1;
+    case "rounds": {
+      const rounds = Math.min(MAX_TURNS_HELD, Math.max(1, duration.rounds));
+      if (!duration.repeatSaveAt) return rounds;
+      return Math.min(rounds, 1 / Math.max(1 / MAX_TURNS_HELD, saveOutChance()));
+    }
+    case "save-ends":
+      return Math.min(MAX_TURNS_HELD, 1 / Math.max(1 / MAX_TURNS_HELD, saveOutChance()));
+    case "concentration":
+    case "permanent":
+      return MAX_TURNS_HELD;
+  }
+}
+
+/** What spending its reaction costs `definition`: something if it has another use for one (Shield, opportunity attacks). */
+function reactionCost(definition: CreatureDefinition): number {
+  return getExecutableActions(definition).some((action) => action.automationSupport === "full"
+    && ((action.actionType === "reaction" && !("reaction" in action && action.reaction?.trigger.kind === "enemy-casts-spell"))
+      || (action.kind === "attack" && action.attackType === "melee" && action.actionType === "action")))
+    ? REACTION_COST
+    : 0;
+}
+
+/**
+ * Whether to counter a spell, and with which slot: each slot's chance of stopping it × what it would do, less the
+ * slot's price (its level × 4, × the resource stance) and the reaction. The best wins if that's above nothing; a
+ * reaction set to `"always"` takes its best that can work regardless, and one set to `"manual"` is never taken.
+ */
+export function assessCounter(advice: CounterAdvice): CounterAssessment {
+  const { snapshot, reactor, caster, spell, level } = advice;
+  const threat = spell ? spellThreat(snapshot, reactor, caster, spell.action, spell.declared, level) : threatByLevel(level);
+  const stance = resourceStanceMultiplier(reactor.resourceStance);
+  const reaction = reactionCost(getDefinition(snapshot, reactor));
+  const scored = advice.options.map((option) => {
+    const slotCost = option.slot * SLOT_PRICE * stance;
+    return { option, score: { actionId: option.actionId, slotCost, score: option.chance * threat.total - slotCost - reaction } };
+  });
+  const best = scored
+    .filter(({ option }) => option.priority !== "manual" && option.chance > 0)
+    .sort((a, b) => b.score.score - a.score.score || a.option.slot - b.option.slot || a.option.actionId.localeCompare(b.option.actionId))[0];
+  const pick = best && (best.score.score > 0 || best.option.priority === "always") ? best.option.actionId : undefined;
+  return { threat, scores: scored.map(({ score }) => score), pick };
+}
+
+setCounterAdvisor(assessCounter);

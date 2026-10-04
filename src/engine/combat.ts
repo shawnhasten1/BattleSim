@@ -1,4 +1,4 @@
-import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay } from "./areas";
+import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
@@ -43,6 +43,7 @@ import type {
   Point,
   ReactionMeta,
   ReactionTrigger,
+  CounterCheck,
   RepositionActionDefinition,
   ResourceCost,
   RiderDuration,
@@ -61,6 +62,8 @@ import {
   type ReactionRequest,
   type RollOutcome,
   type RollRequest,
+  type CounterOdds,
+  type SpellThreat,
   type SwingRequest
 } from "./decisions";
 
@@ -1128,7 +1131,9 @@ function resolveBeamAttack(
   }
   const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   declareAction(state, attacker, action, { target: findCombatant(state.snapshot, targetIds[0] as Id) });
-  if (counterspellWindow(state, attacker, action)) {
+  // Beam i goes at targetIds[i], the last named taking any left over.
+  const beamTargets = Array.from({ length: beamCount }, (_, index) => targetIds[Math.min(index, targetIds.length - 1)] as Id);
+  if (counterspellWindow(state, attacker, action, { targetIds: beamTargets })) {
     return emptyAttackResult();
   }
 
@@ -1731,7 +1736,7 @@ function resolveAttackCore(
   }
 
   // Counterspell — spell attacks only, and only when this call owns the cast.
-  if (spendAction && !parentAction && counterspellWindow(state, attacker, action)) {
+  if (spendAction && !parentAction && counterspellWindow(state, attacker, action, { targetIds: [target.id] })) {
     return emptyAttackResult();
   }
 
@@ -1893,7 +1898,7 @@ export function resolveSaveAction(
     state.log.push(event(state, "ConditionResisted", `${target.displayName} is immune to ${attacker.displayName}'s ${action.name}`, { attackerId, targetId: target.id, actionId }));
     return { success: true, saveRoll: { expression: "immune", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
   }
-  if (counterspellWindow(state, attacker, action)) {
+  if (counterspellWindow(state, attacker, action, { targetIds: [target.id, ...(options.bonusTargetIds ?? []).filter((id) => id !== target.id)] })) {
     return { success: true, saveRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
   }
 
@@ -1990,7 +1995,8 @@ export function resolveAreaSaveAction(
     breakConcentration(state, attackerId);
   }
   declareAction(state, attacker, action, { origin, aimVector });
-  if (counterspellWindow(state, attacker, action)) {
+  const declaredIds = areaSaveTargets(state.snapshot, attacker, action, placement).map(({ target }) => target.id);
+  if (counterspellWindow(state, attacker, action, { targetIds: declaredIds, origin, aimVector })) {
     state.log.push(event(state, "AreaSaveResolved", `${attacker.displayName}'s ${action.name} was countered`, {
       attackerId, actionId, origin, aim, targets: []
     }));
@@ -2195,7 +2201,7 @@ export function resolveHealingAction(
   }
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, { target });
-  if (counterspellWindow(state, healer, action)) {
+  if (counterspellWindow(state, healer, action, { targetIds: [target.id] })) {
     return { healingApplied: 0 };
   }
 
@@ -2265,7 +2271,7 @@ export function resolveRepositionAction(
   validateRepositionTargeting(state.snapshot, actor, mover, destination, action);
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action, { target: isSelf ? undefined : mover, origin: destination });
-  if (counterspellWindow(state, actor, action)) {
+  if (counterspellWindow(state, actor, action, { targetIds: [mover.id], origin: destination })) {
     return { moved: false };
   }
 
@@ -2358,7 +2364,7 @@ export function resolveBuffAction(
     breakConcentration(state, actorId);
   }
   declareAction(state, actor, action, { target: mode === "self" ? undefined : targets[0] });
-  if (counterspellWindow(state, actor, action)) {
+  if (counterspellWindow(state, actor, action, { targetIds: targets.map((target) => target.id) })) {
     return { targetIds: [] };
   }
 
@@ -2484,7 +2490,7 @@ export function resolveHealingBurstAction(
 
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, origin ? { origin } : { target: targets[0] });
-  if (counterspellWindow(state, healer, action)) {
+  if (counterspellWindow(state, healer, action, { targetIds: targets.map((target) => target.id), ...(origin ? { origin } : {}) })) {
     return { healingApplied: 0, targetIds: [] };
   }
 
@@ -6626,8 +6632,10 @@ export interface ReactionEvent {
   targetId?: Id;
   /** Point the range check is measured from (`enemy-casts-spell`). */
   origin?: Point;
-  /** Level of the spell being cast (`enemy-casts-spell`). */
+  /** Level of the spell being cast (`enemy-casts-spell`): the slot it's cast with. */
   spellLevel?: number;
+  /** What the spell is being cast at (`enemy-casts-spell`), for a counterer weighing whether to stop it. */
+  declared?: DeclaredCast;
   /** The triggering attack's type — for `meleeOnly` triggers. */
   attackType?: AttackActionDefinition["attackType"];
   /** Movement step, for `enemy-leaves-reach`. */
@@ -6720,9 +6728,9 @@ function reactionTriggerPasses(
         return false;
       }
       const withinRange = spatialDistanceToPoint(state.snapshot, reactor, event.origin) <= trigger.withinFt;
-      // v1 Counterspell: auto-succeeds only if the counter slot's level ≥ the spell's.
+      // A spell no higher than the counter's slot is stopped outright; one above it takes the check, if it has one.
       const counterSlot = "resourceCost" in action ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
-      return withinRange && counterSlot != null && counterSlot >= event.spellLevel;
+      return withinRange && counterSlot != null && (counterSlot >= event.spellLevel || Boolean(trigger.checkAbove));
     }
     case "manual":
       return false;
@@ -6756,7 +6764,7 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
     return true;
   }
   if (meta.trigger.kind === "enemy-casts-spell") {
-    // Counter a real spell; let a cantrip / 1st-level through.
+    // Counters are weighed together, slot by slot (`counterOutlook`); this is only the fallback's bar.
     return (event.spellLevel ?? 0) >= 2;
   }
   if (meta.trigger.kind === "ally-targeted-by-attack") {
@@ -6806,6 +6814,155 @@ function reactionOptionsFor(
 function aiReactionPick(state: EngineState, options: EligibleReaction[], event: ReactionEvent): EligibleReaction | undefined {
   return options.find((reaction) => reaction.meta.priority !== "manual"
     && !(reaction.meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event)));
+}
+
+/* ─── Counters: which slot, or none ───────────────────────────────────────────
+ * The engine knows the rules: which slot stops which spell outright, and the check a lower slot needs. Whether a spell
+ * is worth stopping, and with which slot, is the AI's call (`assessCounter`, simulation.ts), which registers itself
+ * here because the AI module imports this one, not the other way round.
+ */
+
+/** What a spell is being cast at, as declared: its targets (one per beam, for beams), and an area's placement. */
+export interface DeclaredCast {
+  targetIds: Id[];
+  origin?: Point;
+  aimVector?: AimVector;
+}
+
+export interface CounterAdvice {
+  snapshot: EncounterSnapshot;
+  reactor: CombatantState;
+  caster: CombatantState;
+  /** The spell as it's being cast, when the counterer can see it (`rules.counterspellReadsSpell`). */
+  spell?: { action: ActionDefinition; declared: DeclaredCast };
+  /** The level the counterer judges by: the spell's own, or with the spell unseen a guess from the caster's sheet. */
+  level: number;
+  /** Each slot it could counter with, and the chance it stops a spell of `level`. */
+  options: Array<{ actionId: Id; slot: number; chance: number; priority: ReactionMeta["priority"] }>;
+}
+
+export interface CounterAssessment {
+  threat: SpellThreat;
+  /** Each option's worth: chance × threat, less what the slot and the reaction cost. */
+  scores: Array<{ actionId: Id; score: number; slotCost: number }>;
+  /** The option it takes, if any is worth it. */
+  pick?: Id;
+}
+
+export type CounterAdvisor = (advice: CounterAdvice) => CounterAssessment;
+
+let counterAdvisor: CounterAdvisor | undefined;
+
+/** Register the AI's counter judgement (simulation.ts does on load). `undefined` puts back the level-only fallback. */
+export function setCounterAdvisor(advisor: CounterAdvisor | undefined): void {
+  counterAdvisor = advisor;
+}
+
+/** A spell's own name, without the slot its copy names: "Fireball (upcast to slot 5)" → "Fireball". */
+export function spellNameOf(name: string | undefined): string {
+  return (name ?? "the spell").replace(/ \(upcast to slot \d+\)$/, "");
+}
+
+/** A spell valued by its level alone: when its effect can't be read, or the counterer can't see what it is. */
+export function threatByLevel(level: number): SpellThreat {
+  return { total: 6 * level, basis: "level", creatures: [] };
+}
+
+/** Without the AI module: counter a spell of 2nd level or higher with the cheapest slot that's sure to stop it. */
+function fallbackCounterAssessment(advice: CounterAdvice): CounterAssessment {
+  const threat = threatByLevel(advice.level);
+  const scores = advice.options.map((option) => ({ actionId: option.actionId, score: option.chance * threat.total - option.slot * 4, slotCost: option.slot * 4 }));
+  const sure = advice.options.filter((option) => option.chance >= 1 && option.priority !== "manual").sort((a, b) => a.slot - b.slot)[0];
+  return { threat, scores, pick: advice.level >= 2 ? sure?.actionId : undefined };
+}
+
+/** The level a counterer guesses a spell it can't see is cast at: the caster's highest slot, else its highest spell. */
+function guessedCastLevel(definition: CreatureDefinition): number {
+  const slots = Object.keys(definition.resources ?? {}).map((resourceId) => spellSlotLevel(resourceId) ?? 0);
+  const spells = (definition.spells ?? []).map((spell) => spell.level);
+  return Math.max(1, ...slots, ...spells);
+}
+
+/** The check a counter makes against a spell above its slot: its own, or none (`checkAbove: false`). */
+function counterCheckOf(meta: ReactionMeta): CounterCheck | undefined {
+  return meta.trigger.kind === "enemy-casts-spell" && meta.trigger.checkAbove ? meta.trigger.checkAbove : undefined;
+}
+
+/** The reactor's bonus to a counter's check: its spellcasting ability, plus the check's own bonus. */
+function counterCheckModifier(definition: CreatureDefinition, check: CounterCheck): number {
+  return abilityModifier(definition.abilities[spellcastingAbility(definition)]) + (check.bonus ?? 0);
+}
+
+/** Chance a counter cast with `slot` stops a spell of `level`: certain at or below its slot, else the check's. */
+function counterChance(slot: number, level: number, check: CounterCheck | undefined, modifier: number): number {
+  if (slot >= level) return 1;
+  if (!check) return 0;
+  return Math.min(1, Math.max(0, (21 - (check.dcBase + level - modifier)) / 20));
+}
+
+interface CounterOutlook {
+  /** Whether the counterer can see the spell (`rules.counterspellReadsSpell`). */
+  known: boolean;
+  threat: SpellThreat;
+  odds: Map<Id, CounterOdds>;
+  assessment: CounterAssessment;
+  pick?: EligibleReaction;
+}
+
+/** How each slot `reactor` could counter with would fare against the spell, and which (if any) the AI takes. */
+function counterOutlook(state: EngineState, reactor: CombatantState, options: EligibleReaction[], ev: ReactionEvent): CounterOutlook {
+  const snapshot = state.snapshot;
+  const caster = findCombatant(snapshot, ev.sourceId);
+  const casterDefinition = getDefinition(snapshot, caster);
+  const reactorDefinition = getDefinition(snapshot, reactor);
+  const known = snapshot.rules.counterspellReadsSpell !== false;
+  const action = ev.actionId ? findActionDefinition(casterDefinition, ev.actionId) : undefined;
+  const trueLevel = ev.spellLevel ?? 0;
+  const level = known ? trueLevel : guessedCastLevel(casterDefinition);
+  const odds = new Map<Id, CounterOdds>();
+  const adviceOptions: CounterAdvice["options"] = [];
+  for (const option of options) {
+    const slot = spellSlotLevel("resourceCost" in option.action ? option.action.resourceCost?.resourceId : undefined) ?? 0;
+    const check = counterCheckOf(option.meta);
+    const modifier = check ? counterCheckModifier(reactorDefinition, check) : 0;
+    odds.set(option.action.id, {
+      slot,
+      ...(check ? { check: { dcBase: check.dcBase, modifier } } : {}),
+      ...(known ? { chance: counterChance(slot, trueLevel, check, modifier), ...(check && slot < trueLevel ? { dc: check.dcBase + trueLevel } : {}) } : {})
+    });
+    adviceOptions.push({ actionId: option.action.id, slot, chance: counterChance(slot, level, check, modifier), priority: option.meta.priority });
+  }
+  const advice: CounterAdvice = {
+    snapshot, reactor, caster, level, options: adviceOptions,
+    ...(known && action && ev.declared ? { spell: { action, declared: ev.declared } } : {})
+  };
+  const assessment = (counterAdvisor ?? fallbackCounterAssessment)(advice);
+  return {
+    known,
+    threat: assessment.threat,
+    odds,
+    assessment,
+    pick: options.find((option) => option.action.id === assessment.pick)
+  };
+}
+
+/** The AI's counter decision, with its numbers, so a DM can see why it did (or didn't) counter. */
+function logCounterDecision(state: EngineState, reactor: CombatantState, ev: ReactionEvent, outlook: CounterOutlook): void {
+  const spell = outlook.known ? `${spellNameOf(ev.actionName)} at level ${ev.spellLevel}` : "the spell";
+  const threat = Math.round(outlook.threat.total);
+  const picked = outlook.assessment.scores.find((score) => score.actionId === outlook.pick?.action.id);
+  const odds = outlook.pick ? outlook.odds.get(outlook.pick.action.id) : undefined;
+  const chance = odds?.chance !== undefined && odds.chance < 1 ? ` (${Math.round(odds.chance * 100)}% with the check)` : "";
+  const message = outlook.pick
+    ? `${reactor.displayName} counters ${spell} with a level ${odds?.slot} slot${chance}: threat ≈${threat}${outlook.threat.basis === "level" ? " (valued by level)" : ""}, slot cost ${Math.round(picked?.slotCost ?? 0)}`
+    : `${reactor.displayName} lets ${spell} through: threat ≈${threat}${outlook.threat.basis === "level" ? " (valued by level)" : ""} isn't worth a slot`;
+  state.log.push(event(state, "AiDecision", message, {
+    combatantId: reactor.id,
+    counterActionId: outlook.pick?.action.id,
+    spellActionId: ev.actionId,
+    threat: outlook.threat,
+    options: outlook.assessment.scores.map((score) => ({ ...score, ...outlook.odds.get(score.actionId) }))
+  }));
 }
 
 function reactionContext(ev: ReactionEvent): ReactionContext {
@@ -6889,16 +7046,28 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
       if (options.length === 0) {
         continue;
       }
-      let reaction = aiReactionPick(state, options, ev);
+      // A counter is weighed slot by slot against what the spell would do; anything else takes the first worth it.
+      const outlook = ev.kind === "enemy-casts-spell" ? counterOutlook(state, reactor, options, ev) : undefined;
+      let reaction = outlook ? outlook.pick : aiReactionPick(state, options, ev);
+      let answered = false;
       if (state.decide) {
+        const context = reactionContext(ev);
         const answer = askDecision<ReactionRequest>(state, {
           kind: "reaction", reactorId: reactor.id, trigger: ev.kind, sourceId: ev.sourceId, targetId: ev.targetId,
-          options: options.map((option) => reactionOptionOf(option.action, option.targetId)),
-          aiChoice: reaction?.action.id ?? null, context: reactionContext(ev)
+          options: options.map((option) => ({
+            ...reactionOptionOf(option.action, option.targetId),
+            ...(outlook ? { counter: outlook.odds.get(option.action.id) } : {})
+          })),
+          aiChoice: reaction?.action.id ?? null,
+          context: outlook && context.spell ? { ...context, spell: outlook.known ? { ...context.spell, known: true, threat: outlook.threat } : { actionId: "", name: "", level: 0, known: false } } : context
         }, reactor.id);
         if (answer) {
+          answered = true;
           reaction = answer.actionId === null ? undefined : options.find((option) => option.action.id === answer.actionId) ?? reaction;
         }
+      }
+      if (outlook && !answered) {
+        logCounterDecision(state, reactor, ev, outlook);
       }
       if (!reaction) {
         continue;
@@ -6945,9 +7114,14 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
       return { imposedDisadvantage: true };
     }
     if (meta.trigger.kind === "enemy-casts-spell") {
-      // Counterspell: spend the reaction (+ its slot) and report the counter.
+      // Counterspell: spend the reaction (+ its slot). A spell no higher than the slot is stopped; above it, the check.
       resolveActivateFeatureAction(state, reactor.id, action.id);
-      return { countered: true };
+      const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) ?? 0;
+      const level = ev.spellLevel ?? 0;
+      const check = counterCheckOf(meta);
+      if (slot >= level) return { countered: true };
+      if (!check) return {};
+      return counterCheck(state, reactor, check, level, ev) ? { countered: true } : {};
     }
     switch (action.kind) {
       case "attack":
@@ -6983,11 +7157,31 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
 }
 
 /**
+ * A counter cast with a slot below the spell's level: a check with the reactor's spellcasting ability against
+ * `dcBase` + the spell's level. A DM may overrule it in Play. Whether it stopped the spell.
+ */
+function counterCheck(state: EngineState, reactor: CombatantState, check: CounterCheck, level: number, ev: ReactionEvent): boolean {
+  const definition = getDefinition(state.snapshot, reactor);
+  const dc = check.dcBase + level;
+  const roll = rollDice(withBonus("1d20", counterCheckModifier(definition, check)), state.rng);
+  const spell = ev.actionName ?? "the spell";
+  const overridden = askDecision<RollRequest>(state, {
+    kind: "roll", rollerId: reactor.id, purpose: "check", natural: roll.total - roll.modifier, total: roll.total, against: dc,
+    outcome: roll.total >= dc ? "success" : "failure", label: `Counter ${spell}`
+  }, reactor.id)?.outcome;
+  const success = overridden ? overridden !== "failure" : roll.total >= dc;
+  state.log.push(event(state, "CounterspellCheck", `${reactor.displayName} ${success ? "stops" : "fails to stop"} ${spell} (rolled ${roll.total} vs DC ${dc}${overridden ? ", DM override" : ""})`, {
+    combatantId: reactor.id, casterId: ev.sourceId, actionId: ev.actionId, spellLevel: level, roll, dc, success, ...(overridden ? { overridden } : {})
+  }));
+  return success;
+}
+
+/**
  * Counterspell window for a spell resolver. Call right after the caster's action
  * + slot are spent and the action is declared; a `true` return means the spell
  * was countered and the resolver must return an empty result.
  */
-function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition): boolean {
+function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition, declared: DeclaredCast): boolean {
   const spellLevel = castLevelOf(action);
   if (spellLevel == null) {
     return false;
@@ -6998,7 +7192,8 @@ function counterspellWindow(state: EngineState, caster: CombatantState, action: 
     origin: caster.position,
     spellLevel,
     actionId: action.id,
-    actionName: action.name
+    actionName: action.name,
+    declared
   });
   if (countered) {
     state.log.push(event(state, "SpellCountered", `${caster.displayName}'s ${action.name} was countered`, {

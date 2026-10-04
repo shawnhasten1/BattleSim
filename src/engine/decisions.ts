@@ -23,14 +23,56 @@ export interface ReactionOption {
   resourceCost?: ResourceCost;
   /** Who it acts on: the trigger's source (the attacker, caster or mover), its target, or the reactor itself. */
   targetId: Id;
+  /** A counter: the slot it's cast with, and its chance of stopping the spell. */
+  counter?: CounterOdds;
+}
+
+/** What a counter cast with one slot would do against the spell being cast. */
+export interface CounterOdds {
+  /** The slot level it's cast with: a spell no higher is stopped outright. */
+  slot: number;
+  /** A spell above the slot takes a check (DC `dcBase` + its level), else it can't be countered. */
+  check?: { dcBase: number; modifier: number };
+  /** With the spell's level known: its chance of stopping it (1 when certain), and the DC when it needs the check. */
+  chance?: number;
+  dc?: number;
+}
+
+/**
+ * What a spell being cast would do to the counterer's side if it isn't stopped, in expected hit points: damage, the
+ * chance it drops someone, conditions and how long they'd last, less what it does to the caster's own side, plus
+ * healing and buffs it gives them. `basis: "level"` when the spell's effect couldn't be read (or isn't known), and it
+ * was valued by its level instead.
+ */
+export interface SpellThreat {
+  total: number;
+  basis: "effect" | "level";
+  creatures: SpellThreatLine[];
+}
+
+export interface SpellThreatLine {
+  combatantId: Id;
+  /** Whose side it's on, seen from the counterer. */
+  side: "ours" | "theirs";
+  damage: number;
+  /** The expected damage would drop it. */
+  likelyDown: boolean;
+  conditions: Array<{ name: string; chance: number; turns: number }>;
+  healing?: number;
+  /** What it adds to the threat (negative for harm to the caster's side, which a counter would spare them). */
+  value: number;
 }
 
 /** What a prompt shows about the trigger. */
 export interface ReactionContext {
   /** The attack that triggered it: its roll against the AC, when it's known by now. */
   attack?: { actionId: Id; actionName: string; attackType: "melee" | "ranged" | "spell"; total?: number; natural?: number; targetAc?: number };
-  /** The spell being cast (Counterspell). */
-  spell?: { actionId: Id; name: string; level: number };
+  /**
+   * The spell being cast (Counterspell), and what it would do if let through. With the campaign rule
+   * `counterspellReadsSpell` off, `known` is false: the counterer only sees that a spell is being cast (no name, level
+   * or threat).
+   */
+  spell?: { actionId: Id; name: string; level: number; known?: boolean; threat?: SpellThreat };
   /** The mover's step out of reach (opportunity attacks). */
   step?: { from: Point; to: Point };
   /** Damage the reactor just took (Hellish Rebuke). */

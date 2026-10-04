@@ -180,7 +180,8 @@ describe("srd:spell:counterspell — enemy-casts-spell interrupt", () => {
     fighter.position = { x: 1, y: 1 };
     fighter.resources = { "slot-3": 1 };
     const goblin = combatantOf(encounter, "enemy-goblin-1");
-    goblin.position = { x: 4, y: 1 };
+    // Out of reach of the Fireball's 20 ft: a caster in its own blast isn't worth countering.
+    goblin.position = { x: 8, y: 1 };
     goblin.currentHp = 40;
     goblin.actionEconomy = { action: true, bonus: true, reaction: true };
     goblin.resources = { "slot-3": 1 };
@@ -193,7 +194,7 @@ describe("srd:spell:counterspell — enemy-casts-spell interrupt", () => {
   it("counters an in-range level-3 spell: no damage, caster's action + slot still spent, reactor's slot spent", () => {
     const state = createEngineState(counterEncounter("cs-hit"));
     state.rng = scriptedRng({ 20: [10] });
-    const result = resolveAreaSaveAction(state, "pc-fighter", { x: 4, y: 1 }, "srd:spell:fireball:action");
+    const result = resolveAreaSaveAction(state, "pc-fighter", { x: 8, y: 1 }, "srd:spell:fireball:action");
 
     expect(result.targets).toHaveLength(0);
     expect(state.log.some((e) => e.type === "SpellCountered" && e.data?.actionId === "srd:spell:fireball:action")).toBe(true);
@@ -209,14 +210,14 @@ describe("srd:spell:counterspell — enemy-casts-spell interrupt", () => {
     combatantOf(encounter, "enemy-goblin-1").resources = { "slot-2": 1 };
     const state = createEngineState(encounter);
     state.rng = scriptedRng({ 20: [1] });
-    const result = resolveAreaSaveAction(state, "pc-fighter", { x: 4, y: 1 }, "srd:spell:fireball:action");
+    const result = resolveAreaSaveAction(state, "pc-fighter", { x: 8, y: 1 }, "srd:spell:fireball:action");
 
     expect(state.log.some((e) => e.type === "SpellCountered")).toBe(false);
     expect(result.targets.length).toBeGreaterThan(0);
     expect(combatantOf(state.snapshot, "enemy-goblin-1").resources?.["slot-2"]).toBe(1);
   });
 
-  it("lets a 1st-level spell through — v1 only spends the reaction on level 2+", () => {
+  it("lets a 1st-level Guiding Bolt through: it isn't worth a 3rd-level slot", () => {
     const encounter = counterEncounter("cs-lowlevel");
     giveSpell(encounter, "def-fighter", "srd:spell:guiding-bolt");
     combatantOf(encounter, "pc-fighter").resources = { "slot-1": 1, "slot-3": 1 };
