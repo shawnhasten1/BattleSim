@@ -50,6 +50,8 @@ import {
   refillLegendaryPoints,
   resolveUse,
   spellSlotLevel,
+  isDominatedUpcast,
+  upcastBaseId,
   type EngineState
 } from "./combat";
 import { askDecision, type TurnOptionRequest, type TurnPick } from "./decisions";
@@ -2035,7 +2037,7 @@ function selectBuffAction(
   const candidates = buffActions.flatMap((action) => {
     const mode = action.targeting?.target ?? "single";
     const eligible = mode === "self" ? [actor] : allies;
-    const conditionId = action.appliedCondition.id ?? action.id;
+    const conditionId = action.appliedCondition.id ?? upcastBaseId(action.id);
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     return eligible
       .filter((target) => !target.conditions?.some((condition) => condition.id === conditionId))
@@ -2085,7 +2087,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
 
   let best: BuffBurstPlan | undefined;
   for (const action of buffActions) {
-    const conditionId = action.appliedCondition.id ?? action.id;
+    const conditionId = action.appliedCondition.id ?? upcastBaseId(action.id);
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     const scored = allies
       .filter((target) => !target.conditions?.some((condition) => condition.id === conditionId))
@@ -3055,6 +3057,10 @@ function canPayResource(actor: CombatantState, action: ActionDefinition, executa
   if ("resourceCost" in action && action.resourceCost && (actor.resources?.[action.resourceCost.resourceId] ?? 0) < action.resourceCost.amount) {
     return false;
   }
+  // The same spell for a pricier slot isn't a choice while a cheaper one is left.
+  if (isDominatedUpcast(actor, action)) {
+    return false;
+  }
   // A routine needs every ability it names: an option that breathes fire isn't offered while the breath recharges.
   return action.kind !== "multiattack" || !executables || multiattackPayable(actor, action, executables);
 }
@@ -3533,7 +3539,7 @@ function expectedChargeValue(
 
 
 function featureAppliesToExpectedAction(effect: FeatureEffect, action: Extract<ActionDefinition, { kind: "attack" }>): boolean {
-  if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(action.id)) {
+  if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(upcastBaseId(action.id))) {
     return false;
   }
   if ("attackTypes" in effect && effect.attackTypes && !effect.attackTypes.includes(action.attackType)) {

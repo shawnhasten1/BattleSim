@@ -6,6 +6,7 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   abilityModifier,
   getExecutableActions,
+  isUpcastVariant,
   proficiencyFromDefinition,
   resolveNumericFormula,
   type Ability,
@@ -126,7 +127,8 @@ export function FeatureEffectCards({ groups, onAdd, definition, newPools, activa
   const addRef = useRef<HTMLButtonElement>(null);
   const places = groups.map((group) => group.place);
   const attacks = useMemo(
-    () => getExecutableActions(definition).filter((action) => action.kind === "attack").map((action) => ({ id: action.id, name: action.name })),
+    // A spell cast with a higher slot is still that spell: an effect on it reaches every slot.
+    () => getExecutableActions(definition).filter((action) => action.kind === "attack" && !isUpcastVariant(action)).map((action) => ({ id: action.id, name: action.name })),
     [definition]
   );
   const context: CardContext = { definition, newPools, activated, weapon, attacks };

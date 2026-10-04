@@ -219,12 +219,19 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell, definition)] : []));
-  const spellUpcastActions = spellActions.flatMap((action) => spellUpcastVariants(definition, action));
   // An optional variant rule (a demon's Summon Demon) grants nothing until the DM switches it on.
   const grantedActions = [
     ...(definition.features ?? []),
     ...(definition.traits ?? [])
   ].filter((feature) => !feature.optional || feature.enabled).flatMap((feature) => feature.grantedActions ?? []);
+  // Anything that spends a spell slot can spend a higher one: a spell, or an older sheet's spell kept as an action.
+  const spellUpcastActions = [
+    ...spellActions,
+    ...definition.actions,
+    ...(definition.bonusActions ?? []),
+    ...(definition.reactions ?? []),
+    ...grantedActions
+  ].flatMap((action) => spellUpcastVariants(definition, action));
   const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
 
   const declared = [
@@ -2364,7 +2371,7 @@ export function resolveBuffAction(
     tempHpAmount += rollDice(withBonus(component.dice, abilityBonus), state.rng).total;
   }
 
-  const conditionId = action.appliedCondition.id ?? action.id;
+  const conditionId = action.appliedCondition.id ?? upcastBaseId(action.id);
   for (const target of targets) {
     const instance: ConditionInstance = {
       id: conditionId,
@@ -4924,25 +4931,95 @@ function stampSpellContext(
  * the AI's existing resourceCost-based affordability filter and scoring
  * penalty see each higher slot as its own candidate action, each spending
  * (and only spending) the slot it upcasts to.
+ *
+ * Every leveled spell gets them, whether or not a higher slot makes it
+ * stronger: a creature out of 4th-level slots casts Blight with a 5th. A copy
+ * that adds nothing (`upcastAddsSomething`) is only offered to the AI once
+ * every cheaper slot is gone (`isDominatedUpcast`).
  */
 function spellUpcastVariants(definition: CreatureDefinition, action: ActionDefinition): ActionDefinition[] {
-  if (action.kind !== "attack" && action.kind !== "save" && action.kind !== "area-save" && action.kind !== "healing" && action.kind !== "reposition" && action.kind !== "buff") {
+  const cost = action.kind !== "multiattack" && "resourceCost" in action ? action.resourceCost : undefined;
+  const baseLevel = spellSlotLevel(cost?.resourceId);
+  if (!cost || baseLevel == null) {
     return [];
   }
-  if (!action.resourceCost || action.spellLevel == null || !action.upcast?.perSlotAboveBase) {
-    return [];
-  }
-  const baseLevel = spellSlotLevel(action.resourceCost.resourceId) ?? action.spellLevel;
   const higherTiers = Object.keys(definition.resources ?? {})
     .map((resourceId) => spellSlotLevel(resourceId))
     .filter((level): level is number => level != null && level > baseLevel)
     .sort((a, b) => a - b);
   return higherTiers.map((level) => ({
     ...action,
-    id: `${action.id}:upcast-${level}`,
+    id: `${action.id}${UPCAST_SUFFIX}${level}`,
     name: `${action.name} (upcast to slot ${level})`,
-    resourceCost: { resourceId: `slot-${level}`, amount: 1 }
+    resourceCost: { resourceId: `slot-${level}`, amount: cost.amount },
+    upcastFrom: baseLevel
   } as ActionDefinition));
+}
+
+const UPCAST_SUFFIX = ":upcast-";
+const UPCAST_ID = /:upcast-\d+$/;
+
+/** Whether `action` is a spell cast with a higher slot than its own (`<id>:upcast-N`). */
+export function isUpcastVariant(action: Pick<ActionDefinition, "id">): boolean {
+  return UPCAST_ID.test(action.id);
+}
+
+/** The spell a higher-slot copy is a copy of: `blight:upcast-5` → `blight`. Any other id is its own. */
+export function upcastBaseId(id: Id): Id {
+  return id.replace(UPCAST_ID, "");
+}
+
+/**
+ * Whether casting `action` with a higher slot changes what it does: more dice, beams or targets, or (a counter) a
+ * higher level it stops outright. A spell whose `upcast` names nothing its kind reads only costs more.
+ */
+export function upcastAddsSomething(action: ActionDefinition): boolean {
+  if (action.kind === "activate-feature") return action.reaction?.trigger.kind === "enemy-casts-spell";
+  const per = "upcast" in action ? action.upcast?.perSlotAboveBase : undefined;
+  if (!per) return false;
+  switch (action.kind) {
+    case "attack":
+      return Boolean(per.damageDice && action.damage.length) || Boolean(per.beams && action.attackDelivery === "beams");
+    case "save":
+      return Boolean(per.damageDice && action.damage.length) || Boolean(per.targets && action.targeting?.target !== "self");
+    case "area-save":
+      return Boolean(per.damageDice && action.damage.length);
+    case "healing":
+      return Boolean(per.damageDice);
+    case "buff":
+      return Boolean(per.targets && action.targeting?.target === "chosen");
+    default:
+      return false;
+  }
+}
+
+/** A spell and each copy of it cast with a higher slot, cheapest slot first. Anything else is just itself. */
+export function slotCopiesOf(definition: CreatureDefinition, actionId: Id): ActionDefinition[] {
+  const baseId = upcastBaseId(actionId);
+  return getExecutableActions(definition).filter((action) => action.id === baseId || (isUpcastVariant(action) && upcastBaseId(action.id) === baseId));
+}
+
+/** The cheapest way `combatant` can still cast a spell: its own slot, else the lowest higher slot it has left. */
+export function cheapestCastable(definition: CreatureDefinition, combatant: Pick<CombatantState, "resources">, actionId: Id): ActionDefinition | undefined {
+  return slotCopiesOf(definition, actionId).find((action) => {
+    const cost = "resourceCost" in action ? action.resourceCost : undefined;
+    return !cost || (combatant.resources?.[cost.resourceId] ?? 0) >= cost.amount;
+  });
+}
+
+/**
+ * A higher-slot copy that adds nothing while a cheaper slot it could use is still left: the same spell for more. A
+ * player may still choose it; the AI never does, so its choices don't grow until the cheaper slots run out.
+ */
+export function isDominatedUpcast(combatant: Pick<CombatantState, "resources">, action: ActionDefinition): boolean {
+  const from = action.upcastFrom;
+  const to = "resourceCost" in action ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
+  if (from == null || to == null || upcastAddsSomething(action)) return false;
+  const amount = ("resourceCost" in action ? action.resourceCost?.amount : undefined) ?? 1;
+  for (let level = from; level < to; level += 1) {
+    if ((combatant.resources?.[`slot-${level}`] ?? 0) >= amount) return true;
+  }
+  return false;
 }
 
 /** The level a creature casts at: what scales its cantrips (and Eldritch Blast's beams). */
@@ -6103,7 +6180,7 @@ function featureSaveDcModifier(
       if (effect.kind !== "save-dc-bonus") {
         continue;
       }
-      if (effect.actionIds && !effect.actionIds.includes(action.id)) {
+      if (effect.actionIds && !effect.actionIds.includes(upcastBaseId(action.id))) {
         continue;
       }
       if (effect.spellsOnly && action.spellLevel === undefined) {
@@ -6201,7 +6278,7 @@ function featureEffectUseKey(feature: FeatureDefinitionSource, effect: FeatureEf
 }
 
 function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefinition): boolean {
-  if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(action.id)) {
+  if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(upcastBaseId(action.id))) {
     return false;
   }
   if ("attackTypes" in effect && effect.attackTypes && !effect.attackTypes.includes(action.attackType)) {
@@ -6694,7 +6771,8 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
 
 /**
  * Every reaction `reactor` could take for `event`, whatever the AI would make of it, in the creature's own order.
- * A player is offered all of them; `aiReactionPick` is the AI's choice among them.
+ * A player is offered all of them; `aiReactionPick` is the AI's choice among them. A higher slot that adds nothing
+ * (Shield with a 2nd-level slot while a 1st is left) isn't one of them.
  */
 function reactionOptionsFor(
   state: EngineState,
@@ -6707,7 +6785,7 @@ function reactionOptionsFor(
   const definition = getDefinition(state.snapshot, reactor);
   const options: EligibleReaction[] = [];
   for (const action of getExecutableActions(definition)) {
-    if (action.actionType !== "reaction" || action.automationSupport !== "full" || !canSpendResource(reactor, action)) {
+    if (action.actionType !== "reaction" || action.automationSupport !== "full" || !canSpendResource(reactor, action) || isDominatedUpcast(reactor, action)) {
       continue;
     }
     const meta = reactionMetaFor(action);
@@ -6910,23 +6988,34 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
  * was countered and the resolver must return an empty result.
  */
 function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition): boolean {
-  if (!("spellLevel" in action) || action.spellLevel == null) {
+  const spellLevel = castLevelOf(action);
+  if (spellLevel == null) {
     return false;
   }
   const { countered } = runReactionWindow(state, {
     kind: "enemy-casts-spell",
     sourceId: caster.id,
     origin: caster.position,
-    spellLevel: action.spellLevel,
+    spellLevel,
     actionId: action.id,
     actionName: action.name
   });
   if (countered) {
     state.log.push(event(state, "SpellCountered", `${caster.displayName}'s ${action.name} was countered`, {
-      casterId: caster.id, actionId: action.id, spellLevel: action.spellLevel
+      casterId: caster.id, actionId: action.id, spellLevel
     }));
   }
   return countered === true;
+}
+
+/**
+ * The level a spell is cast at: the slot it spends (an upcast Fireball with a 5th-level slot is a 5th-level spell, and
+ * a warlock's pact slot casts at its own level), or its printed level when it spends no slot. Undefined for anything
+ * that isn't a spell.
+ */
+export function castLevelOf(action: ActionDefinition): number | undefined {
+  if (!("spellLevel" in action) || action.spellLevel == null) return undefined;
+  return spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) ?? action.spellLevel;
 }
 
 function occupiedCells(snapshot: EncounterSnapshot, movingCombatantId: Id): Point[] {

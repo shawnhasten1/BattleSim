@@ -1390,7 +1390,16 @@ export interface TransformActionDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
-export type ActionDefinition =
+/** What `getExecutableActions` stamps on the copies it compiles. Never authored. */
+export interface CompiledActionMeta {
+  /**
+   * On a spell cast with a higher slot (`<id>:upcast-N`): the slot level the spell's own cost names. Any leveled spell
+   * can be cast with a higher slot, whether or not that makes it stronger.
+   */
+  upcastFrom?: number;
+}
+
+export type ActionDefinition = (
   | AttackActionDefinition
   | SaveActionDefinition
   | AreaSaveActionDefinition
@@ -1402,7 +1411,8 @@ export type ActionDefinition =
   | MultiattackActionDefinition
   | UtilityActionDefinition
   | SummonActionDefinition
-  | TransformActionDefinition;
+  | TransformActionDefinition
+) & CompiledActionMeta;
 
 /** Limited-use pool backing a weapon's spell-like `onHit` riders. */
 export interface WeaponCharges {

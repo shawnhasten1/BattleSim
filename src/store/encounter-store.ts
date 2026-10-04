@@ -16,6 +16,8 @@ import {
   planRamp,
   withGroundHeights,
   getExecutableActions,
+  cheapestCastable,
+  slotCopiesOf,
   resolveDeathSave,
   rollDice,
   rollInitiative,
@@ -2601,20 +2603,22 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         const conditionId = action.appliedCondition.id ?? action.id;
-        const alreadyActive = (combatant.conditions ?? []).some((condition) => condition.id === conditionId);
+        const active = (combatant.conditions ?? []).find((condition) => condition.id === conditionId);
 
-        if (alreadyActive) {
-          // Toggle off: drop the condition, refund the resource. Temp HP is
+        if (active) {
+          // Toggle off: drop the condition, refund the slot it was put up with. Temp HP is
           // deliberately left alone — see the plan's "no auto-revert" note.
+          const spent = slotCopiesOf(definition, action.id).find((copy) => copy.id === active.sourceId) ?? action;
+          const cost = "resourceCost" in spent ? spent.resourceCost : undefined;
           commitEncounter({
             ...encounter,
             combatants: encounter.combatants.map((candidate) => candidate.id !== combatantId ? candidate : {
               ...candidate,
               conditions: (candidate.conditions ?? []).filter((condition) => condition.id !== conditionId),
-              resources: action.resourceCost
+              resources: cost
                 ? {
                   ...(candidate.resources ?? {}),
-                  [action.resourceCost.resourceId]: (candidate.resources?.[action.resourceCost.resourceId] ?? 0) + action.resourceCost.amount
+                  [cost.resourceId]: (candidate.resources?.[cost.resourceId] ?? 0) + cost.amount
                 }
                 : candidate.resources
             })
@@ -2622,12 +2626,17 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
 
+        // Its own slot, or with that gone the lowest higher slot left (a 2nd-level Mage Armor).
+        const cast = cheapestCastable(definition, combatant, action.id);
+        if (!cast || cast.kind !== "buff") {
+          return;
+        }
         const engine = createEngineState(encounter);
         engine.log = [...state.log];
         applyCondition(engine, combatantId, {
           id: conditionId,
           name: action.appliedCondition.name ?? "custom",
-          sourceId: action.id,
+          sourceId: cast.id,
           sourceName: action.name,
           sourceCombatantId: combatantId,
           // Not `engine.snapshot.round` — a prep buff is toggled before
@@ -2639,15 +2648,15 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         const target = engine.snapshot.combatants.find((candidate) => candidate.id === combatantId);
         if (target) {
-          if (action.resourceCost) {
-            const current = target.resources?.[action.resourceCost.resourceId] ?? 0;
+          if (cast.resourceCost) {
+            const current = target.resources?.[cast.resourceCost.resourceId] ?? 0;
             target.resources = {
               ...(target.resources ?? {}),
-              [action.resourceCost.resourceId]: Math.max(0, current - action.resourceCost.amount)
+              [cast.resourceCost.resourceId]: Math.max(0, current - cast.resourceCost.amount)
             };
           }
-          if (action.tempHp?.length) {
-            const amount = action.tempHp.reduce((sum, component) => sum + rollDice(component.dice, engine.rng).total, 0);
+          if (cast.tempHp?.length) {
+            const amount = cast.tempHp.reduce((sum, component) => sum + rollDice(component.dice, engine.rng).total, 0);
             target.tempHp = Math.max(target.tempHp, amount);
           }
         }

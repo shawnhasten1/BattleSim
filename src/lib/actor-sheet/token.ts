@@ -1,5 +1,5 @@
 import { tokenImageSource, type TokenImageSource } from "@/lib/token-image";
-import { getExecutableActions, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
+import { cheapestCastable, getExecutableActions, isUpcastVariant, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
 
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 
@@ -12,17 +12,19 @@ export interface PrepBuff {
   affordable: boolean;
 }
 
-/** The buffs cast before a fight (`prepOnly`), as the Combat panel and the Token tab offer them (`togglePrepBuff`). */
+/**
+ * The buffs cast before a fight (`prepOnly`), as the Combat panel and the Token tab offer them (`togglePrepBuff`). One
+ * entry per spell: with its own slot gone, a higher slot still puts it up.
+ */
 export function prepBuffs(definition: CreatureDefinition, combatant: Pick<CombatantState, "conditions" | "resources">): PrepBuff[] {
   return getExecutableActions(definition)
-    .filter((action): action is BuffAction => action.kind === "buff" && Boolean(action.prepOnly))
+    .filter((action): action is BuffAction => action.kind === "buff" && Boolean(action.prepOnly) && !isUpcastVariant(action))
     .map((action) => {
       const conditionId = action.appliedCondition.id ?? action.id;
-      const cost = action.resourceCost;
       return {
         action,
         active: combatant.conditions?.some((condition) => condition.id === conditionId) ?? false,
-        affordable: !cost || (combatant.resources?.[cost.resourceId] ?? 0) >= cost.amount
+        affordable: cheapestCastable(definition, combatant, action.id) !== undefined
       };
     });
 }
