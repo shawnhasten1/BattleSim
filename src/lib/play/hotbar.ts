@@ -358,7 +358,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       slot: base.actionType === "reaction" ? "action" : base.actionType,
       variants,
       defaultVariant: Math.max(0, usable),
-      cost: variants[0]!.cost,
+      // What a click spends: with a spell's own slots gone, the lowest higher one it'll use.
+      cost: variants[Math.max(0, usable)]!.cost,
       automation,
       problem: usable < 0 ? variants[0]!.problem : undefined,
       title: entry.title,

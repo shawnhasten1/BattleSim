@@ -69,6 +69,8 @@ describe("the hotbar's slot chips", () => {
     const blight = button("Blight");
     expect(blight.variants.map((variant) => [variant.label, variant.problem])).toEqual([["4th", "No 4th-level slots left"], ["5th", undefined]]);
     expect(blight.defaultVariant).toBe(1);
+    // The button says what a click spends: the 5th-level slot, its own being gone.
+    expect(blight.cost).toBe("5th-level slot");
     expect(button("Fireball").variants.map((variant) => variant.label)).toEqual(["3rd", "4th · +1d6", "5th · +2d6"]);
     expect(button("Fireball").defaultVariant).toBe(0);
   });
