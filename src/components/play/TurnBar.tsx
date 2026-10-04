@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { controllerOf, getDefinition, LAIR_INITIATIVE } from "@/engine";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { useDisplayEncounter } from "@/hooks/useDisplayEncounter";
-import { useEncounterStore } from "@/store/encounter-store";
+import { hasVanished, useEncounterStore } from "@/store/encounter-store";
 import styles from "./play.module.css";
 
 /**
@@ -25,6 +25,9 @@ export function TurnBar() {
   return (
     <nav className={styles.turnBar} aria-label="Turn order">
       {board.combatants.map((combatant, index) => {
+        if (hasVanished(combatant)) {
+          return index === lairIndex ? <span key={combatant.id} className={styles.lairSlot} title="Lair actions on initiative 20">20 lair</span> : null;
+        }
         const definition = getDefinition(board, combatant);
         const controller = controllerOf(board, control, combatant);
         const out = combatant.state !== "active";

@@ -8,7 +8,7 @@ import { overruleItems } from "@/components/play/RollStrip";
 import { ContextMenu } from "@/components/ui/ContextMenu";
 import { recentRolls, rollsByLogIndex, type RollItem } from "@/lib/play/rolls";
 import { PlaySetup } from "@/components/play/PlaySetup";
-import { isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
+import { hasVanished, isDominated, isSurprised, useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying, usePlaybackCursor } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
@@ -273,6 +273,7 @@ export function CombatPanel() {
                 <span className={styles.hp}>{lairMarker}</span>
               </li>
             ) : null}
+            {hasVanished(combatant) ? null : (
             <li className={play ? styles.withController : undefined}>
               <button
                 type="button"
@@ -354,6 +355,7 @@ export function CombatPanel() {
                 </div>
               ) : null}
             </li>
+            )}
             </Fragment>
           );
         })}

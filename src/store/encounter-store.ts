@@ -474,6 +474,14 @@ export function isDominated(combatant: CombatantState): boolean {
   return (combatant.conditions ?? []).some((condition) => condition.name === "dominated");
 }
 
+/**
+ * A summoned creature that has gone (its duration ran out, its summoner died or lost concentration): the engine keeps
+ * it as `"fled"` for the log and the report, but it isn't on the board any more — no token, no place in the order.
+ */
+export function hasVanished(combatant: Pick<CombatantState, "summon" | "state">): boolean {
+  return Boolean(combatant.summon) && combatant.state === "fled";
+}
+
 /** A fresh "surprised" condition: denies the bearer's first turn, then self-expires at the start of round 2. */
 function surprisedCondition(encounter: EncounterSnapshot): ConditionInstance {
   return {
@@ -1126,7 +1134,8 @@ export const useEncounterStore = create<EncounterStore>()(
           ...encounter,
           round: 0,
           turnIndex: 0,
-          combatants: encounter.combatants.map((combatant) => {
+          // What was summoned during the fight goes with it: it isn't part of the setup.
+          combatants: encounter.combatants.filter((combatant) => !combatant.summon).map((combatant) => {
             const definition = getDefinition(encounter, combatant);
             return {
               ...combatant,

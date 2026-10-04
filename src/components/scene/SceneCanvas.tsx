@@ -3,7 +3,7 @@
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type ConditionName, type CoverLevel, type CreatureDefinition, type DmChange, type TerrainZone, type WallSegment } from "@/engine";
-import { isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
+import { hasVanished, isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { useDisplayEncounter, useIsPlayingBack, useIsReplaying } from "@/hooks/useDisplayEncounter";
 import { PlayOverlay } from "@/components/play/PlayOverlay";
@@ -213,7 +213,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const deviceImages = useDeviceTokenImages();
   const tokenLayouts = useMemo(
     () =>
-      encounter.combatants.map((combatant) => {
+      encounter.combatants.filter((combatant) => !hasVanished(combatant)).map((combatant) => {
         const definition = getDefinition(encounter, combatant);
         const footprint = sizeFootprint(definition.size);
         const drag = draggedToken?.id === combatant.id ? draggedToken : null;
