@@ -1,7 +1,26 @@
 # Upcasting and Counterspell Plan: any slot at or above, and counters that scale
 
-**Status:** proposed 2026-10-04, not started. D1, D4 and D7 confirmed 2026-10-04: D4 was reworked to weigh the
-spell's actual effect (§3), and D7 became a campaign rule (§7). The other decisions in §8 have recommended defaults.
+**Status:** built 2026-10-04 on branch `spell-slots`, not merged: Phase 0 `5d7a619`, Phase 1 `ed3d6e0`, Phase 2
+`828d4b5`, Phase 3 `6e3f0eb`, Phase 4 `1512b54`, Phase 5 `d1ca391`, and a hotbar fix `5848eff` found in the browser
+check. D1, D4 and D7 were confirmed by the user; the other decisions took their recommended defaults.
+
+**Where the build differs from the plan below:**
+- **Older sheets get copies too.** Higher-slot copies are compiled for anything that spends a `slot-N`, not just
+  `spells[]`: older sheets (mage.json, bard-template.json) keep spells as plain actions, and they were locked out too.
+- **Saved counters take the check.** A saved `enemy-casts-spell` counter with no level cap is given
+  `checkAbove: { dcBase: 10 }` by `migrateDefinition`, so existing Counterspells (the warlock and bard templates) work
+  by the rules without being re-edited. `checkAbove: false` keeps a counter that never rolls.
+- **The counter AI is registered as an advisor.** `simulation.ts` registers `assessCounter` with `setCounterAdvisor`
+  (combat.ts can't import it). It returns both the threat and the pick; `resourceStanceMultiplier` stays in
+  simulation.ts.
+- **The SRD offer is for spells with no upcasting.** A spell that upcasts its own way is left alone, not offered the
+  SRD's.
+- **Compact chips are ordinals.** With five slots or more, each chip shows only its ordinal, with the full label as its
+  accessible name and tooltip, rather than a separate segmented control.
+- **The prompt names the spell without its slot copy.** "Fireball (5th level)", not "Fireball (upcast to slot 5)"
+  (`spellNameOf`).
+- **The database column was pushed.** `Project.rulesJson` is on the Neon database. A dev server started before the push
+  keeps the old Prisma client in memory and returns 500 on the campaign routes until it is restarted.
 
 Three problems, reported from play:
 
