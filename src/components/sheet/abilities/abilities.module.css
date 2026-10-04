@@ -866,3 +866,21 @@
   font-size: 10.5px;
   color: var(--ui-text-dim);
 }
+
+/* Spells the SRD would give upcasting to: offered on the Actions tab, never applied by itself. */
+.upcastOffers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upcastOfferList {
+  margin: 0;
+  padding: 0 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ui-text-dim);
+}

@@ -30,6 +30,7 @@ import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
 import { AddAbility, type BlankKind } from "../abilities/AddAbility";
 import { ResourceList } from "../abilities/ResourceList";
 import { SpellcastingHeading } from "../abilities/SpellcastingHeading";
+import { UpcastOffers } from "../abilities/UpcastOffers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -268,6 +269,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
           <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
         </div>
         <ResourceList definition={definition} combatant={combatant} />
+        <UpcastOffers definition={definition} />
       </div>
 
       {addOpen ? (

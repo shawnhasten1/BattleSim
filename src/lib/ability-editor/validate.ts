@@ -138,8 +138,6 @@ function missingPools(definition: CreatureDefinition, record: AbilityRecord): st
     ...actionsIn(record).map((action) => ({ action, cost: "resourceCost" in action ? action.resourceCost : undefined })),
     ...(((record as WeaponDefinition).onHit ?? []).map((rider) => ({ action: undefined, cost: rider.kind === "note" ? undefined : rider.resourceCost })))
   ];
-  // A spell's upcasting is on the spell; the engine copies it onto the action.
-  const spellUpcasts = Boolean((record as SpellDefinition).upcast?.perSlotAboveBase);
   // Pools its effects spend (Legendary Resistance's uses, a regained resource), on the record or while it's active.
   const holder = record as { effects?: FeatureEffect[]; grantedActions?: ActionDefinition[] };
   const effectIds = [...effectPools(holder.effects), ...effectPools(activationOf(holder)?.condition?.effects)];
@@ -147,10 +145,9 @@ function missingPools(definition: CreatureDefinition, record: AbilityRecord): st
   for (const { action, cost } of costs) {
     if (!cost || seeds.has(cost.resourceId) || has(cost.resourceId)) continue;
     const slot = spellSlotLevel(cost.resourceId);
-    // A spell that upcasts can still be cast with any higher slot the creature has.
-    const upcasts = spellUpcasts || Boolean(action && "upcast" in action && action.upcast?.perSlotAboveBase);
-    if (slot !== undefined && upcasts
-      && Object.keys(definition.resources ?? {}).some((id) => (spellSlotLevel(id) ?? 0) > slot)) continue;
+    // An ability that spends a slot can spend a higher one the creature has, whether or not that makes it stronger
+    // (a weapon's on-hit rider can't: it spends the slot it names).
+    if (slot !== undefined && action && Object.keys(definition.resources ?? {}).some((id) => (spellSlotLevel(id) ?? 0) > slot)) continue;
     missing.add(slot !== undefined ? poolName(cost.resourceId, 2) : poolName(cost.resourceId));
   }
   return [...missing];

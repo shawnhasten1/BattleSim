@@ -3,6 +3,7 @@
 import { useId, type ReactNode } from "react";
 import type { ActionDefinition, CreatureDefinition, ReactionMeta, SpellDefinition, SpellUpcast } from "@/engine";
 import { spellLimit } from "@/lib/ability-editor/bindings";
+import { higherLevelsText, srdUpcastOffer } from "@/lib/ability-editor/upcasting";
 import type { SectionId } from "@/lib/ability-editor/sections";
 import {
   canBeReaction,
@@ -188,10 +189,56 @@ function SpellUse({ spell, onChange, definition, newPools, parkedReaction }: {
 
 type PerSlot = NonNullable<SpellUpcast["perSlotAboveBase"]>;
 
-/** What a higher slot adds, per level above the spell's: dice of damage or healing, beams, targets. */
+/**
+ * Casting with a higher slot. Any leveled spell can; what a higher slot adds, per level above the spell's (dice of damage
+ * or healing, beams, targets), if anything; what it does that isn't simulated; the SRD's upcasting, offered for a spell
+ * of the same name that has none; and the spell's own "At Higher Levels" text.
+ */
 function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (next: SpellDefinition) => void }) {
   const action = spell.action;
-  const per: PerSlot = upcastOf(spell)?.perSlotAboveBase ?? {};
+  const upcast = upcastOf(spell);
+  const offer = srdUpcastOffer(spell);
+  const reference = higherLevelsText(spell.description);
+  if (action && "reaction" in action && action.reaction?.trigger.kind === "enemy-casts-spell") {
+    return (
+      <Field copy="higherSlot">
+        <p className={styles.hint}>A higher slot stops a spell of its own level or lower outright; above that, the check (in When).</p>
+      </Field>
+    );
+  }
+  return (
+    <Field copy="higherSlot">
+      <UpcastBenefits spell={spell} onChange={onChange} />
+      {offer ? (
+        <p className={styles.hint}>
+          {offer.text}{" "}
+          <button type="button" className={styles.linkBtn} onClick={() => onChange(withUpcast(spell, { ...offer.upcast, ...(upcast?.notModelled ? { notModelled: upcast.notModelled } : {}) }))}>Use it</button>
+        </p>
+      ) : null}
+      {reference ? <p className={`${styles.hint} ${styles.reference}`}>At higher levels: {reference}</p> : null}
+      <More set={upcast?.notModelled ? 1 : 0} label="Not simulated">
+        <Field copy="upcastNotModelled">
+          <input
+            aria-label="What else a higher slot does (not simulated)"
+            placeholder="A longer duration, a bigger sphere…"
+            value={upcast?.notModelled ?? ""}
+            onChange={(e) => {
+              const notModelled = e.target.value;
+              const rest = upcast?.perSlotAboveBase ? { perSlotAboveBase: upcast.perSlotAboveBase } : {};
+              onChange(withUpcast(spell, notModelled.trim() || upcast?.perSlotAboveBase ? { ...rest, ...(notModelled.trim() ? { notModelled } : {}) } : undefined));
+            }}
+          />
+        </Field>
+      </More>
+    </Field>
+  );
+}
+
+/** What a higher slot adds, per level above the spell's: dice of damage or healing, beams, targets. */
+function UpcastBenefits({ spell, onChange }: { spell: SpellDefinition; onChange: (next: SpellDefinition) => void }) {
+  const action = spell.action;
+  const upcast = upcastOf(spell);
+  const per: PerSlot = upcast?.perSlotAboveBase ?? {};
   const on = Object.values(per).some(Boolean);
   const dealsDamage = Boolean(action && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") && action.damage.length > 0);
   const heals = action?.kind === "healing";
@@ -202,13 +249,17 @@ function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (nex
   const dice = dealsDamage || heals || Boolean(per.damageDice);
   const showBeams = beams || Boolean(per.beams);
   const showTargets = targets || Boolean(per.targets);
-  if (!dice && !showBeams && !showTargets) return null;
+  const same = <p className={styles.hint}>A higher slot casts it the same.</p>;
+  if (!dice && !showBeams && !showTargets) return same;
   const above = `per level above ${ordinal(spell.level)}`;
+  // What isn't simulated stays put whatever is ticked here.
+  const kept = (perSlot: PerSlot | undefined): SpellUpcast | undefined => (perSlot || upcast?.notModelled
+    ? { ...(perSlot ? { perSlotAboveBase: perSlot } : {}), ...(upcast?.notModelled ? { notModelled: upcast.notModelled } : {}) }
+    : undefined);
 
   function setPer(next: PerSlot) {
-    const kept = Object.fromEntries(Object.entries(next).filter(([, value]) => value)) as PerSlot;
-    const upcast = upcastOf(spell);
-    onChange(withUpcast(spell, Object.keys(kept).length ? { ...upcast, perSlotAboveBase: kept } : undefined));
+    const set = Object.fromEntries(Object.entries(next).filter(([, value]) => value)) as PerSlot;
+    onChange(withUpcast(spell, kept(Object.keys(set).length ? set : undefined)));
   }
   function firstDie(): string {
     const first = action && "damage" in action ? action.damage[0]?.dice : action?.kind === "healing" ? action.healing[0]?.dice : undefined;
@@ -222,7 +273,7 @@ function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (nex
         copy="upcast"
         checked={on}
         onChange={(next) => {
-          if (!next) return onChange(withUpcast(spell, undefined));
+          if (!next) return onChange(withUpcast(spell, kept(undefined)));
           setPer(beams ? { beams: 1 } : targets && !dealsDamage && !heals ? { targets: 1 } : { damageDice: firstDie() });
         }}
       />
@@ -262,7 +313,7 @@ function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (nex
             </Field>
           ) : null}
         </div>
-      ) : null}
+      ) : same}
     </>
   );
 }

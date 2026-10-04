@@ -18,7 +18,7 @@ const TRIGGERS: Array<{ value: ReactionTrigger["kind"]; label: string }> = [
 export function blankTrigger(kind: ReactionTrigger["kind"]): ReactionTrigger {
   switch (kind) {
     case "ally-targeted-by-attack": return { kind, withinFt: 5 };
-    case "enemy-casts-spell": return { kind, withinFt: 60 };
+    case "enemy-casts-spell": return { kind, withinFt: 60, checkAbove: { dcBase: 10 } };
     case "manual": return { kind, note: "" };
     default: return { kind } as ReactionTrigger;
   }
@@ -67,10 +67,47 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
           ) : null}
         </span>
       ) : null}
+      {value.kind === "enemy-casts-spell" ? <CounterCheckControls value={value} onChange={onChange} /> : null}
       {value.kind === "manual" ? (
         <input aria-label="Describe the trigger" placeholder="A creature it can see misses it with a melee attack" value={value.note} onChange={(e) => onChange({ ...value, note: e.target.value })} />
       ) : null}
     </Field>
+  );
+}
+
+/**
+ * A counter stops a spell of its slot's level or lower outright. Above that, Counterspell's check (spellcasting ability
+ * against DC 10 + the spell's level), with a bonus of its own if it has one; or no check, and it can't stop it at all.
+ * A saved counter with nothing said takes the check, as Counterspell does.
+ */
+function CounterCheckControls({ value, onChange }: {
+  value: Extract<ReactionTrigger, { kind: "enemy-casts-spell" }>;
+  onChange: (next: ReactionTrigger) => void;
+}) {
+  const check = value.checkAbove === false ? undefined : value.checkAbove ?? { dcBase: 10 };
+  return (
+    <span className={styles.inline}>
+      <Check
+        label="Above its slot's level: a check, DC 10 + the spell's level"
+        checked={Boolean(check)}
+        onChange={(on) => onChange({ ...value, checkAbove: on ? { dcBase: 10 } : false })}
+      />
+      {check ? (
+        <>
+          <span>+</span>
+          <NumberField
+            label="Check bonus"
+            value={check.bonus}
+            optional
+            min={1}
+            max={10}
+            placeholder="0"
+            onChange={(bonus) => onChange({ ...value, checkAbove: bonus ? { ...check, bonus } : { dcBase: check.dcBase } })}
+          />
+          <span>to the check</span>
+        </>
+      ) : null}
+    </span>
   );
 }
 

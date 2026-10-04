@@ -136,7 +136,12 @@ export const COPY = {
   componentMaterial: { label: "Material" },
   source: { label: "Source" },
   castingTime: { label: "Casting time", hint: "What casting it takes from the caster's turn." },
+  higherSlot: {
+    label: "Casting with a higher slot",
+    hint: "Any slot of its level or higher can cast it: with its own slots gone, it uses a higher one. Tick below if a higher slot makes it stronger."
+  },
   upcast: { label: "Stronger with a higher slot", hint: "Cast with a slot above its level, it gets more for each level above." },
+  upcastNotModelled: { label: "Not simulated", hint: "What else a higher slot does that the simulator doesn't run (a longer duration, a bigger sphere), for the DM to read." },
   upcastDamage: { label: "More damage per level above" },
   upcastHealing: { label: "More healing per level above" },
   upcastBeams: { label: "More beams per level above" },
