@@ -13,8 +13,11 @@ import {
   getExecutableActions,
   isLairVariant,
   isLegendaryVariant,
+  isUpcastVariant,
   multiattackBaseId,
+  repeatDice,
   spellSlotLevel,
+  upcastAddsSomething,
   swingsOf,
   targetCapacity,
   zoneMoveProblem,
@@ -233,18 +236,45 @@ function costOf(action: ActionDefinition): string | undefined {
   return cost ? costText(cost).replace(/^an? /, "") : undefined;
 }
 
-/** A variant's name beside its family's others. */
-function variantLabel(action: ActionDefinition, base: ActionDefinition): string {
+/** A variant's name beside its family's others. `slotFamily`: a spell with copies at higher slots (Mage Armor too). */
+function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFamily = false): string {
   if (action.kind === "multiattack") {
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];
     return action.id === base.id || !option ? action.name : option;
   }
   const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined);
-  if (slot !== undefined && "spellLevel" in action && action.spellLevel != null) return `Level ${slot}`;
+  if (slot !== undefined && (slotFamily || ("spellLevel" in action && action.spellLevel != null))) return slotLabel(action, slot);
   const parts: string[] = [];
   if (/:power(?::|$)/.test(action.id)) parts.push("Power Attack");
   if (/:charged(?:-\d+)?$/.test(action.id)) parts.push("Spend a charge");
   return parts.length ? parts.join(" + ") : "Normal";
+}
+
+function ordinal(n: number): string {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
+/** "1d8" twice is "2d8"; anything else is repeated. */
+function scaledDice(dice: string, times: number): string {
+  const match = /^(\d+)d(\d+)$/.exec(dice);
+  return match ? `${Number(match[1]) * times}d${match[2]}` : repeatDice(dice, times);
+}
+
+/**
+ * A spell's slot, as its chip says it: the slot's level, and what that slot adds over the spell's own level ("5th ·
+ * +2d6", "3rd · +1 target", "4th · +2 beams"). A slot that adds nothing is just its level.
+ */
+export function slotLabel(action: ActionDefinition, slot: number): string {
+  const own = ("spellLevel" in action && action.spellLevel != null ? action.spellLevel : undefined) ?? action.upcastFrom ?? slot;
+  const above = slot - own;
+  const per = "upcast" in action ? action.upcast?.perSlotAboveBase : undefined;
+  if (above <= 0 || !per || !upcastAddsSomething(action)) return ordinal(slot);
+  const adds: string[] = [];
+  if (per.damageDice) adds.push(`+${scaledDice(per.damageDice, above)}`);
+  if (per.beams && action.kind === "attack" && action.attackDelivery === "beams") adds.push(`+${per.beams * above} ${per.beams * above === 1 ? "beam" : "beams"}`);
+  if (per.targets) adds.push(`+${per.targets * above} ${per.targets * above === 1 ? "target" : "targets"}`);
+  return adds.length ? `${ordinal(slot)} · ${adds.join(", ")}` : ordinal(slot);
 }
 
 const TRIGGER_WORDS: Partial<Record<string, string>> = {
@@ -262,7 +292,7 @@ function reactionsOf(executables: ActionDefinition[]): HotbarReaction[] {
     && ((action.actionType === "action" && action.opportunityAttack !== false) || (action.actionType === "reaction" && action.reaction?.trigger.kind === "enemy-leaves-reach")));
   const weapons = [...new Set(melee.filter((action) => action.actionType === "action").map((action) => action.name))];
   const others = executables.filter((action) => action.actionType === "reaction" && !isLegendaryVariant(action) && !isLairVariant(action)
-    && !("reaction" in action && action.reaction?.trigger.kind === "enemy-leaves-reach"));
+    && !isUpcastVariant(action) && !("reaction" in action && action.reaction?.trigger.kind === "enemy-leaves-reach"));
   return [
     ...(melee.length ? [{ key: OPPORTUNITY_ATTACKS, name: "Opportunity attacks", detail: weapons.length ? `with ${weapons.join(", ")}` : undefined }] : []),
     ...others.map((action) => {
@@ -308,9 +338,10 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     const base = members.find((member) => member.id === familyKey(member.id)) ?? members[0]!;
     const ordered = [base, ...members.filter((member) => member !== base)];
     const automation = automationOf(base);
+    const slotFamily = members.some((member) => member.upcastFrom != null);
     const variants: HotbarVariant[] = ordered.map((action) => ({
       actionId: action.id,
-      label: variantLabel(action, base),
+      label: variantLabel(action, base, slotFamily),
       cost: costOf(action),
       problem: actionProblem(board, actorId, action.id, { byHand: automation === "by-hand" }),
       aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables, actor),

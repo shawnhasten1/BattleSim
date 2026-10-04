@@ -1,4 +1,4 @@
-import { activeFactions, canAct, createEngineState, effectiveFaction, type EngineState } from "./combat";
+import { activeFactions, canAct, createEngineState, effectiveFaction, upcastBaseId, type EngineState } from "./combat";
 import { currentTurnActor, executeCommand, type CombatCommand } from "./commands";
 import {
   decisionSubject,
@@ -260,13 +260,16 @@ function playableByHand(actor: CombatantState): boolean {
 function ruleReaction(control: PlayControl, request: ReactionRequest): ReactionAnswer | "ask" | "ai" {
   const opportunity = request.trigger === "enemy-leaves-reach";
   const asking = (opportunity ? control.askOpportunityAttacks : control.askReactions) !== false;
+  // A reaction's setting covers it at every slot: Counterspell's is one, whichever slot it's cast with.
   const policies = request.options.map((option) => ({
     option,
-    policy: control.reactions?.[reactionPolicyKey(request.reactorId, opportunity ? OPPORTUNITY_ATTACKS : option.actionId)]
+    policy: control.reactions?.[reactionPolicyKey(request.reactorId, opportunity ? OPPORTUNITY_ATTACKS : upcastBaseId(option.actionId))]
   }));
-  const always = policies.filter(({ policy }) => policy === "use").map(({ option }) => option.actionId);
+  const always = policies.filter(({ policy }) => policy === "use").map(({ option }) => option);
   if (always.length > 0) {
-    return { kind: "reaction", actionId: request.aiChoice && always.includes(request.aiChoice) ? request.aiChoice : always[0]! };
+    // The AI's pick if it's one of them; else, for a counter, the slot surest to stop the spell (the cheaper on a tie).
+    const surest = [...always].sort((a, b) => (b.counter?.chance ?? 0) - (a.counter?.chance ?? 0) || (a.counter?.slot ?? 0) - (b.counter?.slot ?? 0))[0]!;
+    return { kind: "reaction", actionId: request.aiChoice && always.some((option) => option.actionId === request.aiChoice) ? request.aiChoice : surest.actionId };
   }
   if (policies.every(({ policy }) => policy === "never")) {
     return { kind: "reaction", actionId: null };

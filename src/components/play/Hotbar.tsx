@@ -263,19 +263,25 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
       </button>
       {button.variants.length > 1 ? (
         <div className={styles.hotVariants} role="group" aria-label={`${button.name}: which`}>
-          {button.variants.map((variant) => (
-            <button
-              key={variant.actionId}
-              type="button"
-              disabled={Boolean(variant.problem)}
-              onMouseDown={keepFocus}
-              aria-pressed={armedActionId === variant.actionId}
-              title={variant.problem ?? variant.cost ?? variant.label}
-              onClick={() => pressHotbar(button, variant)}
-            >
-              {variant.label}
-            </button>
-          ))}
+          {button.variants.map((variant) => {
+            // Five slots or more (a high-level caster's Magic Missile): each chip just its slot, what it adds on hover.
+            const compact = button.variants.length >= 5 && variant.slotLevel !== undefined;
+            const shown = compact ? variant.label.split(" · ")[0]! : variant.label;
+            return (
+              <button
+                key={variant.actionId}
+                type="button"
+                disabled={Boolean(variant.problem)}
+                onMouseDown={keepFocus}
+                aria-pressed={armedActionId === variant.actionId}
+                aria-label={compact && shown !== variant.label ? variant.label : undefined}
+                title={variant.problem ?? (compact ? variant.label : variant.cost ?? variant.label)}
+                onClick={() => pressHotbar(button, variant)}
+              >
+                {shown}
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </div>

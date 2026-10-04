@@ -6,12 +6,15 @@ import {
   previewSave,
   reactionPolicyKey,
   spatialDistance,
+  spellNameOf,
+  upcastBaseId,
   type Ability,
   type DecisionAnswer,
   type DecisionRequest,
   type EncounterSnapshot,
   type ReactionOption,
-  type ReactionRequest
+  type ReactionRequest,
+  type SpellThreat
 } from "@/engine";
 import { costText } from "@/lib/statblock";
 
@@ -139,7 +142,7 @@ function optionDetail(request: ReactionRequest, board: EncounterSnapshot, option
     const ac = attack.targetAc + gain;
     parts.push(`AC ${ac}: ${attack.total < ac ? "the attack misses" : "it still hits"}`);
   }
-  if (request.trigger === "enemy-casts-spell") parts.push("it's countered");
+  if (request.trigger === "enemy-casts-spell") parts.push(counterOdds(option));
   if (request.trigger === "ally-targeted-by-attack") parts.push("the attack has disadvantage");
   const cost = option.resourceCost;
   if (cost) {
@@ -147,6 +150,54 @@ function optionDetail(request: ReactionRequest, board: EncounterSnapshot, option
     parts.push(`${costText(cost)}${left !== undefined ? ` (${left} left)` : ""}`);
   }
   return parts.length ? parts.join(" · ") : undefined;
+}
+
+/**
+ * What a counter cast with this slot would do: "certain", "check DC 15 (45%)", or, with the spell unseen, "certain up to
+ * 3rd level, a check above".
+ */
+function counterOdds(option: ReactionOption): string {
+  const odds = option.counter;
+  if (!odds) return "it's countered";
+  if (odds.chance === undefined) {
+    return `certain up to ${ordinal(odds.slot)} level${odds.check ? ", a check above" : ", not above"}`;
+  }
+  if (odds.chance >= 1) return "certain";
+  return odds.dc !== undefined ? `check DC ${odds.dc} (${percent(odds.chance)})` : percent(odds.chance);
+}
+
+/** A list in words: "Ana", "Ana and Bo", "Ana, Bo and Cy". */
+function listed(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/**
+ * What a spell would do if let through, from the counterer's `SpellThreat`: "At Ana, Bo, Cy and Dee: ≈28 damage each,
+ * may drop Cy." "65% to leave Bo paralyzed, ≈3 turns." "Heals Ogre ≈10." Empty when it can't be read.
+ */
+export function threatWords(threat: SpellThreat | undefined, board: EncounterSnapshot): string {
+  if (!threat) return "";
+  if (threat.basis === "level") return "What it does can't be read: weighed by its level.";
+  const name = (id: string) => nameOf(board, id);
+  const sentences: string[] = [];
+  const hit = threat.creatures.filter((line) => line.damage >= 0.5);
+  if (hit.length) {
+    const damages = hit.map((line) => Math.round(line.damage));
+    const low = Math.min(...damages);
+    const high = Math.max(...damages);
+    const each = hit.length === 1 ? `≈${low} damage` : high - low <= 3 ? `≈${Math.round(damages.reduce((sum, value) => sum + value, 0) / damages.length)} damage each` : `≈${low}–${high} damage`;
+    const down = hit.filter((line) => line.likelyDown).map((line) => name(line.combatantId));
+    sentences.push(`At ${listed(hit.map((line) => name(line.combatantId)))}: ${each}${down.length ? `, may drop ${listed(down)}` : ""}.`);
+  }
+  for (const line of threat.creatures) {
+    for (const condition of line.conditions) {
+      const turns = Math.round(condition.turns * 10) / 10;
+      sentences.push(`${percent(condition.chance)} to leave ${name(line.combatantId)} ${condition.name}, ≈${turns} ${turns === 1 ? "turn" : "turns"}.`);
+    }
+    if (line.healing) sentences.push(`Heals ${name(line.combatantId)} ≈${Math.round(line.healing)}.`);
+  }
+  if (!sentences.length && threat.creatures.length) sentences.push(`On ${listed(threat.creatures.map((line) => name(line.combatantId)))}.`);
+  return sentences.join(" ");
 }
 
 function describeReaction(request: ReactionRequest, board: EncounterSnapshot): PromptText {
@@ -159,17 +210,25 @@ function describeReaction(request: ReactionRequest, board: EncounterSnapshot): P
     const other = board.combatants.find((combatant) => combatant.id === otherId);
     return reactorCombatant && other ? spatialDistance(board, reactorCombatant, other) : undefined;
   };
+  // A counter is offered slot by slot, the AI's pick first in line ("Don't" when it wouldn't); anything else, in order.
+  const counters = request.trigger === "enemy-casts-spell" && request.options.some((option) => option.counter);
   const options: PromptOption[] = request.options.map((option, index) => ({
-    label: option.name,
+    label: counters && option.counter ? `${ordinal(option.counter.slot)}-level slot` : option.name,
     detail: optionDetail(request, board, option),
     answer: { kind: "reaction", actionId: option.actionId },
-    primary: index === 0
+    primary: counters ? option.actionId === request.aiChoice : index === 0
   }));
-  options.push({ label: "Don't", answer: { kind: "reaction", actionId: null } });
-  // Opportunity attacks are set as one; any other reaction on its own.
+  options.push({ label: "Don't", answer: { kind: "reaction", actionId: null }, ...(counters && request.aiChoice === null ? { primary: true } : {}) });
+  // Opportunity attacks are set as one; any other reaction on its own, at every slot (Counterspell is one setting).
+  const families = [...new Map(request.options.map((option) => [upcastBaseId(option.actionId), option])).entries()];
   const policies: PromptPolicy[] = request.trigger === "enemy-leaves-reach"
     ? [{ key: reactionPolicyKey(request.reactorId, OPPORTUNITY_ATTACKS), label: "Opportunity attacks", use: { kind: "reaction", actionId: request.aiChoice ?? request.options[0]?.actionId ?? null } }]
-    : request.options.map((option) => ({ key: reactionPolicyKey(request.reactorId, option.actionId), label: option.name, use: { kind: "reaction", actionId: option.actionId } }));
+    : families.map(([family, option]) => {
+      const inFamily = request.options.filter((candidate) => upcastBaseId(candidate.actionId) === family);
+      const pick = inFamily.find((candidate) => candidate.actionId === request.aiChoice)
+        ?? [...inFamily].sort((a, b) => (b.counter?.chance ?? 0) - (a.counter?.chance ?? 0) || (a.counter?.slot ?? 0) - (b.counter?.slot ?? 0))[0]!;
+      return { key: reactionPolicyKey(request.reactorId, family), label: spellNameOf(option.name), use: { kind: "reaction", actionId: pick.actionId } };
+    });
   const text = (title: string, ask: string): PromptText => ({ who: reactor, title, ask, options, policies });
 
   switch (request.trigger) {
@@ -192,8 +251,9 @@ function describeReaction(request: ReactionRequest, board: EncounterSnapshot): P
       // With the campaign's rule off, a counterer only sees that a spell is being cast.
       const spell = request.context.spell?.known === false ? undefined : request.context.spell;
       const away = sourceCombatant ? distance(sourceCombatant.id) : undefined;
+      const stakes = threatWords(spell?.threat, board);
       return text(
-        `${source} is casting ${spell?.name || "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}${away !== undefined ? ` ${away} ft. away` : ""}.`,
+        `${source} is casting ${spell?.name ? spellNameOf(spell.name) : "a spell"}${spell?.level ? ` (${ordinal(spell.level)} level)` : ""}${away !== undefined ? ` ${away} ft. away` : ""}.${stakes ? ` ${stakes}` : ""}`,
         "Counter it?"
       );
     }

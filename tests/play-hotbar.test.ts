@@ -133,7 +133,7 @@ describe("what's on the hotbar", () => {
     // No 3rd-level slot left: Fireball goes at 4th.
     const fireball = button(model, "Fireball");
     expect(fireball.variants.map((variant) => [variant.label, variant.problem])).toEqual([
-      ["Level 3", "No 3rd-level slots left"], ["Level 4", undefined], ["Level 5", undefined]
+      ["3rd", "No 3rd-level slots left"], ["4th · +1d6", undefined], ["5th · +2d6", undefined]
     ]);
     expect(fireball.defaultVariant).toBe(1);
     expect(fireball.problem).toBeUndefined();
@@ -150,8 +150,8 @@ describe("what's on the hotbar", () => {
     });
     const model = hotbarFor(board, "pc-archer");
     expect(button(model, "Scorching Ray").variants.map((variant) => [variant.label, variant.aim])).toEqual([
-      ["Level 2", { kind: "creatures", who: "foes", count: 3, repeat: true, range: 120 }],
-      ["Level 3", { kind: "creatures", who: "foes", count: 4, repeat: true, range: 120 }]
+      ["2nd", { kind: "creatures", who: "foes", count: 3, repeat: true, range: 120 }],
+      ["3rd · +1 beam", { kind: "creatures", who: "foes", count: 4, repeat: true, range: 120 }]
     ]);
     expect(button(model, "Hold Person").variants.map((variant) => variant.aim)).toEqual([
       { kind: "creatures", who: "foes", count: 1, repeat: false, range: 60 },
@@ -185,7 +185,7 @@ describe("using the hotbar", () => {
     });
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     const ray = button(hotbarFor(store().encounter, "pc-fighter"), "Scorching Ray");
-    pressHotbar(ray, ray.variants.find((variant) => variant.label === "Level 3"));
+    pressHotbar(ray, ray.variants.find((variant) => variant.label === "3rd · +1 beam"));
     expect(ui().armed).toMatchObject({ actionId: "srd:spell:scorching-ray:action:upcast-3", picked: [] });
     const from = store().log.length;
     aimAtCreature("enemy-goblin-1");
