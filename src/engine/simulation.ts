@@ -51,6 +51,7 @@ import {
   resolveUse,
   spellSlotLevel,
   isDominatedUpcast,
+  chosenTargetCount,
   upcastBaseId,
   setCounterAdvisor,
   threatByLevel,
@@ -1964,7 +1965,7 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
       const scored = woundedAllies
         .map((target) => ({ target, value: scoreFor(target) - spatialDistance(snapshot, actor, target) / 20 }))
         .sort((a, b) => b.value - a.value);
-      const taken = scored.slice(0, action.targeting?.count ?? scored.length);
+      const taken = scored.slice(0, chosenTargetCount(action) ?? scored.length);
       if (!taken.length) {
         continue;
       }
@@ -2104,7 +2105,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
         return { target, value: 15 + priorityBonus - spatialDistance(snapshot, actor, target) / 20 };
       })
       .sort((a, b) => b.value - a.value);
-    const taken = scored.slice(0, action.targeting?.count ?? scored.length);
+    const taken = scored.slice(0, chosenTargetCount(action) ?? scored.length);
     if (!taken.length) {
       continue;
     }

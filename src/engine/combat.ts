@@ -2350,7 +2350,7 @@ export function resolveBuffAction(
   const resolvedIds = mode === "self"
     ? [actorId]
     : mode === "chosen"
-      ? targetIds.slice(0, action.targeting?.count ?? targetIds.length)
+      ? targetIds.slice(0, chosenTargetCount(action) ?? targetIds.length)
       : [targetIds[0] as Id];
   const targets = resolvedIds.map((id) => findCombatant(state.snapshot, id));
   for (const target of targets) {
@@ -2462,7 +2462,7 @@ export function resolveHealingBurstAction(
   let targets: CombatantState[];
   let origin: Point | undefined;
   if (mode === "chosen") {
-    targets = targetIds.slice(0, action.targeting?.count ?? targetIds.length).map((id) => findCombatant(state.snapshot, id));
+    targets = targetIds.slice(0, chosenTargetCount(action) ?? targetIds.length).map((id) => findCombatant(state.snapshot, id));
     for (const target of targets) {
       validateHealingTargeting(state.snapshot, healer, target, action);
     }
@@ -4991,12 +4991,25 @@ export function upcastAddsSomething(action: ActionDefinition): boolean {
     case "area-save":
       return Boolean(per.damageDice && action.damage.length);
     case "healing":
-      return Boolean(per.damageDice);
+      return Boolean(per.damageDice) || Boolean(per.targets && action.targeting?.target === "chosen");
     case "buff":
       return Boolean(per.targets && action.targeting?.target === "chosen");
     default:
       return false;
   }
+}
+
+/**
+ * How many creatures a buff or healing spell aimed at "up to N" creatures takes: N, plus what its upcast slot adds
+ * (Bless with a 2nd-level slot: four). Undefined when it names no limit.
+ */
+export function chosenTargetCount(action: Extract<ActionDefinition, { kind: "buff" | "healing" }>): number | undefined {
+  const count = action.targeting?.count;
+  if (count === undefined) return undefined;
+  const perSlot = action.upcast?.perSlotAboveBase?.targets;
+  const slot = spellSlotLevel(action.resourceCost?.resourceId);
+  const above = perSlot && action.spellLevel != null && slot != null ? Math.max(0, slot - action.spellLevel) : 0;
+  return count + above * (perSlot ?? 0);
 }
 
 /** A spell and each copy of it cast with a higher slot, cheapest slot first. Anything else is just itself. */

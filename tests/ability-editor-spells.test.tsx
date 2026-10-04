@@ -132,10 +132,13 @@ describe("spells built from a blank one", { timeout: 20000 }, () => {
     await retype("AC bonus", "");
     await retype("Attack roll bonus", "2");
     await retype("Saving throw bonus", "2");
+    // A buff on "up to three" reaches one more creature per slot level: ticking it starts at one.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Stronger with a higher slot" }));
     await addToSheet();
 
     const { built, library } = compare("srd:spell:bless");
     expect(built).toBe(library);
+    expect(fighter().spells!.at(-1)!.upcast).toEqual({ perSlotAboveBase: { targets: 1 } });
   });
 
   it("Misty Step: a bonus-action teleport of itself", async () => {

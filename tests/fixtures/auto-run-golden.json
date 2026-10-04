@@ -211,17 +211,17 @@
   },
   {
    "seed": "golden:legendary:1",
-   "hash": "87beda9d28b42559688b0077458312a267feecb8",
-   "events": 205,
+   "hash": "f8e8a711eb77e03aa592d2acc46a99d284ca59d9",
+   "events": 276,
    "winner": "enemy",
-   "rounds": 7
+   "rounds": 8
   },
   {
    "seed": "golden:legendary:2",
-   "hash": "85669d1bfc40df3eab0230cca22bda2d9ab075de",
-   "events": 217,
+   "hash": "993f6845a0df8c65754e90f173549d3fb5fa1378",
+   "events": 158,
    "winner": "enemy",
-   "rounds": 9
+   "rounds": 8
   }
  ],
  "reinforcements": [

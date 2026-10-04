@@ -140,7 +140,7 @@ export const COPY = {
   upcastDamage: { label: "More damage per level above" },
   upcastHealing: { label: "More healing per level above" },
   upcastBeams: { label: "More beams per level above" },
-  upcastTargets: { label: "More targets per level above", hint: "Hold Person: one more creature for each slot level above 2nd." },
+  upcastTargets: { label: "More targets per level above", hint: "Hold Person or Bless: one more creature for each slot level above the spell's." },
   cantripGrowth: { label: "Grows at levels 5, 11 and 17", hint: "A cantrip's dice go up with its caster's level (Stats tab)." },
 
   // Lingering area

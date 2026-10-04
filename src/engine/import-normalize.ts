@@ -1102,10 +1102,11 @@ function normalizeSpellComponents(input: unknown): { v?: boolean; s?: boolean; m
 }
 
 function normalizeSpellUpcast(input: unknown): SpellUpcast | undefined {
-  if (!isRecord(input) || !isRecord(input.perSlotAboveBase)) {
+  if (!isRecord(input)) {
     return undefined;
   }
-  const source = input.perSlotAboveBase;
+  const notModelled = stringField(input, "notModelled")?.trim();
+  const source = isRecord(input.perSlotAboveBase) ? input.perSlotAboveBase : {};
   const perSlot: NonNullable<SpellUpcast["perSlotAboveBase"]> = {};
   const damageDice = stringField(source, "damageDice");
   if (damageDice) perSlot.damageDice = damageDice.replace(/\s+/g, "");
@@ -1113,7 +1114,8 @@ function normalizeSpellUpcast(input: unknown): SpellUpcast | undefined {
   if (beams !== undefined) perSlot.beams = beams;
   const targets = numberField(source, "targets");
   if (targets !== undefined) perSlot.targets = targets;
-  return Object.keys(perSlot).length ? { perSlotAboveBase: perSlot } : undefined;
+  if (!Object.keys(perSlot).length && !notModelled) return undefined;
+  return { ...(Object.keys(perSlot).length ? { perSlotAboveBase: perSlot } : {}), ...(notModelled ? { notModelled } : {}) };
 }
 
 function normalizeIdList(input: unknown, prefix: string): unknown[] {

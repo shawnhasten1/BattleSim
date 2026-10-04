@@ -171,6 +171,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "action",
     range: 30,
     resourceCost: { resourceId: "slot-1", amount: 1 },
+    upcast: { perSlotAboveBase: { targets: 1 } },
     concentration: true,
     automationSupport: "full",
     action: {
@@ -354,6 +355,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "action",
     range: 30,
     resourceCost: { resourceId: "slot-2", amount: 1 },
+    upcast: { notModelled: "5 more hit points per slot level above 2nd; Aid is cast before the fight" },
     automationSupport: "full",
     action: {
       kind: "buff",
@@ -670,6 +672,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "action",
     range: 60,
     resourceCost: { resourceId: "slot-5", amount: 1 },
+    upcast: { perSlotAboveBase: { damageDice: "1d8" } },
     automationSupport: "full",
     action: {
       kind: "healing",
@@ -930,7 +933,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   // ── Mind control spells (phase 7) ────────────────────────────────────────
   {
     id: "srd:spell:dominate-person", name: "Dominate Person", level: 5, school: "enchantment", castingTime: "action", range: 60, concentration: true,
-    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-5", amount: 1 }, upcast: { notModelled: "Lasts longer (10 minutes with a 6th-level slot, up to 8 hours with an 8th)" }, automationSupport: "full",
     description: "WIS save or a humanoid target is dominated: it fights for the caster's side until the spell ends.",
     action: {
       kind: "save", id: "srd:spell:dominate-person:action", name: "Dominate Person", actionType: "action",
@@ -947,7 +950,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:dominate-beast", name: "Dominate Beast", level: 4, school: "enchantment", castingTime: "action", range: 60, concentration: true,
-    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, upcast: { notModelled: "Lasts longer (10 minutes with a 5th-level slot, up to 8 hours with a 7th)" }, automationSupport: "full",
     description: "WIS save or a beast target is dominated: it fights for the caster's side until the spell ends.",
     action: {
       kind: "save", id: "srd:spell:dominate-beast:action", name: "Dominate Beast", actionType: "action",
@@ -964,7 +967,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:planar-binding", name: "Planar Binding", level: 5, school: "abjuration", castingTime: "action", range: 90,
-    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-5", amount: 1 }, upcast: { notModelled: "Binds for longer (10 days with a 6th-level slot, up to a year and a day with a 9th)" }, automationSupport: "full",
     description: "CHA save or a celestial, elemental, fey, or fiend target is bound to service, fighting for the caster's side for the rest of the encounter.",
     action: {
       kind: "save", id: "srd:spell:planar-binding:action", name: "Planar Binding", actionType: "action",
@@ -984,7 +987,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:confusion", name: "Confusion", level: 4, school: "enchantment", castingTime: "action", range: 90, concentration: true,
-    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, upcast: { notModelled: "The sphere's radius grows 5 ft per slot level above 4th" }, automationSupport: "full",
     description: "WIS save or each creature in the area acts randomly each turn (attacks a random creature, wanders, or does nothing) until it saves. Condensed from the SRD's full d10 behavior table to a 3-outcome roll.",
     action: {
       kind: "area-save", id: "srd:spell:confusion:action", name: "Confusion", actionType: "action",
@@ -1180,7 +1183,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:ice-storm", name: "Ice Storm", level: 4, school: "evocation", castingTime: "action", range: 300,
-    resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-4", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d8" } }, automationSupport: "full",
     action: {
       kind: "area-save", id: "srd:spell:ice-storm:action", name: "Ice Storm", actionType: "action",
       saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 300,
@@ -1192,7 +1195,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:flame-strike", name: "Flame Strike", level: 5, school: "evocation", castingTime: "action", range: 60,
-    resourceCost: { resourceId: "slot-5", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-5", amount: 1 }, upcast: { perSlotAboveBase: { damageDice: "1d6" } }, automationSupport: "full",
     action: {
       kind: "area-save", id: "srd:spell:flame-strike:action", name: "Flame Strike", actionType: "action",
       saveAbility: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true }, range: 60,
@@ -1215,7 +1218,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:chain-lightning", name: "Chain Lightning", level: 6, school: "evocation", castingTime: "action", range: 150,
-    resourceCost: { resourceId: "slot-6", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-6", amount: 1 }, upcast: { notModelled: "One more bolt per slot level above 6th" }, automationSupport: "full",
     description: "The bolt's arc to three more targets within 30 ft of the first is approximated as one 30-ft blast radius.",
     action: {
       kind: "area-save", id: "srd:spell:chain-lightning:action", name: "Chain Lightning", actionType: "action",
@@ -1303,7 +1306,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
   },
   {
     id: "srd:spell:dominate-monster", name: "Dominate Monster", level: 8, school: "enchantment", castingTime: "action", range: 60, concentration: true,
-    resourceCost: { resourceId: "slot-8", amount: 1 }, automationSupport: "full",
+    resourceCost: { resourceId: "slot-8", amount: 1 }, upcast: { notModelled: "Lasts up to 8 hours with a 9th-level slot" }, automationSupport: "full",
     description: "Dominate Person/Beast without the creature-type restriction — works on anything.",
     action: {
       kind: "save", id: "srd:spell:dominate-monster:action", name: "Dominate Monster", actionType: "action",

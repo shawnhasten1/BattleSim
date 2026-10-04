@@ -30,6 +30,12 @@ independent and freely editable afterwards.
    of `riders`, `attackDelivery: "beams"`, aimed / self-origin areas, `scaling`
    and `upcast` arrives in the engine-resolvers phase; until then those fields
    round-trip and validate but are not yet resolved in play.
+   Any leveled spell can be cast with a higher slot whatever its `upcast` says.
+   If its "At Higher Levels" text makes it stronger in a way the engine models,
+   give it `upcast.perSlotAboveBase` (`damageDice`, `beams`, `targets`); if not
+   (a longer duration, a bigger sphere), say so in `upcast.notModelled`.
+   `tests/srd-upcast-audit.test.ts` checks every spell against
+   `srd_2014_spells_full.csv`.
 8. Run `npx vitest run tests/srd-library.test.ts` — every entry is validated
    against the engine schemas and checked for a clean attach.
 9. Bump `SRD_LIBRARY_VERSION` in `index.ts`.

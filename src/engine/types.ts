@@ -1525,9 +1525,17 @@ export interface SpellUpcast {
   perSlotAboveBase?: {
     damageDice?: string;
     beams?: number;
-    /** Extra creatures a single-target `save` action can affect for free (Hold Person-style). */
+    /**
+     * Extra creatures per slot level above the spell's: a single-target `save` action affects them for free (Hold
+     * Person), and a buff or healing spell aimed at "up to N" creatures takes that many more (Bless).
+     */
     targets?: number;
   };
+  /**
+   * What a higher slot does that the simulator doesn't model, said in a few words for the DM (a longer duration, a
+   * bigger sphere, another bolt). The spell can still be cast with a higher slot; it just does the same thing.
+   */
+  notModelled?: string;
 }
 
 export interface SpellDefinition {

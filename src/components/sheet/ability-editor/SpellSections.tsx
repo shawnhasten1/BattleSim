@@ -196,7 +196,9 @@ function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (nex
   const dealsDamage = Boolean(action && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save") && action.damage.length > 0);
   const heals = action?.kind === "healing";
   const beams = action?.kind === "attack" && action.attackDelivery === "beams";
-  const targets = action?.kind === "save" && action.targeting?.target !== "self";
+  // A save on one creature catches more (Hold Person); a buff or a heal on "up to N" reaches more (Bless).
+  const targets = (action?.kind === "save" && action.targeting?.target !== "self")
+    || ((action?.kind === "buff" || action?.kind === "healing") && action.targeting?.target === "chosen");
   const dice = dealsDamage || heals || Boolean(per.damageDice);
   const showBeams = beams || Boolean(per.beams);
   const showTargets = targets || Boolean(per.targets);
@@ -221,7 +223,7 @@ function Upcasting({ spell, onChange }: { spell: SpellDefinition; onChange: (nex
         checked={on}
         onChange={(next) => {
           if (!next) return onChange(withUpcast(spell, undefined));
-          setPer(beams ? { beams: 1 } : targets && !dealsDamage ? { targets: 1 } : { damageDice: firstDie() });
+          setPer(beams ? { beams: 1 } : targets && !dealsDamage && !heals ? { targets: 1 } : { damageDice: firstDie() });
         }}
       />
       {on ? (

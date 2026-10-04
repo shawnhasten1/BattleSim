@@ -18,6 +18,7 @@ import {
   resolveUse,
   spatialDistanceToPoint,
   spellSlotLevel,
+  chosenTargetCount,
   standingProblem,
   targetingProblem,
   validateBuffTargeting,
@@ -237,7 +238,7 @@ export function targetCapacity(action: ActionDefinition, casterLevel: number): n
   if (action.kind === "save") return action.targeting?.target === "self" ? 1 : 1 + upcastExtraTargetCapacity(action);
   if (action.kind === "healing" || action.kind === "buff") {
     const mode = action.targeting?.target ?? "single";
-    return mode === "chosen" ? action.targeting?.count ?? 1 : 1;
+    return mode === "chosen" ? chosenTargetCount(action) ?? 1 : 1;
   }
   return 1;
 }
@@ -301,14 +302,14 @@ export function targetProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
       if (mode === "self") return undefined;
       if (mode === "area") return target.aim ? undefined : `Pick where to aim ${action.name}`;
       if (targets.length === 0) return `Pick who ${action.name} heals`;
-      return (mode === "chosen" ? tooMany(action.targeting?.count, 1) : tooMany(1, 1))
+      return (mode === "chosen" ? tooMany(chosenTargetCount(action), 1) : tooMany(1, 1))
         ?? firstProblem(targets, (candidate) => validateHealingTargeting(snapshot, actor, candidate, action));
     }
     case "buff": {
       const mode = action.targeting?.target ?? "single";
       if (mode === "self") return undefined;
       if (targets.length === 0) return `Pick who gets ${action.name}`;
-      return (mode === "chosen" ? tooMany(action.targeting?.count, 1) : tooMany(1, 1))
+      return (mode === "chosen" ? tooMany(chosenTargetCount(action), 1) : tooMany(1, 1))
         ?? firstProblem(targets, (candidate) => validateBuffTargeting(snapshot, actor, candidate, action));
     }
     case "reposition": {
