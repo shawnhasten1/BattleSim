@@ -98,10 +98,12 @@ describe("paths", () => {
 
   it("a burrower goes straight through a rock wall the walker must go around", () => {
     const rock = mapWith(Array.from({ length: 7 }, (_, y) => tile(5, y, "custom", ["solid"]))); // gap at the bottom row
-    const around = across(walker, rock);
-    const through = across(burrower, rock);
+    // Along the top row, so the detour down to the gap and back costs something even with free diagonals.
+    const overTop = (profile: MovementProfile) => findPath(rock, { x: 1, y: 1 }, { x: 9, y: 1 }, 1, [], { movement: profile });
+    const around = overTop(walker);
+    const through = overTop(burrower);
     expect(around.reachable).toBe(true);
-    expect(through.cost).toBeLessThan(around.cost);
+    expect(around.cost).toBe(12);
     expect(through.cost).toBe(8);
   });
 

@@ -29,7 +29,21 @@ describe("geometry", () => {
     const path = findPath(sampleEncounter.map, { x: 1, y: 1 }, { x: 8, y: 2 }, 1);
     expect(path.reachable).toBe(true);
     expect(path.cells.length).toBeGreaterThan(2);
-    expect(path.cost).toBeGreaterThan(7);
+    // The wall runs down x = 5 from y = 1 to 5: the route crosses it above or below.
+    const crossing = path.cells.findIndex((cell, index) => index > 0 && path.cells[index - 1]!.x <= 4 && cell.x >= 5);
+    const [before, after] = [path.cells[crossing - 1]!, path.cells[crossing]!];
+    expect([before.y, after.y].every((y) => y < 1) || [before.y, after.y].every((y) => y >= 5)).toBe(true);
+  });
+
+  it("charges a diagonal step like a straight one under the standard rule, and half again under 5-10-5", () => {
+    const open: BattleMapState = { ...sampleEncounter.map, walls: [], terrain: [] };
+    expect(findPath(open, { x: 0, y: 0 }, { x: 3, y: 3 }, 1).cost).toBe(3);
+    expect(findPath({ ...open, grid: { ...open.grid, diagonalMode: "five-ten-five" } }, { x: 0, y: 0 }, { x: 2, y: 2 }, 1).cost).toBe(3);
+  });
+
+  it("walks a straight line straight when a zigzag would cost the same", () => {
+    const open: BattleMapState = { ...sampleEncounter.map, walls: [], terrain: [] };
+    expect(findPath(open, { x: 1, y: 3 }, { x: 5, y: 3 }, 1).cells.every((cell) => cell.y === 3)).toBe(true);
   });
 
   it("charges extra movement for difficult terrain", () => {

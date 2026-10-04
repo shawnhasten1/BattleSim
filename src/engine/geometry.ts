@@ -414,6 +414,7 @@ export function findPath(
   const cameFrom = new Map<string, string>();
   const gScore = new Map<string, number>([[startKey, 0]]);
   const fScore = new Map<string, number>([[startKey, heuristic(start, goal)]]);
+  const diagonalSteps = new Map<string, number>([[startKey, 0]]);
 
   while (open.size > 0) {
     const currentKey = [...open].sort((a, b) => (fScore.get(a) ?? Infinity) - (fScore.get(b) ?? Infinity))[0];
@@ -434,15 +435,17 @@ export function findPath(
       if (!isTransitFootprintLegal(map, next, footprint, occupied, options) || movementBlockedBetween(map.walls, current, next, footprint)) {
         continue;
       }
-      const stepCost = stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options, current);
+      const stepCost = stepDistance(current, next, map.grid) * footprintMovementCost(map, next, footprint, occupied, options, current);
       if (!Number.isFinite(stepCost)) {
         continue;
       }
       const tentative = (gScore.get(currentKey) ?? Infinity) + stepCost;
       const nextKey = key(next);
-      if (tentative < (gScore.get(nextKey) ?? Infinity)) {
+      const diagonals = (diagonalSteps.get(currentKey) ?? 0) + (isDiagonalStep(current, next) ? 1 : 0);
+      if (isBetterRoute(tentative, diagonals, gScore.get(nextKey), diagonalSteps.get(nextKey))) {
         cameFrom.set(nextKey, currentKey);
         gScore.set(nextKey, tentative);
+        diagonalSteps.set(nextKey, diagonals);
         fScore.set(nextKey, tentative + heuristic(next, goal));
         open.add(nextKey);
       }
@@ -466,6 +469,7 @@ export function findReachableCells(
 
   const open = new Set<string>([key(start)]);
   const costs = new Map<string, number>([[key(start), 0]]);
+  const diagonalSteps = new Map<string, number>([[key(start), 0]]);
   const cameFrom = new Map<string, string>();
 
   while (open.size > 0) {
@@ -481,13 +485,15 @@ export function findReachableCells(
       if (!isTransitFootprintLegal(map, next, footprint, occupied, options) || movementBlockedBetween(map.walls, current, next, footprint)) {
         continue;
       }
-      const nextCost = currentCost + stepDistance(current, next) * footprintMovementCost(map, next, footprint, occupied, options, current);
-      if (nextCost > movementBudget || nextCost >= (costs.get(key(next)) ?? Infinity)) {
+      const nextCost = currentCost + stepDistance(current, next, map.grid) * footprintMovementCost(map, next, footprint, occupied, options, current);
+      const nextKey = key(next);
+      const diagonals = (diagonalSteps.get(currentKey) ?? 0) + (isDiagonalStep(current, next) ? 1 : 0);
+      if (nextCost > movementBudget || !isBetterRoute(nextCost, diagonals, costs.get(nextKey), diagonalSteps.get(nextKey))) {
         continue;
       }
-      const nextKey = key(next);
       cameFrom.set(nextKey, currentKey);
       costs.set(nextKey, nextCost);
+      diagonalSteps.set(nextKey, diagonals);
       open.add(nextKey);
     }
   }
@@ -571,7 +577,7 @@ export function stepCost(
   occupied: Point[] = [],
   options: OccupancyMovementOptions = {}
 ): number {
-  return stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options, from);
+  return stepDistance(from, to, map.grid) * footprintMovementCost(map, to, footprint, occupied, options, from);
 }
 
 /**
@@ -593,7 +599,7 @@ export function pathCostAlong(
   for (let i = 1; i < cells.length; i += 1) {
     const from = cells[i - 1] as Point;
     const to = cells[i] as Point;
-    total += stepDistance(from, to) * footprintMovementCost(map, to, footprint, occupied, options, from);
+    total += stepDistance(from, to, map.grid) * footprintMovementCost(map, to, footprint, occupied, options, from);
   }
   return total;
 }
@@ -638,9 +644,29 @@ function neighbors(cell: Point): Point[] {
   return cells;
 }
 
-/** A step's length on open ground, in squares: a diagonal costs half again. */
-export function stepDistance(a: Point, b: Point): number {
-  return a.x !== b.x && a.y !== b.y ? 1.5 : 1;
+/**
+ * A step's length on open ground, in squares. Under the standard rule a
+ * diagonal costs the same as a straight step; under 5-10-5 it averages out
+ * to half again (alternating 5 ft and 10 ft).
+ */
+export function stepDistance(a: Point, b: Point, grid: GridConfig): number {
+  if (a.x === b.x || a.y === b.y) return 1;
+  return grid.diagonalMode === "five-ten-five" ? 1.5 : 1;
+}
+
+function isDiagonalStep(a: Point, b: Point): boolean {
+  return a.x !== b.x && a.y !== b.y;
+}
+
+/**
+ * Whether a route reaching a square at `cost` with `diagonals` diagonal steps
+ * beats the best one found so far. With free diagonals (the standard rule) a
+ * zigzag often costs the same as the straight line, so a tie goes to the
+ * route with fewer diagonals: a straight drag across the map walks straight.
+ */
+function isBetterRoute(cost: number, diagonals: number, bestCost = Infinity, bestDiagonals = Infinity): boolean {
+  if (cost < bestCost - epsilon) return true;
+  return cost <= bestCost + epsilon && diagonals < bestDiagonals;
 }
 
 function heuristic(a: Point, b: Point): number {

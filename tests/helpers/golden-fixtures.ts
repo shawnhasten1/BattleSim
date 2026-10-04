@@ -89,7 +89,7 @@ export const GOLDEN_FIXTURES: GoldenFixture[] = [
       ["gladiator", "party", { x: 3, y: 10 }],
       ["priest", "party", { x: 1, y: 6 }],
       ["troll", "enemy", { x: 16, y: 3 }],
-      ["ochre-jelly", "enemy", { x: 15, y: 7 }],
+      ["ochre-jelly", "enemy", { x: 12, y: 2 }],
       ["giant-toad", "enemy", { x: 16, y: 10 }],
       ["giant-crab", "enemy", { x: 13, y: 5 }],
       ["wererat", "enemy", { x: 14, y: 11 }],

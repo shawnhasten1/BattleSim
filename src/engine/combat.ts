@@ -853,7 +853,7 @@ export function routeStepCosts(snapshot: EncounterSnapshot, combatantId: Id, cel
   const map = zoneTerrainOverlay(snapshot.map, snapshot.activeZones);
   return cells.slice(1).map((cell, index) => ({
     cost: stepCost(map, cells[index]!, cell, footprint, occupied, pathOptions),
-    open: stepDistance(cells[index]!, cell)
+    open: stepDistance(cells[index]!, cell, map.grid)
   }));
 }
 

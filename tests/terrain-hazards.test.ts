@@ -303,6 +303,9 @@ describe("terrain hazard tiles", () => {
     // safer route, not just that the tactical destination score disfavors it.
     const e = encounter();
     e.seed = "terrain-hazard-melee-detour";
+    // 5-10-5, so the diagonal the detour needs makes it the costlier route;
+    // under the standard rule it would cost the same as going through.
+    e.map.grid.diagonalMode = "five-ten-five";
     e.map.terrain = [lavaTile({ x: 4, y: 1 })];
     const fighter = e.combatants.find((c) => c.id === "pc-fighter")!;
     fighter.position = { x: 1, y: 1 };

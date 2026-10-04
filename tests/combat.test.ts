@@ -2230,6 +2230,12 @@ describe("combat engine", () => {
       });
       const enemy = encounter.combatants.find((combatant) => combatant.id === "enemy-goblin-1");
       if (enemy) enemy.position = { x: 8, y: 1 };
+      // Walls along row 1 so the goblin can't sidestep the zone: with free
+      // diagonals a detour around it also fits in 30 ft.
+      encounter.map.walls = [1, 2].map((y) => ({
+        id: `corridor-${y}`, start: { x: 0, y }, end: { x: 12, y },
+        blocksMovement: true, blocksSight: false, blocksProjectiles: false
+      }));
       const state = createEngineState(encounter);
       resolveAreaSaveAction(state, "pc-fighter", { x: 5, y: 1 }, "swarm-zone");
 
