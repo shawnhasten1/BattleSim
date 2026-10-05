@@ -156,6 +156,13 @@ describe("the item editor's model", () => {
     expect(sections.find((section) => section.id === "basics")!.summary).toBe("Potion of Healing · potion · magic");
   });
 
+  it("names what a use spends after the item, in its collapsed summary too", () => {
+    const definition = carrying([wand], { "item:wand": 7 });
+    const use = wand.grantedActions![0]!;
+    const sections = sectionsFor({ ref: { list: "granted", parent: { list: "items", id: "wand" }, id: use.id }, record: use, definition });
+    expect(sections.find((section) => section.id === "use")!.summary).toBe("Action · 1 charge");
+  });
+
   it("changes type: a wand gets charges and can't be given; a potion gets a stack and is given for an action", () => {
     const asWand = withItemType(potions(), "wand");
     expect(asWand.supply).toEqual({ id: "item:potions", size: 3, unit: "charges", regains: "dawn" });

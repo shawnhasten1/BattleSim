@@ -127,11 +127,12 @@ const SLOT_WORDS: Record<ActionDefinition["actionType"], string> = {
   action: "Action", bonus: "Bonus action", reaction: "Reaction", free: "Free"
 };
 
-function limitText(limit: Limit, action: ActionDefinition | undefined): string {
+/** How often it's used and what it spends; an item's pool is named after the item ("1 charge", "1 Potion of Healing"). */
+function limitText(limit: Limit, action: ActionDefinition | undefined, definition?: CreatureDefinition): string {
   switch (limit.kind) {
     case "at-will": return "at will";
     case "slot": return costText({ resourceId: `slot-${limit.level}`, amount: 1 });
-    case "pool": return costText({ resourceId: limit.resourceId, amount: limit.amount });
+    case "pool": return costText({ resourceId: limit.resourceId, amount: limit.amount }, definition);
     case "uses":
     case "recharge": return usageLabel(action && "usage" in action ? action.usage : undefined);
   }
@@ -156,7 +157,7 @@ function useSummary(shape: Shape, definition: CreatureDefinition): string {
     // A feature that only grants abilities (Second Wind) is used through them.
     if (!activation) return !feature.effects?.length && !feature.aura && !feature.emanation && feature.grantedActions?.length ? "through what it grants" : "always on";
     const rounds = activation.kind === "activate-feature" ? activation.condition?.durationRounds : undefined;
-    return [SLOT_WORDS[activation.actionType], limitText(actionLimit.get(activation), activation), rounds ? `for ${roundsText(rounds)}` : ""].filter(Boolean).join(" · ");
+    return [SLOT_WORDS[activation.actionType], limitText(actionLimit.get(activation), activation, definition), rounds ? `for ${roundsText(rounds)}` : ""].filter(Boolean).join(" · ");
   }
   if (shape.type === "legendary") {
     const pool = definition.legendary?.pool;
@@ -179,7 +180,7 @@ function useSummary(shape: Shape, definition: CreatureDefinition): string {
   const reaction = "reaction" in action && action.actionType === "reaction" && action.reaction ? `when ${triggerText(action.reaction.trigger)}` : "";
   const upcasts = shape.type === "spell" && Object.values(upcastOf(shape.spell)?.perSlotAboveBase ?? {}).some(Boolean) ? "upcasts" : "";
   const beforeCombat = action.kind === "buff" && action.prepOnly ? "cast before combat" : "";
-  return [SLOT_WORDS[action.actionType], reaction, limitText(actionLimit.get(action), action), upcasts, beforeCombat].filter(Boolean).join(" · ");
+  return [SLOT_WORDS[action.actionType], reaction, limitText(actionLimit.get(action), action, definition), upcasts, beforeCombat].filter(Boolean).join(" · ");
 }
 
 function targetSummary(action: ActionDefinition): string {
