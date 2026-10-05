@@ -79,6 +79,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "evasion" })
   },
   {
+    kind: "no-critical-hits", label: "No critical hits against it", hint: "Adamantine armor: a critical hit becomes a normal hit", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "no-critical-hits" })
+  },
+  {
     kind: "melee-retaliation", label: "Hurts what hits it in melee", hint: "Heated Body, a balor's Fire Aura", theme: "defense", when: false, scope: false,
     blank: () => ({ kind: "melee-retaliation", damage: [{ dice: "1d10", damageType: "fire" }], withinFt: 5 })
   },

@@ -616,6 +616,10 @@ export type FeatureEffect =
   | {
     /** Evasion: a Dexterity save that would halve damage instead negates it on a success and halves it on a failure. */
     kind: "evasion";
+  }
+  | {
+    /** Adamantine armor: a critical hit against the bearer becomes a normal hit (a DM's ruling on the roll stands). */
+    kind: "no-critical-hits";
   };
 
 /**
@@ -1649,7 +1653,25 @@ export interface FeatureDefinition {
  * What sort of item it is: how the sheet, the hotbar and the AI treat it. A potion is drunk, or given within 5 ft. (Its
  * field is `type`, never `kind`: the editor tells an action from other records by `kind`.)
  */
-export type ItemType = "potion" | "scroll" | "wand" | "thrown" | "worn" | "gear";
+export type ItemType = "potion" | "scroll" | "wand" | "thrown" | "worn" | "gear" | "armor" | "shield";
+
+/** How heavy a suit of armor is (it caps the Dexterity it adds), or a shield (ARMOR_PLAN.md). */
+export type ArmorCategory = "light" | "medium" | "heavy" | "shield";
+
+/** What armor or a shield does for AC while it's worn (`armoredAc`). */
+export interface ArmorStats {
+  category: ArmorCategory;
+  /** Armor's base AC (11 for leather, 18 for plate), or a shield's bonus (2). */
+  ac: number;
+  /** +1, +2 or +3: magic armor's or a magic shield's bonus to AC. It needs attunement when the item does. */
+  magicBonus?: number;
+  /** The most Dexterity it adds, when it isn't its weight's (light: all of it; medium: +2; heavy: none). */
+  maxDex?: number;
+  /** Heavy armor: the Strength score its wearer needs; below it, the wearer's walking speed drops 10 ft. */
+  strength?: number;
+  /** Disadvantage on Dexterity (Stealth) checks: said on the item; there's no stealth in the simulator. */
+  stealthDisadvantage?: boolean;
+}
 
 /**
  * What an item's uses spend: a stack used up one at a time (`count`: three potions), or charges (`charges`: a wand,
@@ -1682,6 +1704,13 @@ export interface ItemDefinition {
   give?: { actionType: "action" | "bonus" };
   /** A potion's drink and give follow the campaign's potion rule unless this is `false` (it keeps its own timing). */
   followsTableRule?: boolean;
+  /** Armor or a shield (`type` "armor" or "shield"): what it does for AC while it's worn. */
+  armor?: ArmorStats;
+  /**
+   * Armor or a shield is worn (absent or `true`) or only carried (`false`): only worn armor counts toward AC, and only
+   * worn armor's properties and uses work.
+   */
+  equipped?: boolean;
   /**
    * What the simulator doesn't run of it, in a few words for the DM ("the larger size and the advantage on Strength
    * checks"): the sheet marks it partly simulated and says so. Not read by the simulator.

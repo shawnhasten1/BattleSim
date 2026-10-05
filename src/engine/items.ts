@@ -1,3 +1,4 @@
+import { isWorn } from "./armor";
 import { parseDiceExpression } from "./dice";
 import type {
   ActionDefinition,
@@ -56,9 +57,12 @@ export function isConsumableType(type: ItemType): boolean {
   return type === "potion" || type === "scroll" || type === "thrown";
 }
 
-/** The items that work: one that needs attunement does nothing until it's attuned. */
+/**
+ * The items that work: one that needs attunement does nothing until it's attuned, and armor or a shield only while it's
+ * worn. (Worn armor's AC counts attuned or not: `armoredAc`.)
+ */
 export function workingItems(definition: CreatureDefinition): ItemDefinition[] {
-  return (definition.items ?? []).filter((item) => !item.attunement || item.attunement.attuned);
+  return (definition.items ?? []).filter((item) => (!item.attunement || item.attunement.attuned) && isWorn(item));
 }
 
 /** A potion's own use: a heal or a buff its holder drinks, aimed at itself. */

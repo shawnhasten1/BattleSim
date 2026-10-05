@@ -24,6 +24,8 @@ import {
   type ItemDefinition,
   type ItemType,
   type ItemSupply,
+  type ArmorCategory,
+  type ArmorStats,
   type NumericFormula,
   type ReactionMeta,
   type CounterCheck,
@@ -602,7 +604,7 @@ export function normalizeItemDefinition(input: unknown): ItemDefinition {
   return normalizeItemRecord(normalizeIdList([input], "item")[0]);
 }
 
-const ITEM_TYPES: readonly ItemType[] = ["potion", "scroll", "wand", "thrown", "worn", "gear"];
+const ITEM_TYPES: readonly ItemType[] = ["potion", "scroll", "wand", "thrown", "worn", "gear", "armor", "shield"];
 
 function normalizeItems(input: unknown): ItemDefinition[] | undefined {
   return Array.isArray(input) ? normalizeIdList(input, "item").map(normalizeItemRecord) : undefined;
@@ -632,8 +634,30 @@ function normalizeItemRecord(input: unknown): ItemDefinition {
     effects: Array.isArray(input.effects) && input.effects.length ? input.effects as FeatureEffect[] : undefined,
     attunement: isRecord(input.attunement) ? { attuned: input.attunement.attuned === true } : undefined,
     magical: input.magical === true ? true : undefined,
+    armor: type === "armor" || type === "shield" ? normalizeArmorStats(input.armor, type) : undefined,
+    equipped: (type === "armor" || type === "shield") && input.equipped === false ? false : undefined,
     automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
   } as ItemDefinition;
+}
+
+/** Armor's or a shield's AC numbers, whole and in range: a shield's category is always "shield". */
+function normalizeArmorStats(input: unknown, type: "armor" | "shield"): ArmorStats {
+  const source = isRecord(input) ? input : {};
+  const category: ArmorCategory = type === "shield" ? "shield"
+    : source.category === "medium" || source.category === "heavy" ? source.category : "light";
+  const whole = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : undefined);
+  const ac = whole(source.ac) ?? (type === "shield" ? 2 : 11);
+  const magicBonus = whole(source.magicBonus);
+  const maxDex = whole(source.maxDex);
+  const strength = whole(source.strength);
+  return {
+    category,
+    ac: Math.max(0, ac),
+    ...(magicBonus ? { magicBonus } : {}),
+    ...(maxDex !== undefined && category !== "shield" ? { maxDex: Math.max(0, maxDex) } : {}),
+    ...(strength && category !== "shield" ? { strength } : {}),
+    ...(source.stealthDisadvantage === true ? { stealthDisadvantage: true } : {})
+  };
 }
 
 function normalizeItemSupply(input: unknown): ItemSupply | undefined {

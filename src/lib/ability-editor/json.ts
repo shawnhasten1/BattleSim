@@ -203,8 +203,16 @@ class Checker {
         return;
       case "items": {
         this.name("", value);
-        if (!["potion", "scroll", "wand", "thrown", "worn", "gear"].includes(String(value.type))) {
-          this.add("type", "Expected potion, scroll, wand, thrown, worn or gear");
+        if (!["potion", "scroll", "wand", "thrown", "worn", "gear", "armor", "shield"].includes(String(value.type))) {
+          this.add("type", "Expected potion, scroll, wand, thrown, worn, gear, armor or shield");
+        }
+        const armor = value.armor;
+        if (armor !== undefined) {
+          if (!isObject(armor)) this.add("armor", "Expected its AC: { category, ac }");
+          else {
+            if (!["light", "medium", "heavy", "shield"].includes(String(armor.category))) this.add("armor.category", "Expected light, medium, heavy or shield");
+            if (typeof armor.ac !== "number" || armor.ac < 0) this.add("armor.ac", "Expected its AC: 0 or more");
+          }
         }
         const supply = value.supply;
         if (supply !== undefined) {

@@ -1,4 +1,5 @@
 export * from "./areas";
+export * from "./armor";
 export * from "./batch";
 export * from "./combat";
 export * from "./dependencies";

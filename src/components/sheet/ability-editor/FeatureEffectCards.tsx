@@ -748,6 +748,8 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
     }
     case "evasion":
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
+    case "no-critical-hits":
+      return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
     case "melee-retaliation":
       return (
         <>

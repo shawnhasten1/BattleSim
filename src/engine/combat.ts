@@ -2,6 +2,7 @@ import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazard
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { armoredAc } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
@@ -1770,6 +1771,11 @@ function resolveAttackCore(
     hit = overridden !== "failure";
     critical = overridden === "critical";
   }
+  // Adamantine: a critical hit against it is a normal hit.
+  const criticalNegatedBy = critical && !overridden
+    ? featureSources(targetDefinition, target).find((feature) => (feature.effects ?? []).some((effect) => effect.kind === "no-critical-hits"))?.name
+    : undefined;
+  if (criticalNegatedBy) critical = false;
   // Shield, Parry: the roll is known and it hits — the target may raise its AC to make it miss. Nothing stops a
   // critical hit, and a DM's ruling on the roll stands.
   let endsAfterAttack: ReactionWindowResult["endsAfterAttack"];
@@ -1847,6 +1853,7 @@ function resolveAttackCore(
     targetAc,
     hit,
     critical,
+    ...(criticalNegatedBy ? { criticalNegatedBy } : {}),
     damageApplied,
     ...(overridden ? { overridden } : {})
   }));
@@ -4695,7 +4702,7 @@ function effectiveArmorClass(state: EngineState, definition: CreatureDefinition,
     .reduce((sum, { feature, sourceDefinition }) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
       return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, sourceDefinition) : effectSum;
     }, 0), 0);
-  return definition.armorClass + ownFeatureBonus + auraFeatureBonus + (combatant.conditions ?? [])
+  return armoredAc(definition).total + ownFeatureBonus + auraFeatureBonus + (combatant.conditions ?? [])
     .reduce((sum, condition) => sum + (condition.modifiers?.armorClass ?? 0), 0);
 }
 

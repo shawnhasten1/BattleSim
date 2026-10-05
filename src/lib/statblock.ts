@@ -622,6 +622,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `A creature that hits ${who.object} with a melee attack while within ${effect.withinFt ?? 5} feet of ${who.object} takes ${damageText(effect.damage, definition)}.`;
     case "evasion":
       return `When ${who.subject} makes a Dexterity saving throw to take half damage, it takes no damage on a success and half on a failure.`;
+    case "no-critical-hits":
+      return `Any critical hit against ${who.object} becomes a normal hit.`;
   }
 }
 
@@ -679,6 +681,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "avoids-opportunity-attacks": return `no opportunity attacks${gate}`;
     case "melee-retaliation": return `hitting it in melee: ${damageShort(effect.damage, definition)}`;
     case "evasion": return "evasion";
+    case "no-critical-hits": return "no critical hits against it";
   }
 }
 
@@ -1656,7 +1659,7 @@ export function legendaryStatblock(legendary: LegendaryActionRef, definition: Cr
 }
 
 export const ITEM_TYPE_WORDS: Record<ItemType, string> = {
-  potion: "potion", scroll: "scroll", wand: "wand", thrown: "thrown item", worn: "worn item", gear: "gear"
+  potion: "potion", scroll: "scroll", wand: "wand", thrown: "thrown item", worn: "worn item", gear: "gear", armor: "armor", shield: "shield"
 };
 
 const slotPhrase = (actionType: ActionDefinition["actionType"]): string =>
