@@ -12,7 +12,7 @@ import {
   tickZones,
   type EngineState
 } from "./combat";
-import { finishTurn, runLairWindow, takeAutomatedTurn } from "./simulation";
+import { finishTurn, runLairWindow, takeAutomatedTurn, takeSurgedAction } from "./simulation";
 import type { CombatantState, CombatLogEvent, EncounterSnapshot, Id } from "./types";
 
 /* ─── The turn sequencer ───────────────────────────────────────────────────────
@@ -226,7 +226,10 @@ export function combatOutcome(state: EngineState): SimulationOutcome | null {
 /** Let the AI play `actor`'s open turn. A resolver throw from an AI mispick is contained to a lost turn and a warning. */
 export function playAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   try {
-    return takeAutomatedTurn(state, actor);
+    const outcome = takeAutomatedTurn(state, actor);
+    // Action Surge: the turn's action is spent; another one, if there's something worth hitting.
+    if (takeSurgedAction(state, actor)) return takeAutomatedTurn(state, actor);
+    return outcome;
   } catch (error) {
     const warning = `${actor.displayName}: automated turn failed — ${error instanceof Error ? error.message : String(error)}`;
     state.log.push(event(state, "AutomationWarning", warning, { combatantId: actor.id }));

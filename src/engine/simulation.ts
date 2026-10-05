@@ -1421,6 +1421,22 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
   }
 
+  // Free activations that pay off this turn (Reckless Attack before Strength melee swings, Sacred Weapon before melee
+  // ones; a purely defensive one, Superior Defense, once the creature is hurt): they cost no action, so each that's
+  // worth it is taken.
+  const freeActivations = selectFreeActivations(state.snapshot, actor, plan);
+  for (const free of freeActivations) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${free.action.name}`, {
+      combatantId: actor.id,
+      actionId: free.action.id,
+      score: free.score,
+      reasons: free.reasons,
+      slot: "free"
+    }));
+    resolveActivateFeatureAction(state, actor.id, free.action.id);
+  }
+  if (freeActivations.length) plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
+
   // Before committing to "move fully toward the main action, then see what's left
   // for the bonus action," check whether the main and bonus actions are better
   // planned together — same shared movement budget, but weighing which is worth
@@ -2601,6 +2617,94 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
 
   candidates.sort((a, b) => b.score - a.score || a.action.id.localeCompare(b.action.id));
   return candidates[0];
+}
+
+/** The attacks an offensive plan swings with: its own, or a multiattack's steps. */
+function planAttacks(plan: OffensivePlan, executables: ActionDefinition[]): AttackAction[] {
+  if (plan.action.kind === "attack") return [plan.action];
+  if (plan.action.kind !== "multiattack") return [];
+  return plan.action.attacks.flatMap((step) => swingCandidates(step, executables));
+}
+
+/** Whether an attack is one an effect's scope covers: its attack types and abilities (a finesse weapon, the better). */
+function scopeCovers(effect: FeatureEffect, attack: AttackAction, definition: CreatureDefinition): boolean {
+  const scope = effect as { attackTypes?: string[]; abilities?: Ability[]; spellsOnly?: boolean; actionIds?: string[] };
+  if (scope.attackTypes && !scope.attackTypes.includes(attack.attackType)) return false;
+  if (scope.spellsOnly && attack.spellLevel === undefined) return false;
+  if (scope.actionIds && !scope.actionIds.includes(attack.id)) return false;
+  if (scope.abilities) {
+    // A compiled attack names the ability it uses (a finesse weapon's is already the better of the two).
+    if (!attack.ability || !scope.abilities.includes(attack.ability)) return false;
+  }
+  return true;
+}
+
+/**
+ * Free activations worth taking this turn. One that boosts attacks (Reckless Attack, Sacred Weapon) is taken when the
+ * plan swings with an attack it covers, and, if it lowers the creature's defenses (Reckless Attack's advantage against
+ * it), only while it has half its hit points or more. One that only defends (Superior Defense) is taken once it's down to
+ * half, with an enemy close. A cost is weighed as for any activation (the stance scales it).
+ */
+function selectFreeActivations(snapshot: EncounterSnapshot, actor: CombatantState, plan: OffensivePlan): FeatureActivationPlan[] {
+  if (!canAct(actor, "free")) return [];
+  const definition = getDefinition(snapshot, actor);
+  const executables = getExecutableActions(definition);
+  const attacks = planAttacks(plan, executables);
+  const healthy = actor.currentHp * 2 >= definition.maxHp;
+  const threatened = snapshot.combatants.some((other) => effectiveFaction(snapshot, other) !== effectiveFaction(snapshot, actor)
+    && isTargetable(other) && spatialDistance(snapshot, actor, other) <= 10);
+  const chosen: FeatureActivationPlan[] = [];
+  for (const action of executables) {
+    if (action.kind !== "activate-feature" || action.actionType !== "free" || action.automationSupport !== "full") continue;
+    if (!action.condition || !canPayResource(actor, action) || hasActiveFeatureCondition(actor, action.featureId)) continue;
+    const effects = action.condition.effects ?? [];
+    const offense = effects.filter((effect) => effect.kind === "damage-bonus" || effect.kind === "attack-bonus" || effect.kind === "attack-advantage");
+    const defense = effects.some((effect) => effect.kind === "damage-adjustment" || effect.kind === "armor-class-bonus"
+      || effect.kind === "save-bonus" || effect.kind === "save-advantage") || (action.condition.modifiers?.armorClass ?? 0) > 0;
+    const exposes = (action.condition.modifiers?.incomingAttackRoll ?? 0) > 0;
+    const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    let score = 0;
+    const reasons: string[] = [];
+    if (offense.length) {
+      if (!attacks.some((attack) => offense.some((effect) => scopeCovers(effect, attack, definition)))) continue;
+      if (exposes && !healthy) continue;
+      score = 25 + Math.min(action.condition.durationRounds ?? 1, 10);
+      reasons.push("improves this turn's attacks", exposes ? "healthy enough to be exposed" : "no downside");
+    } else if (defense) {
+      if (healthy || !threatened) continue;
+      score = 22 + Math.min(action.condition.durationRounds ?? 1, 10);
+      reasons.push("hurt, with an enemy close");
+    } else {
+      continue;
+    }
+    score -= resourcePenalty;
+    if (score < 20) continue;
+    chosen.push({ action, score, reasons });
+  }
+  return chosen.sort((a, b) => b.score - a.score || a.action.id.localeCompare(b.action.id));
+}
+
+/**
+ * Action Surge and the like: a free activation whose feature hands back the action. Taken after the turn's action, when
+ * there's still something to attack (a conservative creature waits for a bloodied target), and the turn is played again
+ * with the action it gives. Returns whether it was taken.
+ */
+export function takeSurgedAction(state: EngineState, actor: CombatantState): boolean {
+  if (actor.state !== "active" || actor.actionEconomy?.action !== false || !canAct(actor, "free")) return false;
+  const definition = getDefinition(state.snapshot, actor);
+  const features = [...(definition.features ?? []), ...(definition.traits ?? [])];
+  const surge = getExecutableActions(definition).find((action): action is FeatureActivationAction => action.kind === "activate-feature"
+    && action.actionType === "free" && action.automationSupport === "full" && canPayResource(actor, action)
+    && Boolean(features.find((feature) => feature.id === action.featureId)?.effects?.some((effect) => effect.kind === "extra-action" && effect.slot === "action")));
+  if (!surge) return false;
+  const plan = selectOffensivePlan(state.snapshot, actor, tacticsSettings(actor.tacticsProfile));
+  if (!plan) return false;
+  if (actor.resourceStance === "conservative" && plan.target.currentHp * 2 > getDefinition(state.snapshot, plan.target).maxHp) return false;
+  state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${surge.name}`, {
+    combatantId: actor.id, actionId: surge.id, targetId: plan.target.id, reasons: ["another action against an enemy in reach"], slot: "free"
+  }));
+  resolveActivateFeatureAction(state, actor.id, surge.id);
+  return true;
 }
 
 function hasActiveFeatureCondition(actor: CombatantState, featureId: string): boolean {

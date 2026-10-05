@@ -18,8 +18,11 @@ function setUp() {
   // The fighter rolls high, the goblins low: the lair's slot falls between them.
   encounter.combatants = encounter.combatants.map((combatant): CombatantState => ({
     ...combatant,
-    initiative: combatant.faction === "party" ? (combatant.id === "pc-fighter" ? 24 : 18) : combatant.id.endsWith("1") ? 12 : 8
+    initiative: combatant.faction === "party" ? (combatant.id === "pc-fighter" ? 24 : 18) : combatant.id.endsWith("1") ? 12 : 8,
+    // Sturdy enough that the fighter (who may Action Surge) can't drop the lair's goblin before initiative 20.
+    ...(combatant.faction === "enemy" ? { currentHp: 60 } : {})
   }));
+  encounter.definitions = encounter.definitions.map((definition) => (definition.id === "def-goblin" ? { ...definition, maxHp: 60 } : definition));
   useEncounterStore.setState({ encounter, log: [] });
   const goblin = encounter.combatants.find((combatant) => combatant.faction === "enemy")!;
   const ref = store().insertAbilityRecord(goblin.definitionId, "lairActions", eruption);

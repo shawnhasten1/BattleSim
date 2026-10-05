@@ -43,7 +43,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `damage-reaction` | A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance) | Monk, Ranger, Rogue, Species | 1 | Deflect Attacks (Monk); Deflect Energy (Monk); Superior Hunter's Defense (Hunter); Uncanny Dodge (Rogue); Giant Ancestry (Goliath) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
-| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter, Monk, Paladin | 2 | Reckless Attack (Barbarian); Action Surge (Fighter); Superior Defense (Monk); Sacred Weapon (Oath of Devotion) |
 | `initiative` | Bonuses or advantage on initiative | Barbarian, Fighter, Feats | 1 | Feral Instinct (Barbarian); Remarkable Athlete (Champion); Alert (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
@@ -103,7 +102,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Unarmored Defense | full |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Danger Sense | full |  | Advantage on Dexterity saves; the Incapacitated exception isn't checked. |
-| 2 | Reckless Attack | full | `ai-free-actions` | Attacks against it are +5 rather than at advantage until its next turn. The AI doesn't take it on its own yet. |
+| 2 | Reckless Attack | full |  | Attacks against it are +5 rather than at advantage until its next turn. The AI takes it before Strength melee attacks while it has half its hit points. |
 | 3 | Barbarian Subclass | builder |  | The subclass choice. |
 | 3 | Primal Knowledge | builder |  | A skill; using Strength for checks while raging is outside a fight. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
@@ -219,7 +218,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Fighting Style | builder |  | A Fighting Style feat. |
 | 1 | Second Wind | full |  | 1d10 + fighter level, its uses by level. |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
-| 2, 17 | Action Surge | full | `ai-free-actions` | Two uses from 17th level; once per turn isn't checked. The AI doesn't take it on its own yet. |
+| 2, 17 | Action Surge | full |  | Two uses from 17th level; once per turn isn't checked. The AI takes it after its action when there's still something to attack (a conservative stance waits for a bloodied target). |
 | 2 | Tactical Mind | info |  | Ability checks. |
 | 3 | Fighter Subclass | builder |  | The subclass choice. |
 | 4, 6, 8, 12, 14, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
@@ -266,7 +265,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 13 | Deflect Energy | manual | `damage-reaction` |  |
 | 14 | Disciplined Survivor | partial | `d20-reroll` | Proficiency in every save; rerolling a failed one doesn't run. |
 | 15 | Perfect Focus | info |  | A fight starts with full pools. |
-| 18 | Superior Defense | full | `ai-free-actions` | 3 focus points: resistance to everything but force for 10 rounds. The AI doesn't take it on its own yet. |
+| 18 | Superior Defense | full |  | 3 focus points: resistance to everything but force for 10 rounds. The AI takes it once it's below half its hit points with an enemy close. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Body and Mind | builder |  | +4 Dexterity and Wisdom, to a maximum of 25. |
 
@@ -307,7 +306,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Oath of Devotion Spells | builder |  | Oath of Devotion spells are always prepared. |
-| 3 | Sacred Weapon | full | `ai-free-actions` | Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity; its radiant damage and light aren't. A free activation: the AI doesn't take it on its own yet. |
+| 3 | Sacred Weapon | full |  | Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity, taken by the AI before melee attacks; its radiant damage and light aren't. |
 | 7 | Aura of Devotion | manual | `conditional-immunity` |  |
 | 15 | Smite of Protection | manual | `smite` |  |
 | 20 | Holy Nimbus | manual | `activated-aura` |  |

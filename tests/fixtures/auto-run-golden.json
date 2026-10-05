@@ -2,78 +2,78 @@
  "sample": [
   {
    "seed": "golden:sample:0",
-   "hash": "13b0177660fc2a290dfb3787085fd1a3b1d5877b",
+   "hash": "f2ffcc1318ebd0bd7f0d2e472bb77c9f5ae33aa7",
    "events": 58,
    "winner": "party",
    "rounds": 3
   },
   {
    "seed": "golden:sample:1",
-   "hash": "f92aac84a6751de76d2cba484cad51e2bffcb672",
-   "events": 54,
+   "hash": "505606bfbbe2efb613997574a1dc43a13fb309e6",
+   "events": 50,
    "winner": "party",
    "rounds": 3
   },
   {
    "seed": "golden:sample:2",
-   "hash": "b41ee60f22242daeedf91d07df81f34e0921d3fd",
-   "events": 127,
+   "hash": "8c9b7952a7e27b64c94d949c5406d5633e03a864",
+   "events": 65,
    "winner": "party",
-   "rounds": 9
+   "rounds": 3
   },
   {
    "seed": "golden:sample:3",
-   "hash": "000cf5eb16107a1ee2fafdfdcb26abe6b610c28f",
-   "events": 64,
+   "hash": "4284a3a834fad2d4455bddec59a91780416814ca",
+   "events": 93,
    "winner": "party",
-   "rounds": 3
+   "rounds": 4
   },
   {
    "seed": "golden:sample:4",
-   "hash": "3ab5724c09343df15e7192cca5534ce17ef380d2",
-   "events": 68,
-   "winner": "party",
-   "rounds": 4
-  },
-  {
-   "seed": "golden:sample:5",
-   "hash": "26c8314454ce35658d8d74a2bdb72c21265f8194",
-   "events": 56,
-   "winner": "party",
-   "rounds": 3
-  },
-  {
-   "seed": "golden:sample:6",
-   "hash": "1403741a78eb19761d3423cd968c69dc483f6828",
-   "events": 40,
-   "winner": "party",
-   "rounds": 2
-  },
-  {
-   "seed": "golden:sample:7",
-   "hash": "0271bf2066c4a7c0f6a5429d7bd3f84a7c8b06dc",
-   "events": 78,
-   "winner": "party",
-   "rounds": 4
-  },
-  {
-   "seed": "golden:sample:8",
-   "hash": "6f51303cea4cebf80830ee7002a6f01ec4b9ffce",
+   "hash": "13bb75c3ed954b6caef1f5466176fcaa8fcad94f",
    "events": 73,
    "winner": "party",
    "rounds": 4
   },
   {
-   "seed": "golden:sample:9",
-   "hash": "514824ab83b6c2c74e1d1fd63a6446da935fee47",
-   "events": 78,
+   "seed": "golden:sample:5",
+   "hash": "b56cfeb7bac15867743af95eb522dc3e7c7ecdd0",
+   "events": 39,
    "winner": "party",
-   "rounds": 4
+   "rounds": 2
+  },
+  {
+   "seed": "golden:sample:6",
+   "hash": "984914283668b778327ef57888451c08341012cc",
+   "events": 36,
+   "winner": "party",
+   "rounds": 2
+  },
+  {
+   "seed": "golden:sample:7",
+   "hash": "1237103ec5b1d1331c464ed1f39473e5dfe465d4",
+   "events": 71,
+   "winner": "party",
+   "rounds": 3
+  },
+  {
+   "seed": "golden:sample:8",
+   "hash": "856031c5b08ed02875bb80327f4d6bc284a20606",
+   "events": 160,
+   "winner": "enemy",
+   "rounds": 10
+  },
+  {
+   "seed": "golden:sample:9",
+   "hash": "51bfe786c82adda231491d699e8643a7195a5790",
+   "events": 52,
+   "winner": "party",
+   "rounds": 2
   },
   {
    "seed": "golden:sample:10",
-   "hash": "67d7c43d5b6225e54799474781e28caa305293e2",
-   "events": 36,
+   "hash": "f549268be5f4712eb44a3d2e1a601b28b794f48b",
+   "events": 43,
    "winner": "party",
    "rounds": 2
   },
@@ -86,59 +86,59 @@
   },
   {
    "seed": "golden:sample:12",
-   "hash": "7d82c099ae2d9ed9b842cf325590c719124d8c19",
-   "events": 38,
+   "hash": "025ed493611795373032d48f3e056fba31baf010",
+   "events": 43,
    "winner": "party",
    "rounds": 2
   },
   {
    "seed": "golden:sample:13",
-   "hash": "8f35e0e1a7eaee56e6d02933b12fb28b96f57634",
-   "events": 37,
+   "hash": "c2fa3916cf38f575b88cee2818a4260e54ddad91",
+   "events": 44,
    "winner": "party",
    "rounds": 2
   },
   {
    "seed": "golden:sample:14",
-   "hash": "c5447d6265a55d7264ca1a7b9730910944044c78",
-   "events": 18,
+   "hash": "63204c649528cf1ff3bf350e5a893206737a8b38",
+   "events": 25,
    "winner": "party",
    "rounds": 1
   },
   {
    "seed": "golden:sample:15",
-   "hash": "be6de7b5cc4175121b52343157a0194ca894c762",
-   "events": 53,
+   "hash": "b9bafdefdf841c0bf098a0340d7b49a94405239f",
+   "events": 56,
    "winner": "party",
    "rounds": 2
   },
   {
    "seed": "golden:sample:16",
-   "hash": "011aeb1556e78c5bfdb62483cdac2cc7f30ddfd0",
-   "events": 47,
+   "hash": "1ddb774cfb37011239b8b7fb0ed6cec7555498c7",
+   "events": 56,
    "winner": "party",
    "rounds": 3
   },
   {
    "seed": "golden:sample:17",
-   "hash": "b1c463f5cccb9fd6befc9f995988648170d894ae",
-   "events": 152,
+   "hash": "591f06f60079830e801d806aa18b365c660c50bc",
+   "events": 74,
    "winner": "party",
-   "rounds": 9
+   "rounds": 3
   },
   {
    "seed": "golden:sample:18",
-   "hash": "5fbe2c184ae3e176c06887ab602e8338e9fc1919",
+   "hash": "72ccafa5b2fdd610521256c2cfec442f3e15f27c",
    "events": 50,
    "winner": "party",
    "rounds": 3
   },
   {
    "seed": "golden:sample:19",
-   "hash": "612415965b930934b8ad82b52590949ab05f6222",
-   "events": 25,
+   "hash": "523ad5c40f94109d1746cab82ad9ee442710c571",
+   "events": 63,
    "winner": "party",
-   "rounds": 2
+   "rounds": 4
   }
  ],
  "casters": [

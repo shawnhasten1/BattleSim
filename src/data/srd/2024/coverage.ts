@@ -84,7 +84,6 @@ export const GAPS = {
   "counterspell-save": "The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent",
   "weapon-cantrip": "A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
-  "ai-free-actions": "The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play"
 } as const;
 
 export type GapCode = keyof typeof GAPS;
@@ -109,7 +108,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_unarmored-defense": full(),
   "barbarian_weapon-mastery": MASTERY,
   "barbarian_danger-sense": full("Advantage on Dexterity saves; the Incapacitated exception isn't checked."),
-  "barbarian_reckless-attack": { verdict: "full", gaps: ["ai-free-actions"], note: "Attacks against it are +5 rather than at advantage until its next turn. The AI doesn't take it on its own yet." },
+  "barbarian_reckless-attack": full("Attacks against it are +5 rather than at advantage until its next turn. The AI takes it before Strength melee attacks while it has half its hit points."),
   "barbarian_barbarian-subclass": SUBCLASS,
   "barbarian_primal-knowledge": builder("A skill; using Strength for checks while raging is outside a fight."),
   "barbarian_ability-score-improvement": FEAT_CHOICE,
@@ -201,7 +200,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_fighting-style": builder("A Fighting Style feat."),
   "fighter_second-wind": full("1d10 + fighter level, its uses by level."),
   "fighter_weapon-mastery": MASTERY,
-  "fighter_action-surge": { verdict: "full", gaps: ["ai-free-actions"], note: "Two uses from 17th level; once per turn isn't checked. The AI doesn't take it on its own yet." },
+  "fighter_action-surge": full("Two uses from 17th level; once per turn isn't checked. The AI takes it after its action when there's still something to attack (a conservative stance waits for a bloodied target)."),
   "fighter_tactical-mind": info("Ability checks."),
   "fighter_fighter-subclass": SUBCLASS,
   "fighter_ability-score-improvement": FEAT_CHOICE,
@@ -242,7 +241,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_deflect-energy": manual(["damage-reaction"]),
   "monk_disciplined-survivor": partial(["d20-reroll"], "Proficiency in every save; rerolling a failed one doesn't run."),
   "monk_perfect-focus": info("A fight starts with full pools."),
-  "monk_superior-defense": { verdict: "full", gaps: ["ai-free-actions"], note: "3 focus points: resistance to everything but force for 10 rounds. The AI doesn't take it on its own yet." },
+  "monk_superior-defense": full("3 focus points: resistance to everything but force for 10 rounds. The AI takes it once it's below half its hit points with an enemy close."),
   "monk_epic-boon": EPIC_BOON,
   "monk_body-and-mind": builder("+4 Dexterity and Wisdom, to a maximum of 25."),
 
@@ -274,7 +273,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Oath of Devotion */
   "paladin_oath-of-devotion_spells": PREPARED("Oath of Devotion spells"),
-  "paladin_oath-of-devotion_sacred-weapon": { verdict: "full", gaps: ["ai-free-actions"], note: "Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity; its radiant damage and light aren't. A free activation: the AI doesn't take it on its own yet." },
+  "paladin_oath-of-devotion_sacred-weapon": full("Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity, taken by the AI before melee attacks; its radiant damage and light aren't."),
   "paladin_oath-of-devotion_aura-of-devotion": manual(["conditional-immunity"]),
   "paladin_oath-of-devotion_smite-of-protection": manual(["smite"]),
   "paladin_oath-of-devotion_holy-nimbus": manual(["activated-aura"]),
