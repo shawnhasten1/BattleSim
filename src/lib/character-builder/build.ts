@@ -1,6 +1,7 @@
 import {
   abilityModifier,
   type Ability,
+  type ActionDefinition,
   type ConditionImmunity,
   type CreatureSenses,
   type CreatureType,
@@ -26,6 +27,7 @@ import type {
   PickOption,
   SpeciesDefinition,
   SpellcastingProgression,
+  SpellChange,
   SpellsChoice,
   SubclassDefinition,
   Template
@@ -107,6 +109,8 @@ export interface ChoiceOption {
 export interface BuiltSpell {
   key: string;
   spell: SpellDefinition;
+  /** The library spell it's a copy of. */
+  from: string;
 }
 
 /** A weapon the builder puts on the actor (the Monk's Unarmed Strike), with the grant it came from. */
@@ -462,23 +466,51 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
       // A pick made again at a later level (Metamagic at 2nd, 10th and 17th) can't take what an earlier one took.
       const pickKey = `${context.owner.classId ?? context.owner.key}|${spec.id}`;
       const before = state.picked.get(pickKey) ?? new Set<string>();
-      const chosen = (asStrings(stored) ?? []).filter((id) => {
-        const ok = spec.options.some((option) => option.id === id) && !before.has(id);
-        if (!ok) slot.problem = before.has(id) ? `${id} was chosen at an earlier level` : `${id} isn't an option`;
-        return ok;
-      }).slice(0, spec.count);
-      slot.options = spec.options.map((option) => ({
-        id: option.id, name: option.name,
-        ...(option.description ? { detail: option.description } : {}),
-        ...(before.has(option.id) ? { taken: true } : {})
-      }));
-      // A choice of abilities (Magic Initiate's spellcasting ability) suggests the character's best; others, the first.
-      const abilities = spec.options.every((option) => (ABILITIES as string[]).includes(option.id))
+      const classLevel = context.classLevel ?? state.build.levels.length;
+      const taken = (option: PickOption) => before.has(option.id) && !option.repeatable;
+      // What an option still needs: a level, or an option of this pick taken before it (or earlier in this one).
+      const needs = (option: PickOption, alongside: string[]): string | undefined => {
+        const prerequisite = option.prerequisite;
+        if (prerequisite?.level && classLevel < prerequisite.level) return `from ${ordinal(prerequisite.level)} level`;
+        const missing = (prerequisite?.options ?? []).filter((id) => !before.has(id) && !alongside.includes(id));
+        if (missing.length) return `needs ${missing.map((id) => spec.options.find((candidate) => candidate.id === id)?.name ?? id).join(", ")}`;
+        return undefined;
+      };
+      const chosen: string[] = [];
+      for (const id of asStrings(stored) ?? []) {
+        if (chosen.length >= spec.count) break;
+        const option = spec.options.find((candidate) => candidate.id === id);
+        const problem = !option ? `${id} isn't an option`
+          : taken(option) ? `${option.name} was chosen at an earlier level`
+          : chosen.includes(id) ? `${option.name} is chosen twice (a repeatable one can be taken again at a later level)`
+          : needs(option, chosen);
+        if (problem) slot.problem = option && !taken(option) && problem !== `${id} isn't an option` ? `${option.name}: ${problem}` : problem;
+        else chosen.push(id);
+      }
+      slot.options = spec.options.map((option) => {
+        const blocked = taken(option) ? "chosen at an earlier level" : needs(option, chosen);
+        return {
+          id: option.id, name: option.name,
+          ...(blocked && !chosen.includes(option.id) ? { taken: true, detail: blocked } : option.description ? { detail: option.description } : {})
+        };
+      });
+      // A choice of abilities (Magic Initiate's spellcasting ability) suggests the character's best; others take the
+      // class's preferred order for this pick, then the catalog's.
+      const preferred = (context.classDefinition?.suggested.picks ?? classOf(state.sources, state.build.levels[0]?.classId ?? "")?.suggested.picks)?.[spec.id] ?? [];
+      const ordered = spec.options.every((option) => (ABILITIES as string[]).includes(option.id))
         ? [...spec.options].sort((a, b) => state.abilities[b.id as Ability] - state.abilities[a.id as Ability]
           || priority.indexOf(a.id as Ability) - priority.indexOf(b.id as Ability))
-        : spec.options;
-      const open = abilities.filter((option) => !before.has(option.id));
-      slot.suggestion = [...chosen, ...open.map((option) => option.id).filter((id) => !chosen.includes(id))].slice(0, spec.count);
+        : [...spec.options].sort((a, b) => {
+          const rank = (option: PickOption) => (preferred.includes(option.id) ? preferred.indexOf(option.id) : preferred.length + spec.options.indexOf(option));
+          return rank(a) - rank(b);
+        });
+      const suggestion = [...chosen];
+      for (const option of ordered) {
+        if (suggestion.length >= spec.count) break;
+        if (!taken(option) && !suggestion.includes(option.id) && !needs(option, suggestion)) suggestion.push(option.id);
+      }
+      const open = ordered.filter((option) => !taken(option) && !chosen.includes(option.id) && !needs(option, suggestion));
+      slot.suggestion = suggestion;
       if (stored !== undefined) slot.value = chosen;
       slot.pending = chosen.length < Math.min(spec.count, chosen.length + open.filter((option) => !chosen.includes(option.id)).length);
       if (offer) state.choices.push(slot);
@@ -745,11 +777,27 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
       : spec.categories.includes("origin") ? "srd:feat:skilled" : undefined;
     return eligible.find((feat) => feat.id === wanted)?.id ?? eligible[0]?.id;
   };
-  const suggestedFeat = pickSuggestion();
-  slot.options = eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category }));
+  // Options beside the feats (a Paladin's Blessed Warrior instead of a Fighting Style feat).
+  const extras = spec.extraOptions ?? [];
+  const suggestedExtra = spec.categories.includes("fighting-style") ? extras.find((option) => option.id === suggested?.fightingStyle)?.id : undefined;
+  const suggestedFeat = suggestedExtra ?? pickSuggestion();
+  slot.options = [
+    ...eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category })),
+    ...extras.map((option) => ({ id: option.id, name: option.name, ...(option.description ? { detail: option.description } : {}) }))
+  ];
   slot.suggestion = suggestedFeat ? { feat: suggestedFeat } : undefined;
   const choice = stored && typeof stored === "object" && !Array.isArray(stored) && "feat" in stored ? (stored as FeatChoice) : undefined;
   if (!choice) return;
+  const extra = extras.find((option) => option.id === choice.feat);
+  if (extra) {
+    slot.value = { feat: extra.id };
+    slot.pending = false;
+    const owner: Owner = { ...context.owner, key: `${context.owner.key}:${spec.id}=${extra.id}` };
+    for (const grant of extra.grants) state.grants.push({ grant, owner });
+    // Its own choices are kept in the feat choice's `choices`, as a feat's are.
+    for (const nested of extra.choices ?? []) visitChoice(state, nested, { ...context, owner, ownerName: extra.name }, path);
+    return;
+  }
   const feat = featOf(state.sources, choice.feat);
   if (!feat || !spec.categories.includes(feat.category)) {
     slot.problem = `${choice.feat} isn't a feat this choice offers`;
@@ -970,6 +1018,24 @@ function placedSpell(spell: SpellDefinition, id: string): SpellDefinition {
   return { ...spell, id, action: placed };
 }
 
+/** A placed spell with a feature's change: an ability on its first damage roll, a longer range, more riders. */
+function changedSpell(spell: SpellDefinition, change: SpellChange): SpellDefinition {
+  const action = spell.action;
+  if (!action) return spell;
+  let next = { ...action } as ActionDefinition;
+  if (change.damageAbility && "damage" in next && next.damage.length) {
+    next = { ...next, damage: next.damage.map((component, index) => (index === 0 ? { ...component, abilityModifier: change.damageAbility } : component)) } as ActionDefinition;
+  }
+  if (change.range !== undefined && "range" in next) next = { ...next, range: change.range } as ActionDefinition;
+  if (change.riders?.length && "riders" in next) {
+    const existing = next.riders ?? [];
+    next = { ...next, riders: [...existing, ...change.riders.map((rider, index) => ({ ...rider, id: `${action.id}-rider-${existing.length + index + 1}` }))] } as ActionDefinition;
+  } else if (change.riders?.length && (next.kind === "attack" || next.kind === "save" || next.kind === "area-save")) {
+    next = { ...next, riders: change.riders.map((rider, index) => ({ ...rider, id: `${action.id}-rider-${index + 1}` })) } as ActionDefinition;
+  }
+  return { ...spell, ...(change.range !== undefined ? { range: change.range } : {}), action: next };
+}
+
 export function buildCharacter(build: CharacterBuild, sources: BuildSources): BuiltCharacter {
   // Twice: a quick first walk finds the spells grants make always prepared, so the second knows them from the start,
   // and an earlier choice that took one (Bless at 1st level, before Life Domain's 3rd) asks again.
@@ -1157,7 +1223,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       while (takenIds.has(id)) id = `${id}-2`;
       takenIds.add(id);
       placedSpells.add(pick.spell);
-      spells.push({ key: `${pick.owner.key}:spell:${slug}`, spell: placedSpell(cast, id) });
+      spells.push({ key: `${pick.owner.key}:spell:${slug}`, spell: placedSpell(cast, id), from: pick.spell });
     }
     if (pick.freeCasts !== undefined && source.level > 0) {
       // At will (Spell Mastery): a copy that costs nothing. Otherwise a copy spending a pool of its own.
@@ -1167,7 +1233,10 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       let freeId = `${pick.owner.idPrefix}-${slug}-${atWill ? "at-will" : "free"}`;
       while (takenIds.has(freeId)) freeId = `${freeId}-2`;
       takenIds.add(freeId);
-      const cost = atWill ? undefined : { resourceId: freeId, amount: 1 };
+      // Its own pool, named after the spell so the sheet reads "Magic missile free casts".
+      let poolId = `${slug}-free-casts`;
+      while (!atWill && resources[poolId] !== undefined) poolId = `${poolId}-2`;
+      const cost = atWill ? undefined : { resourceId: poolId, amount: 1 };
       const name = `${cast.name} (${atWill ? "at will" : "free"})`;
       const { upcast: _upcast, resourceCost: _cost, ...rest } = cast;
       const strip = <A extends object>(action: A): A => {
@@ -1180,11 +1249,17 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         ...(cost ? { resourceCost: cost } : {}),
         ...(cast.action ? { action: { ...strip(cast.action), name, ...(cost ? { resourceCost: cost } : {}) } as SpellDefinition["action"] } : {})
       };
-      spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId) });
+      spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId), from: pick.spell });
       if (cost) {
-        resources[freeId] = uses;
-        poolLabels[freeId] = `${cast.name} without a slot`;
+        resources[poolId] = uses;
+        poolLabels[poolId] = `${cast.name} without a slot`;
       }
+    }
+  }
+  // What features change about the spells (Agonizing Blast's Charisma on Eldritch Blast), on every copy of them.
+  for (const { grant } of live) {
+    for (const change of grant.spellChanges ?? []) {
+      for (const entry of spells.filter((candidate) => candidate.from === change.spell)) entry.spell = changedSpell(entry.spell, change);
     }
   }
   spells.sort((a, b) => a.spell.level - b.spell.level || byName(a.spell.name, b.spell.name));

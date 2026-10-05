@@ -1,0 +1,135 @@
+import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
+import { choice, grant, informational, reference, runs, spell, srdSpellcasting, weaponMasteryFeature } from "../authoring";
+import { srd52Source, srdClass, srdColumns } from "../reference";
+
+const ref = srdClass("ranger");
+const HUNTERS_MARK = spell("hunters-mark");
+
+const attacks = (key: string, count: number) => runs(key, {
+  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attacks: [{ any: "weapon", count }], automationSupport: "full" }]
+});
+
+export const RANGER: ClassDefinition = {
+  id: "srd:class:ranger",
+  name: "Ranger",
+  source: srd52Source(ref.key),
+  edition: "2024",
+  hitDie: 10,
+  primaryAbilities: ["dex", "wis"],
+  saves: ["str", "dex"],
+  skills: ref.skills as ClassDefinition["skills"],
+  weaponProficiency: ["simple", "martial"],
+  armorTraining: ["light", "medium", "shield"],
+  weaponMastery: Array.from({ length: 20 }, () => 2),
+  spellcasting: srdSpellcasting("ranger", "wis", "half"),
+  subclassLevel: 3,
+  subclassLabel: "Ranger Subclass",
+  featLevels: [4, 8, 12, 16],
+  table: srdColumns("ranger"),
+  levels: [
+    {
+      level: 1,
+      grants: [
+        // Hunter's Mark is reference until the engine marks targets (plan Phase 7); its free casts are counted.
+        grant("favored-enemy", runs("ranger_favored-enemy", { notSimulated: "Hunter's Mark itself: marking a target is plan Phase 7." }), {
+          spells: [HUNTERS_MARK], freeCasts: [{ spell: HUNTERS_MARK, uses: "{col:favored-enemy}" }]
+        }),
+        grant("spellcasting", runs("ranger_spellcasting")),
+        grant("weapon-mastery", weaponMasteryFeature("ranger_weapon-mastery"))
+      ],
+      choices: [choice({ kind: "weapon-mastery", id: "weapon-mastery" }, "ranger_weapon-mastery")]
+    },
+    {
+      level: 2,
+      grants: [],
+      choices: [
+        choice({ kind: "expertise", id: "deft-explorer", count: 1 }, "ranger_deft-explorer"),
+        choice({
+          kind: "feat", id: "fighting-style", categories: ["fighting-style"], label: "Fighting Style",
+          extraOptions: [{
+            id: "druidic-warrior", name: "Druidic Warrior", description: "Two Druid cantrips",
+            grants: [{ key: "druidic-warrior", feature: runs("ranger_fighting-style", { name: "Fighting Style: Druidic Warrior" }) }],
+            choices: [{ kind: "spells", id: "cantrips", what: "cantrips", count: 2, lists: ["druid"], label: "Druidic Warrior: two Druid cantrips" }]
+          }]
+        }, "ranger_fighting-style")
+      ]
+    },
+    { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "ranger_ranger-subclass")] },
+    { level: 5, grants: [grant("extra-attack", attacks("ranger_extra-attack", 2))] },
+    { level: 6, grants: [grant("roving", informational("ranger_roving"), { adjust: { speed: 10, movementEqualToSpeed: ["climb", "swim"] } })] },
+    { level: 9, grants: [], choices: [choice({ kind: "expertise", id: "expertise", count: 2 }, "ranger_expertise")] },
+    {
+      level: 10,
+      grants: [grant("tireless", runs("ranger_tireless", {
+        grantedActions: [{
+          kind: "buff", id: "tireless", name: "Tireless", actionType: "action", range: 0, targeting: { target: "self" },
+          appliedCondition: { id: "tireless", name: "custom", durationRounds: 1 },
+          tempHp: [{ dice: "1d8", abilityModifier: "wis" }],
+          resourceCost: { resourceId: "tireless", amount: 1 }, automationSupport: "full"
+        }]
+      }), { pool: { id: "tireless", size: "{mod:wis|min:1}" } })]
+    },
+    { level: 13, grants: [grant("relentless-hunter", reference("ranger_relentless-hunter"))] },
+    { level: 14, grants: [grant("natures-veil", reference("ranger_natures-veil"), { pool: { id: "natures-veil", size: "{mod:wis|min:1}" } })] },
+    { level: 17, grants: [grant("precise-hunter", reference("ranger_precise-hunter"))] },
+    { level: 18, grants: [grant("feral-senses", informational("ranger_feral-senses"), { adjust: { senses: { blindsight: 30 } } })] },
+    { level: 20, grants: [grant("foe-slayer", reference("ranger_foe-slayer"))] }
+  ],
+  startingEquipment: [
+    {
+      id: "A", label: "Studded leather armor, a scimitar, a shortsword, a longbow, 20 arrows, a quiver, a druidic focus, an explorer's pack and 7 GP",
+      items: [{ ref: "srd:item:studded-leather-armor" }, { ref: "srd:weapon:scimitar" }, { ref: "srd:weapon:shortsword" }, { ref: "srd:weapon:longbow" }], gold: 7
+    },
+    { id: "B", label: "150 GP", items: [], gold: 150 }
+  ],
+  suggested: {
+    abilities: ["dex", "wis", "con", "str", "int", "cha"],
+    tactics: "basic-ranged",
+    background: "srd:background:soldier",
+    skills: ["perception", "stealth", "survival", "nature"],
+    expertise: ["perception", "stealth", "survival"],
+    fightingStyle: "srd:feat:archery",
+    masteries: ["longbow", "shortsword"],
+    epicBoon: "srd:feat:boon-of-dimensional-travel",
+    equipment: "A",
+    cantrips: ["starry-wisp", "guidance"].map(spell),
+    spells: ["cure-wounds", "entangle", "spike-growth", "gust-of-wind", "aid", "stoneskin", "dominate-beast"].map(spell)
+  },
+  description: "A wandering warrior who hunts with weapon and spell."
+};
+
+export const HUNTER: SubclassDefinition = {
+  id: "srd:subclass:hunter",
+  name: "Hunter",
+  source: srd52Source("srd-2024_hunter"),
+  edition: "2024",
+  classId: "srd:class:ranger",
+  levels: [
+    {
+      level: 3,
+      grants: [grant("hunters-lore", informational("ranger_hunter_hunters-lore"))],
+      choices: [choice({
+        kind: "pick", id: "hunters-prey", label: "Hunter's Prey", count: 1,
+        options: [
+          {
+            id: "colossus-slayer", name: "Colossus Slayer", description: "1d8 more, once a turn, on a creature missing hit points",
+            grants: [{
+              key: "hunters-prey",
+              feature: runs("ranger_hunter_hunters-prey", {
+                name: "Hunter's Prey: Colossus Slayer",
+                effects: [{ kind: "damage-bonus", oncePerTurn: true, condition: "target-injured", attackTypes: ["melee", "ranged"], damage: [{ dice: "1d8", damageType: "same-as-attack" }] }]
+              })
+            }]
+          },
+          {
+            id: "horde-breaker", name: "Horde Breaker", description: "Another attack on a creature next to the first",
+            grants: [{ key: "hunters-prey", feature: reference("ranger_hunter_hunters-prey", { name: "Hunter's Prey: Horde Breaker" }) }]
+          }
+        ]
+      }, "ranger_hunter_hunters-prey")]
+    },
+    { level: 7, grants: [grant("defensive-tactics", reference("ranger_hunter_defensive-tactics"))] },
+    { level: 11, grants: [grant("superior-hunters-prey", reference("ranger_hunter_superior-hunters-prey"))] },
+    { level: 15, grants: [grant("superior-hunters-defense", reference("ranger_hunter_superior-hunters-defense"))] }
+  ]
+};

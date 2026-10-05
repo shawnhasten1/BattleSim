@@ -6,8 +6,11 @@ import { CLERIC, LIFE_DOMAIN } from "./classes/cleric";
 import { CIRCLE_OF_THE_LAND, DRUID } from "./classes/druid";
 import { CHAMPION, FIGHTER } from "./classes/fighter";
 import { MONK, OPEN_HAND } from "./classes/monk";
+import { OATH_OF_DEVOTION, PALADIN } from "./classes/paladin";
+import { HUNTER, RANGER } from "./classes/ranger";
 import { ROGUE, THIEF } from "./classes/rogue";
 import { DRACONIC_SORCERY, SORCERER } from "./classes/sorcerer";
+import { FIEND_PATRON, WARLOCK } from "./classes/warlock";
 import { EVOKER, WIZARD } from "./classes/wizard";
 import { SRD_2024_FEATS } from "./feats";
 
@@ -24,8 +27,8 @@ function freeze<T>(value: T): T {
 }
 
 export const SRD_2024_CATALOG: Catalog = freeze({
-  classes: [BARBARIAN, BARD, CLERIC, DRUID, FIGHTER, MONK, ROGUE, SORCERER, WIZARD],
-  subclasses: [BERSERKER, COLLEGE_OF_LORE, LIFE_DOMAIN, CIRCLE_OF_THE_LAND, CHAMPION, OPEN_HAND, THIEF, DRACONIC_SORCERY, EVOKER],
+  classes: [BARBARIAN, BARD, CLERIC, DRUID, FIGHTER, MONK, PALADIN, RANGER, ROGUE, SORCERER, WARLOCK, WIZARD],
+  subclasses: [BERSERKER, COLLEGE_OF_LORE, LIFE_DOMAIN, CIRCLE_OF_THE_LAND, CHAMPION, OPEN_HAND, OATH_OF_DEVOTION, HUNTER, THIEF, DRACONIC_SORCERY, FIEND_PATRON, EVOKER],
   feats: SRD_2024_FEATS,
   backgrounds: SRD_2024_BACKGROUNDS,
   species: []

@@ -113,12 +113,25 @@ export interface FeatureGrant {
   spells?: string[];
   /** Spells it lets the character cast without a slot, from a pool of their own (Favored Enemy: Hunter's Mark). */
   freeCasts?: FreeCast[];
+  /** Changes to a spell the character has (Agonizing Blast: Charisma on Eldritch Blast's damage). */
+  spellChanges?: SpellChange[];
 }
 
-/** A spell cast without a slot, `uses` times (a pool of its own, named after the spell). */
+/** A spell cast without a slot, `uses` times (a pool of its own, named after the spell), or at will. */
 export interface FreeCast {
   spell: string;
-  uses: Template | number;
+  uses: Template | number | "at-will";
+}
+
+/**
+ * A change a feature makes to a spell the character has, on every copy the builder puts on the actor: an ability
+ * modifier on its first damage roll (Agonizing Blast), a longer range (Eldritch Spear), more riders (Repelling Blast).
+ */
+export interface SpellChange {
+  spell: string;
+  damageAbility?: Ability;
+  range?: number;
+  riders?: ActionRider[];
 }
 
 export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon";
@@ -184,6 +197,13 @@ export interface PickOption {
   id: string;
   name: string;
   description?: string;
+  /**
+   * What it needs (an invocation's): a class level, and options of the same pick taken before it (Thirsting Blade
+   * needs Pact of the Blade).
+   */
+  prerequisite?: { level?: number; options?: string[] };
+  /** Can be taken again at a later pick (Lessons of the First Ones). */
+  repeatable?: boolean;
   grants: FeatureGrant[];
   /** Further choices it brings (a lineage's spellcasting ability). */
   choices?: ChoiceSpec[];
@@ -266,6 +286,8 @@ export interface ClassSuggestions {
    */
   cantrips?: string[];
   spells?: string[];
+  /** Options to take first in a `pick`, by its id (a warlock's invocations), most wanted first. */
+  picks?: Record<string, string[]>;
 }
 
 export interface SubclassDefinition {
@@ -375,7 +397,13 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),
   pool: z.object({ id: z.string().min(1), size: templateOrNumber }).optional(),
   spells: z.array(z.string().min(1)).optional(),
-  freeCasts: z.array(z.object({ spell: z.string().min(1), uses: templateOrNumber })).optional(),
+  freeCasts: z.array(z.object({ spell: z.string().min(1), uses: z.union([templateOrNumber, z.literal("at-will")]) })).optional(),
+  spellChanges: z.array(z.object({
+    spell: z.string().min(1),
+    damageAbility: abilitySchema.optional(),
+    range: z.number().optional(),
+    riders: z.array(z.object({ kind: z.string() }).passthrough()).optional()
+  })).optional(),
   adjust: z.object({
     speed: templateOrNumber.optional(),
     movementEqualToSpeed: z.array(z.enum(["climb", "swim"])).optional(),
@@ -395,6 +423,8 @@ const pickOptionSchema: z.ZodType<PickOption> = z.lazy(() => z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
+  prerequisite: z.object({ level: z.number().int().optional(), options: z.array(z.string()).optional() }).optional(),
+  repeatable: z.boolean().optional(),
   grants: z.array(featureGrantSchema),
   choices: z.array(choiceSpecSchema).optional(),
   feat: z.string().optional()
@@ -488,7 +518,8 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
     masteries: z.array(z.string()).optional(),
     equipment: z.string().optional(),
     cantrips: z.array(z.string()).optional(),
-    spells: z.array(z.string()).optional()
+    spells: z.array(z.string()).optional(),
+    picks: z.record(z.string(), z.array(z.string())).optional()
   }),
   description: z.string().optional()
 }) as z.ZodType<ClassDefinition>;

@@ -213,9 +213,9 @@ describe("Magic Initiate", () => {
     expect(definition.spells!.map((spell) => spell.id)).toEqual(expect.arrayContaining(["feat-magic-initiate-cure-wounds-free"]));
     expect(definition.spells!.some((spell) => spell.id === "feat-magic-initiate-cure-wounds")).toBe(false);
     const free = spellOn(definition, "feat-magic-initiate-cure-wounds-free");
-    expect(free).toMatchObject({ name: "Cure Wounds (free)", resourceCost: { resourceId: "feat-magic-initiate-cure-wounds-free", amount: 1 } });
+    expect(free).toMatchObject({ name: "Cure Wounds (free)", resourceCost: { resourceId: "cure-wounds-free-casts", amount: 1 } });
     expect(free.upcast).toBeUndefined();
-    expect(definition.resources?.["feat-magic-initiate-cure-wounds-free"]).toBe(1);
+    expect(definition.resources?.["cure-wounds-free-casts"]).toBe(1);
 
     // It heals, and spends its own use.
     const snapshot = structuredClone(sampleEncounter);
@@ -230,14 +230,14 @@ describe("Magic Initiate", () => {
     resolveHealingAction(state, "pc-fighter", "pc-fighter", action.id);
     const after = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
     expect(after.currentHp).toBeGreaterThan(1);
-    expect(after.resources?.["feat-magic-initiate-cure-wounds-free"]).toBe(0);
+    expect(after.resources?.["cure-wounds-free-casts"]).toBe(0);
   });
 
   it("is also cast with slots by a character that has them", () => {
     const build = withChoice(mage(1, { backgroundId: "srd:background:acolyte" }), { kind: "background" }, ["spell"], [id("bless")]);
     const { definition } = rebuildActor(blankCharacter("def-mage", "Mage"), build, sources);
     expect(spellOn(definition, "feat-magic-initiate-bless").resourceCost).toEqual({ resourceId: "slot-1", amount: 1 });
-    expect(spellOn(definition, "feat-magic-initiate-bless-free").resourceCost?.resourceId).toBe("feat-magic-initiate-bless-free");
+    expect(spellOn(definition, "feat-magic-initiate-bless-free").resourceCost?.resourceId).toBe("bless-free-casts");
     // The mage casts with Intelligence; Magic Initiate's spells with the ability chosen for it.
     expect(definition.spellcasting).toEqual({ ability: "int" });
     const sacredFlame = spellOn(definition, "feat-magic-initiate-sacred-flame");

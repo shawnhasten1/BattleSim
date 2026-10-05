@@ -43,9 +43,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `damage-reaction` | A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance) | Monk, Ranger, Rogue, Species | 1 | Deflect Attacks (Monk); Deflect Energy (Monk); Superior Hunter's Defense (Hunter); Uncanny Dodge (Rogue); Giant Ancestry (Goliath) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
+| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter, Monk, Paladin | 2 | Reckless Attack (Barbarian); Action Surge (Fighter); Superior Defense (Monk); Sacred Weapon (Oath of Devotion) |
 | `initiative` | Bonuses or advantage on initiative | Barbarian, Fighter, Feats | 1 | Feral Instinct (Barbarian); Remarkable Athlete (Champion); Alert (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter, Monk | 2 | Reckless Attack (Barbarian); Action Surge (Fighter); Superior Defense (Monk) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `mark` | Marking a target for extra damage and other benefits (Hunter's Mark, Hex) | Ranger, Spells | 1 | Favored Enemy (Ranger); Relentless Hunter (Ranger); Precise Hunter (Ranger); Foe Slayer (Ranger); Superior Hunter's Prey (Hunter); Hunter's Mark (spell); Hex (spell) |
@@ -294,7 +294,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Faithful Steed | manual | `summon-stat-blocks` |  |
 | 6 | Aura of Protection | full |  | Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied. |
-| 9 | Abjure Foes | partial | `ends-on-damage`, `action-limits` | Frightened on a failed Wisdom save; it doesn't end on damage, and the one-thing-per-turn limit doesn't run. |
+| 9 | Abjure Foes | partial | `ends-on-damage`, `action-limits` | Frightened on a failed Wisdom save, for every enemy within 60 ft (not Charisma-modifier many); it doesn't end on damage, and the one-thing-per-turn limit doesn't run. |
 | 10 | Aura of Courage | manual | `conditional-immunity` |  |
 | 11 | Radiant Strikes | full |  |  |
 | 14 | Restoring Touch | manual | `condition-removal` |  |
@@ -307,7 +307,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Oath of Devotion Spells | builder |  | Oath of Devotion spells are always prepared. |
-| 3 | Sacred Weapon | full |  | Charisma to melee weapon attacks for 10 rounds, for a Channel Divinity; its radiant damage and light aren't. |
+| 3 | Sacred Weapon | full | `ai-free-actions` | Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity; its radiant damage and light aren't. A free activation: the AI doesn't take it on its own yet. |
 | 7 | Aura of Devotion | manual | `conditional-immunity` |  |
 | 15 | Smite of Protection | manual | `smite` |  |
 | 20 | Holy Nimbus | manual | `activated-aura` |  |
@@ -418,7 +418,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 11, 13, 15, 17 | Mystic Arcanum | builder |  | A 6th- to 9th-level spell cast once without a slot. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Eldritch Master | info |  | Magical Cunning is outside a fight. |
-| — | Eldritch Invocation Options | partial | `smite`, `concentration-saves` | Agonizing Blast, Repelling Blast, Thirsting Blade, Devouring Blade, Pact of the Blade, Armor of Shadows, Fiendish Vigor and Lessons of the First Ones run or are built; Eldritch Smite and Eldritch Mind don't; the rest are outside a fight. |
+| — | Eldritch Invocation Options | partial | `smite`, `concentration-saves` | Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Smite, Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked. |
 | — | Warlock Spell List | builder |  | Read from each spell's own class list. |
 
 ### Fiend Patron (Warlock subclass)

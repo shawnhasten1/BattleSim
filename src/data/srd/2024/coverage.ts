@@ -264,7 +264,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "paladin_extra-attack": full(),
   "paladin_faithful-steed": manual(["summon-stat-blocks"]),
   "paladin_aura-of-protection": full("Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied."),
-  "paladin_abjure-foes": partial(["ends-on-damage", "action-limits"], "Frightened on a failed Wisdom save; it doesn't end on damage, and the one-thing-per-turn limit doesn't run."),
+  "paladin_abjure-foes": partial(["ends-on-damage", "action-limits"], "Frightened on a failed Wisdom save, for every enemy within 60 ft (not Charisma-modifier many); it doesn't end on damage, and the one-thing-per-turn limit doesn't run."),
   "paladin_aura-of-courage": manual(["conditional-immunity"]),
   "paladin_radiant-strikes": full(),
   "paladin_restoring-touch": manual(["condition-removal"]),
@@ -274,7 +274,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Oath of Devotion */
   "paladin_oath-of-devotion_spells": PREPARED("Oath of Devotion spells"),
-  "paladin_oath-of-devotion_sacred-weapon": full("Charisma to melee weapon attacks for 10 rounds, for a Channel Divinity; its radiant damage and light aren't."),
+  "paladin_oath-of-devotion_sacred-weapon": { verdict: "full", gaps: ["ai-free-actions"], note: "Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity; its radiant damage and light aren't. A free activation: the AI doesn't take it on its own yet." },
   "paladin_oath-of-devotion_aura-of-devotion": manual(["conditional-immunity"]),
   "paladin_oath-of-devotion_smite-of-protection": manual(["smite"]),
   "paladin_oath-of-devotion_holy-nimbus": manual(["activated-aura"]),
@@ -364,7 +364,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "warlock_mystic-arcanum": builder("A 6th- to 9th-level spell cast once without a slot."),
   "warlock_epic-boon": EPIC_BOON,
   "warlock_eldritch-master": info("Magical Cunning is outside a fight."),
-  "warlock_eldritch-invocation-options": partial(["smite", "concentration-saves"], "Agonizing Blast, Repelling Blast, Thirsting Blade, Devouring Blade, Pact of the Blade, Armor of Shadows, Fiendish Vigor and Lessons of the First Ones run or are built; Eldritch Smite and Eldritch Mind don't; the rest are outside a fight."),
+  "warlock_eldritch-invocation-options": partial(["smite", "concentration-saves"], "Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Smite, Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked."),
   "warlock_warlock-spell-list": SPELL_LIST,
 
   /* Fiend Patron */

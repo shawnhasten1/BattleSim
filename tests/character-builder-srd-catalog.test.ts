@@ -4,16 +4,22 @@ import { CLASS_COVERAGE, FEAT_COVERAGE, type CoverageEntry } from "@/data/srd/20
 import { SRD_2024_REFERENCE } from "@/data/srd/2024/reference";
 import {
   backgroundDefinitionSchema,
+  blankCharacter,
   buildCharacter,
   classDefinitionSchema,
   featDefinitionSchema,
   quickBuild,
+  readBuild,
+  rebuildActor,
   subclassDefinitionSchema,
+  withLevelUp,
+  withSuggestions,
   type ChoiceSpec,
   type FeatureGrant
 } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES, SRD_BUILDER_LIBRARY } from "@/lib/character-builder/srd";
-import type { FeatureDefinition } from "@/engine";
+import { creatureDefinitionSchema, sampleEncounter, type FeatureDefinition } from "@/engine";
+import { runAutomatedEncounter } from "@/engine/turns";
 
 const PREFIX = "srd-2024_";
 const bare = (key: string) => key.slice(PREFIX.length);
@@ -125,6 +131,33 @@ describe("the 2024 catalog", () => {
     }
     for (const subclass of SRD_2024_CATALOG.subclasses) for (const level of subclass.levels) grants(`${subclass.id} ${level.level}`, level.grants, level.choices);
     expect(missing).toEqual([]);
+  });
+
+  it("levels every class from 1 to 20 into a valid actor, which the AI fights with using only legal actions", { timeout: 180000 }, () => {
+    const problems: string[] = [];
+    for (const definition of SRD_2024_CATALOG.classes) {
+      // Leveled up one level at a time, as the level-up window does: the new level's choices suggested.
+      let build = quickBuild(SRD_BUILD_SOURCES, { classId: definition.id, level: 1 });
+      let actor = rebuildActor(blankCharacter("def-fighter", definition.name), build, SRD_BUILD_SOURCES).definition;
+      for (let level = 1; level <= 20; level += 1) {
+        if (level > 1) {
+          build = withSuggestions(withLevelUp(readBuild(actor)!), SRD_BUILD_SOURCES);
+          actor = rebuildActor(actor, build, SRD_BUILD_SOURCES).definition;
+        }
+        const parsed = creatureDefinitionSchema.safeParse(actor);
+        if (!parsed.success) problems.push(`${definition.id} ${level}: ${parsed.error.issues[0]?.path.join(".")} ${parsed.error.issues[0]?.message}`);
+        if (level % 4 !== 1 && level !== 20) continue;
+        const snapshot = structuredClone(sampleEncounter);
+        snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), actor];
+        for (const token of snapshot.combatants) {
+          if (token.id === "pc-fighter") { token.currentHp = actor.maxHp; token.resources = { ...(actor.resources ?? {}) }; }
+        }
+        const result = runAutomatedEncounter({ ...snapshot, seed: `${definition.id}-${level}` }, 6);
+        for (const warning of result.outcome.warnings) problems.push(`${definition.id} ${level}: ${warning}`);
+      }
+      expect(readBuild(actor)?.levels).toHaveLength(20);
+    }
+    expect(problems).toEqual([]);
   });
 
   it("gives every background and its feat a build", () => {
