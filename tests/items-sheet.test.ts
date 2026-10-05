@@ -152,7 +152,7 @@ describe("the item editor's model", () => {
     expect(sections.map((section) => [section.id, section.title])).toEqual([
       ["basics", "Basics"], ["use", "Use & cost"], ["grants", "What it does"], ["while-active", "While carried"], ["notes", "Notes & AI"]
     ]);
-    expect(sections.find((section) => section.id === "use")!.summary).toBe("×3 · drink: action · give (5 ft): action");
+    expect(sections.find((section) => section.id === "use")!.summary).toBe("×3 · drink: action · give (5 ft): action · campaign rule");
     expect(sections.find((section) => section.id === "basics")!.summary).toBe("Potion of Healing · potion · magic");
   });
 

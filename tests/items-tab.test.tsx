@@ -59,20 +59,62 @@ describe("items on the Abilities tab", { timeout: 20000 }, () => {
     expect(group("Items").getByRole("button", { name: "Edit Elixir of Mending" })).toBeTruthy();
   });
 
-  it("sets how many it carries, and what drinking and giving take", async () => {
+  it("sets how many it carries, and what drinking and giving take as its own timing", async () => {
     render(<LiveTab />);
     await openFromLibrary("Potion of Healing", "potion of healing");
     await userEvent.clear(screen.getByLabelText("How many"));
     await userEvent.type(screen.getByLabelText("How many"), "3");
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "What using it takes" })).getByRole("radio", { name: "Its own" }));
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Drinking it takes" })).getByRole("radio", { name: "A bonus action" }));
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Giving it to a creature within 5 ft" })).getByRole("radio", { name: "Can't" }));
+    // Its own timing can heal in full for an action, where a bonus action would do.
+    await userEvent.click(screen.getByRole("checkbox", { name: "An action instead of a bonus action heals the full 10" }));
     await save();
     const item = items()[0]!;
     expect(item.supply?.size).toBe(3);
+    expect(item.followsTableRule).toBe(false);
+    expect(item.fullWithAction).toBe(true);
     expect((item.grantedActions![0] as HealingActionDefinition).actionType).toBe("bonus");
     expect(item.give).toBeUndefined();
     expect(fighter().resources?.[item.supply!.id]).toBe(3);
     expect(token().resources?.[item.supply!.id]).toBe(3);
+  });
+
+  it("follows the campaign's potion rule: says what it takes, and is saved that way", async () => {
+    useEncounterStore.setState({ encounter: { ...store().encounter, rules: { ...store().encounter.rules, potionUse: "bonus", potionActionHealsFull: true } } });
+    render(<LiveTab />);
+    await openFromLibrary("Potion of Healing", "potion of healing");
+    expect(within(screen.getByRole("radiogroup", { name: "What using it takes" })).getByRole("radio", { name: "The campaign's rule" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByLabelText("Under the campaign's rule").textContent)
+      .toBe("Drinking it or giving it to a creature within 5 ft takes a bonus action. An action instead of a bonus action heals the full 10 HP.");
+    expect(screen.queryByRole("radiogroup", { name: "Drinking it takes" })).toBeNull();
+    // Whether it can be given is still the potion's own.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Can be given to a creature within 5 ft" }));
+    expect(screen.getByLabelText("Under the campaign's rule").textContent)
+      .toBe("Drinking it takes a bonus action; it can't be given. An action instead of a bonus action heals the full 10 HP.");
+    await save();
+    const item = items()[0]!;
+    expect(item.followsTableRule).toBeUndefined();
+    expect(item.give).toBeUndefined();
+    expect(item.fullWithAction).toBe(true);
+    expect((item.grantedActions![0] as HealingActionDefinition).actionType).toBe("bonus");
+  });
+
+  it("goes back to the campaign's rule from its own timing", async () => {
+    useEncounterStore.setState({ encounter: { ...store().encounter, rules: { ...store().encounter.rules, potionUse: "drink-bonus" } } });
+    render(<LiveTab />);
+    await openFromLibrary("Potion of Healing", "potion of healing");
+    const timing = () => screen.getByRole("radiogroup", { name: "What using it takes" });
+    await userEvent.click(within(timing()).getByRole("radio", { name: "Its own" }));
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Drinking it takes" })).getByRole("radio", { name: "An action" }));
+    await userEvent.click(within(timing()).getByRole("radio", { name: "The campaign's rule" }));
+    expect(screen.getByLabelText("Under the campaign's rule").textContent)
+      .toBe("Drinking it takes a bonus action, and giving it to a creature within 5 ft an action.");
+    await save();
+    const item = items()[0]!;
+    expect(item.followsTableRule).toBeUndefined();
+    expect((item.grantedActions![0] as HealingActionDefinition).actionType).toBe("bonus");
+    expect(item.give).toEqual({ actionType: "action" });
   });
 
   it("builds each type from its recipe", async () => {

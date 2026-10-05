@@ -256,7 +256,11 @@ const SLOT_WORDS = { action: "action", bonus: "bonus action", free: "free", reac
 
 /** A variant's name beside its family's others. `slotFamily`: a spell with copies at higher slots (Mage Armor too). */
 function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFamily = false): string {
-  if (action.item?.use) return `${action.item.use === "give" ? "Give" : "Drink"}${/:full$/.test(action.id) ? " · full" : ""}`;
+  if (action.item?.use) {
+    // An action spent where a bonus action would do: the full amount, a flat number on the copy ("Drink · full 10").
+    const full = action.item.full && action.kind === "healing" ? ` · full ${action.healing.reduce((sum, component) => sum + (Number(component.dice) || 0), 0)}` : "";
+    return `${action.item.use === "give" ? "Give" : "Drink"}${full}`;
+  }
   if (action.kind === "multiattack") {
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];
     return action.id === base.id || !option ? action.name : option;

@@ -4,8 +4,11 @@ import { useId, type ReactNode } from "react";
 import type { CreatureDefinition, ItemDefinition, ItemSupply, ItemType } from "@/engine";
 import {
   drinkTiming,
+  fullHealAmount,
   giveTiming,
+  hasBonusUse,
   itemUseChoices,
+  potionTimingText,
   supplyIdOf,
   withDrinkTiming,
   withGiveTiming,
@@ -140,7 +143,39 @@ function ItemUse({ item, onChange }: { item: ItemDefinition; onChange: (next: It
           </Field>
         </div>
       ) : null}
-      {item.type === "potion" ? (
+      <p className={styles.hint}>
+        {stack || charges
+          ? "What every token of this creature starts a fight with: a token's own count is its Left in the resource list. A fight spends them; Restart refills them."
+          : "Without charges, what it does is used at will."}
+      </p>
+      {item.type === "potion" ? <PotionTiming item={item} onChange={onChange} /> : null}
+    </>
+  );
+}
+
+/**
+ * What drinking and giving a potion take: the campaign's rule, said but not set here (the editor writes the rule into a
+ * potion that follows it as it's edited, as the store does on save), or its own.
+ */
+function PotionTiming({ item, onChange }: { item: ItemDefinition; onChange: (next: ItemDefinition) => void }) {
+  const follows = item.followsTableRule !== false;
+  const full = fullHealAmount(item);
+  const bonusUse = hasBonusUse(item);
+  return (
+    <>
+      <Field copy="potionTiming">
+        <Segmented
+          label="What using it takes" value={follows ? "table" : "own"}
+          options={[{ value: "table", label: "The campaign's rule" }, { value: "own", label: "Its own" }]}
+          onChange={(value) => onChange(value === "table" ? opt(item, "followsTableRule", undefined) : { ...item, followsTableRule: false })}
+        />
+      </Field>
+      {follows ? (
+        <>
+          <p className={styles.hint} aria-label="Under the campaign's rule">{potionTimingText(item)}</p>
+          <Check copy="potionGiven" checked={Boolean(item.give)} onChange={(on) => onChange(withGiveTiming(item, on ? "action" : "never"))} />
+        </>
+      ) : (
         <>
           <Field copy="drinkTakes">
             <Segmented
@@ -156,13 +191,16 @@ function ItemUse({ item, onChange }: { item: ItemDefinition; onChange: (next: It
               onChange={(slot) => onChange(withGiveTiming(item, slot))}
             />
           </Field>
+          {full !== undefined ? (
+            <Check
+              copy="potionFull" label={`An action instead of a bonus action heals the full ${full}`}
+              checked={item.fullWithAction === true && bonusUse} disabled={!bonusUse}
+              title={bonusUse ? undefined : "Neither drinking nor giving it takes a bonus action, so there's nothing to trade"}
+              onChange={(on) => onChange(opt(item, "fullWithAction", on ? true : undefined))}
+            />
+          ) : null}
         </>
-      ) : null}
-      <p className={styles.hint}>
-        {stack || charges
-          ? "What every token of this creature starts a fight with: a token's own count is its Left in the resource list. A fight spends them; Restart refills them."
-          : "Without charges, what it does is used at will."}
-      </p>
+      )}
     </>
   );
 }

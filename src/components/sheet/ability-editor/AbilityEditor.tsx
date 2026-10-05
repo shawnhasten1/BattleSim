@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   spellcastingAbility,
+  withTableRule,
   type ActionDefinition,
   type ActionRider,
   type CreatureDefinition,
@@ -219,10 +220,14 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
   const nestedTarget = target.mode === "nested" ? target : undefined;
   const isNew = target.mode === "new" || Boolean(nestedTarget?.isNew);
+  // A potion that follows the table's rule takes what the rule says as it's edited, as the store will save it.
+  const tableRules = useEncounterStore((s) => s.encounter.rules);
+  const isItem = listNameOf(target.mode === "new" ? target.list : target.ref) === "items";
+  const settle = (record: AbilityRecord): AbilityRecord => (isItem ? withTableRule(record as ItemDefinition, tableRules) : record);
   const [opened] = useState<AbilityRecord>(() => structuredClone(
     target.mode === "edit" ? findAbility(definition, target.ref)! : target.record
   ));
-  const [working, setWorking] = useState<AbilityRecord>(() => structuredClone(opened));
+  const [working, setWorking] = useState<AbilityRecord>(() => settle(structuredClone(opened)));
   const [ownPools, setOwnPools] = useState<Record<string, number>>(() => (target.mode === "new" ? { ...(target.pools ?? {}) } : {}));
   const [error, setError] = useState<string | null>(null);
   // "Save your changes?": what Discard does, and what follows a successful save (saving itself closes the editor).
@@ -290,7 +295,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const flagged = new Set(warnings.map((warning) => warning.section).filter(Boolean));
 
   function update(next: AbilityRecord) {
-    setWorking(next);
+    setWorking(settle(next));
     setError(null);
   }
 

@@ -64,6 +64,7 @@ import {
   normalizeDeathEffectDefinition,
   normalizeItemDefinition,
   withItemPool,
+  withItemRules,
   isPrepDrink,
   migrateDefinition,
   playStatusOf,
@@ -521,7 +522,8 @@ function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnaps
   };
   // Creatures saved before an engine change come up to date (the same objects when they already are).
   const definitions = encounter.definitions.map(migrateDefinition);
-  return {
+  // Every potion that follows the table's rule says what it is (a potion just added, or one edited back to following it).
+  return withItemRules({
     ...encounter,
     definitions: definitions.some((definition, index) => definition !== encounter.definitions[index]) ? definitions : encounter.definitions,
     map: {
@@ -537,7 +539,7 @@ function normalizeEncounterVisuals(encounter: EncounterSnapshot): EncounterSnaps
         heightPx: encounter.map.canvas?.heightPx ?? grid.height * DEFAULT_GRID_VISUALS.squareSizePx
       }
     }
-  };
+  });
 }
 
 /** Default movement / sight flags for a freshly drawn or re-levelled wall. */

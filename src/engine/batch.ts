@@ -21,8 +21,11 @@ export interface CombatantMetrics {
 
 /** What items did across a batch (ITEMS_PLAN.md §5). Only when some creature in it carries an item. */
 export interface BatchItemsSummary {
-  /** Each item used, by name: how many a fight on average. */
-  used: Array<{ name: string; perFight: number }>;
+  /**
+   * Each item used, by name: how many a fight on average, and of those how many with an action for the full amount
+   * where a bonus action would do (the campaign's potion rule; only when there were any).
+   */
+  used: Array<{ name: string; perFight: number; fullPerFight?: number }>;
   /** Share of the fights in which an item brought a creature back up from 0 HP (a potion given to a downed ally). */
   broughtUpRate: number;
   /** How many times a fight, on average, a creature dropped while still holding a healing potion it never drank. */
@@ -212,6 +215,7 @@ function readMetricEvent(entry: CombatLogEvent, combatantId: Id, metrics: Combat
  */
 function summarizeItems(baseSnapshot: EncounterSnapshot, runs: SimulationRunResult[]): BatchItemsSummary {
   const used = new Map<string, number>();
+  const usedInFull = new Map<string, number>();
   let broughtUpRuns = 0;
   let wentDownHolding = 0;
   // Each creature's healing-potion pools, with what it starts the fight with.
@@ -233,9 +237,10 @@ function summarizeItems(baseSnapshot: EncounterSnapshot, runs: SimulationRunResu
     for (const entry of run.log) {
       const data = entry.data ?? {};
       if (entry.type === "ActionDeclared") {
-        const item = data.item as { name?: string; targetDown?: boolean } | undefined;
+        const item = data.item as { name?: string; targetDown?: boolean; full?: boolean } | undefined;
         if (!item?.name) continue;
         used.set(item.name, (used.get(item.name) ?? 0) + 1);
+        if (item.full) usedInFull.set(item.name, (usedInFull.get(item.name) ?? 0) + 1);
         if (item.targetDown && data.targetId) revivals.set(String(data.targetId), String(data.actorId));
         const cost = data.resourceCost as { resourceId?: string; amount?: number } | undefined;
         const pools = potions.get(String(data.actorId));
@@ -254,7 +259,10 @@ function summarizeItems(baseSnapshot: EncounterSnapshot, runs: SimulationRunResu
     if (broughtUp) broughtUpRuns += 1;
   }
   return {
-    used: [...used.entries()].map(([name, count]) => ({ name, perFight: round(count / Math.max(1, runs.length)) })).sort((a, b) => a.name.localeCompare(b.name)),
+    used: [...used.entries()].map(([name, count]) => {
+      const inFull = usedInFull.get(name) ?? 0;
+      return { name, perFight: round(count / Math.max(1, runs.length)), ...(inFull ? { fullPerFight: round(inFull / Math.max(1, runs.length)) } : {}) };
+    }).sort((a, b) => a.name.localeCompare(b.name)),
     broughtUpRate: ratio(broughtUpRuns, runs.length),
     wentDownHoldingPerFight: round(wentDownHolding / Math.max(1, runs.length))
   };

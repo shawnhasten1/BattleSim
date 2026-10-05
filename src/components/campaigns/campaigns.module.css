@@ -242,7 +242,7 @@
   color: var(--ui-hostile);
 }
 
-/* The campaign's rules: a toggle each, above its encounters. */
+/* The campaign's rules: a toggle or a choice each, above its encounters. */
 .rules {
   margin: 0 0 22px;
   padding: 12px 14px;
@@ -272,6 +272,28 @@
 
 .rule input {
   margin-top: 2px;
+}
+
+.rule + .rule {
+  margin-top: 12px;
+}
+
+/* A rule that does nothing under the campaign's other rules: greyed out, with why. */
+.rule[data-inapplicable] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.rule select {
+  align-self: flex-start;
+  margin: 4px 0 2px;
+  padding: 5px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
 }
 
 .rule > span {

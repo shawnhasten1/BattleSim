@@ -3,7 +3,18 @@
  * giving a potion takes does to the record, and what "Add" offers as a new use. Pure: the item sections show it, tests
  * read it.
  */
-import { isConsumableType, isDrinkUse, type ActionDefinition, type ItemDefinition, type ItemSupply, type ItemType, type ResourceCost } from "@/engine";
+import {
+  fullHealing,
+  healsMoreInFull,
+  isConsumableType,
+  isDrinkUse,
+  type ActionDefinition,
+  type HealingActionDefinition,
+  type ItemDefinition,
+  type ItemSupply,
+  type ItemType,
+  type ResourceCost
+} from "@/engine";
 import { blankAttack, blankBuff, blankHeal, blankSpecialAction } from "./templates";
 
 /** The slot drinking a potion takes: its first drink's (an action, when it has none yet). */
@@ -26,6 +37,39 @@ export function giveTiming(item: ItemDefinition): "action" | "bonus" | "never" {
 export function withGiveTiming(item: ItemDefinition, slot: "action" | "bonus" | "never"): ItemDefinition {
   const { give: _give, ...rest } = item;
   return slot === "never" ? rest : { ...rest, give: { actionType: slot } };
+}
+
+const SLOT_PHRASE = { action: "an action", bonus: "a bonus action" } as const;
+
+/** What its first rolled healing drink comes to in full ("2d4 + 2": 10), or undefined when it heals nothing rolled. */
+export function fullHealAmount(item: ItemDefinition): number | undefined {
+  const drink = item.grantedActions?.find((use): use is HealingActionDefinition => isDrinkUse(use) && use.kind === "healing" && healsMoreInFull(use));
+  return drink ? fullHealing(drink) : undefined;
+}
+
+/** Whether drinking or giving it takes a bonus action: what an action instead can be traded for. */
+export function hasBonusUse(item: ItemDefinition): boolean {
+  return drinkTiming(item) === "bonus" || giveTiming(item) === "bonus";
+}
+
+/** Whether it heals in full when it's used with an action where a bonus action would do (the copies the engine adds). */
+export function healsInFullWithAction(item: ItemDefinition): boolean {
+  return item.fullWithAction === true && hasBonusUse(item) && fullHealAmount(item) !== undefined;
+}
+
+/**
+ * What using a potion takes, in words, as it stands: "Drinking it or giving it to a creature within 5 ft takes a bonus
+ * action. An action instead heals the full 10 HP."
+ */
+export function potionTimingText(item: ItemDefinition): string {
+  const drink = drinkTiming(item);
+  const give = giveTiming(item);
+  const first = give === "never"
+    ? `Drinking it takes ${SLOT_PHRASE[drink]}; it can't be given.`
+    : give === drink
+      ? `Drinking it or giving it to a creature within 5 ft takes ${SLOT_PHRASE[drink]}.`
+      : `Drinking it takes ${SLOT_PHRASE[drink]}, and giving it to a creature within 5 ft ${SLOT_PHRASE[give]}.`;
+  return healsInFullWithAction(item) ? `${first} An action instead of a bonus action heals the full ${fullHealAmount(item)} HP.` : first;
 }
 
 /** The pool its uses spend: its supply's (`"supply"` on a new item until it's added, `item:<id>` after). */

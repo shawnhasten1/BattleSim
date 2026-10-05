@@ -1,12 +1,17 @@
+import { parseDiceExpression } from "./dice";
 import type {
   ActionDefinition,
   BuffActionDefinition,
   CreatureDefinition,
+  EncounterSnapshot,
   HealingActionDefinition,
+  HealingComponent,
   Id,
   ItemDefinition,
   ItemType,
-  ItemUseMeta
+  ItemUseMeta,
+  PotionUse,
+  RuleProfile
 } from "./types";
 
 /**
@@ -39,6 +44,9 @@ export function isPrepDrink(action: ActionDefinition): action is BuffActionDefin
 /** A potion's give copy carries this suffix on its drink's id: `<drink id>:give`. */
 export const GIVE_SUFFIX = ":give";
 
+/** An action copy that heals in full carries this suffix: `<drink id>:full`, `<drink id>:give:full`. */
+export const FULL_SUFFIX = ":full";
+
 /** Items used up one at a time: each use spends one of the stack. */
 export function isConsumableType(type: ItemType): boolean {
   return type === "potion" || type === "scroll" || type === "thrown";
@@ -66,8 +74,89 @@ export function compileItemUses(item: ItemDefinition): ActionDefinition[] {
     item: potion && isDrinkUse(use) ? { ...meta, use: "drink" as const } : meta
   } as ActionDefinition));
   const give = potion ? item.give : undefined;
-  if (!give) return uses;
-  return [...uses, ...uses.filter(isDrinkUse).map((drink) => giveCopy(drink, give.actionType))];
+  const all = give ? [...uses, ...uses.filter(isDrinkUse).map((drink) => giveCopy(drink, give.actionType))] : uses;
+  // With an action where a bonus action would do, a heal is its full amount: an action copy of each bonus-action heal.
+  if (!item.fullWithAction) return all;
+  return [...all, ...all.flatMap((use) => (use.kind === "healing" && use.actionType === "bonus" && healsMoreInFull(use) ? [fullCopy(use)] : []))];
+}
+
+/** The most a dice expression can come to: "2d4+2" is 10. */
+export function maxOfDice(dice: string): number {
+  const parsed = parseDiceExpression(dice);
+  return parsed.terms.reduce((sum, term) => sum + (term.sign > 0 ? term.count * term.sides : -term.count), 0) + parsed.modifier;
+}
+
+/** Whether healing in full is more than rolling: a heal with dice in it. */
+export function healsMoreInFull(use: HealingActionDefinition): boolean {
+  return use.healing.some((component) => parseDiceExpression(component.dice).terms.length > 0);
+}
+
+/** What a heal comes to in full, before any ability modifier: "2d4+2" is 10. */
+export function fullHealing(use: HealingActionDefinition): number {
+  return use.healing.reduce((sum, component) => sum + maxOfDice(component.dice), 0);
+}
+
+/** A healing component at its maximum: a flat number, its ability modifier (if any) still added. */
+function inFull(component: HealingComponent): HealingComponent {
+  return { dice: String(maxOfDice(component.dice)), ...(component.abilityModifier ? { abilityModifier: component.abilityModifier } : {}) };
+}
+
+function fullCopy(use: HealingActionDefinition): ActionDefinition {
+  return {
+    ...use,
+    id: `${use.id}${FULL_SUFFIX}`,
+    actionType: "action",
+    healing: use.healing.map(inFull),
+    item: { ...(use as ActionDefinition).item!, full: true }
+  } as ActionDefinition;
+}
+
+/** What drinking and giving a potion take under a table's potion rule. */
+export function potionTimings(rule: PotionUse | undefined): { drink: "action" | "bonus"; give: "action" | "bonus" } {
+  if (rule === "bonus") return { drink: "bonus", give: "bonus" };
+  if (rule === "drink-bonus") return { drink: "bonus", give: "action" };
+  return { drink: "action", give: "action" };
+}
+
+/**
+ * A potion with the table's rules written into it, unless it keeps its own timing (`followsTableRule: false`): what
+ * drinking it takes, what giving it takes (when it can be given), and whether an action instead heals in full (only
+ * where a bonus action would do). The same object when it already says so.
+ */
+export function withTableRule(item: ItemDefinition, rules: Pick<RuleProfile, "potionUse" | "potionActionHealsFull">): ItemDefinition {
+  if (item.type !== "potion" || item.followsTableRule === false) return item;
+  const timings = potionTimings(rules.potionUse);
+  let changed = false;
+  const grantedActions = item.grantedActions?.map((use) => {
+    if (!isDrinkUse(use) || use.actionType === timings.drink) return use;
+    changed = true;
+    return { ...use, actionType: timings.drink } as ActionDefinition;
+  });
+  const give = item.give && item.give.actionType !== timings.give ? { actionType: timings.give } : item.give;
+  if (give !== item.give) changed = true;
+  const bonusOption = timings.drink === "bonus" || (Boolean(give) && timings.give === "bonus");
+  const full = Boolean(rules.potionActionHealsFull) && bonusOption;
+  if (full !== Boolean(item.fullWithAction)) changed = true;
+  if (!changed) return item;
+  const { fullWithAction: _full, ...rest } = item;
+  return { ...rest, ...(grantedActions ? { grantedActions } : {}), ...(give ? { give } : {}), ...(full ? { fullWithAction: true } : {}) };
+}
+
+/**
+ * The encounter with its table's potion rules (`snapshot.rules`) written into every potion that follows them: the
+ * engine reads only what a potion says, so a run, a saved run and an exported encounter carry the timing they were
+ * played with. The same objects all the way down when nothing changes.
+ */
+export function withItemRules(snapshot: EncounterSnapshot): EncounterSnapshot {
+  let changed = false;
+  const definitions = snapshot.definitions.map((definition) => {
+    if (!definition.items?.length) return definition;
+    const items = definition.items.map((item) => withTableRule(item, snapshot.rules));
+    if (items.every((item, index) => item === definition.items![index])) return definition;
+    changed = true;
+    return { ...definition, items };
+  });
+  return changed ? { ...snapshot, definitions } : snapshot;
 }
 
 function giveCopy(drink: HealingActionDefinition | BuffActionDefinition, actionType: "action" | "bonus"): ActionDefinition {

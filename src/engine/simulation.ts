@@ -65,7 +65,7 @@ import {
 } from "./combat";
 import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
-import { withArticle } from "./items";
+import { FULL_SUFFIX, withArticle } from "./items";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
@@ -842,9 +842,9 @@ function selectBonusCandidate(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   tactics: TacticsSettings,
-  options: { relaxReachability?: boolean } = {}
+  options: { relaxReachability?: boolean; noDrink?: boolean } = {}
 ): BonusPick | undefined {
-  const heal = betterHeal(selectHealingAction(snapshot, actor, "bonus"), selectItemDrink(snapshot, actor, "bonus"));
+  const heal = betterHeal(selectHealingAction(snapshot, actor, "bonus"), options.noDrink ? undefined : selectItemDrink(snapshot, actor, "bonus"));
   const buff = selectBuffAction(snapshot, actor, "bonus");
   const offense = selectOffensivePlan(snapshot, actor, tactics, "bonus", options);
   if (heal && (!buff || heal.score >= buff.score) && (!offense || heal.score >= offense.score)) {
@@ -865,12 +865,14 @@ function betterHeal(a: HealingPlan | undefined, b: HealingPlan | undefined): Hea
 function resolveBonusPick(state: EngineState, actor: CombatantState, pick: BonusPick): boolean {
   if (pick.kind === "heal") {
     const heal = pick.plan;
-    const drink = heal.action.item?.use === "drink" ? heal.action.item : undefined;
-    state.log.push(event(state, "AiDecision", drink
-      ? `${actor.displayName} used a bonus action to drink ${withArticle(drink.name)}`
-      : `${actor.displayName} used a bonus action to heal`, {
+    const item = heal.action.item;
+    state.log.push(event(state, "AiDecision", item?.use === "drink"
+      ? `${actor.displayName} used a bonus action to drink ${withArticle(item.name)}`
+      : item?.use === "give"
+        ? `${actor.displayName} used a bonus action to give ${heal.target.displayName} ${withArticle(item.name)}`
+        : `${actor.displayName} used a bonus action to heal`, {
       combatantId: actor.id, actionId: heal.action.id, targetId: heal.target.id, slot: "bonus",
-      ...(drink ? { score: heal.score, reasons: heal.reasons } : {})
+      ...(item ? { score: heal.score, reasons: heal.reasons } : {})
     }));
     try {
       resolveHealingAction(state, actor.id, heal.target.id, heal.action.id);
@@ -901,14 +903,14 @@ function resolveBonusPick(state: EngineState, actor: CombatantState, pick: Bonus
 }
 
 /** After the main action, spend a still-open bonus action. Only targets already in reach count. */
-function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings): void {
+function maybeSpendBonusAction(state: EngineState, actor: CombatantState, tactics: TacticsSettings, options: { noDrink?: boolean } = {}): void {
   if (actor.state !== "active" || !canAct(actor, "bonus")) {
     return;
   }
   if (tryFollowUpAfterKill(state, actor, tactics)) {
     return;
   }
-  const pick = selectBonusCandidate(state.snapshot, actor, tactics);
+  const pick = selectBonusCandidate(state.snapshot, actor, tactics, options);
   if (pick) {
     // A heal/buff target can be `canMoveIntoRange` without being `reachable`
     // yet — close the gap first, mirroring the main-action heal short-circuit
@@ -1219,7 +1221,14 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   let movedThisTurn = false;
-  const healing = withoutRedundantGive(state.snapshot, actor, selectHealingAction(state.snapshot, actor));
+  let healing = withoutRedundantGive(state.snapshot, actor, selectHealingAction(state.snapshot, actor));
+  // A potion given with the action for its full amount is only worth the action when the rolled one, given with the
+  // bonus action, wouldn't keep the ally up as well: otherwise the bonus action gives it now, and the action is free.
+  const rolledGive = needlessFullGive(state.snapshot, actor, healing);
+  if (rolledGive) {
+    resolveBonusPick(state, actor, { kind: "heal", plan: rolledGive });
+    healing = withoutRedundantGive(state.snapshot, actor, selectHealingAction(state.snapshot, actor));
+  }
   const healingBurst = selectHealingBurstAction(state.snapshot, actor);
   if (healing && (!healingBurst || healing.score >= healingBurst.score)) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose healing`, {
@@ -1288,9 +1297,12 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   const summon = selectSummonAction(state.snapshot, actor, "action");
 
   // A potion drunk with the action is worth what it beats: about to drop, it outscores most attacks; merely bloodied,
-  // only an idle action (nothing in reach, nothing better to do).
+  // only an idle action (nothing in reach, nothing better to do). Where the bonus action could drink one too (rolled),
+  // the action's (the full amount) is worth only what it adds to that: the turn weighs attacking and drinking with the
+  // bonus action against drinking with the action and using the bonus action for whatever else is best.
   const drink = selectItemDrink(state.snapshot, actor, "action");
-  if (drink && [plan, buff, summon].every((rival) => !rival || drink.score > rival.score)) {
+  const drinkEdge = drink ? drink.score - bonusDrinkForgone(state.snapshot, actor, tactics) : 0;
+  if (drink && [plan, buff, summon].every((rival) => !rival || drinkEdge > rival.score)) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose to drink ${withArticle(drink.action.item!.name)}`, {
       combatantId: actor.id,
       actionId: drink.action.id,
@@ -1307,7 +1319,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
         error: error instanceof Error ? error.message : String(error)
       }));
     }
-    maybeSpendBonusAction(state, actor, tactics);
+    // A turn drinks one potion: the bonus action goes to whatever else is best.
+    maybeSpendBonusAction(state, actor, tactics, { noDrink: true });
     return undefined;
   }
   if (summon && (!plan || summon.score > plan.score) && (!buff || summon.score > buff.score)) {
@@ -1976,6 +1989,36 @@ function withoutRedundantGive(snapshot: EncounterSnapshot, actor: CombatantState
   return bonus && !bonus.action.item && bonus.reachable && bonus.target.id === healing.target.id ? undefined : healing;
 }
 
+/**
+ * A potion given with the action for its full amount (ITEMS_PLAN.md §6, D10) when the same potion given with the bonus
+ * action, rolled, would keep the ally up about as well: that rolled give, to make now, so the action stays free for an
+ * attack. Undefined when the full amount is worth the action (the ally would likely drop again on the roll but not on
+ * the full amount), or when the rolled give can't reach the ally from here.
+ */
+function needlessFullGive(snapshot: EncounterSnapshot, actor: CombatantState, healing: HealingPlan | undefined): HealingPlan | undefined {
+  const item = healing?.action.item;
+  if (!healing || !item?.full || item.use !== "give" || !canAct(actor, "bonus")) return undefined;
+  const definition = getDefinition(snapshot, actor);
+  const rolledId = healing.action.id.slice(0, -FULL_SUFFIX.length);
+  const rolled = getExecutableActions(definition).find((action): action is HealingAction => action.id === rolledId
+    && action.kind === "healing" && action.actionType === "bonus" && canPayResource(actor, action));
+  const ally = healing.target;
+  if (!rolled || !isValidTarget(snapshot, actor, ally, rolled.range)) return undefined;
+  const missing = getDefinition(snapshot, ally).maxHp - ally.currentHp;
+  const danger = dangerBeforeNextTurn(snapshot, ally);
+  const standing = ally.currentHp + ally.tempHp;
+  const afterRolled = dropChanceAfterHealing(danger, standing, missing, healingOutcomes(rolled, definition));
+  const afterFull = dropChanceAfterHealing(danger, standing, missing, healingOutcomes(healing.action, definition));
+  if (afterRolled - afterFull >= KEEPS_IT_UP) return undefined;
+  return {
+    action: rolled,
+    target: ally,
+    score: healing.score,
+    reachable: true,
+    reasons: [...healing.reasons, `rolled, with the bonus action: ${Math.round(afterRolled * 100)}% to drop again before its next turn (${Math.round(afterFull * 100)}% for the full amount)`]
+  };
+}
+
 function isIncapacitated(combatant: CombatantState): boolean {
   return (combatant.conditions ?? []).some((condition) => INCAPACITATING_CONDITIONS.has(condition.name));
 }
@@ -2030,6 +2073,28 @@ export function dangerBeforeNextTurn(snapshot: EncounterSnapshot, actor: Combata
 /** The most threats `dropChance` weighs one by one (2^n outcomes); the rest count at what they're expected to deal. */
 const DROP_CHANCE_THREATS = 10;
 
+/** What the threats can deal together, each total with its chance: worked out once per danger. */
+const dangerOutcomes = new WeakMap<Danger, Array<{ damage: number; chance: number }>>();
+
+function damageOutcomes(danger: Danger): Array<{ damage: number; chance: number }> {
+  const known = dangerOutcomes.get(danger);
+  if (known) return known;
+  const ranked = [...danger.hits].sort((a, b) => b.chance * b.damage - a.chance * a.damage);
+  const rest = ranked.slice(DROP_CHANCE_THREATS).reduce((sum, hit) => sum + hit.chance * hit.damage, 0);
+  let totals = new Map<number, number>([[rest, 1]]);
+  for (const hit of ranked.slice(0, DROP_CHANCE_THREATS)) {
+    const next = new Map<number, number>();
+    for (const [damage, chance] of totals) {
+      next.set(damage + hit.damage, (next.get(damage + hit.damage) ?? 0) + chance * hit.chance);
+      next.set(damage, (next.get(damage) ?? 0) + chance * (1 - hit.chance));
+    }
+    totals = next;
+  }
+  const outcomes = [...totals].map(([damage, chance]) => ({ damage, chance }));
+  dangerOutcomes.set(danger, outcomes);
+  return outcomes;
+}
+
 /**
  * The chance the threats take away at least `hp` before its next turn: each lands or not, at its chance, dealing what it
  * deals when it does. A single hit for more than it has left is a likely drop even when, on average, the threats
@@ -2037,16 +2102,52 @@ const DROP_CHANCE_THREATS = 10;
  */
 export function dropChance(danger: Danger, hp: number): number {
   if (hp <= 0) return 1;
-  const ranked = [...danger.hits].sort((a, b) => b.chance * b.damage - a.chance * a.damage);
-  const weighed = ranked.slice(0, DROP_CHANCE_THREATS);
-  const rest = ranked.slice(DROP_CHANCE_THREATS).reduce((sum, hit) => sum + hit.chance * hit.damage, 0);
-  const walk = (index: number, damage: number): number => {
-    if (damage >= hp) return 1;
-    if (index >= weighed.length) return 0;
-    const hit = weighed[index]!;
-    return hit.chance * walk(index + 1, damage + hit.damage) + (1 - hit.chance) * walk(index + 1, damage);
-  };
-  return walk(0, rest);
+  return damageOutcomes(danger).reduce((sum, outcome) => (outcome.damage >= hp ? sum + outcome.chance : sum), 0);
+}
+
+/** The most dice (by their faces, added up) `healingOutcomes` rolls out one by one; a bigger heal counts at its average. */
+const HEALING_OUTCOME_FACES = 120;
+
+/**
+ * What a heal can come to, each amount with its chance: every die rolled out (2d4 + 2 is 4 to 10, 7 the likeliest) and
+ * its modifiers added. A flat heal (a potion's full amount) is one amount, certain.
+ */
+function healingOutcomes(action: HealingAction, source: CreatureDefinition): Array<{ amount: number; chance: number }> {
+  let flat = averageUpcastDiceBonus(action);
+  const dice: Array<{ sides: number; sign: number }> = [];
+  for (const component of action.healing) {
+    const parsed = parseDiceExpression(component.dice);
+    flat += parsed.modifier + (component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0);
+    for (const term of parsed.terms) {
+      for (let die = 0; die < term.count; die += 1) dice.push({ sides: term.sides, sign: term.sign });
+    }
+  }
+  if (dice.reduce((faces, die) => faces + die.sides, 0) > HEALING_OUTCOME_FACES) {
+    return [{ amount: averageHealing(action, source), chance: 1 }];
+  }
+  let sums = new Map<number, number>([[0, 1]]);
+  for (const die of dice) {
+    const next = new Map<number, number>();
+    for (const [sum, chance] of sums) {
+      for (let face = 1; face <= die.sides; face += 1) {
+        next.set(sum + die.sign * face, (next.get(sum + die.sign * face) ?? 0) + chance / die.sides);
+      }
+    }
+    sums = next;
+  }
+  return [...sums].map(([sum, chance]) => ({ amount: Math.max(0, sum + flat), chance }));
+}
+
+/** The chance of dropping before its next turn once healed: each of the heal's outcomes at its chance, none past its max. */
+function dropChanceAfterHealing(danger: Danger, standing: number, missing: number, outcomes: Array<{ amount: number; chance: number }>): number {
+  const byHp = new Map<number, number>();
+  for (const outcome of outcomes) {
+    const hp = standing + Math.min(outcome.amount, missing);
+    byHp.set(hp, (byHp.get(hp) ?? 0) + outcome.chance);
+  }
+  let total = 0;
+  for (const [hp, chance] of byHp) total += chance * dropChance(danger, hp);
+  return total;
 }
 
 /** How much less likely to drop before its next turn a potion must make a creature for it to count as keeping it up. */
@@ -2085,8 +2186,8 @@ function selectItemDrink(snapshot: EncounterSnapshot, actor: CombatantState, slo
   let best: HealingPlan | undefined;
   for (const action of drinks) {
     const average = averageHealing(action, definition);
-    // How much less likely it is to drop before its next turn once it has drunk this.
-    const saves = dropNow - dropChance(danger, standing + Math.min(average, missing));
+    // How much less likely it is to drop before its next turn once it has drunk this: every way the heal can roll.
+    const saves = dropNow - dropChanceAfterHealing(danger, standing, missing, healingOutcomes(action, definition));
     const keepsItUp = saves >= KEEPS_IT_UP;
     const worthIt = keepsItUp
       || (stance !== "conservative" && bloodied)
@@ -2099,11 +2200,24 @@ function selectItemDrink(snapshot: EncounterSnapshot, actor: CombatantState, slo
       keepsItUp
         ? `≈${Math.round(danger.total)} damage likely before its next turn (${danger.threats} in reach): ${Math.round(dropNow * 100)}% to drop, ${Math.round((dropNow - saves) * 100)}% after drinking`
         : bloodied ? "bloodied" : "the heal won't be wasted",
-      `${Math.round(average)} expected healing`
+      action.item?.full ? `the full ${Math.round(average)}, with an action instead of a bonus action` : `${Math.round(average)} expected healing`
     ];
     if (!best || score > best.score) best = { action, target: actor, score, reasons, reachable: true };
   }
   return best;
+}
+
+/**
+ * What drinking with the action gives up in the bonus action (ITEMS_PLAN.md §6, D10): where the bonus action could drink
+ * a potion too (rolled), what that drink would have been worth over the best of everything else the bonus action could
+ * do instead. Nothing when the bonus action can't drink one (a potion that takes an action, or the bonus action spent).
+ */
+function bonusDrinkForgone(snapshot: EncounterSnapshot, actor: CombatantState, tactics: TacticsSettings): number {
+  if (!canAct(actor, "bonus")) return 0;
+  const rolled = selectItemDrink(snapshot, actor, "bonus");
+  if (!rolled) return 0;
+  const other = selectBonusCandidate(snapshot, actor, tactics, { noDrink: true });
+  return Math.max(0, rolled.score - (other?.plan.score ?? 0));
 }
 
 /**

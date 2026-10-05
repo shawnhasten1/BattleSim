@@ -82,6 +82,14 @@ const SECTIONS: Section[] = [
           </li>
           <li>Click a card to open that campaign and see its list of encounters.</li>
         </ul>
+        <p>
+          Above a campaign&apos;s encounters are its <strong>Campaign rules</strong>, the table&apos;s rulings every
+          encounter in it plays by, saved as they&apos;re set: whether counterspellers know what&apos;s being cast and
+          at whom (see <a href="#features">Features &amp; Traits</a>), what drinking or giving a potion takes, and whether a healing
+          potion used with an action instead of a bonus action heals in full (see <a href="#items">Items</a>). An
+          encounter takes them as it opens, and an open one at once, so a run, a saved run or an exported encounter
+          carries the rules it ran under. A rule that does nothing under the others is greyed out, and says why.
+        </p>
         <p>Everything you create is private to your account — other users can't see or edit your campaigns.</p>
       </>
     )
@@ -714,8 +722,10 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong>Use &amp; cost</strong> — <em>how many</em> it carries (a potion, a scroll or a flask is used up one
-            at a time) or its <em>charges</em> (a wand spends them and stays). For a potion, what <em>drinking it</em>{" "}
-            takes, and what <em>giving it to a creature within 5 ft</em> takes, or that it can&apos;t be given.
+            at a time) or its <em>charges</em> (a wand spends them and stays). For a potion, <em>what using it takes</em>:
+            <em> the campaign&apos;s rule</em> (said there, with whether it can be given) or <em>its own</em> (what{" "}
+            <em>drinking it</em> takes, what <em>giving it to a creature within 5 ft</em> takes or that it can&apos;t be
+            given, and whether an action instead of a bonus action heals it in full).
           </li>
           <li>
             <strong>What it does</strong> — its uses, each opened in the editor inside the item&apos;s: a potion&apos;s
@@ -728,6 +738,20 @@ const SECTIONS: Section[] = [
           </li>
           <li><strong>Notes &amp; AI</strong> — reference text, and whether the simulator uses it or keeps it for reference.</li>
         </ul>
+
+        <h3>The campaign&apos;s potion rules</h3>
+        <p>
+          A campaign sets what <strong>drinking or giving a potion takes</strong> (on its page, under Campaign rules):
+          an action (the 2014 rules, the default), a bonus action (the 2024 rules), or a bonus action to drink and an
+          action to give. Every potion follows it unless its Use &amp; cost says it keeps its own timing; the library&apos;s
+          potions follow it as they&apos;re added. A second rule, off by default: <strong>a healing potion used with an
+          action instead of a bonus action heals in full</strong> (a Potion of Healing&apos;s 10, rather than 2d4 + 2;
+          Greater 20, Superior 40, Supreme 60). It applies only where a bonus action would do, so it&apos;s greyed out
+          under the 2014 rule, and under the house rule a potion given for an action is still rolled. A potion that heals
+          a fixed amount, or doesn&apos;t heal, gets nothing from it. When someone carries a potion, the Combat panel
+          says the rules in force (<em>Potions take a bonus action · an action instead heals a potion in full · campaign
+          rules</em>), and a batch says which it ran with.
+        </p>
 
         <h3>In a fight</h3>
         <p>
@@ -750,15 +774,25 @@ const SECTIONS: Section[] = [
           before its next turn (2 in reach): 75% to drop, 25% after drinking</em>.
         </p>
         <p>
+          With full healing for an action, the AI weighs its whole turn: attacking and drinking a rolled potion with its
+          bonus action, or drinking the full amount with its action and using the bonus action for anything but another
+          potion. It drinks in full when the full amount would keep it up and the roll likely wouldn&apos;t (4 HP against
+          an ogre whose club hits for 13), and otherwise attacks and drinks with its bonus action. A downed ally gets the
+          full amount for the action when a rolled potion would likely leave them to drop again; otherwise the rolled one
+          for the bonus action, and the action still attacks.
+        </p>
+        <p>
           In Play, the hotbar&apos;s <strong>Items</strong> tab has a button for each item with how many are left: a
           potion&apos;s <em>Drink</em> is used at once, and <em>Give</em> is aimed at an ally within 5 ft, one who&apos;s
-          down included. A potion whose benefit lasts 10 minutes or more (Heroism) can be drunk before the fight:
+          down included. With full healing for an action, the button also has <em>Drink · full 10</em> and{" "}
+          <em>Give · full 10</em>, each taking the action. A potion whose benefit lasts 10 minutes or more (Heroism) can be drunk before the fight:
           it&apos;s listed with the spells cast before it, in the Combat panel and on the Token tab, and ticking it spends
           one.
         </p>
         <p>
           The <strong>Battle report</strong> lists the items each creature used and the allies it got back up with one.
-          A <strong>batch</strong> says how many of each item were used a fight, in how many fights an item got a downed
+          A <strong>batch</strong> says how many of each item were used a fight (and how many of those for the full
+          amount, with an action), in how many fights an item got a downed
           ally back up, and how often a creature went down still holding a healing potion it never drank: often means
           its stance, or the fight, never gave it the chance.
         </p>

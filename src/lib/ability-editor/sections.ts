@@ -32,6 +32,7 @@ import {
   usageLabel
 } from "@/lib/statblock";
 import { actionLimit, actionTarget, attackBonusBinding, saveDcBinding, spellLimit, type Limit } from "./bindings";
+import { fullHealAmount, healsInFullWithAction } from "./items";
 import { upcastOf } from "./spells";
 import type { AbilityRecord, AbilityRef } from "./refs";
 
@@ -138,13 +139,21 @@ function limitText(limit: Limit, action: ActionDefinition | undefined, definitio
   }
 }
 
-/** An item's stack or charges, and for a potion what drinking and giving it take: "×3 · drink: action · give (5 ft): action". */
+/**
+ * An item's stack or charges, and for a potion what drinking and giving it take and whose rule that is: "×3 · drink:
+ * bonus action · give (5 ft): bonus action · campaign rule · an action heals the full 10".
+ */
 function itemUseSummary(item: ItemDefinition): string {
   const supply = item.supply;
   const count = supply ? (supply.unit === "charges" ? `${supply.size} ${supply.size === 1 ? "charge" : "charges"}` : `×${supply.size}`) : "";
   const drink = item.type === "potion" ? item.grantedActions?.find((use) => (use.kind === "healing" || use.kind === "buff") && use.targeting?.target === "self") : undefined;
   const timing = item.type !== "potion" ? []
-    : [drink ? `drink: ${SLOT_WORDS[drink.actionType].toLowerCase()}` : "", item.give ? `give (5 ft): ${SLOT_WORDS[item.give.actionType].toLowerCase()}` : "can't be given"];
+    : [
+      drink ? `drink: ${SLOT_WORDS[drink.actionType].toLowerCase()}` : "",
+      item.give ? `give (5 ft): ${SLOT_WORDS[item.give.actionType].toLowerCase()}` : "can't be given",
+      item.followsTableRule === false ? "its own timing" : "campaign rule",
+      healsInFullWithAction(item) ? `an action heals the full ${fullHealAmount(item)}` : ""
+    ];
   return [count, ...timing].filter(Boolean).join(" · ") || "—";
 }
 

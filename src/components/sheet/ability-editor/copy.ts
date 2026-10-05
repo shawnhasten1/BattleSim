@@ -249,6 +249,12 @@ export const COPY = {
   itemCharges: { label: "It has charges", hint: "A pool its uses spend; the item stays when it's empty." },
   itemChargesMax: { label: "Charges" },
   itemRegains: { label: "Regains", hint: "For reference: there's no rest in a fight, so a fight starts with every charge." },
+  potionTiming: {
+    label: "What using it takes",
+    hint: "The campaign's rule: an action, a bonus action, or a bonus action to drink and an action to give, as the campaign's page sets it for every potion. Its own: what this potion says, whatever the campaign's rule."
+  },
+  potionGiven: { label: "Can be given to a creature within 5 ft", hint: "Pouring it into a friend who's down brings them back up. It's never given to the one holding it: they drink it." },
+  potionFull: { label: "An action instead of a bonus action heals in full", hint: "A Potion of Healing heals 2d4 + 2 with a bonus action, or the full 10 with an action. Only where drinking or giving it takes a bonus action." },
   drinkTakes: { label: "Drinking it takes", hint: "In SRD 5.1 (2014), drinking or administering a potion takes an action; the 2024 rules make it a bonus action." },
   giveTakes: { label: "Giving it to a creature within 5 ft", hint: "Pouring it into a friend who's down brings them back up. It's never given to the one holding it: they drink it." },
   itemUses: { label: "Using it", hint: "Each opens in this editor and is saved with the item. Each use spends one of the stack, or the charges it says." },

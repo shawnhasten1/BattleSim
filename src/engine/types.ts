@@ -1426,6 +1426,8 @@ export interface ItemUseMeta {
   consumes: boolean;
   /** A potion's use: drinking it (its own, self-targeted use) or giving it to a creature within 5 ft (a compiled copy). */
   use?: "drink" | "give";
+  /** An action copy of a bonus-action heal that heals its full amount (`ItemDefinition.fullWithAction`). */
+  full?: boolean;
 }
 
 export type ActionDefinition = (
@@ -1674,6 +1676,12 @@ export interface ItemDefinition {
   give?: { actionType: "action" | "bonus" };
   /** A potion's drink and give follow the campaign's potion rule unless this is `false` (it keeps its own timing). */
   followsTableRule?: boolean;
+  /**
+   * Used with an action where a bonus action would do, its heal is its full amount (a Potion of Healing: 10, not
+   * 2d4 + 2): each bonus-action heal it has gets an action copy that heals the maximum. Written from the campaign's rule
+   * onto a potion that follows it (`withItemRules`).
+   */
+  fullWithAction?: boolean;
   /** Bonuses while it's carried (a Ring of Protection's +1 AC and saves), folded into `featureSources` like a focus's. */
   effects?: FeatureEffect[];
   /** It needs attunement: until it's attuned, it does nothing. */
@@ -1950,7 +1958,18 @@ export interface RuleProfile {
    * encounter's campaign (`withCampaignRules`).
    */
   counterspellReadsSpell?: boolean;
+  /**
+   * What drinking or giving a potion takes, for every potion that follows the table's rule (`withItemRules` writes it
+   * into them): `"action"` (2014 rules, the default), `"bonus"` (2024 rules) or `"drink-bonus"` (the house rule: drinking
+   * takes a bonus action, giving an action). Set by the encounter's campaign.
+   */
+  potionUse?: PotionUse;
+  /** Where a potion can be drunk or given with a bonus action, an action instead heals its full amount. Off when absent. */
+  potionActionHealsFull?: boolean;
 }
+
+/** What drinking or giving a potion takes, as a table rule (`RuleProfile.potionUse`). */
+export type PotionUse = "action" | "bonus" | "drink-bonus";
 
 export interface EncounterSnapshot {
   schemaVersion: typeof ENCOUNTER_SCHEMA_VERSION;
@@ -2431,7 +2450,9 @@ export const encounterSnapshotSchema = z.object({
     cover: z.boolean().default(true),
     coverFromCreatures: z.boolean().optional(),
     massiveDamage: z.boolean().optional(),
-    counterspellReadsSpell: z.boolean().optional()
+    counterspellReadsSpell: z.boolean().optional(),
+    potionUse: z.enum(["action", "bonus", "drink-bonus"]).optional(),
+    potionActionHealsFull: z.boolean().optional()
   }),
   definitions: z.array(z.any()),
   activeZones: z.array(z.any()).optional(),

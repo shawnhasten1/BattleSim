@@ -7,6 +7,8 @@ import {
   abilityModifier,
   formulaAbility,
   getExecutableActions,
+  fullHealing,
+  healsMoreInFull,
   isDrinkUse,
   ITEM_POOL_PREFIX,
   multiattackRoutines,
@@ -1682,9 +1684,14 @@ export function itemStatblock(item: ItemDefinition, definition: CreatureDefiniti
       : give === drink.actionType ? `Drinking it, or giving it to a creature within 5 feet, takes ${slotPhrase(give)}`
         : `Drinking it takes ${slotPhrase(drink.actionType)}; giving it to a creature within 5 feet takes ${slotPhrase(give)}`;
     sentences.push(`${lead}. ${effect.text.replace(/^It /, "The drinker ")}`);
-    shorts.push(!give ? `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)}`
+    // An action spent where a bonus action would do heals the full amount (the campaign's rule, or the potion's own).
+    const fullDrink = item.fullWithAction && drink.kind === "healing" && healsMoreInFull(drink) ? fullHealing(drink) : undefined;
+    const fullFor = fullDrink === undefined ? "" : drink.actionType === "bonus" && give === "bonus" ? "used" : drink.actionType === "bonus" ? "drunk" : give === "bonus" ? "given" : "";
+    if (fullFor) sentences.push(`${capitalize(fullFor)} with an action instead of a bonus action, it heals the full ${fullDrink} hit points.`);
+    shorts.push((!give ? `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)}`
       : give === drink.actionType ? `drink or give (5 ft): ${drinkShort(drink, onCreature)} · ${slotShort(give)}`
-        : `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)} · give (5 ft): ${slotShort(give)}`);
+        : `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)} · give (5 ft): ${slotShort(give)}`)
+      + (fullFor ? ` · ${fullFor === "used" ? "" : `${fullFor} `}with an action: the full ${fullDrink}` : ""));
   }
   for (const use of others) {
     const entry = actionStatblock(use, onCreature);

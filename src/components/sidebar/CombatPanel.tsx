@@ -2,7 +2,7 @@
 
 import { Dices, Gamepad2, RotateCcw, SkipForward, Swords, Waypoints } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { controllerOf, getDefinition, type CombatantState, type Faction } from "@/engine";
+import { controllerOf, getDefinition, type CombatantState, type EncounterSnapshot, type Faction } from "@/engine";
 import { PlayControls } from "@/components/play/PlayControls";
 import { overruleItems } from "@/components/play/RollStrip";
 import { ContextMenu } from "@/components/ui/ContextMenu";
@@ -15,7 +15,7 @@ import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { prepBuffLabel, prepBuffs } from "@/lib/actor-sheet/token";
 import styles from "./CombatPanel.module.css";
-import { hasCounterspellers, ruleInForce } from "@/lib/campaign-rules";
+import { hasCounterspellers, hasPotions, potionRulesInForce, ruleInForce } from "@/lib/campaign-rules";
 
 const TACTICS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "basic-melee", label: "Basic melee" },
@@ -63,8 +63,15 @@ function percent(value: number): string {
 export function CombatPanel() {
   const encounter = useEncounterStore((state) => state.encounter);
   const currentProjectId = useEncounterStore((state) => state.currentProjectId);
-  // The campaign's rule on counters, said where it matters: when something here can counter a spell.
-  const counterspellRule = hasCounterspellers(encounter) ? ruleInForce(encounter, "counterspellReadsSpell") : undefined;
+  // The campaign's rules, each said where it matters: on counters when something here can counter a spell, on potions
+  // when someone here carries one.
+  const counterspellers = hasCounterspellers(encounter);
+  const potions = hasPotions(encounter);
+  const rulesInForce = (rules: Pick<EncounterSnapshot, "rules">) => [
+    ...(counterspellers ? [ruleInForce(rules, "counterspellReadsSpell")] : []),
+    ...(potions ? [potionRulesInForce(rules)] : [])
+  ];
+  const campaignRules = rulesInForce(encounter);
   const displayEncounter = useDisplayEncounter();
   const replaying = useIsReplaying();
   // Who is fighting in a lair: the tracker shows where initiative 20 falls, and whose lair it is.
@@ -158,10 +165,12 @@ export function CombatPanel() {
         <div className={styles.latest}><span>Latest</span><strong>{latestTurnEvent?.message ?? (play ? "Nothing yet this turn" : "Step to begin")}</strong></div>
       </div>
 
-      {counterspellRule ? (
+      {campaignRules.length ? (
         <p className={styles.ruleLine}>
-          {counterspellRule} ·{" "}
-          {currentProjectId ? <a href={`/campaigns/${currentProjectId}`} title="Set on the campaign's page">campaign rule</a> : "campaign rule"}
+          {campaignRules.join(" · ")} ·{" "}
+          {currentProjectId
+            ? <a href={`/campaigns/${currentProjectId}`} title="Set on the campaign's page">{campaignRules.length > 1 ? "campaign rules" : "campaign rule"}</a>
+            : campaignRules.length > 1 ? "campaign rules" : "campaign rule"}
         </p>
       ) : null}
 
@@ -394,14 +403,14 @@ export function CombatPanel() {
               <div><span>P90 rounds</span><strong>{batchSummary.rounds.p90}</strong></div>
               <div><span>HP left</span><strong>{batchSummary.remainingHpByFaction.party ?? 0}</strong></div>
             </div>
-            {counterspellRule && batchSummary.rules ? (
-              <p className={styles.ruleLine}>Ran with: {ruleInForce(batchSummary, "counterspellReadsSpell")}</p>
+            {campaignRules.length && batchSummary.rules ? (
+              <p className={styles.ruleLine}>Ran with: {rulesInForce(batchSummary).join(" · ")}</p>
             ) : null}
             {batchSummary.items ? (
               <p className={styles.ruleLine} aria-label="Items in the batch">
                 Items:{" "}
                 {batchSummary.items.used.length
-                  ? batchSummary.items.used.map((item) => `${item.name} ${item.perFight} a fight`).join(", ")
+                  ? batchSummary.items.used.map((item) => `${item.name} ${item.perFight} a fight${item.fullPerFight ? ` (${item.fullPerFight} with an action, for the full amount)` : ""}`).join(", ")
                   : "none used"}
                 {" · "}got a downed ally up in {percent(batchSummary.items.broughtUpRate)} of fights
                 {batchSummary.items.wentDownHoldingPerFight > 0

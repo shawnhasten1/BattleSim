@@ -3870,6 +3870,7 @@ function declareAction(
       name: item.name,
       type: item.type,
       ...(item.use ? { use: item.use } : {}),
+      ...(item.full ? { full: true } : {}),
       ...(resourceCost ? { left: actor.resources?.[resourceCost.resourceId] ?? 0 } : {}),
       // Used on a creature at 0 HP (a potion poured into a downed ally): the reports count who it got back up.
       ...(targetInfo.target && targetInfo.target.id !== actor.id && targetInfo.target.state !== "active" ? { targetDown: true } : {})
@@ -3896,8 +3897,12 @@ function declareAction(
 /** What using an item looks like in the log: "Kael drinks a Potion of Healing", "Kael gives Mira a Potion of Healing". */
 function itemDeclaration(actor: CombatantState, action: ActionDefinition, item: ItemUseMeta, target: CombatantState | undefined, targetText: string): string {
   const named = withArticle(item.name);
-  if (item.use === "give" && target) return `${actor.displayName} gives ${target.displayName} ${named}`;
-  if (item.use === "drink") return `${actor.displayName} drinks ${named}`;
+  // An action spent where a bonus action would do: the full amount, a flat number on the copy.
+  const full = item.full && action.kind === "healing"
+    ? ` with its action, for the full ${action.healing.reduce((sum, component) => sum + (Number(component.dice) || 0), 0)} HP`
+    : "";
+  if (item.use === "give" && target) return `${actor.displayName} gives ${target.displayName} ${named}${full}`;
+  if (item.use === "drink") return `${actor.displayName} drinks ${named}${full}`;
   if (item.type === "scroll") return `${actor.displayName} reads ${named}${targetText}`;
   if (item.type === "thrown") return `${actor.displayName} throws ${named}${target ? ` at ${target.displayName}` : targetText}`;
   return `${actor.displayName} uses ${item.name}${action.name !== item.name ? ` (${action.name})` : ""}${targetText}`;
