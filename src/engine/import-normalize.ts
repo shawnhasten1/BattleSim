@@ -169,8 +169,10 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
     weapons: foci.length ? weapons!.filter((weapon) => weapon.attackType !== "focus") : weapons,
     items: foci.length ? [...(items ?? []), ...foci.map(focusToItem)] : items,
     spells: definition.spells?.map((spell) => {
-      const action = spell.action ? migrate(spell.action) : spell.action;
-      return action === spell.action ? spell : { ...spell, action };
+      const migrated = withMageArmorFormula(spell);
+      if (migrated !== spell) changed = true;
+      const action = migrated.action ? migrate(migrated.action) : migrated.action;
+      return action === migrated.action ? migrated : { ...migrated, action };
     }),
     legendary: definition.legendary
       ? {
@@ -183,6 +185,20 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
       : definition.legendary
   };
   return changed ? next : definition;
+}
+
+/**
+ * The library's Mage Armor as it used to be: a flat +3 to AC, which overstated it on anything armored or with natural
+ * armor. Now its base AC becomes 13 + its Dexterity modifier while it wears no armor (`unarmored-ac`). Only the
+ * library's own +3 is changed; a Mage Armor of one's own making stays as it was made.
+ */
+function withMageArmorFormula<T extends { source?: { slug?: string }; action?: ActionDefinition }>(spell: T): T {
+  const action = spell.action;
+  if (spell.source?.slug !== "srd:spell:mage-armor" || action?.kind !== "buff") return spell;
+  const modifiers = action.appliedCondition.modifiers;
+  if (action.appliedCondition.effects?.length || !modifiers || Object.keys(modifiers).length !== 1 || modifiers.armorClass !== 3) return spell;
+  const { modifiers: _old, ...condition } = action.appliedCondition;
+  return { ...spell, action: { ...action, appliedCondition: { ...condition, effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }] } } };
 }
 
 /**

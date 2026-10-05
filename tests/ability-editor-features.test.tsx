@@ -304,8 +304,8 @@ describe("the library's features in the editor", { timeout: 60000 }, () => {
     attached = [...SRD_FEATURES];
   });
 
-  it("opens all 16 with every section and card shown, changing nothing", async () => {
-    expect(attached).toHaveLength(16);
+  it("opens all 19 with every section and card shown, changing nothing", async () => {
+    expect(attached).toHaveLength(19);
     for (const feature of attached) store().attachSrdFeature("def-fighter", feature.id);
     render(<LiveTab />);
     for (const feature of attached) {

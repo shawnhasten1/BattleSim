@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  armorClassOf,
   armoredAc,
   createEngineState,
+  migrateDefinition,
   damageAdjustmentsFor,
   dangerBeforeNextTurn,
   movementProfileOf,
@@ -130,6 +132,79 @@ describe("armor in a fight", () => {
     const carried = createEngineState(scene([{ ...resists, equipped: false }]));
     expect(damageAdjustmentsFor(worn.snapshot.definitions[0]!, worn.snapshot.combatants[0]!).map((adjustment) => adjustment.damageType)).toContain("fire");
     expect(damageAdjustmentsFor(carried.snapshot.definitions[0]!, carried.snapshot.combatants[0]!).map((adjustment) => adjustment.damageType)).not.toContain("fire");
+  });
+});
+
+describe("the AC without armor (Phase 3)", () => {
+  const feature = (name: string, effect: NonNullable<NonNullable<CreatureDefinition["features"]>[number]["effects"]>[number]) =>
+    ({ id: name, name, category: "feature" as const, automationSupport: "full" as const, effects: [effect] });
+  const barbarian = (items: ItemDefinition[]) => creature(14, items, {
+    abilities: { str: 16, dex: 14, con: 16, int: 10, wis: 10, cha: 10 },
+    features: [feature("Unarmored Defense (Barbarian)", { kind: "unarmored-ac", base: 10, abilities: ["dex", "con"] })]
+  });
+  const monk = (items: ItemDefinition[]) => creature(16, items, {
+    abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 16, cha: 10 },
+    features: [feature("Unarmored Defense (Monk)", { kind: "unarmored-ac", base: 10, abilities: ["dex", "wis"], noShield: true })]
+  });
+
+  it("works out Unarmored Defense, a shield still adding to the barbarian's, and worn armor replacing it", () => {
+    expect(armorClassOf(barbarian([]))).toMatchObject({ total: 15, formula: "Unarmored Defense (Barbarian)", parts: [{ label: "Unarmored Defense (Barbarian)", value: 15 }] });
+    expect(armorClassOf(barbarian([SHIELD])).total).toBe(17);
+    expect(armorClassOf(barbarian([LEATHER])).total).toBe(13);
+  });
+
+  it("drops the monk's with a shield, and keeps a typed AC that's higher", () => {
+    expect(armorClassOf(monk([])).total).toBe(16);
+    expect(armorClassOf(monk([SHIELD]))).toMatchObject({ total: 14, parts: [{ label: "without armor", value: 12 }, { label: "Shield", value: 2 }] });
+    expect(armorClassOf({ ...monk([]), armorClass: 18 }).total).toBe(18);
+  });
+
+  it("makes Mage Armor 13 + Dexterity without armor, nothing on top of armor", () => {
+    const mageArmor = { id: "mage-armor", name: "custom" as const, sourceName: "Mage Armor", startedRound: 1, effects: [{ kind: "unarmored-ac" as const, base: 13, abilities: ["dex" as const] }] };
+    expect(armorClassOf(creature(14, []), { conditions: [mageArmor] }).total).toBe(15);
+    expect(armorClassOf(creature(14, [PLATE]), { conditions: [mageArmor] }).total).toBe(18);
+    // Natural armor better than it: the natural armor.
+    expect(armorClassOf({ ...creature(14, []), armorClass: 17 }, { conditions: [mageArmor] }).total).toBe(17);
+  });
+
+  it("brings a library Mage Armor saved as +3 up to date, and leaves one of one's own making", () => {
+    const old = {
+      id: "spell-ma", name: "Mage Armor", level: 1, school: "abjuration", castingTime: "action", range: "touch", automationSupport: "full",
+      source: { provider: "homebrew", documentName: "SRD", slug: "srd:spell:mage-armor" },
+      action: {
+        kind: "buff", id: "spell-action-ma", name: "Mage Armor", actionType: "action", range: 5, targeting: { target: "single" }, prepOnly: true,
+        appliedCondition: { name: "custom", durationRounds: 100, modifiers: { armorClass: 3 } }, automationSupport: "full"
+      }
+    } as unknown as NonNullable<CreatureDefinition["spells"]>[number];
+    const migrated = migrateDefinition(creature(14, [], { spells: [old] }));
+    expect((migrated.spells![0]!.action as { appliedCondition: unknown }).appliedCondition)
+      .toEqual({ name: "custom", durationRounds: 100, effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }] });
+    const own = { ...old, source: { provider: "homebrew" as const } };
+    const kept = creature(14, [], { spells: [own] });
+    expect(migrateDefinition(kept)).toBe(kept);
+  });
+
+  it("gives the Bracers of Defense' +2 only with no armor and no shield worn", () => {
+    const bracers: ItemDefinition = { id: "bracers", name: "Bracers of Defense", type: "worn", effects: [{ kind: "armor-class-bonus", bonus: { base: 2 }, unarmoredOnly: true }], automationSupport: "full" };
+    const encounterWith = (items: ItemDefinition[]) => {
+      const encounter = structuredClone(sampleEncounter);
+      encounter.map.walls = [];
+      encounter.definitions = encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...definition, items } : definition));
+      return encounter;
+    };
+    const targetAc = (items: ItemDefinition[]) => {
+      const encounter = encounterWith(items);
+      const goblin = encounter.combatants.find((combatant) => combatant.faction === "enemy")!;
+      const fighter = encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+      goblin.position = { x: fighter.position.x + 1, y: fighter.position.y };
+      const state = createEngineState(encounter);
+      const attack = state.snapshot.definitions.find((definition) => definition.id === goblin.definitionId)!.actions.find((action) => action.kind === "attack")!.id;
+      resolveAttack(state, goblin.id, "pc-fighter", attack);
+      return state.log.find((entry) => entry.type === "AttackRolled")?.data?.targetAc;
+    };
+    // The fighter's AC is 16 without armor.
+    expect(targetAc([bracers])).toBe(18);
+    expect(targetAc([bracers, SHIELD])).toBe(18);
   });
 });
 

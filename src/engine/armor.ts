@@ -1,5 +1,5 @@
 import { abilityModifier } from "./dice";
-import type { ArmorCategory, ArmorStats, CreatureDefinition, ItemDefinition } from "./types";
+import type { Ability, ArmorCategory, ArmorStats, CreatureDefinition, ItemDefinition } from "./types";
 
 /**
  * Armor and shields (ARMOR_PLAN.md): what a creature's worn armor makes its AC. Worn body armor's base AC, plus its
@@ -42,6 +42,18 @@ export interface ArmoredAc {
   /** The worn suit and shield that count, when there are any. */
   armor?: ArmorItem;
   shield?: ArmorItem;
+  /** Without a suit: what worked out its AC when it beat the typed AC ("Unarmored Defense", "Mage Armor"). */
+  formula?: string;
+}
+
+/** An AC without armor worked out from abilities (`unarmored-ac`): Unarmored Defense, Mage Armor. */
+export interface UnarmoredFormula {
+  /** What it comes from: the feature, item or spell. */
+  label: string;
+  base: number;
+  abilities: Ability[];
+  /** Only while no shield is worn either. */
+  noShield?: boolean;
 }
 
 /** What one worn suit makes the AC: its base and magic, and the Dexterity it adds. */
@@ -56,13 +68,14 @@ function suitParts(item: ArmorItem, dex: number): Array<{ label: string; value: 
 }
 
 /**
- * The AC a creature's armor gives it: its best worn suit's (base, Dexterity up to the suit's cap, magic), or its typed
- * AC without one; plus its best worn shield's bonus and magic. Only one suit and one shield count (D7). A creature
- * that wears nothing has exactly its typed AC.
+ * The AC a creature's armor gives it: its best worn suit's (base, Dexterity up to the suit's cap, magic), or without
+ * one the best of its typed AC and `formulas` (Unarmored Defense, Mage Armor); plus its best worn shield's bonus and
+ * magic. Only one suit and one shield count (D7). A creature that wears nothing and has no formula has exactly its
+ * typed AC. `armorClassOf` (combat) gathers the formulas from its features, items and conditions.
  */
-export function armoredAc(definition: Pick<CreatureDefinition, "armorClass" | "abilities" | "items">): ArmoredAc {
+export function armoredAc(definition: Pick<CreatureDefinition, "armorClass" | "abilities" | "items">, formulas: UnarmoredFormula[] = []): ArmoredAc {
   const worn = (definition.items ?? []).filter((item): item is ArmorItem => isArmorItem(item) && isWorn(item) && simulated(item));
-  if (!worn.length) return { total: definition.armorClass, parts: [{ label: "without armor", value: definition.armorClass }] };
+  if (!worn.length && !formulas.length) return { total: definition.armorClass, parts: [{ label: "without armor", value: definition.armorClass }] };
   const dex = abilityModifier(definition.abilities.dex);
   const sum = (parts: Array<{ value: number }>) => parts.reduce((total, part) => total + part.value, 0);
   const suits = worn.filter((item) => item.armor.category !== "shield")
@@ -73,11 +86,19 @@ export function armoredAc(definition: Pick<CreatureDefinition, "armorClass" | "a
     .sort((a, b) => b.value - a.value);
   const suit = suits[0];
   const shield = shields[0];
+  // Without a suit: the best of the typed AC and what works it out from abilities (a monk's only without a shield).
+  const unarmored = formulas.filter((formula) => !(formula.noShield && shield))
+    .map((formula) => ({ label: formula.label, value: formula.base + formula.abilities.reduce((total, ability) => total + abilityModifier(definition.abilities[ability]), 0) }))
+    .sort((a, b) => b.value - a.value)[0];
+  const best = unarmored && unarmored.value > definition.armorClass ? unarmored : undefined;
   const parts = [
-    ...(suit ? suit.parts : [{ label: "without armor", value: definition.armorClass }]),
+    ...(suit ? suit.parts : [best ?? { label: "without armor", value: definition.armorClass }]),
     ...(shield ? [{ label: shield.item.name, value: shield.value }] : [])
   ];
-  return { total: sum(parts), parts, ...(suit ? { armor: suit.item } : {}), ...(shield ? { shield: shield.item } : {}) };
+  return {
+    total: sum(parts), parts,
+    ...(suit ? { armor: suit.item } : {}), ...(shield ? { shield: shield.item } : {}), ...(!suit && best ? { formula: best.label } : {})
+  };
 }
 
 /** Whether the creature wears armor too heavy for it: below its Strength requirement, it's 10 ft slower. */

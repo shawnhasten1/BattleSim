@@ -151,14 +151,9 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       range: 5,
       targeting: { target: "single" },
       prepOnly: true,
-      // Real Mage Armor SETS AC to 13 + Dex mod (replacing unarmored 10 + Dex,
-      // for a creature wearing no armor and using no shield) — this engine
-      // only has an additive AC modifier, not a formula override, so this is
-      // approximated as a flat +3 (the typical net gain for that unarmored
-      // case). Authoring it for an already-armored target would overstate
-      // the bonus — same class of approximation as Bless's flat +2 and Aid's
-      // temp HP.
-      appliedCondition: { name: "custom", durationRounds: 100, modifiers: { armorClass: 3 } },
+      // Its base AC becomes 13 + its Dexterity modifier while it wears no armor (ARMOR_PLAN.md): the best of that and
+      // its own AC without armor, a shield still adding.
+      appliedCondition: { name: "custom", durationRounds: 100, effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }] },
       resourceCost: { resourceId: "slot-1", amount: 1 },
       automationSupport: "full"
     }

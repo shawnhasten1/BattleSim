@@ -2,7 +2,7 @@
 
 import { Bot, ChevronDown, ChevronUp, Flag, Undo2, X } from "lucide-react";
 import { useEffect, useMemo } from "react";
-import { armoredAc, findActionDefinition, getDefinition, reactionPolicyKey, type EncounterSnapshot, type MovePreview, type ReactionPolicy } from "@/engine";
+import { armorClassOf, findActionDefinition, getDefinition, reactionPolicyKey, type EncounterSnapshot, type MovePreview, type ReactionPolicy } from "@/engine";
 import { PlaySegmented, POLICY_OPTIONS } from "./PlaySegmented";
 import { chooseOption, finishAiming, pressHotbar, type AimView } from "@/hooks/usePlayAim";
 import { makePlayMove, planKeyOf, usePlayMovePlan, type PlayMoveView } from "@/hooks/usePlayMove";
@@ -110,7 +110,7 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
       <div className={styles.hotbarTop}>
         <div className={styles.dockWho}>
           <strong>{actor.displayName}</strong>
-          <span>{`HP ${actor.currentHp}/${definition.maxHp}${actor.tempHp ? ` +${actor.tempHp}` : ""} · AC ${armoredAc(definition).total}`}</span>
+          <span>{`HP ${actor.currentHp}/${definition.maxHp}${actor.tempHp ? ` +${actor.tempHp}` : ""} · AC ${armorClassOf(definition, actor).total}`}</span>
           {model.concentration ? <span className={styles.concentrating}>{`Concentrating: ${model.concentration}`}</span> : null}
         </div>
         <div className={styles.dockEconomy} role="list" aria-label="What's left of the turn">

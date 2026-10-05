@@ -264,6 +264,30 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     effects: [{ kind: "armor-class-bonus", bonus: { base: 1 } }]
   },
   {
+    id: "srd:feature:unarmored-defense-barbarian",
+    name: "Unarmored Defense (Barbarian)",
+    category: "feature",
+    automationSupport: "full",
+    description: "While you aren't wearing any armor, your AC equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.",
+    effects: [{ kind: "unarmored-ac", base: 10, abilities: ["dex", "con"] }]
+  },
+  {
+    id: "srd:feature:unarmored-defense-monk",
+    name: "Unarmored Defense (Monk)",
+    category: "feature",
+    automationSupport: "full",
+    description: "While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.",
+    effects: [{ kind: "unarmored-ac", base: 10, abilities: ["dex", "wis"], noShield: true }]
+  },
+  {
+    id: "srd:feature:draconic-resilience",
+    name: "Draconic Resilience",
+    category: "feature",
+    automationSupport: "full",
+    description: "When you aren't wearing armor, your AC equals 13 + your Dexterity modifier. Your hit point maximum also increases by 1 for each sorcerer level: set it in Max HP.",
+    effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }]
+  },
+  {
     id: "srd:feature:mobile",
     name: "Mobile",
     category: "feature",

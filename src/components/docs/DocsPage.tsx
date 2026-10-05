@@ -750,6 +750,14 @@ const SECTIONS: Section[] = [
           effect any item or feature can have.
         </p>
         <p>
+          Without armor, a feature, an item or a spell can work out the AC instead: the <em>AC without armor</em> effect is
+          a base plus ability modifiers, used when it beats the typed AC. The library&apos;s Unarmored Defense is 10 +
+          Dexterity + Constitution for a barbarian (a shield still adds) and 10 + Dexterity + Wisdom for a monk (not with
+          a shield), Draconic Resilience 13 + Dexterity, and Mage Armor 13 + Dexterity, so it no longer adds +3 on top of
+          armor or natural armor. An AC bonus can be <em>only with no armor and no shield worn</em>, as the Bracers of
+          Defense&apos; is.
+        </p>
+        <p>
           The library has the SRD&apos;s armor (padded, leather and studded leather; hide, chain shirt, scale mail,
           breastplate and half plate; ring mail, chain mail, splint and plate) and the shield, magic shields +1 to +3, and
           magic armor: Elven Chain, Glamoured Studded Leather, mithral half plate and chain mail, Adamantine Plate, Dwarven

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
-import { armoredAc, DEX_CAP, type ArmorCategory, type CreatureDefinition, type ItemDefinition, type ItemSupply, type ItemType } from "@/engine";
+import { armorClassOf, DEX_CAP, type ArmorCategory, type CreatureDefinition, type ItemDefinition, type ItemSupply, type ItemType } from "@/engine";
 import {
   drinkTiming,
   fullHealAmount,
@@ -230,7 +230,7 @@ function ArmorSection({ item, onChange, definition }: { item: ItemDefinition; on
   const set = (patch: Parameters<typeof withArmor>[1]) => onChange(withArmor(item, patch));
   const weightCap = stats.category === "shield" ? 0 : DEX_CAP[stats.category];
   // What it makes this creature's AC worn (the creature's other armor counting as it does).
-  const placed = armoredAc({ ...definition, items: [...(definition.items ?? []).filter((other) => other.id !== item.id), { ...item, equipped: undefined }] });
+  const placed = armorClassOf({ ...definition, items: [...(definition.items ?? []).filter((other) => other.id !== item.id), { ...item, equipped: undefined }] });
   const counts = shield ? placed.shield?.id === item.id : placed.armor?.id === item.id;
   return (
     <>

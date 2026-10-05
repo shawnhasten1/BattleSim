@@ -566,6 +566,19 @@ export type FeatureEffect =
   | {
     kind: "armor-class-bonus";
     bonus: NumericFormula;
+    /** Only while the creature wears no armor and no shield (Bracers of Defense). Without armor items it always applies. */
+    unarmoredOnly?: boolean;
+  }
+  | {
+    /**
+     * An AC without armor worked out from abilities: `base` plus each ability's modifier (Unarmored Defense: 10 + DEX +
+     * CON; Mage Armor: 13 + DEX). The creature uses the best of these and its typed AC while it wears no armor;
+     * `noShield`, only while it carries no shield either (the monk's).
+     */
+    kind: "unarmored-ac";
+    base: number;
+    abilities: Ability[];
+    noShield?: boolean;
   }
   | {
     kind: "save-bonus";

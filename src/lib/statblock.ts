@@ -606,7 +606,9 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
     case "swarm-damage":
       return `${P} ${attackScope(effect, definition)}attacks deal ${damageText(effect.fullHpDamage, definition)}${effect.bloodiedDamage?.length ? `, or ${damageText(effect.bloodiedDamage, definition)} while it has half its hit points or fewer` : ""}.`;
     case "armor-class-bonus":
-      return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), "AC")}.`;
+      return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), "AC")}${effect.unarmoredOnly ? " while it wears no armor and no shield" : ""}.`;
+    case "unarmored-ac":
+      return `While ${who.subject} wears no armor${effect.noShield ? " and no shield" : ""}, ${who.possessive} AC is ${unarmoredFormulaText(effect)}.`;
     case "save-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${effect.ability ? `${ABILITY_NAME[effect.ability]} ` : ""}saving throws`)}.`;
     case "save-dc-bonus":
@@ -675,7 +677,8 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "auto-succeed-save": return "can turn a failed save into a success";
     case "split-on-damage": return `splits when hit by ${joinList(effect.triggerDamageTypes, "or")}`;
     case "swarm-damage": return "less damage when bloodied";
-    case "armor-class-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} AC`;
+    case "armor-class-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} AC${effect.unarmoredOnly ? " (no armor or shield)" : ""}`;
+    case "unarmored-ac": return `AC ${unarmoredFormulaText(effect, true)} without armor${effect.noShield ? " or shield" : ""}`;
     case "save-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves`;
     case "save-dc-bonus": return `${signed(resolveNumericFormula(effect.bonus, definition))} save DCs`;
     case "resource-regain": return `regains ${poolName(effect.resourceId)}`;
@@ -685,6 +688,11 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "evasion": return "evasion";
     case "no-critical-hits": return "no critical hits against it";
   }
+}
+
+/** "10 + its Dexterity modifier + its Constitution modifier"; short: "10 + DEX + CON". */
+function unarmoredFormulaText(effect: Extract<FeatureEffect, { kind: "unarmored-ac" }>, short = false): string {
+  return [String(effect.base), ...effect.abilities.map((ability) => (short ? ability.toUpperCase() : `its ${ABILITY_NAME[ability]} modifier`))].join(" + ");
 }
 
 /** "resists bludgeoning, piercing, and slashing", "immune to poison". */

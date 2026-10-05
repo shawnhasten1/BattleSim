@@ -83,6 +83,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "no-critical-hits" })
   },
   {
+    kind: "unarmored-ac", label: "AC without armor", hint: "Unarmored Defense, Mage Armor: a base plus ability modifiers", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "unarmored-ac", base: 10, abilities: ["dex", "con"] })
+  },
+  {
     kind: "melee-retaliation", label: "Hurts what hits it in melee", hint: "Heated Body, a balor's Fire Aura", theme: "defense", when: false, scope: false,
     blank: () => ({ kind: "melee-retaliation", damage: [{ dice: "1d10", damageType: "fire" }], withinFt: 5 })
   },

@@ -1,5 +1,6 @@
 import {
   activeFactions,
+  armorClassOf,
   canAct,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
@@ -65,7 +66,6 @@ import {
 } from "./combat";
 import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
-import { armoredAc } from "./armor";
 import { FULL_SUFFIX, withArticle } from "./items";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
@@ -541,7 +541,7 @@ function bestSwingAttack(
   const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
   let best: { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined;
   for (const attack of candidates) {
-    const hitChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), armoredAc(target).total);
+    const hitChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), armorClassOf(target).total);
     const damage = (averageDamage(attack, source, adjustments) + averageAttackFeatureDamage(attack, source, sourceCombatant, target, new Set(usedOncePerTurnEffects))) * hitChance
       + expectedRiderDamage(attack, source, target, { landChance: hitChance });
     // In damage terms, half the plan-level penalty a single attack that spends the same would carry.
@@ -2058,7 +2058,7 @@ export function dangerBeforeNextTurn(snapshot: EncounterSnapshot, actor: Combata
       const expected = expectedDamageAgainst(action, hostileDefinition, hostile, definition, actor);
       if (expected <= 0 || (worst && expected <= worst.expected)) continue;
       const chance = action.kind === "attack"
-        ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, hostileDefinition), armoredAc(definition).total))
+        ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, hostileDefinition), armorClassOf(definition).total))
         : 0.5;
       worst = { expected, chance };
     }
@@ -3441,7 +3441,7 @@ function optionalRiderCostDiscount(
     return 1;
   }
   const landChance = action.kind === "attack"
-    ? chanceToHit(resolveAttackBonus(action, source), armoredAc(target).total)
+    ? chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total)
     : undefined;
   const failChance = (action.kind === "save" || action.kind === "area-save")
     ? chanceToFailSave(resolveSaveDc(action, source), target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]))
@@ -3518,7 +3518,7 @@ function expectedDamageAgainst(
   if (action.kind === "attack") {
     const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
     const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
-    const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armoredAc(target).total);
+    const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total);
     return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
   if (action.kind === "save" || action.kind === "area-save") {
@@ -3724,7 +3724,7 @@ function riderLandChance(
   }
   if (rider.when === "on-hit") {
     const hitChance = action.kind === "attack"
-      ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armoredAc(target).total))
+      ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total))
       : 1;
     // a rider that negates on its own save only lands when that save fails
     const negateChance = rider.save && rider.save.onSuccess === "negates"

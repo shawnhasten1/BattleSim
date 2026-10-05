@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { abilityModifier, armoredAc, type Ability, type CreatureDefinition, type CreatureType, type MovementProfile, type SizeCategory } from "@/engine";
+import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type CreatureType, type MovementProfile, type SizeCategory } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { proficiencyOf, saveKind } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
@@ -43,8 +43,9 @@ const SAVES_HELP = (
 /** The top of the Stats tab, always open: who it is, its defenses and speed, and its scores with their saves. */
 export function StatsCore({ definition, focusName }: { definition: CreatureDefinition; focusName?: boolean }) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
-  // Worn armor sets the AC; the typed AC is its AC without armor.
-  const armored = armoredAc(definition);
+  // Worn armor sets the AC, or what works it out without armor (Unarmored Defense); the typed AC is its AC without armor.
+  const armored = armorClassOf(definition);
+  const workedOut = Boolean(armored.armor || armored.shield || armored.formula);
   const updateAbility = useEncounterStore((s) => s.updateCreatureAbility);
   const movement: MovementProfile = definition.movement ?? { walk: definition.speed };
   const modes = MODES.filter((mode) => (movement[mode] ?? 0) > 0);
@@ -108,7 +109,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
         </label>
       </div>
       <div className={styles.coreRow}>
-        {armored.armor || armored.shield ? (
+        {workedOut ? (
           <div className={styles.field}>
             <span>Armor Class</span>
             <span className={styles.speedRow}>
@@ -118,7 +119,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
           </div>
         ) : null}
         <label className={styles.field} title={armored.armor ? "Its AC when it wears no armor: worn armor replaces it" : undefined}>
-          {armored.armor || armored.shield ? "Without armor" : "Armor Class"}
+          {workedOut ? "Without armor" : "Armor Class"}
           <SheetNumber className={styles.coreBox} value={definition.armorClass} min={0} max={99} onCommit={(armorClass) => update(definition.id, { armorClass })} />
         </label>
         <label className={styles.field}>

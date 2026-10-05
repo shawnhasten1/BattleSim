@@ -2,7 +2,7 @@
 
 import { Copy, Download, FolderOpen, FolderPlus, Save, Swords, Trash2, UserPlus, Users } from "lucide-react";
 import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
-import { armoredAc, type CreatureDefinition } from "@/engine";
+import { armorClassOf, type CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -251,7 +251,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
             <div>
               <strong>{selectedCombatant.displayName}</strong>
               <span>{selectedDefinition.name} · {selectedCombatant.faction}</span>
-              <span>AC {armoredAc(selectedDefinition).total} · HP {selectedCombatant.currentHp}/{selectedDefinition.maxHp} · {selectedCombatant.state}</span>
+              <span>AC {armorClassOf(selectedDefinition, selectedCombatant).total} · HP {selectedCombatant.currentHp}/{selectedDefinition.maxHp} · {selectedCombatant.state}</span>
             </div>
           </div>
           <div className={styles.actions}>

@@ -2,7 +2,7 @@ import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazard
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
-import { armoredAc } from "./armor";
+import { armoredAc, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
@@ -4693,16 +4693,45 @@ export function damageAdjustmentsFor(definition: CreatureDefinition, combatant: 
   return [...(definition.damageAdjustments ?? []), ...conditionAdjustments, ...effectAdjustments];
 }
 
+/** A creature's AC formulas without armor from its features and worn items (Unarmored Defense): kept per definition. */
+const unarmoredFormulasByDefinition = new WeakMap<CreatureDefinition, UnarmoredFormula[]>();
+
+function unarmoredFormulasOf(sources: ReturnType<typeof featureSources>): UnarmoredFormula[] {
+  return sources.flatMap((source) => (source.effects ?? [])
+    .filter((effect): effect is Extract<FeatureEffect, { kind: "unarmored-ac" }> => effect.kind === "unarmored-ac")
+    .map((effect) => ({ label: source.name, base: effect.base, abilities: effect.abilities, ...(effect.noShield ? { noShield: true } : {}) })));
+}
+
+/**
+ * The AC a creature's armor gives it (`armoredAc`), with what works out its AC without armor: its features' and worn
+ * items' (Unarmored Defense), and with `combatant` its conditions' (Mage Armor). Before AC bonuses from features, items,
+ * auras and conditions (`effectiveArmorClass`).
+ */
+export function armorClassOf(definition: CreatureDefinition, combatant?: Pick<CombatantState, "conditions">): ArmoredAc {
+  let own = unarmoredFormulasByDefinition.get(definition);
+  if (!own) {
+    own = unarmoredFormulasOf(featureSources(definition));
+    unarmoredFormulasByDefinition.set(definition, own);
+  }
+  const fromConditions = (combatant?.conditions ?? []).flatMap((condition) => (condition.effects ?? [])
+    .filter((effect): effect is Extract<FeatureEffect, { kind: "unarmored-ac" }> => effect.kind === "unarmored-ac")
+    .map((effect) => ({ label: condition.sourceName ?? condition.id, base: effect.base, abilities: effect.abilities, ...(effect.noShield ? { noShield: true } : {}) })));
+  return armoredAc(definition, fromConditions.length ? [...own, ...fromConditions] : own);
+}
+
 function effectiveArmorClass(state: EngineState, definition: CreatureDefinition, combatant: CombatantState): number {
+  const armored = armorClassOf(definition, combatant);
+  // Bracers of Defense: only with no armor and no shield worn.
+  const unarmored = !armored.armor && !armored.shield;
   const ownFeatureBonus = featureSources(definition, combatant)
     .reduce((sum, feature) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
-      return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, definition) : effectSum;
+      return effect.kind === "armor-class-bonus" && (!effect.unarmoredOnly || unarmored) ? effectSum + resolveNumericFormula(effect.bonus, definition) : effectSum;
     }, 0), 0);
   const auraFeatureBonus = auraSources(state, combatant)
     .reduce((sum, { feature, sourceDefinition }) => sum + (feature.effects ?? []).reduce((effectSum, effect) => {
       return effect.kind === "armor-class-bonus" ? effectSum + resolveNumericFormula(effect.bonus, sourceDefinition) : effectSum;
     }, 0), 0);
-  return armoredAc(definition).total + ownFeatureBonus + auraFeatureBonus + (combatant.conditions ?? [])
+  return armored.total + ownFeatureBonus + auraFeatureBonus + (combatant.conditions ?? [])
     .reduce((sum, condition) => sum + (condition.modifiers?.armorClass ?? 0), 0);
 }
 

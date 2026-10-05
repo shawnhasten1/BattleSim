@@ -661,8 +661,30 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           onChange={(mode) => set(opt(effect, "mode", mode === "advantage" ? undefined : mode))} />
       );
     case "attack-bonus":
+      return <FormulaField label="Bonus to hit" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />;
     case "armor-class-bonus":
-      return <FormulaField label={effect.kind === "attack-bonus" ? "Bonus to hit" : "AC bonus"} value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />;
+      return (
+        <>
+          <FormulaField label="AC bonus" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />
+          <Check
+            label="Only with no armor and no shield worn" checked={effect.unarmoredOnly === true}
+            onChange={(on) => set(opt(effect, "unarmoredOnly", on ? true : undefined))}
+          />
+        </>
+      );
+    case "unarmored-ac":
+      return (
+        <>
+          <span className={styles.inline}>
+            <span>Without armor, its AC is</span>
+            <NumberField label="Base AC" value={effect.base} min={0} max={30} onChange={(n) => n !== undefined && set({ ...effect, base: n })} />
+            <span>plus the modifiers of</span>
+            <SaveChips label="Abilities added" value={effect.abilities} onChange={(abilities) => set({ ...effect, abilities })} />
+          </span>
+          <Check label="Only with no shield either (a monk's)" checked={effect.noShield === true} onChange={(on) => set(opt(effect, "noShield", on ? true : undefined))} />
+          <p className={styles.hint}>It uses the best of this and its typed AC while it wears no armor; worn armor replaces both.</p>
+        </>
+      );
     case "save-bonus":
       // A condition's save bonus covers several saves at once; an effect's, one or all.
       return abilities ? (
