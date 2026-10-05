@@ -7,6 +7,7 @@ import {
   type ItemDefinition,
   type WeaponDefinition
 } from "@/engine";
+import { skillName } from "@/lib/actor-sheet/edits";
 import type { CharacterBuild } from "./build-record";
 import type { BuilderLibrary, BuiltCharacter, BuiltFeature, BuiltFields } from "./build";
 import { fingerprint } from "./fingerprint";
@@ -91,9 +92,9 @@ const FIELDS: FieldSpec[] = [
 /** The entries of a record-valued field the builder owns one by one, so the DM can add their own beside them. */
 const ENTRY_FIELDS = [
   { prefix: "save", field: "saves" as const, label: (id: string) => `${id.toUpperCase()} save` },
-  { prefix: "skill", field: "skills" as const, label: (id: string) => `${id.replace(/_/g, " ")} skill` },
-  { prefix: "sense", field: "senses" as const, label: (id: string) => id },
-  { prefix: "resource", field: "resources" as const, label: (id: string) => `${id} pool` }
+  { prefix: "skill", field: "skills" as const, label: (id: string) => skillName(id) },
+  { prefix: "sense", field: "senses" as const, label: (id: string) => `${id.charAt(0).toUpperCase()}${id.slice(1)}` },
+  { prefix: "resource", field: "resources" as const, label: (id: string) => (/^slot-\d$/.test(id) ? `Level ${id.slice(5)} spell slots` : `${id.replace(/-/g, " ").replace(/^./, (first) => first.toUpperCase())} uses`) }
 ];
 
 const describe = (value: unknown): string => {

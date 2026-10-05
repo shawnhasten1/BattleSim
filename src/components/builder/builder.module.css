@@ -1,0 +1,337 @@
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  font-size: 12.5px;
+}
+
+.builder input:not([type="checkbox"]),
+.builder select {
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.builder input[type="checkbox"] {
+  accent-color: var(--ui-accent);
+}
+
+.lede {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ui-text);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.section h4,
+.group h5 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.group h5 {
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ui-text-dim);
+}
+
+.field input[type="number"] {
+  width: 64px;
+}
+
+.scores {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.score > span {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--ui-text-dim);
+}
+
+.score input {
+  width: 46px;
+  text-align: center;
+}
+
+.score small {
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.pending {
+  border-color: color-mix(in srgb, var(--ui-accent) 55%, transparent);
+}
+
+.choiceHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-accent) 22%, transparent);
+  color: var(--ui-accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dim {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 11.5px;
+}
+
+.problem {
+  margin: 0;
+  color: var(--ui-hp-red);
+  font-size: 11.5px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.chip small {
+  color: var(--ui-text-dim);
+}
+
+.chipOn {
+  border-color: var(--ui-accent);
+  color: var(--ui-text);
+}
+
+.chipTaken {
+  opacity: 0.55;
+}
+
+.count {
+  margin-left: auto;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
+.points {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.point {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--ui-text-dim);
+}
+
+.rolls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.roll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 10px;
+  color: var(--ui-text-dim);
+}
+
+.roll input {
+  width: 46px;
+  text-align: center;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+
+.stat {
+  color: var(--ui-text-dim);
+  font-size: 11.5px;
+}
+
+.stat strong {
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
+.featureList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  width: 100%;
+  font-size: 11.5px;
+}
+
+.manual {
+  color: var(--ui-text-dim);
+  font-style: italic;
+}
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+.change_gained::marker {
+  color: var(--ui-hp-green);
+}
+
+.change_lost::marker {
+  color: var(--ui-hp-red);
+}
+
+.change_kept {
+  color: var(--ui-text-dim);
+}
+
+.update {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.primary,
+.secondary {
+  padding: 6px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: transparent;
+  color: var(--ui-text);
+}
+
+.linkButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ui-accent);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}

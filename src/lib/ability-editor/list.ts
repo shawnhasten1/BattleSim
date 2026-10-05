@@ -3,6 +3,7 @@
  * with what its row shows (its cost, its other uses, how much of it the simulator runs). The resources above it are
  * `src/lib/actor-sheet/resources.ts`. Pure: the Abilities tab shows it, tests read it.
  */
+import { builtFrom } from "@/lib/character-builder/summary";
 import {
   casterLevelOf,
   isArmorItem,
@@ -241,9 +242,11 @@ function featureRow(definition: CreatureDefinition, feature: FeatureDefinition):
   const list = (definition.traits ?? []).includes(feature) ? "traits" : "features";
   const activation = activationOf(feature);
   const first = activation ?? (feature.grantedActions ?? []).find((action) => action.kind !== "activate-feature");
+  // Made by the character builder: what gave it (plan, Phase 2).
+  const fromBuild = builtFrom(definition, feature.id);
   return row(definition, { list, id: feature.id }, feature.name, {
     cost: first ? actionCost(first) : undefined,
-    chips: feature.optional ? ["optional rule"] : [],
+    chips: [...(feature.optional ? ["optional rule"] : []), ...(fromBuild ? [`from ${fromBuild}`] : [])],
     ...(feature.optional ? { enabled: feature.enabled === true } : {})
   }, featureGroup(feature));
 }

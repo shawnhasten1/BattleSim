@@ -21,6 +21,7 @@ import { ActorSheet } from "@/components/sheet/ActorSheet";
 import { BattleReport } from "@/components/combat/BattleReport";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
 import { SceneConfigModal } from "@/components/modals/SceneConfigModal";
+import { BuilderHost } from "@/components/builder/BuilderHost";
 import { useViewport } from "@/hooks/useViewport";
 import { useSceneInteraction } from "@/hooks/useSceneInteraction";
 import { useCompendium } from "@/hooks/useCompendium";
@@ -249,6 +250,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
         />
       ) : null}
       {modal === "scene" ? <SceneConfigModal onClose={() => setModal(null)} /> : null}
+      <BuilderHost onCreated={() => setSheetOpen(true)} />
     </>
   );
 }

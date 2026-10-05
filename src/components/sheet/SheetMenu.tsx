@@ -7,6 +7,8 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { exportCombatant } from "@/lib/actor-sheet/export";
 import { ownCreatureBlock, type LibraryStatus } from "@/lib/actor-sheet/scope";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { readBuild } from "@/lib/character-builder";
+import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./sheet.module.css";
 
 export interface SheetToast {
@@ -43,7 +45,9 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   const encounter = useEncounterStore((s) => s.encounter);
   const selectCombatant = useEncounterStore((s) => s.selectCombatant);
   const undo = useEncounterStore((s) => s.undo);
+  const openBuilder = useBuilderUiStore((s) => s.open);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const build = readBuild(definition);
 
   async function save() {
     const name = definition.name;
@@ -97,6 +101,16 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   // Only worked out while the menu is open: it looks through every creature's summons.
   const block = menu ? ownCreatureBlock(encounter, combatant, definition) : undefined;
   const items: ContextMenuItem[] = [
+    // A character made by the character builder levels up from here, as from Stats › Class & level.
+    ...(build ? [
+      {
+        label: "Level up…",
+        disabled: build.levels.length >= 20,
+        onSelect: () => guard(() => openBuilder({ kind: "level-up", definitionId: definition.id }))
+      },
+      { label: "Open in the character builder…", onSelect: () => guard(() => openBuilder({ kind: "edit", definitionId: definition.id })) },
+      { separator: true as const }
+    ] : []),
     { label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) },
     { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition)) },
     { separator: true },

@@ -96,6 +96,8 @@ import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type Pl
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
+import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
 
@@ -417,6 +419,18 @@ interface EncounterStore extends PlayActions {
   addCreatureTokens: (definition: CreatureDefinition, faction: "party" | "enemy", quantity: number, position?: Point) => void;
   importCombatantPackage: (input: CombatantExportPackage) => string;
   addBlankToken: (input: { name: string; faction: "party" | "enemy"; size: SizeCategory; type: CreatureType | undefined; ac: number; hp: number; speed: number; proficiencyBonus: number; abilities: CreatureDefinition["abilities"] }) => string;
+  /**
+   * A new player character from a build (PC_BUILDER_PLAN.md): its actor made by the builder, and a party token named
+   * after it. One undo step. Returns the new creature's id.
+   */
+  createCharacter: (input: { name: string; build: CharacterBuild; position?: Point }) => string;
+  /**
+   * A built character rebuilt from a changed build (a level up or down, a choice changed). What the builder made and
+   * the DM hasn't edited is replaced; `update` names edited ones to replace anyway. Tokens at full hit points, or with a
+   * pool full, follow the new maximum; the others keep theirs, capped. One undo step. `undefined` when the creature
+   * isn't in the scene.
+   */
+  rebuildCharacter: (definitionId: string, build: CharacterBuild, update?: string[]) => { changes: BuildChange[]; warnings: string[] } | undefined;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
   /** Bench one or more tokens as reinforcements arriving on a given round (≤ 1 / undefined = on the board). */
   setArrivesRound: (combatantIds: string[], arrivesRound: number | undefined) => void;
@@ -630,6 +644,26 @@ function terrainTilePolygon(cell: Point): Point[] {
     { x: cell.x + 1, y: cell.y + 1 },
     { x: cell.x, y: cell.y + 1 }
   ];
+}
+
+/**
+ * A token after its creature was rebuilt: at full hit points it follows a new maximum, otherwise it keeps its hit points
+ * (capped); the same for each pool. A pool the creature no longer has goes.
+ */
+function tokenAfterRebuild(combatant: CombatantState, before: CreatureDefinition, after: CreatureDefinition): CombatantState {
+  if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== after.id) return combatant;
+  const currentHp = combatant.currentHp >= before.maxHp ? after.maxHp : Math.min(combatant.currentHp, after.maxHp);
+  const resources: Record<string, number> = {};
+  for (const [id, held] of Object.entries(combatant.resources ?? {})) {
+    if (before.resources?.[id] !== undefined && after.resources?.[id] === undefined) continue;
+    resources[id] = held;
+  }
+  for (const [id, full] of Object.entries(after.resources ?? {})) {
+    const held = combatant.resources?.[id];
+    const oldFull = before.resources?.[id];
+    resources[id] = held === undefined || oldFull === undefined || held >= oldFull ? full : Math.min(held, full);
+  }
+  return { ...combatant, currentHp, resources: Object.keys(resources).length ? resources : undefined };
 }
 
 function defaultResourcesForDefinition(definition: CreatureDefinition): Record<string, number> | undefined {
@@ -2837,6 +2871,12 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       importCombatantPackage: (input) => {
         const encounter = get().encounter;
+        // A build that doesn't check out is dropped: the actor still works as a hand-built one (plan, Phase 2).
+        const { error: buildError } = parseCharacterBuild(input.definition.character?.build);
+        if (buildError) {
+          const { build: _invalid, ...character } = input.definition.character ?? {};
+          input = { ...input, definition: { ...input.definition, character } };
+        }
         const imported = input.combatant;
         const importedResources = imported?.resources ? structuredClone(imported.resources) : undefined;
         const definition: CreatureDefinition = {
@@ -2873,7 +2913,7 @@ export const useEncounterStore = create<EncounterStore>()(
             round: encounter.round,
             turnIndex: encounter.turnIndex,
             type: "AutomationWarning",
-            message: `Imported ${combatant.displayName} from JSON`
+            message: `Imported ${combatant.displayName} from JSON${buildError ? ` (its character build was dropped: ${buildError})` : ""}`
           }]
         });
         return definition.id;
@@ -2895,6 +2935,32 @@ export const useEncounterStore = create<EncounterStore>()(
           actions: []
         }, input.faction);
         return id;
+      },
+      createCharacter: ({ name, build, position }) => {
+        const id = `def-${crypto.randomUUID()}`;
+        const { definition } = rebuildActor(blankCharacter(id, name), build, SRD_BUILD_SOURCES);
+        get().addCreatureDefinition({ ...definition, source: { provider: "homebrew" } }, "party", position);
+        // A player character's token is the character: "Vex", not "Vex 1". Part of the same undo step.
+        const encounter = get().encounter;
+        set({
+          encounter: {
+            ...encounter,
+            combatants: encounter.combatants.map((combatant) => (combatant.definitionId === id ? { ...combatant, displayName: name } : combatant))
+          }
+        });
+        return id;
+      },
+      rebuildCharacter: (definitionId, build, update) => {
+        const encounter = get().encounter;
+        const before = encounter.definitions.find((definition) => definition.id === definitionId);
+        if (!before) return undefined;
+        const result = rebuildActor(before, build, SRD_BUILD_SOURCES, update);
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((definition) => (definition.id === definitionId ? result.definition : definition)),
+          combatants: encounter.combatants.map((combatant) => tokenAfterRebuild(combatant, before, result.definition))
+        });
+        return { changes: result.changes, warnings: result.warnings };
       },
       updateCombatant: (combatantId, updates) => {
         const encounter = get().encounter;
@@ -2994,6 +3060,14 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       updateCreatureDefinition: (definitionId, updates) => {
         const encounter = get().encounter;
+        // A built character's max HP is its build's (plan D6): a typed one becomes an adjustment the next level keeps.
+        const built = encounter.definitions.find((definition) => definition.id === definitionId);
+        const build = readBuild(built);
+        if (build && built && updates.maxHp !== undefined && Object.keys(updates).length === 1) {
+          const adjust = (build.hp.adjust ?? 0) + (updates.maxHp - built.maxHp);
+          get().rebuildCharacter(definitionId, { ...build, hp: { ...build.hp, adjust: adjust || undefined } });
+          return;
+        }
         // A new max HP: tokens that were at full follow it, the others keep their HP, capped at it. "Were" is measured
         // before the edit began, so the 6 typed on the way from 52 to 60 can't cut a token's HP to 6.
         const base = editBase();
@@ -3029,6 +3103,14 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       updateCreatureAbility: (definitionId, ability, value) => {
         const encounter = get().encounter;
+        // A built character's score is its build's (plan D6): a typed one moves its base score, so the bonuses on top stay.
+        const built = encounter.definitions.find((definition) => definition.id === definitionId);
+        const build = readBuild(built);
+        if (build && built) {
+          const base = build.abilities.base[ability] + (value - built.abilities[ability]);
+          get().rebuildCharacter(definitionId, { ...build, abilities: { ...build.abilities, method: "manual", base: { ...build.abilities.base, [ability]: base } } });
+          return;
+        }
         const before = editBase().definitions.find((definition) => definition.id === definitionId);
         commitEncounter({
           ...encounter,

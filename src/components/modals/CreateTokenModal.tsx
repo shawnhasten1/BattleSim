@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Swords, Trash2, Upload, UserPlus } from "lucide-react";
+import { ListChecks, Search, Swords, Trash2, Upload, UserPlus, Wand2 } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { abilityModifier, parseCombatantPackage, type Ability, type CreatureDefinition, type CreatureType, type SizeCategory } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -8,6 +8,9 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { formatBonus } from "@/lib/ui-helpers";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
+import { quickBuild } from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./modals.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -32,6 +35,7 @@ interface CreateTokenModalProps {
 
 const TABS = [
   { id: "custom", label: "Custom" },
+  { id: "character", label: "Character" },
   { id: "library", label: "Library" },
   { id: "open5e", label: "Open5e" },
   { id: "import", label: "Import" }
@@ -46,6 +50,12 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const deleteLibraryDefinition = useEncounterStore((s) => s.deleteLibraryDefinition);
   const importCombatantPackage = useEncounterStore((s) => s.importCombatantPackage);
   const moveDefinitionToFolder = useEncounterStore((s) => s.moveDefinitionToFolder);
+  const createCharacter = useEncounterStore((s) => s.createCharacter);
+  const openBuilder = useBuilderUiStore((s) => s.open);
+  const [character, setCharacter] = useState(() => {
+    const first = SRD_BUILD_SOURCES.catalog.classes[0]!;
+    return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "" };
+  });
 
   const [tab, setTab] = useState<TabId>("custom");
 
@@ -198,6 +208,64 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
             >
               <UserPlus size={14} /> Create token
             </button>
+          </>
+        ) : null}
+
+        {tab === "character" ? (
+          <>
+            <p className={styles.status}>
+              A player character built from a 2024 class: its features, hit points, saves and skills by level, and leveled
+              up later from its sheet.
+            </p>
+            <label className={styles.field}>Name<input value={character.name} onChange={(e) => setCharacter({ ...character, name: e.target.value })} /></label>
+            <div className={styles.grid3}>
+              <label className={styles.field}>
+                Class
+                <select
+                  value={character.classId}
+                  onChange={(e) => {
+                    const chosen = SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === e.target.value);
+                    setCharacter({ ...character, classId: e.target.value, backgroundId: chosen?.suggested.background ?? character.backgroundId });
+                  }}
+                >
+                  {SRD_BUILD_SOURCES.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                </select>
+              </label>
+              <label className={styles.field}>
+                Level
+                <select value={character.level} onChange={(e) => setCharacter({ ...character, level: Number(e.target.value) })}>
+                  {Array.from({ length: 20 }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
+                </select>
+              </label>
+              <label className={styles.field}>
+                Background
+                <select value={character.backgroundId} onChange={(e) => setCharacter({ ...character, backgroundId: e.target.value })}>
+                  {SRD_BUILD_SOURCES.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={() => {
+                const build = quickBuild(SRD_BUILD_SOURCES, { classId: character.classId, level: character.level, backgroundId: character.backgroundId || undefined });
+                const newId = createCharacter({ name: character.name.trim() || "New Character", build });
+                finish(newId);
+              }}
+            >
+              <Wand2 size={14} /> Quick build
+            </button>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => {
+                openBuilder({ kind: "create", seed: { name: character.name.trim() || "New Character", classId: character.classId, level: character.level, backgroundId: character.backgroundId || undefined } });
+                onClose();
+              }}
+            >
+              <ListChecks size={14} /> Step through the choices…
+            </button>
+            <p className={styles.status}>Quick build makes every choice for you; either way, you can change them later.</p>
           </>
         ) : null}
 

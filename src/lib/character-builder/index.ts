@@ -8,6 +8,7 @@ export * from "./build-record";
 export * from "./build";
 export * from "./apply";
 export * from "./quick";
+export * from "./summary";
 export { fingerprint } from "./fingerprint";
 export { evaluateTemplate, evaluateNumber, type TemplateScope } from "./template";
 export { spellSlots, casterLevelFor, FULL_CASTER_SLOTS, PACT_SLOTS } from "./slots";

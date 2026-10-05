@@ -12,7 +12,7 @@ import {
   type TacticsProfile,
   type WeaponDefinition
 } from "@/engine";
-import { SKILLS } from "@/lib/actor-sheet/edits";
+import { SKILLS, skillName } from "@/lib/actor-sheet/edits";
 import type {
   BackgroundDefinition,
   Catalog,
@@ -76,6 +76,17 @@ export interface ChoiceSlot {
   /** A choice still to make: no value, or not all of one (two skills of four). */
   pending: boolean;
   suggestion?: ChoiceValue;
+  /** How many to choose (skills, masteries, picks), or the points to spend (ability increases). */
+  count: number;
+  /** What can be chosen, for the UI. `taken`: already had another way (a skill the background gives). */
+  options: ChoiceOption[];
+}
+
+export interface ChoiceOption {
+  id: string;
+  name: string;
+  detail?: string;
+  taken?: boolean;
 }
 
 /** A feature the builder puts on the actor, with the grant it came from. */
@@ -297,7 +308,8 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
   const stored = fixed ?? storedChoice(state.build, context.scope, path, spec);
   const slot: ChoiceSlot = {
     scope: context.scope, path, spec, owner: context.ownerName,
-    characterLevel: context.characterLevel, classLevel: context.classLevel, pending: true
+    characterLevel: context.characterLevel, classLevel: context.classLevel, pending: true,
+    count: "count" in spec ? spec.count : 1, options: []
   };
   const offer = fixed === undefined;
   const priority = priorityOf(state);
@@ -307,6 +319,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
     case "subclass": {
       const classId = context.owner.classId;
       const options = state.sources.catalog.subclasses.filter((entry) => entry.classId === classId);
+      slot.options = options.map((entry) => ({ id: entry.id, name: entry.name, detail: entry.source.documentName }));
       slot.suggestion = options[0]?.id;
       if (typeof stored === "string") {
         if (options.some((entry) => entry.id === stored)) {
@@ -318,6 +331,8 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
     }
     case "skills": {
       const from = spec.from === "any" ? ALL_SKILLS : spec.from;
+      const takenBefore = new Set(state.skills);
+      slot.options = from.map((skill) => ({ id: skill, name: skillName(skill), ...(takenBefore.has(skill) ? { taken: true } : {}) }));
       const chosen = (asStrings(stored) ?? []).filter((skill) => {
         const ok = from.includes(skill) && !state.skills.has(skill);
         if (!ok) slot.problem = `${skill} isn't one of these skills, or is already proficient`;
@@ -337,6 +352,8 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
         return ok;
       }).slice(0, spec.count);
       const candidates = [...state.skills].filter((skill) => !state.expertise.has(skill) && (!spec.from || spec.from.includes(skill)));
+      slot.options = [...state.skills].sort().filter((skill) => !spec.from || spec.from.includes(skill))
+        .map((skill) => ({ id: skill, name: skillName(skill), ...(state.expertise.has(skill) && !chosen.includes(skill) ? { taken: true } : {}) }));
       const preferred = [...(suggestionsOf?.expertise ?? []), ...candidates.sort((a, b) => state.abilities[skillAbility(b)] - state.abilities[skillAbility(a)])];
       slot.suggestion = preferred.filter((skill, index) => candidates.includes(skill) && preferred.indexOf(skill) === index).slice(0, spec.count);
       for (const skill of chosen) state.expertise.add(skill);
@@ -350,6 +367,12 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
       const level = context.classLevel ?? 1;
       const count = table ? (table[level - 1] ?? 0) - (level > 1 ? table[level - 2] ?? 0 : 0) : 0;
       const known = state.sources.library.weaponKinds?.();
+      const masteredBefore = new Set(state.masteries);
+      slot.count = count;
+      slot.options = (known ?? []).map((kind) => {
+        const about = state.sources.library.weaponKind?.(kind);
+        return { id: kind, name: about?.name ?? kind, ...(about?.mastery ? { detail: about.mastery } : {}), ...(masteredBefore.has(kind) ? { taken: true } : {}) };
+      });
       const chosen = (asStrings(stored) ?? []).filter((kind) => {
         const ok = !state.masteries.includes(kind) && (!known || known.includes(kind));
         if (!ok) slot.problem = `${kind} is already mastered, or isn't a weapon`;
@@ -365,6 +388,8 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
     }
     case "abilities": {
       const { increases, problem, complete } = validIncreases(stored, spec);
+      slot.count = spec.points;
+      slot.options = spec.from.map((ability) => ({ id: ability, name: ABILITY_NAMES[ability], detail: String(state.abilities[ability]) }));
       slot.suggestion = suggestIncreases(spec, state.abilities, priority);
       if (problem) slot.problem = problem;
       if (stored !== undefined) slot.value = increases;
@@ -378,6 +403,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
         if (!ok) slot.problem = `${id} isn't an option`;
         return ok;
       }).slice(0, spec.count);
+      slot.options = spec.options.map((option) => ({ id: option.id, name: option.name, ...(option.description ? { detail: option.description } : {}) }));
       slot.suggestion = spec.options.slice(0, spec.count).map((option) => option.id);
       if (stored !== undefined) slot.value = chosen;
       slot.pending = chosen.length < spec.count;
@@ -429,6 +455,7 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
     return eligible.find((feat) => feat.id === wanted)?.id ?? eligible[0]?.id;
   };
   const suggestedFeat = pickSuggestion();
+  slot.options = eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category }));
   slot.suggestion = suggestedFeat ? { feat: suggestedFeat } : undefined;
   const choice = stored && typeof stored === "object" && !Array.isArray(stored) && "feat" in stored ? (stored as FeatChoice) : undefined;
   if (!choice) return;
@@ -823,6 +850,11 @@ export function withSuggestions(build: CharacterBuild, sources: BuildSources): C
 }
 
 const slotKey = (slot: ChoiceSlot) => `${JSON.stringify(slot.scope)}|${slot.path.join("/")}`;
+
+/** A slot's value once its suggestion completes it: what the "Suggest" button sets. */
+export function suggestedValue(slot: ChoiceSlot): ChoiceValue | undefined {
+  return mergeSuggestion(slot);
+}
 
 /** A suggestion completes what's there, never replaces a valid part of it. */
 function mergeSuggestion(slot: ChoiceSlot): ChoiceValue | undefined {

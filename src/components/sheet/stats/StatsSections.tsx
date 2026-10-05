@@ -23,6 +23,9 @@ import { AdjustmentGroupEditor, flattenGroups, groupAdjustments } from "./Damage
 import { SheetSection } from "../SheetSection";
 import defenseStyles from "./defenses.module.css";
 import styles from "../sheet.module.css";
+import { buildLabel, readBuild, withLevelDown, type CharacterBuild } from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { useBuilderUiStore } from "@/store/builder-ui-store";
 
 interface SectionProps {
   definition: CreatureDefinition;
@@ -181,8 +184,48 @@ export function SensesSection({ definition, open, onToggle }: SectionProps) {
   );
 }
 
+/**
+ * A character made by the character builder: its classes, background and level come from its build, so this section
+ * says them and offers Level up, Level down and the builder, instead of fields to type.
+ */
+function BuiltLevelSection({ definition, build, open, onToggle }: SectionProps & { build: CharacterBuild }) {
+  const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
+  const openBuilder = useBuilderUiStore((s) => s.open);
+  const label = buildLabel(build, SRD_BUILD_SOURCES);
+  return (
+    <SheetSection title="Class & level" summary={label} open={open} onToggle={onToggle}>
+      <p className={styles.note}>
+        {label}, level {build.levels.length}. Made with the character builder: leveling up adds what the next level gives,
+        and keeps anything you&apos;ve changed by hand.
+      </p>
+      <div className={styles.coreRow}>
+        <button type="button" className={styles.addSmall} disabled={build.levels.length >= 20} onClick={() => openBuilder({ kind: "level-up", definitionId: definition.id })}>
+          Level up…
+        </button>
+        <button
+          type="button" className={styles.addSmall} disabled={build.levels.length <= 1}
+          title="Takes the last level away, and what it gave. Undo brings it back."
+          onClick={() => rebuildCharacter(definition.id, withLevelDown(build))}
+        >
+          Level down
+        </button>
+        <button type="button" className={styles.addSmall} onClick={() => openBuilder({ kind: "edit", definitionId: definition.id })}>
+          Open in the builder…
+        </button>
+      </div>
+    </SheetSection>
+  );
+}
+
 /** Its challenge rating, proficiency bonus, and level (or classes): what scales its cantrips and its proficiency. */
 export function LevelSection({ definition, open, onToggle }: SectionProps) {
+  const build = readBuild(definition);
+  return build
+    ? <BuiltLevelSection definition={definition} build={build} open={open} onToggle={onToggle} />
+    : <TypedLevelSection definition={definition} open={open} onToggle={onToggle} />;
+}
+
+function TypedLevelSection({ definition, open, onToggle }: SectionProps) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const classes = definition.character?.classes ?? [];
   const casts = Boolean(definition.spells?.length);
