@@ -92,10 +92,18 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     return () => { live = false; };
   }, [abilities, query, filter]);
 
-  const results = useMemo(() => searchAdd(query, filter, abilities), [query, filter, abilities]);
+  const results = useMemo(() => searchAdd(query, filter, abilities, definition), [query, filter, abilities, definition]);
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   function chooseRecipe(recipe: Recipe) {
+    // A recipe that's a search (a spell scroll asks for its spell): search for it under Items.
+    if (recipe.search) {
+      setQuery(recipe.search);
+      setFilter("items");
+      setOpen5e(false);
+      searchRef.current?.focus();
+      return;
+    }
     onPrepared(recipe.prepare(definition));
   }
   function attach(entry: LibraryEntry) {

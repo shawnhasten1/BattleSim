@@ -83,6 +83,7 @@ import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/
 import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
 import { defaultTacticsOf, isSurprised } from "@/lib/actor-sheet/token";
 import { ownCreatureBlock } from "@/lib/actor-sheet/scope";
+import { ownSpellScroll } from "@/lib/ability-editor/scrolls";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
 import { deepEqual } from "@/lib/deep-equal";
@@ -3083,11 +3084,14 @@ export const useEncounterStore = create<EncounterStore>()(
         return weaponId;
       },
       attachSrdItem: (definitionId, srdId) => {
-        const source = findSrdItem(srdId);
+        // A library item, or a scroll of one of the creature's own spells (`own-scroll:<spell id>`).
+        const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const own = definition ? ownSpellScroll(definition, srdId) : undefined;
+        const source = findSrdItem(srdId) ?? own;
         if (!source) return undefined;
         const ref = get().insertAbilityRecord(definitionId, "items", {
           ...structuredClone(source),
-          source: { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() }
+          source: { provider: "homebrew", documentName: own ? "Spell scroll" : "SRD", slug: srdId, importedAt: new Date().toISOString() }
         });
         return ref && "id" in ref ? ref.id : undefined;
       },

@@ -16,14 +16,15 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import {
-  SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon, type SrdEntryKind
+  SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon, type SrdEntryKind
 } from "@/data/srd";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
 import type { AbilityInsertTarget, AbilityRecord } from "./refs";
+import { ownSpellScroll, ownSpellScrolls } from "./scrolls";
 import type { SectionId } from "./sections";
 import { castWith } from "./spells";
-import { ACTION_TEMPLATES, FEATURE_TEMPLATES, ITEM_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES, blankDeathEffect } from "./templates";
+import { ACTION_TEMPLATES, FEATURE_TEMPLATES, ITEM_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES, blankDeathEffect, blankItem } from "./templates";
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
 
@@ -61,6 +62,8 @@ export interface Recipe {
   /** The sections to fill in, opened highlighted. */
   focus: SectionId[];
   prepare(definition: CreatureDefinition): Prepared;
+  /** A recipe that's a search: choosing it searches for this (under Items) instead of opening the editor. */
+  search?: string;
 }
 
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -146,6 +149,11 @@ export const RECIPES: Recipe[] = [
     return { list: record.category === "trait" ? "traits" : "features", record };
   })),
   ...ITEM_TEMPLATES.map((template) => recipe("item", template.label, template.hint, () => ({ list: "items", record: template.record() }))),
+  // A scroll is made from a spell: the recipe asks for one by searching for the scrolls.
+  {
+    ...recipe("item", "Spell scroll", "A scroll of any spell in the library or on this creature: type the spell after “scroll”", () => ({ list: "items", record: { ...blankItem(), name: "Spell scroll", type: "scroll" } })),
+    search: "scroll "
+  },
   recipe("death", "Death burst", "When it dies, everyone within 10 ft makes a save or is poisoned (a gas spore, a mephit)", deathBurst)
 ];
 
@@ -165,6 +173,12 @@ const LIBRARY: LibraryEntry[] = [
   ...SRD_ITEMS.map((entry): LibraryEntry => ({ kind: "item", id: entry.id, name: entry.name, entry }))
 ];
 
+/** A scroll of every library spell: listed only when a search asks for scrolls. */
+const SCROLLS: LibraryEntry[] = SRD_SPELL_SCROLLS.map((entry) => ({ kind: "item", id: entry.id, name: entry.name, entry }));
+
+/** Whether a search asks for scrolls: one of its words is "scroll" (or "scrolls"). */
+const wantsScrolls = (tokens: string[]) => tokens.some((token) => token === "scroll" || token === "scrolls");
+
 const SRD_SOURCE = (slugId: string) => ({ provider: "homebrew" as const, documentName: "SRD", slug: slugId, importedAt: new Date().toISOString() });
 const freshRiders = (riders: ActionRider[] | undefined) => riders?.map((rider) => ({ ...rider, id: `rider-${crypto.randomUUID()}` }));
 
@@ -178,8 +192,10 @@ export function prepareLibrary(kind: SrdEntryKind, id: string, definition: Creat
     return weapon ? { list: "weapons", record: { ...structuredClone(weapon), source: SRD_SOURCE(id) } } : undefined;
   }
   if (kind === "item") {
-    const item = findSrdItem(id);
-    return item ? { list: "items", record: { ...structuredClone(item), source: SRD_SOURCE(id) } } : undefined;
+    const own = ownSpellScroll(definition, id);
+    const item = findSrdItem(id) ?? own;
+    const source = own ? { provider: "homebrew" as const, documentName: "Spell scroll", slug: id, importedAt: new Date().toISOString() } : SRD_SOURCE(id);
+    return item ? { list: "items", record: { ...structuredClone(item), source } } : undefined;
   }
   if (kind === "spell") {
     const source = findSrdSpell(id);
@@ -278,12 +294,21 @@ const LIBRARY_KINDS: Record<AddFilter, SrdEntryKind[]> = {
 
 /**
  * What a search finds, by section. Monster abilities need a query (there are hundreds) and `abilities` loaded; traits
- * from them show under "Traits & features" too.
+ * from them show under "Traits & features" too. Spell scrolls show only when the search asks for a scroll ("scroll
+ * fireball"): one of every library spell, and of each of `definition`'s own spells.
  */
-export function searchAdd(query: string, filter: AddFilter, abilities: readonly SrdMonsterAbilityEntry[] | undefined): AddResults {
+export function searchAdd(
+  query: string,
+  filter: AddFilter,
+  abilities: readonly SrdMonsterAbilityEntry[] | undefined,
+  definition?: Pick<CreatureDefinition, "spells">
+): AddResults {
   const tokens = tokensOf(query);
   const recipes = ranked(RECIPES.filter((entry) => RECIPE_GROUPS[filter].includes(entry.group)), tokens, (entry) => entry.label, (entry) => `${entry.hint} ${entry.group}`);
-  const library = ranked(LIBRARY.filter((entry) => LIBRARY_KINDS[filter].includes(entry.kind)), tokens, (entry) => entry.name, (entry) => entry.kind);
+  const scrolls = wantsScrolls(tokens)
+    ? [...SCROLLS, ...(definition ? ownSpellScrolls(definition).map((entry): LibraryEntry => ({ kind: "item", id: entry.id, name: entry.name, entry })) : [])]
+    : [];
+  const library = ranked([...LIBRARY, ...scrolls].filter((entry) => LIBRARY_KINDS[filter].includes(entry.kind)), tokens, (entry) => entry.name, (entry) => entry.kind);
   const monsterKinds = filter === "all" || filter === "monster" ? undefined : filter === "features" ? ["trait", "feature"] : [];
   const monsterPool = !tokens.length || !abilities || (monsterKinds && !monsterKinds.length)
     ? []

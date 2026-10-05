@@ -19,7 +19,8 @@ import {
   type ItemDefinition,
   type Point
 } from "@/engine";
-import { SRD_ITEMS, findSrdItem } from "@/data/srd";
+import { SRD_ITEMS, SRD_SPELL_SCROLLS, findSrdItem, scrollNumbers } from "@/data/srd";
+import { RECIPES, prepareLibrary, searchAdd } from "@/lib/ability-editor/add";
 import { checkRecordJson, recordJson } from "@/lib/ability-editor/json";
 import { abilityWarnings } from "@/lib/ability-editor/validate";
 import { hotbarFor } from "@/lib/play/hotbar";
@@ -142,6 +143,62 @@ describe("a wand's spell for more charges", () => {
     const used = state.log.find((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "kael");
     expect(String(used?.data?.actionId)).toMatch(/^fireball(:charges-[23])?$/);
     expect(state.snapshot.combatants[0]!.resources?.["item:wand"]).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("spell scrolls", () => {
+  it("cast at the scroll's own numbers, by the spell's level", () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => Object.values(scrollNumbers(level)).join("/")))
+      .toEqual(["13/5", "13/5", "13/5", "15/7", "15/7", "17/9", "17/9", "18/10", "18/10", "19/11"]);
+    const fireball = findSrdItem("srd:item:scroll-of-fireball")!;
+    expect(fireball).toMatchObject({ name: "Scroll of Fireball", type: "scroll", supply: { size: 1, unit: "count" } });
+    expect(fireball.grantedActions![0]).toMatchObject({ kind: "area-save", dc: 15, spellLevel: 3, resourceCost: { resourceId: "supply", amount: 1 } });
+    expect((fireball.grantedActions![0] as { dcFormula?: unknown }).dcFormula).toBeUndefined();
+    const fireBolt = findSrdItem("srd:item:scroll-of-fire-bolt")!.grantedActions![0]!;
+    expect(fireBolt).toMatchObject({ kind: "attack", attackBonus: 5 });
+    expect((fireBolt as { attackBonusFormula?: unknown }).attackBonusFormula).toBeUndefined();
+    expect(findSrdItem("srd:item:scroll-of-bless")!.grantedActions![0]).toMatchObject({ kind: "buff", concentration: true, spellLevel: 1 });
+  });
+
+  it("are found by asking for a scroll, never listed otherwise; the recipe asks for one", () => {
+    expect(searchAdd("fire", "items", undefined).library.some((entry) => entry.name.startsWith("Scroll of"))).toBe(false);
+    expect(searchAdd("", "items", undefined).library.some((entry) => entry.name.startsWith("Scroll of"))).toBe(false);
+    const found = searchAdd("scroll fire", "items", undefined).library.map((entry) => entry.name);
+    expect(found).toEqual(expect.arrayContaining(["Scroll of Fireball", "Scroll of Fire Bolt"]));
+    expect(searchAdd("scroll", "items", undefined).library.length).toBe(SRD_SPELL_SCROLLS.length);
+    expect(RECIPES.find((recipe) => recipe.label === "Spell scroll")?.search).toBe("scroll ");
+  });
+
+  it("can be made of the creature's own spell, and attached", () => {
+    const lance = { ...structuredClone(findSrdItem("srd:item:scroll-of-fire-bolt")!.grantedActions![0]!), id: "lance-action", name: "Frost Lance" } as ActionDefinition;
+    const spell = { id: "spell-frost-lance", name: "Frost Lance", level: 2, school: "evocation", castingTime: "action", range: 60, automationSupport: "full", action: lance } as const;
+    useEncounterStore.setState({ encounter: { ...store().encounter, definitions: store().encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...definition, spells: [spell as never] } : definition)) } });
+    const entry = searchAdd("scroll frost", "items", undefined, fighter()).library.find((candidate) => candidate.name === "Scroll of Frost Lance")!;
+    expect(entry.id).toBe("own-scroll:spell-frost-lance");
+    expect(prepareLibrary("item", entry.id, fighter())!.record).toMatchObject({ name: "Scroll of Frost Lance", source: { documentName: "Spell scroll" } });
+    const id = store().attachSrdItem("def-fighter", entry.id)!;
+    const item = fighter().items!.find((candidate) => candidate.id === id)!;
+    expect(item.grantedActions![0]).toMatchObject({ kind: "attack", attackBonus: 5, spellLevel: 2, resourceCost: { resourceId: `item:${id}`, amount: 1 } });
+  });
+
+  it("every scroll in the library attaches cleanly and compiles", () => {
+    for (const source of SRD_SPELL_SCROLLS) {
+      useEncounterStore.setState(pristine, true);
+      const id = store().attachSrdItem("def-fighter", source.id)!;
+      const item = fighter().items!.find((candidate) => candidate.id === id)!;
+      // The fighter casts no spells, so reading a leveled one takes a check the simulator doesn't roll: said, as it should be.
+      const warnings = abilityWarnings(fighter(), { list: "items", id }, item).map((warning) => warning.id).filter((warning) => warning !== "partly-simulated" && warning !== "scroll-above-level");
+      expect(warnings, source.name).toEqual([]);
+      expect(getExecutableActions(fighter()).filter((action) => action.item?.id === id), source.name).toHaveLength(1);
+    }
+  });
+
+  it("the AI reads a Scroll of Fireball at a pack of goblins", () => {
+    const scroll = withItemPool(structuredClone(findSrdItem("srd:item:scroll-of-fireball")!) as ItemDefinition, "scroll");
+    const state = createEngineState(scene({ items: [scroll], resources: { "item:scroll": 1 }, kaelAt: { x: 1, y: 1 }, foes: [{ x: 8, y: 5 }, { x: 9, y: 5 }, { x: 8, y: 6 }, { x: 9, y: 6 }] }));
+    takeAutomatedTurn(state, state.snapshot.combatants[0]!);
+    expect(state.log.some((entry) => entry.type === "ActionDeclared" && /^Kael reads a Scroll of Fireball/.test(entry.message))).toBe(true);
+    expect(state.snapshot.combatants[0]!.resources?.["item:scroll"]).toBe(0);
   });
 });
 

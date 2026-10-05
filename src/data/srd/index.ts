@@ -3,6 +3,7 @@ import { SRD_WEAPONS } from "./weapons";
 import { SRD_SPELLS } from "./spells";
 import { SRD_FEATURES } from "./features";
 import { SRD_ITEMS } from "./items";
+import { SRD_SPELL_SCROLLS } from "./scrolls";
 
 /**
  * Bundled, offline weapon + spell + feature + item library. Entries are plain
@@ -20,6 +21,7 @@ export { SRD_WEAPONS } from "./weapons";
 export { SRD_SPELLS } from "./spells";
 export { SRD_FEATURES } from "./features";
 export { SRD_ITEMS } from "./items";
+export { SCROLL_NUMBERS, SRD_SPELL_SCROLLS, scrollNumbers, spellScroll } from "./scrolls";
 
 export type SrdEntryKind = "weapon" | "spell" | "feature" | "item";
 
@@ -61,11 +63,13 @@ deepFreeze(SRD_WEAPONS);
 deepFreeze(SRD_SPELLS);
 deepFreeze(SRD_FEATURES);
 deepFreeze(SRD_ITEMS);
+deepFreeze(SRD_SPELL_SCROLLS);
 
 const WEAPONS_BY_ID = indexById(SRD_WEAPONS, "weapon");
 const SPELLS_BY_ID = indexById(SRD_SPELLS, "spell");
 const FEATURES_BY_ID = indexById(SRD_FEATURES, "feature");
-const ITEMS_BY_ID = indexById(SRD_ITEMS, "item");
+// A scroll of each library spell is an item too: found by its id, and by name in a search, but never listed by default.
+const ITEMS_BY_ID = indexById([...SRD_ITEMS, ...SRD_SPELL_SCROLLS], "item");
 
 /* ── lookup ───────────────────────────────────────────────────────────────── */
 

@@ -109,6 +109,11 @@ Authoring:
   (`<use id>:charges-N`), up to the item's charges and 9th level.
 - A thrown flask is a ranged `attack`, 20/60 ft, Dexterity without proficiency (an improvised weapon). Damage only some
   creatures take (holy water) is a `damage` rider with `restrictToCreatureTypes`, over an attack that deals none.
+- Spell scrolls aren't authored: `scrolls.ts` makes `SRD_SPELL_SCROLLS`, a scroll of every library spell
+  (`srd:item:scroll-of-<spell slug>`), at the SRD's scroll numbers by level (`scrollNumbers`: DC 13 and +5 up to 2nd
+  level, up to DC 19 and +11 at 9th). They're indexed with the items, so `findSrdItem` and `attachSrdItem` find them,
+  but the Add panel lists them only for a search with "scroll" in it. A creature's own spell gets one there too
+  (`own-scroll:<spell id>`, `lib/ability-editor/scrolls.ts`).
 - What part of an item the engine doesn't run goes in `notSimulated`, in a few words (the sheet marks it partly
   simulated), with `automationSupport: "partial"`. An item it can't run at all is `"manual-only"`, with no uses: the DM
   can still carry it, and its text says what to do by hand.
