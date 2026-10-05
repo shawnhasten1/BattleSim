@@ -7,6 +7,7 @@ import {
   orderedChanges,
   readBuild,
   rebuildActor,
+  storedChoice,
   withChoice,
   withLevelUp,
   withSuggestions,
@@ -44,7 +45,11 @@ export function LevelUpWindow({ definitionId, onClose }: { definitionId: string;
   }
 
   const newIndex = draft.levels.length - 1;
-  const slots = built.choices.filter((slot) => (slot.scope.kind === "level" && slot.scope.index === newIndex) || slot.pending);
+  // This level's choices, any still open, and earlier ones the level up made again (a spell a new feature now makes
+  // always prepared is swapped for another).
+  const remade = (slot: (typeof built.choices)[number]) =>
+    JSON.stringify(storedChoice(saved, slot.scope, slot.path, slot.spec) ?? null) !== JSON.stringify(storedChoice(draft, slot.scope, slot.path, slot.spec) ?? null);
+  const slots = built.choices.filter((slot) => (slot.scope.kind === "level" && slot.scope.index === newIndex) || slot.pending || remade(slot));
   const changes = orderedChanges(preview.changes).filter((change) => !(change.kind === "field" && (change.key === "field:classes" || change.key === "field:level")));
   const classLevel = draft.levels.filter((entry) => entry.classId === draft.levels[newIndex]!.classId).length;
   const className = sources.catalog.classes.find((entry) => entry.id === draft.levels[newIndex]!.classId)?.name ?? "";
@@ -74,6 +79,9 @@ export function LevelUpWindow({ definitionId, onClose }: { definitionId: string;
 
         <section className={styles.section} aria-label="Choices">
           <h4>{slots.length ? "Choices at this level" : "No choices at this level"}</h4>
+          {slots.some((slot) => !(slot.scope.kind === "level" && slot.scope.index === newIndex) && !slot.pending)
+            ? <p className={styles.dim}>An earlier choice is made again: what it had is now given another way.</p>
+            : null}
           {slots.map((slot) => (
             <ChoiceControl
               key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}

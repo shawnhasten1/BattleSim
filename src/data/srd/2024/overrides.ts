@@ -70,3 +70,45 @@ export const COLUMN_OVERRIDES: Record<string, ColumnOverride> = {
     label: "Wild Shape"
   }
 };
+
+export interface SpellOverride {
+  reason: string;
+  castingTime?: string;
+  higherLevel?: string;
+}
+
+const longCast = (time: string): SpellOverride => ({
+  reason: `The source's casting time is rounded to its unit ("1minute", "1hour"); the SRD 5.2 PDF has ${time}.`,
+  castingTime: time
+});
+
+/** By Open5e spell key. */
+export const SPELL_OVERRIDES: Record<string, SpellOverride> = {
+  "srd-2024_awaken": longCast("8 hours"),
+  "srd-2024_clairvoyance": longCast("10 minutes"),
+  "srd-2024_contingency": longCast("10 minutes"),
+  "srd-2024_control-weather": longCast("10 minutes"),
+  "srd-2024_fabricate": longCast("10 minutes"),
+  "srd-2024_hallow": longCast("24 hours"),
+  "srd-2024_hallucinatory-terrain": longCast("10 minutes"),
+  "srd-2024_heroes-feast": longCast("10 minutes"),
+  "srd-2024_legend-lore": longCast("10 minutes"),
+  "srd-2024_mirage-arcane": longCast("10 minutes"),
+  "srd-2024_planar-ally": longCast("10 minutes"),
+  "srd-2024_prayer-of-healing": longCast("10 minutes"),
+  "srd-2024_private-sanctum": longCast("10 minutes"),
+  "srd-2024_scrying": longCast("10 minutes"),
+  "srd-2024_simulacrum": longCast("12 hours"),
+  "srd-2024_plant-growth": {
+    reason: "\"1hour\" in the source; the SRD 5.2 PDF has \"Action (Overgrowth) or 8 hours (Enrichment)\".",
+    castingTime: "action"
+  },
+  "srd-2024_chain-lightning": {
+    reason: "No higher-level text in the source; the SRD 5.2 PDF has it.",
+    higherLevel: "One additional bolt leaps from the first target to another target for each spell slot level above 6."
+  },
+  "srd-2024_dissonant-whispers": {
+    reason: "No higher-level text in the source; the SRD 5.2 PDF has it.",
+    higherLevel: "The damage increases by 1d6 for each spell slot level above 1."
+  }
+};

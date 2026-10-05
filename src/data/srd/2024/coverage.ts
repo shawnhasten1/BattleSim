@@ -81,6 +81,8 @@ export const GAPS = {
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
   "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)",
+  "counterspell-save": "The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent",
+  "weapon-cantrip": "A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
   "ai-free-actions": "The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play"
 } as const;

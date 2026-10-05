@@ -1,10 +1,12 @@
 import {
   normalizeItemDefinition,
+  normalizeSpellDefinition,
   normalizeWeaponDefinition,
   withItemPool,
   type CreatureDefinition,
   type FeatureDefinition,
   type ItemDefinition,
+  type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import { skillName } from "@/lib/actor-sheet/edits";
@@ -18,8 +20,9 @@ import { fingerprint } from "./fingerprint";
  * so; `update` names the ones to replace anyway ("Update to this level's version"). Equipment goes on once, on the first
  * build, and is the DM's from then on.
  *
- * What the builder made is remembered in the build's `made` map: a feature by `feature:<id>`, a field by `field:<name>`,
- * a save, a skill, a sense or a pool by `save:<ability>`, `skill:<id>`, `sense:<sense>`, `resource:<id>`.
+ * What the builder made is remembered in the build's `made` map: a feature by `feature:<id>`, a weapon by `weapon:<id>`,
+ * a spell by `spell:<id>`, a field by `field:<name>`, a save, a skill, a sense or a pool by `save:<ability>`,
+ * `skill:<id>`, `sense:<sense>`, `resource:<id>`.
  */
 
 export type BuildChange =
@@ -94,7 +97,11 @@ const ENTRY_FIELDS = [
   { prefix: "save", field: "saves" as const, label: (id: string) => `${id.toUpperCase()} save` },
   { prefix: "skill", field: "skills" as const, label: (id: string) => skillName(id) },
   { prefix: "sense", field: "senses" as const, label: (id: string) => `${id.charAt(0).toUpperCase()}${id.slice(1)}` },
-  { prefix: "resource", field: "resources" as const, label: (id: string) => (/^slot-\d$/.test(id) ? `Level ${id.slice(5)} spell slots` : `${id.replace(/-/g, " ").replace(/^./, (first) => first.toUpperCase())} uses`) }
+  {
+    prefix: "resource", field: "resources" as const,
+    label: (id: string, built?: BuiltCharacter) => built?.poolLabels[id]
+      ?? (/^slot-\d$/.test(id) ? `Level ${id.slice(5)} spell slots` : `${id.replace(/-/g, " ").replace(/^./, (first) => first.toUpperCase())} uses`)
+  }
 ];
 
 const describe = (value: unknown): string => {
@@ -122,6 +129,76 @@ function featureDetails(before: FeatureDefinition, after: BuiltFeature): string[
     if (was !== now) details.push(`${describe(was)} → ${describe(now)}`);
   }
   return details;
+}
+
+interface Ownership {
+  build: CharacterBuild;
+  update: Set<string>;
+  made: Made;
+  changes: BuildChange[];
+  warnings: string[];
+}
+
+/**
+ * A list the builder puts records in beside the DM's own (weapons, spells), by the feature rules: a record as the builder
+ * left it is replaced (or dropped when no longer built), one the DM edited or deleted stays as the DM left it, and the
+ * DM's own records are untouched. Builder records come first, in the order built.
+ */
+function ownRecords<T extends { id: string; name: string }>(
+  owned: Ownership,
+  prefix: "weapon" | "spell",
+  existing: T[],
+  built: Array<{ key: string; record: T; details?: (current: T) => string[] }>
+): T[] {
+  const { build, update, made, changes, warnings } = owned;
+  const keyOf = (id: string) => `${prefix}:${id}`;
+  const builtIds = new Set(built.map((entry) => keyOf(entry.record.id)));
+  const madeIds = new Set(Object.keys(build.made).filter((key) => key.startsWith(`${prefix}:`)));
+  const placed: T[] = [];
+  for (const entry of built) {
+    const record = entry.record;
+    const key = keyOf(record.id);
+    const current = existing.find((candidate) => candidate.id === record.id);
+    const previous = build.made[key];
+    if (!current) {
+      if (previous && !update.has(key)) {
+        changes.push({ kind: "kept", key, name: record.name, reason: "removed" });
+        made[key] = previous;
+        continue;
+      }
+      changes.push({ kind: "gained", key, name: record.name });
+      placed.push(record);
+      made[key] = { key: entry.key, fingerprint: fingerprint(record) };
+      continue;
+    }
+    if (!previous && !update.has(key)) {
+      warnings.push(`${record.name}: the actor already has its own ${prefix} with id ${record.id}`);
+      continue;
+    }
+    if (update.has(key) || fingerprint(current) === previous!.fingerprint) {
+      if (fingerprint(current) !== fingerprint(record)) changes.push({ kind: "changed", key, name: record.name, details: entry.details?.(current) ?? [] });
+      placed.push(record);
+      made[key] = { key: entry.key, fingerprint: fingerprint(record) };
+    } else {
+      changes.push({ kind: "kept", key, name: current.name, reason: "edited" });
+      placed.push(current);
+      made[key] = previous!;
+    }
+  }
+  for (const record of existing) {
+    const key = keyOf(record.id);
+    if (!madeIds.has(key) || builtIds.has(key)) continue;
+    if (fingerprint(record) === build.made[key]!.fingerprint) {
+      changes.push({ kind: "lost", key, name: record.name });
+    } else {
+      changes.push({ kind: "kept", key, name: record.name, reason: "not-granted" });
+      placed.push(record);
+      made[key] = build.made[key]!;
+    }
+  }
+  const clashes = existing.filter((record) => builtIds.has(keyOf(record.id)) && !build.made[keyOf(record.id)] && !update.has(keyOf(record.id)));
+  const others = existing.filter((record) => !madeIds.has(keyOf(record.id)) && !builtIds.has(keyOf(record.id)));
+  return [...placed, ...clashes, ...others];
 }
 
 export function applyBuild(definition: CreatureDefinition, build: CharacterBuild, built: BuiltCharacter, options: ApplyOptions): ApplyResult {
@@ -169,17 +246,17 @@ export function applyBuild(definition: CreatureDefinition, build: CharacterBuild
       const value = builtEntries[id];
       if (value === undefined) {
         if (build.made[key] && fingerprint(current[id]) === build.made[key]!.fingerprint) {
-          if (current[id] !== undefined) changes.push({ kind: "field", key, name: entry.label(id), before: current[id], after: undefined });
+          if (current[id] !== undefined) changes.push({ kind: "field", key, name: entry.label(id, built), before: current[id], after: undefined });
           delete current[id];
         }
         continue;
       }
       if (mayWrite(key, current[id])) {
-        if (current[id] !== value) changes.push({ kind: "field", key, name: entry.label(id), before: current[id], after: value });
+        if (current[id] !== value) changes.push({ kind: "field", key, name: entry.label(id, built), before: current[id], after: value });
         current[id] = value;
         made[key] = { key, fingerprint: fingerprint(value) };
       } else {
-        changes.push({ kind: "kept", key, name: entry.label(id), reason: "edited", details: [`yours: ${describe(current[id])}`, `the build's: ${describe(value)}`] });
+        changes.push({ kind: "kept", key, name: entry.label(id, built), reason: "edited", details: [`yours: ${describe(current[id])}`, `the build's: ${describe(value)}`] });
         made[key] = build.made[key]!;
       }
     }
@@ -243,62 +320,24 @@ export function applyBuild(definition: CreatureDefinition, build: CharacterBuild
     next = { ...next, [bucket]: list.length ? list : undefined };
   }
 
-  // The builder's own weapons (the Monk's Unarmed Strike), kept by the same rules as features.
-  {
-    const existing = next.weapons ?? [];
-    const builtIds = new Set(built.weapons.map((entry) => `weapon:${entry.weapon.id}`));
-    const madeIds = new Set(Object.keys(build.made).filter((key) => key.startsWith("weapon:")));
-    const placed: WeaponDefinition[] = [];
-    for (const entry of built.weapons) {
-      const key = `weapon:${entry.weapon.id}`;
-      const weapon = normalizeWeaponDefinition(structuredClone(entry.weapon), next.abilities);
-      const current = existing.find((candidate) => candidate.id === entry.weapon.id);
-      const previous = build.made[key];
-      if (!current) {
-        if (previous && !update.has(key)) {
-          changes.push({ kind: "kept", key, name: weapon.name, reason: "removed" });
-          made[key] = previous;
-          continue;
-        }
-        changes.push({ kind: "gained", key, name: weapon.name });
-        placed.push(weapon);
-        made[key] = { key: entry.key, fingerprint: fingerprint(weapon) };
-        continue;
-      }
-      if (!previous && !update.has(key)) {
-        warnings.push(`${weapon.name}: the actor already has its own weapon with id ${weapon.id}`);
-        continue;
-      }
-      if (update.has(key) || fingerprint(current) === previous!.fingerprint) {
-        if (fingerprint(current) !== fingerprint(weapon)) {
-          const details = entry.scaled.map((path) => `${String(getPath(current, path) ?? "none")} → ${String(getPath(weapon, path) ?? "none")}`)
-            .filter((detail) => !/^(.*) → \1$/.test(detail));
-          changes.push({ kind: "changed", key, name: weapon.name, details });
-        }
-        placed.push(weapon);
-        made[key] = { key: entry.key, fingerprint: fingerprint(weapon) };
-      } else {
-        changes.push({ kind: "kept", key, name: current.name, reason: "edited" });
-        placed.push(current);
-        made[key] = previous!;
-      }
-    }
-    for (const weapon of existing) {
-      const key = `weapon:${weapon.id}`;
-      if (!madeIds.has(key) || builtIds.has(key)) continue;
-      if (fingerprint(weapon) === build.made[key]!.fingerprint) {
-        changes.push({ kind: "lost", key, name: weapon.name });
-      } else {
-        changes.push({ kind: "kept", key, name: weapon.name, reason: "not-granted" });
-        placed.push(weapon);
-        made[key] = build.made[key]!;
-      }
-    }
-    const clashes = existing.filter((weapon) => builtIds.has(`weapon:${weapon.id}`) && !build.made[`weapon:${weapon.id}`] && !update.has(`weapon:${weapon.id}`));
-    const others = existing.filter((weapon) => !madeIds.has(`weapon:${weapon.id}`) && !builtIds.has(`weapon:${weapon.id}`));
-    const list = [...placed, ...clashes, ...others];
-    next = { ...next, weapons: list.length ? list : undefined };
-  }
+  // The builder's own weapons (the Monk's Unarmed Strike) and spells, kept by the same rules as features.
+  const owned = { build, update, made, changes, warnings };
+  const weapons = ownRecords(owned, "weapon", next.weapons ?? [], built.weapons.map((entry) => {
+    const weapon = normalizeWeaponDefinition(structuredClone(entry.weapon), next.abilities);
+    return {
+      key: entry.key,
+      record: weapon,
+      details: (current: WeaponDefinition) => entry.scaled
+        .map((path) => `${String(getPath(current, path) ?? "none")} → ${String(getPath(weapon, path) ?? "none")}`)
+        .filter((detail) => !/^(.*) → \1$/.test(detail))
+    };
+  }));
+  next = { ...next, weapons: weapons.length ? weapons : undefined };
+  const spells = ownRecords(owned, "spell", next.spells ?? [], built.spells.map((entry) => ({
+    key: entry.key,
+    record: normalizeSpellDefinition(structuredClone(entry.spell)) as SpellDefinition
+  })));
+  next = { ...next, spells: spells.length ? spells : undefined };
 
   // Equipment, once.
   let equipment = build.equipment;

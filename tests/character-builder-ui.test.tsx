@@ -82,6 +82,33 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
   });
 });
 
+describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
+  it("offers Magic Initiate's spells by level, marks the reference-only ones, and puts the choice on the actor", async () => {
+    useBuilderUiStore.getState().open({ kind: "create", seed: { classId: "srd:class:fighter", level: 1, backgroundId: "srd:background:acolyte" } });
+    render(<BuilderHost onCreated={() => undefined} />);
+    const builder = screen.getByRole("dialog", { name: "Character builder" });
+    const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
+    const box = (name: RegExp) => within(cantrips).getByRole("checkbox", { name }) as HTMLInputElement;
+    expect(box(/^Sacred Flame$/).checked).toBe(true);
+    // A cantrip the simulator doesn't cast is marked.
+    expect(within(cantrips).getByText(/^Guidance/).closest("label")!.textContent).toBe("Guidance ref");
+    await userEvent.click(box(/^Guidance/));
+    expect(within(builder).getByText("1 still to choose")).toBeTruthy();
+    await userEvent.click(box(/^Spare the Dying/));
+    expect(within(builder).getByText("All made")).toBeTruthy();
+    // The 1st-level spell: only 1st-level cleric spells.
+    const spell = within(builder).getByRole("group", { name: "A 1st-level spell, always prepared: 1st level" });
+    await userEvent.click(within(spell).getByRole("checkbox", { name: /^Bless$/ }));
+    const chosen = within(spell).getAllByRole("checkbox").filter((input) => (input as HTMLInputElement).checked);
+    expect(chosen).toHaveLength(1);
+    await userEvent.click(chosen[0]!);
+    await userEvent.click(within(spell).getByRole("checkbox", { name: /^Bless$/ }));
+    await userEvent.click(within(builder).getByRole("button", { name: "Create character" }));
+    const fighter = definitionNamed("New Character");
+    expect(fighter.spells?.map((entry) => entry.name).sort()).toEqual(["Bless (free)", "Sacred Flame", "Spare the Dying"]);
+  });
+});
+
 describe("leveling up", { timeout: 20000 }, () => {
   it("the Level up window shows the level's choices filled in and what changes, and applies it as one step", async () => {
     const rogue = createRogue(3);

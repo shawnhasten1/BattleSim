@@ -101,6 +101,19 @@ export interface FeatureGrant {
   /** A resource pool the feature spends, and its size. */
   pool?: { id: string; size: Template | number };
   adjust?: GrantAdjust;
+  /**
+   * Spells it gives, always prepared and not counted against the prepared number (a subclass's spells, Paladin's Smite's
+   * Divine Smite), cast with the granting class's ability. Library spell ids.
+   */
+  spells?: string[];
+  /** Spells it lets the character cast without a slot, from a pool of their own (Favored Enemy: Hunter's Mark). */
+  freeCasts?: FreeCast[];
+}
+
+/** A spell cast without a slot, `uses` times (a pool of its own, named after the spell). */
+export interface FreeCast {
+  spell: string;
+  uses: Template | number;
 }
 
 export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon";
@@ -115,10 +128,35 @@ export type ChoiceSpec = { id: string; ref?: string } & (
   | { kind: "skills"; count: number; from: string[] | "any" }
   | { kind: "expertise"; count: number; from?: string[] }
   | { kind: "weapon-mastery" }
-  | { kind: "spells" }
+  | SpellsChoice
   | { kind: "abilities"; label: string; points: number; from: Ability[]; maxPerAbility: number; cap: number }
   | { kind: "pick"; label: string; count: number; options: PickOption[] }
 );
+
+/**
+ * Spells to choose: cantrips learned, spells prepared, or spells written in a spellbook. A spellcasting class's choices
+ * are made by the builder from its progression at each level (their count is how much the table's number went up); a
+ * feat's or a subclass's are in the catalog (Magic Initiate's two cantrips and one 1st-level spell).
+ */
+export interface SpellsChoice {
+  kind: "spells";
+  what: "cantrips" | "prepared" | "spellbook";
+  /** How many. A class's own choices always say. */
+  count?: number;
+  label?: string;
+  /** The spell lists it chooses from (`"wizard"`). Absent: the class's own list, or the list another choice picked. */
+  lists?: string[];
+  /** The id of an earlier choice (in the same feat or level) whose value is the list (Magic Initiate's). */
+  listFrom?: string;
+  /** The id of an earlier choice whose value is the spellcasting ability for these spells (Magic Initiate's). */
+  abilityFrom?: string;
+  /** Exactly this spell level (Magic Initiate's 1st-level spell). Absent: 1st up to the highest the class can cast. */
+  level?: number;
+  /** Always prepared, not counted against the class's number (Magical Discoveries; a feat's spell). */
+  alwaysPrepared?: boolean;
+  /** Each spell chosen can also be cast this many times without a slot (Magic Initiate: once). */
+  freeCasts?: Template | number;
+}
 
 /** One option of a `pick` choice (a fighting style, an invocation, a lineage): what choosing it grants. */
 export interface PickOption {
@@ -139,6 +177,10 @@ export interface ClassLevel {
   choices?: ChoiceSpec[];
 }
 
+/**
+ * How a class casts spells. The builder asks for its cantrips, prepared spells and spellbook at each level, as many as
+ * the numbers went up. Always-prepared spells and free casts are grants (`FeatureGrant.spells`, `freeCasts`).
+ */
 export interface SpellcastingProgression {
   ability: Ability;
   kind: "full" | "half" | "third" | "pact";
@@ -148,12 +190,8 @@ export interface SpellcastingProgression {
   cantrips?: number[];
   /** Level 1+ spells prepared, by class level (20 entries). Every 2024 caster prepares. */
   prepared: number[];
-  /** A wizard's spellbook: how many 1st-level spells it starts with, and how many each level adds. */
+  /** A wizard's spellbook: how many 1st-level spells it starts with, and how many each level adds. It prepares from it. */
   spellbook?: { start: number; perLevel: number };
-  /** Spells always prepared, by class level (subclass spells, Paladin's Smite, Favored Enemy's Hunter's Mark). */
-  alwaysPrepared?: Record<number, string[]>;
-  /** Spells cast without a slot from a pool of their own (Favored Enemy: Hunter's Mark, `"{col:favored-enemy}"` times). */
-  freeCasts?: Array<{ spell: string; uses: Template | number }>;
 }
 
 export interface ClassDefinition {
@@ -201,6 +239,12 @@ export interface ClassSuggestions {
   /** Weapon kinds to master first (`longsword`, `shortbow`). */
   masteries?: string[];
   equipment?: string;
+  /**
+   * Spells to choose first, most wanted first (library ids): cantrips, then leveled spells. A leveled choice takes the
+   * highest-level ones it can, so this list is read level by level. Spells that run come before reference-only ones.
+   */
+  cantrips?: string[];
+  spells?: string[];
 }
 
 export interface SubclassDefinition {
@@ -308,6 +352,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   replaces: z.string().optional(),
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),
   pool: z.object({ id: z.string().min(1), size: templateOrNumber }).optional(),
+  spells: z.array(z.string().min(1)).optional(),
+  freeCasts: z.array(z.object({ spell: z.string().min(1), uses: templateOrNumber })).optional(),
   adjust: z.object({
     speed: templateOrNumber.optional(),
     movementEqualToSpeed: z.array(z.enum(["climb", "swim"])).optional(),
@@ -337,7 +383,18 @@ export const choiceSpecSchema: z.ZodType<ChoiceSpec> = z.lazy(() => z.discrimina
   z.object({ kind: z.literal("skills"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.union([z.array(z.string()), z.literal("any")]) }),
   z.object({ kind: z.literal("expertise"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("weapon-mastery"), id: z.string(), ref: z.string().optional() }),
-  z.object({ kind: z.literal("spells"), id: z.string(), ref: z.string().optional() }),
+  z.object({
+    kind: z.literal("spells"), id: z.string(), ref: z.string().optional(),
+    what: z.enum(["cantrips", "prepared", "spellbook"]),
+    count: z.number().int().min(0).optional(),
+    label: z.string().optional(),
+    lists: z.array(z.string()).optional(),
+    listFrom: z.string().optional(),
+    abilityFrom: z.string().optional(),
+    level: z.number().int().min(0).max(9).optional(),
+    alwaysPrepared: z.boolean().optional(),
+    freeCasts: templateOrNumber.optional()
+  }),
   z.object({ kind: z.literal("abilities"), id: z.string(), ref: z.string().optional(), label: z.string(), points: z.number().int().min(1), from: z.array(abilitySchema), maxPerAbility: z.number().int().min(1), cap: z.number().int() }),
   z.object({ kind: z.literal("pick"), id: z.string(), ref: z.string().optional(), label: z.string(), count: z.number().int().min(1), options: z.array(pickOptionSchema) })
 ])) as z.ZodType<ChoiceSpec>;
@@ -369,9 +426,7 @@ const spellcastingSchema = z.object({
   list: z.string(),
   cantrips: twenty(z.number().int().min(0)).optional(),
   prepared: twenty(z.number().int().min(0)),
-  spellbook: z.object({ start: z.number().int(), perLevel: z.number().int() }).optional(),
-  alwaysPrepared: z.record(z.string(), z.array(z.string())).optional(),
-  freeCasts: z.array(z.object({ spell: z.string(), uses: templateOrNumber })).optional()
+  spellbook: z.object({ start: z.number().int(), perLevel: z.number().int() }).optional()
 });
 
 export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
@@ -403,7 +458,9 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
     fightingStyle: z.string().optional(),
     epicBoon: z.string().optional(),
     masteries: z.array(z.string()).optional(),
-    equipment: z.string().optional()
+    equipment: z.string().optional(),
+    cantrips: z.array(z.string()).optional(),
+    spells: z.array(z.string()).optional()
   }),
   description: z.string().optional()
 }) as z.ZodType<ClassDefinition>;

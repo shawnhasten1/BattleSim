@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Ability } from "@/engine";
 import { suggestedValue, type ChoiceSlot, type ChoiceValue, type FeatChoice } from "@/lib/character-builder";
 import styles from "./builder.module.css";
@@ -22,6 +22,56 @@ export function choiceTitle(slot: ChoiceSlot): string {
   if ("label" in spec && spec.label) return spec.label;
   if (spec.kind === "skills" && spec.id === "class-skills") return "Class skills";
   return KIND_LABELS[spec.kind];
+}
+
+const SPELL_LEVELS = ["Cantrips", "1st level", "2nd level", "3rd level", "4th level", "5th level", "6th level", "7th level", "8th level", "9th level"];
+
+/**
+ * Spells to choose, grouped by level, with a filter once there are many. A spell the simulator doesn't cast has a dashed
+ * outline: it goes on the actor as its text.
+ */
+function SpellPicker({ slot, title, onChange }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void }) {
+  const [filter, setFilter] = useState("");
+  const chosen = asList(slot.value);
+  const full = chosen.length >= slot.count;
+  const needle = filter.trim().toLowerCase();
+  const shown = slot.options.filter((option) => chosen.includes(option.id) || !needle || option.name.toLowerCase().includes(needle));
+  const levels = [...new Set(shown.map((option) => option.level ?? 0))].sort((a, b) => a - b);
+  return (
+    <div className={styles.spells}>
+      <div className={styles.spellsHead}>
+        {slot.options.length > 12
+          ? <input type="search" aria-label={`${title}: filter`} placeholder="Filter spells…" value={filter} onChange={(event) => setFilter(event.target.value)} />
+          : null}
+        <span className={styles.count}>{chosen.length} of {slot.count}</span>
+      </div>
+      {levels.map((level) => (
+        <div key={level} role="group" aria-label={`${title}: ${SPELL_LEVELS[level]}`}>
+          {levels.length > 1 || level > 0 ? <p className={styles.spellLevel}>{SPELL_LEVELS[level]}</p> : null}
+          <div className={styles.chips}>
+            {shown.filter((option) => (option.level ?? 0) === level).map((option) => {
+              const checked = chosen.includes(option.id);
+              const disabled = !checked && (option.taken || full);
+              const why = option.taken ? option.detail : option.reference ? "Reference only: the simulator doesn't cast it" : undefined;
+              return (
+                <label
+                  key={option.id}
+                  className={`${styles.chip} ${checked ? styles.chipOn : ""} ${option.taken && !checked ? styles.chipTaken : ""} ${option.reference ? styles.chipReference : ""}`}
+                  title={why}
+                >
+                  <input
+                    type="checkbox" checked={checked} disabled={disabled}
+                    onChange={() => onChange(checked ? chosen.filter((id) => id !== option.id) : [...chosen, option.id])}
+                  />
+                  {option.name}{option.reference ? <small> ref</small> : null}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const asList = (value: ChoiceValue | undefined): string[] => (Array.isArray(value) ? value : []);
@@ -76,7 +126,7 @@ export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: 
       </div>
     );
   } else if (spec.kind === "spells") {
-    body = <p className={styles.dim}>Spells are chosen once the builder knows spells.</p>;
+    body = <SpellPicker slot={slot} title={title} onChange={onChange} />;
   } else {
     const chosen = asList(slot.value);
     const full = chosen.length >= slot.count;

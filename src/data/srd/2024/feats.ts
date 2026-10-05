@@ -64,7 +64,8 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     edition: "2024",
     category: "origin",
     repeatable: true,
-    grants: [{ key: "feat", feature: reference({ feat: "magic-initiate" }, { notSimulated: "its cantrips and spell are chosen once the builder knows spells (plan Phase 5)." }) }],
+    // The feature is the text; the spells chosen below go on the actor as spells (its 1st-level one also as a free cast).
+    grants: [{ key: "feat", feature: informational({ feat: "magic-initiate" }) }],
     choices: [
       {
         kind: "pick", id: "list", label: "Spell list", count: 1,
@@ -81,6 +82,11 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
           { id: "wis", name: "Wisdom", grants: [] },
           { id: "cha", name: "Charisma", grants: [] }
         ]
+      },
+      { kind: "spells", id: "cantrips", what: "cantrips", label: "Two cantrips", count: 2, listFrom: "list", abilityFrom: "ability" },
+      {
+        kind: "spells", id: "spell", what: "prepared", label: "A 1st-level spell, always prepared", count: 1, level: 1,
+        listFrom: "list", abilityFrom: "ability", alwaysPrepared: true, freeCasts: 1
       }
     ]
   },

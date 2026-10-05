@@ -106,3 +106,42 @@ export interface ReferenceArmor {
   strength: number | null;
   stealthDisadvantage: boolean;
 }
+
+/**
+ * The SRD 5.2 spell index (`generated/spells.json`): every spell's facts and text, as Open5e serves it. The character
+ * builder's spell choices read the class lists here, and a spell the library hasn't authored yet goes on an actor as
+ * reference only, with this text (`src/data/srd/2024/spells.ts`).
+ */
+export interface Srd2024SpellIndex {
+  attribution: string;
+  document: string;
+  spells: ReferenceSpell[];
+}
+
+export interface ReferenceSpell {
+  /** Open5e's key (`srd-2024_fireball`). */
+  key: string;
+  /** The key without the document (`fireball`): the 2024 spell's id is `srd:spell:<slug>-2024`. */
+  slug: string;
+  name: string;
+  level: number;
+  school: string;
+  /** The classes whose spell list has it, by slug (`wizard`), from the spell's own entry. */
+  classes: string[];
+  /** `action`, `bonus` or `reaction`, or a longer time as printed (`1 minute`). */
+  castingTime: string;
+  reactionTrigger?: string;
+  /** As printed: `150 feet`, `Self`, `Touch`, `Sight`. */
+  range: string;
+  components: string;
+  duration: string;
+  concentration: boolean;
+  ritual: boolean;
+  save: Ability | null;
+  /** The first damage (or healing) roll the text names, and its types. */
+  damage: string | null;
+  damageTypes: string[];
+  area: { shape: string; size: number } | null;
+  text: string;
+  higherLevel: string;
+}

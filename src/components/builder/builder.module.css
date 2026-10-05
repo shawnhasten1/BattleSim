@@ -189,6 +189,33 @@
   opacity: 0.55;
 }
 
+.spells {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spellsHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spellsHead input {
+  flex: 1;
+  min-width: 0;
+}
+
+.spellLevel {
+  margin: 0 0 3px;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
+.chipReference {
+  border-style: dashed;
+}
+
 .count {
   margin-left: auto;
   color: var(--ui-text-dim);

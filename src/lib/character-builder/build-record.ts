@@ -5,28 +5,21 @@ import type { Edition } from "./catalog";
 /**
  * What a player chose for one `ChoiceSpec`. Which shape it takes follows the spec's kind:
  * - `subclass`: the subclass id;
- * - `skills`, `expertise`, `weapon-mastery`, `pick`: the ids chosen;
+ * - `skills`, `expertise`, `weapon-mastery`, `pick`, `spells`: the ids chosen (a spell choice is one of cantrips,
+ *   prepared spells or spellbook spells: library spell ids);
  * - `feat`: the feat, its ability increases and its own choices;
- * - `spells`: cantrips learned, spells prepared, spells added to a spellbook;
  * - `abilities`: the points put into each ability.
  */
 export type ChoiceValue =
   | string
   | string[]
   | FeatChoice
-  | SpellChoice
   | Partial<Record<Ability, number>>;
 
 export interface FeatChoice {
   feat: string;
   increases?: Partial<Record<Ability, number>>;
   choices?: Record<string, ChoiceValue>;
-}
-
-export interface SpellChoice {
-  cantrips?: string[];
-  prepared?: string[];
-  spellbook?: string[];
 }
 
 /**
@@ -71,11 +64,6 @@ const choiceValueSchema: z.ZodType<ChoiceValue> = z.lazy(() => z.union([
     increases: abilityPoints.optional(),
     choices: z.record(z.string(), choiceValueSchema).optional()
   }),
-  z.object({
-    cantrips: z.array(z.string()).optional(),
-    prepared: z.array(z.string()).optional(),
-    spellbook: z.array(z.string()).optional()
-  }).strict(),
   abilityPoints
 ])) as z.ZodType<ChoiceValue>;
 
