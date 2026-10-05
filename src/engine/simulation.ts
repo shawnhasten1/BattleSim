@@ -1980,43 +1980,91 @@ function isIncapacitated(combatant: CombatantState): boolean {
   return (combatant.conditions ?? []).some((condition) => INCAPACITATING_CONDITIONS.has(condition.name));
 }
 
+/** What a creature faces before its next turn: what it can expect to take, and each threat's chance to land and what it deals. */
+export interface Danger {
+  /** Expected damage before its next turn. */
+  total: number;
+  threats: number;
+  /** Each threat's chance to land and what it deals when it does (its expected damage ÷ that chance). */
+  hits: Array<{ chance: number; damage: number }>;
+}
+
 /**
  * The damage `actor` can expect to take before its next turn (ITEMS_PLAN.md §3). Every active hostile acts once before
  * then; each one that can get to it (its fastest speed plus its best attack's reach or range) adds the most it's
  * expected to deal it with one of its actions. Distances are straight lines, so a wall in between isn't counted: it can
- * overcount, never undercount.
+ * overcount, never undercount. Each threat also says how likely it is to land: an attack's chance to hit, an even
+ * chance for a save or a routine.
  */
-export function dangerBeforeNextTurn(snapshot: EncounterSnapshot, actor: CombatantState): { total: number; threats: number } {
+export function dangerBeforeNextTurn(snapshot: EncounterSnapshot, actor: CombatantState): Danger {
   const definition = getDefinition(snapshot, actor);
-  let total = 0;
-  let threats = 0;
+  const danger: Danger = { total: 0, threats: 0, hits: [] };
   for (const hostile of snapshot.combatants) {
     if (hostile.state !== "active" || hostile.containedBy || effectiveFaction(snapshot, hostile) === effectiveFaction(snapshot, actor) || !canAct(hostile, "action")) continue;
     const hostileDefinition = getDefinition(snapshot, hostile);
     const executables = getExecutableActions(hostileDefinition);
     const distance = spatialDistance(snapshot, hostile, actor);
     const speed = movementReference(movementProfileOf(hostileDefinition));
-    let worst = 0;
+    let worst: { expected: number; chance: number } | undefined;
     for (const action of executables) {
       if (action.automationSupport !== "full" || action.actionType !== "action"
         || !(action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack")
         || !canPayResource(hostile, action, executables)
         || distance > speed + actionRange(action, hostileDefinition)) continue;
-      worst = Math.max(worst, expectedDamageAgainst(action, hostileDefinition, hostile, definition, actor));
+      const expected = expectedDamageAgainst(action, hostileDefinition, hostile, definition, actor);
+      if (expected <= 0 || (worst && expected <= worst.expected)) continue;
+      const chance = action.kind === "attack"
+        ? (action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, hostileDefinition), definition.armorClass))
+        : 0.5;
+      worst = { expected, chance };
     }
-    if (worst > 0) {
-      total += worst;
-      threats += 1;
+    if (worst) {
+      danger.total += worst.expected;
+      danger.threats += 1;
+      danger.hits.push({ chance: worst.chance, damage: worst.expected / worst.chance });
     }
   }
-  return { total, threats };
+  return danger;
 }
+
+/** The most threats `dropChance` weighs one by one (2^n outcomes); the rest count at what they're expected to deal. */
+const DROP_CHANCE_THREATS = 10;
+
+/**
+ * The chance the threats take away at least `hp` before its next turn: each lands or not, at its chance, dealing what it
+ * deals when it does. A single hit for more than it has left is a likely drop even when, on average, the threats
+ * together are expected to deal less (two goblins' shortbows against a fighter at 5 HP).
+ */
+export function dropChance(danger: Danger, hp: number): number {
+  if (hp <= 0) return 1;
+  const ranked = [...danger.hits].sort((a, b) => b.chance * b.damage - a.chance * a.damage);
+  const weighed = ranked.slice(0, DROP_CHANCE_THREATS);
+  const rest = ranked.slice(DROP_CHANCE_THREATS).reduce((sum, hit) => sum + hit.chance * hit.damage, 0);
+  const walk = (index: number, damage: number): number => {
+    if (damage >= hp) return 1;
+    if (index >= weighed.length) return 0;
+    const hit = weighed[index]!;
+    return hit.chance * walk(index + 1, damage + hit.damage) + (1 - hit.chance) * walk(index + 1, damage);
+  };
+  return walk(0, rest);
+}
+
+/** How much less likely to drop before its next turn a potion must make a creature for it to count as keeping it up. */
+const KEEPS_IT_UP = 0.25;
+/**
+ * What staying up is worth to a creature, a whole drop avoided: the down itself (`DOWN_VALUE`, as the AI weighs dropping
+ * an enemy) and the turns it would lose on the floor, about an attack's worth more. (A function: `DOWN_VALUE` is
+ * declared further down.)
+ */
+const stayingUpValue = () => DOWN_VALUE * 3;
 
 /**
  * A healing potion its holder drinks (ITEMS_PLAN.md §3, D4). It's worth drinking when the creature is likely to drop
- * before its next turn and the potion would keep it up; bloodied, it's an option the caller weighs against what else
- * the slot could do (it only scores what the HP is worth); a `liberal` creature also drinks whenever the heal won't be
- * wasted. A `conservative` one only drinks when it would keep it up. A buff potion goes through `selectBuffAction`.
+ * before its next turn and the potion would keep it up: it's worth staying up (`stayingUpValue`) for every bit it
+ * lowers the chance of dropping (`dropChance` before and after drinking), on top of the HP it restores. Bloodied, it's an option the caller
+ * weighs against what else the slot could do (it only scores what the HP is worth); a `liberal` creature also drinks
+ * whenever the heal won't be wasted. A `conservative` one only drinks when it would keep it up. A buff potion goes
+ * through `selectBuffAction`.
  */
 function selectItemDrink(snapshot: EncounterSnapshot, actor: CombatantState, slot: "action" | "bonus"): HealingPlan | undefined {
   if (actor.state !== "active") return undefined;
@@ -2031,22 +2079,25 @@ function selectItemDrink(snapshot: EncounterSnapshot, actor: CombatantState, slo
   if (!drinks.length || missing <= 0) return undefined;
   const danger = dangerBeforeNextTurn(snapshot, actor);
   const standing = actor.currentHp + actor.tempHp;
+  const dropNow = dropChance(danger, standing);
   const bloodied = actor.currentHp <= definition.maxHp / 2;
   const stance = actor.resourceStance;
   let best: HealingPlan | undefined;
   for (const action of drinks) {
     const average = averageHealing(action, definition);
-    const keepsItUp = danger.total >= standing && danger.total < standing + average;
+    // How much less likely it is to drop before its next turn once it has drunk this.
+    const saves = dropNow - dropChance(danger, standing + Math.min(average, missing));
+    const keepsItUp = saves >= KEEPS_IT_UP;
     const worthIt = keepsItUp
       || (stance !== "conservative" && bloodied)
       || (stance === "liberal" && missing >= average);
     if (!worthIt) continue;
     const price = resourceCostWeight(action) * 3 * resourceStanceMultiplier(stance);
-    const score = Math.min(average, missing) * 2 + (keepsItUp ? DOWN_VALUE * 2 : 0) - price + 10;
+    const score = Math.min(average, missing) * 2 + stayingUpValue() * Math.max(0, saves) - price + 10;
     const reasons = [
       `${actor.currentHp} HP left`,
       keepsItUp
-        ? `≈${Math.round(danger.total)} damage likely before its next turn (${danger.threats} in reach): it would keep it up`
+        ? `≈${Math.round(danger.total)} damage likely before its next turn (${danger.threats} in reach): ${Math.round(dropNow * 100)}% to drop, ${Math.round((dropNow - saves) * 100)}% after drinking`
         : bloodied ? "bloodied" : "the heal won't be wasted",
       `${Math.round(average)} expected healing`
     ];

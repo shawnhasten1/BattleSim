@@ -738,14 +738,16 @@ const SECTIONS: Section[] = [
         </p>
         <p>
           The AI drinks a healing potion when it&apos;s likely to drop before its next turn and the potion would keep it
-          up, adding up what every enemy that can reach it is expected to deal. Bloodied, it drinks only when the action
+          up: it weighs every enemy that can reach it, how likely each one&apos;s attack is to land and what it deals, so a
+          single hit for more than it has left counts even when the enemies together are expected to deal less. Bloodied,
+          it drinks only when the action
           or bonus action has nothing better to do; a <em>liberal</em> creature also drinks whenever the heal won&apos;t
           be wasted, and a <em>conservative</em> one only to stay up. It gives a potion only to an ally who can&apos;t
           drink their own (down, or incapacitated), and a Healing Word that already reaches them beats walking over. A
           thrown flask is thrown when it beats the creature&apos;s weapon by more than the flask is worth. Using an item
           is priced as gone for good: a potion or a flask costs more to use than a charge, and a scroll at least a spell
-          slot of its level. The log says why: <em>Kael chose to drink a Potion of Healing: 9 HP left, ≈13 damage likely
-          before its next turn (2 in reach)</em>.
+          slot of its level. The log says why: <em>Kael chose to drink a Potion of Healing: 8 HP left, ≈10 damage likely
+          before its next turn (2 in reach): 75% to drop, 25% after drinking</em>.
         </p>
         <p>
           In Play, the hotbar&apos;s <strong>Items</strong> tab has a button for each item with how many are left: a

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEngineState,
   dangerBeforeNextTurn,
+  dropChance,
   sampleEncounter,
   takeAutomatedTurn,
   type ActionDefinition,
@@ -25,6 +26,10 @@ const LONGSWORD: ActionDefinition = {
 const GREATAXE: ActionDefinition = {
   kind: "attack", id: "greataxe", name: "Greataxe", actionType: "action", attackType: "melee", ability: "str", attackBonus: 5,
   range: 5, reach: 5, damage: [{ dice: "1d12+3", damageType: "slashing" }], automationSupport: "full"
+};
+const SHORTBOW: ActionDefinition = {
+  kind: "attack", id: "shortbow", name: "Shortbow", actionType: "action", attackType: "ranged", ability: "dex", attackBonus: 4,
+  range: 80, longRange: 320, damage: [{ dice: "1d6+2", damageType: "piercing" }], automationSupport: "full"
 };
 const HEALING_WORD: ActionDefinition = {
   kind: "healing", id: "healing-word", name: "Healing Word", actionType: "bonus", range: 60, healing: [{ dice: "1d4", abilityModifier: "wis" }],
@@ -79,6 +84,8 @@ interface Setup {
   mira?: { at: Point; hp?: number };
   /** Kael fights for the enemy and the orcs for the party (a monster with a potion). */
   swapSides?: boolean;
+  /** What the orcs fight with instead of their greataxes. */
+  orcActions?: ActionDefinition[];
   resources?: Record<string, number>;
 }
 
@@ -90,7 +97,7 @@ function scene(setup: Setup): EncounterSnapshot {
   const items = [...(setup.potions ? [potions(setup.potions)] : []), ...(setup.kael?.items ?? [])];
   encounter.definitions = [
     creature("def-kael", "Kael", { ...setup.kael, items: items.length ? items : undefined }),
-    creature("def-orc", "Orc", { armorClass: 13, maxHp: 15, actions: [GREATAXE] }),
+    creature("def-orc", "Orc", { armorClass: 13, maxHp: 15, actions: setup.orcActions ?? [GREATAXE] }),
     creature("def-mira", "Mira", { maxHp: 30 })
   ];
   const kaelSide = setup.swapSides ? "enemy" : "party";
@@ -136,6 +143,15 @@ describe("the danger before its next turn", () => {
     const kael = encounter.combatants.find((combatant) => combatant.id === "kael")!;
     expect(dangerBeforeNextTurn(encounter, kael).total).toBeCloseTo(9.5, 5);
     expect(dangerBeforeNextTurn(encounter, kael).threats).toBe(2);
+  });
+
+  it("says how likely it is to drop: either orc's hit drops it at 8 HP; at 15 HP, only both", () => {
+    const encounter = scene({ hp: 52, orcs: ADJACENT_TWO });
+    const danger = dangerBeforeNextTurn(encounter, encounter.combatants[0]!);
+    expect(danger.hits).toEqual([{ chance: 0.5, damage: 9.5 }, { chance: 0.5, damage: 9.5 }]);
+    expect(dropChance(danger, 8)).toBeCloseTo(0.75, 5);
+    expect(dropChance(danger, 15)).toBeCloseTo(0.25, 5);
+    expect(dropChance(danger, 20)).toBe(0);
   });
 
   it("doesn't count an orc too far away to reach it, or one that can't act", () => {
@@ -193,6 +209,14 @@ describe("drinking (the plan's worked examples)", () => {
       expect(turn.drank).toBeUndefined();
       expect(turn.attacked).toBe(true);
     }
+  });
+
+  it("5/52 against two shortbows expected to deal less than 5: any one hit drops it, so it drinks", () => {
+    const encounter = scene({ hp: 5, potions: "action", orcs: [{ x: 9, y: 3 }, { x: 9, y: 4 }], orcActions: [SHORTBOW] });
+    const danger = dangerBeforeNextTurn(encounter, encounter.combatants[0]!);
+    expect(danger.total).toBeLessThan(5);
+    expect(dropChance(danger, 5)).toBeGreaterThan(0.6);
+    expect(kaelsTurn(encounter).drank).toBeDefined();
   });
 
   it("conservative still drinks when the potion would keep it up", () => {
