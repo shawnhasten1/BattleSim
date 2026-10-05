@@ -5,6 +5,8 @@
  */
 import {
   casterLevelOf,
+  isArmorItem,
+  isWorn,
   resolveNumericFormula,
   spellcastingAbility,
   spellSlotLevel,
@@ -49,6 +51,8 @@ export interface ListRow {
   automationNote: string;
   /** An optional rule: whether it's switched on. */
   enabled?: boolean;
+  /** Armor or a shield: whether it's worn (a switch on its row; only worn armor counts toward AC). */
+  worn?: boolean;
   /** Where Move to… can take it (none for a record that isn't an action). */
   moves: MoveTarget[];
   /** How the sheet deletes it (a legendary action by its place). */
@@ -219,7 +223,11 @@ function itemRow(definition: CreatureDefinition, item: ItemDefinition, combatant
       : left !== undefined ? `${left} of ${full}` : `×${full}`
     : undefined;
   const chips = item.attunement ? [item.attunement.attuned ? "attuned" : "not attuned"] : [];
-  return row(definition, { list: "items", id: item.id }, item.name, { ...(count ? { cost: count } : {}), chips }, "items");
+  return row(definition, { list: "items", id: item.id }, item.name, {
+    ...(count ? { cost: count } : {}),
+    chips,
+    ...(isArmorItem(item) ? { worn: isWorn(item) } : {})
+  }, "items");
 }
 
 function actionRow(definition: CreatureDefinition, list: "actions" | "bonusActions" | "reactions", action: ActionDefinition): ListRow {

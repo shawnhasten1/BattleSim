@@ -4,6 +4,8 @@
  */
 import {
   getExecutableActions,
+  isArmorItem,
+  isWorn,
   multiattackRoutines,
   spellSlotLevel,
   stepAbility,
@@ -28,6 +30,9 @@ import { withAbility, withNewAbilityAt, type AbilityInsertTarget, type AbilityRe
 import type { SectionId } from "./sections";
 
 export type WarningId =
+  | "second-suit"
+  | "second-shield"
+  | "shield-bonus"
   | "free-leveled-spell"
   | "missing-pool"
   | "damage-ability-mismatch"
@@ -309,9 +314,27 @@ function placementWarnings(definition: CreatureDefinition, where: AbilityRef | A
  * Warnings for a record as the editor holds it. `where` is where it's stored (a ref), or the list a new one is going
  * into.
  */
-/** What an item does that the DM probably doesn't mean: nothing to use, not attuned, too many attuned, an empty stack. */
+/**
+ * What an item does that the DM probably doesn't mean: nothing to use, not attuned, too many attuned, an empty stack; a
+ * second suit or shield worn (only the better counts), a shield that isn't a bonus.
+ */
 function itemWarnings(item: ItemDefinition, withRecord: CreatureDefinition): AbilityWarning[] {
   const warnings: AbilityWarning[] = [];
+  if (isArmorItem(item) && isWorn(item)) {
+    const shield = item.armor.category === "shield";
+    const other = (withRecord.items ?? []).find((candidate) => candidate.id !== item.id && isArmorItem(candidate) && isWorn(candidate)
+      && (candidate.armor.category === "shield") === shield);
+    if (other) {
+      warnings.push({
+        id: shield ? "second-shield" : "second-suit",
+        message: `It also wears ${other.name}: only the better ${shield ? "shield" : "suit"} counts. Untick Worn on the one it carries.`,
+        section: "armor"
+      });
+    }
+    if (shield && item.armor.ac > 5) {
+      warnings.push({ id: "shield-bonus", message: `A shield's AC is what it adds (+2): this one adds ${item.armor.ac}.`, section: "armor" });
+    }
+  }
   const reference = item.automationSupport === "manual-only" || item.automationSupport === "unsupported";
   if (!reference && (item.type === "potion" || item.type === "scroll" || item.type === "wand" || item.type === "thrown") && !item.grantedActions?.length) {
     warnings.push({ id: "item-does-nothing", message: "Using it does nothing yet: add what it does in What it does.", section: "grants" });

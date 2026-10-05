@@ -102,6 +102,8 @@ const FOCUS: Record<string, SectionId[]> = {
   "item:wand": ["use", "grants"],
   "item:thrown-flask": ["grants"],
   "item:worn-item": ["while-active"],
+  "item:armor": ["armor"],
+  "item:shield": ["armor"],
   "item:other-gear": ["basics"],
   "death:death-burst": ["target", "roll", "damage"]
 };

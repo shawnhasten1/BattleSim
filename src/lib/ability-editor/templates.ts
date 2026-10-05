@@ -167,6 +167,16 @@ export const ITEM_TEMPLATES: ItemTemplate[] = [
     })
   },
   {
+    label: "Armor",
+    hint: "A suit it wears: its AC replaces the creature's AC without armor",
+    record: () => ({ id: "", name: "New armor", type: "armor", armor: { category: "light", ac: 11 }, automationSupport: "full" })
+  },
+  {
+    label: "Shield",
+    hint: "+2 AC while it's worn, over armor or not",
+    record: () => ({ id: "", name: "Shield", type: "shield", armor: { category: "shield", ac: 2 }, automationSupport: "full" })
+  },
+  {
     label: "Other gear",
     hint: "Something it carries that doesn't change a fight: rope, a lantern",
     record: () => ({ id: "", name: "New gear", type: "gear", automationSupport: "full" })

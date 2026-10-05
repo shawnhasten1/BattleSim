@@ -5,6 +5,8 @@
  */
 import {
   abilityModifier,
+  dexCapOf,
+  isArmorItem,
   formulaAbility,
   getExecutableActions,
   fullHealing,
@@ -1668,6 +1670,38 @@ const slotShort = (actionType: ActionDefinition["actionType"]): string =>
   actionType === "bonus" ? "bonus action" : actionType === "reaction" ? "reaction" : actionType === "free" ? "free" : "action";
 
 /**
+ * What armor or a shield does for AC, as a statblock says it ("Heavy armor: worn, its wearer's AC is 18. A wearer with a
+ * Strength score below 15 is 10 feet slower. It has disadvantage on Dexterity (Stealth) checks.") and as a row says it
+ * ("AC 18 · heavy · Str 15 · stealth disadvantage").
+ */
+function armorText(item: ItemDefinition): { sentence: string; short: string } | undefined {
+  if (!isArmorItem(item)) return undefined;
+  const stats = item.armor;
+  const magic = stats.magicBonus ?? 0;
+  const carried = item.equipped === false;
+  const magicWords = magic ? ` (${signed(magic)} magic)` : "";
+  if (stats.category === "shield") {
+    return {
+      sentence: `Worn, it adds ${signed(stats.ac + magic)} to its wearer's AC${magicWords}.${carried ? " It's carried, not worn." : ""}`,
+      short: [`${signed(stats.ac + magic)} AC`, carried ? "carried" : ""].filter(Boolean).join(" · ")
+    };
+  }
+  const cap = dexCapOf(stats);
+  const dexWords = cap === 0 ? "" : cap === undefined ? " + its Dexterity modifier" : ` + its Dexterity modifier (max ${cap})`;
+  const dexShort = cap === 0 ? "" : cap === undefined ? " + Dex" : ` + Dex (max ${cap})`;
+  return {
+    sentence: [
+      `${capitalize(stats.category)} armor: worn, its wearer's AC is ${stats.ac + magic}${dexWords}${magicWords}.`,
+      stats.strength ? `A wearer with a Strength score below ${stats.strength} is 10 feet slower.` : "",
+      stats.stealthDisadvantage ? "It has disadvantage on Dexterity (Stealth) checks." : "",
+      carried ? "It's carried, not worn." : ""
+    ].filter(Boolean).join(" "),
+    short: [`AC ${stats.ac + magic}${dexShort}`, stats.category, stats.strength ? `Str ${stats.strength}` : "", stats.stealthDisadvantage ? "stealth disadvantage" : "", carried ? "carried" : ""]
+      .filter(Boolean).join(" · ")
+  };
+}
+
+/**
  * A wand's use cast a level higher for each extra charge (`upcast.byCharges`), in words: what each adds, and how far it
  * goes ("Each extra charge casts it a level higher, for 1d6 more damage, up to 7 (9th level).").
  */
@@ -1709,6 +1743,11 @@ export function itemStatblock(item: ItemDefinition, definition: CreatureDefiniti
   const others = uses.filter((use) => !drinks.includes(use as never));
   const sentences: string[] = [];
   const shorts: string[] = [];
+  const armor = armorText(item);
+  if (armor) {
+    sentences.push(armor.sentence);
+    shorts.push(armor.short);
+  }
   for (const drink of drinks) {
     const effect = actionStatblock({ ...drink, resourceCost: undefined } as ActionDefinition, onCreature);
     const give = item.give?.actionType;
@@ -1749,7 +1788,7 @@ export function itemStatblock(item: ItemDefinition, definition: CreatureDefiniti
   if (item.automationSupport === "manual-only" || item.automationSupport === "unsupported") {
     return { title: item.name, text: description || "Not simulated.", short: description ? firstSentence(description) : "reference only", support: "reference", notSimulated: [] };
   }
-  if (!uses.length && !item.effects?.length) {
+  if (!uses.length && !item.effects?.length && !armor) {
     return { title: item.name, text: description || "No combat effect.", short: "no combat effect", support: "no-effect", notSimulated: [] };
   }
   return {

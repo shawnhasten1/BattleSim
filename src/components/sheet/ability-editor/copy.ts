@@ -248,6 +248,14 @@ export const COPY = {
   itemCharges: { label: "It has charges", hint: "A pool its uses spend; the item stays when it's empty." },
   itemChargesMax: { label: "Charges" },
   itemRegains: { label: "Regains", hint: "For reference: there's no rest in a fight, so a fight starts with every charge." },
+  armorWeight: { label: "Weight", hint: "Light armor adds all of the wearer's Dexterity modifier to its AC, medium at most +2, heavy none." },
+  armorAc: { label: "Base AC", hint: "The AC it gives before Dexterity and magic: 11 for leather, 16 for chain mail, 18 for plate. Worn, it replaces the creature's AC without armor." },
+  shieldAc: { label: "AC bonus", hint: "What it adds to the creature's AC while it's worn: +2 for a shield." },
+  armorMagic: { label: "Magic bonus", hint: "+1, +2 or +3 armor or shield. When it needs attunement, the bonus works only while it's attuned; its base AC works either way." },
+  armorMaxDex: { label: "Most Dex it adds", hint: "Leave it empty for its weight's: all for light armor, +2 for medium, none for heavy." },
+  armorStrength: { label: "Strength needed", hint: "Heavy armor: a wearer with a lower Strength score is 10 ft slower on foot. Empty: none." },
+  armorStealth: { label: "Disadvantage on Stealth", hint: "Said on the item for the DM: there's no stealth in the simulator." },
+  armorWorn: { label: "Worn", hint: "Only worn armor or a worn shield counts toward AC, and only worn armor's properties and uses work. Off: it's carried." },
   potionTiming: {
     label: "What using it takes",
     hint: "The campaign's rule: an action, a bonus action, or a bonus action to drink and an action to give, as the campaign's page sets it for every potion. Its own: what this potion says, whatever the campaign's rule."

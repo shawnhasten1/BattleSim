@@ -94,7 +94,7 @@ type RecordType = "weapon" | "item" | "spell" | "action" | "feature" | "legendar
 const SECTIONS: Record<RecordType, SectionId[]> = {
   weapon: ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"],
   // How many and what using it takes, what it does, what it gives while carried.
-  item: ["basics", "use", "grants", "while-active", "notes"],
+  item: ["basics", "armor", "use", "grants", "while-active", "notes"],
   spell: ["basics", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   action: ["sequence", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   feature: ["basics", "use", "while-active", "aura", "grants", "notes"],

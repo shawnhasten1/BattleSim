@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
-import type { CreatureDefinition, ItemDefinition, ItemSupply, ItemType } from "@/engine";
+import { armoredAc, DEX_CAP, type ArmorCategory, type CreatureDefinition, type ItemDefinition, type ItemSupply, type ItemType } from "@/engine";
 import {
   drinkTiming,
   fullHealAmount,
@@ -10,6 +10,7 @@ import {
   itemUseChoices,
   potionTimingText,
   supplyIdOf,
+  withArmor,
   withDrinkTiming,
   withGiveTiming,
   withItemType,
@@ -43,6 +44,8 @@ const TYPES: Array<{ value: ItemType; label: string; title: string }> = [
   { value: "wand", label: "Wand", title: "Spends charges on what it casts, and stays" },
   { value: "thrown", label: "Thrown", title: "A flask or a vial thrown at a creature; used up" },
   { value: "worn", label: "Worn", title: "A ring, a cloak, an amulet: works while it's carried" },
+  { value: "armor", label: "Armor", title: "A suit of armor: worn, its AC replaces the creature's AC without armor" },
+  { value: "shield", label: "Shield", title: "A shield: worn, it adds to the creature's AC" },
   { value: "gear", label: "Gear", title: "Anything else it carries" }
 ];
 
@@ -52,6 +55,8 @@ export function itemSection(id: SectionId, props: ItemSectionProps): ReactNode {
   switch (id) {
     case "basics":
       return <ItemBasics item={item} onChange={onChange} />;
+    case "armor":
+      return <ArmorSection item={item} onChange={onChange} definition={definition} />;
     case "use":
       return <ItemUse item={item} onChange={onChange} />;
     case "grants":
@@ -201,6 +206,67 @@ function PotionTiming({ item, onChange }: { item: ItemDefinition; onChange: (nex
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+const WEIGHTS: Array<{ value: Exclude<ArmorCategory, "shield">; label: string; title: string }> = [
+  { value: "light", label: "Light", title: "Adds all of the wearer's Dexterity modifier" },
+  { value: "medium", label: "Medium", title: "Adds the wearer's Dexterity modifier, at most +2" },
+  { value: "heavy", label: "Heavy", title: "Adds no Dexterity" }
+];
+const MAGIC: Array<{ value: string; label: string }> = [{ value: "0", label: "None" }, { value: "1", label: "+1" }, { value: "2", label: "+2" }, { value: "3", label: "+3" }];
+
+/**
+ * Armor's or a shield's AC: its weight, its AC, its magic, the Dexterity it adds and the Strength it needs, stealth,
+ * and whether it's worn. Says what it makes this creature's AC.
+ */
+function ArmorSection({ item, onChange, definition }: { item: ItemDefinition; onChange: (next: ItemDefinition) => void; definition: CreatureDefinition }) {
+  const acId = useId();
+  const dexId = useId();
+  const strengthId = useId();
+  const shield = item.type === "shield";
+  const stats = item.armor ?? (shield ? { category: "shield" as const, ac: 2 } : { category: "light" as const, ac: 11 });
+  const set = (patch: Parameters<typeof withArmor>[1]) => onChange(withArmor(item, patch));
+  const weightCap = stats.category === "shield" ? 0 : DEX_CAP[stats.category];
+  // What it makes this creature's AC worn (the creature's other armor counting as it does).
+  const placed = armoredAc({ ...definition, items: [...(definition.items ?? []).filter((other) => other.id !== item.id), { ...item, equipped: undefined }] });
+  const counts = shield ? placed.shield?.id === item.id : placed.armor?.id === item.id;
+  return (
+    <>
+      {shield ? null : (
+        <Field copy="armorWeight">
+          <Segmented label="Weight" value={stats.category === "shield" ? undefined : stats.category} options={WEIGHTS} onChange={(category) => set({ category })} />
+        </Field>
+      )}
+      <div className={styles.row}>
+        <Field copy={shield ? "shieldAc" : "armorAc"} id={acId}>
+          <NumberField id={acId} value={stats.ac} min={0} max={30} onChange={(n) => n !== undefined && set({ ac: n })} />
+        </Field>
+        <Field copy="armorMagic">
+          <Segmented label="Magic bonus" value={String(stats.magicBonus ?? 0)} options={MAGIC} onChange={(value) => set({ magicBonus: Number(value) || undefined })} />
+        </Field>
+      </div>
+      {shield ? null : (
+        <div className={styles.row}>
+          <Field copy="armorMaxDex" id={dexId}>
+            <NumberField
+              id={dexId} value={stats.maxDex} min={0} max={10} optional
+              placeholder={weightCap === undefined ? "all" : String(weightCap)} onChange={(n) => set({ maxDex: n })}
+            />
+          </Field>
+          <Field copy="armorStrength" id={strengthId}>
+            <NumberField id={strengthId} value={stats.strength} min={1} max={30} optional placeholder="none" onChange={(n) => set({ strength: n })} />
+          </Field>
+        </div>
+      )}
+      {shield ? null : <Check copy="armorStealth" checked={stats.stealthDisadvantage === true} onChange={(on) => set({ stealthDisadvantage: on || undefined })} />}
+      <Check copy="armorWorn" checked={item.equipped !== false} onChange={(on) => onChange(opt(item, "equipped", on ? undefined : false))} />
+      <p className={styles.hint} aria-label="What it makes the AC">
+        {counts
+          ? `Worn, ${definition.name}'s AC is ${placed.total} (${placed.parts.map((part) => `${part.label} ${part.value}`).join(" + ")}), before rings, features and conditions.`
+          : `${definition.name} wears better ${shield ? "a shield" : "armor"} already (${(shield ? placed.shield : placed.armor)?.name}): only the better one counts.`}
+      </p>
     </>
   );
 }

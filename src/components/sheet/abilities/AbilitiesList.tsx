@@ -13,6 +13,8 @@ export interface RowHandlers {
   onMove: (row: ListRow, to: MoveTarget) => void;
   onDelete: (row: ListRow) => void;
   onToggleOptional: (row: ListRow, on: boolean) => void;
+  /** Armor or a shield put on or taken off. */
+  onToggleWorn?: (row: ListRow, on: boolean) => void;
 }
 
 /**
@@ -84,6 +86,12 @@ function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandl
           <label className={styles.optional} title="An optional rule: what it grants is only available while it's on">
             <input type="checkbox" checked={row.enabled} onChange={(event) => handlers.onToggleOptional(row, event.target.checked)} />
             Use it
+          </label>
+        ) : null}
+        {row.worn !== undefined && handlers.onToggleWorn ? (
+          <label className={styles.optional} title="Only worn armor or a worn shield counts toward AC; carried, it does nothing">
+            <input type="checkbox" checked={row.worn} onChange={(event) => handlers.onToggleWorn!(row, event.target.checked)} />
+            Worn
           </label>
         ) : null}
         {row.itemType ? <RowMenu row={row} handlers={handlers} /> : null}

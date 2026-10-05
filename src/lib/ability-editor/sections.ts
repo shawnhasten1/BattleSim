@@ -4,6 +4,7 @@
  * What kind of ability it is follows from its Roll and Target, so there's no separate "what it does" section.
  */
 import {
+  DEX_CAP,
   getExecutableActions,
   resolveAttackBonus,
   resolveSaveDc,
@@ -38,6 +39,7 @@ import type { AbilityRecord, AbilityRef } from "./refs";
 
 export type SectionId =
   | "basics"
+  | "armor"
   | "use"
   | "does"
   | "target"
@@ -421,6 +423,13 @@ const OUTCOME_TITLES: Partial<Record<ActionDefinition["kind"], string>> = {
 
 const SECTIONS: SectionSpec[] = [
   { id: "basics", title: "Basics", appliesTo: () => true, summary: (shape) => basicsSummary(shape) },
+  // Armor's or a shield's AC.
+  {
+    id: "armor",
+    title: (shape) => (shape.type === "item" && shape.item.type === "shield" ? "Shield" : "Armor"),
+    appliesTo: (shape) => shape.type === "item" && (shape.item.type === "armor" || shape.item.type === "shield"),
+    summary: (shape) => armorSummary((shape as Extract<Shape, { type: "item" }>).item)
+  },
   // A multiattack is its routine: it comes first, as the statblock sentence does.
   { id: "sequence", title: "Sequence", appliesTo: withAction((action) => action.kind === "multiattack"), summary: (shape, definition) => sequenceSummary(actionOf(shape)!, definition) },
   {
@@ -476,8 +485,20 @@ const SECTIONS: SectionSpec[] = [
   { id: "notes", title: "Notes & AI", appliesTo: () => true, summary: (shape) => notesSummary(shape) }
 ];
 
-/** An item's own order: what using it does comes before what it gives while carried. */
-const ITEM_ORDER: SectionId[] = ["basics", "use", "grants", "while-active", "notes"];
+/** An item's own order: armor's AC first, then what using it does, then what it gives while carried. */
+const ITEM_ORDER: SectionId[] = ["basics", "armor", "use", "grants", "while-active", "notes"];
+
+/** Armor's AC in a few words: "AC 13 + Dex (max 2) · medium · worn", "+2 AC · carried". */
+function armorSummary(item: ItemDefinition): string {
+  const stats = item.armor;
+  if (!stats) return "—";
+  const magic = stats.magicBonus ? ` (+${stats.magicBonus} magic)` : "";
+  const worn = item.equipped === false ? "carried" : "worn";
+  if (stats.category === "shield") return [`+${stats.ac + (stats.magicBonus ?? 0)} AC${magic}`, worn].join(" · ");
+  const cap = stats.maxDex ?? DEX_CAP[stats.category];
+  const dex = cap === 0 ? "" : cap === undefined ? " + Dex" : ` + Dex (max ${cap})`;
+  return [`AC ${stats.ac + (stats.magicBonus ?? 0)}${dex}${magic}`, stats.category, stats.strength ? `Str ${stats.strength}` : "", worn].filter(Boolean).join(" · ");
+}
 
 /** The sections the editor shows for a record, in order, each with its collapsed summary. */
 export function sectionsFor(context: SectionContext): SectionSummary[] {

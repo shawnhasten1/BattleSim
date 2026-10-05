@@ -731,12 +731,36 @@ const SECTIONS: Section[] = [
           documents each get their own offer.
         </p>
 
+        <h3>Armor and shields</h3>
+        <p>
+          Armor and shields are items too. A worn suit of armor sets the creature&apos;s AC: its base AC, plus its
+          Dexterity modifier (all of it for light armor, at most +2 for medium, none for heavy), plus its magic bonus (+1
+          to +3). A worn shield adds +2 (and its magic) to that, or to the AC without armor. The AC typed on the Stats tab
+          is the creature&apos;s AC <em>without armor</em> (natural armor, Unarmored Defense): with armor on, the Stats tab
+          shows the AC the armor gives and its sum (<em>Chain Mail 16 + Shield 2</em>), and the typed AC moves to{" "}
+          <em>Without armor</em>. A monster keeps its printed AC unless you give it armor.
+        </p>
+        <p>
+          An armor row&apos;s <strong>Worn</strong> switch takes it off without deleting it: carried armor does nothing.
+          Only the best suit and the best shield count, and the editor warns about a second. Heavy armor its wearer
+          isn&apos;t strong enough for (a Strength score below its requirement) costs 10 ft of walking speed; disadvantage
+          on Stealth is noted on the item, since there&apos;s no stealth in the simulator. Magic armor that needs attunement
+          keeps its base AC unattuned; its bonus and properties need attunement. Rings, features and conditions (a Ring of
+          Protection, Shield of Faith) still add on top. Adamantine armor&apos;s <em>no critical hits against it</em> is an
+          effect any item or feature can have.
+        </p>
+
         <h3>The sections</h3>
         <ul>
           <li>
-            <strong>Basics</strong> — what it is (a potion, a scroll, a wand, a thrown flask, a worn item or gear), whether
+            <strong>Basics</strong> — what it is (a potion, a scroll, a wand, a thrown flask, a worn item, armor, a shield or gear), whether
             it&apos;s magic, and whether it <em>needs attunement</em>. An item that needs attunement does nothing until
             it&apos;s attuned; the sheet warns when a creature is attuned to more than three.
+          </li>
+          <li>
+            <strong>Armor</strong> (armor and shields) — its weight (light, medium, heavy), its base AC (a shield&apos;s
+            bonus), its magic bonus, the most Dexterity it adds (empty: its weight&apos;s), the Strength it needs,
+            disadvantage on Stealth, and whether it&apos;s worn, with what it makes the creature&apos;s AC.
           </li>
           <li>
             <strong>Use &amp; cost</strong> — <em>how many</em> it carries (a potion, a scroll or a flask is used up one

@@ -303,7 +303,15 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
             if (row.ref.list === "legendary") requestRemove("legendary", String(row.ref.index), row.name);
             else if ("id" in row.ref) requestRemove(row.itemType, row.ref.id, row.name);
           },
-          onToggleOptional: (row, on) => { if ("id" in row.ref) updateFeature(definition.id, row.ref.id, { enabled: on ? true : undefined }); }
+          onToggleOptional: (row, on) => { if ("id" in row.ref) updateFeature(definition.id, row.ref.id, { enabled: on ? true : undefined }); },
+          onToggleWorn: (row, on) => {
+            if (row.ref.list !== "items") return;
+            const id = row.ref.id;
+            const item = definition.items?.find((candidate) => candidate.id === id);
+            if (!item) return;
+            const { equipped: _equipped, ...rest } = item;
+            replaceAbilityRecord(definition.id, row.ref, on ? rest : { ...rest, equipped: false });
+          }
         }}
       />
 

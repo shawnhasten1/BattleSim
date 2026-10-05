@@ -9,6 +9,7 @@ import {
   isConsumableType,
   isDrinkUse,
   type ActionDefinition,
+  type ArmorStats,
   type HealingActionDefinition,
   type ItemDefinition,
   type ItemSupply,
@@ -72,6 +73,14 @@ export function potionTimingText(item: ItemDefinition): string {
   return healsInFullWithAction(item) ? `${first} An action instead of a bonus action heals the full ${fullHealAmount(item)} HP.` : first;
 }
 
+/** Armor or a shield with some of its AC numbers changed (`undefined` clears one: its weight's Dexterity cap, no Strength needed). */
+export function withArmor(item: ItemDefinition, patch: Partial<ArmorStats>): ItemDefinition {
+  const current: ArmorStats = item.armor ?? (item.type === "shield" ? { category: "shield", ac: 2 } : { category: "light", ac: 11 });
+  const next = { ...current, ...patch } as ArmorStats & Record<string, unknown>;
+  for (const key of Object.keys(next)) if (next[key] === undefined) delete next[key];
+  return { ...item, armor: next };
+}
+
 /** The pool its uses spend: its supply's (`"supply"` on a new item until it's added, `item:<id>` after). */
 export function supplyIdOf(item: ItemDefinition): string {
   return item.supply?.id ?? "supply";
@@ -82,14 +91,21 @@ const withoutRegains = ({ regains: _regains, ...supply }: ItemSupply): ItemSuppl
 /**
  * The item as another type. A potion can be given (for an action, until that's changed) and nothing else can. A wand's
  * stack becomes charges (7, back at dawn, when it had none); a potion's, a scroll's or a flask's charges become a stack
- * (one, when it had none). Worn items and gear keep whatever they had.
+ * (one, when it had none). Armor starts as leather (AC 11, light) and a shield as +2, worn; neither is a stack. Worn
+ * items and gear keep whatever they had.
  */
 export function withItemType(item: ItemDefinition, type: ItemType): ItemDefinition {
   if (type === item.type) return item;
-  const { give, followsTableRule, ...rest } = item;
+  const { give, followsTableRule, armor, equipped, ...rest } = item;
   let next: ItemDefinition = type === "potion"
     ? { ...rest, type, give: give ?? { actionType: "action" }, ...(followsTableRule === false ? { followsTableRule } : {}) }
     : { ...rest, type };
+  if (type === "armor" || type === "shield") {
+    const stats: ArmorStats = type === "shield" ? { category: "shield", ac: 2, ...(armor?.magicBonus ? { magicBonus: armor.magicBonus } : {}) }
+      : armor && armor.category !== "shield" ? armor : { category: "light", ac: 11, ...(armor?.magicBonus ? { magicBonus: armor.magicBonus } : {}) };
+    const { supply, ...unstacked } = next;
+    next = { ...(supply?.unit === "charges" ? next : unstacked), armor: stats, ...(equipped === false ? { equipped } : {}) };
+  }
   if (type === "wand") {
     next = { ...next, supply: item.supply ? { ...item.supply, unit: "charges", regains: item.supply.regains ?? "dawn" } : { id: supplyIdOf(item), size: 7, unit: "charges", regains: "dawn" } };
   } else if (isConsumableType(type)) {

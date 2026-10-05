@@ -260,7 +260,8 @@ describe("Add and the library", () => {
     const results = searchAdd("potion", "items", undefined);
     expect(results.library.map((entry) => entry.name)).toEqual(expect.arrayContaining(["Potion of Heroism", "Potion of Invulnerability", "Potion of Speed"]));
     expect(results.recipes.map((recipe) => recipe.label)).toEqual(["Buff potion", "Healing potion"]);
-    expect(searchAdd("", "items", undefined).recipes.map((recipe) => recipe.label)).toEqual(["Buff potion", "Healing potion", "Other gear", "Spell scroll", "Thrown flask", "Wand", "Worn item"]);
+    expect(searchAdd("", "items", undefined).recipes.map((recipe) => recipe.label))
+      .toEqual(["Armor", "Buff potion", "Healing potion", "Other gear", "Shield", "Spell scroll", "Thrown flask", "Wand", "Worn item"]);
   });
 
   it("opens a library item in the editor with where it came from", () => {

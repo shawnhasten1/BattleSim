@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useState } from "react";
-import type { CombatantState, ConditionInstance, CreatureDefinition, EncounterSnapshot, Faction } from "@/engine";
+import { armoredAc, type CombatantState, type ConditionInstance, type CreatureDefinition, type EncounterSnapshot, type Faction } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { automationSummary } from "@/lib/actor-sheet/ai-uses";
 import { concentrationOf, conditionLabel, describeCondition, DM_CONDITIONS, statusOf } from "@/lib/actor-sheet/conditions";
@@ -72,8 +72,8 @@ export function VitalsStrip({ combatant, definition }: { combatant: CombatantSta
           <HpBar current={combatant.currentHp} max={definition.maxHp} width={96} />
           <span className={styles.vitalsLabel}>Temp</span>
           <SheetNumber label="Temporary hit points" className={styles.vitalsBox} value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
-          <span className={styles.vitalsFacts} title={`AC ${definition.armorClass} · speed ${speedLine(definition)} · ${FACTIONS[combatant.faction]}`}>
-            AC {definition.armorClass} · {speedLine(definition)} · <span className={styles.faction} data-faction={combatant.faction}>{FACTIONS[combatant.faction]}</span>
+          <span className={styles.vitalsFacts} title={`AC ${armoredAc(definition).total} · speed ${speedLine(definition)} · ${FACTIONS[combatant.faction]}`}>
+            AC {armoredAc(definition).total} · {speedLine(definition)} · <span className={styles.faction} data-faction={combatant.faction}>{FACTIONS[combatant.faction]}</span>
           </span>
         </div>
         <div className={styles.vitalsRow}>

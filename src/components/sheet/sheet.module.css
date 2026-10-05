@@ -411,6 +411,21 @@
   width: 60px;
 }
 
+/* The AC worn armor gives: worked out, not typed, so a box that can't be edited. */
+.acTotal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .unit {
   font-size: 11px;
   text-transform: none;
