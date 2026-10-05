@@ -1,7 +1,8 @@
 # Armor Plan: armor and shields that set a creature's AC
 
-**Status:** planned and built 2026-10-05 on branch `armor` (from `items`). Decided by the user on 2026-10-05: worn armor
-sets the AC (D1), and armor and shields are items (D2). The rest take the defaults below.
+**Status:** built 2026-10-05, Phases 0–3, on branch `armor` (from `items`); not merged. Decided by the user on
+2026-10-05: worn armor sets the AC (D1), and armor and shields are items (D2). The rest take the defaults below; "Built:
+where it differs" at the end says how the build departs from this.
 
 Today a creature's AC is one typed number (`CreatureDefinition.armorClass`). Abilities can only add flat bonuses to it:
 an item's or a feature's `armor-class-bonus` effect (a Ring of Protection's +1), a condition's `modifiers.armorClass`
@@ -60,6 +61,20 @@ fighter in chain mail is "AC 16, typed", and putting on a +1 shield means doing 
   Wis with no shield; Draconic Resilience: 13 + Dex). The best of the typed AC and these counts.
 - Mage Armor (13 + Dex, no armor) becomes that formula on its condition, so it no longer adds +3 on top of armor.
 - A feature condition `unarmored` lets an effect apply only without armor (Bracers of Defense: no armor, no shield).
+
+## Built: where it differs
+
+- `armoredAc(definition, formulas)` (engine/armor.ts) is pure; `armorClassOf(definition, combatant?)` (combat) gathers
+  the formulas without armor from features, worn items and the token's conditions, and is what attacks, the AI, the
+  sheet, the hotbar and the Actors panel read. The AI passes no token, so it counts features' Unarmored Defense but not
+  a token's Mage Armor, as it never counted conditions' AC.
+- Armor kept for reference only (`manual-only`) sets no AC and no speed, so an Open5e magic armor without numbers can't
+  replace a creature's AC with the default leather.
+- The AC bonus gate is `unarmoredOnly` (no armor and no shield worn: the Bracers of Defense). The Defense fighting style
+  ("while wearing armor") stays unconditional: gating it would cost every creature whose armor is still typed its +1.
+- Mage Armor's conversion migrates only a library copy that's still exactly +3 (its source slug says so). The SRD's Mage
+  and Archmage (AC 12 without armor, Dex +2) keep 15; the regenerated humanoid chunk changed only there.
+- An armor row has a Worn checkbox, as an optional rule has its switch, rather than a menu item.
 
 ## Risks
 
