@@ -628,6 +628,10 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `When ${who.subject} makes a Dexterity saving throw to take half damage, it takes no damage on a success and half on a failure.`;
     case "no-critical-hits":
       return `Any critical hit against ${who.object} becomes a normal hit.`;
+    case "weapon-mastery":
+      return effect.weapons === "all"
+        ? `${S} can use the mastery property of every weapon.`
+        : `${S} can use the mastery properties of ${joinList(effect.weapons.map((kind) => kind.replace(/-/g, " ")))}.`;
   }
 }
 
@@ -687,6 +691,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "melee-retaliation": return `hitting it in melee: ${damageShort(effect.damage, definition)}`;
     case "evasion": return "evasion";
     case "no-critical-hits": return "no critical hits against it";
+    case "weapon-mastery": return effect.weapons === "all" ? "masters every weapon" : `masters ${effect.weapons.map((kind) => kind.replace(/-/g, " ")).join(", ")}`;
   }
 }
 
@@ -1558,6 +1563,24 @@ export function compiledWeaponAttack(weapon: WeaponDefinition, definition: Creat
   return [base, `${base}:bonus`, `${base}:reaction`].map((id) => attacks.find((action) => action.id === id)).find(Boolean);
 }
 
+/** What a weapon's mastery property does for this creature, in one sentence (weapon mastery, PC_BUILDER_PLAN.md Phase 3). */
+function masterySentence(attack: AttackAction, definition: CreatureDefinition): string {
+  const modifier = abilityModifier(definition.abilities[attack.ability]);
+  const damageType = attack.damage[0]?.damageType;
+  const pb = definition.proficiencyBonus ?? proficiencyFromDefinition(definition);
+  switch (attack.mastery) {
+    case "graze": return `Graze (mastery): on a miss, the target takes ${Math.max(0, modifier)} ${damageType && damageType !== "same-as-attack" ? `${damageType} ` : ""}damage.`;
+    case "push": return "Push (mastery): a hit pushes a Large or smaller target up to 10 feet away.";
+    case "sap": return "Sap (mastery): a target it hits has disadvantage on its next attack roll before the start of its next turn.";
+    case "slow": return "Slow (mastery): a target it hits is 10 feet slower until the start of its next turn (never more than 10 feet from Slow).";
+    case "topple": return `Topple (mastery): a target it hits makes a DC ${8 + modifier + pb} Constitution saving throw or falls prone.`;
+    case "vex": return "Vex (mastery): after a hit, its next attack roll against that target before the end of its next turn has advantage.";
+    case "cleave": return "Cleave (mastery): once per turn, after a melee hit, it attacks a second creature within 5 feet of the first and in reach, adding no ability modifier to that damage.";
+    case "nick": return "Nick (mastery): the extra attack of its other light weapon is part of the Attack action, not a bonus action.";
+    default: return "";
+  }
+}
+
 export function weaponStatblock(weapon: WeaponDefinition, definition: CreatureDefinition): StatblockEntry {
   const extras: string[] = [];
   if (weapon.charges) {
@@ -1590,6 +1613,7 @@ export function weaponStatblock(weapon: WeaponDefinition, definition: CreatureDe
     ? { ...rider, resourceCost: { ...rider.resourceCost, resourceId: "charges" } }
     : rider));
   const entry = actionStatblock({ ...compiled, riders }, onDefinition, { title: weapon.name });
+  if (compiled.mastery) extras.push(masterySentence(compiled, onDefinition));
   if (weapon.usableAs?.includes("bonus")) extras.push(weapon.usableAs.includes("action") ? "It can also attack with it as a bonus action." : "It attacks with it as a bonus action.");
   if (weapon.powerAttack) extras.push("It can take a -5 penalty to hit for +10 damage.");
   const flags = [

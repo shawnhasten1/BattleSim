@@ -160,7 +160,8 @@ describe("drinking a potion before the fight", () => {
   });
 });
 
-describe("the reports", () => {
+// Batches: about 1.5 s alone, but over the 5 s default when the whole suite runs at once.
+describe("the reports", { timeout: 20000 }, () => {
   it("a fight's report names the items each creature used, and the ally it got back up", () => {
     const encounter = load([potions("action", "bonus")], (board) => {
       downArcher(board);

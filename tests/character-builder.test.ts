@@ -168,7 +168,7 @@ describe("a Fighter built from 1st to 20th level", () => {
     const secondWind = feature(fighter, "fighter-second-wind");
     expect(secondWind.grantedActions?.[0]).toMatchObject({ kind: "healing", healing: [{ dice: "1d10+1" }], resourceCost: { resourceId: "second-wind", amount: 1 } });
     expect(feature(fighter, "feat-defense").effects).toEqual([{ kind: "armor-class-bonus", bonus: { base: 1 } }]);
-    expect(feature(fighter, "fighter-weapon-mastery").description).toMatch(/Mastered: Greatsword \(Graze\), Flail \(Sap\), Longbow \(Slow\)\./);
+    expect(feature(fighter, "fighter-weapon-mastery").description).toMatch(/Mastered: Greatsword \(Graze\), Flail \(Sap\), Spear \(Sap\)\./);
     expect(fighter.weapons?.map((weapon) => weapon.name)).toEqual(["Greatsword", "Flail", "Spear", "Shortbow"]);
     expect(fighter.items?.map((item) => item.name)).toEqual(["Chain Mail"]);
   });

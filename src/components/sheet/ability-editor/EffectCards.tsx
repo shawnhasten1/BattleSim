@@ -506,7 +506,8 @@ type DurationChoice = "next-turn" | "1-round" | "1-minute" | "rounds" | "save-en
 
 function durationChoice(duration: RiderDuration): DurationChoice {
   switch (duration.kind) {
-    case "until-start-of-next-turn": return "next-turn";
+    case "until-start-of-next-turn":
+    case "until-source-turn": return "next-turn";
     case "rounds": return duration.rounds === 1 ? "1-round" : duration.rounds === 10 ? "1-minute" : "rounds";
     default: return duration.kind;
   }

@@ -1,4 +1,4 @@
-import type { WeaponDefinition } from "@/engine";
+import type { WeaponDefinition, WeaponMastery } from "@/engine";
 
 /**
  * Bundled weapon library. Mostly SRD 5.1 base weapons plus a few magic-item
@@ -14,7 +14,7 @@ import type { WeaponDefinition } from "@/engine";
  *   resolved at attack time.
  * - No `id` on riders and no `actionId` on the weapon — both are minted on attach.
  */
-export const SRD_WEAPONS: readonly WeaponDefinition[] = [
+const LIBRARY_WEAPONS: readonly WeaponDefinition[] = [
   // ── Simple melee ────────────────────────────────────────────────────────────
   {
     id: "srd:weapon:club",
@@ -415,3 +415,53 @@ export const SRD_WEAPONS: readonly WeaponDefinition[] = [
     damage: [{ dice: "1", damageType: "piercing", abilityModifier: "dex" }]
   }
 ];
+
+/**
+ * Each weapon's kind and its SRD 5.2 mastery property (PC_BUILDER_PLAN.md Phase 3): the stats are the same in both
+ * editions, so the 2014 entries carry the 2024 property, which works only for a wielder that has mastered the weapon.
+ * A magic weapon is the kind it's made from. `tests/weapon-mastery.test.ts` checks this against the SRD 5.2 table.
+ */
+const MASTERY: Record<string, { baseWeapon: string; mastery: WeaponMastery }> = {
+  club: { baseWeapon: "club", mastery: "slow" },
+  dagger: { baseWeapon: "dagger", mastery: "nick" },
+  handaxe: { baseWeapon: "handaxe", mastery: "vex" },
+  mace: { baseWeapon: "mace", mastery: "sap" },
+  quarterstaff: { baseWeapon: "quarterstaff", mastery: "topple" },
+  spear: { baseWeapon: "spear", mastery: "sap" },
+  "light-crossbow": { baseWeapon: "light-crossbow", mastery: "slow" },
+  shortbow: { baseWeapon: "shortbow", mastery: "vex" },
+  sling: { baseWeapon: "sling", mastery: "slow" },
+  longsword: { baseWeapon: "longsword", mastery: "sap" },
+  shortsword: { baseWeapon: "shortsword", mastery: "vex" },
+  rapier: { baseWeapon: "rapier", mastery: "vex" },
+  scimitar: { baseWeapon: "scimitar", mastery: "nick" },
+  battleaxe: { baseWeapon: "battleaxe", mastery: "topple" },
+  warhammer: { baseWeapon: "warhammer", mastery: "push" },
+  greatsword: { baseWeapon: "greatsword", mastery: "graze" },
+  greataxe: { baseWeapon: "greataxe", mastery: "cleave" },
+  maul: { baseWeapon: "maul", mastery: "topple" },
+  glaive: { baseWeapon: "glaive", mastery: "graze" },
+  whip: { baseWeapon: "whip", mastery: "slow" },
+  longbow: { baseWeapon: "longbow", mastery: "slow" },
+  "heavy-crossbow": { baseWeapon: "heavy-crossbow", mastery: "push" },
+  "longsword-plus-1": { baseWeapon: "longsword", mastery: "sap" },
+  "dagger-of-venom": { baseWeapon: "dagger", mastery: "nick" },
+  "fear-sword": { baseWeapon: "longsword", mastery: "sap" },
+  greatclub: { baseWeapon: "greatclub", mastery: "push" },
+  "light-hammer": { baseWeapon: "light-hammer", mastery: "nick" },
+  sickle: { baseWeapon: "sickle", mastery: "nick" },
+  dart: { baseWeapon: "dart", mastery: "vex" },
+  morningstar: { baseWeapon: "morningstar", mastery: "sap" },
+  flail: { baseWeapon: "flail", mastery: "sap" },
+  "war-pick": { baseWeapon: "war-pick", mastery: "sap" },
+  trident: { baseWeapon: "trident", mastery: "topple" },
+  halberd: { baseWeapon: "halberd", mastery: "cleave" },
+  pike: { baseWeapon: "pike", mastery: "push" },
+  lance: { baseWeapon: "lance", mastery: "topple" },
+  blowgun: { baseWeapon: "blowgun", mastery: "vex" }
+};
+
+export const SRD_WEAPONS: readonly WeaponDefinition[] = LIBRARY_WEAPONS.map((weapon) => {
+  const mastery = MASTERY[weapon.id.slice("srd:weapon:".length)];
+  return mastery ? { ...weapon, ...mastery } : weapon;
+});

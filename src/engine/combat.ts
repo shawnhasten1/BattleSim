@@ -1,4 +1,5 @@
 import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
+import { activeMastery, isLightWeapon, masteryRiders } from "./mastery";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
@@ -241,7 +242,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
   const itemUses = workingItems(definition).flatMap(compileItemUses);
 
-  const declared = [
+  const listed = [
     ...definition.actions,
     ...(definition.bonusActions ?? []),
     ...(definition.reactions ?? []),
@@ -251,8 +252,10 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...grantedActions,
     ...weaponGrantedActions,
     ...itemUses
+  ];
+  const declared = [...listed, ...nickVariants(definition, listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
-  ].flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
+    .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
   return dedupeActionsById([
     ...declared,
@@ -260,6 +263,34 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...legendaryVariants(definition, declared),
     ...lairVariants(definition)
   ]).map(withEffectiveAutomationSupport);
+}
+
+/**
+ * Weapon mastery's Nick: the extra attack of two light weapons is part of the Attack action, not a bonus action. For a
+ * creature with a light weapon it uses Nick with, and another light weapon, each Attack routine of any weapons gets a
+ * copy with one more swing of that weapon ("Attack (Nick)"); without one, a single attack plus the swing. Simplified:
+ * the first attack needn't be made with a light weapon.
+ */
+function nickVariants(definition: CreatureDefinition, listed: ActionDefinition[]): ActionDefinition[] {
+  const light = (definition.weapons ?? []).filter((weapon) => weapon.attackType === "melee" && isLightWeapon(weapon));
+  const nick = light.find((weapon) => activeMastery(definition, weapon) === "nick");
+  if (!nick || light.length < 2) return [];
+  const nickAttackId = nick.actionId ?? `weapon:${nick.id}`;
+  const routines = listed.filter((action): action is MultiattackActionDefinition => action.kind === "multiattack"
+    && action.actionType === "action" && action.attacks.every((step) => step.any !== undefined));
+  if (routines.length) {
+    return routines.map((routine) => ({
+      ...routine,
+      id: `${routine.id}:nick`,
+      name: `${routine.name} (Nick)`,
+      attacks: [...routine.attacks, { actionId: nickAttackId, count: 1 }],
+      options: undefined
+    }));
+  }
+  return [{
+    kind: "multiattack", id: `nick:${nick.id}`, name: `Attack (Nick: ${nick.name})`, actionType: "action",
+    attacks: [{ any: "weapon", count: 1 }, { actionId: nickAttackId, count: 1 }], automationSupport: "full"
+  }];
 }
 
 /** The pool legendary actions spend from; refilled to `legendary.pool` at the start of the creature's own turn. */
@@ -1596,7 +1627,10 @@ export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: 
 export function turnMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
   const definition = getDefinition(snapshot, combatant);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
-  const fullBudget = movementReference(movementProfileOf(definition)) / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
+  // Feet off its speed (weapon mastery's Slow): the largest, not their sum.
+  const penaltyFt = Math.max(0, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.speedPenaltyFt ?? 0));
+  const speedFt = Math.max(0, movementReference(movementProfileOf(definition)) - penaltyFt);
+  const fullBudget = speedFt / snapshot.map.grid.distancePerSquare / movementMultiplier * dashFactor(combatant);
   return fullBudget + (combatant.turnFlags?.bonusMovement ?? 0);
 }
 
@@ -1694,9 +1728,13 @@ export function attackRollInputs(
     ? coverAgainst(state.snapshot, attacker, target)
     : { level: "none" as const, acBonus: options.coverBonus ?? 0, sources: [] as string[] });
   const featureAdvantage = featureAttackAdvantage(state, attacker, target, action, attackerDefinition);
+  // Weapon mastery's Sap (the attacker's next roll) and Vex (the next roll against a creature it vexed).
+  const nextAttack = nextAttackConditions(attacker, target);
+  for (const { condition } of nextAttack) featureAdvantage.sources.push(condition.sourceName ?? condition.id);
   const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
-  const advantage = Boolean(options.advantage || featureAdvantage.advantage);
-  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage);
+  const advantage = Boolean(options.advantage || featureAdvantage.advantage || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "advantage"));
+  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage
+    || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "disadvantage"));
   const rollMode = attackRollMode({ advantage, disadvantage });
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
@@ -1704,6 +1742,61 @@ export function attackRollInputs(
     + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
   const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
   return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover };
+}
+
+/**
+ * The conditions that change this attack roll and are used up by it (weapon mastery's Sap and Vex): the attacker's own
+ * "next attack roll", and the target's "next attack roll by this attacker".
+ */
+function nextAttackConditions(attacker: CombatantState, target: CombatantState): Array<{ bearer: CombatantState; condition: ConditionInstance }> {
+  const found: Array<{ bearer: CombatantState; condition: ConditionInstance }> = [];
+  for (const condition of attacker.conditions ?? []) {
+    if (condition.nextAttack?.role === "made") found.push({ bearer: attacker, condition });
+  }
+  for (const condition of target.conditions ?? []) {
+    if (condition.nextAttack?.role === "against" && condition.nextAttack.by === attacker.id) found.push({ bearer: target, condition });
+  }
+  return found;
+}
+
+/** An attack roll was made: the Sap or Vex it used is spent. */
+function spendNextAttackConditions(state: EngineState, attacker: CombatantState, target: CombatantState): void {
+  for (const { bearer, condition } of nextAttackConditions(attacker, target)) {
+    bearer.conditions = (bearer.conditions ?? []).filter((candidate) => candidate.id !== condition.id);
+    state.log.push(event(state, "ConditionExpired", `${bearer.displayName}'s ${condition.sourceName ?? condition.name} is used up`, {
+      combatantId: bearer.id, conditionId: condition.id, condition, reason: "next-attack-made"
+    }));
+  }
+}
+
+/**
+ * Weapon mastery's Cleave: after a melee hit, once per turn, an attack with the same weapon against a second creature
+ * within 5 ft of the first and in reach. Its damage has no positive ability modifier. The second creature is the one
+ * likeliest to drop: the fewest hit points left.
+ */
+function cleaveAfterHit(state: EngineState, attacker: CombatantState, first: CombatantState, attackerDefinition: CreatureDefinition, action: AttackActionDefinition): void {
+  const useKey = `${action.id}:cleave`;
+  if (wasRiderUsedThisTurn(state, attacker.id, useKey)) return;
+  const cleaveAction: AttackActionDefinition = {
+    ...action,
+    name: `${action.name} (Cleave)`,
+    cleave: false,
+    damage: action.damage.map((component) => component.abilityModifier && abilityModifier(attackerDefinition.abilities[component.abilityModifier]) > 0
+      ? { ...component, abilityModifier: undefined }
+      : component)
+  };
+  const attackerFaction = effectiveFaction(state.snapshot, attacker);
+  const second = state.snapshot.combatants
+    .filter((candidate) => candidate.id !== first.id && candidate.id !== attacker.id && candidate.state === "active"
+      && effectiveFaction(state.snapshot, candidate) !== attackerFaction
+      && spatialDistance(state.snapshot, first, candidate) <= 5
+      && !targetingProblem(state.snapshot, attacker, candidate, cleaveAction))
+    .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id))[0];
+  if (!second) return;
+  state.log.push(event(state, "RiderApplied", `${attacker.displayName} cleaves into ${second.displayName}`, {
+    sourceId: attacker.id, targetId: second.id, actionId: action.id, riderKind: "cleave", riderUseKey: useKey
+  }));
+  resolveAttackCore(state, attacker, second, attackerDefinition, cleaveAction, { suppressDeclare: true }, false);
 }
 
 /** The result a spell resolver returns when the spell was countered before it could take effect. */
@@ -1758,6 +1851,7 @@ function resolveAttackCore(
   const { featureAdvantage, longRange, rollMode, attackBonus, featureAttackBonus } = inputs;
   let targetAc = inputs.targetAc;
   const d20 = rollD20(state.rng, { advantage: inputs.advantage, disadvantage: inputs.disadvantage });
+  spendNextAttackConditions(state, attacker, target);
   const total = d20.total + inputs.totalBonus;
   const natural = d20.total;
   let critical = natural === 20;
@@ -1869,6 +1963,9 @@ function resolveAttackCore(
     attacker.turnFlags = { ...(attacker.turnFlags ?? {}), droppedCreature: true, bonusMovement: (attacker.turnFlags?.bonusMovement ?? 0) + extraSquares };
   }
   if (hit) applyMeleeRetaliation(state, attacker, target, action);
+  if (hit && action.cleave && action.attackType === "melee" && attacker.state === "active") {
+    cleaveAfterHit(state, attacker, target, attackerDefinition, action);
+  }
   // A Parry's bonus is for this attack only.
   for (const { combatantId, conditionId } of endsAfterAttack ?? []) {
     const bearer = state.snapshot.combatants.find((combatant) => combatant.id === combatantId);
@@ -4876,11 +4973,18 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
   const isMagical = weapon.magical === true;
   const twoHanded = wieldsTwoHanded(definition, weapon);
   const damageSource = twoHanded && weapon.versatileDamage?.length ? weapon.versatileDamage : weapon.damage;
+  // Weapon mastery: only for a wielder that has mastered this kind of weapon.
+  const mastery = activeMastery(definition, weapon);
+  const weaponDamageType = damageSource[0]?.damageType;
+  const masteryAdds = mastery ? masteryRiders(mastery, ability, weaponDamageType === "same-as-attack" ? undefined : weaponDamageType) : [];
+  const riders = mandatoryRiders(weapon.onHit);
   return {
     kind: "attack",
     id: weapon.actionId ?? `weapon:${weapon.id}`,
     name: weapon.name,
     actionType: "action",
+    ...(mastery ? { mastery } : {}),
+    ...(mastery === "cleave" ? { cleave: true } : {}),
     // Never "focus" here — `weaponToActions` returns early for a focus weapon before this runs.
     attackType: weapon.attackType as "melee" | "ranged",
     ability,
@@ -4904,7 +5008,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
         ? { ...(component.bonusFormula ?? {}), base: (component.bonusFormula?.base ?? 0) + magicBonus }
         : component.bonusFormula
     })),
-    riders: mandatoryRiders(weapon.onHit),
+    riders: masteryAdds.length ? [...(riders ?? []), ...masteryAdds] : riders,
     resourceCost: weapon.resourceCost,
     automationSupport: weaponAutomationSupport(weapon)
   };
@@ -5612,7 +5716,7 @@ function wasRiderUsedThisTurn(state: EngineState, sourceId: Id, key: string): bo
     && entry.data.riderUseKey === key);
 }
 
-function riderDurationToExpiry(state: EngineState, duration: RiderDuration, bearerTurnIndex?: number): {
+function riderDurationToExpiry(state: EngineState, duration: RiderDuration, bearerTurnIndex?: number, sourceTurnIndex?: number): {
   expiresAt?: ConditionInstance["expiresAt"];
   repeatTiming?: "turn-start" | "turn-end";
   concentration?: boolean;
@@ -5632,6 +5736,18 @@ function riderDurationToExpiry(state: EngineState, duration: RiderDuration, bear
           round: state.snapshot.round + (laterThisRound ? 0 : 1),
           turnIndex: bearerIdx,
           timing: "start"
+        }
+      };
+    }
+    case "until-source-turn": {
+      // The source's next turn: later this round if it hasn't come yet, otherwise next round (its own, now, included).
+      const sourceIdx = sourceTurnIndex ?? state.snapshot.turnIndex;
+      const laterThisRound = sourceIdx > state.snapshot.turnIndex;
+      return {
+        expiresAt: {
+          round: state.snapshot.round + (laterThisRound ? 0 : 1),
+          turnIndex: sourceIdx,
+          timing: duration.timing
         }
       };
     }
@@ -5832,9 +5948,11 @@ function applyConditionRider(
   }
 
   const conditionName: ConditionName = typeof rider.condition === "string" ? rider.condition : "custom";
-  const conditionId = `${target.id}:${ctx.actionId}:${rider.id ?? "cond"}`;
+  // A keyed condition (weapon mastery's Slow) replaces itself rather than stacking with the same from another weapon.
+  const conditionId = rider.conditionKey ? `${target.id}:${rider.conditionKey}` : `${target.id}:${ctx.actionId}:${rider.id ?? "cond"}`;
   const bearerTurnIndex = state.snapshot.combatants.findIndex((c) => c.id === target.id);
-  const expiry = riderDurationToExpiry(state, rider.duration, bearerTurnIndex >= 0 ? bearerTurnIndex : undefined);
+  const sourceTurnIndex = state.snapshot.combatants.findIndex((c) => c.id === source.id);
+  const expiry = riderDurationToExpiry(state, rider.duration, bearerTurnIndex >= 0 ? bearerTurnIndex : undefined, sourceTurnIndex >= 0 ? sourceTurnIndex : undefined);
   const repeatAbility = rider.save?.ability ?? ctx.saveAbility;
   const repeatDc = rider.save ? resolveRiderSaveDc(rider.save, sourceDefinition, ctx.fallbackDc) : ctx.fallbackDc;
 
@@ -5847,6 +5965,8 @@ function applyConditionRider(
     expiresAt: expiry.expiresAt,
     modifiers: rider.modifiers ?? defaultConditionModifiers(conditionName),
     effects: rider.effects,
+    ...(rider.conditionKey ? { sourceName: rider.conditionKey } : {}),
+    ...(rider.nextAttack ? { nextAttack: { ...rider.nextAttack, ...(rider.nextAttack.role === "against" ? { by: source.id } : {}) } } : {}),
     repeatSave: expiry.repeatTiming && repeatAbility
       ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming }
       : undefined,
@@ -5942,6 +6062,8 @@ function applyActionRiders(
       const recipient = rider.target === "self" ? source : target;
       outcome.healing += applyRiderHealing(state, recipient, sourceDefinition, rider.components);
     } else if (rider.kind === "push") {
+      // Weapon mastery's Push: only a Large or smaller creature moves.
+      if (rider.maxSize && SIZE_ORDER.indexOf(targetDefinition.size) > SIZE_ORDER.indexOf(rider.maxSize)) return;
       pushCombatant(state, target, rider.distance, ctx.origin ?? source.position);
     } else if (rider.kind === "swallow") {
       if (!applySwallow(state, source, target, targetDefinition, rider, ctx.actionId)) {

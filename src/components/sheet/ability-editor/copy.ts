@@ -44,6 +44,8 @@ export const COPY = {
   magicBonus: { label: "Magic bonus", hint: "+1 to +3, added to the attack roll and every damage roll." },
   toHitBonus: { label: "Extra to-hit bonus", hint: "Added to the attack roll only." },
   powerAttack: { label: "Offer a power attack", hint: "Great Weapon Master or Sharpshooter: also a −5 to hit, +10 damage swing. The AI picks whichever looks better." },
+  weaponMastery: { label: "Mastery", hint: "Its mastery property (2024 rules): it works only for a creature with Weapon Mastery for this kind of weapon. Cleave, Graze, Nick, Push, Sap, Slow, Topple or Vex." },
+  baseWeapon: { label: "Kind of weapon", hint: "What Weapon Mastery is chosen by: a +1 longsword is a longsword. Blank: its name." },
   magicalSource: { label: "Counts as magic", hint: "Creatures with Magic Resistance get advantage on saves against its effects." },
 
   // Damage

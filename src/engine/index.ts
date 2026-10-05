@@ -9,6 +9,7 @@ export * from "./geometry";
 export * from "./elevation";
 export * from "./import-normalize";
 export * from "./items";
+export * from "./mastery";
 export * from "./multiattack";
 export * from "./report";
 export * from "./rng";

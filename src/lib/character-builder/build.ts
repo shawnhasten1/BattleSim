@@ -215,6 +215,8 @@ interface WalkState {
   skills: Set<string>;
   expertise: Set<string>;
   masteries: string[];
+  /** The kinds of weapon its starting packages give it: what a mastery suggestion picks first. */
+  carriedKinds: string[];
   feats: Map<string, number>;
   grants: CollectedGrant[];
   choices: ChoiceSlot[];
@@ -378,7 +380,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
         if (!ok) slot.problem = `${kind} is already mastered, or isn't a weapon`;
         return ok;
       }).slice(0, count);
-      const preferred = [...(suggestionsOf?.masteries ?? []), ...(known ?? [])];
+      const preferred = [...state.carriedKinds, ...(suggestionsOf?.masteries ?? []), ...(known ?? [])];
       slot.suggestion = preferred.filter((kind, index) => preferred.indexOf(kind) === index && !state.masteries.includes(kind) && (!known || known.includes(kind))).slice(0, count);
       state.masteries.push(...chosen);
       if (stored !== undefined) slot.value = chosen;
@@ -508,12 +510,24 @@ function takeFeat(state: WalkState, feat: FeatDefinition, choice: FeatChoice | u
   }
 }
 
+/** The kinds of weapon the build's starting packages give (the first class's and the background's), in order. */
+function carriedKindsOf(build: CharacterBuild, sources: BuildSources): string[] {
+  const firstClass = classOf(sources, build.levels[0]?.classId ?? "");
+  const background = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
+  const refs = [
+    ...(firstClass?.startingEquipment?.find((entry) => entry.id === build.equipment?.classOption)?.items ?? []),
+    ...(background?.equipment?.find((entry) => entry.id === build.equipment?.backgroundOption)?.items ?? [])
+  ].map((item) => item.ref).filter((ref) => ref.startsWith("srd:weapon:"));
+  const kinds = refs.map((ref) => sources.library.weapon(ref)?.baseWeapon ?? ref.slice("srd:weapon:".length));
+  return kinds.filter((kind, index) => kinds.indexOf(kind) === index);
+}
+
 /** Walk the whole build in order: background, then each level, gathering grants and choices. */
 function walk(build: CharacterBuild, sources: BuildSources): WalkState & { classLevels: Map<string, number>; subclassOf: Map<string, SubclassDefinition> } {
   const state: WalkState & { classLevels: Map<string, number>; subclassOf: Map<string, SubclassDefinition> } = {
     build, sources,
     abilities: { ...build.abilities.base },
-    skills: new Set(), expertise: new Set(), masteries: [], feats: new Map(),
+    skills: new Set(), expertise: new Set(), masteries: [], carriedKinds: carriedKindsOf(build, sources), feats: new Map(),
     grants: [], choices: [], warnings: [], saves: new Set(),
     classLevels: new Map(), subclassOf: new Map()
   };
@@ -731,9 +745,14 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     }).join(", ")}.`
     : undefined;
   for (const built of features) {
-    if (masteryNote && built.key.endsWith(":weapon-mastery")) {
-      built.feature = { ...built.feature, description: [built.feature.description, masteryNote].filter(Boolean).join("\n\n") };
-    }
+    if (!built.key.endsWith(":weapon-mastery")) continue;
+    // The kinds chosen, for the engine (`weapon-mastery`) and for the DM (the note).
+    const effects = (built.feature.effects ?? []).map((effect) => (effect.kind === "weapon-mastery" ? { ...effect, weapons: [...state.masteries] } : effect));
+    built.feature = {
+      ...built.feature,
+      ...(built.feature.effects ? { effects } : {}),
+      ...(masteryNote ? { description: [built.feature.description, masteryNote].filter(Boolean).join("\n\n") } : {})
+    };
   }
 
   // Species: size, speed, type and senses (Phase 6); without one, a Medium humanoid walking 30 ft.

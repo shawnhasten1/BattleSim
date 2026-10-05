@@ -4076,6 +4076,7 @@ function turnsHeld(
   };
   switch (duration.kind) {
     case "until-start-of-next-turn":
+    case "until-source-turn":
       return 1;
     case "rounds": {
       const rounds = Math.min(MAX_TURNS_HELD, Math.max(1, duration.rounds));

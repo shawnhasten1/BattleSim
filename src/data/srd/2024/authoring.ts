@@ -88,6 +88,11 @@ export function choice<C extends ChoiceSpec>(spec: C, ref: string): C & { ref: s
   return { ...spec, ref: refKey(ref) };
 }
 
+/** A class's Weapon Mastery feature: the builder fills in the kinds of weapon chosen (`weapon-mastery` effect). */
+export function weaponMasteryFeature(key: string): FeatureDefinition {
+  return runs(key, { effects: [{ kind: "weapon-mastery", weapons: [] }] });
+}
+
 /** 20 values from a sparse "from level N, value V" list: `fromLevels([[2, 1], [17, 2]])` → null, 1 … 1, 2, 2, 2, 2. */
 export function fromLevels(steps: Array<[number, number]>): Array<number | null> {
   return Array.from({ length: 20 }, (_, index) => {

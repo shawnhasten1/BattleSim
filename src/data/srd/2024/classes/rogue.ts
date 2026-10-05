@@ -1,5 +1,5 @@
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
-import { choice, grant, informational, reference, runs } from "../authoring";
+import { choice, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
 
 const ref = srdClass("rogue");
@@ -60,7 +60,7 @@ export const ROGUE: ClassDefinition = {
       grants: [
         grant("sneak-attack", sneakAttack, { scale: [{ path: "effects.0.damage.0.dice", value: "{col:sneak-attack}" }] }),
         grant("thieves-cant", informational("rogue_thieves-cant")),
-        grant("weapon-mastery", reference("rogue_weapon-mastery"))
+        grant("weapon-mastery", weaponMasteryFeature("rogue_weapon-mastery"))
       ],
       choices: [
         choice({ kind: "expertise", id: "expertise", count: 2 }, "rogue_expertise"),

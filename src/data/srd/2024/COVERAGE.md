@@ -15,15 +15,15 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 5 | 3 | 9 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 6 | 3 | 8 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 1 | 4 | 4 | 8 | 2 |
-| Fighter (Champion) | 21 | 5 | 0 | 10 | 5 | 1 |
+| Fighter (Champion) | 21 | 6 | 0 | 9 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 7 | 5 | 5 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 4 | 1 | 9 | 8 | 1 |
-| Ranger (Hunter) | 23 | 2 | 2 | 8 | 9 | 2 |
-| Rogue (Thief) | 23 | 2 | 2 | 9 | 6 | 4 |
+| Paladin (Oath of Devotion) | 23 | 5 | 1 | 8 | 8 | 1 |
+| Ranger (Hunter) | 23 | 3 | 2 | 7 | 9 | 2 |
+| Rogue (Thief) | 23 | 3 | 2 | 8 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 2 | 1 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
 | Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
@@ -38,7 +38,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
 | `d20-reroll` | Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate) | Bard, Fighter, Monk, Rogue, Warlock, Feats, Species | 1 | Countercharm (Bard); Indomitable (Fighter); Heroic Warrior (Champion); Disciplined Survivor (Monk); Stroke of Luck (Rogue); Dark One's Own Luck (Fiend Patron); Boon of Combat Prowess (feat); Boon of Fate (feat); Luck (Halfling); Resourceful (Human) |
-| `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Barbarian, Fighter, Paladin, Ranger, Rogue | 1 | Weapon Mastery (Barbarian); Weapon Mastery (Fighter); Tactical Master (Fighter); Weapon Mastery (Paladin); Weapon Mastery (Ranger); Weapon Mastery (Rogue) |
 | `damage-reaction` | A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance) | Monk, Ranger, Rogue, Species | 1 | Deflect Attacks (Monk); Deflect Energy (Monk); Superior Hunter's Defense (Hunter); Uncanny Dodge (Rogue); Giant Ancestry (Goliath) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
@@ -53,6 +52,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
 | `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
 | `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
+| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter | 2 | Reckless Attack (Barbarian); Action Surge (Fighter) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 10 | Self-Restoration (Monk); Restoring Touch (Paladin) |
@@ -76,6 +76,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin | 9 | Abjure Foes (Paladin) |
+| `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `relentless` | Dropping to more than 1 HP instead of 0, with a DC that rises each use (Relentless Rage) | Barbarian | 11 | Relentless Rage (Barbarian) |
@@ -97,9 +98,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Rage | partial | `rage-limits` | Resistance, the damage bonus and advantage on Strength saves run, for 10 rounds. It isn't ended by not attacking, and raging doesn't stop spells or concentration. |
 | 1 | Unarmored Defense | full |  |  |
-| 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
+| 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Danger Sense | full |  | Advantage on Dexterity saves; the Incapacitated exception isn't checked. |
-| 2 | Reckless Attack | full |  | Attacks against it are +5 rather than at advantage until its next turn. |
+| 2 | Reckless Attack | full | `ai-free-actions` | Attacks against it are +5 rather than at advantage until its next turn. The AI doesn't take it on its own yet. |
 | 3 | Barbarian Subclass | builder |  | The subclass choice. |
 | 3 | Primal Knowledge | builder |  | A skill; using Strength for checks while raging is outside a fight. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
@@ -214,8 +215,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Fighting Style | builder |  | A Fighting Style feat. |
 | 1 | Second Wind | full |  | 1d10 + fighter level, its uses by level. |
-| 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
-| 2, 17 | Action Surge | full |  | Two uses from 17th level; once per turn isn't checked. |
+| 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
+| 2, 17 | Action Surge | full | `ai-free-actions` | Two uses from 17th level; once per turn isn't checked. The AI doesn't take it on its own yet. |
 | 2 | Tactical Mind | info |  | Ability checks. |
 | 3 | Fighter Subclass | builder |  | The subclass choice. |
 | 4, 6, 8, 12, 14, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
@@ -281,7 +282,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Lay On Hands | manual | `pool-heal` | The builder sizes the pool (5 × paladin level). |
 | 1 | Spellcasting | builder |  |  |
-| 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
+| 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Fighting Style | builder |  | A Fighting Style feat, or Blessed Warrior's two cantrips. |
 | 2 | Paladin's Smite | manual | `smite` | Divine Smite is always prepared. |
 | 3 | Channel Divinity | info |  | Divine Sense; the builder sizes the pool for the subclass's options. |
@@ -314,7 +315,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Favored Enemy | partial | `mark` | Hunter's Mark is always prepared, with its free casts as a pool; the mark's damage needs Phase 7. |
 | 1 | Spellcasting | builder |  |  |
-| 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
+| 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Deft Explorer | builder |  | Expertise; languages are outside a fight. |
 | 2 | Fighting Style | builder |  | A Fighting Style feat, or Druidic Warrior's two cantrips. |
 | 3 | Ranger Subclass | builder |  | The subclass choice. |
@@ -348,7 +349,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1, 6 | Expertise | builder |  |  |
 | 1 | Sneak Attack | partial | `weapon-property-scope` | Its dice by level; any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage. |
 | 1 | Thieves' Cant | info |  | Languages. |
-| 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
+| 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Cunning Action | full |  | Dash and Disengage run; Hide is reference. |
 | 3 | Rogue Subclass | builder |  | The subclass choice. |
 | 3 | Steady Aim | partial | `next-attack` | Advantage on its attacks this turn and no movement; not having moved first isn't checked. |

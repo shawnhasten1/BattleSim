@@ -1,5 +1,5 @@
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
-import { choice, fromLevels, grant, informational, reference, runs } from "../authoring";
+import { choice, fromLevels, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns, srdNumbers } from "../reference";
 
 const ref = srdClass("fighter");
@@ -58,7 +58,7 @@ export const FIGHTER: ClassDefinition = {
           scale: [{ path: "grantedActions.0.healing.0.dice", value: "1d10+{level}" }],
           pool: { id: "second-wind", size: "{col:second-wind}" }
         }),
-        grant("weapon-mastery", reference("fighter_weapon-mastery"))
+        grant("weapon-mastery", weaponMasteryFeature("fighter_weapon-mastery"))
       ],
       choices: [
         choice({ kind: "feat", id: "fighting-style", categories: ["fighting-style"], label: "Fighting Style" }, "fighter_fighting-style"),

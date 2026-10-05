@@ -5,6 +5,7 @@
  */
 import { builtFrom } from "@/lib/character-builder/summary";
 import {
+  activeMastery,
   casterLevelOf,
   isArmorItem,
   isWorn,
@@ -204,7 +205,9 @@ function weaponRow(definition: CreatureDefinition, weapon: WeaponDefinition): Li
   const slots = weapon.usableAs ?? ["action"];
   const chips = [
     ...(weaponGroup(weapon) === "actions" && slots.includes("bonus") ? ["also a bonus action"] : []),
-    ...(weapon.powerAttack ? ["power attack"] : [])
+    ...(weapon.powerAttack ? ["power attack"] : []),
+    // Weapon mastery, when this creature uses it.
+    ...((() => { const mastery = activeMastery(definition, weapon); return mastery ? [`${mastery} mastery`] : []; })())
   ];
   const cost = weapon.resourceCost ? costText(weapon.resourceCost) : weapon.charges ? `${weapon.charges.max} ${weapon.charges.max === 1 ? "charge" : "charges"}` : undefined;
   return row(definition, { list: "weapons", id: weapon.id }, weapon.name, { chips, cost }, weaponGroup(weapon));

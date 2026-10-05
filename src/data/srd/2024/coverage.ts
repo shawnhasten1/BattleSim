@@ -80,7 +80,8 @@ export const GAPS = {
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
-  "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)"
+  "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)",
+  "ai-free-actions": "The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play"
 } as const;
 
 export type GapCode = keyof typeof GAPS;
@@ -95,7 +96,7 @@ const FEAT_CHOICE = builder("A feat choice: the Ability Score Improvement feat o
 const EPIC_BOON = builder("A feat choice from the Epic Boons.");
 const SUBCLASS = builder("The subclass choice.");
 const SPELL_LIST = builder("Read from each spell's own class list.");
-const MASTERY = manual(["weapon-mastery"], "The builder records the chosen kinds of weapon; they run once Phase 3 is built.");
+const MASTERY = full("The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left.");
 const PREPARED = (what: string) => builder(`${what} are always prepared.`);
 
 /** Class and subclass features, by Open5e key without its `srd-2024_` prefix. */
@@ -105,7 +106,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_unarmored-defense": full(),
   "barbarian_weapon-mastery": MASTERY,
   "barbarian_danger-sense": full("Advantage on Dexterity saves; the Incapacitated exception isn't checked."),
-  "barbarian_reckless-attack": full("Attacks against it are +5 rather than at advantage until its next turn."),
+  "barbarian_reckless-attack": { verdict: "full", gaps: ["ai-free-actions"], note: "Attacks against it are +5 rather than at advantage until its next turn. The AI doesn't take it on its own yet." },
   "barbarian_barbarian-subclass": SUBCLASS,
   "barbarian_primal-knowledge": builder("A skill; using Strength for checks while raging is outside a fight."),
   "barbarian_ability-score-improvement": FEAT_CHOICE,
@@ -197,7 +198,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_fighting-style": builder("A Fighting Style feat."),
   "fighter_second-wind": full("1d10 + fighter level, its uses by level."),
   "fighter_weapon-mastery": MASTERY,
-  "fighter_action-surge": full("Two uses from 17th level; once per turn isn't checked."),
+  "fighter_action-surge": { verdict: "full", gaps: ["ai-free-actions"], note: "Two uses from 17th level; once per turn isn't checked. The AI doesn't take it on its own yet." },
   "fighter_tactical-mind": info("Ability checks."),
   "fighter_fighter-subclass": SUBCLASS,
   "fighter_ability-score-improvement": FEAT_CHOICE,

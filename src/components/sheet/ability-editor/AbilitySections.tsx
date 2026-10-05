@@ -3,7 +3,9 @@
 import { useId, useRef, type ReactNode } from "react";
 import {
   abilityModifier,
+  activeMastery,
   proficiencyFromDefinition,
+  weaponKindOf,
   resolveAttackBonus,
   spellcastingAbility,
   withSpellcastingAttackAbility,
@@ -14,7 +16,8 @@ import {
   type DamageComponent,
   type ReactionMeta,
   type SpellDefinition,
-  type WeaponDefinition
+  type WeaponDefinition,
+  type WeaponMastery
 } from "@/engine";
 import { actionTarget, attackBonusBinding, calculatedAttackBonus, diceBinding, diceExpression, diceParts } from "@/lib/ability-editor/bindings";
 import type { SectionId } from "@/lib/ability-editor/sections";
@@ -501,6 +504,8 @@ function WeaponRoll({ weapon, onChange, definition }: { weapon: WeaponDefinition
   ];
   const total = parts.reduce((sum, part) => sum + part.value, 0);
   const common = weapon.ability === "str" || weapon.ability === "dex" || weapon.ability === "finesse";
+  const masteryId = useId();
+  const used = activeMastery(definition, weapon);
   return (
     <>
       <Field copy="attackType">
@@ -534,11 +539,33 @@ function WeaponRoll({ weapon, onChange, definition }: { weapon: WeaponDefinition
       </Field>
       <Check copy="proficient" checked={proficient} onChange={(on) => onChange(withValue(weapon, "proficient", on ? undefined : false))} />
       <Breakdown parts={parts} total={total} />
-      <More set={(extra ? 1 : 0) + (weapon.powerAttack ? 1 : 0) + (common ? 0 : 1)}>
+      <More set={(extra ? 1 : 0) + (weapon.powerAttack ? 1 : 0) + (common ? 0 : 1) + (weapon.mastery ? 1 : 0)}>
         <Field copy="toHitBonus">
           <NumberField label="Extra to-hit bonus" signed optional value={weapon.toHitBonus} min={-10} max={20} placeholder="+0" onChange={(n) => onChange(withValue(weapon, "toHitBonus", n || undefined))} />
         </Field>
         <Check copy="powerAttack" checked={weapon.powerAttack === true} onChange={(on) => onChange(withValue(weapon, "powerAttack", on ? true : undefined))} />
+        <Field copy="weaponMastery" id={masteryId}>
+          <select
+            id={masteryId} value={weapon.mastery ?? ""} style={{ alignSelf: "flex-start" }}
+            onChange={(e) => onChange(withValue(weapon, "mastery", (e.target.value || undefined) as WeaponMastery | undefined))}
+          >
+            <option value="">None</option>
+            {(["cleave", "graze", "nick", "push", "sap", "slow", "topple", "vex"] as const).map((property) => (
+              <option key={property} value={property}>{property.charAt(0).toUpperCase() + property.slice(1)}</option>
+            ))}
+          </select>
+          {weapon.mastery ? (
+            <span className={styles.hint}>
+              {used ? "This creature has mastered it: its attacks use it." : `This creature hasn't mastered ${weaponKindOf(weapon).replace(/-/g, " ")}s, so it does nothing here.`}
+            </span>
+          ) : null}
+        </Field>
+        <Field copy="baseWeapon">
+          <input
+            aria-label="Kind of weapon" value={weapon.baseWeapon ?? ""} placeholder={weaponKindOf({ name: weapon.name })}
+            onChange={(e) => onChange(withValue(weapon, "baseWeapon", e.target.value.trim().toLowerCase().replace(/\s+/g, "-") || undefined))}
+          />
+        </Field>
         <Field copy="otherAbility" id={otherId}>
           <select id={otherId} value={common ? "" : weapon.ability} onChange={(e) => e.target.value && onChange(withWeaponAbility(weapon, e.target.value as Ability))} style={{ alignSelf: "flex-start" }}>
             <option value="">STR, DEX or finesse (above)</option>

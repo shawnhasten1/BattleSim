@@ -633,6 +633,14 @@ export type FeatureEffect =
   | {
     /** Adamantine armor: a critical hit against the bearer becomes a normal hit (a DM's ruling on the roll stands). */
     kind: "no-critical-hits";
+  }
+  | {
+    /**
+     * Weapon Mastery (SRD 5.2): the kinds of weapon (`WeaponDefinition.baseWeapon`) whose mastery property this creature
+     * can use, or `"all"`. A weapon's attacks carry its property only for a wielder that has mastered its kind.
+     */
+    kind: "weapon-mastery";
+    weapons: string[] | "all";
   };
 
 /**
@@ -712,7 +720,12 @@ export type RiderDuration =
   | { kind: "concentration" }
   | { kind: "permanent" }
   /** Clears at the start of the bearer's next turn (Shield, Dodge, Shocking Grasp's reaction lock). */
-  | { kind: "until-start-of-next-turn" };
+  | { kind: "until-start-of-next-turn" }
+  /**
+   * Clears at the start or the end of the next turn of the creature that applied it (weapon mastery: Sap and Slow
+   * "until the start of your next turn", Vex "before the end of your next turn").
+   */
+  | { kind: "until-source-turn"; timing: "start" | "end" };
 
 export interface RiderSave {
   ability: Ability;
@@ -772,8 +785,20 @@ export type ActionRider =
       save?: RiderSave;
       modifiers?: ConditionInstance["modifiers"];
       effects?: FeatureEffect[];
+      /**
+       * A fixed name for the condition on its bearer, so it replaces rather than stacks with the same effect from another
+       * source (two Slow weapons: still only 10 ft slower). Also its name in the log and on the token.
+       */
+      conditionKey?: string;
+      /** It changes, and is used up by, the next attack roll: see `ConditionInstance.nextAttack`. */
+      nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
     })
-  | (TriggeredRider & { kind: "push"; distance: number })
+  | (TriggeredRider & {
+      kind: "push";
+      distance: number;
+      /** Only pushes a creature this size or smaller (weapon mastery's Push: Large). */
+      maxSize?: SizeCategory;
+    })
   | (TriggeredRider & {
       /**
        * Swallows the target (a behir, a purple worm, a kraken): it is blinded and restrained inside, can't be reached
@@ -888,6 +913,13 @@ export interface AttackActionDefinition {
   grantsMovementFeet?: number;
   /** Damage instead of `damage` while the attacker is at half its hit points or fewer (a swarm's weaker bite). */
   bloodiedDamage?: DamageComponent[];
+  /** The weapon mastery property this attack uses, stamped by `weaponToActions` when its wielder has mastered it. */
+  mastery?: WeaponMastery;
+  /**
+   * Cleave: on a melee hit, once per turn, an attack with the same weapon against a second creature within 5 ft of the
+   * first and in reach, its damage without a positive ability modifier.
+   */
+  cleave?: boolean;
   ability: Ability;
   /** Resolved wield for a weapon-compiled attack — sheet / log only. Set by `weaponToAction`. */
   grip?: "one-handed" | "two-handed";
@@ -1474,9 +1506,19 @@ export interface WeaponCharges {
   recharge?: "dawn" | "short-rest" | "long-rest" | { dice: string };
 }
 
+/** A weapon's mastery property (SRD 5.2), usable only by a wielder that has mastered that kind of weapon. */
+export type WeaponMastery = "cleave" | "graze" | "nick" | "push" | "sap" | "slow" | "topple" | "vex";
+
 export interface WeaponDefinition {
   id: Id;
   name: string;
+  /**
+   * The kind of weapon it is (`longsword` for a +1 longsword, `dagger` for a Dagger of Venom): what Weapon Mastery is
+   * chosen by. Absent: its name, kebab-cased.
+   */
+  baseWeapon?: string;
+  /** Its mastery property (SRD 5.2). It works only for a wielder that has mastered `baseWeapon` (a `weapon-mastery` effect). */
+  mastery?: WeaponMastery;
   /** Reference text shown with the weapon. Not read by the simulator. */
   description?: string;
   source?: SourceMetadata;
@@ -1874,7 +1916,15 @@ export interface ConditionInstance {
     incomingAttackRoll?: number;
     /** Confusion: the bearer's turn is overridden by a random attack/move/do-nothing roll instead of normal AI decisions. */
     forcesRandomAction?: boolean;
+    /** Feet taken off the bearer's speed (weapon mastery's Slow: 10). The largest of these counts, not their sum. */
+    speedPenaltyFt?: number;
   };
+  /**
+   * Weapon mastery's Sap and Vex: the condition changes one attack roll and is used up by it. `"made"`: the bearer's own
+   * next attack roll (Sap: disadvantage). `"against"`: the next attack roll `by` makes against the bearer (Vex: the
+   * attacker's advantage).
+   */
+  nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage"; by?: Id };
   effects?: FeatureEffect[];
   /**
    * The bearer re-rolls this save at the given timing on its own turn; a success
@@ -2210,7 +2260,8 @@ export const riderDurationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save-ends"), saveAt: z.enum(["turn-start", "turn-end"]) }),
   z.object({ kind: z.literal("concentration") }),
   z.object({ kind: z.literal("permanent") }),
-  z.object({ kind: z.literal("until-start-of-next-turn") })
+  z.object({ kind: z.literal("until-start-of-next-turn") }),
+  z.object({ kind: z.literal("until-source-turn"), timing: z.enum(["start", "end"]) })
 ]);
 
 export const riderSaveSchema = z.object({
@@ -2252,9 +2303,11 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
     duration: riderDurationSchema,
     save: riderSaveSchema.optional(),
     modifiers: z.any().optional(),
-    effects: z.array(z.any()).optional()
+    effects: z.array(z.any()).optional(),
+    conditionKey: z.string().min(1).optional(),
+    nextAttack: z.object({ role: z.enum(["made", "against"]), mode: z.enum(["advantage", "disadvantage"]) }).optional()
   }),
-  z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number() }),
+  z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number(), maxSize: sizeSchema.optional() }),
   z.object({
     ...triggeredRiderBase,
     kind: z.literal("swallow"),
