@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  armoredAc,
   compileItemUses,
   createEngineState,
+  isArmorItem,
   damageAdjustmentsFor,
   featureSources,
   getExecutableActions,
@@ -61,17 +63,25 @@ describe("the library audit", () => {
       if (source.automationSupport === "manual-only") {
         expect(uses, source.name).toEqual([]);
         expect(carried, source.name).toBe(false);
-      } else if (!item.grantedActions?.length) {
-        // A ring or a cloak works while it's carried.
-        expect(carried, source.name).toBe(true);
-      } else {
-        expect(uses.length, source.name).toBeGreaterThan(0);
+        continue;
+      }
+      // Armor or a shield sets the AC: worn on a creature with none, it's the one that counts.
+      if (isArmorItem(item)) {
+        const ac = armoredAc(fighter());
+        expect([ac.armor?.id, ac.shield?.id], source.name).toContain(id);
+      }
+      if (uses.length) {
         const supports = new Set(uses.map((use) => use.automationSupport));
         expect([...supports].every((support) => support === "full" || support === "partial"), source.name).toBe(true);
-        expect(supports.has(source.automationSupport as "full" | "partial"), source.name).toBe(true);
-        // Every use spends the item's own pool.
+        // A partial item has a partial use, or says what of it isn't simulated.
+        expect(supports.has(source.automationSupport as "full" | "partial") || (source.automationSupport === "partial" && Boolean(item.notSimulated)), source.name).toBe(true);
+        // Every use spends the item's own pool, or nothing (at will).
         for (const use of uses) expect((use as { resourceCost?: { resourceId: string } }).resourceCost?.resourceId, `${source.name}: ${use.id}`).toBe(item.supply?.id);
+      } else if (!isArmorItem(item)) {
+        // A ring or a cloak works while it's carried.
+        expect(carried, source.name).toBe(true);
       }
+      if (source.automationSupport === "partial" && !uses.some((use) => use.automationSupport === "partial")) expect(item.notSimulated, source.name).toBeTruthy();
     }
   });
 

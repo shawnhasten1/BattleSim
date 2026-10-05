@@ -1,4 +1,4 @@
-import type { ActionDefinition, DamageType, ItemDefinition, SpellDefinition } from "@/engine";
+import type { ActionDefinition, ArmorStats, DamageType, ItemDefinition, SpellDefinition } from "@/engine";
 import { itemSpellUse } from "./item-spells";
 import { SRD_SPELLS } from "./spells";
 
@@ -137,6 +137,19 @@ function worn(slug: string, name: string, description: string, effects: NonNulla
   };
 }
 
+/**
+ * A suit of armor or a shield (ARMOR_PLAN.md): its AC, worn. Light armor adds the wearer's Dexterity modifier, medium at
+ * most +2, heavy none; a shield adds +2.
+ */
+function armor(slug: string, name: string, stats: ArmorStats, description: string, extra: Partial<ItemDefinition> = {}): ItemDefinition {
+  return {
+    id: `srd:item:${slug}`, name, type: stats.category === "shield" ? "shield" : "armor", description, armor: stats,
+    automationSupport: "full", ...extra
+  };
+}
+
+const PLATE: ArmorStats = { category: "heavy", ac: 18, strength: 15, stealthDisadvantage: true };
+
 /** An item the engine can't run yet (ITEMS_PLAN.md §9): carried for reference, its rules applied by the DM. */
 function reference(slug: string, name: string, type: ItemDefinition["type"], description: string, extra: Partial<ItemDefinition> = {}): ItemDefinition {
   return { id: `srd:item:${slug}`, name, type, description, automationSupport: "manual-only", ...extra };
@@ -243,6 +256,100 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
   worn("ring-of-resistance", "Ring of Resistance",
     "A rare ring (requires attunement). You have resistance to one damage type while wearing it; its gem shows which, as the DM chooses. This one resists fire (a garnet): change it in While carried.",
     [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "fire" } }]),
+
+  // ── Armor and shields ───────────────────────────────────────────────────────
+  armor("padded-armor", "Padded Armor", { category: "light", ac: 11, stealthDisadvantage: true },
+    "Light armor of quilted layers of cloth and batting: AC 11 + Dexterity modifier, with disadvantage on Stealth."),
+  armor("leather-armor", "Leather Armor", { category: "light", ac: 11 },
+    "Light armor: a breastplate and shoulder protectors of leather stiffened by boiling in oil, the rest softer and more flexible. AC 11 + Dexterity modifier."),
+  armor("studded-leather-armor", "Studded Leather Armor", { category: "light", ac: 12 },
+    "Light armor of tough but flexible leather, reinforced with close-set rivets or spikes. AC 12 + Dexterity modifier."),
+  armor("hide-armor", "Hide Armor", { category: "medium", ac: 12 },
+    "Medium armor of thick furs and pelts. AC 12 + Dexterity modifier (max 2)."),
+  armor("chain-shirt", "Chain Shirt", { category: "medium", ac: 13 },
+    "Medium armor of interlocking metal rings, worn between layers of clothing or leather. AC 13 + Dexterity modifier (max 2)."),
+  armor("scale-mail", "Scale Mail", { category: "medium", ac: 14, stealthDisadvantage: true },
+    "Medium armor: a coat and leggings of leather covered with overlapping pieces of metal, like a fish's scales. AC 14 + Dexterity modifier (max 2), with disadvantage on Stealth."),
+  armor("breastplate", "Breastplate", { category: "medium", ac: 14 },
+    "Medium armor: a fitted metal chest piece worn with supple leather. AC 14 + Dexterity modifier (max 2)."),
+  armor("half-plate", "Half Plate", { category: "medium", ac: 15, stealthDisadvantage: true },
+    "Medium armor of shaped metal plates that cover most of the wearer's body. AC 15 + Dexterity modifier (max 2), with disadvantage on Stealth."),
+  armor("ring-mail", "Ring Mail", { category: "heavy", ac: 14, stealthDisadvantage: true },
+    "Heavy armor: leather with heavy rings sewn into it. AC 14, with disadvantage on Stealth."),
+  armor("chain-mail", "Chain Mail", { category: "heavy", ac: 16, strength: 13, stealthDisadvantage: true },
+    "Heavy armor of interlocking metal rings over quilted fabric, with gauntlets. AC 16. A wearer with a Strength score below 13 is 10 feet slower; disadvantage on Stealth."),
+  armor("splint-armor", "Splint Armor", { category: "heavy", ac: 17, strength: 15, stealthDisadvantage: true },
+    "Heavy armor of narrow vertical strips of metal riveted to a leather backing over cloth padding. AC 17. A wearer with a Strength score below 15 is 10 feet slower; disadvantage on Stealth."),
+  armor("plate-armor", "Plate Armor", PLATE,
+    "Heavy armor of shaped, interlocking metal plates covering the entire body, with gauntlets, boots and a visored helmet. AC 18. A wearer with a Strength score below 15 is 10 feet slower; disadvantage on Stealth."),
+  armor("shield", "Shield", { category: "shield", ac: 2 },
+    "A shield of wood or metal, carried in one hand: +2 AC while it's worn."),
+
+  // ── Magic armor and shields ─────────────────────────────────────────────────
+  armor("shield-plus-1", "Shield +1", { category: "shield", ac: 2, magicBonus: 1 },
+    "An uncommon magic shield. While holding it, you have a +1 bonus to AC on top of the shield's normal +2.", { magical: true }),
+  armor("shield-plus-2", "Shield +2", { category: "shield", ac: 2, magicBonus: 2 },
+    "A rare magic shield. While holding it, you have a +2 bonus to AC on top of the shield's normal +2.", { magical: true }),
+  armor("shield-plus-3", "Shield +3", { category: "shield", ac: 2, magicBonus: 3 },
+    "A very rare magic shield. While holding it, you have a +3 bonus to AC on top of the shield's normal +2.", { magical: true }),
+  armor("elven-chain", "Elven Chain", { category: "medium", ac: 13, magicBonus: 1 },
+    "A rare chain shirt. You gain a +1 bonus to AC while you wear it, and you're considered proficient with it even without proficiency in medium armor.", { magical: true }),
+  armor("glamoured-studded-leather", "Glamoured Studded Leather", { category: "light", ac: 12, magicBonus: 1 },
+    "Rare studded leather armor. While wearing it, you gain a +1 bonus to AC, and you can use a bonus action to make it look like a normal set of clothing or some other kind of armor.", { magical: true }),
+  armor("mithral-half-plate", "Mithral Half Plate", { category: "medium", ac: 15 },
+    "Uncommon half plate of mithral, a light, flexible metal: unlike other half plate, it doesn't impose disadvantage on Stealth.", { magical: true }),
+  armor("mithral-chain-mail", "Mithral Chain Mail", { category: "heavy", ac: 16 },
+    "Uncommon chain mail of mithral, a light, flexible metal: it has no Strength requirement and doesn't impose disadvantage on Stealth.", { magical: true }),
+  armor("adamantine-plate", "Adamantine Plate", PLATE,
+    "Uncommon plate armor reinforced with adamantine, one of the hardest substances in existence. While you're wearing it, any critical hit against you becomes a normal hit.",
+    { magical: true, effects: [{ kind: "no-critical-hits" }] }),
+  armor("dwarven-plate", "Dwarven Plate", { ...PLATE, magicBonus: 2 },
+    "Very rare plate armor. While wearing it, you gain a +2 bonus to AC. In addition, if an effect moves you against your will along the ground, you can use your reaction to reduce the distance you're moved by up to 10 feet.",
+    { magical: true, notSimulated: "the reaction that cuts forced movement by 10 feet", automationSupport: "partial" }),
+  armor("armor-of-invulnerability", "Armor of Invulnerability", PLATE,
+    "Legendary plate armor (requires attunement). You have resistance to nonmagical damage while you wear it. As an action, you can make yourself immune to nonmagical damage for 10 minutes or until you're no longer wearing it; once used, this can't be used again until the next dawn.",
+    {
+      magical: true,
+      attunement: { attuned: true },
+      supply: { id: "supply", size: 1, unit: "charges", regains: "dawn" },
+      effects: ALL_DAMAGE_TYPES.map((damageType) => ({ kind: "damage-adjustment" as const, adjustment: { type: "resistance" as const, damageType, nonMagicalOnly: true } })),
+      grantedActions: [{
+        kind: "buff", id: "invulnerable", name: "Invulnerable", actionType: "action", range: 0, targeting: { target: "self" },
+        appliedCondition: { name: "custom", durationRounds: 100, modifiers: { damageAdjustments: ALL_DAMAGE_TYPES.map((damageType) => ({ type: "immunity" as const, damageType, nonMagicalOnly: true })) } },
+        resourceCost: { resourceId: "supply", amount: 1 }, automationSupport: "full"
+      }]
+    }),
+  armor("dragon-scale-mail", "Dragon Scale Mail", { category: "medium", ac: 14, magicBonus: 1, stealthDisadvantage: true },
+    "Very rare scale mail made of a dragon's scales (requires attunement). While wearing it, you gain a +1 bonus to AC, advantage on saving throws against dragons' Frightful Presence and breath weapons, and resistance to one damage type set by the dragon's kind. This one is red: fire. As an action once a day, you can sense the closest dragon of that kind within 30 miles.",
+    {
+      magical: true,
+      attunement: { attuned: true },
+      effects: [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "fire" } }],
+      notSimulated: "the advantage on saves against dragons' Frightful Presence and breath weapons, and sensing dragons",
+      automationSupport: "partial"
+    }),
+  armor("demon-armor", "Demon Armor", { ...PLATE, magicBonus: 1 },
+    "Very rare plate armor (requires attunement). While wearing it, you gain a +1 bonus to AC and can understand and speak Abyssal, and its clawed gauntlets make your unarmed strikes magic weapons that deal 1d8 slashing damage, with a +1 bonus to attack and damage rolls. Cursed: you can't take it off, and you have disadvantage on attacks against demons and on saves against their spells and special abilities.",
+    {
+      magical: true,
+      attunement: { attuned: true },
+      grantedActions: [{
+        kind: "attack", id: "claws", name: "Clawed Gauntlets", actionType: "action", attackType: "melee", ability: "str",
+        attackBonusFormula: { base: 1, ability: "str", proficiency: true }, range: 5, reach: 5,
+        damage: [{ dice: "1d8+1", damageType: "slashing", abilityModifier: "str", magical: true }], automationSupport: "full"
+      }],
+      notSimulated: "its curse: disadvantage on attacks against demons and on saves against their spells and abilities",
+      automationSupport: "partial"
+    }),
+  armor("spellguard-shield", "Spellguard Shield", { category: "shield", ac: 2 },
+    "A very rare shield (requires attunement). While holding it, you have advantage on saving throws against spells and other magical effects, and spell attacks have disadvantage against you.",
+    {
+      magical: true,
+      attunement: { attuned: true },
+      effects: [{ kind: "save-advantage", against: { source: "magical" } }],
+      notSimulated: "spell attacks' disadvantage against its bearer",
+      automationSupport: "partial"
+    }),
 
   // ── Carried for reference: rules the engine can't run yet ───────────────────
   reference("alchemists-fire", "Alchemist's Fire", "thrown",

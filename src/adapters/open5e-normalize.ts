@@ -1,4 +1,4 @@
-import type { ConditionName, CreatureDefinition, DamageType, FeatureDefinition, ItemDefinition, ItemType, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { ArmorStats, ConditionName, CreatureDefinition, DamageType, FeatureDefinition, ItemDefinition, ItemType, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
 import type { Open5eCompendiumSummary, Open5eImportedPayload } from "./open5e-client";
 
 export function normalizeOpen5eCreature(imported: Open5eImportedPayload): CreatureDefinition {
@@ -114,15 +114,55 @@ export function normalizeOpen5eItem(imported: Open5eImportedPayload): ItemDefini
   const category = (readNestedString(raw, ["category", "key"]) ?? readNestedString(raw, ["category", "name"]) ?? stringField(raw, "category") ?? "").toLowerCase();
   const documentKey = imported.documentKey ?? readNestedString(raw, ["document", "key"]) ?? "unknown";
   const rarity = readNestedString(raw, ["rarity", "name"]) ?? readNestedString(raw, ["rarity", "key"]) ?? stringField(raw, "rarity");
-  return {
+  const magical = raw.is_magic_item === true || Boolean(rarity);
+  const base: ItemDefinition = {
     id: `open5e:${documentKey}:${imported.key ?? imported.slug}:item`,
     name,
     type: itemTypeFromCategory(category, name),
     description: stringField(raw, "desc") ?? stringField(raw, "description"),
-    ...(raw.is_magic_item === true || rarity ? { magical: true } : {}),
+    ...(magical ? { magical: true } : {}),
     ...(raw.requires_attunement === true ? { attunement: { attuned: true } } : {}),
     automationSupport: "manual-only",
     source: sourceMetadata(imported, raw)
+  };
+  // Armor or a shield with its numbers (ARMOR_PLAN.md): simulated, its magic beyond its base the DM's to add.
+  const armor = armorStatsOf(raw, category, name);
+  if (!armor) return base;
+  return {
+    ...base,
+    type: armor.category === "shield" ? "shield" : "armor",
+    armor,
+    ...(magical ? { notSimulated: "its magic beyond its base armor: set its bonus and add its properties", automationSupport: "partial" } : { automationSupport: "full" })
+  };
+}
+
+/**
+ * Armor's numbers from Open5e's `armor` block (`ac_base`, `ac_add_dexmod`, `ac_cap_dexmod`, `strength_score_required`,
+ * `grants_stealth_disadvantage`). A shield is told by its category or its name: the 2024 Shield is filed as heavy armor
+ * with a base of 2, the 2014 one has no armor block at all.
+ */
+function armorStatsOf(raw: Record<string, unknown>, category: string, name: string): ArmorStats | undefined {
+  const block = raw.armor && typeof raw.armor === "object" ? raw.armor as Record<string, unknown> : undefined;
+  const named = stringField(block ?? {}, "name") ?? name;
+  if (category === "shield" || (block && /\bshield\b/i.test(named))) {
+    return { category: "shield", ac: numberField(block ?? {}, "ac_base") ?? 2 };
+  }
+  const ac = block ? numberField(block, "ac_base") : undefined;
+  if (!block || ac === undefined) return undefined;
+  const addsDex = block.ac_add_dexmod === true;
+  const cap = numberField(block, "ac_cap_dexmod");
+  const weight = stringField(block, "category")?.toLowerCase();
+  const armorCategory = weight === "light" || weight === "medium" || weight === "heavy" ? weight : !addsDex ? "heavy" : cap !== undefined ? "medium" : "light";
+  // The Dexterity it adds, when it isn't its weight's.
+  const maxDex = !addsDex ? 0 : cap;
+  const weightCap = armorCategory === "light" ? undefined : armorCategory === "medium" ? 2 : 0;
+  const strength = numberField(block, "strength_score_required");
+  return {
+    category: armorCategory,
+    ac,
+    ...(maxDex !== weightCap && maxDex !== undefined ? { maxDex } : {}),
+    ...(strength ? { strength } : {}),
+    ...(block.grants_stealth_disadvantage === true ? { stealthDisadvantage: true } : {})
   };
 }
 

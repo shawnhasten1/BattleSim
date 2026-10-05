@@ -114,6 +114,11 @@ Authoring:
   level, up to DC 19 and +11 at 9th). They're indexed with the items, so `findSrdItem` and `attachSrdItem` find them,
   but the Add panel lists them only for a search with "scroll" in it. A creature's own spell gets one there too
   (`own-scroll:<spell id>`, `lib/ability-editor/scrolls.ts`).
+- Armor and shields (ARMOR_PLAN.md) are items of `type` `"armor"` or `"shield"` with `armor: { category, ac }`: a
+  suit's base AC and its weight (light, medium, heavy: the Dexterity cap follows it unless `maxDex` says otherwise), or
+  a shield's bonus; `magicBonus` for +1 to +3, `strength` for heavy armor's requirement, `stealthDisadvantage`. Worn
+  (`equipped` absent), a suit replaces the creature's AC without armor and a shield adds to it (`armoredAc`). Magic
+  armor's other properties are `effects` and uses, as any item's.
 - What part of an item the engine doesn't run goes in `notSimulated`, in a few words (the sheet marks it partly
   simulated), with `automationSupport: "partial"`. An item it can't run at all is `"manual-only"`, with no uses: the DM
   can still carry it, and its text says what to do by hand.

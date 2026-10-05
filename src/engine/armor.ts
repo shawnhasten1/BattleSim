@@ -18,6 +18,9 @@ export function isArmorItem(item: ItemDefinition): item is ArmorItem {
   return (item.type === "armor" || item.type === "shield") && Boolean(item.armor);
 }
 
+/** Whether the simulator runs it: armor kept for reference only (its text, applied by hand) doesn't set the AC. */
+const simulated = (item: ItemDefinition) => item.automationSupport !== "manual-only" && item.automationSupport !== "unsupported";
+
 /** Whether armor or a shield is worn: it can be carried without being worn (`equipped: false`). Anything else is "worn". */
 export function isWorn(item: ItemDefinition): boolean {
   return item.equipped !== false;
@@ -58,7 +61,7 @@ function suitParts(item: ArmorItem, dex: number): Array<{ label: string; value: 
  * that wears nothing has exactly its typed AC.
  */
 export function armoredAc(definition: Pick<CreatureDefinition, "armorClass" | "abilities" | "items">): ArmoredAc {
-  const worn = (definition.items ?? []).filter((item): item is ArmorItem => isArmorItem(item) && isWorn(item));
+  const worn = (definition.items ?? []).filter((item): item is ArmorItem => isArmorItem(item) && isWorn(item) && simulated(item));
   if (!worn.length) return { total: definition.armorClass, parts: [{ label: "without armor", value: definition.armorClass }] };
   const dex = abilityModifier(definition.abilities.dex);
   const sum = (parts: Array<{ value: number }>) => parts.reduce((total, part) => total + part.value, 0);
@@ -81,6 +84,6 @@ export function armoredAc(definition: Pick<CreatureDefinition, "armorClass" | "a
 export function slowedByArmor(definition: Partial<Pick<CreatureDefinition, "abilities" | "items">>): boolean {
   const strength = definition.abilities?.str;
   if (strength === undefined) return false;
-  return (definition.items ?? []).some((item) => isArmorItem(item) && isWorn(item) && item.armor.category !== "shield"
+  return (definition.items ?? []).some((item) => isArmorItem(item) && isWorn(item) && simulated(item) && item.armor.category !== "shield"
     && item.armor.strength !== undefined && strength < item.armor.strength);
 }

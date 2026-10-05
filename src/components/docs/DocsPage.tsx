@@ -749,6 +749,14 @@ const SECTIONS: Section[] = [
           Protection, Shield of Faith) still add on top. Adamantine armor&apos;s <em>no critical hits against it</em> is an
           effect any item or feature can have.
         </p>
+        <p>
+          The library has the SRD&apos;s armor (padded, leather and studded leather; hide, chain shirt, scale mail,
+          breastplate and half plate; ring mail, chain mail, splint and plate) and the shield, magic shields +1 to +3, and
+          magic armor: Elven Chain, Glamoured Studded Leather, mithral half plate and chain mail, Adamantine Plate, Dwarven
+          Plate, Armor of Invulnerability, Dragon Scale Mail, Demon Armor and the Spellguard Shield. Any armor can be made
+          +1 to +3 in its Armor section. Armor from Open5e comes in with its numbers and is simulated; magic armor from
+          Open5e keeps its base and is marked partial, for you to add its bonus and properties.
+        </p>
 
         <h3>The sections</h3>
         <ul>
