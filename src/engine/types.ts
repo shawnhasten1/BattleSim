@@ -424,6 +424,11 @@ export interface FeatureEffectConditions {
   anyConditions?: FeatureCondition[];
   /** For a `"charged"` condition: how far the attacker must have closed on the target this turn, in feet. Default 20. */
   chargeFeet?: number;
+  /**
+   * Only while the creature has a condition with this id: an activation's (Rage: `"rage-active"`). Frenzy's extra
+   * damage while raging.
+   */
+  whileCondition?: string;
 }
 
 /** What kind of save a `save-advantage` effect applies to. See `FeatureEffect` "save-advantage". */

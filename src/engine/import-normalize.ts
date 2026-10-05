@@ -983,7 +983,8 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
     };
   }
   if (input.kind === "push") {
-    return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5 };
+    const maxSize = (["tiny", "small", "medium", "large", "huge", "gargantuan"] as const).find((size) => size === input.maxSize);
+    return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5, ...(maxSize ? { maxSize } : {}) };
   }
   // Grapples and swallows are structured records with no legacy shapes to translate; keep them as authored.
   if (input.kind === "hold" && numberField(input, "escapeDc") !== undefined) {
@@ -1003,7 +1004,12 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
       duration: normalizeRiderDuration(input.duration),
       save: normalizeRiderSave(input.save),
       modifiers: isRecord(input.modifiers) ? input.modifiers as ConditionInstance["modifiers"] : undefined,
-      effects: Array.isArray(input.effects) ? input.effects as FeatureEffect[] : undefined
+      effects: Array.isArray(input.effects) ? input.effects as FeatureEffect[] : undefined,
+      ...(typeof input.conditionKey === "string" && input.conditionKey ? { conditionKey: input.conditionKey } : {}),
+      ...(isRecord(input.nextAttack) && (input.nextAttack.role === "made" || input.nextAttack.role === "against")
+        && (input.nextAttack.mode === "advantage" || input.nextAttack.mode === "disadvantage")
+        ? { nextAttack: { role: input.nextAttack.role, mode: input.nextAttack.mode } }
+        : {})
     };
   }
   return null;
@@ -1033,6 +1039,9 @@ function normalizeRiderDuration(input: unknown): RiderDuration {
     }
     if (input.kind === "until-start-of-next-turn" || input.untilStartOfNextTurn === true) {
       return { kind: "until-start-of-next-turn" };
+    }
+    if (input.kind === "until-source-turn") {
+      return { kind: "until-source-turn", timing: input.timing === "end" ? "end" : "start" };
     }
     const rounds = numberField(input, "rounds") ?? numberField(input, "durationRounds");
     if (input.kind === "rounds" || rounds !== undefined) {

@@ -5074,7 +5074,7 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
     const upgraded = out.flatMap((action) => optionalRiders.map((rider, index) => ({
       ...action,
       id: `${action.id}:charged${optionalRiders.length > 1 ? `-${index + 1}` : ""}`,
-      name: `${action.name} (spend charge)`,
+      name: `${action.name} (${spendLabel(rider.resourceCost, weapon.charges?.id)})`,
       riders: [...(action.riders ?? []), rider],
       // Surface the rider's cost on the action itself so the AI's existing
       // resourceCost-based affordability filter / scoring penalty (which only
@@ -5086,6 +5086,16 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
   }
 
   return out;
+}
+
+/**
+ * What an optional on-hit upgrade spends, for its variant's name: "spend charge" for the weapon's own charges, otherwise
+ * the pool's ("1 focus point" for Stunning Strike on a Monk's Unarmed Strike).
+ */
+function spendLabel(cost: ResourceCost | undefined, chargesId: string | undefined): string {
+  if (!cost || cost.resourceId === chargesId) return "spend charge";
+  const words = cost.resourceId.replace(/^.*:/, "").replace(/-/g, " ");
+  return `${cost.amount} ${cost.amount === 1 ? words.replace(/s$/, "") : words}`;
 }
 
 /** A weapon compiles to full automation unless an on-hit rider needs a human (a note or an unspecified custom condition). */
@@ -6586,6 +6596,7 @@ function featureConditionsMet(
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
   const chargeFeet = "chargeFeet" in effect ? effect.chargeFeet : undefined;
+  if (!whileConditionHeld(attacker, effect)) return false;
   return required.every((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet))
     && (alternatives.length === 0 || alternatives.some((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet)));
 }
@@ -6626,8 +6637,15 @@ function featureConditionsMetForSelf(
     ...("allConditions" in effect && effect.allConditions ? effect.allConditions : [])
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
+  if (!whileConditionHeld(combatant, effect)) return false;
   return required.every((condition) => selfFeatureConditionMet(definition, combatant, condition))
     && (alternatives.length === 0 || alternatives.some((condition) => selfFeatureConditionMet(definition, combatant, condition)));
+}
+
+/** An effect that works only while its bearer holds a condition (Frenzy while raging): whether it does now. */
+function whileConditionHeld(bearer: CombatantState, effect: FeatureEffect): boolean {
+  const required = "whileCondition" in effect ? effect.whileCondition : undefined;
+  return !required || (bearer.conditions ?? []).some((condition) => condition.id === required);
 }
 
 function featureConditionsMetForConditionTarget(

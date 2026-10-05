@@ -1,11 +1,13 @@
 import { z } from "zod";
 import type {
   Ability,
+  ActionRider,
   ConditionImmunity,
   CreatureSenses,
   CreatureType,
   FeatureDefinition,
   ResourceStance,
+  WeaponDefinition,
   SizeCategory,
   SourceMetadata,
   TacticsProfile
@@ -83,6 +85,16 @@ export interface FeatureGrant {
   ref?: string;
   /** A library feature id (`srd:feature:…`) or the feature itself. Absent: the grant only adjusts. */
   feature?: string | FeatureDefinition;
+  /**
+   * A weapon the builder owns, as it owns features (the Monk's Unarmed Strike). Its id and action id are the grant's
+   * feature id; `scale` paths starting `weapon.` write into it.
+   */
+  weapon?: WeaponDefinition;
+  /**
+   * On-hit riders this grant adds to a weapon an earlier grant gave (by that grant's key): Stunning Strike on the Monk's
+   * Unarmed Strike.
+   */
+  onHitOf?: { grant: string; riders: ActionRider[] };
   /** The key of an earlier grant this one takes the place of (Superior Critical replaces Improved Critical). */
   replaces?: string;
   scale?: ScaleBinding[];
@@ -291,6 +303,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   key: z.string().min(1),
   ref: z.string().optional(),
   feature: z.union([z.string().min(1), featureSchema]).optional(),
+  weapon: z.object({ id: z.string(), name: z.string().min(1) }).passthrough().optional(),
+  onHitOf: z.object({ grant: z.string().min(1), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
   replaces: z.string().optional(),
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),
   pool: z.object({ id: z.string().min(1), size: templateOrNumber }).optional(),

@@ -15,7 +15,7 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 6 | 3 | 8 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 6 | 2 | 9 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 1 | 4 | 4 | 8 | 2 |
@@ -45,6 +45,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `smite` | Spending a slot or a use when an attack hits (Divine Smite, Eldritch Smite, Fire's Burn, Hurl Through Hell) | Paladin, Warlock, Species | 1 | Paladin's Smite (Paladin); Smite of Protection (Oath of Devotion); Eldritch Invocation Options (Warlock); Hurl Through Hell (Fiend Patron); Giant Ancestry (Goliath) |
 | `initiative` | Bonuses or advantage on initiative | Barbarian, Fighter, Feats | 1 | Feral Instinct (Barbarian); Remarkable Athlete (Champion); Alert (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
+| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter, Monk | 2 | Reckless Attack (Barbarian); Action Surge (Fighter); Superior Defense (Monk) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
@@ -52,7 +53,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
 | `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
 | `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
-| `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter | 2 | Reckless Attack (Barbarian); Action Surge (Fighter) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 10 | Self-Restoration (Monk); Restoring Touch (Paladin) |
@@ -73,6 +73,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `on-kill` | Something that happens when an enemy drops (Dark One's Blessing) | Warlock | 3 | Dark One's Blessing (Fiend Patron) |
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
+| `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin | 9 | Abjure Foes (Paladin) |
@@ -121,9 +122,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Frenzy | partial | `rage-limits` | Rage's extra d6s on the first hit each turn need both raging and Reckless Attack; approximated as rage's damage on a hit with advantage. |
+| 3 | Frenzy | partial | `rage-limits` | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack. |
 | 6 | Mindless Rage | manual | `conditional-immunity` |  |
-| 10 | Retaliation | partial | `reaction-attack` | A melee reaction attack when hit by a creature within 5 ft (hit, not any damage). |
+| 10 | Retaliation | manual | `reaction-attack` |  |
 | 14 | Intimidating Presence | full |  | A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered. |
 
 ## Bard
@@ -244,18 +245,18 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and Dexterity, also as a bonus action; monk weapons get the die when it's bigger. |
+| 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked. |
 | 1 | Unarmored Defense | full |  |  |
 | 2 | Monk's Focus | partial | `combined-utility` | Flurry of Blows runs, and so do Disengage and Dash as bonus actions; spending a point for two actions in one gives the Dodge or the Dash alone. |
 | 2 | Unarmored Movement | builder |  | Speed by level; armor isn't checked. |
 | 2 | Uncanny Metabolism | info |  | A fight starts with full pools and hit points. |
 | 3 | Deflect Attacks | manual | `damage-reaction` |  |
 | 3 | Monk Subclass | builder |  | The subclass choice. |
-| 3, 5 | Stunning Strike | partial | `next-attack` | Stunned on a failed save runs; on a success, halved speed and advantage on the next attack don't. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 4 | Slow Fall | info |  | Falling. |
 | 5 | Extra Attack | full |  |  |
-| 6 | Empowered Strikes | full |  | Unarmed Strikes deal force damage. |
+| 5 | Stunning Strike | partial | `next-attack`, `ai-control-value` | Stunned on a failed save runs, on the Unarmed Strike; on a success, halved speed and advantage on the next attack don't. The AI spends focus on it only under Controller tactics. |
+| 6 | Empowered Strikes | full |  | Its Unarmed Strike deals force damage from 6th level. |
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |
 | 10 | Heightened Focus | partial | `combined-utility` | Three Flurry strikes run; Patient Defense's temporary hit points and carrying an ally don't. |
@@ -263,7 +264,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 13 | Deflect Energy | manual | `damage-reaction` |  |
 | 14 | Disciplined Survivor | partial | `d20-reroll` | Proficiency in every save; rerolling a failed one doesn't run. |
 | 15 | Perfect Focus | info |  | A fight starts with full pools. |
-| 18 | Superior Defense | full |  | 3 focus points: resistance to everything but force for 10 rounds. |
+| 18 | Superior Defense | full | `ai-free-actions` | 3 focus points: resistance to everything but force for 10 rounds. The AI doesn't take it on its own yet. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Body and Mind | builder |  | +4 Dexterity and Wisdom, to a maximum of 25. |
 

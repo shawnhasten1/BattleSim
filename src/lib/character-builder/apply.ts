@@ -243,6 +243,63 @@ export function applyBuild(definition: CreatureDefinition, build: CharacterBuild
     next = { ...next, [bucket]: list.length ? list : undefined };
   }
 
+  // The builder's own weapons (the Monk's Unarmed Strike), kept by the same rules as features.
+  {
+    const existing = next.weapons ?? [];
+    const builtIds = new Set(built.weapons.map((entry) => `weapon:${entry.weapon.id}`));
+    const madeIds = new Set(Object.keys(build.made).filter((key) => key.startsWith("weapon:")));
+    const placed: WeaponDefinition[] = [];
+    for (const entry of built.weapons) {
+      const key = `weapon:${entry.weapon.id}`;
+      const weapon = normalizeWeaponDefinition(structuredClone(entry.weapon), next.abilities);
+      const current = existing.find((candidate) => candidate.id === entry.weapon.id);
+      const previous = build.made[key];
+      if (!current) {
+        if (previous && !update.has(key)) {
+          changes.push({ kind: "kept", key, name: weapon.name, reason: "removed" });
+          made[key] = previous;
+          continue;
+        }
+        changes.push({ kind: "gained", key, name: weapon.name });
+        placed.push(weapon);
+        made[key] = { key: entry.key, fingerprint: fingerprint(weapon) };
+        continue;
+      }
+      if (!previous && !update.has(key)) {
+        warnings.push(`${weapon.name}: the actor already has its own weapon with id ${weapon.id}`);
+        continue;
+      }
+      if (update.has(key) || fingerprint(current) === previous!.fingerprint) {
+        if (fingerprint(current) !== fingerprint(weapon)) {
+          const details = entry.scaled.map((path) => `${String(getPath(current, path) ?? "none")} → ${String(getPath(weapon, path) ?? "none")}`)
+            .filter((detail) => !/^(.*) → \1$/.test(detail));
+          changes.push({ kind: "changed", key, name: weapon.name, details });
+        }
+        placed.push(weapon);
+        made[key] = { key: entry.key, fingerprint: fingerprint(weapon) };
+      } else {
+        changes.push({ kind: "kept", key, name: current.name, reason: "edited" });
+        placed.push(current);
+        made[key] = previous!;
+      }
+    }
+    for (const weapon of existing) {
+      const key = `weapon:${weapon.id}`;
+      if (!madeIds.has(key) || builtIds.has(key)) continue;
+      if (fingerprint(weapon) === build.made[key]!.fingerprint) {
+        changes.push({ kind: "lost", key, name: weapon.name });
+      } else {
+        changes.push({ kind: "kept", key, name: weapon.name, reason: "not-granted" });
+        placed.push(weapon);
+        made[key] = build.made[key]!;
+      }
+    }
+    const clashes = existing.filter((weapon) => builtIds.has(`weapon:${weapon.id}`) && !build.made[`weapon:${weapon.id}`] && !update.has(`weapon:${weapon.id}`));
+    const others = existing.filter((weapon) => !madeIds.has(`weapon:${weapon.id}`) && !builtIds.has(`weapon:${weapon.id}`));
+    const list = [...placed, ...clashes, ...others];
+    next = { ...next, weapons: list.length ? list : undefined };
+  }
+
   // Equipment, once.
   let equipment = build.equipment;
   if (equipment && !equipment.applied) {

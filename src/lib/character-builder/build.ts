@@ -89,6 +89,13 @@ export interface ChoiceOption {
   taken?: boolean;
 }
 
+/** A weapon the builder puts on the actor (the Monk's Unarmed Strike), with the grant it came from. */
+export interface BuiltWeapon {
+  key: string;
+  weapon: WeaponDefinition;
+  scaled: string[];
+}
+
 /** A feature the builder puts on the actor, with the grant it came from. */
 export interface BuiltFeature {
   /** The `made` key: what owns it and its grant key. */
@@ -123,6 +130,8 @@ export interface BuiltFields {
 export interface BuiltCharacter {
   fields: BuiltFields;
   features: BuiltFeature[];
+  /** Weapons the builder owns (not the starting packages, which are the DM's once on the actor). */
+  weapons: BuiltWeapon[];
   /** Pools the builder sizes: a feature's (`rage`, `second-wind`) and spell slots (`slot-1`…). */
   resources: Record<string, number>;
   /** The starting packages' weapons and armor, as library ids: put on the actor once, on its first build. */
@@ -613,7 +622,18 @@ function walk(build: CharacterBuild, sources: BuildSources): WalkState & { class
 
 /* ── turning grants into features and numbers ─────────────────────────────────────────────────────────────────── */
 
+function getPath(target: unknown, path: string): unknown {
+  let node = target as Record<string, unknown> | undefined;
+  for (const part of path.split(".")) {
+    if (!node || typeof node !== "object") return undefined;
+    node = node[part] as Record<string, unknown> | undefined;
+  }
+  return node;
+}
+
+/** Write a scaled value. A field that holds text gets text: Rage's "+2" is the dice string "2", not the number 2. */
 function setPath(target: unknown, path: string, value: unknown): boolean {
+  if (typeof getPath(target, path) === "string" && typeof value === "number") value = String(value);
   const parts = path.split(".");
   let node = target as Record<string, unknown> | unknown[];
   for (let index = 0; index < parts.length - 1; index += 1) {
@@ -679,6 +699,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   };
 
   const features: BuiltFeature[] = [];
+  const weapons: BuiltWeapon[] = [];
   const resources: Record<string, number> = {};
   let speedBonus = 0;
   let hpBonus = 0;
@@ -698,7 +719,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       } else {
         const feature = structuredClone(source) as FeatureDefinition;
         const scaled: string[] = [];
-        for (const binding of grant.scale ?? []) {
+        for (const binding of (grant.scale ?? []).filter((candidate) => !candidate.path.startsWith("weapon."))) {
           const value = evaluate(`${label} ${binding.path}`, () => evaluateTemplate(binding.value, scope));
           if (value === undefined) continue;
           if (setPath(feature, binding.path, value)) scaled.push(binding.path);
@@ -718,6 +739,24 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
           scaled
         });
       }
+    }
+    if (grant.weapon) {
+      const weapon = structuredClone(grant.weapon) as WeaponDefinition;
+      const scaled: string[] = [];
+      for (const binding of (grant.scale ?? []).filter((candidate) => candidate.path.startsWith("weapon."))) {
+        const path = binding.path.slice("weapon.".length);
+        const value = evaluate(`${label} ${binding.path}`, () => evaluateTemplate(binding.value, scope));
+        if (value === undefined) continue;
+        if (setPath(weapon, path, value)) scaled.push(path);
+        else state.warnings.push(`${label}: no ${binding.path} to scale`);
+      }
+      const id = `${owner.idPrefix}-${grant.key}`;
+      weapons.push({ key: `${owner.key}:${grant.key}`, weapon: { ...weapon, id, actionId: id }, scaled });
+    }
+    if (grant.onHitOf) {
+      const target = weapons.find((entry) => entry.key.endsWith(`:${grant.onHitOf!.grant}`));
+      if (!target) state.warnings.push(`${label}: no weapon from ${grant.onHitOf.grant} to add to`);
+      else target.weapon = { ...target.weapon, onHit: [...(target.weapon.onHit ?? []), ...structuredClone(grant.onHitOf.riders)] };
     }
     if (grant.pool) {
       const size = evaluate(`${label} pool`, () => evaluateNumber(grant.pool!.size, scope));
@@ -836,6 +875,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       ...(firstClass?.suggested.stance ? { defaultResourceStance: firstClass.suggested.stance } : {})
     },
     features,
+    weapons,
     resources,
     equipment,
     masteries: state.masteries,

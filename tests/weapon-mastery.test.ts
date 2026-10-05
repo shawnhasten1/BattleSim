@@ -315,4 +315,16 @@ describe("the sheet", () => {
     const plain = scene([weapon("srd:weapon:greatsword")], null).fighter;
     expect(weaponStatblock(plain.weapons![0]!, plain).text).not.toContain("mastery");
   });
+
+  it("a hand-written weapon keeps the new rider fields through normalizing", () => {
+    const normalized = normalizeWeaponDefinition({
+      id: "w", name: "Custom", attackType: "melee", ability: "str", range: 5, damage: [{ dice: "1d6", damageType: "bludgeoning" }],
+      onHit: [
+        { kind: "condition", when: "on-hit", condition: { custom: "Rattled" }, conditionKey: "Rattled", duration: { kind: "until-source-turn", timing: "end" }, nextAttack: { role: "made", mode: "disadvantage" } },
+        { kind: "push", when: "on-hit", distance: 10, maxSize: "large" }
+      ]
+    });
+    expect(normalized.onHit?.[0]).toMatchObject({ conditionKey: "Rattled", duration: { kind: "until-source-turn", timing: "end" }, nextAttack: { role: "made", mode: "disadvantage" } });
+    expect(normalized.onHit?.[1]).toMatchObject({ kind: "push", maxSize: "large" });
+  });
 });

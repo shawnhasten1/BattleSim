@@ -81,6 +81,7 @@ export const GAPS = {
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
   "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)",
+  "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
   "ai-free-actions": "The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play"
 } as const;
 
@@ -124,9 +125,9 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_primal-champion": builder("+4 Strength and Constitution, to a maximum of 25."),
 
   /* Path of the Berserker */
-  "path-of-the-berserker_frenzy": partial(["rage-limits"], "Rage's extra d6s on the first hit each turn need both raging and Reckless Attack; approximated as rage's damage on a hit with advantage."),
+  "path-of-the-berserker_frenzy": partial(["rage-limits"], "The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack."),
   "path-of-the-berserker_mindless-rage": manual(["conditional-immunity"]),
-  "path-of-the-berserker_retaliation": partial(["reaction-attack"], "A melee reaction attack when hit by a creature within 5 ft (hit, not any damage)."),
+  "path-of-the-berserker_retaliation": manual(["reaction-attack"]),
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),
 
   /* Bard */
@@ -220,18 +221,18 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_champion_survivor": manual(["death-saves", "gated-regen"]),
 
   /* Monk */
-  "monk_martial-arts": full("An Unarmed Strike with the Martial Arts die and Dexterity, also as a bonus action; monk weapons get the die when it's bigger."),
+  "monk_martial-arts": full("An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked."),
   "monk_unarmored-defense": full(),
   "monk_monks-focus": partial(["combined-utility"], "Flurry of Blows runs, and so do Disengage and Dash as bonus actions; spending a point for two actions in one gives the Dodge or the Dash alone."),
   "monk_unarmored-movement": builder("Speed by level; armor isn't checked."),
   "monk_uncanny-metabolism": info("A fight starts with full pools and hit points."),
   "monk_deflect-attacks": manual(["damage-reaction"]),
   "monk_monk-subclass": SUBCLASS,
-  "monk_stunning-strike": partial(["next-attack"], "Stunned on a failed save runs; on a success, halved speed and advantage on the next attack don't."),
+  "monk_stunning-strike": partial(["next-attack", "ai-control-value"], "Stunned on a failed save runs, on the Unarmed Strike; on a success, halved speed and advantage on the next attack don't. The AI spends focus on it only under Controller tactics."),
   "monk_ability-score-improvement": FEAT_CHOICE,
   "monk_slow-fall": info("Falling."),
   "monk_extra-attack": full(),
-  "monk_empowered-strikes": full("Unarmed Strikes deal force damage."),
+  "monk_empowered-strikes": full("Its Unarmed Strike deals force damage from 6th level."),
   monk_evasion: full(),
   "monk_acrobatic-movement": info("Walls and water."),
   "monk_heightened-focus": partial(["combined-utility"], "Three Flurry strikes run; Patient Defense's temporary hit points and carrying an ally don't."),
@@ -239,7 +240,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_deflect-energy": manual(["damage-reaction"]),
   "monk_disciplined-survivor": partial(["d20-reroll"], "Proficiency in every save; rerolling a failed one doesn't run."),
   "monk_perfect-focus": info("A fight starts with full pools."),
-  "monk_superior-defense": full("3 focus points: resistance to everything but force for 10 rounds."),
+  "monk_superior-defense": { verdict: "full", gaps: ["ai-free-actions"], note: "3 focus points: resistance to everything but force for 10 rounds. The AI doesn't take it on its own yet." },
   "monk_epic-boon": EPIC_BOON,
   "monk_body-and-mind": builder("+4 Dexterity and Wisdom, to a maximum of 25."),
 

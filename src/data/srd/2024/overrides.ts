@@ -36,6 +36,10 @@ export const FEATURE_OVERRIDES: Record<string, FeatureOverride> = {
     reason: "No level in the source; the SRD 5.2 PDF has \"Level 3: Deflect Attacks\".",
     levels: [3]
   },
+  "srd-2024_monk_stunning-strike": {
+    reason: "Listed at levels 3 and 5 in the source; the SRD 5.2 PDF has \"Level 5: Stunning Strike\" (and its table, level 5).",
+    levels: [5]
+  },
   "srd-2024_bard_bard-subclass": {
     reason: "No level in the source; the SRD 5.2 PDF has \"Level 3: Bard Subclass\".",
     levels: [3]
