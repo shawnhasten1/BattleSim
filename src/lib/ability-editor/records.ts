@@ -7,17 +7,20 @@ import {
   normalizeActionDefinition,
   usagePoolId,
   normalizeDeathEffectDefinition,
+  normalizeItemDefinition,
   normalizeSpellDefinition,
   normalizeWeaponDefinition,
+  withItemPool,
   type ActionDefinition,
   type CreatureDefinition,
   type DeathEffectDefinition,
   type FeatureDefinition,
+  type ItemDefinition,
   type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
-import { DEFAULT_LEGENDARY_POOL, findAbility, withAbility, type AbilityRecord, type AbilityRef } from "./refs";
+import { DEFAULT_LEGENDARY_POOL, findAbility, withAbility, type AbilityRecord, type AbilityRef, type GrantingList } from "./refs";
 import { effectPools } from "./features";
 
 /** Starting sizes for the class pools a feature's granted actions spend. */
@@ -93,7 +96,7 @@ function normalizedAction(input: ActionDefinition, id: string, fallback: "action
 const fallbackType = (action: ActionDefinition): "action" | "bonus" | "reaction" =>
   action.actionType === "bonus" || action.actionType === "reaction" ? action.actionType : "action";
 
-/** The actions inside a record: itself, a spell's or death effect's action, a legendary entry's, or what a weapon or feature grants. */
+/** The actions inside a record: itself, a spell's or death effect's action, a legendary entry's, or what a weapon, an item or a feature grants. */
 function actionsIn(record: AbilityRecord): ActionDefinition[] {
   if ("kind" in record && typeof record.kind === "string") return [record as ActionDefinition];
   const holder = record as { action?: ActionDefinition; grantedActions?: ActionDefinition[] };
@@ -130,15 +133,15 @@ export function withNewLegendaryAction(definition: CreatureDefinition, entry: Le
   };
 }
 
-/** The creature with a new action granted by one of its weapons or features. `undefined` when the parent isn't there. */
+/** The creature with a new action granted by one of its weapons, items or features. `undefined` when the parent isn't there. */
 export function withNewGrantedAction(
   definition: CreatureDefinition,
-  parent: { list: "weapons" | "features" | "traits"; id: string },
+  parent: { list: GrantingList; id: string },
   action: ActionDefinition
 ): { definition: CreatureDefinition; ref: AbilityRef } | undefined {
-  const owner = findAbility(definition, parent) as WeaponDefinition | FeatureDefinition | undefined;
+  const owner = findAbility(definition, parent) as WeaponDefinition | ItemDefinition | FeatureDefinition | undefined;
   if (!owner) return undefined;
-  const isFeature = parent.list !== "weapons";
+  const isFeature = parent.list === "features" || parent.list === "traits";
   const granted = pinGrantedActions(owner.id, [...(owner.grantedActions ?? []), { ...action, id: "" }], isFeature)!;
   const added = normalizedAction(granted[granted.length - 1]!, granted[granted.length - 1]!.id, fallbackType(action));
   const pinned = isFeature && added.kind === "activate-feature" ? { ...added, featureId: owner.id } : added;
@@ -174,6 +177,8 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
   if (!existing) return undefined;
   let normalized: AbilityRecord;
   let pools: Record<string, number> | undefined;
+  // A pool whose size the edit changed: what the creature starts with follows it.
+  let resized: Record<string, number> | undefined;
 
   switch (ref.list) {
     case "weapons": {
@@ -184,6 +189,17 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
       weapon.grantedActions = pinGrantedActions(before.id, weapon.grantedActions, false);
       if (weapon.charges) pools = { [weapon.charges.id]: weapon.charges.max };
       normalized = weapon;
+      break;
+    }
+    case "items": {
+      const before = existing as ItemDefinition;
+      const input = normalizeItemDefinition({ ...(record as ItemDefinition), id: before.id });
+      const item = withItemPool({ ...input, id: before.id, grantedActions: pinGrantedActions(before.id, input.grantedActions, false) });
+      if (item.supply) {
+        pools = { [item.supply.id]: item.supply.size };
+        if (before.supply && before.supply.size !== item.supply.size) resized = { [item.supply.id]: item.supply.size };
+      }
+      normalized = item;
       break;
     }
     case "spells": {
@@ -228,7 +244,7 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
       const action = record as ActionDefinition;
       const id = (existing as ActionDefinition).id;
       const next = normalizedAction(action, id, fallbackType(action));
-      normalized = ref.parent.list !== "weapons" && next.kind === "activate-feature" ? { ...next, featureId: ref.parent.id } : next;
+      normalized = (ref.parent.list === "features" || ref.parent.list === "traits") && next.kind === "activate-feature" ? { ...next, featureId: ref.parent.id } : next;
       break;
     }
     default: {
@@ -251,6 +267,7 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
     if (resources[id] === undefined) resources[id] = start;
     seeded[id] = start;
   }
+  for (const [id, size] of Object.entries(resized ?? {})) resources[id] = size;
   const changed = Object.keys(resources).some((id) => resources[id] !== definition.resources?.[id]);
   return {
     definition: changed ? { ...placed.definition, resources } : placed.definition,

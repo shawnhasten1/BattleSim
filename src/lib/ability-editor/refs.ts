@@ -8,6 +8,7 @@ import type {
   CreatureDefinition,
   DeathEffectDefinition,
   FeatureDefinition,
+  ItemDefinition,
   LegendaryActionRef,
   SpellDefinition,
   WeaponDefinition
@@ -16,6 +17,7 @@ import type {
 /** The lists on a creature that hold abilities by id. */
 export type AbilityList =
   | "weapons"
+  | "items"
   | "spells"
   | "features"
   | "traits"
@@ -26,16 +28,16 @@ export type AbilityList =
   | "reactions";
 
 /** The lists a granted ability can live under. */
-export type GrantingList = "weapons" | "features" | "traits";
+export type GrantingList = "weapons" | "items" | "features" | "traits";
 
 export type AbilityRef =
   | { list: AbilityList; id: string }
   /** A legendary action: they have no ids, so it's found by its place in `legendary.actions`. */
   | { list: "legendary"; index: number }
-  /** An action a weapon or feature grants, in its parent's `grantedActions`. */
+  /** An action a weapon, an item or a feature grants, in its parent's `grantedActions`. */
   | { list: "granted"; parent: { list: GrantingList; id: string }; id: string };
 
-/** Where a new ability can go: a list, the legendary actions, or the actions a weapon or feature grants. */
+/** Where a new ability can go: a list, the legendary actions, or the actions a weapon, an item or a feature grants. */
 export type AbilityInsertTarget = AbilityList | "legendary" | { granted: { list: GrantingList; id: string } };
 
 /** How many legendary actions a creature takes a round when it gets its first: the 5e default. */
@@ -44,6 +46,7 @@ export const DEFAULT_LEGENDARY_POOL = 3;
 /** The record type each kind of ref points at. */
 export interface AbilityRecordFor {
   weapons: WeaponDefinition;
+  items: ItemDefinition;
   spells: SpellDefinition;
   features: FeatureDefinition;
   traits: FeatureDefinition;
@@ -84,7 +87,7 @@ export function findAbility<R extends AbilityRef>(definition: CreatureDefinition
 export function findAbility(definition: CreatureDefinition, ref: AbilityRef): AbilityRecord | undefined {
   if (ref.list === "legendary") return definition.legendary?.actions[ref.index];
   if (ref.list === "granted") {
-    const parent = listOf(definition, ref.parent.list).find((item) => item.id === ref.parent.id) as WeaponDefinition | FeatureDefinition | undefined;
+    const parent = listOf(definition, ref.parent.list).find((item) => item.id === ref.parent.id) as WeaponDefinition | ItemDefinition | FeatureDefinition | undefined;
     return parent?.grantedActions?.find((action) => action.id === ref.id);
   }
   return listOf(definition, ref.list).find((item) => item.id === ref.id) as AbilityRecord | undefined;
@@ -103,7 +106,7 @@ export function withAbility(definition: CreatureDefinition, ref: AbilityRef, rec
     return { definition: { ...definition, legendary: { ...legendary, actions } }, ref };
   }
   if (ref.list === "granted") {
-    const parents = listOf(definition, ref.parent.list) as Array<WeaponDefinition | FeatureDefinition>;
+    const parents = listOf(definition, ref.parent.list) as Array<WeaponDefinition | ItemDefinition | FeatureDefinition>;
     const next = parents.map((parent) => parent.id === ref.parent.id
       ? { ...parent, grantedActions: (parent.grantedActions ?? []).map((action) => (action.id === ref.id ? (record as ActionDefinition) : action)) }
       : parent);
@@ -156,7 +159,7 @@ export function withNewAbilityAt(definition: CreatureDefinition, where: AbilityI
   if (typeof where === "object") {
     const parent = where.granted;
     const action = record as ActionDefinition;
-    const parents = listOf(definition, parent.list) as Array<WeaponDefinition | FeatureDefinition>;
+    const parents = listOf(definition, parent.list) as Array<WeaponDefinition | ItemDefinition | FeatureDefinition>;
     const next = parents.map((owner) => (owner.id === parent.id ? { ...owner, grantedActions: [...(owner.grantedActions ?? []), action] } : owner));
     return { definition: { ...definition, [parent.list]: next }, ref: { list: "granted", parent, id: action.id } };
   }
@@ -188,11 +191,11 @@ export function withRecordAfter(definition: CreatureDefinition, ref: AbilityRef,
 
 /** Every ability on a creature, in the order a sheet lists them within each list. */
 export function abilityRefs(definition: CreatureDefinition): AbilityRef[] {
-  const lists: AbilityList[] = ["weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions", "lairActions", "deathEffects"];
+  const lists: AbilityList[] = ["weapons", "items", "spells", "features", "traits", "actions", "bonusActions", "reactions", "lairActions", "deathEffects"];
   const refs: AbilityRef[] = lists.flatMap((list) => listOf(definition, list).map((item): AbilityRef => ({ list, id: item.id })));
   const legendary = (definition.legendary?.actions ?? []).map((_, index): AbilityRef => ({ list: "legendary", index }));
-  const granted = (["weapons", "features", "traits"] as const).flatMap((list) =>
-    (listOf(definition, list) as Array<WeaponDefinition | FeatureDefinition>).flatMap((parent) =>
+  const granted = (["weapons", "items", "features", "traits"] as const).flatMap((list) =>
+    (listOf(definition, list) as Array<WeaponDefinition | ItemDefinition | FeatureDefinition>).flatMap((parent) =>
       (parent.grantedActions ?? []).map((action): AbilityRef => ({ list: "granted", parent: { list, id: parent.id }, id: action.id }))));
   return [...refs, ...legendary, ...granted];
 }

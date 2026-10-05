@@ -2,6 +2,7 @@ import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazard
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { compileItemUses, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
@@ -38,6 +39,7 @@ import type {
   HealingActionDefinition,
   HealingComponent,
   Id,
+  ItemUseMeta,
   MultiattackActionDefinition,
   NumericFormula,
   Point,
@@ -236,6 +238,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...grantedActions
   ].flatMap((action) => spellUpcastVariants(definition, action));
   const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
+  const itemUses = workingItems(definition).flatMap(compileItemUses);
 
   const declared = [
     ...definition.actions,
@@ -245,7 +248,8 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...spellActions,
     ...spellUpcastActions,
     ...grantedActions,
-    ...weaponGrantedActions
+    ...weaponGrantedActions,
+    ...itemUses
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
   ].flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -2356,6 +2360,8 @@ export function resolveBuffAction(
   for (const target of targets) {
     if (target.id !== actorId) {
       validateBuffTargeting(state.snapshot, actor, target, action);
+    } else if (action.targeting?.notSelf) {
+      throw new Error(notSelfProblem(actor, action));
     }
   }
 
@@ -2419,6 +2425,9 @@ export function validateBuffTargeting(
   target: CombatantState,
   action: BuffActionDefinition
 ): void {
+  if (action.targeting?.notSelf && target.id === actor.id) {
+    throw new Error(notSelfProblem(actor, action));
+  }
   if (target.state !== "active") {
     throw new Error(`${target.displayName} cannot be buffed`);
   }
@@ -3853,7 +3862,20 @@ function declareAction(
   // `direction` (always east) regardless of where it was actually pointed.
   const area = "area" in action ? action.area : undefined;
   const damageType = "damage" in action ? action.damage?.[0]?.damageType : undefined;
-  state.log.push(event(state, "ActionDeclared", targetInfo.message ?? `${actor.displayName} uses ${action.name}${targetText}`, {
+  // An item says which, and how many of its stack or charges are left (the cost is already spent).
+  const item = action.item;
+  const itemData = item
+    ? {
+      id: item.id,
+      name: item.name,
+      kind: item.kind,
+      ...(item.use ? { use: item.use } : {}),
+      ...(resourceCost ? { left: actor.resources?.[resourceCost.resourceId] ?? 0 } : {})
+    }
+    : undefined;
+  const message = targetInfo.message
+    ?? (item ? itemDeclaration(actor, action, item, targetInfo.target, targetText) : `${actor.displayName} uses ${action.name}${targetText}`);
+  state.log.push(event(state, "ActionDeclared", message, {
     actorId: actor.id,
     actionId: action.id,
     actionName: action.name,
@@ -3864,8 +3886,31 @@ function declareAction(
     aimVector: targetInfo.aimVector,
     resourceCost,
     area,
-    damageType
+    damageType,
+    ...(itemData ? { item: itemData } : {})
   }));
+}
+
+/** "a Potion of Healing", "an Elixir of Health". */
+function withArticle(name: string): string {
+  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+}
+
+/** What using an item looks like in the log: "Kael drinks a Potion of Healing", "Kael gives Mira a Potion of Healing". */
+function itemDeclaration(actor: CombatantState, action: ActionDefinition, item: ItemUseMeta, target: CombatantState | undefined, targetText: string): string {
+  const named = withArticle(item.name);
+  if (item.use === "give" && target) return `${actor.displayName} gives ${target.displayName} ${named}`;
+  if (item.use === "drink") return `${actor.displayName} drinks ${named}`;
+  if (item.kind === "scroll") return `${actor.displayName} reads ${named}${targetText}`;
+  if (item.kind === "thrown") return `${actor.displayName} throws ${named}${target ? ` at ${target.displayName}` : targetText}`;
+  return `${actor.displayName} uses ${item.name}${action.name !== item.name ? ` (${action.name})` : ""}${targetText}`;
+}
+
+/** Why an ability that can't target its user (giving a potion) was aimed at it anyway. */
+function notSelfProblem(actor: CombatantState, action: ActionDefinition): string {
+  return action.item?.use === "give"
+    ? `${actor.displayName} can't give itself ${withArticle(action.item.name)}: it drinks it instead`
+    : `${actor.displayName} can't target itself with ${action.name}`;
 }
 
 function validateTargeting(
@@ -3951,6 +3996,9 @@ export function validateHealingTargeting(
 ): void {
   if (target.state === "dead" || target.state === "fled") {
     throw new Error("Target cannot be healed");
+  }
+  if (action.targeting?.notSelf && target.id === healer.id) {
+    throw new Error(notSelfProblem(healer, action));
   }
   const distance = spatialDistance(snapshot, healer, target);
   if (distance > action.range) {
@@ -5135,7 +5183,17 @@ export function featureSources(definition: CreatureDefinition, combatant?: Comba
       effects: weapon.effects,
       automationSupport: "full" as const
     }));
-  return [...simulatedFeatures(definition), ...weaponSources, ...activeConditionSources];
+  // What a worn item gives while it works (attuned, if it needs to be), unless it's kept for reference only.
+  const itemSources = workingItems(definition)
+    .filter((item) => item.effects?.length && item.automationSupport !== "manual-only" && item.automationSupport !== "unsupported")
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: "feature" as const,
+      effects: item.effects,
+      automationSupport: "full" as const
+    }));
+  return [...simulatedFeatures(definition), ...weaponSources, ...itemSources, ...activeConditionSources];
 }
 
 /**
@@ -6634,7 +6692,8 @@ function leaveReachReactions(
       if (action.reaction && action.reaction.trigger.kind !== "enemy-leaves-reach") {
         return false;
       }
-    } else if (action.actionType !== "action" || action.opportunityAttack === false) {
+    } else if (action.actionType !== "action" || action.opportunityAttack === false || action.item) {
+      // An item's attack (a flask) is an action of its own, never the "any melee attack" opportunity attack.
       return false;
     }
     if (!canSpendResource(reactor, action)) {

@@ -110,13 +110,15 @@ function matchesGeneric(action: AttackActionDefinition, any: MultiattackGeneric)
 
 /**
  * The plain attacks a generic step can choose from: the creature's own attacks of that kind, taken as an action (not
- * a follow-up it earns, a legendary or lair copy, or one only a reaction makes), and simulated.
+ * a follow-up it earns, a legendary or lair copy, or one only a reaction makes), and simulated. Never an item's: a
+ * thrown flask is an action of its own, not a swing of an Attack.
  */
 export function genericBases(any: MultiattackGeneric, executables: ActionDefinition[]): AttackActionDefinition[] {
   return executables.filter((candidate): candidate is AttackActionDefinition => candidate.kind === "attack"
     && candidate.actionType === "action"
     && !candidate.onlyAfter
     && candidate.automationSupport === "full"
+    && !candidate.item
     && !isAttackVariant(candidate)
     && matchesGeneric(candidate, any));
 }

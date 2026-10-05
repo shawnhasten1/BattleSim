@@ -21,6 +21,9 @@ import {
   type FeatureEffect,
   type FeatureEffectConditionApplication,
   type HealingComponent,
+  type ItemDefinition,
+  type ItemKind,
+  type ItemSupply,
   type NumericFormula,
   type ReactionMeta,
   type CounterCheck,
@@ -96,6 +99,7 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
   const bonusActions = normalizeActionList(input.bonusActions, "bonus", actionIdMap, featureIdByName);
   const reactions = normalizeActionList(input.reactions, "reaction", actionIdMap, featureIdByName);
   const weapons = normalizeWeapons(input.weapons, actionIdMap, input.abilities);
+  const items = normalizeItems(input.items);
   const spells = normalizeIdList(input.spells, "spell").map((spell) => normalizeSpellRecord(spell, featureIdByName));
   const deathEffects = normalizeIdList(input.deathEffects, "death-effect").map((effect) => normalizeDeathEffectRecord(effect, featureIdByName));
   const normalized = {
@@ -107,6 +111,7 @@ export function normalizeCreatureDefinition(input: Record<string, unknown>): Cre
     bonusActions,
     reactions,
     weapons,
+    ...(items ? { items } : {}),
     spells,
     deathEffects,
     features,
@@ -155,6 +160,7 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
     features: withGrants(definition.features),
     traits: withGrants(definition.traits),
     weapons: withGrants(definition.weapons),
+    items: withGrants(definition.items),
     spells: definition.spells?.map((spell) => {
       const action = spell.action ? migrate(spell.action) : spell.action;
       return action === spell.action ? spell : { ...spell, action };
@@ -563,6 +569,63 @@ export function normalizeSpellDefinition(
     normalized.id = `spell-${safeFileName(typeof normalized.name === "string" ? normalized.name : "spell")}`;
   }
   return normalized as SpellDefinition;
+}
+
+/** Normalize a single item record: the SRD-library / ability-editor entry point. */
+export function normalizeItemDefinition(input: unknown): ItemDefinition {
+  return normalizeItemRecord(normalizeIdList([input], "item")[0]);
+}
+
+const ITEM_KINDS: readonly ItemKind[] = ["potion", "scroll", "wand", "thrown", "worn", "gear"];
+
+function normalizeItems(input: unknown): ItemDefinition[] | undefined {
+  return Array.isArray(input) ? normalizeIdList(input, "item").map(normalizeItemRecord) : undefined;
+}
+
+function normalizeItemRecord(input: unknown): ItemDefinition {
+  if (!isRecord(input)) {
+    return input as ItemDefinition;
+  }
+  const kind = ITEM_KINDS.includes(input.kind as ItemKind) ? input.kind as ItemKind : "gear";
+  const grantedActions = Array.isArray(input.grantedActions) && input.grantedActions.length
+    ? normalizeActionList(input.grantedActions, "action", new Map(), new Map())
+    : undefined;
+  // Only a potion is given to someone else.
+  const give = kind === "potion" && isRecord(input.give)
+    ? { actionType: input.give.actionType === "bonus" ? "bonus" as const : "action" as const }
+    : undefined;
+  return {
+    ...input,
+    id: stringField(input, "id") ?? "item",
+    name: stringField(input, "name") ?? "Item",
+    kind,
+    supply: normalizeItemSupply(input.supply),
+    grantedActions,
+    give,
+    followsTableRule: kind === "potion" && input.followsTableRule === false ? false : undefined,
+    effects: Array.isArray(input.effects) && input.effects.length ? input.effects as FeatureEffect[] : undefined,
+    attunement: isRecord(input.attunement) ? { attuned: input.attunement.attuned === true } : undefined,
+    magical: input.magical === true ? true : undefined,
+    automationSupport: normalizeAutomationSupport(input.automationSupport, "full")
+  } as ItemDefinition;
+}
+
+function normalizeItemSupply(input: unknown): ItemSupply | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const id = stringField(input, "id");
+  const size = numberField(input, "size");
+  if (!id || size === undefined || size < 0) {
+    return undefined;
+  }
+  let regains: ItemSupply["regains"];
+  if (input.regains === "dawn" || input.regains === "short-rest" || input.regains === "long-rest") {
+    regains = input.regains;
+  } else if (isRecord(input.regains) && typeof input.regains.dice === "string" && input.regains.dice.trim()) {
+    regains = { dice: input.regains.dice.trim() };
+  }
+  return { id, size: Math.floor(size), unit: input.unit === "charges" ? "charges" : "count", ...(regains ? { regains } : {}) };
 }
 
 /** Normalize a single death effect record, as the ability editor adds or saves one. */
@@ -1017,7 +1080,7 @@ function normalizeSelfTargeting(input: unknown): { target: "single" | "self" } |
   return { target: input.target === "self" ? "self" : "single" };
 }
 
-function normalizeHealingTargeting(input: unknown): { target: "single" | "self" | "chosen" | "area"; count?: number } | undefined {
+function normalizeHealingTargeting(input: unknown): { target: "single" | "self" | "chosen" | "area"; count?: number; notSelf?: boolean } | undefined {
   if (!isRecord(input)) {
     return undefined;
   }
@@ -1025,15 +1088,15 @@ function normalizeHealingTargeting(input: unknown): { target: "single" | "self" 
     : input.target === "chosen" ? "chosen"
       : input.target === "area" ? "area"
         : "single";
-  return { target, count: numberField(input, "count") };
+  return { target, count: numberField(input, "count"), ...(input.notSelf === true ? { notSelf: true } : {}) };
 }
 
-function normalizeBuffTargeting(input: unknown): { target: "self" | "single" | "chosen"; count?: number } | undefined {
+function normalizeBuffTargeting(input: unknown): { target: "self" | "single" | "chosen"; count?: number; notSelf?: boolean } | undefined {
   if (!isRecord(input)) {
     return undefined;
   }
   const target = input.target === "self" ? "self" : input.target === "chosen" ? "chosen" : "single";
-  return { target, count: numberField(input, "count") };
+  return { target, count: numberField(input, "count"), ...(input.notSelf === true ? { notSelf: true } : {}) };
 }
 
 /** No existing normalizer covers this shape (the `activate-feature` kind's identical `condition` field is passed through unnormalized via its own `...input` spread) — kept minimal, matching that precedent, rather than deep-validating `modifiers`/`effects`. */

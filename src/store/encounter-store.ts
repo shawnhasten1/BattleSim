@@ -44,6 +44,7 @@ import {
   type EncounterSnapshot,
   type FeatureEffect,
   type FeatureDefinition,
+  type ItemDefinition,
   type LegendaryActionRef,
   type MapImageSettings,
   type PlacedTemplate,
@@ -61,6 +62,8 @@ import {
   normalizeSpellDefinition,
   normalizeActionDefinition,
   normalizeDeathEffectDefinition,
+  normalizeItemDefinition,
+  withItemPool,
   migrateDefinition,
   playStatusOf,
   type ActionRider,
@@ -676,6 +679,25 @@ function prepareWeaponForAttach(weapon: WeaponDefinition, weaponId: string): { w
   }
 
   return { weapon: next, seeded };
+}
+
+/**
+ * Finish preparing an item for a creature: its uses re-minted as `<itemId>-granted-N` (their riders too, so two copies
+ * never collide, and an own use pool follows its new id), its pool named `item:<itemId>` with every use pointed at it
+ * (`withItemPool`), and the pool's starting size to seed. Shared by the library's attach and the editor's insert.
+ */
+function prepareItemForAttach(item: ItemDefinition, itemId: string): { item: ItemDefinition; seeded?: Record<string, number> } {
+  const reminted: ItemDefinition = {
+    ...item,
+    id: itemId,
+    grantedActions: item.grantedActions?.map((action, index) => {
+      const fresh = { ...action, id: `${itemId}-granted-${index + 1}` } as ActionDefinition;
+      if ("riders" in fresh && fresh.riders) fresh.riders = remintRiderIds(fresh.riders);
+      return withOwnUsagePool(fresh, action.id);
+    })
+  };
+  const settled = withItemPool(reminted, itemId);
+  return { item: settled, seeded: settled.supply ? { [settled.supply.id]: settled.supply.size } : undefined };
 }
 
 function createSceneSnapshot(source: EncounterSnapshot, name: string, mode: "empty" | "duplicate"): EncounterSnapshot {
@@ -3372,6 +3394,11 @@ function withInsertedAbility(
     normalized.actionId = `weapon-action-${id}`;
     const { weapon, seeded } = prepareWeaponForAttach(normalized, id);
     placed = withNewAbility(definition, "weapons", weapon);
+    pools = seeded ?? {};
+  } else if (where === "items") {
+    const id = `item-${crypto.randomUUID()}`;
+    const { item, seeded } = prepareItemForAttach(normalizeItemDefinition({ ...(record as ItemDefinition), id }), id);
+    placed = withNewAbility(definition, "items", item);
     pools = seeded ?? {};
   } else if (where === "spells") {
     const id = `spell-${crypto.randomUUID()}`;

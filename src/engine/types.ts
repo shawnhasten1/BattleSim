@@ -1138,9 +1138,9 @@ export interface HealingActionDefinition {
    * `range` of the caster (Prayer of Healing). `"area"` heals everyone
    * caught in `area` (Mass Cure Wounds) — resolved via `resolveHealingBurstAction`,
    * not this shape's own `resolveHealingAction`, which stays single-target
-   * only. Default `"single"`.
+   * only. Default `"single"`. `notSelf`: never the actor (giving a potion: drinking it is its own use).
    */
-  targeting?: { target: "single" | "self" | "chosen" | "area"; count?: number };
+  targeting?: { target: "single" | "self" | "chosen" | "area"; count?: number; notSelf?: boolean };
   /** Only meaningful when `targeting.target === "area"`. */
   area?: AreaTemplate;
   /** Only meaningful when `targeting.target === "area"`. Placement/aim, same shape `area-save` actions use. */
@@ -1208,8 +1208,12 @@ export interface BuffActionDefinition {
   actionType: ActionType;
   /** Max feet from the caster to each target. Irrelevant (but still required — use 0) for `"self"`. */
   range: number;
-  /** `"chosen"` picks up to `count` allies, each independently within `range` of the caster (Bless: "up to three creatures within range of you" — not an area template). Default `"single"`. */
-  targeting?: { target: "self" | "single" | "chosen"; count?: number };
+  /**
+   * `"chosen"` picks up to `count` allies, each independently within `range` of the caster (Bless: "up to three
+   * creatures within range of you" — not an area template). Default `"single"`. `notSelf`: never the actor (giving a
+   * potion).
+   */
+  targeting?: { target: "self" | "single" | "chosen"; count?: number; notSelf?: boolean };
   /** The condition granted. Reuses the same shape `apply-condition-on-hit` already carries — no save block, matching `ActivateFeatureActionDefinition.condition`'s pattern rather than `ActionRider`'s (which has one, since a rider is adversarial). */
   appliedCondition: FeatureEffectConditionApplication;
   /** Temporary HP granted alongside the condition (Aid-style). Rolled once, applied identically to every resolved target via `Math.max` (5e: temp HP doesn't stack). */
@@ -1409,6 +1413,19 @@ export interface CompiledActionMeta {
    * can be cast with a higher slot, whether or not that makes it stronger.
    */
   upcastFrom?: number;
+  /** On an item's use: the item it comes from. The AI, the hotbar, the log and the report read it. */
+  item?: ItemUseMeta;
+}
+
+/** Which item a compiled action uses, and how. Stamped by `getExecutableActions` on every item use. */
+export interface ItemUseMeta {
+  id: Id;
+  name: string;
+  kind: ItemKind;
+  /** Using it spends one of a stack (a potion, a scroll, a flask) rather than a charge. */
+  consumes: boolean;
+  /** A potion's use: drinking it (its own, self-targeted use) or giving it to a creature within 5 ft (a compiled copy). */
+  use?: "drink" | "give";
 }
 
 export type ActionDefinition = (
@@ -1620,6 +1637,48 @@ export interface FeatureDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/** What kind of item it is: how the sheet, the hotbar and the AI treat it. A potion is drunk, or given within 5 ft. */
+export type ItemKind = "potion" | "scroll" | "wand" | "thrown" | "worn" | "gear";
+
+/**
+ * What an item's uses spend: a stack used up one at a time (`count`: three potions), or charges (`charges`: a wand,
+ * which stays). Sized in `definition.resources` like any other pool.
+ */
+export interface ItemSupply {
+  /** The pool its uses' `resourceCost` names: `item:<item id>` once attached; a library entry authors `"supply"`. */
+  id: string;
+  size: number;
+  unit: "count" | "charges";
+  /** When charges come back. Reference only: there's no rest in a fight. */
+  regains?: WeaponCharges["recharge"];
+}
+
+/** Something a creature carries and can use, or that works while it's carried. */
+export interface ItemDefinition {
+  id: Id;
+  name: string;
+  /** Reference text shown with the item. Not read by the simulator. */
+  description?: string;
+  source?: SourceMetadata;
+  kind: ItemKind;
+  supply?: ItemSupply;
+  /**
+   * What using it does: whole abilities, each with its own action type and a cost against `supply`. A potion's is
+   * drunk (a self-targeted heal or buff); its give copies are compiled from it.
+   */
+  grantedActions?: ActionDefinition[];
+  /** A potion can also be given to a creature within 5 ft, which takes this. Absent: it can't be given. */
+  give?: { actionType: "action" | "bonus" };
+  /** A potion's drink and give follow the campaign's potion rule unless this is `false` (it keeps its own timing). */
+  followsTableRule?: boolean;
+  /** Bonuses while it's carried (a Ring of Protection's +1 AC and saves), folded into `featureSources` like a focus's. */
+  effects?: FeatureEffect[];
+  /** It needs attunement: until it's attuned, it does nothing. */
+  attunement?: { attuned: boolean };
+  magical?: boolean;
+  automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
 export interface SourceMetadata {
   provider: "homebrew" | "open5e" | "srd";
   documentKey?: string;
@@ -1698,6 +1757,8 @@ export interface CreatureDefinition {
   saves?: Partial<Record<Ability, number>>;
   damageAdjustments?: DamageAdjustment[];
   weapons?: WeaponDefinition[];
+  /** What it carries: potions, scrolls, wands, flasks, worn magic items. */
+  items?: ItemDefinition[];
   spells?: SpellDefinition[];
   deathEffects?: DeathEffectDefinition[];
   /**
@@ -2216,6 +2277,7 @@ export const creatureDefinitionSchema = z.object({
   bonusActions: z.array(z.any()).optional(),
   reactions: z.array(z.any()).optional(),
   weapons: z.array(z.any()).optional(),
+  items: z.array(z.any()).optional(),
   spells: z.array(z.any()).optional(),
   deathEffects: z.array(z.any()).optional(),
   features: z.array(z.any()).optional(),
