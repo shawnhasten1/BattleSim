@@ -151,6 +151,11 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
     });
     return next.some((record, index) => record !== records[index]) ? next : records;
   };
+  // A focus or a wand was a weapon with no attack of its own (`attackType: "focus"`); it's an item now (ITEMS_PLAN.md §8).
+  const weapons = withGrants(definition.weapons);
+  const foci = (weapons ?? []).filter((weapon) => weapon.attackType === "focus");
+  if (foci.length) changed = true;
+  const items = withGrants(definition.items);
   const next: CreatureDefinition = {
     ...definition,
     actions: list(definition.actions) ?? [],
@@ -159,8 +164,8 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
     lairActions: list(definition.lairActions),
     features: withGrants(definition.features),
     traits: withGrants(definition.traits),
-    weapons: withGrants(definition.weapons),
-    items: withGrants(definition.items),
+    weapons: foci.length ? weapons!.filter((weapon) => weapon.attackType !== "focus") : weapons,
+    items: foci.length ? [...(items ?? []), ...foci.map(focusToItem)] : items,
     spells: definition.spells?.map((spell) => {
       const action = spell.action ? migrate(spell.action) : spell.action;
       return action === spell.action ? spell : { ...spell, action };
@@ -176,6 +181,27 @@ export function migrateDefinition(definition: CreatureDefinition): CreatureDefin
       : definition.legendary
   };
   return changed ? next : definition;
+}
+
+/**
+ * A focus weapon as the wand it is: its charges its supply (the pool keeps its id, `<weapon id>:<charges id>`, so every
+ * token's count carries on), its granted actions its uses (their ids kept, so a multiattack or legendary action that
+ * names one still does), its effects what it gives while carried. Its id is kept too.
+ */
+function focusToItem(weapon: WeaponDefinition): ItemDefinition {
+  const charges = weapon.charges;
+  return {
+    id: weapon.id,
+    name: weapon.name,
+    ...(weapon.description ? { description: weapon.description } : {}),
+    ...(weapon.source ? { source: weapon.source } : {}),
+    type: "wand",
+    ...(weapon.magical ? { magical: true } : {}),
+    ...(charges ? { supply: { id: charges.id, size: charges.max, unit: "charges" as const, ...(charges.recharge ? { regains: charges.recharge } : {}) } } : {}),
+    ...(weapon.grantedActions?.length ? { grantedActions: weapon.grantedActions } : {}),
+    ...(weapon.effects?.length ? { effects: weapon.effects } : {}),
+    automationSupport: "full"
+  };
 }
 
 /**

@@ -238,7 +238,6 @@ export const COPY = {
   canRevert: { label: "It can change back into its true form" },
   revertOnDeath: { label: "It changes back when it dies", hint: "Lycanthropes and vampires return to their true form when they die." },
   standardAction: { label: "Takes the", hint: "An action any creature has: as a bonus action, or for a cost. The simulator doesn't hide, and Help is only partly simulated." },
-  weaponKind: { label: "It's", hint: "A focus (a staff, a wand, a holy symbol) makes no attack of its own: it has charges, effects while it's carried, and abilities it grants." },
 
   // Items
   itemType: { label: "It's", hint: "A potion is drunk, or given to a creature within 5 ft. A potion, a scroll and a flask are used up one at a time; a wand spends charges and stays. A worn item works while it's carried." },

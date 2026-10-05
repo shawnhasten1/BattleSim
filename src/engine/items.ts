@@ -256,7 +256,9 @@ export function withItemPool(item: ItemDefinition, itemId: Id = item.id): ItemDe
   const consumable = isConsumableType(item.type);
   const supply = item.supply ?? (consumable ? { id: itemPoolId(itemId), size: 1, unit: "count" as const } : undefined);
   if (!supply) return item;
-  const poolId = itemPoolId(itemId);
+  // A pool already this item's own keeps its id: a wand that was a focus weapon spends `<its id>:<charges id>`, and every
+  // token's count is kept under it.
+  const poolId = supply.id.startsWith(`${itemId}:`) ? supply.id : itemPoolId(itemId);
   let changed = supply !== item.supply || supply.id !== poolId;
   const grantedActions = item.grantedActions?.map((use) => {
     if (!COSTED_KINDS.has(use.kind)) return use;

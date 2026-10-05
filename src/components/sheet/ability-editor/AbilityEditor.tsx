@@ -555,7 +555,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const ACTION_WORDS: Partial<Record<ActionDefinition["kind"], string>> = {
     attack: "attack", multiattack: "multiattack", summon: "summon", transform: "shapechange", utility: "standard action"
   };
-  const kindLabel = type === "weapon" ? ((working as WeaponDefinition).attackType === "focus" ? "focus" : "weapon") : type === "item" ? "item" : type === "spell" ? "spell"
+  const kindLabel = type === "weapon" ? "weapon" : type === "item" ? "item" : type === "spell" ? "spell"
     : type === "feature" ? (working as FeatureDefinition).category : type === "legendary" ? "legendary action" : type === "death" ? "death effect"
       : listName === "lairActions" ? "lair action" : (actionKind && ACTION_WORDS[actionKind]) ?? "action";
 

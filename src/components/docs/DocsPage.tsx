@@ -556,10 +556,11 @@ const SECTIONS: Section[] = [
           </li>
         </ul>
         <p>
-          A weapon&apos;s Basics can make it <strong>a focus or wand</strong> (a staff, a holy symbol): it makes no attack
-          of its own, so it has no Target, Roll or Damage, only its charges (Use &amp; cost), what it does while carried
-          (While active) and what it lets the creature use (Grants), each opened in the editor with a breadcrumb
-          (<em>Staff of Fire › Fireball</em>).
+          A weapon is something the creature attacks with. A <strong>focus or wand</strong> (a staff, a holy symbol), which
+          makes no attack of its own, is an item (see <a href="#items">Items</a>): its charges, what it does while carried
+          and what it lets the creature use, each use opened in the editor with a breadcrumb (<em>Staff of Fire ›
+          Fireball</em>). One saved as a weapon before opens under Items, its charges and every token&apos;s count kept. A
+          staff that is also a weapon (a quarterstaff that casts) stays a weapon, with what it grants.
         </p>
         <p>
           Warnings under the preview point at the section that fixes them: a spell whose slot the creature

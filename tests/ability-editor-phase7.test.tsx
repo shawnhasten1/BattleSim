@@ -168,16 +168,12 @@ describe("summons, shapechanges and standard actions", { timeout: 30000 }, () =>
   });
 });
 
-describe("a focus", { timeout: 30000 }, () => {
-  it("is a weapon with no attack of its own: charges, what it does while carried, and what it grants", async () => {
+describe("a focus or a wand", { timeout: 30000 }, () => {
+  it("isn't a weapon any more: the weapon editor makes something it attacks with (a wand is an item)", async () => {
     render(<LiveTab />);
     await startFromScratch("Weapon");
-    await radio("It's", "A focus or wand");
-    expect(sectionIds()).toEqual(["basics", "use", "while-active", "grants", "notes"]);
-    expect(screen.queryByText("Attacks with it as")).toBeNull();
-    await userEvent.click(screen.getByRole("checkbox", { name: "It has charges" }));
-    await addToSheet();
-    expect(fighter().weapons![0]).toMatchObject({ attackType: "focus", charges: { max: 1 } });
+    expect(screen.queryByRole("radiogroup", { name: "It's" })).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Attack" })).toBeTruthy();
   });
 });
 

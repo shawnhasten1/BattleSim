@@ -300,34 +300,12 @@ function usableAs(weapon: WeaponDefinition, parts: { action: boolean; bonus: boo
   return withValue(weapon, "usableAs", isDefault ? undefined : list);
 }
 
-/**
- * A weapon made a focus (a staff, a wand): no attack of its own, so the attack's fields are left as they are, unused.
- * Made a weapon again, it's a melee weapon with a reach.
- */
-function withWeaponKind(weapon: WeaponDefinition, kind: "weapon" | "focus"): WeaponDefinition {
-  if (kind === "focus") return weapon.attackType === "focus" ? weapon : { ...weapon, attackType: "focus" };
-  if (weapon.attackType !== "focus") return weapon;
-  return { ...weapon, attackType: "melee", range: Math.max(5, weapon.reach ?? 5), reach: Math.max(5, weapon.reach ?? 5) };
-}
-
 export function weaponSection(id: SectionId, props: WeaponSectionProps): ReactNode {
   const { weapon, onChange, definition, newPools, onOpenGranted } = props;
-  const focus = weapon.attackType === "focus";
   switch (id) {
     case "basics":
-      return (
-        <>
-          <Field copy="weaponKind">
-            <Segmented
-              label="It's" value={focus ? "focus" : "weapon"}
-              options={[{ value: "weapon", label: "A weapon" }, { value: "focus", label: "A focus or wand" }]}
-              onChange={(kind) => onChange(withWeaponKind(weapon, kind))}
-            />
-          </Field>
-          {focus ? <p className={styles.hint}>It makes no attack of its own: give it charges in Use &amp; cost, and what it lets the creature use in Grants.</p> : null}
-          {focus ? null : <WeaponBasics weapon={weapon} onChange={onChange} />}
-        </>
-      );
+      // A weapon is something it attacks with: a focus or a wand is an item (Add ability → Items).
+      return <WeaponBasics weapon={weapon} onChange={onChange} />;
     case "use":
       return <WeaponUse weapon={weapon} onChange={onChange} />;
     default:

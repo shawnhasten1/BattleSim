@@ -192,7 +192,8 @@ class Checker {
     switch (listName) {
       case "weapons":
         this.name("", value);
-        if (!["melee", "ranged", "focus"].includes(String(value.attackType))) this.add("attackType", "Expected melee, ranged or focus");
+        if (value.attackType === "focus") this.add("attackType", "A focus or a wand is an item now: add it under Items");
+        else if (!["melee", "ranged"].includes(String(value.attackType))) this.add("attackType", "Expected melee or ranged");
         this.list("damage", value.damage, damageComponentSchema);
         this.list("versatileDamage", value.versatileDamage, damageComponentSchema);
         this.list("onHit", value.onHit, actionRiderSchema);
