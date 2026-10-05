@@ -1,6 +1,6 @@
 # Items Plan: potions, scrolls, wands and worn magic items on the sheet
 
-**Status:** Phases 0–4 built on branch `items` (2026-10-05); Phases 5 and 6 to come. D1, D2 and D6 were confirmed by the
+**Status:** built, Phases 0–6, on branch `items` (2026-10-05); not merged. D1, D2 and D6 were confirmed by the
 user on 2026-10-05. The same day the user asked for D10: a healing potion used with an action instead of a bonus action
 heals its full amount (§6). The other decisions in §10 take their recommended defaults unless changed. Where the build
 differs from the plan below, "Built so far" says how.
@@ -60,6 +60,38 @@ reads as a weapon and can't be given to anyone else.
   "Give · full 10 (action)". The sheet row says "drink or give (5 ft): 7 (2d4 + 2) HP · bonus action · with an action:
   the full 10". The Combat panel says "Potions take a bonus action · an action instead heals a potion in full ·
   campaign rules", a batch's Ran with line the same, and its Items line "(0.6 with an action, for the full amount)".
+
+**The library and Open5e (Phase 5).**
+- The thrown flasks are named "Vial of Acid" and "Flask of Holy Water", so the log reads "throws a Vial of Acid"; the
+  SRD's "Acid (vial)" still finds it (the offer matches names by their words, in any order).
+- A wand's tiers aren't authored one by one. Its use is the library's spell at the wand's DC (`itemSpellUse`), and
+  `upcast.byCharges` (new on `SpellUpcast`) makes the engine compile a copy per extra charge, a level higher each
+  (`<use id>:charges-N`, up to the charges it holds and 9th level). The hotbar folds them into one button ("3 charges ·
+  5th"), the log says "(Fireball at 5th level, 3 charges)", and the Necklace of Fireballs throws beads the same way.
+- There's no spell picker for scrolls. `SRD_SPELL_SCROLLS` is a scroll of each of the 82 library spells, indexed with the
+  items but listed only for a search with "scroll" in it; the Spell scroll recipe starts that search. A creature's own
+  spell gets one too (`own-scroll:<spell id>`).
+- `ItemDefinition.notSimulated` says what part of an item the engine doesn't run; the sheet marks it partial. The
+  Potion of Speed is partial (+2 AC and advantage on Dexterity saves: a condition can only slow a creature, not double
+  its speed), as are Growth (no size), Invisibility (attackers at −4; it doesn't end on an attack), the Bracers of
+  Defense (armor and shields aren't checked) and the Brooch of Shielding (no magic missile immunity).
+- Seven items are carried for reference until §9: Alchemist's Fire, a Healer's Kit, the Potions of Giant Strength and
+  Flying, the Elixir of Health, Gauntlets of Ogre Power and the Amulet of Health.
+- An Open5e item comes in as a reference-only item (`normalizeOpen5eItem`, its kind from Open5e's category), from the
+  Compendium or from Add ability's "Search Open5e items" under Items. The SRD's twin is offered under the Abilities
+  tab's resources, not on the row, and taking it keeps the item's id, pool and count (`swapInSrdItem`).
+- A rider that only some creatures take says so on its row too ("+7 (2d6) radiant (fiend or undead only)").
+
+**Foci (Phase 6).**
+- `migrateDefinition` moves each focus weapon into `items` as a wand, its id, its pool's id (`<weapon id>:<charges
+  id>`) and its uses' ids kept. `withItemPool` keeps a pool already namespaced to its item, so an edit doesn't move
+  every token's count to a new pool.
+- "Plays the same" holds for every roll, decision and the outcome; the declaration's wording and data change (an item's
+  use says which item it is).
+- The weapon JSON check refuses `attackType: "focus"` ("a focus or a wand is an item now"), since a commit would move it
+  out from under the editor. The engine still compiles an unmigrated focus, for a snapshot run headless.
+- `tests/focus-weapons.test.ts` became `tests/weapon-charges.test.ts` (a weapon's granted actions and charged riders)
+  and `tests/items-foci.test.ts` (the migration, and what a focus's effects did, as a wand's).
 
 ## Summary
 
