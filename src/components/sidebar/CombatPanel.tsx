@@ -13,7 +13,7 @@ import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { useDisplayEncounter, useIsReplaying, usePlaybackCursor } from "@/hooks/useDisplayEncounter";
 import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
-import { prepBuffs } from "@/lib/actor-sheet/token";
+import { prepBuffLabel, prepBuffs } from "@/lib/actor-sheet/token";
 import styles from "./CombatPanel.module.css";
 import { hasCounterspellers, ruleInForce } from "@/lib/campaign-rules";
 
@@ -344,8 +344,9 @@ export function CombatPanel() {
                 </div>
               ) : null}
               {buffs.length > 0 ? (
-                <div className={styles.prepBuffs} title="Spells cast before this fight — toggle which are already active">
-                  {buffs.map(({ action, active, affordable }) => {
+                <div className={styles.prepBuffs} title="Spells cast and potions drunk before this fight — toggle which are already active">
+                  {buffs.map((buff) => {
+                    const { action, active, affordable } = buff;
                     const disabled = !active && !affordable;
                     return (
                       <label
@@ -359,7 +360,7 @@ export function CombatPanel() {
                           disabled={disabled}
                           onChange={() => togglePrepBuff(combatant.id, action.id)}
                         />
-                        {action.name}
+                        {prepBuffLabel(buff)}
                       </label>
                     );
                   })}
@@ -395,6 +396,18 @@ export function CombatPanel() {
             </div>
             {counterspellRule && batchSummary.rules ? (
               <p className={styles.ruleLine}>Ran with: {ruleInForce(batchSummary, "counterspellReadsSpell")}</p>
+            ) : null}
+            {batchSummary.items ? (
+              <p className={styles.ruleLine} aria-label="Items in the batch">
+                Items:{" "}
+                {batchSummary.items.used.length
+                  ? batchSummary.items.used.map((item) => `${item.name} ${item.perFight} a fight`).join(", ")
+                  : "none used"}
+                {" · "}got a downed ally up in {percent(batchSummary.items.broughtUpRate)} of fights
+                {batchSummary.items.wentDownHoldingPerFight > 0
+                  ? ` · went down still holding a healing potion ${batchSummary.items.wentDownHoldingPerFight} a fight`
+                  : ""}
+              </p>
             ) : null}
 
             {batchSummary.roundDistribution.length ? (

@@ -190,7 +190,9 @@ describe("drinking and giving", () => {
     expect(archer.currentHp).toBeGreaterThanOrEqual(4);
     expect(archer.deathSaves).toEqual({ successes: 0, failures: 0, stable: false });
     expect(state.snapshot.combatants.find((combatant) => combatant.id === FIGHTER)!.resources?.["item:potions"]).toBe(2);
-    expect(state.log.find((entry) => entry.type === "ActionDeclared")!.message).toBe("Fighter gives Archer a Potion of Healing");
+    const declared = state.log.find((entry) => entry.type === "ActionDeclared")!;
+    expect(declared.message).toBe("Fighter gives Archer a Potion of Healing");
+    expect(declared.data?.item).toMatchObject({ use: "give", left: 2, targetDown: true });
   });
 
   it("it can't be given from 10 ft away", () => {

@@ -64,6 +64,7 @@ import {
   normalizeDeathEffectDefinition,
   normalizeItemDefinition,
   withItemPool,
+  isPrepDrink,
   migrateDefinition,
   playStatusOf,
   type ActionRider,
@@ -2670,9 +2671,10 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!combatant || !definition) {
           return;
         }
+        // A prep spell, or a potion whose benefit outlasts the fight (drunk before it, one of its stack spent).
         const action = getExecutableActions(definition).find(
           (candidate): candidate is Extract<ActionDefinition, { kind: "buff" }> =>
-            candidate.id === actionId && candidate.kind === "buff" && Boolean(candidate.prepOnly)
+            candidate.id === actionId && candidate.kind === "buff" && (Boolean(candidate.prepOnly) || isPrepDrink(candidate))
         );
         if (!action) {
           return;

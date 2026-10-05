@@ -29,13 +29,14 @@ import {
 } from "@/engine";
 import { actionStatblock, costText, usageLabel } from "@/lib/statblock";
 
-export type HotbarTab = "attacks" | "spells" | "bonus" | "features" | "common" | "reactions";
+export type HotbarTab = "attacks" | "spells" | "bonus" | "features" | "items" | "common" | "reactions";
 
 export const HOTBAR_TABS: ReadonlyArray<{ id: HotbarTab; label: string }> = [
   { id: "attacks", label: "Attacks" },
   { id: "spells", label: "Spells" },
   { id: "bonus", label: "Bonus" },
   { id: "features", label: "Features" },
+  { id: "items", label: "Items" },
   { id: "common", label: "Common" },
   { id: "reactions", label: "Reactions" }
 ];
@@ -68,6 +69,8 @@ export interface HotbarVariant {
   aim: Aim;
   /** The spell slot level it spends. */
   slotLevel?: number;
+  /** What it takes, when its button's variants differ (a potion drunk as a bonus action and given as an action). */
+  slot?: "action" | "bonus" | "free";
 }
 
 export type Automation = "full" | "partial" | "by-hand";
@@ -93,6 +96,8 @@ export interface HotbarButton {
   text: string;
   spellLevel?: number;
   concentration?: boolean;
+  /** An item's: how many are left ("×2"), or its charges ("5 charges"). */
+  count?: string;
 }
 
 /** One of the creature's reactions, as the Reactions tab lists it: its setting is `reactionPolicyKey(actorId, key)`. */
@@ -115,8 +120,8 @@ export interface HotbarModel {
   concentration?: string;
 }
 
-/** Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot. */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+)$/;
+/** Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a potion. */
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -142,6 +147,7 @@ function featureGrantedIds(definition: CreatureDefinition): Set<Id> {
 }
 
 function tabOf(action: ActionDefinition, granted: Set<Id>): HotbarTab {
+  if (action.item) return "items";
   if (action.kind === "utility") return "common";
   if ("spellLevel" in action && action.spellLevel != null) return "spells";
   if (action.kind === "attack" || action.kind === "multiattack") return action.actionType === "bonus" ? "bonus" : "attacks";
@@ -225,7 +231,7 @@ export function aimForAction(board: EncounterSnapshot, actorId: Id, actionId: Id
 }
 
 /** What using it costs, as a short chip: its slot, its pool, its recharge or uses, or how many attacks a routine makes. */
-function costOf(action: ActionDefinition): string | undefined {
+function costOf(action: ActionDefinition, definition?: CreatureDefinition): string | undefined {
   if (action.kind === "multiattack") {
     const swings = swingsOf(action.attacks).length;
     return `${swings} ${swings === 1 ? "attack" : "attacks"}`;
@@ -233,11 +239,24 @@ function costOf(action: ActionDefinition): string | undefined {
   const usage = "usage" in action ? action.usage : undefined;
   if (usage) return usageLabel(usage);
   const cost = "resourceCost" in action ? action.resourceCost : undefined;
-  return cost ? costText(cost).replace(/^an? /, "") : undefined;
+  // A potion's use spends one of it: its button says how many are left instead.
+  if (action.item?.consumes) return undefined;
+  return cost ? costText(cost, definition).replace(/^an? /, "") : undefined;
 }
+
+/** How many of an item are left: "×2" of a stack, "5 charges". */
+function itemCount(actor: CombatantState, action: ActionDefinition): string | undefined {
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  if (!action.item || !cost) return undefined;
+  const left = actor.resources?.[cost.resourceId] ?? 0;
+  return action.item.consumes ? `×${left}` : `${left} ${left === 1 ? "charge" : "charges"}`;
+}
+
+const SLOT_WORDS = { action: "action", bonus: "bonus action", free: "free", reaction: "reaction" } as const;
 
 /** A variant's name beside its family's others. `slotFamily`: a spell with copies at higher slots (Mage Armor too). */
 function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFamily = false): string {
+  if (action.item?.use) return `${action.item.use === "give" ? "Give" : "Drink"}${/:full$/.test(action.id) ? " · full" : ""}`;
   if (action.kind === "multiattack") {
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];
     return action.id === base.id || !option ? action.name : option;
@@ -330,7 +349,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     if (action.actionType === "reaction" || isLegendaryVariant(action) || isLairVariant(action)) continue;
     // Escaping a grapple is offered only while it's grappled.
     if (action.kind === "utility" && action.mode === "escape" && !grappled) continue;
-    const key = `${familyKey(action.id)}|${action.actionType}`;
+    // An item's use is one button whatever its variants take: a potion drunk as a bonus action and given as an action.
+    const key = `${familyKey(action.id)}|${action.item ? "item" : action.actionType}`;
     families.set(key, [...(families.get(key) ?? []), action]);
   }
 
@@ -339,10 +359,13 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     const ordered = [base, ...members.filter((member) => member !== base)];
     const automation = automationOf(base);
     const slotFamily = members.some((member) => member.upcastFrom != null);
+    // An item's variants can take different slots; each then says which.
+    const mixed = Boolean(base.item) && new Set(ordered.map((action) => action.actionType)).size > 1;
     const variants: HotbarVariant[] = ordered.map((action) => ({
       actionId: action.id,
-      label: variantLabel(action, base, slotFamily),
-      cost: costOf(action),
+      label: mixed ? `${variantLabel(action, base, slotFamily)} (${SLOT_WORDS[action.actionType]})` : variantLabel(action, base, slotFamily),
+      cost: costOf(action, definition),
+      ...(mixed && action.actionType !== "reaction" ? { slot: action.actionType } : {}),
       problem: actionProblem(board, actorId, action.id, { byHand: automation === "by-hand" }),
       aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables, actor),
       ...(spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) !== undefined
@@ -351,15 +374,20 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     }));
     const usable = variants.findIndex((variant) => !variant.problem);
     const entry = actionStatblock(base, definition);
+    const item = base.item;
+    const count = itemCount(actor, base);
+    const slot = variants[Math.max(0, usable)]!.slot ?? (base.actionType === "reaction" ? "action" : base.actionType);
     return {
       key: familyKey(base.id),
       tab: tabOf(base, granted),
-      name: base.name,
-      slot: base.actionType === "reaction" ? "action" : base.actionType,
+      // A wand's spell is "Web (Wand of Web)"; a potion's use is the potion.
+      name: item && base.name !== item.name ? `${base.name} (${item.name})` : base.name,
+      slot,
       variants,
       defaultVariant: Math.max(0, usable),
       // What a click spends: with a spell's own slots gone, the lowest higher one it'll use.
-      cost: variants[Math.max(0, usable)]!.cost,
+      cost: [count, variants[Math.max(0, usable)]!.cost].filter(Boolean).join(" · ") || undefined,
+      ...(count ? { count } : {}),
       automation,
       problem: usable < 0 ? variants[0]!.problem : undefined,
       title: entry.title,
@@ -403,7 +431,9 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       .map((button, index) => ({ button, index }))
       .sort((a, b) => (id === "spells" ? (a.button.spellLevel ?? 0) - (b.button.spellLevel ?? 0) : routine(a.button) - routine(b.button)) || a.index - b.index)
       .map(({ button }) => button)
-  }));
+  }))
+    // Most creatures carry nothing: the Items tab shows only for one that does.
+    .filter((tab) => tab.id !== "items" || tab.buttons.length > 0);
 
   const slots = Object.keys(definition.resources ?? {})
     .map((resourceId) => ({ resourceId, level: spellSlotLevel(resourceId) }))

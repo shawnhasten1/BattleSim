@@ -7,7 +7,7 @@ import { MAX_ELEVATION_FT, useEncounterStore } from "@/store/encounter-store";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { COMBATANT_STATE_HELP } from "@/lib/sheet-help";
 import { appearanceLine, fightLine, statusLine } from "@/lib/actor-sheet/summaries";
-import { imageSource, isSurprised, prepBuffs } from "@/lib/actor-sheet/token";
+import { imageSource, isSurprised, prepBuffLabel, prepBuffs } from "@/lib/actor-sheet/token";
 import { tokenVisualsFor } from "@/lib/ui-helpers";
 import { srdSlugOf } from "@/lib/token-image";
 import { TWIN_SLUGS } from "@/lib/token-pack-match";
@@ -37,8 +37,8 @@ const ALTITUDE_HELP = (
 
 const PREP_HELP = (
   <p>
-    Spells it casts before the fight, like Mage Armor. One that&apos;s up starts the fight on it, with its slot
-    already spent. Restart takes it down again.
+    Spells it casts before the fight, like Mage Armor, and potions it drinks before it, like a Potion of Heroism. One
+    that&apos;s up starts the fight on it, with its slot (or one of its potions) already spent. Restart takes it down again.
   </p>
 );
 
@@ -90,12 +90,16 @@ export function FightSection({ combatant, definition, open, onToggle }: SectionP
         </Row>
         {buffs.length ? (
           <Row label="Already up" help={PREP_HELP}>
-            {buffs.map(({ action, active, affordable }) => (
-              <label key={action.id} className={styles.checkLine} title={why ?? (!active && !affordable ? `Not enough left to cast ${action.name}` : undefined)}>
-                <input type="checkbox" checked={active} disabled={underWay || (!active && !affordable)} onChange={() => togglePrepBuff(combatant.id, action.id)} />
-                {action.name}
-              </label>
-            ))}
+            {buffs.map((buff) => {
+              const { action, active, affordable, drunk } = buff;
+              const short = drunk ? `No ${action.item?.name ?? action.name} left` : `Not enough left to cast ${action.name}`;
+              return (
+                <label key={action.id} className={styles.checkLine} title={why ?? (!active && !affordable ? short : undefined)}>
+                  <input type="checkbox" checked={active} disabled={underWay || (!active && !affordable)} onChange={() => togglePrepBuff(combatant.id, action.id)} />
+                  {prepBuffLabel(buff)}
+                </label>
+              );
+            })}
           </Row>
         ) : null}
         {fly || altitude ? (

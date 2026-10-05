@@ -3870,7 +3870,9 @@ function declareAction(
       name: item.name,
       type: item.type,
       ...(item.use ? { use: item.use } : {}),
-      ...(resourceCost ? { left: actor.resources?.[resourceCost.resourceId] ?? 0 } : {})
+      ...(resourceCost ? { left: actor.resources?.[resourceCost.resourceId] ?? 0 } : {}),
+      // Used on a creature at 0 HP (a potion poured into a downed ally): the reports count who it got back up.
+      ...(targetInfo.target && targetInfo.target.id !== actor.id && targetInfo.target.state !== "active" ? { targetDown: true } : {})
     }
     : undefined;
   const message = targetInfo.message

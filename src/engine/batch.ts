@@ -1,3 +1,4 @@
+import { isDrinkUse } from "./items";
 import { runAutomatedEncounter, runAutomatedFromHere, type SimulationRunResult } from "./turns";
 import type { CombatLogEvent, EncounterSnapshot, Faction, Id } from "./types";
 
@@ -14,6 +15,18 @@ export interface CombatantMetrics {
   endingHp: number;
   /** Average resource points spent per run (sum of `ActionDeclared.resourceCost.amount`). */
   resourceSpent: number;
+  /** Average number of items it used per run (a potion drunk or given, a flask thrown, a wand's charge spent). */
+  itemsUsed: number;
+}
+
+/** What items did across a batch (ITEMS_PLAN.md §5). Only when some creature in it carries an item. */
+export interface BatchItemsSummary {
+  /** Each item used, by name: how many a fight on average. */
+  used: Array<{ name: string; perFight: number }>;
+  /** Share of the fights in which an item brought a creature back up from 0 HP (a potion given to a downed ally). */
+  broughtUpRate: number;
+  /** How many times a fight, on average, a creature dropped while still holding a healing potion it never drank. */
+  wentDownHoldingPerFight: number;
 }
 
 /** One bar of the round-count histogram: how many runs ended on exactly `round`. */
@@ -43,6 +56,8 @@ export interface BatchSimulationSummary {
   warnings: string[];
   /** The rules the batch ran under (the campaign's among them), so the report can say. */
   rules: EncounterSnapshot["rules"];
+  /** What items did, when anyone carries one. */
+  items?: BatchItemsSummary;
   runs: Array<{
     seed: string;
     winner: string | null;
@@ -101,6 +116,7 @@ export function summarizeBatch(baseSnapshot: EncounterSnapshot, runs: Simulation
     roundDistribution: roundDistribution(rounds),
     remainingHpByFaction: remainingHpByFaction(runs),
     damageByCombatant: aggregateCombatants(baseSnapshot, runs),
+    ...(baseSnapshot.definitions.some((definition) => definition.items?.length) ? { items: summarizeItems(baseSnapshot, runs) } : {}),
     warnings,
     runs: runs.map((run) => ({
       seed: run.snapshot.seed,
@@ -139,7 +155,8 @@ function aggregateCombatants(baseSnapshot: EncounterSnapshot, runs: SimulationRu
       died: false,
       survived: false,
       endingHp: 0,
-      resourceSpent: 0
+      resourceSpent: 0,
+      itemsUsed: 0
     };
 
     for (const run of runs) {
@@ -158,6 +175,7 @@ function aggregateCombatants(baseSnapshot: EncounterSnapshot, runs: SimulationRu
     metrics.healingReceived = round(metrics.healingReceived / Math.max(1, runs.length));
     metrics.endingHp = round(metrics.endingHp / Math.max(1, runs.length));
     metrics.resourceSpent = round(metrics.resourceSpent / Math.max(1, runs.length));
+    metrics.itemsUsed = round(metrics.itemsUsed / Math.max(1, runs.length));
     return metrics;
   });
 }
@@ -184,7 +202,62 @@ function readMetricEvent(entry: CombatLogEvent, combatantId: Id, metrics: Combat
   if (entry.type === "ActionDeclared" && entry.data?.actorId === combatantId) {
     const cost = entry.data.resourceCost as { amount?: number } | undefined;
     metrics.resourceSpent += Number(cost?.amount ?? 0);
+    if (entry.data.item) metrics.itemsUsed += 1;
   }
+}
+
+/**
+ * What items did across the runs: each used, by name; how often one got a creature back up from 0 HP; and how often a
+ * creature dropped with a healing potion it never drank (a sign its stance, or the AI, held on too long).
+ */
+function summarizeItems(baseSnapshot: EncounterSnapshot, runs: SimulationRunResult[]): BatchItemsSummary {
+  const used = new Map<string, number>();
+  let broughtUpRuns = 0;
+  let wentDownHolding = 0;
+  // Each creature's healing-potion pools, with what it starts the fight with.
+  const startingPotions = new Map<Id, Map<string, number>>();
+  for (const combatant of baseSnapshot.combatants) {
+    const definition = baseSnapshot.definitions.find((candidate) => candidate.id === combatant.definitionId);
+    const pools = new Map<string, number>();
+    for (const item of definition?.items ?? []) {
+      const heals = item.type === "potion" && item.grantedActions?.some((use) => use.kind === "healing" && isDrinkUse(use));
+      if (heals && item.supply) pools.set(item.supply.id, combatant.resources?.[item.supply.id] ?? 0);
+    }
+    if (pools.size) startingPotions.set(combatant.id, pools);
+  }
+  for (const run of runs) {
+    const potions = new Map([...startingPotions].map(([id, pools]) => [id, new Map(pools)]));
+    // An item used on a creature at 0 HP, by whom: the heal that follows it gets them back up.
+    const revivals = new Map<string, string>();
+    let broughtUp = false;
+    for (const entry of run.log) {
+      const data = entry.data ?? {};
+      if (entry.type === "ActionDeclared") {
+        const item = data.item as { name?: string; targetDown?: boolean } | undefined;
+        if (!item?.name) continue;
+        used.set(item.name, (used.get(item.name) ?? 0) + 1);
+        if (item.targetDown && data.targetId) revivals.set(String(data.targetId), String(data.actorId));
+        const cost = data.resourceCost as { resourceId?: string; amount?: number } | undefined;
+        const pools = potions.get(String(data.actorId));
+        if (cost?.resourceId && pools?.has(cost.resourceId)) pools.set(cost.resourceId, (pools.get(cost.resourceId) ?? 0) - Number(cost.amount ?? 1));
+      } else if (entry.type === "CombatantDowned" || entry.type === "CombatantDefeated") {
+        const id = String(data.combatantId);
+        if ([...(potions.get(id)?.values() ?? [])].some((left) => left > 0)) wentDownHolding += 1;
+      } else if (entry.type === "HealingApplied") {
+        const target = String(data.targetId);
+        if (revivals.get(target) === String(data.healerId) && Number(data.currentHp ?? 0) > 0) {
+          revivals.delete(target);
+          broughtUp = true;
+        }
+      }
+    }
+    if (broughtUp) broughtUpRuns += 1;
+  }
+  return {
+    used: [...used.entries()].map(([name, count]) => ({ name, perFight: round(count / Math.max(1, runs.length)) })).sort((a, b) => a.name.localeCompare(b.name)),
+    broughtUpRate: ratio(broughtUpRuns, runs.length),
+    wentDownHoldingPerFight: round(wentDownHolding / Math.max(1, runs.length))
+  };
 }
 
 function roundDistribution(sortedRounds: number[]): RoundDistributionBin[] {

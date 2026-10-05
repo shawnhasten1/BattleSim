@@ -28,6 +28,14 @@ export function withArticle(name: string): string {
   return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
 }
 
+/** How long a potion's benefit must last for it to be drunk before a fight starts: 10 minutes. */
+export const PREP_DRINK_ROUNDS = 100;
+
+/** A buff potion whose benefit outlasts a fight (Heroism, Resistance): drunk before it starts, like a prep spell. */
+export function isPrepDrink(action: ActionDefinition): action is BuffActionDefinition {
+  return action.kind === "buff" && action.item?.use === "drink" && (action.appliedCondition.durationRounds ?? Number.POSITIVE_INFINITY) >= PREP_DRINK_ROUNDS;
+}
+
 /** A potion's give copy carries this suffix on its drink's id: `<drink id>:give`. */
 export const GIVE_SUFFIX = ":give";
 

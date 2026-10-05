@@ -48,6 +48,10 @@ export interface ActorReport {
   // Resources
   resourcesSpent: Array<{ resourceId: string; label: string; amount: number }>;
   totalResourcePoints: number;
+  /** Items it used, by name: "Potion of Healing" ×2. */
+  itemsUsed: Array<{ name: string; count: number }>;
+  /** Allies at 0 HP it brought back up with an item (a potion given). */
+  alliesBroughtUp: number;
 
   // Control / reactions
   conditionsSuffered: string[];
@@ -130,6 +134,8 @@ function emptyActor(combatant: CombatantState, maxHp: number): ActorReport {
     healingReceived: 0,
     resourcesSpent: [],
     totalResourcePoints: 0,
+    itemsUsed: [],
+    alliesBroughtUp: 0,
     conditionsSuffered: [],
     opportunityAttacks: 0,
     reactionsUsed: 0
@@ -141,6 +147,11 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
   const actors = new Map<Id, ActorReport>();
   const resourceTallies = new Map<Id, Map<string, number>>();
   const conditionsSuffered = new Map<Id, Set<string>>();
+  // An item's pool is named after the item, which its use's declaration names; and which uses were an item's.
+  const itemPoolNames = new Map<string, string>();
+  const itemTallies = new Map<Id, Map<string, number>>();
+  // An item used on a creature at 0 HP, by whom: the heal that follows it gets them back up.
+  const revivals = new Map<Id, Id>();
 
   for (const combatant of snapshot.combatants) {
     actors.set(combatant.id, emptyActor(combatant, maxHpByDefinition.get(combatant.definitionId) ?? combatant.currentHp));
@@ -234,6 +245,11 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
       case "HealingApplied": {
         const healer = actorFor(str(data.healerId));
         if (healer) healer.healingGiven += num(data.healingApplied);
+        const healedId = str(data.targetId) ?? "";
+        if (healer && revivals.get(healedId) === healer.combatantId && num(data.currentHp) > 0) {
+          revivals.delete(healedId);
+          healer.alliesBroughtUp += 1;
+        }
         const target = actorFor(str(data.targetId));
         if (target) {
           target.healingReceived += num(data.healingApplied);
@@ -277,6 +293,14 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
           const tally = resourceTallies.get(str(data.actorId) ?? "");
           if (tally) tally.set(cost.resourceId, (tally.get(cost.resourceId) ?? 0) + num(cost.amount));
         }
+        const item = data.item as { name?: string; targetDown?: boolean } | undefined;
+        if (item?.name) {
+          if (cost?.resourceId) itemPoolNames.set(cost.resourceId, item.name);
+          if (item.targetDown && str(data.targetId)) revivals.set(str(data.targetId)!, str(data.actorId) ?? "");
+          const items = itemTallies.get(str(data.actorId) ?? "") ?? new Map<string, number>();
+          items.set(item.name, (items.get(item.name) ?? 0) + 1);
+          itemTallies.set(str(data.actorId) ?? "", items);
+        }
         break;
       }
       case "ConditionApplied": {
@@ -314,11 +338,14 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
     const tally = resourceTallies.get(actor.combatantId);
     if (tally) {
       actor.resourcesSpent = [...tally.entries()]
-        .map(([resourceId, amount]) => ({ resourceId, label: formatResourceId(resourceId), amount }))
+        .map(([resourceId, amount]) => ({ resourceId, label: itemPoolNames.get(resourceId) ?? formatResourceId(resourceId), amount }))
         .sort((a, b) => a.label.localeCompare(b.label));
       actor.totalResourcePoints = actor.resourcesSpent.reduce((sum, r) => sum + r.amount, 0);
     }
     actor.conditionsSuffered = [...(conditionsSuffered.get(actor.combatantId) ?? [])].sort();
+    actor.itemsUsed = [...(itemTallies.get(actor.combatantId) ?? new Map<string, number>()).entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   const orderedActors = snapshot.combatants

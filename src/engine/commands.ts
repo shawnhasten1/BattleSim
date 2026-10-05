@@ -224,6 +224,7 @@ const ORDINALS = ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th",
 function costProblem(action: ActionDefinition): string {
   const cost = "resourceCost" in action ? action.resourceCost : undefined;
   if (!cost) return `Not enough left to use ${action.name}`;
+  if (action.item) return action.item.consumes ? `No ${action.item.name} left` : `${action.item.name} hasn't the charges left`;
   const slot = spellSlotLevel(cost.resourceId);
   if (slot !== undefined) return `No ${ORDINALS[slot] ?? `${slot}th`}-level slots left`;
   if (cost.resourceId.startsWith("usage:")) {

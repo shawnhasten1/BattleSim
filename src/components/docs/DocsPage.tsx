@@ -747,6 +747,19 @@ const SECTIONS: Section[] = [
           slot of its level. The log says why: <em>Kael chose to drink a Potion of Healing: 9 HP left, ≈13 damage likely
           before its next turn (2 in reach)</em>.
         </p>
+        <p>
+          In Play, the hotbar&apos;s <strong>Items</strong> tab has a button for each item with how many are left: a
+          potion&apos;s <em>Drink</em> is used at once, and <em>Give</em> is aimed at an ally within 5 ft, one who&apos;s
+          down included. A potion whose benefit lasts 10 minutes or more (Heroism) can be drunk before the fight:
+          it&apos;s listed with the spells cast before it, in the Combat panel and on the Token tab, and ticking it spends
+          one.
+        </p>
+        <p>
+          The <strong>Battle report</strong> lists the items each creature used and the allies it got back up with one.
+          A <strong>batch</strong> says how many of each item were used a fight, in how many fights an item got a downed
+          ally back up, and how often a creature went down still holding a healing potion it never drank: often means
+          its stance, or the fight, never gave it the chance.
+        </p>
       </>
     )
   },
@@ -910,8 +923,9 @@ const SECTIONS: Section[] = [
         <ul>
           <li>
             <strong>The hotbar</strong>, at the bottom of the map, shows what's left of the turn and everything the
-            creature can use, by tab: Attacks, Spells (with the slots left), Bonus, Features, Common (Dash,
-            Disengage, Dodge…) and Reactions. A button greyed out says why. Keys 1–0 press the tab's first ten.
+            creature can use, by tab: Attacks, Spells (with the slots left), Bonus, Features, Items (for a creature
+            that carries any: how many are left, and a potion's Drink and Give), Common (Dash, Disengage, Dodge…) and
+            Reactions. A button greyed out says why. Keys 1–0 press the tab's first ten.
           </li>
           <li>
             <strong>Moving</strong>: the squares it can still reach are tinted; over a square, the route, its cost,

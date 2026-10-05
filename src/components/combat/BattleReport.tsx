@@ -135,6 +135,16 @@ function ActorEntry({ actor, portrait }: { actor: ActorReport; portrait?: string
         <div><span>Times downed</span><strong>{actor.timesDowned}</strong></div>
       </div>
 
+      {actor.itemsUsed.length ? (
+        <div className={styles.chips}>
+          <span className={styles.chipsLabel}>Items</span>
+          {actor.itemsUsed.map((item) => (
+            <span key={item.name} className={styles.chip}>{item.count}× {item.name}</span>
+          ))}
+          {actor.alliesBroughtUp ? <span className={styles.chip}>got {actor.alliesBroughtUp === 1 ? "an ally" : `${actor.alliesBroughtUp} allies`} back up</span> : null}
+        </div>
+      ) : null}
+
       {actor.resourcesSpent.length ? (
         <div className={styles.chips}>
           <span className={styles.chipsLabel}>Resources</span>
@@ -180,10 +190,13 @@ function reportToText(report: ReturnType<typeof buildBattleReport>): string {
   );
   const line = (cells: string[]) =>
     cells.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd();
+  const items = report.actors.filter((actor) => actor.itemsUsed.length)
+    .map((actor) => `${actor.displayName}: ${actor.itemsUsed.map((item) => `${item.count}× ${item.name}`).join(", ")}`);
   return [
     ...header,
     line(cols.map(([label]) => label)),
     line(widths.map((width) => "-".repeat(width))),
-    ...rows.map(line)
+    ...rows.map(line),
+    ...(items.length ? ["", "Items used", ...items] : [])
   ].join("\n");
 }

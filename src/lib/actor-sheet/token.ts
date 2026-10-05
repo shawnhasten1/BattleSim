@@ -1,5 +1,5 @@
 import { tokenImageSource, type TokenImageSource } from "@/lib/token-image";
-import { cheapestCastable, getExecutableActions, isUpcastVariant, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
+import { cheapestCastable, getExecutableActions, isPrepDrink, isUpcastVariant, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
 
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 
@@ -10,23 +10,32 @@ export interface PrepBuff {
   active: boolean;
   /** The token has enough of what putting it up spends. */
   affordable: boolean;
+  /** A potion drunk before the fight (its benefit outlasts it), not a spell cast. */
+  drunk?: boolean;
 }
 
 /**
- * The buffs cast before a fight (`prepOnly`), as the Combat panel and the Token tab offer them (`togglePrepBuff`). One
- * entry per spell: with its own slot gone, a higher slot still puts it up.
+ * The buffs put up before a fight, as the Combat panel and the Token tab offer them (`togglePrepBuff`): spells cast
+ * before it (`prepOnly`), and potions whose benefit outlasts it (`isPrepDrink`). One entry per spell: with its own slot
+ * gone, a higher slot still puts it up.
  */
 export function prepBuffs(definition: CreatureDefinition, combatant: Pick<CombatantState, "conditions" | "resources">): PrepBuff[] {
   return getExecutableActions(definition)
-    .filter((action): action is BuffAction => action.kind === "buff" && Boolean(action.prepOnly) && !isUpcastVariant(action))
+    .filter((action): action is BuffAction => action.kind === "buff" && (Boolean(action.prepOnly) || isPrepDrink(action)) && !isUpcastVariant(action))
     .map((action) => {
       const conditionId = action.appliedCondition.id ?? action.id;
       return {
         action,
         active: combatant.conditions?.some((condition) => condition.id === conditionId) ?? false,
-        affordable: cheapestCastable(definition, combatant, action.id) !== undefined
+        affordable: cheapestCastable(definition, combatant, action.id) !== undefined,
+        ...(isPrepDrink(action) ? { drunk: true } : {})
       };
     });
+}
+
+/** How a prep buff is named in a list: a potion says it was drunk. */
+export function prepBuffLabel(buff: PrepBuff): string {
+  return buff.drunk ? `${buff.action.name} (drank one)` : buff.action.name;
 }
 
 /** Where the image a token shows comes from (see `TokenImageSource`), or undefined when it shows its initials. */
