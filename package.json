@@ -20,7 +20,10 @@
     "srd:monsters": "tsx scripts/build-srd-monsters.ts",
     "srd:monsters:check": "tsx scripts/build-srd-monsters.ts --check",
     "srd:tokens": "tsx scripts/build-srd-tokens.ts",
-    "srd:tokens:check": "tsx scripts/build-srd-tokens.ts --check"
+    "srd:tokens:check": "tsx scripts/build-srd-tokens.ts --check",
+    "srd:2024:fetch": "tsx scripts/fetch-srd-2024.ts",
+    "srd:2024": "tsx scripts/build-srd-2024.ts",
+    "srd:2024:check": "tsx scripts/build-srd-2024.ts --check"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

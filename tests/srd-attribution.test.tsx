@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { openAdd } from "./helpers/abilities-tab";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { SRD_ATTRIBUTION, SRD_CREDITS_PATH, SRD_MODIFICATION_NOTICE } from "@/data/srd/attribution";
+import { SRD_52_ATTRIBUTION, SRD_ATTRIBUTION, SRD_CREDITS_PATH, SRD_MODIFICATION_NOTICE } from "@/data/srd/attribution";
 import { DocsPage } from "@/components/docs/DocsPage";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
 import { useCompendium } from "@/hooks/useCompendium";
@@ -20,6 +20,15 @@ const OFFICIAL =
   + "https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 "
   + "International License available at https://creativecommons.org/licenses/by/4.0/legalcode.";
 
+/**
+ * The same for SRD 5.2, copied VERBATIM from the "Legal Information" page of SRD_CC_v5.2.pdf (checked 2026-10-05):
+ * its curly quotes, its commas, and "https://" (the PDF's "https:/ /" is a kerning gap, not a space).
+ */
+const OFFICIAL_52 =
+  "This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at "
+  + "https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, "
+  + "available at https://creativecommons.org/licenses/by/4.0/legalcode.";
+
 const root = `${process.cwd().replace(/[\/]+$/, "")}/`; // vitest runs from the repo root
 const squash = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -34,6 +43,10 @@ afterEach(() => {
 describe("SRD attribution", () => {
   it("is exactly the statement the SRD 5.1 asks for", () => {
     expect(SRD_ATTRIBUTION).toBe(OFFICIAL);
+  });
+
+  it("is exactly the statement the SRD 5.2 asks for", () => {
+    expect(SRD_52_ATTRIBUTION).toBe(OFFICIAL_52);
   });
 
   it("indicates modification (CC-BY §3(a)) without adding any other attribution regarding Wizards", () => {
@@ -54,6 +67,7 @@ describe("SRD attribution", () => {
   it("is in the READMEs", () => {
     for (const file of ["README.md", "src/data/srd/README.md"]) {
       expect(squash(readFileSync(`${root}${file}`, "utf8")), file).toContain(OFFICIAL);
+      expect(squash(readFileSync(`${root}${file}`, "utf8")), file).toContain(OFFICIAL_52);
     }
     expect(squash(readFileSync(`${root}README.md`, "utf8"))).toContain(squash(SRD_MODIFICATION_NOTICE));
   });
@@ -67,8 +81,11 @@ describe("credits in the app", () => {
     expect(within(section).getByRole("heading", { name: "Credits & Licensing" })).toBeTruthy();
     // Links wrap the URLs but never change the text.
     expect(squash(document.getElementById("srd-attribution")!.textContent ?? "")).toBe(OFFICIAL);
-    expect(within(section).getByRole("link", { name: "https://creativecommons.org/licenses/by/4.0/legalcode" }).getAttribute("href")).toBe("https://creativecommons.org/licenses/by/4.0/legalcode");
+    const licence = within(section).getAllByRole("link", { name: "https://creativecommons.org/licenses/by/4.0/legalcode" });
+    expect(licence.map((link) => link.getAttribute("href"))).toEqual(Array(2).fill("https://creativecommons.org/licenses/by/4.0/legalcode"));
     expect(within(section).getByRole("link", { name: "https://dnd.wizards.com/resources/systems-reference-document" }).getAttribute("href")).toBe("https://dnd.wizards.com/resources/systems-reference-document");
+    expect(squash(document.getElementById("srd-52-attribution")!.textContent ?? "")).toBe(OFFICIAL_52);
+    expect(within(section).getByRole("link", { name: "https://www.dndbeyond.com/srd" }).getAttribute("href")).toBe("https://www.dndbeyond.com/srd");
     expect(section.textContent).toContain(SRD_MODIFICATION_NOTICE);
     // It is reachable from the docs nav.
     expect(screen.getByRole("link", { name: "Credits & Licensing" }).getAttribute("href")).toBe("#credits");

@@ -16,6 +16,17 @@ export const SRD_ATTRIBUTION =
   + "International License available at https://creativecommons.org/licenses/by/4.0/legalcode.";
 
 /**
+ * Attribution for the bundled SRD 5.2 content (the 2024 classes, species, backgrounds and feats the character builder
+ * uses). Copied VERBATIM from the "Legal Information" page of SRD_CC_v5.2.pdf (checked 2026-10-05), its curly quotes
+ * included; the PDF's "https:/ /" is a kerning gap, not a space. Do not reword it. That page also says: "Please do not
+ * include any other attribution to Wizards or its parent or affiliates other than that provided above."
+ */
+export const SRD_52_ATTRIBUTION =
+  "This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at "
+  + "https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, "
+  + "available at https://creativecommons.org/licenses/by/4.0/legalcode.";
+
+/**
  * CC-BY-4.0 §3(a)(1)(B) requires indicating that the material was modified. This states what we changed,
  * and — per the SRD's own request — says nothing further about Wizards.
  */

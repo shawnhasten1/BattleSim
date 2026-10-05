@@ -224,3 +224,29 @@ Pick a monster's icon in `scripts/srd-tokens/icon-map.ts`, then run `npm run srd
 commit the SVGs and `monsters/generated/token-icons.json`). The Docs credits list the icon
 authors from that manifest. Art a DM imports for a monster lives only in their browser
 (`src/lib/tokenPackStore.ts`). See `SRD_TOKEN_IMAGES_PLAN.md`.
+
+## The 2024 rules (`2024/`)
+
+The character builder (PC_BUILDER_PLAN.md) builds player characters from the SRD 5.2 (2024) classes, subclasses,
+species, backgrounds and feats. Like the monsters, its reference data is generated from a local Open5e V2 cache:
+
+```
+srd_2024_cache.json                 (local, gitignored: npm run srd:2024:fetch)
+        │  npm run srd:2024         (scripts/build-srd-2024.ts → scripts/srd-2024/*)
+        ▼
+2024/generated/reference.json       every class and subclass feature's text and levels, the features tables'
+                                    columns, feats, backgrounds, species, weapons with their mastery, armor
+2024/COVERAGE.md                    the audit: a verdict and gap codes for every feature, feat and species trait
+```
+
+- `npm run srd:2024:check` regenerates in memory and fails if the committed files differ;
+  `tests/srd-2024-reference.test.ts` does the same when the cache is present.
+- **Fixing wrong source data:** add an entry to `2024/overrides.ts` with a `reason`, checked against the SRD 5.2 PDF.
+  Never edit `2024/generated/` by hand. The Core Traits tables are read for saves, skills and weapons: the source's own
+  `saving_throws` field is wrong for the Fighter and the Monk.
+- **The audit:** `2024/coverage.ts` gives each feature a verdict (`full`, `partial`, `manual`, `builder`, `info`) and
+  gap codes from `GAPS`. The generator fails on a feature without a verdict, or a verdict for one that doesn't exist.
+
+### Attribution
+
+This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.

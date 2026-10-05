@@ -497,6 +497,8 @@ Use `apply-condition-on-hit` with `incoming-hit-damage` for marks, brands, curse
 
 This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
+This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
 The SRD material in this app has been modified: entries were converted into structured game data, statblock and spell text was parsed into rules the simulator can run, and some entries were corrected or simplified for simulation. They are not verbatim copies of the SRD text.
 
-The statement lives in `src/data/srd/attribution.ts` (verbatim from the SRD 5.1's own Legal Information page); `tests/srd-attribution.test.ts` keeps every copy of it in sync.
+The statements live in `src/data/srd/attribution.ts` (verbatim from the SRD 5.1's and SRD 5.2's own Legal Information pages); `tests/srd-attribution.test.ts` keeps every copy of it in sync.
