@@ -103,6 +103,15 @@ Authoring:
   after the potion. `give: { actionType }` says what giving it to a creature within 5 ft takes (the engine compiles the
   give from the drink). SRD 5.1: drinking or administering a potion takes an action.
 - What an item gives while carried goes in `effects`, as a feature's would; `attunement: { attuned }` if it needs it.
+- A spell an item casts (a wand's Fireball, a necklace's bead) is built from the library's spell by `itemSpellUse`
+  (`item-spells.ts`): the spell's own action at the item's DC or attack bonus, spending `"supply"`, still a spell of its
+  level. Give its `upcast` `byCharges: true` and the engine compiles a copy for each extra charge, a level higher each
+  (`<use id>:charges-N`), up to the item's charges and 9th level.
+- A thrown flask is a ranged `attack`, 20/60 ft, Dexterity without proficiency (an improvised weapon). Damage only some
+  creatures take (holy water) is a `damage` rider with `restrictToCreatureTypes`, over an attack that deals none.
+- What part of an item the engine doesn't run goes in `notSimulated`, in a few words (the sheet marks it partly
+  simulated), with `automationSupport: "partial"`. An item it can't run at all is `"manual-only"`, with no uses: the DM
+  can still carry it, and its text says what to do by hand.
 
 ## Reaction spells (`spells.ts`)
 

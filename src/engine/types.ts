@@ -1555,6 +1555,12 @@ export interface SpellUpcast {
    * bigger sphere, another bolt). The spell can still be cast with a higher slot; it just does the same thing.
    */
   notModelled?: string;
+  /**
+   * On an item's use (a Wand of Fireballs): each extra charge it spends casts the spell a level higher, growing as
+   * `perSlotAboveBase` says, up to every charge the item holds (and 9th level). Compiled into a copy per charge count,
+   * `<use id>:charges-N` (`compileItemUses`).
+   */
+  byCharges?: boolean;
 }
 
 export interface SpellDefinition {
@@ -1676,6 +1682,11 @@ export interface ItemDefinition {
   give?: { actionType: "action" | "bonus" };
   /** A potion's drink and give follow the campaign's potion rule unless this is `false` (it keeps its own timing). */
   followsTableRule?: boolean;
+  /**
+   * What the simulator doesn't run of it, in a few words for the DM ("the larger size and the advantage on Strength
+   * checks"): the sheet marks it partly simulated and says so. Not read by the simulator.
+   */
+  notSimulated?: string;
   /**
    * Used with an action where a bonus action would do, its heal is its full amount (a Potion of Healing: 10, not
    * 2d4 + 2): each bonus-action heal it has gets an action copy that heals the maximum. Written from the campaign's rule

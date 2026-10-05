@@ -375,6 +375,13 @@ function onlyDeniesReactions(rider: ConditionRider): boolean {
 
 /** A rider's gist for a list row: "DC 11 STR or prone", "grappled (DC 16)". */
 export function riderShort(rider: ActionRider, definition: CreatureDefinition, fallbackDc: number, rollsOwnSave: boolean): string {
+  const short = riderShortOf(rider, definition, fallbackDc, rollsOwnSave);
+  // Only some creatures take it (holy water: fiends and undead).
+  const only = rider.kind !== "note" && rider.restrictToCreatureTypes?.length ? ` (${joinList(rider.restrictToCreatureTypes, "or")} only)` : "";
+  return short && only ? `${short}${only}` : short;
+}
+
+function riderShortOf(rider: ActionRider, definition: CreatureDefinition, fallbackDc: number, rollsOwnSave: boolean): string {
   switch (rider.kind) {
     case "condition": {
       const name = onlyDeniesReactions(rider) ? "no reactions" : conditionName(rider.condition);
@@ -1657,6 +1664,28 @@ const slotPhrase = (actionType: ActionDefinition["actionType"]): string =>
 const slotShort = (actionType: ActionDefinition["actionType"]): string =>
   actionType === "bonus" ? "bonus action" : actionType === "reaction" ? "reaction" : actionType === "free" ? "free" : "action";
 
+/**
+ * A wand's use cast a level higher for each extra charge (`upcast.byCharges`), in words: what each adds, and how far it
+ * goes ("Each extra charge casts it a level higher, for 1d6 more damage, up to 7 (9th level).").
+ */
+function chargeTierText(use: ActionDefinition, item: ItemDefinition): { sentence: string; short: string } | undefined {
+  const upcast = "upcast" in use ? use.upcast : undefined;
+  const level = "spellLevel" in use ? use.spellLevel : undefined;
+  const cost = "resourceCost" in use ? use.resourceCost : undefined;
+  if (!upcast?.byCharges || level == null || !cost || !item.supply) return undefined;
+  const most = Math.min(item.supply.size, cost.amount + 9 - level);
+  if (most <= cost.amount) return undefined;
+  const per = upcast.perSlotAboveBase;
+  const adds = per?.damageDice ? `${per.damageDice.replace(/\+/g, " + ")} more ${use.kind === "healing" ? "healing" : "damage"}`
+    : per?.beams ? (per.beams === 1 ? "one more dart" : `${per.beams} more darts`)
+      : "no more effect";
+  const unit = item.supply.unit === "charges" ? "charge" : "one";
+  return {
+    sentence: `Each extra ${unit} spent at once casts it a level higher, for ${adds}, up to ${most} (${ordinal(level + most - cost.amount)} level).`,
+    short: `+${adds.replace(/ more /, " ")} per extra ${unit}, up to ${most}`
+  };
+}
+
 /** What drinking a potion does, as a short: "7 (2d4 + 2) HP", "10 temp HP, +2 to hit · 1 hour". */
 function drinkShort(drink: Extract<ActionDefinition, { kind: "healing" | "buff" }>, definition: CreatureDefinition): string {
   if (drink.kind === "healing") return `${healingShort(drink.healing, definition)} HP`;
@@ -1695,8 +1724,9 @@ export function itemStatblock(item: ItemDefinition, definition: CreatureDefiniti
   }
   for (const use of others) {
     const entry = actionStatblock(use, onCreature);
-    sentences.push(`It can be used for ${entry.title} (${slotPhrase(use.actionType)}): ${uncapitalize(entry.text)}`);
-    shorts.push(entry.title === item.name ? entry.short : `${entry.title}: ${entry.short}`);
+    const tiers = chargeTierText(use, item);
+    sentences.push(`It can be used for ${entry.title} (${slotPhrase(use.actionType)}): ${uncapitalize(entry.text)}${tiers ? ` ${tiers.sentence}` : ""}`);
+    shorts.push(`${entry.title === item.name ? entry.short : `${entry.title}: ${entry.short}`}${tiers ? ` · ${tiers.short}` : ""}`);
   }
   if (item.supply?.unit === "charges") {
     const { size, regains } = item.supply;
@@ -1724,7 +1754,10 @@ export function itemStatblock(item: ItemDefinition, definition: CreatureDefiniti
     text: sentences.join(" "),
     short: shorts.join(" · "),
     support: "simulated",
-    notSimulated: uses.flatMap((use) => actionStatblock(use, onCreature).notSimulated)
+    notSimulated: [
+      ...uses.flatMap((use) => actionStatblock(use, onCreature).notSimulated),
+      ...(item.notSimulated?.trim() ? [`${capitalize(item.notSimulated.trim().replace(/\.$/, ""))}.`] : [])
+    ]
   };
 }
 

@@ -14,7 +14,7 @@ import { SRD_ITEMS } from "./items";
  * Bump `SRD_LIBRARY_VERSION` whenever the data changes; a future "refresh
  * attached copies" feature will diff against it.
  */
-export const SRD_LIBRARY_VERSION = "2024.6";
+export const SRD_LIBRARY_VERSION = "2024.7";
 
 export { SRD_WEAPONS } from "./weapons";
 export { SRD_SPELLS } from "./spells";

@@ -3905,7 +3905,14 @@ function itemDeclaration(actor: CombatantState, action: ActionDefinition, item: 
   if (item.use === "drink") return `${actor.displayName} drinks ${named}${full}`;
   if (item.type === "scroll") return `${actor.displayName} reads ${named}${targetText}`;
   if (item.type === "thrown") return `${actor.displayName} throws ${named}${target ? ` at ${target.displayName}` : targetText}`;
-  return `${actor.displayName} uses ${item.name}${action.name !== item.name ? ` (${action.name})` : ""}${targetText}`;
+  // A wand's spell for more than one charge (or several beads at once): the level that casts it at, and what it spends.
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  const level = "spellLevel" in action ? action.spellLevel : undefined;
+  const tier = cost && cost.amount > 1 && level != null
+    ? ` at ${level}${level === 1 ? "st" : level === 2 ? "nd" : level === 3 ? "rd" : "th"} level, ${cost.amount} ${item.consumes ? "at once" : "charges"}`
+    : "";
+  const what = action.name !== item.name || tier ? ` (${action.name}${tier})` : "";
+  return `${actor.displayName} uses ${item.name}${what}${targetText}`;
 }
 
 /** Why an ability that can't target its user (giving a potion) was aimed at it anyway. */

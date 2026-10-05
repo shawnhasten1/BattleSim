@@ -120,8 +120,11 @@ export interface HotbarModel {
   concentration?: string;
 }
 
-/** Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a potion. */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full)$/;
+/**
+ * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
+ * potion, a wand's spell for more charges.
+ */
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -260,6 +263,12 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
     // An action spent where a bonus action would do: the full amount, a flat number on the copy ("Drink · full 10").
     const full = action.item.full && action.kind === "healing" ? ` · full ${action.healing.reduce((sum, component) => sum + (Number(component.dice) || 0), 0)}` : "";
     return `${action.item.use === "give" ? "Give" : "Drink"}${full}`;
+  }
+  // A wand's spell for the charges it spends, and the level that casts it at ("2 charges · 4th").
+  const itemCost = action.item && "resourceCost" in action ? action.resourceCost : undefined;
+  if (action.item && itemCost && "spellLevel" in action && action.spellLevel != null) {
+    const spent = action.item.consumes ? `×${itemCost.amount}` : `${itemCost.amount} ${itemCost.amount === 1 ? "charge" : "charges"}`;
+    return `${spent} · ${ordinal(action.spellLevel)}`;
   }
   if (action.kind === "multiattack") {
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];

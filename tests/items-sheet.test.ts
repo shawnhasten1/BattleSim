@@ -255,8 +255,10 @@ describe("warnings", () => {
 
 describe("Add and the library", () => {
   it("finds library potions and item recipes under Items", () => {
+    expect(searchAdd("healing", "items", undefined).library.map((entry) => entry.name))
+      .toEqual(["Potion of Greater Healing", "Potion of Healing", "Potion of Superior Healing", "Potion of Supreme Healing"]);
     const results = searchAdd("potion", "items", undefined);
-    expect(results.library.map((entry) => entry.name)).toEqual(["Potion of Greater Healing", "Potion of Healing", "Potion of Superior Healing", "Potion of Supreme Healing"]);
+    expect(results.library.map((entry) => entry.name)).toEqual(expect.arrayContaining(["Potion of Heroism", "Potion of Invulnerability", "Potion of Speed"]));
     expect(results.recipes.map((recipe) => recipe.label)).toEqual(["Buff potion", "Healing potion"]);
     expect(searchAdd("", "items", undefined).recipes.map((recipe) => recipe.label)).toEqual(["Buff potion", "Healing potion", "Other gear", "Thrown flask", "Wand", "Worn item"]);
   });

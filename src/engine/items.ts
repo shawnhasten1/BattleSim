@@ -11,6 +11,7 @@ import type {
   ItemType,
   ItemUseMeta,
   PotionUse,
+  ResourceCost,
   RuleProfile
 } from "./types";
 
@@ -47,6 +48,9 @@ export const GIVE_SUFFIX = ":give";
 /** An action copy that heals in full carries this suffix: `<drink id>:full`, `<drink id>:give:full`. */
 export const FULL_SUFFIX = ":full";
 
+/** A use cast a level higher for extra charges carries this suffix with what it spends: `<use id>:charges-3`. */
+export const CHARGES_SUFFIX = ":charges-";
+
 /** Items used up one at a time: each use spends one of the stack. */
 export function isConsumableType(type: ItemType): boolean {
   return type === "potion" || type === "scroll" || type === "thrown";
@@ -74,10 +78,68 @@ export function compileItemUses(item: ItemDefinition): ActionDefinition[] {
     item: potion && isDrinkUse(use) ? { ...meta, use: "drink" as const } : meta
   } as ActionDefinition));
   const give = potion ? item.give : undefined;
-  const all = give ? [...uses, ...uses.filter(isDrinkUse).map((drink) => giveCopy(drink, give.actionType))] : uses;
+  const gives = give ? uses.filter(isDrinkUse).map((drink) => giveCopy(drink, give.actionType)) : [];
+  const tiers = item.supply ? uses.flatMap((use) => chargeTiers(use, item.supply!.size)) : [];
+  const all = [...uses, ...gives, ...tiers];
   // With an action where a bonus action would do, a heal is its full amount: an action copy of each bonus-action heal.
   if (!item.fullWithAction) return all;
   return [...all, ...all.flatMap((use) => (use.kind === "healing" && use.actionType === "bonus" && healsMoreInFull(use) ? [fullCopy(use)] : []))];
+}
+
+/**
+ * A wand's use cast a level higher for each extra charge (`upcast.byCharges`): a copy for each charge count it could
+ * spend, up to every charge the item holds and no higher than 9th level. Each grows as a higher slot would grow it (its
+ * first damage or healing dice, its darts) and is that level of spell, so a counterspeller reads it right.
+ */
+function chargeTiers(use: ActionDefinition, size: number): ActionDefinition[] {
+  const upcast = "upcast" in use ? use.upcast : undefined;
+  const level = "spellLevel" in use ? use.spellLevel : undefined;
+  const cost = "resourceCost" in use ? use.resourceCost : undefined;
+  if (!upcast?.byCharges || level == null || !cost) return [];
+  const tiers: ActionDefinition[] = [];
+  for (let extra = 1; cost.amount + extra <= size && level + extra <= 9; extra += 1) {
+    tiers.push(raisedBy(use, extra, level, cost.amount));
+  }
+  return tiers;
+}
+
+function raisedBy(use: ActionDefinition, extra: number, level: number, amount: number): ActionDefinition {
+  const per = "upcast" in use ? use.upcast?.perSlotAboveBase : undefined;
+  const { byCharges: _byCharges, ...upcast } = ("upcast" in use ? use.upcast : undefined) ?? {};
+  const copy = {
+    ...use,
+    id: `${use.id}${CHARGES_SUFFIX}${amount + extra}`,
+    resourceCost: { ...(use as { resourceCost: ResourceCost }).resourceCost, amount: amount + extra },
+    spellLevel: level + extra,
+    upcast
+  } as ActionDefinition;
+  const grow = <C extends { dice: string; diceCount?: number; diceSize?: number; flatBonus?: number }>(components: C[]): C[] => {
+    if (!per?.damageDice || !components.length) return components;
+    const { diceCount: _count, diceSize: _size, flatBonus: _flat, ...first } = components[0]!;
+    return [{ ...first, dice: grownDice(first.dice, per.damageDice, extra) } as C, ...components.slice(1)];
+  };
+  if (copy.kind === "attack" || copy.kind === "save" || copy.kind === "area-save") copy.damage = grow(copy.damage);
+  if (copy.kind === "healing") copy.healing = grow(copy.healing);
+  if (copy.kind === "attack" && per?.beams && copy.attackDelivery === "beams") copy.beamCount = (copy.beamCount ?? 1) + per.beams * extra;
+  return copy;
+}
+
+/** `base` with `per` added `times` over, like dice merged: "8d6" with "1d6" twice is "10d6". */
+export function grownDice(base: string, per: string, times: number): string {
+  const counts = new Map<number, number>();
+  let modifier = 0;
+  const add = (dice: string, by: number) => {
+    const parsed = parseDiceExpression(dice);
+    for (const term of parsed.terms) {
+      const key = term.sign * term.sides;
+      counts.set(key, (counts.get(key) ?? 0) + term.count * by);
+    }
+    modifier += parsed.modifier * by;
+  };
+  add(base, 1);
+  add(per, times);
+  const terms = [...counts].map(([key, count]) => `${key < 0 ? "-" : "+"}${count}d${Math.abs(key)}`).join("");
+  return `${terms}${modifier > 0 ? `+${modifier}` : modifier < 0 ? modifier : ""}`.replace(/^\+/, "");
 }
 
 /** The most a dice expression can come to: "2d4+2" is 10. */
