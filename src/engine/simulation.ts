@@ -54,6 +54,8 @@ import {
   isDominatedUpcast,
   chosenTargetCount,
   upcastBaseId,
+  castLevelOf,
+  INCAPACITATING_CONDITIONS,
   setCounterAdvisor,
   threatByLevel,
   type CounterAdvice,
@@ -63,10 +65,11 @@ import {
 } from "./combat";
 import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { withArticle } from "./items";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
-import { footprintGroundHeight, movementProfileOf, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
+import { footprintGroundHeight, movementProfileOf, movementReference, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
 import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -841,7 +844,7 @@ function selectBonusCandidate(
   tactics: TacticsSettings,
   options: { relaxReachability?: boolean } = {}
 ): BonusPick | undefined {
-  const heal = selectHealingAction(snapshot, actor, "bonus");
+  const heal = betterHeal(selectHealingAction(snapshot, actor, "bonus"), selectItemDrink(snapshot, actor, "bonus"));
   const buff = selectBuffAction(snapshot, actor, "bonus");
   const offense = selectOffensivePlan(snapshot, actor, tactics, "bonus", options);
   if (heal && (!buff || heal.score >= buff.score) && (!offense || heal.score >= offense.score)) {
@@ -853,12 +856,21 @@ function selectBonusCandidate(
   return offense ? { kind: "offense", plan: offense } : undefined;
 }
 
+function betterHeal(a: HealingPlan | undefined, b: HealingPlan | undefined): HealingPlan | undefined {
+  if (!a || !b) return a ?? b;
+  return b.score > a.score ? b : a;
+}
+
 /** Log and resolve a `BonusPick`. Returns false (and does nothing) if its target stopped being valid. */
 function resolveBonusPick(state: EngineState, actor: CombatantState, pick: BonusPick): boolean {
   if (pick.kind === "heal") {
     const heal = pick.plan;
-    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action to heal`, {
-      combatantId: actor.id, actionId: heal.action.id, targetId: heal.target.id, slot: "bonus"
+    const drink = heal.action.item?.use === "drink" ? heal.action.item : undefined;
+    state.log.push(event(state, "AiDecision", drink
+      ? `${actor.displayName} used a bonus action to drink ${withArticle(drink.name)}`
+      : `${actor.displayName} used a bonus action to heal`, {
+      combatantId: actor.id, actionId: heal.action.id, targetId: heal.target.id, slot: "bonus",
+      ...(drink ? { score: heal.score, reasons: heal.reasons } : {})
     }));
     try {
       resolveHealingAction(state, actor.id, heal.target.id, heal.action.id);
@@ -1207,7 +1219,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   let movedThisTurn = false;
-  const healing = selectHealingAction(state.snapshot, actor);
+  const healing = withoutRedundantGive(state.snapshot, actor, selectHealingAction(state.snapshot, actor));
   const healingBurst = selectHealingBurstAction(state.snapshot, actor);
   if (healing && (!healingBurst || healing.score >= healingBurst.score)) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose healing`, {
@@ -1274,6 +1286,30 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   // A summon is a standing investment (new allies for the rest of the fight), so it beats a comparable buff or
   // attack when it scores higher than both — not merely "no offensive plan at all", the way a free buff does.
   const summon = selectSummonAction(state.snapshot, actor, "action");
+
+  // A potion drunk with the action is worth what it beats: about to drop, it outscores most attacks; merely bloodied,
+  // only an idle action (nothing in reach, nothing better to do).
+  const drink = selectItemDrink(state.snapshot, actor, "action");
+  if (drink && [plan, buff, summon].every((rival) => !rival || drink.score > rival.score)) {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose to drink ${withArticle(drink.action.item!.name)}`, {
+      combatantId: actor.id,
+      actionId: drink.action.id,
+      targetId: actor.id,
+      score: drink.score,
+      reasons: drink.reasons
+    }));
+    try {
+      resolveHealingAction(state, actor.id, actor.id, drink.action.id);
+    } catch (error) {
+      state.log.push(event(state, "AutomationWarning", `${actor.displayName}'s ${drink.action.name} could not resolve`, {
+        combatantId: actor.id,
+        actionId: drink.action.id,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+    maybeSpendBonusAction(state, actor, tactics);
+    return undefined;
+  }
   if (summon && (!plan || summon.score > plan.score) && (!buff || summon.score > buff.score)) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${summon.action.name}`, {
       combatantId: actor.id,
@@ -1881,9 +1917,15 @@ function selectHealingAction(
     .filter((action): action is HealingAction => action.kind === "healing"
       && action.actionType === slot
       && action.automationSupport === "full"
+      // Drinking a potion is `selectItemDrink`'s call: whether it's about to drop, not how hurt it is.
+      && action.item?.use !== "drink"
       && canPayResource(actor, action));
   const tactics = tacticsSettings(actor.tacticsProfile);
-  const candidates = healingActions.flatMap((action) => woundedAllies.map((target) => {
+  const candidates = healingActions.flatMap((action) => woundedAllies
+    .filter((target) => !(action.targeting?.notSelf && target.id === actor.id))
+    // A potion is given to someone who can't drink their own: down, or incapacitated.
+    .filter((target) => action.item?.use !== "give" || target.state === "downed" || isIncapacitated(target))
+    .map((target) => {
     const targetDefinition = getDefinition(snapshot, target);
     const missingHp = targetDefinition.maxHp - target.currentHp;
     const missingHpRatio = missingHp / Math.max(1, targetDefinition.maxHp);
@@ -1922,6 +1964,95 @@ function selectHealingAction(
     return undefined;
   }
   return { action: best.action, target: best.target, score: best.score, reasons: best.reasons, reachable: best.reachable };
+}
+
+/**
+ * Giving a potion with the action is pointless when a bonus-action heal (Healing Word) already reaches the same ally
+ * from here: that heal gets them up and the action is still free. Undefined then, so the turn goes on to the bonus heal.
+ */
+function withoutRedundantGive(snapshot: EncounterSnapshot, actor: CombatantState, healing: HealingPlan | undefined): HealingPlan | undefined {
+  if (healing?.action.item?.use !== "give" || !canAct(actor, "bonus")) return healing;
+  const bonus = selectHealingAction(snapshot, actor, "bonus");
+  return bonus && !bonus.action.item && bonus.reachable && bonus.target.id === healing.target.id ? undefined : healing;
+}
+
+function isIncapacitated(combatant: CombatantState): boolean {
+  return (combatant.conditions ?? []).some((condition) => INCAPACITATING_CONDITIONS.has(condition.name));
+}
+
+/**
+ * The damage `actor` can expect to take before its next turn (ITEMS_PLAN.md §3). Every active hostile acts once before
+ * then; each one that can get to it (its fastest speed plus its best attack's reach or range) adds the most it's
+ * expected to deal it with one of its actions. Distances are straight lines, so a wall in between isn't counted: it can
+ * overcount, never undercount.
+ */
+export function dangerBeforeNextTurn(snapshot: EncounterSnapshot, actor: CombatantState): { total: number; threats: number } {
+  const definition = getDefinition(snapshot, actor);
+  let total = 0;
+  let threats = 0;
+  for (const hostile of snapshot.combatants) {
+    if (hostile.state !== "active" || hostile.containedBy || effectiveFaction(snapshot, hostile) === effectiveFaction(snapshot, actor) || !canAct(hostile, "action")) continue;
+    const hostileDefinition = getDefinition(snapshot, hostile);
+    const executables = getExecutableActions(hostileDefinition);
+    const distance = spatialDistance(snapshot, hostile, actor);
+    const speed = movementReference(movementProfileOf(hostileDefinition));
+    let worst = 0;
+    for (const action of executables) {
+      if (action.automationSupport !== "full" || action.actionType !== "action"
+        || !(action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack")
+        || !canPayResource(hostile, action, executables)
+        || distance > speed + actionRange(action, hostileDefinition)) continue;
+      worst = Math.max(worst, expectedDamageAgainst(action, hostileDefinition, hostile, definition, actor));
+    }
+    if (worst > 0) {
+      total += worst;
+      threats += 1;
+    }
+  }
+  return { total, threats };
+}
+
+/**
+ * A healing potion its holder drinks (ITEMS_PLAN.md §3, D4). It's worth drinking when the creature is likely to drop
+ * before its next turn and the potion would keep it up; bloodied, it's an option the caller weighs against what else
+ * the slot could do (it only scores what the HP is worth); a `liberal` creature also drinks whenever the heal won't be
+ * wasted. A `conservative` one only drinks when it would keep it up. A buff potion goes through `selectBuffAction`.
+ */
+function selectItemDrink(snapshot: EncounterSnapshot, actor: CombatantState, slot: "action" | "bonus"): HealingPlan | undefined {
+  if (actor.state !== "active") return undefined;
+  const definition = getDefinition(snapshot, actor);
+  const drinks = getExecutableActions(definition)
+    .filter((action): action is HealingAction => action.kind === "healing"
+      && action.item?.use === "drink"
+      && action.actionType === slot
+      && action.automationSupport === "full"
+      && canPayResource(actor, action));
+  const missing = definition.maxHp - actor.currentHp;
+  if (!drinks.length || missing <= 0) return undefined;
+  const danger = dangerBeforeNextTurn(snapshot, actor);
+  const standing = actor.currentHp + actor.tempHp;
+  const bloodied = actor.currentHp <= definition.maxHp / 2;
+  const stance = actor.resourceStance;
+  let best: HealingPlan | undefined;
+  for (const action of drinks) {
+    const average = averageHealing(action, definition);
+    const keepsItUp = danger.total >= standing && danger.total < standing + average;
+    const worthIt = keepsItUp
+      || (stance !== "conservative" && bloodied)
+      || (stance === "liberal" && missing >= average);
+    if (!worthIt) continue;
+    const price = resourceCostWeight(action) * 3 * resourceStanceMultiplier(stance);
+    const score = Math.min(average, missing) * 2 + (keepsItUp ? DOWN_VALUE * 2 : 0) - price + 10;
+    const reasons = [
+      `${actor.currentHp} HP left`,
+      keepsItUp
+        ? `≈${Math.round(danger.total)} damage likely before its next turn (${danger.threats} in reach): it would keep it up`
+        : bloodied ? "bloodied" : "the heal won't be wasted",
+      `${Math.round(average)} expected healing`
+    ];
+    if (!best || score > best.score) best = { action, target: actor, score, reasons, reachable: true };
+  }
+  return best;
 }
 
 /**
@@ -2029,6 +2160,8 @@ function selectBuffAction(
     .filter((action): action is BuffAction => action.kind === "buff"
       && action.actionType === slot
       && (action.targeting?.target ?? "single") !== "chosen"
+      // A conscious ally can drink its own potion: the AI drinks its buff potions and gives none.
+      && action.item?.use !== "give"
       // Prep-only buffs (Aid, Mage Armor) are DM-toggled before combat, not
       // an in-combat option — never a candidate here.
       && !action.prepOnly
@@ -3105,6 +3238,11 @@ function resourceCostWeight(action: ActionDefinition): number {
   // Legendary points are use-it-or-lose-it each round, so a point is worth little — just enough to prefer
   // three 1-point attacks over one 3-point option that does no more.
   if (action.resourceCost.resourceId === LEGENDARY_POINTS) return action.resourceCost.amount * 0.2;
+  // An item: a potion, a flask or a scroll is gone for good (a slot or a charge comes back after a rest), and a scroll
+  // is never cheaper than a slot of its spell's level; a wand's charge is priced like any other pool's.
+  if (action.item) {
+    return action.item.consumes ? action.resourceCost.amount * Math.max(2, castLevelOf(action) ?? 0) : action.resourceCost.amount;
+  }
   const weight = spellSlotLevel(action.resourceCost.resourceId) ?? action.resourceCost.amount;
   // A recharge ability comes back on its own (a Recharge 5-6 breath in ~3 turns), so spending it is cheap.
   const usage = "usage" in action ? action.usage : undefined;

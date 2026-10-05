@@ -2,7 +2,7 @@ import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazard
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
-import { compileItemUses, workingItems } from "./items";
+import { compileItemUses, withArticle, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
@@ -3889,11 +3889,6 @@ function declareAction(
     damageType,
     ...(itemData ? { item: itemData } : {})
   }));
-}
-
-/** "a Potion of Healing", "an Elixir of Health". */
-function withArticle(name: string): string {
-  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
 }
 
 /** What using an item looks like in the log: "Kael drinks a Potion of Healing", "Kael gives Mira a Potion of Healing". */

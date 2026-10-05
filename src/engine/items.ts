@@ -23,6 +23,11 @@ export function itemPoolId(itemId: Id): string {
   return `${ITEM_POOL_PREFIX}${itemId}`;
 }
 
+/** "a Potion of Healing", "an Elixir of Health": an item named the way the log says it. */
+export function withArticle(name: string): string {
+  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+}
+
 /** A potion's give copy carries this suffix on its drink's id: `<drink id>:give`. */
 export const GIVE_SUFFIX = ":give";
 
