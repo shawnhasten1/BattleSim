@@ -143,6 +143,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   }
 
   const showRecipes = results.recipes.length > 0;
+  // Under Items, Open5e is searched for items (carried for reference); otherwise for spells.
+  const open5eItems = filter === "items";
   const nothing = !showRecipes && !results.library.length && !results.monster.length;
   return (
     <div className={styles.add} role="region" aria-label="Add ability">
@@ -246,21 +248,30 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
           <section className={styles.section} aria-label="Open5e">
             <button
               type="button" className={styles.linkBtn}
-              onClick={() => { compendium.setQuery(query.trim()); setOpen5e(true); void compendium.search("spells", query.trim()); }}
+              onClick={() => { compendium.setQuery(query.trim()); setOpen5e(true); void compendium.search(open5eItems ? "items" : "spells", query.trim()); }}
             >
-              Search Open5e spells for “{query.trim()}” →
+              Search Open5e {open5eItems ? "items" : "spells"} for “{query.trim()}” →
             </button>
             {open5e ? (
               <>
                 <div className={styles.items}>
-                  {compendium.results.filter((result) => result.resource === "spell").map((result) => (
-                    <div key={result.key} className={styles.item}>
-                      <button type="button" className={styles.itemOpen} onClick={() => void compendium.importSpell(result.slug, definition.id)}>
-                        <span className={styles.itemName}>{result.name} <span className={styles.itemMeta}>· level {result.level ?? 0} · {result.documentTitle ?? "Open5e"}</span></span>
-                        <span className={styles.itemLine}>Adds it as reference text: open it and pick how it works to simulate it.</span>
-                      </button>
-                    </div>
-                  ))}
+                  {open5eItems
+                    ? compendium.results.filter((result) => result.resource === "item" || result.resource === "weapon").map((result) => (
+                      <div key={result.key} className={styles.item}>
+                        <button type="button" className={styles.itemOpen} onClick={() => void compendium.attach(result, definition.id)}>
+                          <span className={styles.itemName}>{result.name} <span className={styles.itemMeta}>· {result.documentTitle ?? "Open5e"}</span></span>
+                          <span className={styles.itemLine}>Carries it for reference (a weapon attacks): its text, applied by hand.</span>
+                        </button>
+                      </div>
+                    ))
+                    : compendium.results.filter((result) => result.resource === "spell").map((result) => (
+                      <div key={result.key} className={styles.item}>
+                        <button type="button" className={styles.itemOpen} onClick={() => void compendium.importSpell(result.slug, definition.id)}>
+                          <span className={styles.itemName}>{result.name} <span className={styles.itemMeta}>· level {result.level ?? 0} · {result.documentTitle ?? "Open5e"}</span></span>
+                          <span className={styles.itemLine}>Adds it as reference text: open it and pick how it works to simulate it.</span>
+                        </button>
+                      </div>
+                    ))}
                 </div>
                 {compendium.status ? <p className={styles.more}>{compendium.status}</p> : null}
               </>
@@ -278,7 +289,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       <p className={styles.footnote}>
         Click a row to check it before it&apos;s added; a library row&apos;s + adds it as it is, or drag it onto the sheet.{" "}
         {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells,{" "}
-        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items.{" "}
+        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and a scroll of every spell.{" "}
         <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 credits · CC-BY-4.0</a>
       </p>
     </div>

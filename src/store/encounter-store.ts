@@ -459,6 +459,11 @@ interface EncounterStore extends PlayActions {
    * creature and its tokens (see `insertAbilityRecord`). One undo step. Returns the new item's id.
    */
   attachSrdItem: (definitionId: string, srdId: string) => string | undefined;
+  /**
+   * Swap the library's simulated item in for one carried for reference (an Open5e import, ITEMS_PLAN.md §7), keeping its
+   * id, its place, its pool and how many there are. One undo step.
+   */
+  swapInSrdItem: (definitionId: string, itemId: string, srdId: string) => void;
   /** Merge a partial patch into one feature / trait (an optional rule switched on). One undo step. */
   updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
   /**
@@ -3094,6 +3099,19 @@ export const useEncounterStore = create<EncounterStore>()(
           source: { provider: "homebrew", documentName: own ? "Spell scroll" : "SRD", slug: srdId, importedAt: new Date().toISOString() }
         });
         return ref && "id" in ref ? ref.id : undefined;
+      },
+      swapInSrdItem: (definitionId, itemId, srdId) => {
+        const source = findSrdItem(srdId);
+        const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
+        const current = definition?.items?.find((item) => item.id === itemId);
+        if (!source || !current) return;
+        const { item } = prepareItemForAttach({
+          ...structuredClone(source),
+          source: { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() }
+        } as ItemDefinition, itemId);
+        // As many as it carried, when it was counted.
+        const kept = current.supply && item.supply?.unit === current.supply.unit ? { ...item, supply: { ...item.supply, size: current.supply.size } } : item;
+        get().replaceAbilityRecord(definitionId, { list: "items", id: itemId }, kept);
       },
       attachSrdSpell: (definitionId, srdId) => {
         const source = findSrdSpell(srdId);

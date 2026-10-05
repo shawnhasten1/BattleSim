@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from "react";
-import type { CreatureDefinition, FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { CreatureDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
@@ -27,6 +27,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
   const attachSpellDefinition = useEncounterStore((state) => state.attachSpellDefinition);
   const attachWeaponDefinition = useEncounterStore((state) => state.attachWeaponDefinition);
   const attachFeatureDefinition = useEncounterStore((state) => state.attachFeatureDefinition);
+  const insertAbilityRecord = useEncounterStore((state) => state.insertAbilityRecord);
   const applyConditionToCombatant = useEncounterStore((state) => state.applyConditionToCombatant);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
@@ -93,7 +94,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
 
   async function importCompendiumContent(
     payload: CompendiumDragPayload
-  ): Promise<{ weapon?: WeaponDefinition; feature?: FeatureDefinition } | null> {
+  ): Promise<{ weapon?: WeaponDefinition; item?: ItemDefinition; feature?: FeatureDefinition } | null> {
     if (!payload.route || !payload.objectKey) {
       return { feature: featureFromCompendiumPayload(payload) };
     }
@@ -103,7 +104,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
       setStatus("Compendium import failed");
       return null;
     }
-    return (await response.json()) as { weapon?: WeaponDefinition; feature?: FeatureDefinition };
+    return (await response.json()) as { weapon?: WeaponDefinition; item?: ItemDefinition; feature?: FeatureDefinition };
   }
 
   async function attach(
@@ -145,6 +146,11 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
       if (imported?.weapon) {
         attachWeaponDefinition(definitionId, imported.weapon);
         setStatus("Weapon attached as structured attack");
+        return;
+      }
+      if (imported?.item) {
+        insertAbilityRecord(definitionId, "items", imported.item);
+        setStatus(`${imported.item.name} carried for reference: the DM applies it`);
         return;
       }
       if (imported?.feature) {

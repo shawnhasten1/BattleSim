@@ -708,9 +708,26 @@ const SECTIONS: Section[] = [
         <p>
           A creature can carry <strong>items</strong>: a stack of potions, a scroll, a wand with charges, a flask to throw,
           a ring or a cloak that&apos;s always working. They&apos;re listed under <strong>Items</strong> on the Abilities
-          tab, after Spellcasting, with how many each token has left. Add one from the library (the Potions of Healing) in{" "}
-          <strong>Add ability</strong>, from a recipe there (a healing potion, a buff potion, a wand, a thrown flask, a worn
-          item, other gear), or from <strong>Start from scratch → Item</strong>. Each opens in the ability editor.
+          tab, after Spellcasting, with how many each token has left. Add one from the library in{" "}
+          <strong>Add ability</strong> (under Items: the Potions of Healing and the potions that help, a vial of acid and a
+          flask of holy water, four wands, the Necklace of Fireballs, rings, a cloak and bracers, and items carried for
+          reference until the simulator can run them), from a recipe there (a healing potion, a buff potion, a spell scroll,
+          a wand, a thrown flask, a worn item, other gear), or from <strong>Start from scratch → Item</strong>. Each opens
+          in the ability editor.
+        </p>
+        <p>
+          A <strong>spell scroll</strong> is made from a spell: search <em>scroll</em> and the spell&apos;s name
+          (<em>scroll fireball</em>), or choose the Spell scroll recipe. There&apos;s one of every library spell, and of
+          each of the creature&apos;s own. Reading it casts the spell at the scroll&apos;s own save DC and attack bonus,
+          which go by the spell&apos;s level (DC 13 and +5 up to 2nd level, up to DC 19 and +11 at 9th), and the scroll
+          is gone.
+        </p>
+        <p>
+          Under Items, <strong>Search Open5e items</strong> finds an item in Open5e. It&apos;s carried for reference: its
+          text and where it came from, applied by hand (a weapon still attacks). When the library simulates an item of
+          that name, the Abilities tab offers it: <em>The SRD&apos;s Potion of Healing is simulated. Use it</em> swaps it
+          in, keeping how many there are. It&apos;s never swapped by itself, and two items of the same name from different
+          documents each get their own offer.
         </p>
 
         <h3>The sections</h3>
@@ -759,6 +776,13 @@ const SECTIONS: Section[] = [
           spends it, <strong>Restart</strong> refills it, and a token can start with fewer (its <em>Left</em>). A potion is
           drunk, or given to a creature within 5 ft: pouring one into an ally who&apos;s down brings them back up. It&apos;s
           never given to the creature holding it, which drinks it instead.
+        </p>
+        <p>
+          A wand casts its spell for a charge, and some cast it a level higher for each extra charge: a Wand of
+          Fireballs&apos; 3 charges cast a 5th-level Fireball (10d6). Its hotbar button has a chip for each (<em>3 charges
+          · 5th</em>), and the AI weighs each against the charges it spends. The Necklace of Fireballs throws one bead or
+          several at once the same way. An item the simulator runs only in part (a Potion of Speed&apos;s AC, not its
+          extra action) is marked on its row, which says what isn&apos;t simulated.
         </p>
         <p>
           The AI drinks a healing potion when it&apos;s likely to drop before its next turn and the potion would keep it

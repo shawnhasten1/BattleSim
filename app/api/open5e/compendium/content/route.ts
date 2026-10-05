@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { normalizeOpen5eFeatureReference, normalizeOpen5eWeapon, Open5eClient } from "@/adapters";
+import { normalizeOpen5eFeatureReference, normalizeOpen5eItem, normalizeOpen5eWeapon, Open5eClient } from "@/adapters";
 
 export async function GET(request: Request) {
   try {
@@ -15,8 +15,10 @@ export async function GET(request: Request) {
     const weapon = imported.resource === "weapon" || imported.resource === "item"
       ? normalizeOpen5eWeapon(imported)
       : undefined;
-    const feature = weapon ? undefined : normalizeOpen5eFeatureReference(imported);
-    return NextResponse.json({ imported, weapon, feature });
+    // An item that isn't a weapon is carried for reference; anything else is a reference feature.
+    const item = !weapon && imported.resource === "item" ? normalizeOpen5eItem(imported) : undefined;
+    const feature = weapon || item ? undefined : normalizeOpen5eFeatureReference(imported);
+    return NextResponse.json({ imported, weapon, item, feature });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Open5e compendium import failed" },

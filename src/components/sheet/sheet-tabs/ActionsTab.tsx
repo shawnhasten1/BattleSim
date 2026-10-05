@@ -31,6 +31,7 @@ import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
 import { AddAbility, type BlankKind } from "../abilities/AddAbility";
 import { ResourceList } from "../abilities/ResourceList";
 import { SpellcastingHeading } from "../abilities/SpellcastingHeading";
+import { ItemOffers } from "../abilities/ItemOffers";
 import { UpcastOffers } from "../abilities/UpcastOffers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
@@ -274,6 +275,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
         </div>
         <ResourceList definition={definition} combatant={combatant} />
         <UpcastOffers definition={definition} />
+        <ItemOffers definition={definition} />
       </div>
 
       {addOpen ? (

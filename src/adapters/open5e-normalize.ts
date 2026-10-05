@@ -1,4 +1,4 @@
-import type { ConditionName, CreatureDefinition, DamageType, FeatureDefinition, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { ConditionName, CreatureDefinition, DamageType, FeatureDefinition, ItemDefinition, ItemType, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
 import type { Open5eCompendiumSummary, Open5eImportedPayload } from "./open5e-client";
 
 export function normalizeOpen5eCreature(imported: Open5eImportedPayload): CreatureDefinition {
@@ -100,6 +100,41 @@ export function normalizeOpen5eWeapon(imported: Open5eImportedPayload): WeaponDe
     actionId: `open5e:${imported.documentKey ?? "unknown"}:${imported.key ?? imported.slug}:weapon-action`,
     source: sourceMetadata(imported, raw)
   };
+}
+
+/**
+ * An Open5e item that isn't a weapon, as a reference-only item (ITEMS_PLAN.md §7): its text, its source document and when
+ * it was imported, carried for the DM to apply by hand. Its kind follows Open5e's category. Same-named items from
+ * different documents stay separate (their ids name the document). The sheet offers the SRD's simulated item of the same
+ * name when there is one; it's never swapped in by itself.
+ */
+export function normalizeOpen5eItem(imported: Open5eImportedPayload): ItemDefinition {
+  const raw = imported.raw;
+  const name = stringField(raw, "name") ?? imported.slug;
+  const category = (readNestedString(raw, ["category", "key"]) ?? readNestedString(raw, ["category", "name"]) ?? stringField(raw, "category") ?? "").toLowerCase();
+  const documentKey = imported.documentKey ?? readNestedString(raw, ["document", "key"]) ?? "unknown";
+  const rarity = readNestedString(raw, ["rarity", "name"]) ?? readNestedString(raw, ["rarity", "key"]) ?? stringField(raw, "rarity");
+  return {
+    id: `open5e:${documentKey}:${imported.key ?? imported.slug}:item`,
+    name,
+    type: itemTypeFromCategory(category, name),
+    description: stringField(raw, "desc") ?? stringField(raw, "description"),
+    ...(raw.is_magic_item === true || rarity ? { magical: true } : {}),
+    ...(raw.requires_attunement === true ? { attunement: { attuned: true } } : {}),
+    automationSupport: "manual-only",
+    source: sourceMetadata(imported, raw)
+  };
+}
+
+/** An item's kind from Open5e's category ("potion", "wand", "ring", "wondrous-item"), else from its name. */
+function itemTypeFromCategory(category: string, name: string): ItemType {
+  if (category.includes("potion")) return "potion";
+  if (category.includes("scroll")) return "scroll";
+  if (category.includes("wand") || category.includes("rod") || category.includes("staff")) return "wand";
+  if (category.includes("ring") || category.includes("armor") || category.includes("shield")) return "worn";
+  if (/^(potion|elixir|philter|oil) /i.test(name)) return "potion";
+  if (/^spell scroll/i.test(name)) return "scroll";
+  return "gear";
 }
 
 export function normalizeOpen5eFeatureReference(input: Open5eImportedPayload | Open5eCompendiumSummary, category: "feature" | "trait" = "feature"): FeatureDefinition {
