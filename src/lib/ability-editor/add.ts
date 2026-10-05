@@ -10,26 +10,30 @@ import {
   type ActionRider,
   type CreatureDefinition,
   type FeatureDefinition,
+  type ItemDefinition,
   type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
-import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdSpell, findSrdWeapon, type SrdEntryKind } from "@/data/srd";
+import {
+  SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon, type SrdEntryKind
+} from "@/data/srd";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
 import type { AbilityInsertTarget, AbilityRecord } from "./refs";
 import type { SectionId } from "./sections";
 import { castWith } from "./spells";
-import { ACTION_TEMPLATES, FEATURE_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES, blankDeathEffect } from "./templates";
+import { ACTION_TEMPLATES, FEATURE_TEMPLATES, ITEM_TEMPLATES, SPELL_TEMPLATES, WEAPON_TEMPLATES, blankDeathEffect } from "./templates";
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
 
-export type AddFilter = "all" | "weapons" | "spells" | "monster" | "features" | "recipes";
+export type AddFilter = "all" | "weapons" | "spells" | "items" | "monster" | "features" | "recipes";
 
 export const ADD_FILTERS: Array<{ value: AddFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "weapons", label: "Weapons" },
   { value: "spells", label: "Spells" },
+  { value: "items", label: "Items" },
   { value: "monster", label: "Monster abilities" },
   { value: "features", label: "Traits & features" },
   { value: "recipes", label: "Recipes" }
@@ -47,7 +51,7 @@ export interface Prepared {
 
 /* ─── recipes ────────────────────────────────────────────────────────────── */
 
-export type RecipeGroup = "weapon" | "action" | "spell" | "feature" | "death";
+export type RecipeGroup = "weapon" | "action" | "spell" | "feature" | "item" | "death";
 
 export interface Recipe {
   id: string;
@@ -90,9 +94,15 @@ const FOCUS: Record<string, SectionId[]> = {
   "feature:aura-of-protection": ["aura"],
   "feature:legendary-resistance": ["while-active"],
   "feature:regeneration": ["while-active"],
+  "item:healing-potion": ["use", "grants"],
+  "item:buff-potion": ["grants"],
+  "item:wand": ["use", "grants"],
+  "item:thrown-flask": ["grants"],
+  "item:worn-item": ["while-active"],
+  "item:other-gear": ["basics"],
   "death:death-burst": ["target", "roll", "damage"]
 };
-const GROUP_FOCUS: Record<RecipeGroup, SectionId[]> = { weapon: ["roll", "damage"], action: ["damage"], spell: ["roll"], feature: ["while-active"], death: ["damage"] };
+const GROUP_FOCUS: Record<RecipeGroup, SectionId[]> = { weapon: ["roll", "damage"], action: ["damage"], spell: ["roll"], feature: ["while-active"], item: ["grants"], death: ["damage"] };
 
 function recipe(group: RecipeGroup, label: string, hint: string, prepare: (definition: CreatureDefinition) => Omit<Prepared, "focus">): Recipe {
   const id = `${group}:${slug(label)}`;
@@ -135,6 +145,7 @@ export const RECIPES: Recipe[] = [
     const record = template.record(attacks);
     return { list: record.category === "trait" ? "traits" : "features", record };
   })),
+  ...ITEM_TEMPLATES.map((template) => recipe("item", template.label, template.hint, () => ({ list: "items", record: template.record() }))),
   recipe("death", "Death burst", "When it dies, everyone within 10 ft makes a save or is poisoned (a gas spore, a mephit)", deathBurst)
 ];
 
@@ -144,13 +155,14 @@ export interface LibraryEntry {
   kind: SrdEntryKind;
   id: string;
   name: string;
-  entry: WeaponDefinition | SpellDefinition | FeatureDefinition;
+  entry: WeaponDefinition | SpellDefinition | FeatureDefinition | ItemDefinition;
 }
 
 const LIBRARY: LibraryEntry[] = [
   ...SRD_WEAPONS.map((entry): LibraryEntry => ({ kind: "weapon", id: entry.id, name: entry.name, entry })),
   ...SRD_SPELLS.map((entry): LibraryEntry => ({ kind: "spell", id: entry.id, name: entry.name, entry })),
-  ...SRD_FEATURES.map((entry): LibraryEntry => ({ kind: "feature", id: entry.id, name: entry.name, entry }))
+  ...SRD_FEATURES.map((entry): LibraryEntry => ({ kind: "feature", id: entry.id, name: entry.name, entry })),
+  ...SRD_ITEMS.map((entry): LibraryEntry => ({ kind: "item", id: entry.id, name: entry.name, entry }))
 ];
 
 const SRD_SOURCE = (slugId: string) => ({ provider: "homebrew" as const, documentName: "SRD", slug: slugId, importedAt: new Date().toISOString() });
@@ -164,6 +176,10 @@ export function prepareLibrary(kind: SrdEntryKind, id: string, definition: Creat
   if (kind === "weapon") {
     const weapon = findSrdWeapon(id);
     return weapon ? { list: "weapons", record: { ...structuredClone(weapon), source: SRD_SOURCE(id) } } : undefined;
+  }
+  if (kind === "item") {
+    const item = findSrdItem(id);
+    return item ? { list: "items", record: { ...structuredClone(item), source: SRD_SOURCE(id) } } : undefined;
   }
   if (kind === "spell") {
     const source = findSrdSpell(id);
@@ -253,11 +269,11 @@ function ranked<T>(items: readonly T[], tokens: string[], nameOf: (item: T) => s
 }
 
 const RECIPE_GROUPS: Record<AddFilter, RecipeGroup[]> = {
-  all: ["weapon", "action", "spell", "feature", "death"], recipes: ["weapon", "action", "spell", "feature", "death"],
-  weapons: ["weapon"], spells: ["spell"], features: ["feature"], monster: ["action", "death"]
+  all: ["weapon", "action", "spell", "feature", "item", "death"], recipes: ["weapon", "action", "spell", "feature", "item", "death"],
+  weapons: ["weapon"], spells: ["spell"], items: ["item"], features: ["feature"], monster: ["action", "death"]
 };
 const LIBRARY_KINDS: Record<AddFilter, SrdEntryKind[]> = {
-  all: ["weapon", "spell", "feature"], weapons: ["weapon"], spells: ["spell"], features: ["feature"], monster: [], recipes: []
+  all: ["weapon", "spell", "feature", "item"], weapons: ["weapon"], spells: ["spell"], items: ["item"], features: ["feature"], monster: [], recipes: []
 };
 
 /**

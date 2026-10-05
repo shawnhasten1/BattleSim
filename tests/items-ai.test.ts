@@ -33,7 +33,7 @@ const HEALING_WORD: ActionDefinition = {
 
 function potions(slot: "action" | "bonus"): ItemDefinition {
   return {
-    id: "potions", name: "Potion of Healing", kind: "potion", supply: { id: "item:potions", size: 3, unit: "count" },
+    id: "potions", name: "Potion of Healing", type: "potion", supply: { id: "item:potions", size: 3, unit: "count" },
     give: { actionType: slot },
     grantedActions: [{
       kind: "healing", id: "drink", name: "Potion of Healing", actionType: slot, range: 0, healing: [{ dice: "2d4+2" }],
@@ -44,7 +44,7 @@ function potions(slot: "action" | "bonus"): ItemDefinition {
 }
 
 const ACID: ItemDefinition = {
-  id: "acid", name: "Vial of Acid", kind: "thrown", supply: { id: "item:acid", size: 2, unit: "count" },
+  id: "acid", name: "Vial of Acid", type: "thrown", supply: { id: "item:acid", size: 2, unit: "count" },
   grantedActions: [{
     kind: "attack", id: "acid-throw", name: "Vial of Acid", actionType: "action", attackType: "ranged", ability: "dex", attackBonus: 3,
     range: 20, longRange: 60, damage: [{ dice: "2d6", damageType: "acid" }], resourceCost: { resourceId: "item:acid", amount: 1 }, automationSupport: "full"

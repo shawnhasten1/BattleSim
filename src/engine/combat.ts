@@ -3868,7 +3868,7 @@ function declareAction(
     ? {
       id: item.id,
       name: item.name,
-      kind: item.kind,
+      type: item.type,
       ...(item.use ? { use: item.use } : {}),
       ...(resourceCost ? { left: actor.resources?.[resourceCost.resourceId] ?? 0 } : {})
     }
@@ -3896,8 +3896,8 @@ function itemDeclaration(actor: CombatantState, action: ActionDefinition, item: 
   const named = withArticle(item.name);
   if (item.use === "give" && target) return `${actor.displayName} gives ${target.displayName} ${named}`;
   if (item.use === "drink") return `${actor.displayName} drinks ${named}`;
-  if (item.kind === "scroll") return `${actor.displayName} reads ${named}${targetText}`;
-  if (item.kind === "thrown") return `${actor.displayName} throws ${named}${target ? ` at ${target.displayName}` : targetText}`;
+  if (item.type === "scroll") return `${actor.displayName} reads ${named}${targetText}`;
+  if (item.type === "thrown") return `${actor.displayName} throws ${named}${target ? ` at ${target.displayName}` : targetText}`;
   return `${actor.displayName} uses ${item.name}${action.name !== item.name ? ` (${action.name})` : ""}${targetText}`;
 }
 

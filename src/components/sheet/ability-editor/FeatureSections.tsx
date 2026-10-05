@@ -44,6 +44,7 @@ import { withActionType } from "@/lib/ability-editor/spells";
 import { blankAttack, blankBuff, blankHeal, blankSpecialAction } from "@/lib/ability-editor/templates";
 import { actionStatblock, componentAverage, effectShorts } from "@/lib/statblock";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
+import type { CopyKey } from "./copy";
 import { DamageLines } from "./DamageLines";
 import { FeatureEffectCards } from "./FeatureEffectCards";
 import { LimitPicker, type NewPools } from "./LimitPicker";
@@ -442,7 +443,7 @@ const UTILITY_LABELS: Record<UtilityMode, string> = { dash: "Dash", disengage: "
 
 type Granting = { id?: string; name: string; grantedActions?: ActionDefinition[] };
 
-interface GrantChoice {
+export interface GrantChoice {
   label: string;
   hint: string;
   make: () => ActionDefinition;
@@ -452,7 +453,7 @@ interface GrantChoice {
  * What a feature or item lets the creature use: Dash, Disengage and Hide as bonus actions (Cunning Action), follow-up
  * attacks (Pounce, Rampage), and any other ability, each opened in this editor. A kind it can't open yet is listed.
  */
-export function GrantsSection<R extends Granting>({ record, onChange, definition, onOpenGranted, utilities, followUps }: {
+export function GrantsSection<R extends Granting>({ record, onChange, definition, onOpenGranted, utilities, followUps, choices: ownChoices, copy = "grantsAbilities", addLabel = "Add an ability it grants" }: {
   record: R;
   onChange: (next: R) => void;
   definition: CreatureDefinition;
@@ -461,6 +462,11 @@ export function GrantsSection<R extends Granting>({ record, onChange, definition
   utilities?: boolean;
   /** Offer follow-up attacks. */
   followUps?: boolean;
+  /** What "Add" offers instead of the usual (an item's uses: a potion's is drunk). */
+  choices?: GrantChoice[];
+  /** The list's label. */
+  copy?: CopyKey;
+  addLabel?: string;
 }) {
   const [adding, setAdding] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -485,7 +491,7 @@ export function GrantsSection<R extends Granting>({ record, onChange, definition
   const named = (action: ActionDefinition): ActionDefinition =>
     // The first thing a feature grants usually shares its name (Second Wind's heal).
     record.name && !granted.some((entry) => entry.action.name === record.name) ? { ...action, name: record.name } : action;
-  const choices: GrantChoice[] = [
+  const choices: GrantChoice[] = ownChoices ?? [
     ...(followUps ? [
       {
         label: "An attack after a charge",
@@ -526,7 +532,7 @@ export function GrantsSection<R extends Granting>({ record, onChange, definition
           </div>
         </Field>
       ) : null}
-      <Field copy="grantsAbilities">
+      <Field copy={copy}>
         <div className={styles.lines}>
           {granted.length === 0 ? <p className={styles.empty}>Nothing yet.</p> : null}
           {granted.map(({ action, index }) => (
@@ -540,11 +546,11 @@ export function GrantsSection<R extends Granting>({ record, onChange, definition
             </div>
           ))}
           <button ref={addRef} type="button" className={styles.addLine} aria-expanded={adding} aria-haspopup="menu" onClick={() => setAdding((v) => !v)}>
-            <Plus size={12} /> Add an ability it grants
+            <Plus size={12} /> {addLabel}
           </button>
           {adding ? (
             <div
-              ref={menuRef} className={styles.menu} role="menu" aria-label="Add an ability it grants"
+              ref={menuRef} className={styles.menu} role="menu" aria-label={addLabel}
               onKeyDown={(event) => {
                 if (event.key === "Escape") { event.stopPropagation(); setAdding(false); addRef.current?.focus(); }
                 if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;

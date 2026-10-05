@@ -5,7 +5,7 @@ import type {
   HealingActionDefinition,
   Id,
   ItemDefinition,
-  ItemKind,
+  ItemType,
   ItemUseMeta
 } from "./types";
 
@@ -31,9 +31,9 @@ export function withArticle(name: string): string {
 /** A potion's give copy carries this suffix on its drink's id: `<drink id>:give`. */
 export const GIVE_SUFFIX = ":give";
 
-/** Kinds used up one at a time: each use spends one of the stack. */
-export function isConsumableKind(kind: ItemKind): boolean {
-  return kind === "potion" || kind === "scroll" || kind === "thrown";
+/** Items used up one at a time: each use spends one of the stack. */
+export function isConsumableType(type: ItemType): boolean {
+  return type === "potion" || type === "scroll" || type === "thrown";
 }
 
 /** The items that work: one that needs attunement does nothing until it's attuned. */
@@ -51,8 +51,8 @@ export function isDrinkUse(action: ActionDefinition): action is HealingActionDef
  * copy of each drink (`<id>:give`): the same effect and cost, on another creature within 5 ft, taking the give's slot.
  */
 export function compileItemUses(item: ItemDefinition): ActionDefinition[] {
-  const potion = item.kind === "potion";
-  const meta: ItemUseMeta = { id: item.id, name: item.name, kind: item.kind, consumes: item.supply?.unit === "count" };
+  const potion = item.type === "potion";
+  const meta: ItemUseMeta = { id: item.id, name: item.name, type: item.type, consumes: item.supply?.unit === "count" };
   const uses = (item.grantedActions ?? []).map((use) => ({
     ...use,
     item: potion && isDrinkUse(use) ? { ...meta, use: "drink" as const } : meta
@@ -94,7 +94,7 @@ const COSTED_KINDS = new Set<ActionDefinition["kind"]>([
  * nothing changes.
  */
 export function withItemPool(item: ItemDefinition, itemId: Id = item.id): ItemDefinition {
-  const consumable = isConsumableKind(item.kind);
+  const consumable = isConsumableType(item.type);
   const supply = item.supply ?? (consumable ? { id: itemPoolId(itemId), size: 1, unit: "count" as const } : undefined);
   if (!supply) return item;
   const poolId = itemPoolId(itemId);

@@ -11,11 +11,13 @@ import {
   type CreatureDefinition,
   type DeathEffectDefinition,
   type FeatureDefinition,
+  type ItemDefinition,
   type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
 import {
+  ITEM_TYPE_WORDS,
   areaShort,
   compiledWeaponAttack,
   costText,
@@ -65,6 +67,7 @@ export interface SectionSummary {
 
 type Shape =
   | { type: "weapon"; weapon: WeaponDefinition; action?: ActionDefinition }
+  | { type: "item"; item: ItemDefinition }
   | { type: "spell"; spell: SpellDefinition; action?: ActionDefinition }
   | { type: "feature"; feature: FeatureDefinition }
   | { type: "death"; effect: DeathEffectDefinition; action: ActionDefinition }
@@ -84,6 +87,8 @@ function shapeOf({ ref, record, definition }: SectionContext): Shape {
       const spell = record as SpellDefinition;
       return { type: "spell", spell, action: spell.action };
     }
+    case "items":
+      return { type: "item", item: record as ItemDefinition };
     case "features":
     case "traits":
       return { type: "feature", feature: record as FeatureDefinition };
@@ -132,8 +137,19 @@ function limitText(limit: Limit, action: ActionDefinition | undefined): string {
   }
 }
 
+/** An item's stack or charges, and for a potion what drinking and giving it take: "×3 · drink: action · give (5 ft): action". */
+function itemUseSummary(item: ItemDefinition): string {
+  const supply = item.supply;
+  const count = supply ? (supply.unit === "charges" ? `${supply.size} ${supply.size === 1 ? "charge" : "charges"}` : `×${supply.size}`) : "";
+  const drink = item.type === "potion" ? item.grantedActions?.find((use) => (use.kind === "healing" || use.kind === "buff") && use.targeting?.target === "self") : undefined;
+  const timing = item.type !== "potion" ? []
+    : [drink ? `drink: ${SLOT_WORDS[drink.actionType].toLowerCase()}` : "", item.give ? `give (5 ft): ${SLOT_WORDS[item.give.actionType].toLowerCase()}` : "can't be given"];
+  return [count, ...timing].filter(Boolean).join(" · ") || "—";
+}
+
 function useSummary(shape: Shape, definition: CreatureDefinition): string {
   if (shape.type === "lair") return "initiative 20, in its lair";
+  if (shape.type === "item") return itemUseSummary(shape.item);
   if (shape.type === "feature") {
     const activation = activationOf(shape.feature);
     const { feature } = shape;
@@ -286,6 +302,7 @@ function whileActiveSummary(shape: Shape, definition: CreatureDefinition): strin
     return effects.join(", ") || "none";
   }
   if (shape.type === "weapon") return effectShorts(shape.weapon.effects, definition).join(", ") || "none";
+  if (shape.type === "item") return effectShorts(shape.item.effects, definition).join(", ") || "none";
   // A spell that activates a state (Shield's +5 AC until its next turn).
   const action = actionOf(shape);
   if (action?.kind === "activate-feature") {
@@ -315,6 +332,7 @@ function doesSummary(entry: LegendaryActionRef, definition: CreatureDefinition):
 }
 
 function grantsSummary(shape: Shape): string {
+  if (shape.type === "item") return (shape.item.grantedActions ?? []).map((action) => action.name).join(", ") || "nothing yet";
   const granted = shape.type === "weapon" ? shape.weapon.grantedActions ?? [] : shape.type === "feature" ? shape.feature.grantedActions ?? [] : [];
   const shown = granted.filter((action) => action.kind !== "activate-feature");
   const max = shape.type === "weapon" ? shape.weapon.charges?.max : undefined;
@@ -323,6 +341,10 @@ function grantsSummary(shape: Shape): string {
 }
 
 function notesSummary(shape: Shape): string {
+  if (shape.type === "item") {
+    const reference = shape.item.automationSupport === "manual-only" || shape.item.automationSupport === "unsupported";
+    return [shape.item.description ? "reference text" : "", reference ? "reference only" : "simulated"].filter(Boolean).join(" · ");
+  }
   const support = shape.type === "weapon" ? "full"
     : shape.type === "spell" ? shape.spell.automationSupport
       : shape.type === "feature" ? (shape.feature.informational ? "informational" : shape.feature.automationSupport)
@@ -346,6 +368,10 @@ function notesSummary(shape: Shape): string {
 function basicsSummary(shape: Shape): string {
   switch (shape.type) {
     case "weapon": return `${shape.weapon.name} · ${shape.weapon.attackType === "focus" ? "focus" : `${shape.weapon.category ? `${shape.weapon.category} ` : ""}${shape.weapon.attackType} weapon`}`;
+    case "item": {
+      const { item } = shape;
+      return [item.name, ITEM_TYPE_WORDS[item.type], item.magical ? "magic" : "", item.attunement ? (item.attunement.attuned ? "attuned" : "not attuned") : ""].filter(Boolean).join(" · ");
+    }
     case "spell": return `${shape.spell.name} · ${shape.spell.level === 0 ? "cantrip" : `level ${shape.spell.level}`}${shape.spell.school ? ` ${shape.spell.school}` : ""}${shape.spell.concentration ? " · concentration" : ""}`;
     case "feature": return `${shape.feature.name} · ${shape.feature.category}${shape.feature.optional ? " · optional" : ""}`;
     case "death": return `${shape.effect.name} · on death`;
@@ -422,23 +448,33 @@ const SECTIONS: SectionSpec[] = [
   { id: "effects", title: "Effects", appliesTo: withAction((action) => RIDER_KINDS.has(action.kind)), summary: (shape, definition) => effectsSummary(actionOf(shape)!, definition) },
   {
     id: "while-active",
-    title: "While active",
+    title: (shape) => (shape.type === "item" ? "While carried" : "While active"),
     // An activation of its own (Shield, Parry) too, unless it counters a spell or protects an ally: those do only that.
-    appliesTo: (shape) => shape.type === "feature" || shape.type === "weapon"
+    appliesTo: (shape) => shape.type === "feature" || shape.type === "weapon" || shape.type === "item"
       || withAction((action) => action.kind === "activate-feature" && !answersOnly(action))(shape),
     summary: (shape, definition) => whileActiveSummary(shape, definition)
   },
   { id: "aura", title: "Aura", appliesTo: (shape) => shape.type === "feature", summary: (shape, definition) => auraSummary((shape as Extract<Shape, { type: "feature" }>).feature, definition) },
   // A death effect's burst is over at once: the engine makes no lingering area from it.
   { id: "lingering", title: "Lingering area", appliesTo: (shape) => shape.type !== "death" && withAction((action) => action.kind === "area-save")(shape), summary: (shape) => lingeringSummary(actionOf(shape)!) },
-  { id: "grants", title: "Grants", appliesTo: (shape) => shape.type === "weapon" || shape.type === "feature", summary: (shape) => grantsSummary(shape) },
+  {
+    id: "grants",
+    title: (shape) => (shape.type === "item" ? "What it does" : "Grants"),
+    appliesTo: (shape) => shape.type === "weapon" || shape.type === "feature" || shape.type === "item",
+    summary: (shape) => grantsSummary(shape)
+  },
   { id: "notes", title: "Notes & AI", appliesTo: () => true, summary: (shape) => notesSummary(shape) }
 ];
+
+/** An item's own order: what using it does comes before what it gives while carried. */
+const ITEM_ORDER: SectionId[] = ["basics", "use", "grants", "while-active", "notes"];
 
 /** The sections the editor shows for a record, in order, each with its collapsed summary. */
 export function sectionsFor(context: SectionContext): SectionSummary[] {
   const shape = shapeOf(context);
-  return SECTIONS.filter((section) => section.appliesTo(shape)).map((section) => ({
+  const specs = SECTIONS.filter((section) => section.appliesTo(shape));
+  const ordered = shape.type === "item" ? [...specs].sort((a, b) => ITEM_ORDER.indexOf(a.id) - ITEM_ORDER.indexOf(b.id)) : specs;
+  return ordered.map((section) => ({
     id: section.id,
     title: typeof section.title === "string" ? section.title : section.title(shape),
     summary: section.summary(shape, context.definition)

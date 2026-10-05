@@ -32,7 +32,7 @@ function potions(overrides: Partial<ItemDefinition> = {}): ItemDefinition {
   return {
     id: "potions",
     name: "Potion of Healing",
-    kind: "potion",
+    type: "potion",
     supply: { id: "item:potions", size: 3, unit: "count" },
     give: { actionType: "action" },
     grantedActions: [{
@@ -48,7 +48,7 @@ function potions(overrides: Partial<ItemDefinition> = {}): ItemDefinition {
 /** A Ring of Protection: +1 AC and saving throws while attuned. */
 function ring(attuned: boolean): ItemDefinition {
   return {
-    id: "ring", name: "Ring of Protection", kind: "worn", magical: true, attunement: { attuned },
+    id: "ring", name: "Ring of Protection", type: "worn", magical: true, attunement: { attuned },
     effects: [
       { kind: "armor-class-bonus", bonus: { base: 1 } },
       { kind: "save-bonus", bonus: { base: 1 } }
@@ -88,7 +88,7 @@ describe("items compile into uses", () => {
     const definition = fighterDefinition(encounterWith([potions()]));
     const drink = action(definition, DRINK) as HealingActionDefinition & ActionDefinition;
     const give = action(definition, GIVE) as HealingActionDefinition & ActionDefinition;
-    expect(drink.item).toEqual({ id: "potions", name: "Potion of Healing", kind: "potion", consumes: true, use: "drink" });
+    expect(drink.item).toEqual({ id: "potions", name: "Potion of Healing", type: "potion", consumes: true, use: "drink" });
     expect(drink.targeting).toEqual({ target: "self" });
     expect(give.item?.use).toBe("give");
     expect(give.actionType).toBe("action");
@@ -128,7 +128,7 @@ describe("items compile into uses", () => {
     expect(castLevelOf(action(definition, DRINK)!)).toBeUndefined();
     expect(castLevelOf(action(definition, GIVE)!)).toBeUndefined();
     const scroll: ItemDefinition = {
-      id: "scroll", name: "Scroll of Fireball", kind: "scroll", supply: { id: "item:scroll", size: 1, unit: "count" },
+      id: "scroll", name: "Scroll of Fireball", type: "scroll", supply: { id: "item:scroll", size: 1, unit: "count" },
       grantedActions: [{
         kind: "area-save", id: "scroll-granted-1", name: "Fireball", actionType: "action", range: 150, saveAbility: "dex",
         dc: 15, halfDamageOnSuccess: true, onSuccess: "half", affects: "all", damage: [{ dice: "8d6", damageType: "fire" }], area: { type: "circle", size: 20 },
@@ -142,7 +142,7 @@ describe("items compile into uses", () => {
 
   it("an item's attack is never a swing of an Attack (a flask is an action of its own)", () => {
     const flask: ItemDefinition = {
-      id: "acid", name: "Vial of Acid", kind: "thrown", supply: { id: "item:acid", size: 2, unit: "count" },
+      id: "acid", name: "Vial of Acid", type: "thrown", supply: { id: "item:acid", size: 2, unit: "count" },
       grantedActions: [{
         kind: "attack", id: "acid-granted-1", name: "Vial of Acid", actionType: "action", attackType: "ranged", ability: "dex",
         range: 20, longRange: 60, damage: [{ dice: "2d6", damageType: "acid" }],
@@ -170,7 +170,7 @@ describe("drinking and giving", () => {
     expect(fighter.actionEconomy?.action).toBe(false);
     const declared = state.log.find((entry) => entry.type === "ActionDeclared")!;
     expect(declared.message).toBe("Fighter drinks a Potion of Healing");
-    expect(declared.data?.item).toEqual({ id: "potions", name: "Potion of Healing", kind: "potion", use: "drink", left: 2 });
+    expect(declared.data?.item).toEqual({ id: "potions", name: "Potion of Healing", type: "potion", use: "drink", left: 2 });
   });
 
   it("with none left, it can't be drunk", () => {
@@ -206,7 +206,7 @@ describe("drinking and giving", () => {
 
   it("a buff potion given to an ally is the same effect as drinking it, and can't be given to the giver", () => {
     const heroism: ItemDefinition = {
-      id: "heroism", name: "Potion of Heroism", kind: "potion", supply: { id: "item:heroism", size: 1, unit: "count" },
+      id: "heroism", name: "Potion of Heroism", type: "potion", supply: { id: "item:heroism", size: 1, unit: "count" },
       give: { actionType: "action" },
       grantedActions: [{
         kind: "buff", id: "heroism-granted-1", name: "Potion of Heroism", actionType: "action", range: 0,
@@ -255,13 +255,13 @@ describe("saved creatures", () => {
       name: "Smuggler", size: "medium", armorClass: 12, maxHp: 11, speed: 30,
       abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 }, actions: [],
       items: [{
-        name: "Potion of Healing", kind: "potion", supply: { id: "item:p", size: 2.5, unit: "count" }, give: { actionType: "bonus" },
+        name: "Potion of Healing", type: "potion", supply: { id: "item:p", size: 2.5, unit: "count" }, give: { actionType: "bonus" },
         grantedActions: [{ kind: "healing", id: "p-1", name: "Potion of Healing", actionType: "bonus", healing: [{ dice: "2d4+2" }], targeting: { target: "self" }, resourceCost: { resourceId: "item:p", amount: 1 } }]
       }]
     });
     const item = imported.items![0]!;
     expect(item.id).toBeTruthy();
-    expect(item.kind).toBe("potion");
+    expect(item.type).toBe("potion");
     expect(item.supply).toEqual({ id: "item:p", size: 2, unit: "count" });
     expect(item.give).toEqual({ actionType: "bonus" });
     expect(item.grantedActions?.[0]).toMatchObject({ kind: "healing", actionType: "bonus", healing: [{ dice: "2d4+2", diceCount: 2, diceSize: 4, flatBonus: 2 }] });

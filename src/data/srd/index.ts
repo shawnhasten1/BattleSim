@@ -1,10 +1,11 @@
-import type { FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { SRD_WEAPONS } from "./weapons";
 import { SRD_SPELLS } from "./spells";
 import { SRD_FEATURES } from "./features";
+import { SRD_ITEMS } from "./items";
 
 /**
- * Bundled, offline weapon + spell + feature library. Entries are plain
+ * Bundled, offline weapon + spell + feature + item library. Entries are plain
  * `WeaponDefinition` / `SpellDefinition` / `FeatureDefinition` records; attaching
  * one deep-clones it and re-mints every id (see the store's `attachSrdWeapon` /
  * `attachSrdSpell` / `attachSrdFeature`). Adding an entry is a data change only
@@ -13,19 +14,20 @@ import { SRD_FEATURES } from "./features";
  * Bump `SRD_LIBRARY_VERSION` whenever the data changes; a future "refresh
  * attached copies" feature will diff against it.
  */
-export const SRD_LIBRARY_VERSION = "2024.5";
+export const SRD_LIBRARY_VERSION = "2024.6";
 
 export { SRD_WEAPONS } from "./weapons";
 export { SRD_SPELLS } from "./spells";
 export { SRD_FEATURES } from "./features";
+export { SRD_ITEMS } from "./items";
 
-export type SrdEntryKind = "weapon" | "spell" | "feature";
+export type SrdEntryKind = "weapon" | "spell" | "feature" | "item";
 
 export interface SrdSearchResult {
   kind: SrdEntryKind;
   id: string;
   name: string;
-  entry: WeaponDefinition | SpellDefinition | FeatureDefinition;
+  entry: WeaponDefinition | SpellDefinition | FeatureDefinition | ItemDefinition;
 }
 
 /* ── integrity: freeze + index, throwing on a malformed library ─────────────── */
@@ -58,10 +60,12 @@ function indexById<T extends { id: string }>(entries: readonly T[], kind: SrdEnt
 deepFreeze(SRD_WEAPONS);
 deepFreeze(SRD_SPELLS);
 deepFreeze(SRD_FEATURES);
+deepFreeze(SRD_ITEMS);
 
 const WEAPONS_BY_ID = indexById(SRD_WEAPONS, "weapon");
 const SPELLS_BY_ID = indexById(SRD_SPELLS, "spell");
 const FEATURES_BY_ID = indexById(SRD_FEATURES, "feature");
+const ITEMS_BY_ID = indexById(SRD_ITEMS, "item");
 
 /* ── lookup ───────────────────────────────────────────────────────────────── */
 
@@ -75,6 +79,10 @@ export function findSrdSpell(id: string): SpellDefinition | undefined {
 
 export function findSrdFeature(id: string): FeatureDefinition | undefined {
   return FEATURES_BY_ID.get(id);
+}
+
+export function findSrdItem(id: string): ItemDefinition | undefined {
+  return ITEMS_BY_ID.get(id);
 }
 
 /** Case-insensitive name substring search. `kind` narrows the result set. */
@@ -91,6 +99,7 @@ export function searchSrd(query: string, kind?: SrdEntryKind): SrdSearchResult[]
   if (kind === undefined || kind === "weapon") push("weapon", SRD_WEAPONS);
   if (kind === undefined || kind === "spell") push("spell", SRD_SPELLS);
   if (kind === undefined || kind === "feature") push("feature", SRD_FEATURES);
+  if (kind === undefined || kind === "item") push("item", SRD_ITEMS);
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -112,7 +121,7 @@ export function parseSrdDragPayload(raw: string): SrdDragPayload | null {
     const parsed = JSON.parse(raw) as unknown;
     const kind = (parsed as SrdDragPayload)?.kind;
     const id = (parsed as SrdDragPayload)?.id;
-    if ((kind === "weapon" || kind === "spell" || kind === "feature") && typeof id === "string" && id) {
+    if ((kind === "weapon" || kind === "spell" || kind === "feature" || kind === "item") && typeof id === "string" && id) {
       return { kind, id };
     }
   } catch {

@@ -88,6 +88,22 @@ Authoring:
   "bonus", mode, … }]` (Cunning Action).
 - Skip pure flavour — no damage / utility / economy impact, no entry.
 
+## Items (`items.ts`)
+
+`SRD_ITEMS` is the fourth library type: plain `ItemDefinition` records (ITEMS_PLAN.md), ids `srd:item:<slug>`. An item
+is told apart from an action by its `type` (`potion`, `scroll`, `wand`, `thrown`, `worn`, `gear`): never give it a
+`kind`, which the editor reads as "this is an action". Attaching one (`attachSrdItem`, through `insertAbilityRecord`)
+deep-clones it, re-mints its uses' ids (`<itemId>-granted-N`), names its pool `item:<itemId>` and seeds it on the
+creature and its tokens (`withItemPool`).
+
+Authoring:
+- A stack or charges is `supply: { id: "supply", size, unit: "count" | "charges" }`, and every use that spends it names
+  `"supply"`; a potion, a scroll or a flask is used up one at a time (`count`), a wand spends charges and stays.
+- A potion's use is drinking it: a `healing` or `buff` action aimed at itself (`targeting: { target: "self" }`), named
+  after the potion. `give: { actionType }` says what giving it to a creature within 5 ft takes (the engine compiles the
+  give from the drink). SRD 5.1: drinking or administering a potion takes an action.
+- What an item gives while carried goes in `effects`, as a feature's would; `attunement: { attuned }` if it needs it.
+
 ## Reaction spells (`spells.ts`)
 
 A spell whose `castingTime` is `"reaction"` carries a `reaction` block on its

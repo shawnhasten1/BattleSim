@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { resolveAttackBonus, type CreatureDefinition, type DamageComponent } from "@/engine";
-import { SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS } from "@/data/srd";
+import { SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS } from "@/data/srd";
 import { useEncounterStore } from "@/store/encounter-store";
 import { diceExpression, diceParts, pathBinding, saveDcBinding, withLineDice } from "@/lib/ability-editor/bindings";
 import { withReplacedAbility } from "@/lib/ability-editor/records";
@@ -101,6 +101,7 @@ function everyAbility(): Stored[] {
   for (const weapon of SRD_WEAPONS) store().attachSrdWeapon("def-fighter", weapon.id);
   for (const spell of SRD_SPELLS) store().attachSrdSpell("def-fighter", spell.id);
   for (const feature of SRD_FEATURES) store().attachSrdFeature("def-fighter", feature.id);
+  for (const item of SRD_ITEMS) store().attachSrdItem("def-fighter", item.id);
   const fighter = structuredClone(store().encounter.definitions.find((candidate) => candidate.id === "def-fighter")!);
   useEncounterStore.setState(pristine, true);
   return [fighter, ...MONSTERS].flatMap((definition) => abilityRefs(definition).map((ref) => ({ label: `${definition.name} ${refKey(ref)}`, definition, ref })));

@@ -7,6 +7,8 @@ import {
   abilityModifier,
   formulaAbility,
   getExecutableActions,
+  isDrinkUse,
+  ITEM_POOL_PREFIX,
   multiattackRoutines,
   parseDiceExpression,
   proficiencyFromDefinition,
@@ -31,6 +33,8 @@ import {
   type FeatureDefinition,
   type FeatureEffect,
   type HealingComponent,
+  type ItemDefinition,
+  type ItemType,
   type LegendaryActionRef,
   type MultiattackStep,
   type NumericFormula,
@@ -105,10 +109,16 @@ export function roundsText(rounds: number): string {
 /** A sentence with a duration folded in before its full stop. */
 const withDuration = (sentence: string, duration: string): string => (duration ? sentence.replace(/\.$/, `${duration}.`) : sentence);
 
-/** A resource id as a thing you spend: "3rd-level slot", "rage", "fear sword charges". */
-export function poolName(resourceId: string, amount = 1): string {
+/**
+ * A resource id as a thing you spend: "3rd-level slot", "rage", "fear sword charges". An item's pool is named after the
+ * item when the creature (or the editor's preview of it) is given: "Potion of Healing", "charges".
+ */
+export function poolName(resourceId: string, amount = 1, definition?: Pick<CreatureDefinition, "items">): string {
   const slot = spellSlotLevel(resourceId);
   if (slot !== undefined) return `${ordinal(slot)}-level ${plural(amount, "slot")}`;
+  const item = definition?.items?.find((candidate) => candidate.supply?.id === resourceId);
+  if (item) return item.supply?.unit === "charges" ? plural(amount, "charge") : item.name;
+  if (resourceId.startsWith(ITEM_POOL_PREFIX) || resourceId === "supply") return plural(amount, "use");
   const bare = resourceId.includes(":") ? resourceId.slice(resourceId.lastIndexOf(":") + 1) : resourceId;
   const words = bare.replace(/[-_]+/g, " ").trim();
   // "1 charge", "2 ki points": one of a plural-named pool drops its "s"; more than one gains it. Ki and dice don't.
@@ -117,9 +127,9 @@ export function poolName(resourceId: string, amount = 1): string {
   return words.endsWith("s") ? words : `${words}s`;
 }
 
-/** "a 1st-level slot", "2 ki points" — what spending `cost` takes. */
-export function costText(cost: ResourceCost): string {
-  const name = poolName(cost.resourceId, cost.amount);
+/** "a 1st-level slot", "2 ki points", "1 Potion of Healing" — what spending `cost` takes. */
+export function costText(cost: ResourceCost, definition?: Pick<CreatureDefinition, "items">): string {
+  const name = poolName(cost.resourceId, cost.amount, definition);
   return cost.amount === 1 && spellSlotLevel(cost.resourceId) !== undefined ? `${article(name)} ${name}` : `${cost.amount} ${name}`;
 }
 
@@ -1361,12 +1371,12 @@ export function actionStatblock(action: ActionDefinition, definition: CreatureDe
   ];
   return {
     title: `${options.title ?? action.name}${"usage" in action ? usageSuffix(action.usage) : ""}`,
-    text: `${prefix}${prefix ? continueSentence(body.text) : body.text}${cost ? ` Uses ${costText(cost)}.` : ""}`,
+    text: `${prefix}${prefix ? continueSentence(body.text) : body.text}${cost ? ` Uses ${costText(cost, definition)}.` : ""}`,
     short: [
       "usage" in action ? usageLabel(action.usage) : "",
       reaction ? `reaction: ${triggerText(reaction.trigger)}` : "",
       body.short,
-      cost ? costText(cost) : ""
+      cost ? costText(cost, definition) : ""
     ].filter(Boolean).join(" · "),
     support: reference ? "reference" : "simulated",
     notSimulated
@@ -1636,12 +1646,88 @@ export function legendaryStatblock(legendary: LegendaryActionRef, definition: Cr
   return { title, text: description || "Not simulated.", short: "reference only", support: "reference", notSimulated: [] };
 }
 
+export const ITEM_TYPE_WORDS: Record<ItemType, string> = {
+  potion: "potion", scroll: "scroll", wand: "wand", thrown: "thrown item", worn: "worn item", gear: "gear"
+};
+
+const slotPhrase = (actionType: ActionDefinition["actionType"]): string =>
+  actionType === "bonus" ? "a bonus action" : actionType === "reaction" ? "a reaction" : actionType === "free" ? "no action" : "an action";
+const slotShort = (actionType: ActionDefinition["actionType"]): string =>
+  actionType === "bonus" ? "bonus action" : actionType === "reaction" ? "reaction" : actionType === "free" ? "free" : "action";
+
+/** What drinking a potion does, as a short: "7 (2d4 + 2) HP", "10 temp HP, +2 to hit · 1 hour". */
+function drinkShort(drink: Extract<ActionDefinition, { kind: "healing" | "buff" }>, definition: CreatureDefinition): string {
+  if (drink.kind === "healing") return `${healingShort(drink.healing, definition)} HP`;
+  return actionStatblock({ ...drink, resourceCost: undefined }, definition).short.split(" · ").filter((part) => part !== "self").join(" · ");
+}
+
+/**
+ * An item as a statblock would describe it: what drinking or giving a potion takes and does, what each other use does
+ * and spends, its charges, what it gives while carried, and whether it's attuned. Its stack's count is the token's, not
+ * the text's (the list row shows it).
+ */
+export function itemStatblock(item: ItemDefinition, definition: CreatureDefinition): StatblockEntry {
+  // Its pools are named after it, also when it isn't on the creature yet (a library row, the editor's new item).
+  const onCreature = (definition.items ?? []).some((candidate) => candidate.id === item.id && candidate === item)
+    ? definition : { ...definition, items: [...(definition.items ?? []).filter((candidate) => candidate.id !== item.id), item] };
+  const uses = item.grantedActions ?? [];
+  const drinks = item.type === "potion" ? uses.filter(isDrinkUse) : [];
+  const others = uses.filter((use) => !drinks.includes(use as never));
+  const sentences: string[] = [];
+  const shorts: string[] = [];
+  for (const drink of drinks) {
+    const effect = actionStatblock({ ...drink, resourceCost: undefined } as ActionDefinition, onCreature);
+    const give = item.give?.actionType;
+    const lead = !give ? `Drinking it takes ${slotPhrase(drink.actionType)}`
+      : give === drink.actionType ? `Drinking it, or giving it to a creature within 5 feet, takes ${slotPhrase(give)}`
+        : `Drinking it takes ${slotPhrase(drink.actionType)}; giving it to a creature within 5 feet takes ${slotPhrase(give)}`;
+    sentences.push(`${lead}. ${effect.text.replace(/^It /, "The drinker ")}`);
+    shorts.push(!give ? `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)}`
+      : give === drink.actionType ? `drink or give (5 ft): ${drinkShort(drink, onCreature)} · ${slotShort(give)}`
+        : `drink: ${drinkShort(drink, onCreature)} · ${slotShort(drink.actionType)} · give (5 ft): ${slotShort(give)}`);
+  }
+  for (const use of others) {
+    const entry = actionStatblock(use, onCreature);
+    sentences.push(`It can be used for ${entry.title} (${slotPhrase(use.actionType)}): ${uncapitalize(entry.text)}`);
+    shorts.push(entry.title === item.name ? entry.short : `${entry.title}: ${entry.short}`);
+  }
+  if (item.supply?.unit === "charges") {
+    const { size, regains } = item.supply;
+    const when = typeof regains === "string" ? ` and regains ${size === 1 ? "it" : "them"} ${regains === "dawn" ? "at dawn" : `on a ${regains.replace(/-/g, " ")}`}`
+      : regains ? ` and regains ${regains.dice} at dawn` : "";
+    sentences.push(`It has ${size} ${plural(size, "charge")}${when}.`);
+  }
+  if (item.effects?.length) {
+    sentences.push(`While carried: ${afterColon(effectSentences(item.effects, onCreature))}`);
+    shorts.push(...effectShorts(item.effects, onCreature));
+  }
+  if (item.attunement) {
+    sentences.push(item.attunement.attuned ? "It requires attunement, and is attuned." : "It requires attunement and isn't attuned: it does nothing.");
+    if (!item.attunement.attuned) shorts.unshift("not attuned");
+  }
+  const description = item.description?.trim() ?? "";
+  if (item.automationSupport === "manual-only" || item.automationSupport === "unsupported") {
+    return { title: item.name, text: description || "Not simulated.", short: description ? firstSentence(description) : "reference only", support: "reference", notSimulated: [] };
+  }
+  if (!uses.length && !item.effects?.length) {
+    return { title: item.name, text: description || "No combat effect.", short: "no combat effect", support: "no-effect", notSimulated: [] };
+  }
+  return {
+    title: item.name,
+    text: sentences.join(" "),
+    short: shorts.join(" · "),
+    support: "simulated",
+    notSimulated: uses.flatMap((use) => actionStatblock(use, onCreature).notSimulated)
+  };
+}
+
 /** The statblock entry for any ability on a creature, or undefined when the ref points at nothing. */
 export function statblockFor(definition: CreatureDefinition, ref: AbilityRef): StatblockEntry | undefined {
   const record = findAbility(definition, ref);
   if (!record) return undefined;
   switch (ref.list) {
     case "weapons": return weaponStatblock(record as WeaponDefinition, definition);
+    case "items": return itemStatblock(record as ItemDefinition, definition);
     case "spells": return spellStatblock(record as SpellDefinition, definition);
     case "features":
     case "traits": return featureStatblock(record as FeatureDefinition, definition);

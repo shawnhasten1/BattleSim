@@ -16,6 +16,7 @@ import {
   blankAttack,
   blankDeathEffect,
   blankFeature,
+  blankItem,
   blankLairAction,
   blankReaction,
   blankSpecialAction,
@@ -63,6 +64,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
+  const attachSrdItem = useEncounterStore((s) => s.attachSrdItem);
 
   const [addOpen, setAddOpen] = useState(false);
   // A delete waiting on "Delete Claws?" because a multiattack or a legendary action uses it, and what they'd use instead.
@@ -135,6 +137,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
   function attachFromLibrary(kind: SrdEntryKind, id: string) {
     if (kind === "weapon") attachSrdWeapon(definition.id, id);
     else if (kind === "spell") attachSrdSpell(definition.id, id);
+    else if (kind === "item") attachSrdItem(definition.id, id);
     else attachSrdFeature(definition.id, id);
   }
 
@@ -151,6 +154,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
       case "multiattack": openAbilityEditor({ mode: "new", list: "actions", record: blankMultiattack(definition) }); break;
       case "spell": openAbilityEditor({ mode: "new", list: "spells", record: blankSpell(spellcastingAbility(definition)) }); break;
       case "feature": openAbilityEditor({ mode: "new", list: "features", record: blankFeature() }); break;
+      case "item": openAbilityEditor({ mode: "new", list: "items", record: blankItem() }); break;
       case "reaction": openAbilityEditor({ mode: "new", list: "reactions", record: blankReaction() }); break;
       case "legendary": openAbilityEditor({ mode: "new", list: "legendary", record: blankLegendaryAction(definition) }); break;
       case "lair": openAbilityEditor({ mode: "new", list: "lairActions", record: blankLairAction() }); break;

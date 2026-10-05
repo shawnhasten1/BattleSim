@@ -9,6 +9,7 @@ import {
   type CreatureDefinition,
   type DeathEffectDefinition,
   type FeatureDefinition,
+  type ItemDefinition,
   type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
@@ -42,6 +43,7 @@ import { actionSection } from "./ActionSections";
 import { More } from "./controls";
 import { EditorSection } from "./EditorSection";
 import { featureSection } from "./FeatureSections";
+import { itemSection } from "./ItemSections";
 import { JsonView } from "./JsonView";
 import { DeathNotes, LegendaryDoes, LegendaryNotes, LegendaryUse } from "./LegendarySections";
 import type { NewPools } from "./LimitPicker";
@@ -85,11 +87,13 @@ export interface AbilityEditorResult {
   savedRef?: AbilityRef;
 }
 
-type RecordType = "weapon" | "spell" | "action" | "feature" | "legendary" | "death";
+type RecordType = "weapon" | "item" | "spell" | "action" | "feature" | "legendary" | "death";
 
 /** The sections the editor has fields for, per kind of record (each shows only when it applies). */
 const SECTIONS: Record<RecordType, SectionId[]> = {
   weapon: ["basics", "use", "target", "roll", "damage", "effects", "while-active", "grants", "notes"],
+  // How many and what using it takes, what it does, what it gives while carried.
+  item: ["basics", "use", "grants", "while-active", "notes"],
   spell: ["basics", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   action: ["sequence", "use", "target", "roll", "outcome", "damage", "effects", "while-active", "lingering", "notes"],
   feature: ["basics", "use", "while-active", "aura", "grants", "notes"],
@@ -231,7 +235,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const [nestedWorking, setNestedWorking] = useState<ActionDefinition | null>(null);
   const where: AbilityRef | AbilityInsertTarget = target.mode === "new" ? target.list : target.ref;
   const listName = listNameOf(where);
-  const type: RecordType = listName === "weapons" ? "weapon" : listName === "spells" ? "spell" : listName === "features" || listName === "traits" ? "feature"
+  const type: RecordType = listName === "weapons" ? "weapon" : listName === "items" ? "item" : listName === "spells" ? "spell" : listName === "features" || listName === "traits" ? "feature"
     : listName === "legendary" ? "legendary" : listName === "deathEffects" ? "death" : "action";
   const available = SECTIONS[type];
   // How many legendary actions it takes a round: a legendary action's editor sets it, saved with it.
@@ -514,6 +518,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const common = { definition: withPools, newPools, parkedReaction, onConvert: convert, conversionNote: note };
   function renderSection(id: SectionId) {
     if (type === "weapon") return weaponSection(id, { weapon: working as WeaponDefinition, onChange: update, definition: withPools, newPools, onOpenGranted: openGranted });
+    if (type === "item") return itemSection(id, { item: working as ItemDefinition, onChange: update, definition: withPools, newPools, onOpenGranted: openGranted });
     if (type === "spell") return spellSection(id, { ...common, spell: working as SpellDefinition, onChange: update });
     if (type === "feature") {
       return featureSection(id, {
@@ -545,7 +550,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const ACTION_WORDS: Partial<Record<ActionDefinition["kind"], string>> = {
     attack: "attack", multiattack: "multiattack", summon: "summon", transform: "shapechange", utility: "standard action"
   };
-  const kindLabel = type === "weapon" ? ((working as WeaponDefinition).attackType === "focus" ? "focus" : "weapon") : type === "spell" ? "spell"
+  const kindLabel = type === "weapon" ? ((working as WeaponDefinition).attackType === "focus" ? "focus" : "weapon") : type === "item" ? "item" : type === "spell" ? "spell"
     : type === "feature" ? (working as FeatureDefinition).category : type === "legendary" ? "legendary action" : type === "death" ? "death effect"
       : listName === "lairActions" ? "lair action" : (actionKind && ACTION_WORDS[actionKind]) ?? "action";
 
@@ -626,6 +631,12 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
             const wrapped = type === "death" || type === "legendary" ? (renamed as { action?: ActionDefinition }) : undefined;
             if (wrapped?.action && wrapped.action.name === name) {
               update({ ...renamed, action: { ...wrapped.action, name: event.target.value } } as AbilityRecord);
+              return;
+            }
+            // An item's uses named after it (a potion's drink) follow its name.
+            const item = type === "item" ? (renamed as ItemDefinition) : undefined;
+            if (item?.grantedActions?.some((action) => action.name === name)) {
+              update({ ...item, grantedActions: item.grantedActions.map((action) => (action.name === name ? { ...action, name: event.target.value } : action)) });
               return;
             }
             const feature = type === "feature" ? (renamed as FeatureDefinition) : undefined;

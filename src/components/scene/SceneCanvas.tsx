@@ -95,6 +95,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const updateTerrainTiles = useEncounterStore((state) => state.updateTerrainTiles);
   const removeTerrainTiles = useEncounterStore((state) => state.removeTerrainTiles);
   const attachSrdWeapon = useEncounterStore((state) => state.attachSrdWeapon);
+  const attachSrdItem = useEncounterStore((state) => state.attachSrdItem);
   const attachSrdSpell = useEncounterStore((state) => state.attachSrdSpell);
   const [srdDropTokenId, setSrdDropTokenId] = useState<string | null>(null);
   const encounter = useDisplayEncounter();
@@ -132,6 +133,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
     const payload = parseSrdDragPayload(raw);
     if (payload?.kind === "weapon") attachSrdWeapon(combatant.definitionId, payload.id);
     else if (payload?.kind === "spell") attachSrdSpell(combatant.definitionId, payload.id);
+    else if (payload?.kind === "item") attachSrdItem(combatant.definitionId, payload.id);
   }
   const { floaties, areaFlashes } = useSceneFeedback(encounter);
 

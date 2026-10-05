@@ -48,6 +48,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
+  const attachSrdItem = useEncounterStore((s) => s.attachSrdItem);
   const [tab, setTabState] = useState<SheetTabId>(storedTab);
   const [dropActive, setDropActive] = useState(false);
   const [toast, setToast] = useState<SheetToast | null>(null);
@@ -133,6 +134,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
       if (payload?.kind === "weapon") attachSrdWeapon(definition.id, payload.id);
       else if (payload?.kind === "spell") attachSrdSpell(definition.id, payload.id);
       else if (payload?.kind === "feature") attachSrdFeature(definition.id, payload.id);
+      else if (payload?.kind === "item") attachSrdItem(definition.id, payload.id);
       return;
     }
     const raw = event.dataTransfer.getData("application/x-battle-sim-compendium");

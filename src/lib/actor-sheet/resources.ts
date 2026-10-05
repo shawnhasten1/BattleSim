@@ -14,13 +14,13 @@ import {
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { usageLabel } from "@/lib/statblock";
 
-export type ResourceKind = "slot" | "uses" | "recharge" | "pool" | "charges" | "legendary";
+export type ResourceKind = "slot" | "uses" | "recharge" | "pool" | "charges" | "item" | "legendary";
 
 export interface ResourceRow {
   /** The resource id the engine spends ("slot-3", "rage", "usage:fire-breath"), never shown. */
   id: string;
   kind: ResourceKind;
-  /** "3rd-level spell slots", "Rage", "Fire Breath", "Staff of Fire charges", "Legendary actions". */
+  /** "3rd-level spell slots", "Rage", "Fire Breath", "Staff of Fire charges", "Potion of Healing", "Legendary actions". */
   label: string;
   /** What spends it, when that isn't just its label: "Bardic Inspiration (d8), Cutting Words". */
   spentBy?: string;
@@ -54,7 +54,7 @@ function spenders(definition: CreatureDefinition): Array<{ name: string; action:
   const out: Array<{ name: string; action: ActionDefinition }> = [];
   for (const list of ["actions", "bonusActions", "reactions", "lairActions"] as const) for (const action of definition[list] ?? []) out.push({ name: action.name, action });
   for (const spell of definition.spells ?? []) if (spell.action) out.push({ name: spell.name, action: spell.action });
-  for (const owner of [...(definition.features ?? []), ...(definition.traits ?? []), ...(definition.weapons ?? [])]) {
+  for (const owner of [...(definition.features ?? []), ...(definition.traits ?? []), ...(definition.weapons ?? []), ...(definition.items ?? [])]) {
     for (const action of owner.grantedActions ?? []) out.push({ name: action.kind === "activate-feature" ? owner.name : action.name, action });
   }
   for (const entry of definition.legendary?.actions ?? []) if (entry.action) out.push({ name: entry.name, action: entry.action });
@@ -71,6 +71,7 @@ function idsInUse(definition: CreatureDefinition): Set<string> {
   const used = new Set<string>();
   for (const match of JSON.stringify(rest).matchAll(/"resourceId":("(?:[^"\\]|\\.)*")/g)) used.add(JSON.parse(match[1]!) as string);
   for (const weapon of definition.weapons ?? []) if (weapon.charges) used.add(weapon.charges.id);
+  for (const item of definition.items ?? []) if (item.supply) used.add(item.supply.id);
   if (definition.legendary) used.add(LEGENDARY_POINTS);
   return used;
 }
@@ -135,6 +136,15 @@ export function resourceRows(definition: CreatureDefinition, combatant?: Combata
     const full = sizes[id] ?? weapon.charges.max;
     const note = regainText(weapon.charges);
     add({ id, kind: "charges", label: `${weapon.name} charges`, left: leftOf(id, full), full, ...(note ? { note } : {}) });
+  }
+
+  // Its items' stacks ("Potion of Healing") and charges ("Wand of Web charges").
+  for (const item of definition.items ?? []) {
+    if (!item.supply || listed.has(item.supply.id)) continue;
+    const { id, unit, regains } = item.supply;
+    const full = sizes[id] ?? item.supply.size;
+    const note = unit === "charges" && regains ? regainText({ id, max: full, recharge: regains }) : undefined;
+    add({ id, kind: "item", label: unit === "charges" ? `${item.name} charges` : item.name, left: leftOf(id, full), full, ...(note ? { note } : {}) });
   }
 
   // Named pools, by their own name ("Superiority dice"), with what spends them when that's something else. The one
@@ -216,6 +226,9 @@ export function withResourceSize(definition: CreatureDefinition, id: string, siz
     resources: { ...definition.resources, [id]: size },
     ...(definition.weapons?.some((weapon) => weapon.charges?.id === id)
       ? { weapons: definition.weapons.map((weapon) => (weapon.charges?.id === id ? { ...weapon, charges: { ...weapon.charges, max: size } } : weapon)) }
+      : {}),
+    ...(definition.items?.some((item) => item.supply?.id === id)
+      ? { items: definition.items.map((item) => (item.supply?.id === id ? { ...item, supply: { ...item.supply, size } } : item)) }
       : {})
   };
   if (!id.startsWith("usage:")) return sized;

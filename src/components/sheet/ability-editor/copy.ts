@@ -240,6 +240,19 @@ export const COPY = {
   standardAction: { label: "Takes the", hint: "An action any creature has: as a bonus action, or for a cost. The simulator doesn't hide, and Help is only partly simulated." },
   weaponKind: { label: "It's", hint: "A focus (a staff, a wand, a holy symbol) makes no attack of its own: it has charges, effects while it's carried, and abilities it grants." },
 
+  // Items
+  itemType: { label: "It's", hint: "A potion is drunk, or given to a creature within 5 ft. A potion, a scroll and a flask are used up one at a time; a wand spends charges and stays. A worn item works while it's carried." },
+  itemMagical: { label: "A magic item" },
+  itemAttunement: { label: "Needs attunement", hint: "It does nothing until it's attuned. A creature can be attuned to three items at once." },
+  itemAttuned: { label: "Attuned" },
+  itemCount: { label: "How many", hint: "What every token of this creature starts a fight with." },
+  itemCharges: { label: "It has charges", hint: "A pool its uses spend; the item stays when it's empty." },
+  itemChargesMax: { label: "Charges" },
+  itemRegains: { label: "Regains", hint: "For reference: there's no rest in a fight, so a fight starts with every charge." },
+  drinkTakes: { label: "Drinking it takes", hint: "In SRD 5.1 (2014), drinking or administering a potion takes an action; the 2024 rules make it a bonus action." },
+  giveTakes: { label: "Giving it to a creature within 5 ft", hint: "Pouring it into a friend who's down brings them back up. It's never given to the one holding it: they drink it." },
+  itemUses: { label: "Using it", hint: "Each opens in this editor and is saved with the item. Each use spends one of the stack, or the charges it says." },
+
   // Notes & AI
   description: { label: "Reference text", hint: "Shown with the ability; the simulator doesn't read it." },
   json: { label: "The record as JSON", hint: "Edit it, then Check: it's checked and normalized the way a save would, and you see what changes before you Apply it. Save still commits it." },

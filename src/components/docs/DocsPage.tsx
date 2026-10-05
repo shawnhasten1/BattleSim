@@ -693,6 +693,64 @@ const SECTIONS: Section[] = [
     )
   },
   {
+    id: "items",
+    label: "Items",
+    content: (
+      <>
+        <p>
+          A creature can carry <strong>items</strong>: a stack of potions, a scroll, a wand with charges, a flask to throw,
+          a ring or a cloak that&apos;s always working. They&apos;re listed under <strong>Items</strong> on the Abilities
+          tab, after Spellcasting, with how many each token has left. Add one from the library (the Potions of Healing) in{" "}
+          <strong>Add ability</strong>, from a recipe there (a healing potion, a buff potion, a wand, a thrown flask, a worn
+          item, other gear), or from <strong>Start from scratch → Item</strong>. Each opens in the ability editor.
+        </p>
+
+        <h3>The sections</h3>
+        <ul>
+          <li>
+            <strong>Basics</strong> — what it is (a potion, a scroll, a wand, a thrown flask, a worn item or gear), whether
+            it&apos;s magic, and whether it <em>needs attunement</em>. An item that needs attunement does nothing until
+            it&apos;s attuned; the sheet warns when a creature is attuned to more than three.
+          </li>
+          <li>
+            <strong>Use &amp; cost</strong> — <em>how many</em> it carries (a potion, a scroll or a flask is used up one
+            at a time) or its <em>charges</em> (a wand spends them and stays). For a potion, what <em>drinking it</em>{" "}
+            takes, and what <em>giving it to a creature within 5 ft</em> takes, or that it can&apos;t be given.
+          </li>
+          <li>
+            <strong>What it does</strong> — its uses, each opened in the editor inside the item&apos;s: a potion&apos;s
+            heal or benefit, a flask&apos;s thrown attack, a wand&apos;s spell. Each spends one of the stack, or the
+            charges it says.
+          </li>
+          <li>
+            <strong>While carried</strong> — what it gives while it&apos;s carried (and attuned, if it needs to be): a
+            Ring of Protection&apos;s +1 to AC and saving throws.
+          </li>
+          <li><strong>Notes &amp; AI</strong> — reference text, and whether the simulator uses it or keeps it for reference.</li>
+        </ul>
+
+        <h3>In a fight</h3>
+        <p>
+          A stack or charges is a resource, listed in the resource list with the creature&apos;s other pools: a fight
+          spends it, <strong>Restart</strong> refills it, and a token can start with fewer (its <em>Left</em>). A potion is
+          drunk, or given to a creature within 5 ft: pouring one into an ally who&apos;s down brings them back up. It&apos;s
+          never given to the creature holding it, which drinks it instead.
+        </p>
+        <p>
+          The AI drinks a healing potion when it&apos;s likely to drop before its next turn and the potion would keep it
+          up, adding up what every enemy that can reach it is expected to deal. Bloodied, it drinks only when the action
+          or bonus action has nothing better to do; a <em>liberal</em> creature also drinks whenever the heal won&apos;t
+          be wasted, and a <em>conservative</em> one only to stay up. It gives a potion only to an ally who can&apos;t
+          drink their own (down, or incapacitated), and a Healing Word that already reaches them beats walking over. A
+          thrown flask is thrown when it beats the creature&apos;s weapon by more than the flask is worth. Using an item
+          is priced as gone for good: a potion or a flask costs more to use than a charge, and a scroll at least a spell
+          slot of its level. The log says why: <em>Kael chose to drink a Potion of Healing: 9 HP left, ≈13 damage likely
+          before its next turn (2 in reach)</em>.
+        </p>
+      </>
+    )
+  },
+  {
     id: "multiattack",
     label: "Multiattack & Extra Attack",
     content: (

@@ -32,7 +32,7 @@ export interface AiUses {
 }
 
 const HOW: Partial<Record<ListGroupId, string>> = {
-  bonus: "bonus action", reactions: "reaction", legendary: "legendary", lair: "lair", death: "on death"
+  bonus: "bonus action", reactions: "reaction", items: "item", legendary: "legendary", lair: "lair", death: "on death"
 };
 
 function rowsOf(definition: CreatureDefinition, combatant?: CombatantState): AiUse[] {

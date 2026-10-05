@@ -1421,7 +1421,7 @@ export interface CompiledActionMeta {
 export interface ItemUseMeta {
   id: Id;
   name: string;
-  kind: ItemKind;
+  type: ItemType;
   /** Using it spends one of a stack (a potion, a scroll, a flask) rather than a charge. */
   consumes: boolean;
   /** A potion's use: drinking it (its own, self-targeted use) or giving it to a creature within 5 ft (a compiled copy). */
@@ -1637,8 +1637,11 @@ export interface FeatureDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
-/** What kind of item it is: how the sheet, the hotbar and the AI treat it. A potion is drunk, or given within 5 ft. */
-export type ItemKind = "potion" | "scroll" | "wand" | "thrown" | "worn" | "gear";
+/**
+ * What sort of item it is: how the sheet, the hotbar and the AI treat it. A potion is drunk, or given within 5 ft. (Its
+ * field is `type`, never `kind`: the editor tells an action from other records by `kind`.)
+ */
+export type ItemType = "potion" | "scroll" | "wand" | "thrown" | "worn" | "gear";
 
 /**
  * What an item's uses spend: a stack used up one at a time (`count`: three potions), or charges (`charges`: a wand,
@@ -1660,7 +1663,7 @@ export interface ItemDefinition {
   /** Reference text shown with the item. Not read by the simulator. */
   description?: string;
   source?: SourceMetadata;
-  kind: ItemKind;
+  type: ItemType;
   supply?: ItemSupply;
   /**
    * What using it does: whole abilities, each with its own action type and a cost against `supply`. A potion's is

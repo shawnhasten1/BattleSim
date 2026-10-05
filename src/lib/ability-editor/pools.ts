@@ -19,10 +19,19 @@ export function isManagedPool(resourceId: string): boolean {
   return spellSlotLevel(resourceId) !== undefined || resourceId.startsWith("usage:") || resourceId === "legendary-points";
 }
 
-/** The pools to offer, the weapon's own charges first. `extra` lists pools created in the editor and not saved yet. */
+/**
+ * The pools to offer: the weapon's own charges first, then each item's stack or charges (an item being edited is on the
+ * editor's preview of the creature, before its pool is), then the creature's pools. `extra` lists pools created in the
+ * editor and not saved yet.
+ */
 export function poolOptions(definition: CreatureDefinition, weapon?: WeaponDefinition, extra: Record<string, number> = {}): PoolOption[] {
   const options: PoolOption[] = [];
   if (weapon?.charges) options.push({ id: weapon.charges.id, label: `${weapon.name || "This weapon"}'s charges`, size: weapon.charges.max });
+  for (const item of definition.items ?? []) {
+    if (!item.supply || options.some((option) => option.id === item.supply!.id)) continue;
+    const label = `${item.name || "This item"}${item.supply.unit === "charges" ? "'s charges" : " (the stack)"}`;
+    options.push({ id: item.supply.id, label, size: definition.resources?.[item.supply.id] ?? item.supply.size });
+  }
   const pools = { ...(definition.resources ?? {}), ...extra };
   for (const [id, size] of Object.entries(pools)) {
     if (isManagedPool(id) || options.some((option) => option.id === id)) continue;

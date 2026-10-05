@@ -70,7 +70,7 @@ import {
   type CoverLevel,
   type WallSegment
 } from "@/engine";
-import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
@@ -451,6 +451,11 @@ interface EncounterStore extends PlayActions {
    * and its combatants. One undo step. `undefined` if the srd id is unknown.
    */
   attachSrdFeature: (definitionId: string, srdId: string) => string | undefined;
+  /**
+   * Attach a copy of a bundled SRD item (a potion, a wand): fresh ids, its pool named after its new id and seeded on the
+   * creature and its tokens (see `insertAbilityRecord`). One undo step. Returns the new item's id.
+   */
+  attachSrdItem: (definitionId: string, srdId: string) => string | undefined;
   /** Merge a partial patch into one feature / trait (an optional rule switched on). One undo step. */
   updateFeature: (definitionId: string, featureId: string, patch: Partial<FeatureDefinition>) => void;
   /**
@@ -1023,14 +1028,28 @@ export const useEncounterStore = create<EncounterStore>()(
        * creatures it summons or changes into that the editor fetched (`embed`) come in the same step, and its forms get
        * its shapechanges (see `withSpawnsSettled`).
        */
-      const commitAbilityChange = (encounter: EncounterSnapshot, definitionId: string, next: CreatureDefinition, seeded: Record<string, number>, embed?: CreatureDefinition[]) => {
+      const commitAbilityChange = (
+        encounter: EncounterSnapshot, definitionId: string, next: CreatureDefinition, seeded: Record<string, number>, embed?: CreatureDefinition[],
+        resized?: Record<string, { from: number; to: number }>
+      ) => {
         const hasSeeds = Object.keys(seeded).length > 0;
+        // A resized item stack: a token that had them all gets the new size (the sheet's rule for sizes), the rest keep
+        // what they have left, up to it.
+        const resize = (resources: Record<string, number>): Record<string, number> => {
+          if (!resized) return resources;
+          const out = { ...resources };
+          for (const [id, { from, to }] of Object.entries(resized)) {
+            const was = resources[id];
+            out[id] = was === undefined || was >= from ? to : Math.min(was, to);
+          }
+          return out;
+        };
         commitEncounter({
           ...encounter,
           definitions: withSpawnsSettled(encounter.definitions.map((candidate) => (candidate.id === definitionId ? next : candidate)), next, embed),
-          combatants: hasSeeds
+          combatants: hasSeeds || resized
             ? encounter.combatants.map((combatant) => combatant.definitionId === definitionId
-              ? { ...combatant, resources: { ...seeded, ...(combatant.resources ?? {}) } }
+              ? { ...combatant, resources: resize({ ...seeded, ...(combatant.resources ?? {}) }) }
               : combatant)
             : encounter.combatants
         });
@@ -3059,6 +3078,15 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         return weaponId;
       },
+      attachSrdItem: (definitionId, srdId) => {
+        const source = findSrdItem(srdId);
+        if (!source) return undefined;
+        const ref = get().insertAbilityRecord(definitionId, "items", {
+          ...structuredClone(source),
+          source: { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() }
+        });
+        return ref && "id" in ref ? ref.id : undefined;
+      },
       attachSrdSpell: (definitionId, srdId) => {
         const source = findSrdSpell(srdId);
         const encounter = get().encounter;
@@ -3171,7 +3199,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // A spell that now follows the spellcasting ability pins the creature's (see `withSettledSpellcasting`).
         const settled = withSettledSpellcasting(pooled.definition);
         if (deepEqual(settled, definition)) return replaced.ref;
-        commitAbilityChange(encounter, definitionId, settled, { ...replaced.seeded, ...pooled.added }, extras?.embed);
+        commitAbilityChange(encounter, definitionId, settled, { ...replaced.seeded, ...pooled.added }, extras?.embed, replaced.resized);
         return replaced.ref;
       },
       insertAbilityRecord: (definitionId, where, record, extras) => {

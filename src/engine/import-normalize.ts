@@ -22,7 +22,7 @@ import {
   type FeatureEffectConditionApplication,
   type HealingComponent,
   type ItemDefinition,
-  type ItemKind,
+  type ItemType,
   type ItemSupply,
   type NumericFormula,
   type ReactionMeta,
@@ -576,7 +576,7 @@ export function normalizeItemDefinition(input: unknown): ItemDefinition {
   return normalizeItemRecord(normalizeIdList([input], "item")[0]);
 }
 
-const ITEM_KINDS: readonly ItemKind[] = ["potion", "scroll", "wand", "thrown", "worn", "gear"];
+const ITEM_TYPES: readonly ItemType[] = ["potion", "scroll", "wand", "thrown", "worn", "gear"];
 
 function normalizeItems(input: unknown): ItemDefinition[] | undefined {
   return Array.isArray(input) ? normalizeIdList(input, "item").map(normalizeItemRecord) : undefined;
@@ -586,23 +586,23 @@ function normalizeItemRecord(input: unknown): ItemDefinition {
   if (!isRecord(input)) {
     return input as ItemDefinition;
   }
-  const kind = ITEM_KINDS.includes(input.kind as ItemKind) ? input.kind as ItemKind : "gear";
+  const type = ITEM_TYPES.includes(input.type as ItemType) ? input.type as ItemType : "gear";
   const grantedActions = Array.isArray(input.grantedActions) && input.grantedActions.length
     ? normalizeActionList(input.grantedActions, "action", new Map(), new Map())
     : undefined;
   // Only a potion is given to someone else.
-  const give = kind === "potion" && isRecord(input.give)
+  const give = type === "potion" && isRecord(input.give)
     ? { actionType: input.give.actionType === "bonus" ? "bonus" as const : "action" as const }
     : undefined;
   return {
     ...input,
     id: stringField(input, "id") ?? "item",
     name: stringField(input, "name") ?? "Item",
-    kind,
+    type,
     supply: normalizeItemSupply(input.supply),
     grantedActions,
     give,
-    followsTableRule: kind === "potion" && input.followsTableRule === false ? false : undefined,
+    followsTableRule: type === "potion" && input.followsTableRule === false ? false : undefined,
     effects: Array.isArray(input.effects) && input.effects.length ? input.effects as FeatureEffect[] : undefined,
     attunement: isRecord(input.attunement) ? { attuned: input.attunement.attuned === true } : undefined,
     magical: input.magical === true ? true : undefined,

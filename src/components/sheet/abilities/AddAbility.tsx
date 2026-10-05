@@ -2,8 +2,8 @@
 
 import { Check, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { CreatureDefinition, FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
-import { SRD_DRAG_MIME, SRD_FEATURES, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
+import type { CreatureDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { loadSrdMonsterAbilities, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -17,12 +17,12 @@ import {
   type Prepared,
   type Recipe
 } from "@/lib/ability-editor/add";
-import { featureStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
+import { featureStatblock, itemStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
 import styles from "./abilities.module.css";
 
 /** What "Start from scratch" can start. */
 export type BlankKind =
-  | "weapon" | "attack" | "special" | "multiattack" | "spell" | "feature" | "reaction" | "legendary" | "lair" | "death" | "summon" | "transform";
+  | "weapon" | "attack" | "special" | "multiattack" | "spell" | "feature" | "item" | "reaction" | "legendary" | "lair" | "death" | "summon" | "transform";
 
 const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
   { kind: "weapon", label: "Weapon", title: "A longsword-style weapon to change" },
@@ -31,6 +31,7 @@ const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
   { kind: "multiattack", label: "Multiattack", title: "Several attacks for one action: “a bite and two claws”" },
   { kind: "spell", label: "Spell", title: "A spell attack; Roll and Target make it anything else" },
   { kind: "feature", label: "Trait or feature", title: "Always on (Pack Tactics) or switched on (Rage)" },
+  { kind: "item", label: "Item", title: "A potion, a wand, a ring: something it carries. Starts as a healing potion; Basics makes it anything else" },
   { kind: "reaction", label: "Reaction", title: "Something it does when it's targeted or hit (a Parry)" },
   { kind: "legendary", label: "Legendary action", title: "Taken between other creatures' turns, for legendary actions it has a round (a dragon's tail attack)" },
   { kind: "lair", label: "Lair action", title: "Taken on initiative 20 while it's in its lair" },
@@ -41,19 +42,21 @@ const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
 
 
 /** What a recipe makes, beside its name. */
-const RECIPE_GROUP_WORDS: Record<Recipe["group"], string> = { weapon: "weapon", action: "monster action", spell: "spell", feature: "feature", death: "on death" };
+const RECIPE_GROUP_WORDS: Record<Recipe["group"], string> = { weapon: "weapon", action: "monster action", spell: "spell", feature: "feature", item: "item", death: "on death" };
 
 /** A library row's statblock line, without its name ("Extra Attack: 2 × any weapon attack"), which the row shows. */
 function line(entry: LibraryEntry, definition: CreatureDefinition): string {
   const short = entry.kind === "weapon"
     ? weaponStatblock(entry.entry as WeaponDefinition, definition).short
-    : entry.kind === "spell" ? spellStatblock(entry.entry as SpellDefinition, definition).short : featureStatblock(entry.entry as FeatureDefinition, definition).short;
+    : entry.kind === "spell" ? spellStatblock(entry.entry as SpellDefinition, definition).short
+      : entry.kind === "item" ? itemStatblock(entry.entry as ItemDefinition, definition).short
+        : featureStatblock(entry.entry as FeatureDefinition, definition).short;
   return short.startsWith(`${entry.name}: `) ? short.slice(entry.name.length + 2) : short;
 }
 
-/** The library entries this creature has already (a weapon, spell or feature keeps the library id it came from). */
+/** The library entries this creature has already (a weapon, spell, feature or item keeps the library id it came from). */
 function onSheet(definition: CreatureDefinition): Set<string> {
-  const records = [...(definition.weapons ?? []), ...(definition.spells ?? []), ...(definition.features ?? []), ...(definition.traits ?? [])];
+  const records = [...(definition.weapons ?? []), ...(definition.items ?? []), ...(definition.spells ?? []), ...(definition.features ?? []), ...(definition.traits ?? [])];
   return new Set(records.flatMap((record) => (record.source?.slug ? [record.source.slug] : [])));
 }
 
@@ -137,7 +140,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     <div className={styles.add} role="region" aria-label="Add ability">
       <input
         ref={searchRef} type="search" className={styles.search} aria-label="Search abilities" value={query}
-        placeholder="Search weapons, spells, monster abilities and recipes" onChange={(event) => { setQuery(event.target.value); setOpen5e(false); }}
+        placeholder="Search weapons, spells, items, monster abilities and recipes" onChange={(event) => { setQuery(event.target.value); setOpen5e(false); }}
         onKeyDown={onSearchKey}
       />
       <div className={styles.filters} role="group" aria-label="Show">
@@ -267,7 +270,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       <p className={styles.footnote}>
         Click a row to check it before it&apos;s added; a library row&apos;s + adds it as it is, or drag it onto the sheet.{" "}
         {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells,{" "}
-        {SRD_FEATURES.length} features.{" "}
+        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items.{" "}
         <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 credits · CC-BY-4.0</a>
       </p>
     </div>

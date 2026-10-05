@@ -200,6 +200,29 @@ class Checker {
         if (value.resourceCost !== undefined) this.schema("resourceCost", value.resourceCost, resourceCostSchema);
         (Array.isArray(value.grantedActions) ? value.grantedActions : []).forEach((action, index) => this.action(`grantedActions[${index}]`, action));
         return;
+      case "items": {
+        this.name("", value);
+        if (!["potion", "scroll", "wand", "thrown", "worn", "gear"].includes(String(value.type))) {
+          this.add("type", "Expected potion, scroll, wand, thrown, worn or gear");
+        }
+        const supply = value.supply;
+        if (supply !== undefined) {
+          if (!isObject(supply)) this.add("supply", "Expected its stack or charges: { id, size, unit }");
+          else {
+            if (typeof supply.id !== "string" || !supply.id) this.add("supply.id", "Expected the pool's id");
+            if (typeof supply.size !== "number" || supply.size < 0) this.add("supply.size", "Expected how many: 0 or more");
+            if (supply.unit !== "count" && supply.unit !== "charges") this.add("supply.unit", "Expected count or charges");
+          }
+        }
+        if (value.give !== undefined && !(isObject(value.give) && (value.give.actionType === "action" || value.give.actionType === "bonus"))) {
+          this.add("give", "Expected what giving it takes: { actionType: action or bonus }");
+        }
+        if (value.attunement !== undefined && !(isObject(value.attunement) && typeof value.attunement.attuned === "boolean")) {
+          this.add("attunement", "Expected { attuned: true or false }");
+        }
+        (Array.isArray(value.grantedActions) ? value.grantedActions : []).forEach((action, index) => this.action(`grantedActions[${index}]`, action));
+        return;
+      }
       case "spells":
         this.name("", value);
         if (typeof value.level !== "number" || value.level < 0 || value.level > 9) this.add("level", "Expected a spell level from 0 to 9");

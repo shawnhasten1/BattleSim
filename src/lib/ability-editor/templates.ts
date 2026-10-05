@@ -2,7 +2,7 @@
  * Starting points for a new ability in the editor: blank kinds and recipes. Each is a whole record; nothing is added
  * to the creature until the DM saves it.
  */
-import type { Ability, ActionDefinition, DamageComponent, DeathEffectDefinition, FeatureDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import type { Ability, ActionDefinition, DamageComponent, DeathEffectDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { followUpFrom } from "./features";
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
@@ -93,6 +93,85 @@ export function blankBuff(): Extract<ActionDefinition, { kind: "buff" }> {
     appliedCondition: { name: "custom", durationRounds: 10 }, automationSupport: "full"
   };
 }
+
+/* ─── items ──────────────────────────────────────────────────────────────── */
+
+/** A potion's drink: a heal aimed at itself, spending one of the stack. */
+function drinkHeal(name: string, dice: string): Extract<ActionDefinition, { kind: "healing" }> {
+  return {
+    kind: "healing", id: "", name, actionType: "action", range: 0, healing: [{ dice }], targeting: { target: "self" },
+    resourceCost: { resourceId: "supply", amount: 1 }, automationSupport: "full"
+  };
+}
+
+/**
+ * A blank item: a potion that heals 2d4 + 2, drunk or given for an action (SRD 5.1). Its stack is named `"supply"` until
+ * it's added: the store names its pool after it then (`withItemPool`).
+ */
+export function blankItem(): ItemDefinition {
+  return {
+    id: "", name: "New potion", type: "potion", magical: true, supply: { id: "supply", size: 1, unit: "count" },
+    give: { actionType: "action" }, grantedActions: [drinkHeal("New potion", "2d4+2")], automationSupport: "full"
+  };
+}
+
+export interface ItemTemplate {
+  label: string;
+  hint: string;
+  record: () => ItemDefinition;
+}
+
+export const ITEM_TEMPLATES: ItemTemplate[] = [
+  { label: "Healing potion", hint: "Drunk, or given to a creature within 5 ft: regains hit points", record: blankItem },
+  {
+    label: "Buff potion",
+    hint: "Drunk for a benefit: temporary hit points, a bonus, a resistance",
+    record: () => ({
+      id: "", name: "New potion", type: "potion", magical: true, supply: { id: "supply", size: 1, unit: "count" }, give: { actionType: "action" },
+      grantedActions: [{
+        kind: "buff", id: "", name: "New potion", actionType: "action", range: 0, targeting: { target: "self" },
+        appliedCondition: { name: "custom", durationRounds: 600, modifiers: { armorClass: 1 } },
+        resourceCost: { resourceId: "supply", amount: 1 }, automationSupport: "full"
+      }],
+      automationSupport: "full"
+    })
+  },
+  {
+    label: "Wand",
+    hint: "Charges spent on what it casts: a save or an area for 1 charge",
+    record: () => ({
+      id: "", name: "New wand", type: "wand", magical: true, supply: { id: "supply", size: 7, unit: "charges", regains: "dawn" },
+      grantedActions: [{ ...blankSpecialAction(), name: "Blast", resourceCost: { resourceId: "supply", amount: 1 } }],
+      automationSupport: "full"
+    })
+  },
+  {
+    label: "Thrown flask",
+    hint: "A vial thrown at a creature: a ranged attack, 20/60 ft, with no proficiency",
+    record: () => ({
+      id: "", name: "New flask", type: "thrown", supply: { id: "supply", size: 1, unit: "count" },
+      grantedActions: [{
+        kind: "attack", id: "", name: "New flask", actionType: "action", attackType: "ranged", ability: "dex",
+        attackBonusFormula: { ability: "dex" }, range: 20, longRange: 60, damage: [{ dice: "2d6", damageType: "acid" }],
+        resourceCost: { resourceId: "supply", amount: 1 }, automationSupport: "full"
+      }],
+      automationSupport: "full"
+    })
+  },
+  {
+    label: "Worn item",
+    hint: "Always working while it's worn: a ring or a cloak that gives +1 AC",
+    record: () => ({
+      id: "", name: "New ring", type: "worn", magical: true, attunement: { attuned: true },
+      effects: [{ kind: "armor-class-bonus", bonus: { base: 1 } }], automationSupport: "full"
+    })
+  },
+  {
+    label: "Other gear",
+    hint: "Something it carries that doesn't change a fight: rope, a lantern",
+    record: () => ({ id: "", name: "New gear", type: "gear", automationSupport: "full" })
+  }
+];
 
 /* ─── on death, lair actions, summons and shapechanges ───────────────────── */
 

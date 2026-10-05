@@ -12,6 +12,7 @@ import { legendaryUsersOf, withoutLegendaryAction } from "./ability-editor/legen
 /** A record on a creature's sheet that can be deleted on its own. A legendary action's `itemId` is its index. */
 export type DefinitionItemType =
   | "weapon"
+  | "item"
   | "spell"
   | "deathEffect"
   | "feature"
@@ -101,9 +102,16 @@ function removalOf(definition: CreatureDefinition, itemType: Exclude<DefinitionI
   const bucket = ACTION_BUCKET[itemType];
   const withoutRecord = <T extends { id: string }>(list: T[] | undefined, applies: boolean, alsoIds?: Set<string>): T[] | undefined =>
     applies ? (list ?? []).filter((item) => item.id !== itemId && !alsoIds?.has(item.id)) : list;
+  // An item's stack or charges are the item: they go with it.
+  const deletedItem = itemType === "item" ? (definition.items ?? []).find((item) => item.id === itemId) : undefined;
+  const resources = deletedItem?.supply && definition.resources?.[deletedItem.supply.id] !== undefined
+    ? Object.fromEntries(Object.entries(definition.resources).filter(([id]) => id !== deletedItem.supply!.id))
+    : definition.resources;
   const itemRemoved: CreatureDefinition = {
     ...definition,
+    ...(resources !== definition.resources ? { resources } : {}),
     weapons: withoutRecord(definition.weapons, itemType === "weapon" || weaponIdsFromAction.size > 0, weaponIdsFromAction),
+    items: withoutRecord(definition.items, itemType === "item"),
     spells: withoutRecord(definition.spells, itemType === "spell" || spellIdsFromAction.size > 0, spellIdsFromAction),
     deathEffects: withoutRecord(definition.deathEffects, itemType === "deathEffect"),
     lairActions: withoutRecord(definition.lairActions, itemType === "lairAction"),

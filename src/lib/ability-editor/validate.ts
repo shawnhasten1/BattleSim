@@ -14,6 +14,7 @@ import {
   type DeathEffectDefinition,
   type FeatureDefinition,
   type FeatureEffect,
+  type ItemDefinition,
   type LegendaryActionRef,
   type SpellDefinition,
   type WeaponDefinition
@@ -57,7 +58,18 @@ export type WarningId =
   | "summon-empty"
   | "transform-empty"
   | "transform-not-automatic"
-  | "legacy-bonuses";
+  | "legacy-bonuses"
+  | "item-does-nothing"
+  | "item-not-attuned"
+  | "too-many-attuned"
+  | "empty-stack"
+  | "scroll-above-level";
+
+/** How many items a creature can be attuned to at once (5e). */
+const ATTUNEMENT_LIMIT = 3;
+
+/** An item, told apart from an action by its `type` (an action has a `kind`). */
+const isItemRecord = (record: AbilityRecord): record is ItemDefinition => "type" in record && !("kind" in record);
 
 export interface AbilityWarning {
   id: WarningId;
@@ -125,6 +137,7 @@ function poolsSavingSeeds(record: AbilityRecord): Set<string> {
   }
   const charges = (record as WeaponDefinition).charges;
   if (charges && "attackType" in record) pools.add(charges.id);
+  if (isItemRecord(record) && record.supply) pools.add(record.supply.id);
   if ("category" in record) for (const id of Object.keys(featurePoolsToSeed(record as FeatureDefinition) ?? {})) pools.add(id);
   return pools;
 }
@@ -132,7 +145,8 @@ function poolsSavingSeeds(record: AbilityRecord): Set<string> {
 /** What each pool the record spends is called, for the ones this creature doesn't have (and a save won't add). */
 function missingPools(definition: CreatureDefinition, record: AbilityRecord): string[] {
   const seeds = poolsSavingSeeds(record);
-  const has = (id: string) => definition.resources?.[id] !== undefined;
+  // An item's stack is there once it's saved, including an item being edited (its use is edited inside it).
+  const has = (id: string) => definition.resources?.[id] !== undefined || Boolean(definition.items?.some((item) => item.supply?.id === id));
   const missing = new Set<string>();
   const costs = [
     ...actionsIn(record).map((action) => ({ action, cost: "resourceCost" in action ? action.resourceCost : undefined })),
@@ -295,9 +309,46 @@ function placementWarnings(definition: CreatureDefinition, where: AbilityRef | A
  * Warnings for a record as the editor holds it. `where` is where it's stored (a ref), or the list a new one is going
  * into.
  */
+/** What an item does that the DM probably doesn't mean: nothing to use, not attuned, too many attuned, an empty stack. */
+function itemWarnings(item: ItemDefinition, withRecord: CreatureDefinition): AbilityWarning[] {
+  const warnings: AbilityWarning[] = [];
+  const reference = item.automationSupport === "manual-only" || item.automationSupport === "unsupported";
+  if (!reference && (item.type === "potion" || item.type === "scroll" || item.type === "wand" || item.type === "thrown") && !item.grantedActions?.length) {
+    warnings.push({ id: "item-does-nothing", message: "Using it does nothing yet: add what it does in What it does.", section: "grants" });
+  }
+  if (item.attunement && !item.attunement.attuned) {
+    warnings.push({ id: "item-not-attuned", message: "It needs attunement and isn't attuned, so it does nothing: tick Attuned in Basics.", section: "basics" });
+  }
+  const attuned = (withRecord.items ?? []).filter((candidate) => candidate.attunement?.attuned).length;
+  if (item.attunement?.attuned && attuned > ATTUNEMENT_LIMIT) {
+    warnings.push({
+      id: "too-many-attuned",
+      message: `The creature is attuned to ${attuned} items, and the rules allow ${ATTUNEMENT_LIMIT}. The simulator lets them all work.`,
+      section: "basics"
+    });
+  }
+  if (item.supply && item.supply.size === 0) {
+    warnings.push({ id: "empty-stack", message: "Every token starts the fight without one: set how many in Use & cost, or a token's own in the resource list.", section: "use" });
+  }
+  // A scroll of a spell the reader can't cast takes a check to read; the simulator reads it without one.
+  const highest = Math.max(0, ...Object.keys(withRecord.resources ?? {}).map((id) => spellSlotLevel(id) ?? 0));
+  const scrollLevel = item.type === "scroll" ? Math.max(0, ...(item.grantedActions ?? []).map((use) => ("spellLevel" in use ? use.spellLevel ?? 0 : 0))) : 0;
+  if (scrollLevel > highest) {
+    warnings.push({
+      id: "scroll-above-level",
+      message: `A creature that can't cast ${ordinalLevel(scrollLevel)}-level spells needs a check to read it, which the simulator doesn't roll: it always works.`,
+      section: "grants"
+    });
+  }
+  return warnings;
+}
+
+const ordinalLevel = (n: number) => ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"][n] ?? `${n}th`;
+
 export function abilityWarnings(definition: CreatureDefinition, where: AbilityRef | AbilityInsertTarget, record: AbilityRecord): AbilityWarning[] {
   const warnings: AbilityWarning[] = [];
   const withRecord = placed(definition, where, record);
+  if (isItemRecord(record)) warnings.push(...itemWarnings(record, withRecord));
 
   // A leveled spell that costs nothing, on a creature that casts with slots. (An innate caster's at-will spells are free by design.)
   const spell = "level" in record && "castingTime" in record ? (record as SpellDefinition) : undefined;

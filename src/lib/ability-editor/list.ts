@@ -13,6 +13,7 @@ import {
   type CombatantState,
   type CreatureDefinition,
   type FeatureDefinition,
+  type ItemDefinition,
   type ResourceCost,
   type SpellDefinition,
   type WeaponDefinition
@@ -25,7 +26,7 @@ import { findAbility, refKey, type AbilityInsertTarget, type AbilityList, type A
 import { canBeReaction } from "./spells";
 import { abilityWarnings, type WarningId } from "./validate";
 
-export type ListGroupId = "traits" | "actions" | "bonus" | "reactions" | "spellcasting" | "legendary" | "lair" | "death";
+export type ListGroupId = "traits" | "actions" | "bonus" | "reactions" | "spellcasting" | "items" | "legendary" | "lair" | "death";
 
 /** ● simulated, ◐ partly, ○ reference only or no combat effect. */
 export type Automation = "simulated" | "partial" | "reference" | "no-effect";
@@ -76,9 +77,12 @@ export interface ListGroup {
 
 const TITLES: Record<ListGroupId, string> = {
   traits: "Traits", actions: "Actions", bonus: "Bonus actions", reactions: "Reactions", spellcasting: "Spellcasting",
-  legendary: "Legendary actions", lair: "Lair actions", death: "On death"
+  items: "Items", legendary: "Legendary actions", lair: "Lair actions", death: "On death"
 };
-const ORDER: ListGroupId[] = ["traits", "actions", "bonus", "reactions", "spellcasting", "legendary", "lair", "death"];
+const ORDER: ListGroupId[] = ["traits", "actions", "bonus", "reactions", "spellcasting", "items", "legendary", "lair", "death"];
+
+/** How many items a creature can be attuned to at once (5e). More is warned, not blocked (ITEMS_PLAN.md D7). */
+export const ATTUNEMENT_LIMIT = 3;
 const MOVE_GROUPS: MoveTarget[] = ["actions", "bonus", "reactions"];
 
 /* ─── where a record is mainly used ──────────────────────────────────────── */
@@ -128,10 +132,12 @@ function actionCost(action: ActionDefinition): string | undefined {
  * another ability, and what the statblock already says. Any other means part of it never happens: the AI never uses it
  * (Reckless Attack, a manual reaction, a missing pool), using it does nothing yet, or a routine skips a step.
  */
-const RUNS_AS_WRITTEN = new Set<WarningId>(["free-leveled-spell", "damage-ability-mismatch", "partly-simulated", "reference-only"]);
+const RUNS_AS_WRITTEN = new Set<WarningId>([
+  "free-leveled-spell", "damage-ability-mismatch", "partly-simulated", "reference-only", "too-many-attuned", "scroll-above-level"
+]);
 /** The lists whose records the dot checks with the editor's warnings: all of them. */
 const CHECKED_LISTS = new Set<AbilityRef["list"]>([
-  "weapons", "spells", "features", "traits", "actions", "bonusActions", "reactions", "legendary", "lairActions", "deathEffects"
+  "weapons", "items", "spells", "features", "traits", "actions", "bonusActions", "reactions", "legendary", "lairActions", "deathEffects"
 ]);
 
 function automationOf(definition: CreatureDefinition, ref: AbilityRef): { automation: Automation; automationNote: string } {
@@ -150,7 +156,7 @@ function automationOf(definition: CreatureDefinition, ref: AbilityRef): { automa
 }
 
 const ITEM_TYPES: Partial<Record<AbilityList, DefinitionItemType>> = {
-  weapons: "weapon", spells: "spell", features: "feature", traits: "trait", actions: "action", bonusActions: "bonusAction",
+  weapons: "weapon", items: "item", spells: "spell", features: "feature", traits: "trait", actions: "action", bonusActions: "bonusAction",
   reactions: "reaction", lairActions: "lairAction", deathEffects: "deathEffect"
 };
 
@@ -197,6 +203,23 @@ function weaponRow(definition: CreatureDefinition, weapon: WeaponDefinition): Li
   ];
   const cost = weapon.resourceCost ? costText(weapon.resourceCost) : weapon.charges ? `${weapon.charges.max} ${weapon.charges.max === 1 ? "charge" : "charges"}` : undefined;
   return row(definition, { list: "weapons", id: weapon.id }, weapon.name, { chips, cost }, weaponGroup(weapon));
+}
+
+/**
+ * An item by how many are left: "2 of 3" on a token (a stack), "5 of 7 charges"; on a creature on its own, what each
+ * token starts with ("×3", "7 charges"). Its attunement is a chip.
+ */
+function itemRow(definition: CreatureDefinition, item: ItemDefinition, combatant: CombatantState | undefined): ListRow {
+  const supply = item.supply;
+  const full = supply ? definition.resources?.[supply.id] ?? supply.size : undefined;
+  const left = supply && combatant ? combatant.resources?.[supply.id] ?? 0 : undefined;
+  const count = supply && full !== undefined
+    ? supply.unit === "charges"
+      ? `${left !== undefined ? `${left} of ` : ""}${full} ${full === 1 ? "charge" : "charges"}`
+      : left !== undefined ? `${left} of ${full}` : `×${full}`
+    : undefined;
+  const chips = item.attunement ? [item.attunement.attuned ? "attuned" : "not attuned"] : [];
+  return row(definition, { list: "items", id: item.id }, item.name, { ...(count ? { cost: count } : {}), chips }, "items");
 }
 
 function actionRow(definition: CreatureDefinition, list: "actions" | "bonusActions" | "reactions", action: ActionDefinition): ListRow {
@@ -273,6 +296,7 @@ export function abilityList(definition: CreatureDefinition, combatant?: Combatan
 
   for (const feature of [...(definition.traits ?? []), ...(definition.features ?? [])]) add(featureGroup(feature), featureRow(definition, feature));
   for (const weapon of definition.weapons ?? []) add(weaponGroup(weapon), weaponRow(definition, weapon));
+  for (const item of definition.items ?? []) add("items", itemRow(definition, item, combatant));
   for (const list of ["actions", "bonusActions", "reactions"] as const) {
     for (const action of definition[list] ?? []) add(slotGroup(action.actionType), actionRow(definition, list, action));
   }
@@ -312,6 +336,9 @@ export function abilityList(definition: CreatureDefinition, combatant?: Combatan
       id,
       title: TITLES[id],
       ...(id === "legendary" && definition.legendary ? { note: `${definition.legendary.pool} a round` } : {}),
+      ...(id === "items" && definition.items?.some((item) => item.attunement)
+        ? { note: `attuned ${definition.items.filter((item) => item.attunement?.attuned).length} of ${ATTUNEMENT_LIMIT}` }
+        : {}),
       ...(id === "lair" ? { note: "on initiative 20, while it's in its lair" } : {}),
       ...(id === "death" ? { note: "once, when it drops to 0 HP" } : {}),
       rows: sorted

@@ -52,12 +52,12 @@ export function withStepValue(step: MultiattackStep, value: string): Multiattack
 
 /** The attacks a step can name: the creature's own, taken as an action (a weapon's stands for its power attack and charges too). */
 function stepAttacks(executables: ActionDefinition[]): AttackAction[] {
-  return executables.filter((action): action is AttackAction => action.kind === "attack" && action.actionType === "action" && !action.onlyAfter && !isAttackVariant(action));
+  return executables.filter((action): action is AttackAction => action.kind === "attack" && action.actionType === "action" && !action.onlyAfter && !isAttackVariant(action) && !action.item);
 }
 
 /** The abilities a routine can use along with its attacks: its save and area abilities (Frightful Presence, a breath). */
 function stepAbilities(executables: ActionDefinition[]): ActionDefinition[] {
-  return executables.filter((action) => (action.kind === "save" || action.kind === "area-save") && action.actionType === "action");
+  return executables.filter((action) => (action.kind === "save" || action.kind === "area-save") && action.actionType === "action" && !action.item);
 }
 
 /**

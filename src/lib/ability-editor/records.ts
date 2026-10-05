@@ -166,6 +166,8 @@ export interface ReplacedAbility {
   ref: AbilityRef;
   /** The pools the record spends, with their starting values: tokens of the creature that lack one get it. */
   seeded?: Record<string, number>;
+  /** An item's stack or charges the edit resized: tokens that had them all get the new size, the rest keep what's left. */
+  resized?: Record<string, { from: number; to: number }>;
 }
 
 /**
@@ -178,7 +180,7 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
   let normalized: AbilityRecord;
   let pools: Record<string, number> | undefined;
   // A pool whose size the edit changed: what the creature starts with follows it.
-  let resized: Record<string, number> | undefined;
+  let resized: Record<string, { from: number; to: number }> | undefined;
 
   switch (ref.list) {
     case "weapons": {
@@ -197,7 +199,9 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
       const item = withItemPool({ ...input, id: before.id, grantedActions: pinGrantedActions(before.id, input.grantedActions, false) });
       if (item.supply) {
         pools = { [item.supply.id]: item.supply.size };
-        if (before.supply && before.supply.size !== item.supply.size) resized = { [item.supply.id]: item.supply.size };
+        if (before.supply && before.supply.size !== item.supply.size) {
+          resized = { [item.supply.id]: { from: definition.resources?.[item.supply.id] ?? before.supply.size, to: item.supply.size } };
+        }
       }
       normalized = item;
       break;
@@ -267,11 +271,12 @@ export function withReplacedAbility(definition: CreatureDefinition, ref: Ability
     if (resources[id] === undefined) resources[id] = start;
     seeded[id] = start;
   }
-  for (const [id, size] of Object.entries(resized ?? {})) resources[id] = size;
+  for (const [id, { to }] of Object.entries(resized ?? {})) resources[id] = to;
   const changed = Object.keys(resources).some((id) => resources[id] !== definition.resources?.[id]);
   return {
     definition: changed ? { ...placed.definition, resources } : placed.definition,
     ref: placed.ref,
-    ...(Object.keys(seeded).length ? { seeded } : {})
+    ...(Object.keys(seeded).length ? { seeded } : {}),
+    ...(resized ? { resized } : {})
   };
 }

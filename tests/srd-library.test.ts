@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   SRD_DRAG_MIME,
   SRD_FEATURES,
+  SRD_ITEMS,
   SRD_LIBRARY_VERSION,
   SRD_SPELLS,
   SRD_WEAPONS,
@@ -138,7 +139,7 @@ describe("SRD library — lookup & search", () => {
     expect(featuresOnly).toEqual(["srd:feature:rage", "srd:feature:rage-bear-totem", "srd:feature:rage-zealot"]);
     expect(findSrdFeature("srd:feature:cunning-action")?.name).toBe("Cunning Action");
 
-    expect(searchSrd("").length).toBe(SRD_WEAPONS.length + SRD_SPELLS.length + SRD_FEATURES.length);
+    expect(searchSrd("").length).toBe(SRD_WEAPONS.length + SRD_SPELLS.length + SRD_FEATURES.length + SRD_ITEMS.length);
   });
 });
 
