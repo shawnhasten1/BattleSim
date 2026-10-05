@@ -101,8 +101,8 @@ describe("a caster's spell choices", () => {
     expect(at(1, "prepared").slice(0, 2)).toEqual([id("magic-missile"), id("burning-hands")]);
     const fifth = at(5, "prepared").map((spellId) => SRD_BUILDER_LIBRARY.spell!(spellId)!);
     expect(fifth.map((spell) => spell.level)).toEqual([3, 3]);
-    // The class's preference first, then by name.
-    expect(fifth.map((spell) => spell.name)).toEqual(["Fireball", "Fear"]);
+    // The class's preference first, then the Wizard's (the list it chooses from).
+    expect(fifth.map((spell) => spell.name)).toEqual(["Fireball", "Lightning Bolt"]);
     for (const spell of built.spells) expect(spellRuns(spell.spell) || spell.spell.level === 0, spell.spell.name).toBe(true);
   });
 
@@ -179,7 +179,7 @@ describe("spells on the actor", () => {
     const fifth = rebuildActor(blankCharacter("def-mage", "Mage"), mage(5), sources).definition;
     const fourth = rebuildActor(fifth, withLevelDown(fifth.character!.build as CharacterBuild), sources);
     expect(fourth.definition.spells!.some((spell) => spell.level === 3)).toBe(false);
-    expect(fourth.changes.filter((change) => change.kind === "lost").map((change) => change.name).sort()).toEqual(["Fear", "Fireball"]);
+    expect(fourth.changes.filter((change) => change.kind === "lost").map((change) => change.name).sort()).toEqual(["Fireball", "Lightning Bolt"]);
     expect(fourth.definition.resources?.["slot-3"]).toBeUndefined();
   });
 

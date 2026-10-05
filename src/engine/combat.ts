@@ -459,8 +459,12 @@ function defaultSaveDc(definition: CreatureDefinition, ability: Ability): number
   return 8 + abilityModifier(definition.abilities[ability]) + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition));
 }
 
-export function resolveSaveDc(action: SaveActionDefinition | AreaSaveActionDefinition, definition: CreatureDefinition): number {
-  const featureDcBonus = featureSaveDcModifier(definition, action);
+/**
+ * A save action's DC. With the caster's token, what its active conditions give counts too (Innate Sorcery's +1); the AI's
+ * estimates read the definition alone.
+ */
+export function resolveSaveDc(action: SaveActionDefinition | AreaSaveActionDefinition, definition: CreatureDefinition, caster?: CombatantState): number {
+  const featureDcBonus = featureSaveDcModifier(definition, action, caster);
   if (action.dcFormula) {
     return resolveNumericFormula(action.dcFormula, definition) + featureDcBonus.total;
   }
@@ -2011,7 +2015,7 @@ export function resolveSaveAction(
   }
 
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
-  const dc = resolveSaveDc(action, attackerDefinition);
+  const dc = resolveSaveDc(action, attackerDefinition, attacker);
   const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId);
 
   // Upcast-granted bonus targets (Hold Person-style): same save/DC/riders, no extra resource spend.
@@ -2111,7 +2115,7 @@ export function resolveAreaSaveAction(
     return { targets: [] };
   }
 
-  const dc = resolveSaveDc(action, attackerDefinition);
+  const dc = resolveSaveDc(action, attackerDefinition, attacker);
 
   // A persistent zone spell (Insect Plague, Web) usually only settles onto the
   // board — it doesn't also blast everyone standing there at cast time, unlike
@@ -4603,7 +4607,7 @@ function resolveOneDeathEffect(
   declareAction(state, deceased, action, { origin });
 
   const onSuccess = resolveOnSuccess(action);
-  const dc = resolveSaveDc(action, definition);
+  const dc = resolveSaveDc(action, definition, deceased);
   const definitionsById = new Map(state.snapshot.definitions.map((d) => [d.id, d]));
   const areaCoverFor = (target: CombatantState) => state.snapshot.rules.cover
     ? coverBetween(
@@ -6460,11 +6464,12 @@ function legendaryResistanceFor(
 
 function featureSaveDcModifier(
   definition: CreatureDefinition,
-  action: SaveActionDefinition | AreaSaveActionDefinition
+  action: SaveActionDefinition | AreaSaveActionDefinition,
+  caster?: CombatantState
 ): { total: number; sources: string[] } {
   let total = 0;
   const sources: string[] = [];
-  for (const feature of featureSources(definition)) {
+  for (const feature of featureSources(definition, caster)) {
     for (const effect of feature.effects ?? []) {
       if (effect.kind !== "save-dc-bonus") {
         continue;

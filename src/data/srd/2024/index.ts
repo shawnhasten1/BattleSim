@@ -1,9 +1,14 @@
 import type { Catalog } from "@/lib/character-builder/catalog";
 import { SRD_2024_BACKGROUNDS } from "./backgrounds";
 import { BARBARIAN, BERSERKER } from "./classes/barbarian";
+import { BARD, COLLEGE_OF_LORE } from "./classes/bard";
+import { CLERIC, LIFE_DOMAIN } from "./classes/cleric";
+import { CIRCLE_OF_THE_LAND, DRUID } from "./classes/druid";
 import { CHAMPION, FIGHTER } from "./classes/fighter";
 import { MONK, OPEN_HAND } from "./classes/monk";
 import { ROGUE, THIEF } from "./classes/rogue";
+import { DRACONIC_SORCERY, SORCERER } from "./classes/sorcerer";
+import { EVOKER, WIZARD } from "./classes/wizard";
 import { SRD_2024_FEATS } from "./feats";
 
 /**
@@ -19,8 +24,8 @@ function freeze<T>(value: T): T {
 }
 
 export const SRD_2024_CATALOG: Catalog = freeze({
-  classes: [BARBARIAN, FIGHTER, MONK, ROGUE],
-  subclasses: [BERSERKER, CHAMPION, OPEN_HAND, THIEF],
+  classes: [BARBARIAN, BARD, CLERIC, DRUID, FIGHTER, MONK, ROGUE, SORCERER, WIZARD],
+  subclasses: [BERSERKER, COLLEGE_OF_LORE, LIFE_DOMAIN, CIRCLE_OF_THE_LAND, CHAMPION, OPEN_HAND, THIEF, DRACONIC_SORCERY, EVOKER],
   feats: SRD_2024_FEATS,
   backgrounds: SRD_2024_BACKGROUNDS,
   species: []

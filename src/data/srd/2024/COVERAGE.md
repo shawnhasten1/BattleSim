@@ -18,13 +18,13 @@ its gaps, never dropped and never approximated without saying so.
 | Barbarian (Path of the Berserker) | 24 | 6 | 2 | 9 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 1 | 4 | 4 | 8 | 2 |
+| Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 6 | 0 | 9 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 7 | 5 | 5 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 5 | 1 | 8 | 8 | 1 |
 | Ranger (Hunter) | 23 | 3 | 2 | 7 | 9 | 2 |
 | Rogue (Thief) | 23 | 3 | 2 | 8 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 2 | 1 | 7 | 6 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
 | Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
 | Feats | 17 | 3 | 1 | 9 | 4 | 0 |
@@ -39,10 +39,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | `d20-reroll` | Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate) | Bard, Fighter, Monk, Rogue, Warlock, Feats, Species | 1 | Countercharm (Bard); Indomitable (Fighter); Heroic Warrior (Champion); Disciplined Survivor (Monk); Stroke of Luck (Rogue); Dark One's Own Luck (Fiend Patron); Boon of Combat Prowess (feat); Boon of Fate (feat); Luck (Halfling); Resourceful (Human) |
 | `smite` | Spending a slot or a use when an attack hits (Divine Smite, Eldritch Smite, Fire's Burn, Hurl Through Hell) | Paladin, Warlock, Species, Spells | 1 | Paladin's Smite (Paladin); Smite of Protection (Oath of Devotion); Eldritch Invocation Options (Warlock); Hurl Through Hell (Fiend Patron); Giant Ancestry (Goliath); Divine Smite (spell); Searing Smite (spell); Shining Smite (spell); Ensnaring Strike (spell) |
+| `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 1 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Innate Sorcery (Sorcerer); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
 | `damage-reaction` | A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance) | Monk, Ranger, Rogue, Species | 1 | Deflect Attacks (Monk); Deflect Energy (Monk); Superior Hunter's Defense (Hunter); Uncanny Dodge (Rogue); Giant Ancestry (Goliath) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
-| `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 3 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
 | `initiative` | Bonuses or advantage on initiative | Barbarian, Fighter, Feats | 1 | Feral Instinct (Barbarian); Remarkable Athlete (Champion); Alert (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `ai-free-actions` | The AI taking free actions on its own (Action Surge, Reckless Attack): they run when used by hand in Play | Barbarian, Fighter, Monk | 2 | Reckless Attack (Barbarian); Action Surge (Fighter); Superior Defense (Monk) |
@@ -67,7 +67,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
-| `wild-shape` | What Wild Shape keeps of the druid (mental scores, proficiencies) and casting while shifted | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
+| `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `healing-bonus` | Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing) | Cleric | 3 | Disciple of Life (Life Domain); Blessed Healer (Life Domain); Supreme Healing (Life Domain) |
 | `crit-range` | Scoring a critical hit on less than a 20 | Fighter | 3 | Improved Critical (Champion); Superior Critical (Champion) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
@@ -152,7 +152,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Bonus Proficiencies | builder |  |  |
-| 3 | Cutting Words | partial | `ally-die` | Approximated as −4 to the triggering attack; reducing damage or a check isn't. |
+| 3 | Cutting Words | partial | `ally-die` | An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't. |
 | 6 | Magical Discoveries | builder |  |  |
 | 14 | Peerless Skill | manual | `ally-die` |  |
 
@@ -191,7 +191,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Primal Order | builder |  | Magician: a cantrip (its check bonus is outside a fight). Warden: martial weapons and medium armor. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Wild Companion | manual | `summon-stat-blocks` |  |
-| 2 | Wild Shape | partial | `wild-shape` | Becomes a known SRD beast form (CR by level) with temporary hit points equal to its druid level, keeping its hit points; its mental scores, proficiencies and features aren't kept. |
+| 2 | Wild Shape | manual | `wild-shape` | Its uses are counted (Land's Aid spends them). Shifting needs the beast forms in the encounter and temporary hit points on shifting: plan Phase 7. |
 | 3 | Druid Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Wild Resurgence | manual | `slot-conversion` |  |
@@ -382,10 +382,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Innate Sorcery | full |  | +1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice. |
+| 1 | Innate Sorcery | partial | `spell-scope` | +1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice; on every spell, not only Sorcerer spells. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Font of Magic | manual | `slot-conversion` | The builder sizes the sorcery point pool. |
-| 2, 10 | Metamagic | manual | `metamagic` |  |
+| 2, 10, 17 | Metamagic | manual | `metamagic` |  |
 | 3 | Sorcerer Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sorcerous Restoration | info |  | A short rest. |
@@ -403,7 +403,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Draconic Spells | builder |  | Draconic spells are always prepared. |
 | 6 | Elemental Affinity | partial | `spell-scope` | The resistance runs; Charisma on a spell's damage doesn't. |
 | 14 | Dragon Wings | manual | `gain-speed` |  |
-| 19 | Dragon Companion | manual | `summon-stat-blocks` |  |
+| 18 | Dragon Companion | manual | `summon-stat-blocks` |  |
 
 ## Warlock
 

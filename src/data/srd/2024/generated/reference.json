@@ -1440,7 +1440,7 @@
      "key": "srd-2024_sorcerer_draconic-sorcery_dragon-companion",
      "name": "Dragon Companion",
      "levels": [
-      19
+      18
      ],
      "kind": "feature",
      "text": "You can cast *Summon Dragon* without a Material component. You can also cast it once without a spell slot, and you regain the ability to cast it in this way when you finish a Long Rest.\n\nWhenever you start casting the spell, you can modify it so that it doesn't require Concentration. If you do so, the spell's duration becomes 1 minute for that casting."
@@ -3865,7 +3865,8 @@
      "name": "Metamagic",
      "levels": [
       2,
-      10
+      10,
+      17
      ],
      "kind": "feature",
      "text": "Because your magic flows from within, you can alter your spells to suit your needs; you gain two Metamagic options of your choice from \"Metamagic Options\" later in this class's description. You use the chosen options to temporarily modify spells you cast. To use an option, you must spend the number of Sorcery Points that it costs.\n\nYou can use only one Metamagic option on a spell when you cast it unless otherwise noted in one of those options.\n\nWhenever you gain a Sorcerer level, you can replace one of your Metamagic options with one you don't know. You gain two more options at Sorcerer level 10 and two more at Sorcerer level 17."

@@ -84,7 +84,7 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
 
 describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
   it("offers Magic Initiate's spells by level, marks the reference-only ones, and puts the choice on the actor", async () => {
-    useBuilderUiStore.getState().open({ kind: "create", seed: { classId: "srd:class:fighter", level: 1, backgroundId: "srd:background:acolyte" } });
+    useBuilderUiStore.getState().open({ kind: "create", seed: { name: "New Character", classId: "srd:class:fighter", level: 1, backgroundId: "srd:background:acolyte" } });
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
     const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });

@@ -66,7 +66,7 @@ export const GAPS = {
   "action-limits": "A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes)",
   "condition-removal": "Ending a condition with a feature (Self-Restoration, Restoring Touch)",
   "summon-stat-blocks": "Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon)",
-  "wild-shape": "What Wild Shape keeps of the druid (mental scores, proficiencies) and casting while shifted",
+  "wild-shape": "Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
   "free-cast-any": "Casting any spell of a level from a list for free, chosen when cast (Divine Intervention)",
   "mixed-area": "An area that harms enemies and heals one ally at once (Land's Aid)",
@@ -149,7 +149,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* College of Lore */
   "college-of-lore_bonus-proficiencies": builder(),
-  "college-of-lore_cutting-words": partial(["ally-die"], "Approximated as −4 to the triggering attack; reducing damage or a check isn't."),
+  "college-of-lore_cutting-words": partial(["ally-die"], "An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't."),
   "college-of-lore_magical-discoveries": builder(),
   "college-of-lore_peerless-skill": manual(["ally-die"]),
 
@@ -179,7 +179,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "druid_primal-order": builder("Magician: a cantrip (its check bonus is outside a fight). Warden: martial weapons and medium armor."),
   druid_spellcasting: builder(),
   "druid_wild-companion": manual(["summon-stat-blocks"]),
-  "druid_wild-shape": partial(["wild-shape"], "Becomes a known SRD beast form (CR by level) with temporary hit points equal to its druid level, keeping its hit points; its mental scores, proficiencies and features aren't kept."),
+  "druid_wild-shape": manual(["wild-shape"], "Its uses are counted (Land's Aid spends them). Shifting needs the beast forms in the encounter and temporary hit points on shifting: plan Phase 7."),
   "druid_druid-subclass": SUBCLASS,
   "druid_ability-score-improvement": FEAT_CHOICE,
   "druid_wild-resurgence": manual(["slot-conversion"]),
@@ -334,7 +334,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "rogue_thief_thiefs-reflexes": manual(["extra-turn"]),
 
   /* Sorcerer */
-  "sorcerer_innate-sorcery": full("+1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice."),
+  "sorcerer_innate-sorcery": partial(["spell-scope"], "+1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice; on every spell, not only Sorcerer spells."),
   sorcerer_spellcasting: builder(),
   "sorcerer_font-of-magic": manual(["slot-conversion"], "The builder sizes the sorcery point pool."),
   sorcerer_metamagic: manual(["metamagic"]),

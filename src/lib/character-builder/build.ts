@@ -19,6 +19,7 @@ import type {
   Catalog,
   ChoiceSpec,
   ClassDefinition,
+  ClassSuggestions,
   ClassTableColumn,
   FeatDefinition,
   FeatureGrant,
@@ -265,6 +266,10 @@ interface WalkState {
    * choice can't take one, even at a level before the grant (Bless before Life Domain's 3rd level).
    */
   reserved: Map<string, string>;
+  /** Options taken in earlier picks, by the class (or owner) and the pick's id: a later Metamagic pick can't repeat one. */
+  picked: Map<string, Set<string>>;
+  /** Whether to rank spells for suggestions: not on the first of two walks, which only finds always-prepared spells. */
+  suggest: boolean;
 }
 
 /** A spell the character has, and how. */
@@ -275,7 +280,7 @@ interface SpellPick {
   ability?: Ability;
   via: "cantrip" | "prepared" | "always" | "free";
   /** Casts without a slot, from a pool of its own. */
-  freeCasts?: Template | number;
+  freeCasts?: Template | number | "at-will";
 }
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
@@ -454,21 +459,30 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
       break;
     }
     case "pick": {
+      // A pick made again at a later level (Metamagic at 2nd, 10th and 17th) can't take what an earlier one took.
+      const pickKey = `${context.owner.classId ?? context.owner.key}|${spec.id}`;
+      const before = state.picked.get(pickKey) ?? new Set<string>();
       const chosen = (asStrings(stored) ?? []).filter((id) => {
-        const ok = spec.options.some((option) => option.id === id);
-        if (!ok) slot.problem = `${id} isn't an option`;
+        const ok = spec.options.some((option) => option.id === id) && !before.has(id);
+        if (!ok) slot.problem = before.has(id) ? `${id} was chosen at an earlier level` : `${id} isn't an option`;
         return ok;
       }).slice(0, spec.count);
-      slot.options = spec.options.map((option) => ({ id: option.id, name: option.name, ...(option.description ? { detail: option.description } : {}) }));
+      slot.options = spec.options.map((option) => ({
+        id: option.id, name: option.name,
+        ...(option.description ? { detail: option.description } : {}),
+        ...(before.has(option.id) ? { taken: true } : {})
+      }));
       // A choice of abilities (Magic Initiate's spellcasting ability) suggests the character's best; others, the first.
       const abilities = spec.options.every((option) => (ABILITIES as string[]).includes(option.id))
         ? [...spec.options].sort((a, b) => state.abilities[b.id as Ability] - state.abilities[a.id as Ability]
           || priority.indexOf(a.id as Ability) - priority.indexOf(b.id as Ability))
         : spec.options;
-      slot.suggestion = abilities.slice(0, spec.count).map((option) => option.id);
+      const open = abilities.filter((option) => !before.has(option.id));
+      slot.suggestion = [...chosen, ...open.map((option) => option.id).filter((id) => !chosen.includes(id))].slice(0, spec.count);
       if (stored !== undefined) slot.value = chosen;
-      slot.pending = chosen.length < spec.count;
+      slot.pending = chosen.length < Math.min(spec.count, chosen.length + open.filter((option) => !chosen.includes(option.id)).length);
       if (offer) state.choices.push(slot);
+      state.picked.set(pickKey, new Set([...before, ...chosen]));
       for (const id of chosen) {
         const option = spec.options.find((candidate) => candidate.id === id)!;
         visitOption(state, option, spec, context, parentPath);
@@ -488,6 +502,43 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
   if (offer) state.choices.push(slot);
 }
 
+/** What a spell choice needs to know of a library spell, worked out once per library: choices read it many times. */
+interface SpellFacts {
+  name: string;
+  level: number;
+  school?: string;
+  castingTime: string;
+  runs: boolean;
+}
+
+const SPELL_FACTS = new WeakMap<BuilderLibrary, Map<string, SpellFacts | null>>();
+const LIST_SPELLS = new WeakMap<BuilderLibrary, Map<string, string[]>>();
+
+function spellFacts(library: BuilderLibrary, id: string): SpellFacts | undefined {
+  let cache = SPELL_FACTS.get(library);
+  if (!cache) SPELL_FACTS.set(library, (cache = new Map()));
+  let facts = cache.get(id);
+  if (facts === undefined) {
+    const spell = library.spell?.(id);
+    facts = spell ? { name: spell.name, level: spell.level, school: spell.school, castingTime: spell.castingTime, runs: spellRuns(spell) } : null;
+    cache.set(id, facts);
+  }
+  return facts ?? undefined;
+}
+
+/** The spells on any of these lists, each once. */
+function listSpells(library: BuilderLibrary, lists: string[]): string[] {
+  let cache = LIST_SPELLS.get(library);
+  if (!cache) LIST_SPELLS.set(library, (cache = new Map()));
+  const key = lists.join("|");
+  let spells = cache.get(key);
+  if (!spells) cache.set(key, (spells = [...new Set(lists.flatMap((list) => library.spellsOn?.(list) ?? []))]));
+  return spells;
+}
+
+/** Names in a fixed order, fast (spell lists are sorted many times while Quick build fills choices). */
+const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /** The spellcasting a class has: its own, or its subclass's (a third caster's). */
 function progressionOf(state: WalkState, classId: string): SpellcastingProgression | undefined {
   return classOf(state.sources, classId)?.spellcasting ?? state.subclassOf.get(classId)?.spellcasting;
@@ -498,19 +549,45 @@ function grantAbility(state: WalkState, owner: Owner): Ability | undefined {
   return owner.classId ? progressionOf(state, owner.classId)?.ability : undefined;
 }
 
+/** Whether a grant applies yet: one with `atLevel` waits for its class to reach that level. */
+function grantActive(state: WalkState, collected: CollectedGrant): boolean {
+  const atLevel = collected.grant.atLevel;
+  if (atLevel === undefined) return true;
+  const classId = collected.owner.classId;
+  return (classId ? state.classLevels.get(classId) ?? 0 : state.build.levels.length) >= atLevel;
+}
+
 /** The spells the character has so far, and what gave each: picks, and grants' always-prepared spells. */
-function spellsHeld(state: WalkState): Map<string, string> {
-  const held = new Map<string, string>();
-  for (const pick of state.spellPicks) if (pick.via !== "free" && !held.has(pick.spell)) held.set(pick.spell, pick.owner.name);
-  for (const { grant, owner } of state.grants) for (const id of grant.spells ?? []) if (!held.has(id)) held.set(id, owner.name);
+function spellsHeld(state: WalkState): Map<string, { name: string; ownerKey: string }> {
+  const held = new Map<string, { name: string; ownerKey: string }>();
+  for (const pick of state.spellPicks) {
+    if (pick.via !== "free" && !held.has(pick.spell)) held.set(pick.spell, { name: pick.owner.name, ownerKey: pick.owner.key });
+  }
+  for (const collected of state.grants) {
+    if (!grantActive(state, collected)) continue;
+    for (const id of collected.grant.spells ?? []) if (!held.has(id)) held.set(id, { name: collected.owner.name, ownerKey: collected.owner.key });
+  }
   return held;
 }
 
 /** Every spell a grant in the build makes always prepared, with what grants it. */
 function grantedSpells(state: WalkState): Map<string, string> {
   const granted = new Map<string, string>();
-  for (const { grant, owner } of state.grants) for (const id of grant.spells ?? []) if (!granted.has(id)) granted.set(id, owner.name);
+  for (const collected of state.grants) {
+    if (!grantActive(state, collected)) continue;
+    for (const id of collected.grant.spells ?? []) if (!granted.has(id)) granted.set(id, collected.owner.name);
+  }
   return granted;
+}
+
+/** The spell lists a class's own prepared spells come from: its list, and any a grant adds (Magical Secrets). */
+function classSpellLists(state: WalkState, classId: string, own: string): string[] {
+  const lists = new Set([own]);
+  for (const collected of state.grants) {
+    if (collected.owner.classId !== classId || !grantActive(state, collected)) continue;
+    for (const list of collected.grant.adjust?.spellLists ?? []) lists.add(list);
+  }
+  return [...lists];
 }
 
 /**
@@ -526,43 +603,60 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
   };
   const classId = context.owner.classId;
   const progression = classId ? progressionOf(state, classId) : undefined;
-  const lists = spec.lists ?? (spec.listFrom ? [sibling(spec.listFrom)].filter((list): list is string => Boolean(list)) : progression ? [progression.list] : []);
+  // A class's own choices (no lists of their own) read its list, and for prepared spells any a grant added (Magical
+  // Secrets: not cantrips).
+  const classLists = progression && classId
+    ? (spec.what === "prepared" ? classSpellLists(state, classId, progression.list) : [progression.list])
+    : [];
+  const lists = spec.lists ?? (spec.listFrom ? [sibling(spec.listFrom)].filter((list): list is string => Boolean(list)) : classLists);
   const ability = (sibling(spec.abilityFrom) as Ability | undefined) ?? progression?.ability;
-  const top = spec.what === "cantrips" ? 0 : spec.level ?? (progression ? maxSpellLevel(progression.kind, context.classLevel ?? 1) : 1);
-  const bottom = spec.what === "cantrips" ? 0 : spec.level ?? 1;
+  const castable = progression ? maxSpellLevel(progression.kind, context.classLevel ?? 1) : 1;
+  const top = spec.what === "cantrips" ? 0 : spec.level ?? Math.min(castable, spec.maxLevel ?? 9);
+  const bottom = spec.what === "cantrips" ? 0 : spec.level ?? spec.minLevel ?? 1;
   const count = spec.count ?? 0;
   slot.count = count;
   if (count <= 0) return;
 
   const book = classId && progression?.spellbook ? (state.spellbooks.get(classId) ?? []) : undefined;
   if (book && classId && !state.spellbooks.has(classId)) state.spellbooks.set(classId, book);
-  const from = spec.what === "prepared" && book ? book : [...new Set(lists.flatMap((list) => library.spellsOn?.(list) ?? []))];
-  const spellOf = (id: string) => library.spell?.(id);
-  const inRange = from.filter((id) => {
-    const level = spellOf(id)?.level;
-    return level !== undefined && level >= bottom && level <= top;
-  });
   const held = spellsHeld(state);
+  const from = spec.from === "held"
+    // What the character has from what asks (the subclass, and the options chosen in it).
+    ? [...held].filter(([, have]) => have.ownerKey.startsWith(context.owner.key)).map(([id]) => id)
+    : (spec.what === "prepared" || spec.from === "spellbook") && book ? book
+      : listSpells(library, lists);
+  const spellOf = (id: string) => spellFacts(library, id);
+  const inRange = from.filter((id) => {
+    const spell = spellOf(id);
+    return spell !== undefined && spell.level >= bottom && spell.level <= top && (!spec.school || spell.school === spec.school)
+      && (!spec.actionOnly || spell.castingTime === "action");
+  });
+  const inBook = new Set(book ?? []);
+  // A choice of free casts can take a spell the character has (Spell Mastery's from the book, Natural Recovery's).
+  const freeOnly = spec.freeCasts !== undefined && (spec.from === "held" || spec.from === "spellbook");
   const takenBy = (id: string): string | undefined => {
-    if (spec.what === "spellbook") return book?.includes(id) ? "already in the spellbook" : undefined;
+    if (spec.what === "spellbook") return inBook.has(id) ? "already in the spellbook" : undefined;
+    if (freeOnly) return state.spellPicks.some((pick) => pick.spell === id && pick.via === "free") ? "already cast without a slot" : undefined;
     const reserved = state.reserved.get(id);
     if (reserved) return `always prepared (${reserved})`;
     const have = held.get(id);
-    return have ? `already had (${have})` : undefined;
+    return have ? `already had (${have.name})` : undefined;
   };
   const nameOf = (id: string) => spellOf(id)?.name ?? id;
-  slot.options = inRange
+  // The first of two walks only needs what's chosen, not what could be (see buildCharacter).
+  slot.options = !state.suggest ? [] : inRange
     .map((id): ChoiceOption => {
       const spell = spellOf(id)!;
       const taken = takenBy(id);
-      return { id, name: spell.name, level: spell.level, ...(spellRuns(spell) ? {} : { reference: true }), ...(taken ? { taken: true, detail: taken } : {}) };
+      return { id, name: spell.name, level: spell.level, ...(spell.runs ? {} : { reference: true }), ...(taken ? { taken: true, detail: taken } : {}) };
     })
-    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.name.localeCompare(b.name));
+    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || byName(a.name, b.name));
 
   const chosen: string[] = [];
+  const offered = new Set(inRange);
   for (const id of asStrings(stored) ?? []) {
     if (chosen.length >= count || chosen.includes(id)) continue;
-    if (!inRange.includes(id)) {
+    if (!offered.has(id)) {
       slot.problem = `${nameOf(id)} isn't one of the spells this can choose`;
       continue;
     }
@@ -574,25 +668,43 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
     chosen.push(id);
   }
 
-  // The suggestion: what runs, then the highest level, then the classes' preferences.
+  // The suggestion: what runs, then the highest level, then the classes' preferences. A full choice needs none.
+  if (chosen.length >= count || !state.suggest) {
+    if (stored !== undefined) slot.value = chosen;
+    slot.suggestion = chosen;
+    slot.pending = false;
+    recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly);
+    return;
+  }
   const firstClass = classOf(state.sources, state.build.levels[0]?.classId ?? "");
   const own = context.classDefinition?.suggested ?? firstClass?.suggested;
-  const wantedList = spec.what === "cantrips"
-    ? [...(own?.cantrips ?? []), ...state.sources.catalog.classes.flatMap((entry) => entry.suggested.cantrips ?? [])]
-    : [...(own?.spells ?? []), ...state.sources.catalog.classes.flatMap((entry) => entry.suggested.spells ?? [])];
-  const wanted = (id: string) => {
-    const index = wantedList.indexOf(id);
-    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
-  };
+  // The class's own preferences, then those of the classes whose lists it's choosing from (Magic Initiate's Cleric
+  // spells read the Cleric's), then every other class's.
+  const listClasses = state.sources.catalog.classes.filter((entry) => entry.spellcasting && lists.includes(entry.spellcasting.list));
+  const otherClasses = state.sources.catalog.classes.filter((entry) => !listClasses.includes(entry));
+  const preferences = (entry: ClassSuggestions | undefined) => (spec.what === "cantrips" ? entry?.cantrips : entry?.spells) ?? [];
+  const wantedList = [own, ...listClasses.map((entry) => entry.suggested), ...otherClasses.map((entry) => entry.suggested)].flatMap(preferences);
+  const wanted = new Map<string, number>();
+  wantedList.forEach((id, index) => { if (!wanted.has(id)) wanted.set(id, index); });
   const candidates = inRange.filter((id) => !takenBy(id) && !chosen.includes(id));
-  candidates.sort((a, b) => Number(spellRuns(spellOf(b))) - Number(spellRuns(spellOf(a)))
-    || (spellOf(b)?.level ?? 0) - (spellOf(a)?.level ?? 0)
-    || wanted(a) - wanted(b)
-    || nameOf(a).localeCompare(nameOf(b)));
+  const keyOf = new Map(candidates.map((id) => {
+    const spell = spellOf(id);
+    return [id, { runs: spell?.runs ? 0 : 1, level: -(spell?.level ?? 0), wanted: wanted.get(id) ?? Number.MAX_SAFE_INTEGER, name: spell?.name ?? id }];
+  }));
+  candidates.sort((a, b) => {
+    const x = keyOf.get(a)!;
+    const y = keyOf.get(b)!;
+    return x.runs - y.runs || x.level - y.level || x.wanted - y.wanted || byName(x.name, y.name);
+  });
   slot.suggestion = [...chosen, ...candidates].slice(0, count);
 
   if (stored !== undefined) slot.value = chosen;
   slot.pending = chosen.length < Math.min(count, chosen.length + candidates.length);
+  recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly);
+}
+
+/** What a spell choice took: into the class's spellbook, or the character's spells. */
+function recordSpellPicks(state: WalkState, spec: SpellsChoice, context: ChoiceContext, chosen: string[], book: string[] | undefined, ability: Ability | undefined, freeOnly: boolean) {
   for (const id of chosen) {
     if (spec.what === "spellbook") {
       book?.push(id);
@@ -600,7 +712,7 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
     }
     state.spellPicks.push({
       spell: id, owner: context.owner, ...(ability ? { ability } : {}),
-      via: spec.what === "cantrips" ? "cantrip" : spec.alwaysPrepared ? "always" : "prepared",
+      via: freeOnly ? "free" : spec.what === "cantrips" ? "cantrip" : spec.alwaysPrepared ? "always" : "prepared",
       ...(spec.freeCasts !== undefined ? { freeCasts: spec.freeCasts } : {})
     });
   }
@@ -700,13 +812,13 @@ function carriedKindsOf(build: CharacterBuild, sources: BuildSources): string[] 
 }
 
 /** Walk the whole build in order: background, then each level, gathering grants and choices. */
-function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string, string>): WalkState {
+function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string, string>, suggest = true): WalkState {
   const state: WalkState = {
     build, sources,
     abilities: { ...build.abilities.base },
     skills: new Set(), expertise: new Set(), masteries: [], carriedKinds: carriedKindsOf(build, sources), feats: new Map(),
     grants: [], choices: [], warnings: [], saves: new Set(),
-    classLevels: new Map(), subclassOf: new Map(), spellPicks: [], spellbooks: new Map(), reserved
+    classLevels: new Map(), subclassOf: new Map(), spellPicks: [], spellbooks: new Map(), reserved, picked: new Map(), suggest
   };
 
   // The background: its ability increases, its skills and its origin feat.
@@ -833,7 +945,11 @@ function setPath(target: unknown, path: string, value: unknown): boolean {
 function placedFeature(feature: FeatureDefinition, id: string): FeatureDefinition {
   const grantedActions = feature.grantedActions?.map((action, index) => {
     const actionId = `${id}-granted-${index + 1}`;
-    return "featureId" in action ? { ...action, id: actionId, featureId: id } : { ...action, id: actionId };
+    // Each rider its own id: two conditions from one action (Turn Undead's) would otherwise be one condition.
+    const riders = "riders" in action && action.riders
+      ? { riders: action.riders.map((rider, riderIndex) => ({ ...rider, id: rider.id ?? `${actionId}-rider-${riderIndex + 1}` })) }
+      : {};
+    return { ...action, id: actionId, ...("featureId" in action ? { featureId: id } : {}), ...riders } as typeof action;
   });
   return { ...feature, id, ...(grantedActions ? { grantedActions } : {}) };
 }
@@ -855,11 +971,10 @@ function placedSpell(spell: SpellDefinition, id: string): SpellDefinition {
 }
 
 export function buildCharacter(build: CharacterBuild, sources: BuildSources): BuiltCharacter {
-  // Twice when a grant makes spells always prepared: the second walk knows them from the start, so an earlier choice
-  // that took one (Bless at 1st level, before Life Domain's 3rd) asks again.
-  const first = walk(build, sources, new Map());
-  const reserved = grantedSpells(first);
-  const state = reserved.size ? walk(build, sources, reserved) : first;
+  // Twice: a quick first walk finds the spells grants make always prepared, so the second knows them from the start,
+  // and an earlier choice that took one (Bless at 1st level, before Life Domain's 3rd) asks again.
+  const reserved = grantedSpells(walk(build, sources, new Map(), false));
+  const state = walk(build, sources, reserved);
   const firstClass = classOf(sources, build.levels[0]?.classId ?? "");
   const characterLevel = build.levels.length;
   const pb = pbForLevel(characterLevel);
@@ -869,7 +984,8 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   for (const collected of state.grants) {
     if (collected.grant.replaces) replaced.add(`${collected.owner.classId ?? collected.owner.key}|${collected.grant.replaces}`);
   }
-  const live = state.grants.filter((collected) => !replaced.has(`${collected.owner.classId ?? collected.owner.key}|${collected.grant.key}`));
+  const live = state.grants.filter((collected) =>
+    !replaced.has(`${collected.owner.classId ?? collected.owner.key}|${collected.grant.key}`) && grantActive(state, collected));
 
   // Scores: base, the background, feats (already in `state.abilities`), then features that raise them past 20.
   const abilities = { ...state.abilities };
@@ -956,9 +1072,34 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       weapons.push({ key: `${owner.key}:${grant.key}`, weapon: { ...weapon, id, actionId: id }, scaled });
     }
     if (grant.onHitOf) {
-      const target = weapons.find((entry) => entry.key.endsWith(`:${grant.onHitOf!.grant}`));
-      if (!target) state.warnings.push(`${label}: no weapon from ${grant.onHitOf.grant} to add to`);
-      else target.weapon = { ...target.weapon, onHit: [...(target.weapon.onHit ?? []), ...structuredClone(grant.onHitOf.riders)] };
+      const onHitOf = grant.onHitOf;
+      // A rider's dice can be a template ("{mod:wis|min:1}d8").
+      const riders = structuredClone(onHitOf.riders).map((rider) => {
+        if (!("components" in rider)) return rider;
+        const components = rider.components.map((component) => {
+          if (!component.dice.includes("{")) return component;
+          const dice = evaluate(`${label} rider dice`, () => evaluateTemplate(component.dice, scope));
+          return dice === undefined ? component : { ...component, dice: String(dice) };
+        });
+        return { ...rider, components } as typeof rider;
+      });
+      if (onHitOf.action === undefined) {
+        const target = weapons.find((entry) => entry.key.endsWith(`:${onHitOf.grant}`));
+        if (!target) state.warnings.push(`${label}: no weapon from ${onHitOf.grant} to add to`);
+        else target.weapon = { ...target.weapon, onHit: [...(target.weapon.onHit ?? []), ...riders] };
+      } else {
+        const target = features.find((entry) => entry.key.endsWith(`:${onHitOf.grant}`));
+        const action = target?.feature.grantedActions?.[onHitOf.action];
+        if (!target || !action || !("riders" in action || action.kind === "area-save" || action.kind === "save" || action.kind === "healing")) {
+          state.warnings.push(`${label}: no action ${onHitOf.action} from ${onHitOf.grant} to add to`);
+        } else {
+          const existing = ("riders" in action ? action.riders : undefined) ?? [];
+          const placed = riders.map((rider, index) => ({ ...rider, id: `${action.id}-rider-${existing.length + index + 1}` }));
+          const grantedActions = target.feature.grantedActions!.map((candidate, index) =>
+            (index === onHitOf.action ? { ...candidate, riders: [...existing, ...placed] } as typeof candidate : candidate));
+          target.feature = { ...target.feature, grantedActions };
+        }
+      }
     }
     if (grant.pool) {
       const size = evaluate(`${label} pool`, () => evaluateNumber(grant.pool!.size, scope));
@@ -1019,25 +1160,34 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       spells.push({ key: `${pick.owner.key}:spell:${slug}`, spell: placedSpell(cast, id) });
     }
     if (pick.freeCasts !== undefined && source.level > 0) {
-      const uses = evaluate(`${pick.owner.name}: ${source.name} free casts`, () => evaluateNumber(pick.freeCasts!, scopeFor(pick.owner))) ?? 0;
+      // At will (Spell Mastery): a copy that costs nothing. Otherwise a copy spending a pool of its own.
+      const atWill = pick.freeCasts === "at-will";
+      const uses = atWill ? Infinity : evaluate(`${pick.owner.name}: ${source.name} free casts`, () => evaluateNumber(pick.freeCasts as Template | number, scopeFor(pick.owner))) ?? 0;
       if (uses <= 0) continue;
-      let freeId = `${pick.owner.idPrefix}-${slug}-free`;
+      let freeId = `${pick.owner.idPrefix}-${slug}-${atWill ? "at-will" : "free"}`;
       while (takenIds.has(freeId)) freeId = `${freeId}-2`;
       takenIds.add(freeId);
-      const cost = { resourceId: freeId, amount: 1 };
-      const { upcast: _upcast, ...rest } = cast;
+      const cost = atWill ? undefined : { resourceId: freeId, amount: 1 };
+      const name = `${cast.name} (${atWill ? "at will" : "free"})`;
+      const { upcast: _upcast, resourceCost: _cost, ...rest } = cast;
+      const strip = <A extends object>(action: A): A => {
+        const { resourceCost: _actionCost, ...actionRest } = action as A & { resourceCost?: unknown };
+        return actionRest as A;
+      };
       const free: SpellDefinition = {
         ...rest,
-        name: `${cast.name} (free)`,
-        resourceCost: cost,
-        ...(cast.action ? { action: { ...cast.action, name: `${cast.name} (free)`, resourceCost: cost } as SpellDefinition["action"] } : {})
+        name,
+        ...(cost ? { resourceCost: cost } : {}),
+        ...(cast.action ? { action: { ...strip(cast.action), name, ...(cost ? { resourceCost: cost } : {}) } as SpellDefinition["action"] } : {})
       };
-      spells.push({ key: `${pick.owner.key}:spell:${slug}:free`, spell: placedSpell(free, freeId) });
-      resources[freeId] = uses;
-      poolLabels[freeId] = `${cast.name} without a slot`;
+      spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId) });
+      if (cost) {
+        resources[freeId] = uses;
+        poolLabels[freeId] = `${cast.name} without a slot`;
+      }
     }
   }
-  spells.sort((a, b) => a.spell.level - b.spell.level || a.spell.name.localeCompare(b.spell.name));
+  spells.sort((a, b) => a.spell.level - b.spell.level || byName(a.spell.name, b.spell.name));
 
   // The Weapon Mastery feature says which weapons were chosen.
   const masteryNote = state.masteries.length

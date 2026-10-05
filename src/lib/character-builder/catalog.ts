@@ -75,6 +75,8 @@ export interface GrantAdjust {
   saves?: Ability[] | "all";
   /** Conditions it can't be given (Nature's Ward: Poisoned). */
   conditionImmunities?: ConditionImmunity[];
+  /** More spell lists the granting class's prepared spells can come from, from now on (Magical Secrets). */
+  spellLists?: string[];
 }
 
 /** What a level, feat, species or background gives: a feature, and anything it changes beside it. */
@@ -91,10 +93,13 @@ export interface FeatureGrant {
    */
   weapon?: WeaponDefinition;
   /**
-   * On-hit riders this grant adds to a weapon an earlier grant gave (by that grant's key): Stunning Strike on the Monk's
-   * Unarmed Strike.
+   * Riders this grant adds to what an earlier grant gave (by that grant's key): to its weapon's hits (Stunning Strike on
+   * the Monk's Unarmed Strike), or with `action`, to that grant's feature's granted action at that index (Sear Undead's
+   * damage on Turn Undead). A rider's dice can be a template.
    */
-  onHitOf?: { grant: string; riders: ActionRider[] };
+  onHitOf?: { grant: string; action?: number; riders: ActionRider[] };
+  /** Only from this class level on: a grant inside a choice made at an earlier level (a land's 5th-level spells). */
+  atLevel?: number;
   /** The key of an earlier grant this one takes the place of (Superior Critical replaces Improved Critical). */
   replaces?: string;
   scale?: ScaleBinding[];
@@ -152,10 +157,26 @@ export interface SpellsChoice {
   abilityFrom?: string;
   /** Exactly this spell level (Magic Initiate's 1st-level spell). Absent: 1st up to the highest the class can cast. */
   level?: number;
+  /** The lowest level offered; 0 offers cantrips beside leveled spells (Magical Discoveries). Default 1. */
+  minLevel?: number;
+  /** The highest level offered, if lower than the class can cast (Evocation Savant's first two: 2nd). */
+  maxLevel?: number;
+  /** Only spells of this school (Evocation Savant). */
+  school?: string;
+  /** Only spells cast with an action (Spell Mastery). */
+  actionOnly?: boolean;
+  /**
+   * Where the spells come from instead of a list: the class's spellbook (Spell Mastery), or the spells the character
+   * already has from what asks (Natural Recovery: a circle spell).
+   */
+  from?: "spellbook" | "held";
   /** Always prepared, not counted against the class's number (Magical Discoveries; a feat's spell). */
   alwaysPrepared?: boolean;
-  /** Each spell chosen can also be cast this many times without a slot (Magic Initiate: once). */
-  freeCasts?: Template | number;
+  /**
+   * Each spell chosen can also be cast this many times without a slot (Magic Initiate: once), or at will (Spell
+   * Mastery). A spell the character already has can be chosen for this.
+   */
+  freeCasts?: Template | number | "at-will";
 }
 
 /** One option of a `pick` choice (a fighting style, an invocation, a lineage): what choosing it grants. */
@@ -348,7 +369,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   ref: z.string().optional(),
   feature: z.union([z.string().min(1), featureSchema]).optional(),
   weapon: z.object({ id: z.string(), name: z.string().min(1) }).passthrough().optional(),
-  onHitOf: z.object({ grant: z.string().min(1), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
+  onHitOf: z.object({ grant: z.string().min(1), action: z.number().int().min(0).optional(), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
+  atLevel: z.number().int().min(1).max(20).optional(),
   replaces: z.string().optional(),
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),
   pool: z.object({ id: z.string().min(1), size: templateOrNumber }).optional(),
@@ -362,7 +384,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
     hpBonus: templateOrNumber.optional(),
     senses: sensesSchema.optional(),
     saves: z.union([z.array(abilitySchema), z.literal("all")]).optional(),
-    conditionImmunities: z.array(z.string()).optional()
+    conditionImmunities: z.array(z.string()).optional(),
+    spellLists: z.array(z.string()).optional()
   }).optional()
 }) as z.ZodType<FeatureGrant>;
 
@@ -392,8 +415,13 @@ export const choiceSpecSchema: z.ZodType<ChoiceSpec> = z.lazy(() => z.discrimina
     listFrom: z.string().optional(),
     abilityFrom: z.string().optional(),
     level: z.number().int().min(0).max(9).optional(),
+    minLevel: z.number().int().min(0).max(9).optional(),
+    maxLevel: z.number().int().min(0).max(9).optional(),
+    school: z.string().optional(),
+    actionOnly: z.boolean().optional(),
+    from: z.enum(["spellbook", "held"]).optional(),
     alwaysPrepared: z.boolean().optional(),
-    freeCasts: templateOrNumber.optional()
+    freeCasts: z.union([templateOrNumber, z.literal("at-will")]).optional()
   }),
   z.object({ kind: z.literal("abilities"), id: z.string(), ref: z.string().optional(), label: z.string(), points: z.number().int().min(1), from: z.array(abilitySchema), maxPerAbility: z.number().int().min(1), cap: z.number().int() }),
   z.object({ kind: z.literal("pick"), id: z.string(), ref: z.string().optional(), label: z.string(), count: z.number().int().min(1), options: z.array(pickOptionSchema) })

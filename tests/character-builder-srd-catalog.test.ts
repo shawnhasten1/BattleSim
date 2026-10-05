@@ -12,7 +12,7 @@ import {
   type ChoiceSpec,
   type FeatureGrant
 } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { SRD_BUILD_SOURCES, SRD_BUILDER_LIBRARY } from "@/lib/character-builder/srd";
 import type { FeatureDefinition } from "@/engine";
 
 const PREFIX = "srd-2024_";
@@ -89,7 +89,7 @@ describe("the 2024 catalog", () => {
     expect(wrong).toEqual([]);
   });
 
-  it("builds every class it has at every level with its suggestions, without a warning", () => {
+  it("builds every class it has at every level with its suggestions, without a warning", { timeout: 120000 }, () => {
     for (const definition of SRD_2024_CATALOG.classes) {
       for (let level = 1; level <= 20; level += 1) {
         const built = buildCharacter(quickBuild(SRD_BUILD_SOURCES, { classId: definition.id, level }), SRD_BUILD_SOURCES);
@@ -101,8 +101,30 @@ describe("the 2024 catalog", () => {
             expect("riders" in action && action.riders?.some((rider) => rider.kind === "note"), `${feature.name}`).toBeFalsy();
           }
         }
+        for (const { spell } of built.spells) {
+          const action = spell.action;
+          expect(action && "riders" in action && action.riders?.some((rider) => rider.kind === "note"), `${definition.id} ${level} ${spell.name}`).toBeFalsy();
+        }
       }
     }
+  });
+
+  it("names only spells the library has: in suggestions, grants and choices' options", () => {
+    const missing: string[] = [];
+    const check = (where: string, id: string) => { if (!SRD_BUILDER_LIBRARY.spell!(id)) missing.push(`${where}: ${id}`); };
+    const grants = (where: string, list: FeatureGrant[] = [], choices: ChoiceSpec[] = []) => {
+      for (const grant of list) {
+        for (const id of grant.spells ?? []) check(where, id);
+        for (const free of grant.freeCasts ?? []) check(where, free.spell);
+      }
+      for (const spec of choices) if (spec.kind === "pick") for (const option of spec.options) grants(`${where} ${option.id}`, option.grants, option.choices);
+    };
+    for (const definition of SRD_2024_CATALOG.classes) {
+      for (const id of [...(definition.suggested.cantrips ?? []), ...(definition.suggested.spells ?? [])]) check(`${definition.id} suggestions`, id);
+      for (const level of definition.levels) grants(`${definition.id} ${level.level}`, level.grants, level.choices);
+    }
+    for (const subclass of SRD_2024_CATALOG.subclasses) for (const level of subclass.levels) grants(`${subclass.id} ${level.level}`, level.grants, level.choices);
+    expect(missing).toEqual([]);
   });
 
   it("gives every background and its feat a build", () => {

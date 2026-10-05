@@ -204,7 +204,7 @@ function savePreviewOf(
 ): SavePreview {
   const snapshot = state.snapshot;
   const source = getDefinition(snapshot, caster);
-  const dc = resolveSaveDc(action, source);
+  const dc = resolveSaveDc(action, source, caster);
   const ctx = actionSaveContext(action, dc, coverSaveBonus);
   const { bonus, featureAdvantage } = saveRollInputs(state, target, ctx);
   // A saving throw has no automatic success or failure on a natural 20 or 1.

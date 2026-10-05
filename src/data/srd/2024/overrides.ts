@@ -40,6 +40,14 @@ export const FEATURE_OVERRIDES: Record<string, FeatureOverride> = {
     reason: "Listed at levels 3 and 5 in the source; the SRD 5.2 PDF has \"Level 5: Stunning Strike\" (and its table, level 5).",
     levels: [5]
   },
+  "srd-2024_sorcerer_metamagic": {
+    reason: "Listed at levels 2 and 10 in the source; the Sorcerer Features table in the SRD 5.2 PDF has Metamagic at 2, 10 and 17.",
+    levels: [2, 10, 17]
+  },
+  "srd-2024_sorcerer_draconic-sorcery_dragon-companion": {
+    reason: "Listed at level 19 in the source; the SRD 5.2 PDF has \"Level 18: Dragon Companion\".",
+    levels: [18]
+  },
   "srd-2024_bard_bard-subclass": {
     reason: "No level in the source; the SRD 5.2 PDF has \"Level 3: Bard Subclass\".",
     levels: [3]

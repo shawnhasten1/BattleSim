@@ -1,6 +1,6 @@
-import type { ActionDefinition, FeatureDefinition, FeatureEffect } from "@/engine";
-import type { ChoiceSpec, FeatureGrant } from "@/lib/character-builder/catalog";
-import { srd52Source, srdFeat, srdFeatText, srdFeature, srdFeatureText, srdTraitText } from "./reference";
+import type { Ability, ActionDefinition, FeatureDefinition, FeatureEffect } from "@/engine";
+import type { ChoiceSpec, FeatureGrant, PickOption, SpellcastingProgression } from "@/lib/character-builder/catalog";
+import { srd52Source, srdClass, srdFeat, srdFeatText, srdFeature, srdFeatureText, srdNumbers, srdTraitText } from "./reference";
 
 /**
  * Small helpers for writing the 2024 catalog. A feature's name and description come from the SRD 5.2 reference
@@ -99,5 +99,49 @@ export function fromLevels(steps: Array<[number, number]>): Array<number | null>
     let value: number | null = null;
     for (const [level, amount] of steps) if (index + 1 >= level) value = amount;
     return value;
+  });
+}
+
+/** A 2024 library spell's id: `spell("fireball")` → `srd:spell:fireball-2024`. */
+export const spell = (slug: string) => `srd:spell:${slug}-2024`;
+
+/** A class's spellcasting from its SRD table: its cantrips and prepared spells by level, its own list. */
+export function srdSpellcasting(classKey: string, ability: Ability, kind: SpellcastingProgression["kind"], extra: Partial<SpellcastingProgression> = {}): SpellcastingProgression {
+  const hasCantrips = srdClass(classKey).columns.some((column) => column.id === "cantrips");
+  return {
+    ability,
+    kind,
+    list: classKey,
+    ...(hasCantrips ? { cantrips: srdNumbers(classKey, "cantrips") } : {}),
+    prepared: srdNumbers(classKey, "prepared-spells"),
+    ...extra
+  };
+}
+
+/**
+ * The options an SRD option list describes ("### Careful Spell" …), each as a `pick` option that puts its text on the
+ * actor as a reference feature named `<prefix>: <option>`. For lists of options the engine can't run yet (Metamagic).
+ */
+export function srdReferenceOptions(key: string, prefix: string): PickOption[] {
+  const feature = srdFeature(key);
+  const sections = feature.text.split(/^### /m).slice(1);
+  return sections.map((section) => {
+    const [heading, ...body] = section.split("\n");
+    const name = heading!.trim();
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const text = body.join("\n").trim();
+    return {
+      id,
+      name,
+      // Its first line (the cost) as the option's detail.
+      description: text.replace(/\*/g, "").split("\n").find((line) => line.trim())?.trim(),
+      grants: [{
+        key: id,
+        feature: {
+          id, name: `${prefix}: ${name}`, category: "feature" as const, source: srd52Source(feature.key), description: text,
+          automationSupport: "manual-only" as const
+        }
+      }]
+    };
   });
 }
