@@ -13,6 +13,7 @@ import { DRACONIC_SORCERY, SORCERER } from "./classes/sorcerer";
 import { FIEND_PATRON, WARLOCK } from "./classes/warlock";
 import { EVOKER, WIZARD } from "./classes/wizard";
 import { SRD_2024_FEATS } from "./feats";
+import { SRD_2024_SPECIES } from "./species";
 
 /**
  * The bundled 2024 catalog (SRD 5.2): what the character builder builds from. Read-only: the builder clones whatever it
@@ -31,5 +32,5 @@ export const SRD_2024_CATALOG: Catalog = freeze({
   subclasses: [BERSERKER, COLLEGE_OF_LORE, LIFE_DOMAIN, CIRCLE_OF_THE_LAND, CHAMPION, OPEN_HAND, OATH_OF_DEVOTION, HUNTER, THIEF, DRACONIC_SORCERY, FIEND_PATRON, EVOKER],
   feats: SRD_2024_FEATS,
   backgrounds: SRD_2024_BACKGROUNDS,
-  species: []
+  species: SRD_2024_SPECIES
 });

@@ -109,6 +109,36 @@ describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
   });
 });
 
+describe("species in the builder (Phase 6)", { timeout: 20000 }, () => {
+  it("Create Token › Character takes a species", async () => {
+    render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Character" }));
+    await userEvent.clear(screen.getByLabelText("Name"));
+    await userEvent.type(screen.getByLabelText("Name"), "Thrain");
+    await userEvent.selectOptions(screen.getByLabelText("Species"), "srd:species:dwarf");
+    await userEvent.click(screen.getByRole("button", { name: /quick build/i }));
+    const thrain = definitionNamed("Thrain");
+    expect(readBuild(thrain)?.species?.id).toBe("srd:species:dwarf");
+    expect(thrain.senses).toEqual({ darkvision: 120 });
+    expect(thrain.traits?.some((entry) => entry.name === "Dwarven Resilience")).toBe(true);
+  });
+
+  it("the builder window offers a species, its choices, and a size when it has two", async () => {
+    useBuilderUiStore.getState().open({ kind: "create", seed: { name: "Ana", classId: "srd:class:rogue", level: 1 } });
+    render(<BuilderHost onCreated={() => undefined} />);
+    const builder = screen.getByRole("dialog", { name: "Character builder" });
+    expect(within(builder).queryByLabelText("Size")).toBeNull();
+    await userEvent.selectOptions(within(builder).getByLabelText("Species"), "srd:species:human");
+    // A human's skill and origin feat are asked for, already suggested.
+    expect(within(builder).getByText("All made")).toBeTruthy();
+    await userEvent.selectOptions(within(builder).getByLabelText("Size"), "small");
+    await userEvent.click(within(builder).getByRole("button", { name: "Create character" }));
+    const ana = definitionNamed("Ana");
+    expect(ana.size).toBe("small");
+    expect(readBuild(ana)?.species).toMatchObject({ id: "srd:species:human", size: "small" });
+  });
+});
+
 describe("leveling up", { timeout: 20000 }, () => {
   it("the Level up window shows the level's choices filled in and what changes, and applies it as one step", async () => {
     const rogue = createRogue(3);

@@ -344,6 +344,8 @@ export interface SpeciesDefinition {
   senses?: CreatureSenses;
   /** Traits by character level (Draconic Flight at 5th, a lineage's spells at 3rd and 5th). */
   levels: ClassLevel[];
+  /** The id of its choice whose value is the spellcasting ability for its spells (an elf's lineage spells). */
+  spellcastingAbilityChoice?: string;
   description?: string;
 }
 
@@ -578,5 +580,6 @@ export const speciesDefinitionSchema: z.ZodType<SpeciesDefinition> = z.object({
   type: z.string() as unknown as z.ZodType<CreatureType>,
   senses: sensesSchema.optional(),
   levels: z.array(classLevelSchema),
+  spellcastingAbilityChoice: z.string().optional(),
   description: z.string().optional()
 }) as z.ZodType<SpeciesDefinition>;

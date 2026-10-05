@@ -235,6 +235,8 @@ interface Owner {
   level: number;
   classId?: string;
   columns: ClassTableColumn[];
+  /** The ability its spells are cast with, when it isn't a class's (a species' chosen one). */
+  castingAbility?: Ability;
 }
 
 interface CollectedGrant {
@@ -578,7 +580,7 @@ function progressionOf(state: WalkState, classId: string): SpellcastingProgressi
 
 /** The ability a grant's spells are cast with: the granting class's. Absent: the character's own. */
 function grantAbility(state: WalkState, owner: Owner): Ability | undefined {
-  return owner.classId ? progressionOf(state, owner.classId)?.ability : undefined;
+  return owner.castingAbility ?? (owner.classId ? progressionOf(state, owner.classId)?.ability : undefined);
 }
 
 /** Whether a grant applies yet: one with `atLevel` waits for its class to reach that level. */
@@ -888,6 +890,25 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
     takeFeat(state, originFeat, { feat: originFeat.id, choices: build.background.choices }, backgroundContext, []);
   } else if (background?.feat ?? custom?.feat) {
     state.warnings.push(`No feat ${background?.feat ?? custom?.feat}`);
+  }
+
+  // The species: its traits up to the character's level, and its choices (a lineage, an ancestry, a skill), before the
+  // class levels so a class's skill choices know what it gave.
+  const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
+  if (species) {
+    const characterLevel = build.levels.length;
+    const abilityChoice = species.spellcastingAbilityChoice ? storedChoice(build, { kind: "species" }, [species.spellcastingAbilityChoice]) : undefined;
+    const castingAbility = (Array.isArray(abilityChoice) ? abilityChoice[0] : abilityChoice) as Ability | undefined;
+    const owner: Owner = {
+      key: `species:${species.id}`, idPrefix: slugOf(species.id), name: species.name, level: characterLevel, columns: [],
+      ...(castingAbility && (ABILITIES as string[]).includes(castingAbility) ? { castingAbility } : {})
+    };
+    // No character level: a feat it gives (Versatile) is "from Human", not "taken at 5th level".
+    const context: ChoiceContext = { scope: { kind: "species" }, owner, ownerName: species.name, where: "species" };
+    for (const level of species.levels.filter((entry) => entry.level <= characterLevel).sort((a, b) => a.level - b.level)) {
+      for (const grant of level.grants) state.grants.push({ grant, owner });
+      for (const choice of level.choices ?? []) visitChoice(state, choice, context);
+    }
   }
 
   // Each level, in order.

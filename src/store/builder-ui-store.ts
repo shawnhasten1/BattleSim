@@ -8,6 +8,7 @@ export interface BuilderSeed {
   classId: string;
   level: number;
   backgroundId?: string;
+  speciesId?: string;
 }
 
 /** The character builder's open window: a new character, a built one's whole recipe, or its next level. */

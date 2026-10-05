@@ -54,7 +54,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const openBuilder = useBuilderUiStore((s) => s.open);
   const [character, setCharacter] = useState(() => {
     const first = SRD_BUILD_SOURCES.catalog.classes[0]!;
-    return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "" };
+    return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "", speciesId: "" };
   });
 
   const [tab, setTab] = useState<TabId>("custom");
@@ -244,11 +244,21 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                 </select>
               </label>
             </div>
+            <label className={styles.field}>
+              Species
+              <select value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
+                <option value="">None (set size, speed and senses by hand)</option>
+                {SRD_BUILD_SOURCES.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+              </select>
+            </label>
             <button
               type="button"
               className={styles.primary}
               onClick={() => {
-                const build = quickBuild(SRD_BUILD_SOURCES, { classId: character.classId, level: character.level, backgroundId: character.backgroundId || undefined });
+                const build = quickBuild(SRD_BUILD_SOURCES, {
+                  classId: character.classId, level: character.level,
+                  backgroundId: character.backgroundId || undefined, speciesId: character.speciesId || undefined
+                });
                 const newId = createCharacter({ name: character.name.trim() || "New Character", build });
                 finish(newId);
               }}
@@ -259,7 +269,13 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               type="button"
               className={styles.secondary}
               onClick={() => {
-                openBuilder({ kind: "create", seed: { name: character.name.trim() || "New Character", classId: character.classId, level: character.level, backgroundId: character.backgroundId || undefined } });
+                openBuilder({
+                  kind: "create",
+                  seed: {
+                    name: character.name.trim() || "New Character", classId: character.classId, level: character.level,
+                    backgroundId: character.backgroundId || undefined, speciesId: character.speciesId || undefined
+                  }
+                });
                 onClose();
               }}
             >

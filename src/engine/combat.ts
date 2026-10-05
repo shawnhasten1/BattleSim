@@ -7421,10 +7421,20 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
       return counterCheck(state, reactor, check, level, ev) ? { countered: true } : {};
     }
     switch (action.kind) {
-      case "attack":
-        resolveAttackCore(state, reactor, findCombatant(state.snapshot, targetId), reactorDefinition,
-          action.actionType === "reaction" ? action : { ...action, actionType: "reaction" }, {}, true);
+      case "attack": {
+        const asReaction = action.actionType === "reaction" ? action : { ...action, actionType: "reaction" as const };
+        const target = findCombatant(state.snapshot, targetId);
+        if (action.autoHit) {
+          // Damage that lands without a roll (a goliath's Storm's Thunder): spend the reaction, then hit.
+          validateTargeting(state.snapshot, reactor, target, asReaction);
+          validateAndSpendAction(reactor, asReaction);
+          declareAction(state, reactor, asReaction, { target });
+          resolveAutoHitBeam(state, reactor, target, reactorDefinition, asReaction);
+          return {};
+        }
+        resolveAttackCore(state, reactor, target, reactorDefinition, asReaction, {}, true);
         return {};
+      }
       case "save":
         resolveSaveAction(state, reactor.id, targetId, action.id);
         return {};

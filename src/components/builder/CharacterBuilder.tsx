@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition } from "@/engine";
+import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type SizeCategory } from "@/engine";
 import {
   ABILITIES,
   blankCharacter,
@@ -93,7 +93,7 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
   const [draft, setDraft] = useState<CharacterBuild | undefined>(() => {
     if (saved) return saved;
     if (!seed) return undefined;
-    return withSuggestions(startBuild(sources, { classId: seed.classId, level: seed.level, backgroundId: seed.backgroundId }), sources);
+    return withSuggestions(startBuild(sources, { classId: seed.classId, level: seed.level, backgroundId: seed.backgroundId, speciesId: seed.speciesId }), sources);
   });
   const [update, setUpdate] = useState<string[]>([]);
 
@@ -114,6 +114,7 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
 
   const classId = draft.levels[0]!.classId;
   const firstClass = sources.catalog.classes.find((entry) => entry.id === classId);
+  const species = draft.species ? sources.catalog.species.find((entry) => entry.id === draft.species!.id) : undefined;
   const pending = built.choices.filter((slot) => slot.pending);
   const scores = scoresProblem(draft.abilities);
   const changes: BuildChange[] = creating ? [] : orderedChanges(preview.changes).filter((change) => !(change.kind === "field" && change.key === "field:classes"));
@@ -121,7 +122,12 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
   const set = (next: CharacterBuild) => setDraft(next);
 
   function changeClass(nextClass: string) {
-    set(withSuggestions(startBuild(sources, { classId: nextClass, level: draft!.levels.length, backgroundId: draft!.background.id }), sources));
+    set(withSuggestions(startBuild(sources, { classId: nextClass, level: draft!.levels.length, backgroundId: draft!.background.id, speciesId: draft!.species?.id }), sources));
+  }
+
+  function changeSpecies(id: string) {
+    const { species: _species, ...rest } = draft!;
+    set(withSuggestions(id ? { ...rest, species: { id } } : rest, sources));
   }
 
   function changeBackground(id: string) {
@@ -184,6 +190,26 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
                 {sources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
               </select>
             </label>
+          </div>
+          <div className={styles.row}>
+            <label className={styles.field}>
+              Species
+              <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
+                <option value="">None (size, speed and senses by hand)</option>
+                {sources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+              </select>
+            </label>
+            {species && species.sizes.length > 1 ? (
+              <label className={styles.field}>
+                Size
+                <select
+                  aria-label="Size" value={draft.species?.size ?? species.sizes[0]}
+                  onChange={(event) => set({ ...draft, species: { ...draft.species!, size: event.target.value as SizeCategory } })}
+                >
+                  {species.sizes.map((size) => <option key={size} value={size}>{size.charAt(0).toUpperCase()}{size.slice(1)}</option>)}
+                </select>
+              </label>
+            ) : null}
           </div>
           {creating && firstClass?.startingEquipment?.length ? (
             <label className={styles.field}>
