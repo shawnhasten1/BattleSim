@@ -79,7 +79,8 @@ export const GAPS = {
   "concentration-saves": "Advantage on concentration saves (Eldritch Mind)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
-  "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)"
+  "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
+  "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)"
 } as const;
 
 export type GapCode = keyof typeof GAPS;
@@ -303,7 +304,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Rogue */
   rogue_expertise: builder(),
-  "rogue_sneak-attack": full("Its dice by level."),
+  "rogue_sneak-attack": partial(["weapon-property-scope"], "Its dice by level; any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage."),
   "rogue_thieves-cant": info("Languages."),
   "rogue_weapon-mastery": MASTERY,
   "rogue_cunning-action": full("Dash and Disengage run; Hide is reference."),
@@ -395,16 +396,16 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   "ability-score-improvement": builder("+2 to one score or +1 to two, to a maximum of 20."),
   alert: manual(["initiative"]),
   archery: full("+2 to ranged weapon attack rolls."),
-  "boon-of-combat-prowess": partial(["d20-reroll"], "+1 to a score; turning a miss into a hit doesn't run."),
-  "boon-of-dimensional-travel": partial(["free-move"], "+1 to a score; the teleport after an attack doesn't run."),
-  "boon-of-fate": partial(["d20-reroll"], "+1 to a score; changing a d20 Test doesn't run."),
-  "boon-of-irresistible-offense": partial(["ignore-resistance"], "+1 to a score; ignoring resistance and the extra damage on a 20 don't run."),
-  "boon-of-spell-recall": partial(["slot-conversion"], "+1 to a score; keeping a slot doesn't run."),
-  "boon-of-the-night-spirit": partial(["stealth"], "+1 to a score; invisibility and resistance in darkness don't run."),
+  "boon-of-combat-prowess": manual(["d20-reroll"], "The builder adds the +1 to a score; turning a miss into a hit doesn't run."),
+  "boon-of-dimensional-travel": manual(["free-move"], "The builder adds the +1 to a score; the teleport after an attack doesn't run."),
+  "boon-of-fate": manual(["d20-reroll"], "The builder adds the +1 to a score; changing a d20 Test doesn't run."),
+  "boon-of-irresistible-offense": manual(["ignore-resistance"], "The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run."),
+  "boon-of-spell-recall": manual(["slot-conversion"], "The builder adds the +1 to a score; keeping a slot doesn't run."),
+  "boon-of-the-night-spirit": manual(["stealth"], "The builder adds the +1 to a score; invisibility and resistance in darkness don't run."),
   "boon-of-truesight": builder("+1 to a score; truesight is a sense the simulator doesn't use."),
   defense: full("+1 AC; whether armor is worn isn't checked."),
   grappler: partial(["grapple-strike"], "+1 Strength or Dexterity and advantage against a creature it grapples; damaging and grappling with one strike doesn't run."),
-  "great-weapon-fighting": manual(["damage-dice"]),
+  "great-weapon-fighting": manual(["damage-dice", "weapon-property-scope"]),
   "magic-initiate": builder("Two cantrips and a 1st-level spell, cast once without a slot."),
   "savage-attacker": manual(["damage-dice"]),
   skilled: builder("Three skills."),

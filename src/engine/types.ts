@@ -1810,6 +1810,11 @@ export interface CreatureDefinition {
         url?: string;
       };
     }>;
+    /**
+     * A player character's build: the recipe the character builder makes it from (`CharacterBuild`,
+     * src/lib/character-builder). The engine never reads it.
+     */
+    build?: unknown;
   };
   abilities: Record<Ability, number>;
   /**

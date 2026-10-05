@@ -93,16 +93,20 @@ export interface FeatureGrant {
 
 export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon";
 
-/** Something a level (or a feat, a species, a background) asks the player to choose. `id` is stable within its level. */
-export type ChoiceSpec =
-  | { kind: "subclass"; id: string }
-  | { kind: "feat"; id: string; categories: FeatCategory[]; label?: string; extraOptions?: PickOption[] }
-  | { kind: "skills"; id: string; count: number; from: string[] | "any" }
-  | { kind: "expertise"; id: string; count: number; from?: string[] }
-  | { kind: "weapon-mastery"; id: string }
-  | { kind: "spells"; id: string }
-  | { kind: "abilities"; id: string; label: string; points: number; from: Ability[]; maxPerAbility: number; cap: number }
-  | { kind: "pick"; id: string; label: string; count: number; options: PickOption[] };
+/**
+ * Something a level (or a feat, a species, a background) asks the player to choose. `id` is stable within its level;
+ * `ref` is the SRD feature it covers ("Ability Score Improvement", "Fighter Subclass"), for the coverage cross-check.
+ */
+export type ChoiceSpec = { id: string; ref?: string } & (
+  | { kind: "subclass" }
+  | { kind: "feat"; categories: FeatCategory[]; label?: string; extraOptions?: PickOption[] }
+  | { kind: "skills"; count: number; from: string[] | "any" }
+  | { kind: "expertise"; count: number; from?: string[] }
+  | { kind: "weapon-mastery" }
+  | { kind: "spells" }
+  | { kind: "abilities"; label: string; points: number; from: Ability[]; maxPerAbility: number; cap: number }
+  | { kind: "pick"; label: string; count: number; options: PickOption[] }
+);
 
 /** One option of a `pick` choice (a fighting style, an invocation, a lineage): what choosing it grants. */
 export interface PickOption {
@@ -165,8 +169,26 @@ export interface ClassDefinition {
   table: ClassTableColumn[];
   levels: ClassLevel[];
   startingEquipment?: EquipmentPackage[];
-  suggested: { abilities: Ability[]; tactics: TacticsProfile; stance?: ResourceStance };
+  suggested: ClassSuggestions;
   description?: string;
+}
+
+/**
+ * What the builder picks when the player doesn't (plan D7): a Quick build takes every one of these. Ability priority
+ * fills the standard array; the rest name catalog ids or skill ids.
+ */
+export interface ClassSuggestions {
+  abilities: Ability[];
+  tactics: TacticsProfile;
+  stance?: ResourceStance;
+  background?: string;
+  skills?: string[];
+  expertise?: string[];
+  fightingStyle?: string;
+  epicBoon?: string;
+  /** Weapon kinds to master first (`longsword`, `shortbow`). */
+  masteries?: string[];
+  equipment?: string;
 }
 
 export interface SubclassDefinition {
@@ -296,14 +318,14 @@ const pickOptionSchema: z.ZodType<PickOption> = z.lazy(() => z.object({
 })) as z.ZodType<PickOption>;
 
 export const choiceSpecSchema: z.ZodType<ChoiceSpec> = z.lazy(() => z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("subclass"), id: z.string() }),
-  z.object({ kind: z.literal("feat"), id: z.string(), categories: z.array(featCategorySchema), label: z.string().optional(), extraOptions: z.array(pickOptionSchema).optional() }),
-  z.object({ kind: z.literal("skills"), id: z.string(), count: z.number().int().min(0), from: z.union([z.array(z.string()), z.literal("any")]) }),
-  z.object({ kind: z.literal("expertise"), id: z.string(), count: z.number().int().min(0), from: z.array(z.string()).optional() }),
-  z.object({ kind: z.literal("weapon-mastery"), id: z.string() }),
-  z.object({ kind: z.literal("spells"), id: z.string() }),
-  z.object({ kind: z.literal("abilities"), id: z.string(), label: z.string(), points: z.number().int().min(1), from: z.array(abilitySchema), maxPerAbility: z.number().int().min(1), cap: z.number().int() }),
-  z.object({ kind: z.literal("pick"), id: z.string(), label: z.string(), count: z.number().int().min(1), options: z.array(pickOptionSchema) })
+  z.object({ kind: z.literal("subclass"), id: z.string(), ref: z.string().optional() }),
+  z.object({ kind: z.literal("feat"), id: z.string(), ref: z.string().optional(), categories: z.array(featCategorySchema), label: z.string().optional(), extraOptions: z.array(pickOptionSchema).optional() }),
+  z.object({ kind: z.literal("skills"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.union([z.array(z.string()), z.literal("any")]) }),
+  z.object({ kind: z.literal("expertise"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.array(z.string()).optional() }),
+  z.object({ kind: z.literal("weapon-mastery"), id: z.string(), ref: z.string().optional() }),
+  z.object({ kind: z.literal("spells"), id: z.string(), ref: z.string().optional() }),
+  z.object({ kind: z.literal("abilities"), id: z.string(), ref: z.string().optional(), label: z.string(), points: z.number().int().min(1), from: z.array(abilitySchema), maxPerAbility: z.number().int().min(1), cap: z.number().int() }),
+  z.object({ kind: z.literal("pick"), id: z.string(), ref: z.string().optional(), label: z.string(), count: z.number().int().min(1), options: z.array(pickOptionSchema) })
 ])) as z.ZodType<ChoiceSpec>;
 
 const classLevelSchema: z.ZodType<ClassLevel> = z.object({
@@ -360,7 +382,14 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
   suggested: z.object({
     abilities: z.array(abilitySchema),
     tactics: z.enum(["basic-melee", "basic-ranged", "skirmisher", "brute", "defender", "controller"]),
-    stance: z.enum(["conservative", "balanced", "liberal"]).optional()
+    stance: z.enum(["conservative", "balanced", "liberal"]).optional(),
+    background: z.string().optional(),
+    skills: z.array(z.string()).optional(),
+    expertise: z.array(z.string()).optional(),
+    fightingStyle: z.string().optional(),
+    epicBoon: z.string().optional(),
+    masteries: z.array(z.string()).optional(),
+    equipment: z.string().optional()
   }),
   description: z.string().optional()
 }) as z.ZodType<ClassDefinition>;

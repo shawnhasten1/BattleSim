@@ -23,11 +23,11 @@ its gaps, never dropped and never approximated without saying so.
 | Monk (Warrior of the Open Hand) | 26 | 7 | 5 | 5 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 4 | 1 | 9 | 8 | 1 |
 | Ranger (Hunter) | 23 | 2 | 2 | 8 | 9 | 2 |
-| Rogue (Thief) | 23 | 3 | 1 | 9 | 6 | 4 |
+| Rogue (Thief) | 23 | 2 | 2 | 9 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 2 | 1 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
 | Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
-| Feats | 17 | 3 | 7 | 3 | 4 | 0 |
+| Feats | 17 | 3 | 1 | 9 | 4 | 0 |
 | Species traits | 33 | 6 | 3 | 5 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -51,6 +51,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
+| `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
 | `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
@@ -345,7 +346,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 1, 6 | Expertise | builder |  |  |
-| 1 | Sneak Attack | full |  | Its dice by level. |
+| 1 | Sneak Attack | partial | `weapon-property-scope` | Its dice by level; any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage. |
 | 1 | Thieves' Cant | info |  | Languages. |
 | 1 | Weapon Mastery | manual | `weapon-mastery` | The builder records the chosen kinds of weapon; they run once Phase 3 is built. |
 | 2 | Cunning Action | full |  | Dash and Disengage run; Hide is reference. |
@@ -459,16 +460,16 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Ability Score Improvement | general | builder |  | +2 to one score or +1 to two, to a maximum of 20. |
 | Alert | origin | manual | `initiative` |  |
 | Archery | fighting-style | full |  | +2 to ranged weapon attack rolls. |
-| Boon of Combat Prowess | epic-boon | partial | `d20-reroll` | +1 to a score; turning a miss into a hit doesn't run. |
-| Boon of Dimensional Travel | epic-boon | partial | `free-move` | +1 to a score; the teleport after an attack doesn't run. |
-| Boon of Fate | epic-boon | partial | `d20-reroll` | +1 to a score; changing a d20 Test doesn't run. |
-| Boon of Irresistible Offense | epic-boon | partial | `ignore-resistance` | +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
-| Boon of Spell Recall | epic-boon | partial | `slot-conversion` | +1 to a score; keeping a slot doesn't run. |
-| Boon of the Night Spirit | epic-boon | partial | `stealth` | +1 to a score; invisibility and resistance in darkness don't run. |
+| Boon of Combat Prowess | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; turning a miss into a hit doesn't run. |
+| Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
+| Boon of Fate | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; changing a d20 Test doesn't run. |
+| Boon of Irresistible Offense | epic-boon | manual | `ignore-resistance` | The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
+| Boon of Spell Recall | epic-boon | manual | `slot-conversion` | The builder adds the +1 to a score; keeping a slot doesn't run. |
+| Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |
 | Boon of Truesight | epic-boon | builder |  | +1 to a score; truesight is a sense the simulator doesn't use. |
 | Defense | fighting-style | full |  | +1 AC; whether armor is worn isn't checked. |
 | Grappler | general | partial | `grapple-strike` | +1 Strength or Dexterity and advantage against a creature it grapples; damaging and grappling with one strike doesn't run. |
-| Great Weapon Fighting | fighting-style | manual | `damage-dice` |  |
+| Great Weapon Fighting | fighting-style | manual | `damage-dice`, `weapon-property-scope` |  |
 | Magic Initiate | origin | builder |  | Two cantrips and a 1st-level spell, cast once without a slot. |
 | Savage Attacker | origin | manual | `damage-dice` |  |
 | Skilled | origin | builder |  | Three skills. |

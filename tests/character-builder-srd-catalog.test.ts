@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+import { SRD_2024_CATALOG } from "@/data/srd/2024";
+import { CLASS_COVERAGE, FEAT_COVERAGE, type CoverageEntry } from "@/data/srd/2024/coverage";
+import { SRD_2024_REFERENCE } from "@/data/srd/2024/reference";
+import {
+  backgroundDefinitionSchema,
+  buildCharacter,
+  classDefinitionSchema,
+  featDefinitionSchema,
+  quickBuild,
+  subclassDefinitionSchema,
+  type ChoiceSpec,
+  type FeatureGrant
+} from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import type { FeatureDefinition } from "@/engine";
+
+const PREFIX = "srd-2024_";
+const bare = (key: string) => key.slice(PREFIX.length);
+
+/** A grant's feature agrees with the audit's verdict for it. */
+function agrees(feature: FeatureDefinition, verdict: CoverageEntry["verdict"]): boolean {
+  switch (verdict) {
+    case "full": return feature.automationSupport === "full" && !feature.informational;
+    case "partial": return feature.automationSupport === "partial" && !feature.informational;
+    case "manual": return feature.automationSupport === "manual-only" && !feature.informational;
+    case "info": return Boolean(feature.informational);
+    case "builder": return true;
+  }
+}
+
+describe("the 2024 catalog", () => {
+  it("passes its own schemas", () => {
+    for (const entry of SRD_2024_CATALOG.classes) expect(classDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
+    for (const entry of SRD_2024_CATALOG.subclasses) expect(subclassDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
+    for (const entry of SRD_2024_CATALOG.feats) expect(featDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
+    for (const entry of SRD_2024_CATALOG.backgrounds) expect(backgroundDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
+  });
+
+  it("has all 17 feats and all four backgrounds, each pointing at a feat that exists", () => {
+    expect(SRD_2024_CATALOG.feats.map((feat) => feat.id.replace("srd:feat:", "")).sort())
+      .toEqual(SRD_2024_REFERENCE.feats.map((feat) => bare(feat.key)).sort());
+    for (const background of SRD_2024_CATALOG.backgrounds) {
+      expect(SRD_2024_CATALOG.feats.some((feat) => feat.id === background.feat), background.id).toBe(true);
+    }
+  });
+
+  it("covers every SRD feature of each class it has, with a grant or a choice", () => {
+    for (const definition of SRD_2024_CATALOG.classes) {
+      const slug = definition.id.replace("srd:class:", "");
+      const subclasses = SRD_2024_CATALOG.subclasses.filter((entry) => entry.classId === definition.id);
+      const refs = new Set<string>();
+      const take = (grants: FeatureGrant[] = [], choices: ChoiceSpec[] = []) => {
+        for (const grant of grants) if (grant.ref) refs.add(grant.ref);
+        for (const choice of choices) if (choice.ref) refs.add(choice.ref);
+      };
+      for (const level of definition.levels) take(level.grants, level.choices);
+      for (const subclass of subclasses) for (const level of subclass.levels) take(level.grants, level.choices);
+      // The feat levels and the Epic Boon are choices the builder makes from `featLevels`.
+      refs.add(`${PREFIX}${slug}_ability-score-improvement`);
+      refs.add(`${PREFIX}${slug}_epic-boon`);
+      const owners = SRD_2024_REFERENCE.classes.filter((entry) => entry.key === `${PREFIX}${slug}` || entry.subclassOf === `${PREFIX}${slug}`);
+      const missing = owners.flatMap((owner) => owner.features)
+        .filter((feature) => feature.kind !== "spell-list" && !refs.has(feature.key))
+        .map((feature) => feature.key);
+      expect(missing, definition.id).toEqual([]);
+      for (const ref of refs) expect(owners.some((owner) => owner.features.some((feature) => feature.key === ref)), `${definition.id} ${ref}`).toBe(true);
+    }
+  });
+
+  it("marks each feature as the coverage audit says", () => {
+    const wrong: string[] = [];
+    for (const owner of [...SRD_2024_CATALOG.classes, ...SRD_2024_CATALOG.subclasses]) {
+      for (const level of owner.levels) {
+        for (const grant of level.grants) {
+          if (!grant.ref || typeof grant.feature !== "object") continue;
+          const audit = CLASS_COVERAGE[bare(grant.ref)];
+          if (!audit) wrong.push(`${grant.ref}: no verdict`);
+          else if (!agrees(grant.feature, audit.verdict)) wrong.push(`${grant.ref}: ${grant.feature.automationSupport}${grant.feature.informational ? " (informational)" : ""} but the audit says ${audit.verdict}`);
+        }
+      }
+    }
+    for (const feat of SRD_2024_CATALOG.feats) {
+      const audit = FEAT_COVERAGE[feat.id.replace("srd:feat:", "")]!;
+      const record = feat.grants.find((grant) => grant.key === "feat")?.feature;
+      if (typeof record !== "object") wrong.push(`${feat.id}: no feature`);
+      else if (!agrees(record, audit.verdict)) wrong.push(`${feat.id}: ${record.automationSupport} but the audit says ${audit.verdict}`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it("builds every class it has at every level with its suggestions, without a warning", () => {
+    for (const definition of SRD_2024_CATALOG.classes) {
+      for (let level = 1; level <= 20; level += 1) {
+        const built = buildCharacter(quickBuild(SRD_BUILD_SOURCES, { classId: definition.id, level }), SRD_BUILD_SOURCES);
+        expect(built.warnings, `${definition.id} ${level}`).toEqual([]);
+        expect(built.choices.filter((choice) => choice.pending).map((choice) => choice.path.join("/")), `${definition.id} ${level}`).toEqual([]);
+        // No builder-made action leans on a note rider: the AI would stop using it.
+        for (const { feature } of built.features) {
+          for (const action of feature.grantedActions ?? []) {
+            expect("riders" in action && action.riders?.some((rider) => rider.kind === "note"), `${feature.name}`).toBeFalsy();
+          }
+        }
+      }
+    }
+  });
+
+  it("gives every background and its feat a build", () => {
+    for (const background of SRD_2024_CATALOG.backgrounds) {
+      const built = buildCharacter(quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:rogue", backgroundId: background.id }), SRD_BUILD_SOURCES);
+      expect(built.warnings, background.id).toEqual([]);
+      expect(built.features.some((entry) => entry.key.startsWith(`feat:${background.feat}@background`)), background.id).toBe(true);
+    }
+  });
+});
