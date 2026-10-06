@@ -129,6 +129,8 @@ export interface D20ChangeRequest extends RequestBase {
   rollerId?: Id;
   /** The roll that failed: a save, or an attack roll that missed. */
   roll: "attack" | "save";
+  /** A foe's roll that succeeded, which the change would make fail (Cutting Words). */
+  succeeded?: boolean;
   natural: number;
   total: number;
   /** The DC or AC it had to reach. */

@@ -149,10 +149,12 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     effects: [{ kind: "d20-change", rolls: ["attack"], change: "hit", oncePerTurn: true }]
   })),
   epicBoon("boon-of-dimensional-travel", "Boon of Dimensional Travel", reference({ feat: "boon-of-dimensional-travel" })),
-  // 2d4 on a failed attack roll or save, its own or one within 60 ft, once a fight.
+  // 2d4 on a failed attack roll or save, its own or one within 60 ft, or off a foe's success there, once a fight.
   epicBoon("boon-of-fate", "Boon of Fate", runs({ feat: "boon-of-fate" }, {
-    effects: [{ kind: "d20-change", rolls: ["attack", "save"], change: "add", dice: "2d4", resourceCost: { resourceId: "boon-of-fate", amount: 1 }, forOthers: { withinFt: 60, includeSelf: true } }],
-    notSimulated: "the 2d4 as a penalty on another creature's success, and on ability checks."
+    effects: [
+      { kind: "d20-change", rolls: ["attack", "save"], change: "add", dice: "2d4", resourceCost: { resourceId: "boon-of-fate", amount: 1 }, forOthers: { withinFt: 60, includeSelf: true } },
+      { kind: "d20-change", rolls: ["attack", "save"], change: "subtract", dice: "2d4", resourceCost: { resourceId: "boon-of-fate", amount: 1 }, againstFoes: { withinFt: 60 } }
+    ]
   }), { grants: [{ key: "boon-of-fate-use", pool: { id: "boon-of-fate", size: 1 } }] }),
   // Its bludgeoning, piercing and slashing damage ignores resistance.
   epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", runs({ feat: "boon-of-irresistible-offense" }, {

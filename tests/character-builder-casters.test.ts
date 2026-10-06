@@ -229,11 +229,12 @@ describe("the Bard (College of Lore)", () => {
     expect(at(10, "cantrips")!.options.some((option) => option.id === spell("fire-bolt"))).toBe(false);
   });
 
-  it("Cutting Words: disadvantage on an attack against an ally; a hit on the bard loses the die's average", () => {
-    for (const [level, penalty] of [[3, 4], [5, 5], [10, 6], [15, 7]] as const) {
+  it("Cutting Words: its reaction, a Bardic Inspiration die off a foe's hit (7am)", () => {
+    for (const [level, die] of [[3, "1d6"], [5, "1d8"], [10, "1d10"], [15, "1d12"]] as const) {
       const bard = built("bard", level);
-      expect(action(bard, "Cutting Words")).toMatchObject({ reaction: { trigger: { kind: "ally-targeted-by-attack", withinFt: 60 } }, resourceCost: { resourceId: "bardic-inspiration" } });
-      expect(action(bard, "Cutting Words (you)"), `level ${level}`).toMatchObject({ reaction: { trigger: { kind: "would-be-hit" } }, condition: { modifiers: { armorClass: penalty } } });
+      expect(feature(bard, "college-of-lore-cutting-words").effects?.[0], `level ${level}`).toMatchObject({
+        kind: "d20-change", rolls: ["attack"], change: "subtract", dice: die, reaction: true, againstFoes: { withinFt: 60 }, resourceCost: { resourceId: "bardic-inspiration" }
+      });
     }
   });
 

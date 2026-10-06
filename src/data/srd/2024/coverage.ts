@@ -30,12 +30,11 @@ export interface CoverageEntry {
 export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
-  "d20-reroll": "A penalty on another creature's successful d20 roll (Boon of Fate)",
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Two Cunning Strike effects on one hit (Improved Cunning Strike)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
-  "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
+  "ally-die": "A rolled die taken off an enemy's damage roll (Cutting Words)",
   metamagic: "Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis)",
   "slot-conversion": "Once a turn for a slot turned into a Wild Shape use (Wild Resurgence)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
@@ -119,7 +118,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* College of Lore */
   "college-of-lore_bonus-proficiencies": builder(),
-  "college-of-lore_cutting-words": partial(["ally-die"], "An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't."),
+  "college-of-lore_cutting-words": partial(["ally-die"], "Its reaction: a foe's hit within 60 ft loses a rolled Bardic Inspiration die, missing if that takes it below the AC (the AI uses it when it more likely than not does). Not on damage rolls; checks aren't simulated."),
   "college-of-lore_magical-discoveries": builder(),
   "college-of-lore_peerless-skill": full("A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight."),
 
@@ -372,7 +371,7 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   archery: full("+2 to ranged weapon attack rolls."),
   "boon-of-combat-prowess": full("The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn."),
   "boon-of-dimensional-travel": manual(["free-move"], "The builder adds the +1 to a score; the teleport after an attack doesn't run."),
-  "boon-of-fate": partial(["d20-reroll"], "2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1."),
+  "boon-of-fate": full("2d4 on a failed attack roll or save, its own or an ally's within 60 ft, or off a foe's hit or made save there, once a fight; the builder adds the +1."),
   "boon-of-irresistible-offense": full("Its bludgeoning, piercing and slashing damage ignores resistance; on a 20, extra damage equal to the score of the ability the attack uses (the one a player raises with the boon's +1)."),
   "boon-of-spell-recall": full("A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score."),
   "boon-of-the-night-spirit": manual(["stealth"], "The builder adds the +1 to a score; invisibility and resistance in darkness don't run."),

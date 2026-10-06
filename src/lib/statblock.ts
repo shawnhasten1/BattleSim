@@ -581,6 +581,12 @@ function spellScopeText(effect: FeatureEffect, who: Who, one = false): string {
 
 /** "When it fails a saving throw, it can reroll the d20 and use the new roll, adding 9, by spending 1 Indomitable." */
 function d20ChangeSentence(effect: Extract<FeatureEffect, { kind: "d20-change" }>, definition: CreatureDefinition, who: Who): string {
+  // Cutting Words, Boon of Fate: a foe's success.
+  if (effect.change === "subtract") {
+    const succeeds = joinList(effect.rolls.map((roll) => (roll === "save" ? "succeeds on a saving throw" : "hits with an attack roll")), "or");
+    const cost = effect.resourceCost ? `, spending ${costText(effect.resourceCost, definition)}` : "";
+    return `When a foe within ${effect.againstFoes?.withinFt ?? 60} feet of ${who.object} ${succeeds}, ${who.subject} can ${effect.reaction ? "use its reaction to " : ""}roll ${effect.dice ?? "1d4"} and subtract it from the roll${cost}.`;
+  }
   const when = effect.onNatural1
     ? `rolls a 1 on the d20 of ${joinList(effect.rolls.map((roll) => (roll === "save" ? "a saving throw" : "an attack roll")), "or")}`
     : joinList(effect.rolls.map((roll) => (roll === "save" ? "fails a saving throw" : "misses with an attack roll")), "or");
@@ -850,6 +856,9 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "healing-bonus": return [effect.slotBonus ? "+2 + slot level healing" : "", effect.selfOnOthers ? "heals itself when it heals others" : "", effect.maximize ? "healing dice maximized" : ""].filter(Boolean).join(", ") || "healing";
     case "free-move": return `${effect.feet ? `${effect.feet} ft` : "half speed"} move ${effect.on === "critical-hit" ? "after a critical hit" : `with ${poolName(effect.on.spends, 1, definition)}`}${effect.noOpportunityAttacks ? ", no opportunity attacks" : ""}`;
     case "d20-change": {
+      if (effect.change === "subtract") {
+        return `−${effect.dice ?? "1d4"} off a foe's ${joinList(effect.rolls.map((roll) => (roll === "save" ? "made save" : "hit")), "or")}${effect.resourceCost ? ` (${costText(effect.resourceCost, definition)})` : ""}`;
+      }
       const failed = effect.onNatural1 ? "a 1" : joinList(effect.rolls.map((roll) => (roll === "save" ? "a failed save" : "a miss")), "or");
       const does = effect.change === "reroll" ? `reroll${effect.bonus ? ` +${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "").replace(/^\+/, "")}` : ""}`
         : effect.change === "add" ? `+${effect.dice ?? "1d4"}` : effect.change === "twenty" ? "a 20" : "a hit";

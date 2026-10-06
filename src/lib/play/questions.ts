@@ -74,9 +74,14 @@ export function describeQuestion(request: DecisionRequest, board: EncounterSnaps
       const roller = request.rollerId ? nameOf(board, request.rollerId) : who;
       return {
         who,
-        title: request.roll === "save"
-          ? `${roller} failed a DC ${request.against} save${request.label ? ` against ${request.label}` : ""} (rolled ${request.total}).`
-          : `${roller} missed with ${request.label ?? "an attack"}: ${request.total} against AC ${request.against}.`,
+        title: request.succeeded
+          // Cutting Words: a foe's success, to make fail.
+          ? request.roll === "save"
+            ? `${roller} made a DC ${request.against} save${request.label ? ` against ${request.label}` : ""} (rolled ${request.total}).`
+            : `${roller} hit with ${request.label ?? "an attack"}: ${request.total} against AC ${request.against}.`
+          : request.roll === "save"
+            ? `${roller} failed a DC ${request.against} save${request.label ? ` against ${request.label}` : ""} (rolled ${request.total}).`
+            : `${roller} missed with ${request.label ?? "an attack"}: ${request.total} against AC ${request.against}.`,
         ask: request.rollerId ? `Change ${roller}'s roll?` : "Change the roll?",
         options: [
           ...request.options.map((option): PromptOption => ({

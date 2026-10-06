@@ -27,7 +27,7 @@ its gaps, never dropped and never approximated without saying so.
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
-| Feats | 17 | 8 | 3 | 2 | 4 | 0 |
+| Feats | 17 | 9 | 2 | 2 | 4 | 0 |
 | Species traits | 33 | 11 | 0 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -42,13 +42,12 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
-| `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
+| `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
@@ -122,7 +121,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Bonus Proficiencies | builder |  |  |
-| 3 | Cutting Words | partial | `ally-die` | An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't. |
+| 3 | Cutting Words | partial | `ally-die` | Its reaction: a foe's hit within 60 ft loses a rolled Bardic Inspiration die, missing if that takes it below the AC (the AI uses it when it more likely than not does). Not on damage rolls; checks aren't simulated. |
 | 6 | Magical Discoveries | builder |  |  |
 | 14 | Peerless Skill | full |  | A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight. |
 
@@ -436,7 +435,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Archery | fighting-style | full |  | +2 to ranged weapon attack rolls. |
 | Boon of Combat Prowess | epic-boon | full |  | The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
-| Boon of Fate | epic-boon | partial | `d20-reroll` | 2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1. |
+| Boon of Fate | epic-boon | full |  | 2d4 on a failed attack roll or save, its own or an ally's within 60 ft, or off a foe's hit or made save there, once a fight; the builder adds the +1. |
 | Boon of Irresistible Offense | epic-boon | full |  | Its bludgeoning, piercing and slashing damage ignores resistance; on a 20, extra damage equal to the score of the ability the attack uses (the one a player raises with the boon's +1). |
 | Boon of Spell Recall | epic-boon | full |  | A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score. |
 | Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |

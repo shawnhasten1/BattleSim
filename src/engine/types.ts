@@ -497,7 +497,7 @@ export type FeatureEffect =
      */
     kind: "d20-change";
     rolls: Array<"attack" | "save">;
-    change: "reroll" | "add" | "twenty" | "hit";
+    change: "reroll" | "add" | "twenty" | "hit" | "subtract";
     bonus?: NumericFormula;
     dice?: string;
     onNatural1?: boolean;
@@ -520,6 +520,12 @@ export type FeatureEffect =
     againstConditions?: ConditionName[];
     /** The reroll has advantage (Countercharm). */
     advantage?: boolean;
+    /**
+     * A foe's roll that succeeded, by a creature within `withinFt` of the owner: `"subtract"` takes `dice` off it, maybe
+     * making it fail (Cutting Words: the Bardic Inspiration die, off an attack roll; Boon of Fate: 2d4, off an attack
+     * roll or a save). Not a critical hit.
+     */
+    againstFoes?: { withinFt: number };
   }
   | {
     /**

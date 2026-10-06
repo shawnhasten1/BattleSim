@@ -1230,20 +1230,24 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       };
       return (
         <>
+          {/* Cutting Words: a foe's success, not its own failure. */}
           <span className={styles.typeChips} role="group" aria-label="Rolls it changes">
-            <button type="button" aria-pressed={rolls.includes("save")} onClick={() => toggleRoll("save")}>a failed save</button>
-            <button type="button" aria-pressed={rolls.includes("attack")} onClick={() => toggleRoll("attack")}>a missed attack</button>
+            <button type="button" aria-pressed={rolls.includes("save")} onClick={() => toggleRoll("save")}>{effect.change === "subtract" ? "a foe's made save" : "a failed save"}</button>
+            <button type="button" aria-pressed={rolls.includes("attack")} onClick={() => toggleRoll("attack")}>{effect.change === "subtract" ? "a foe's hit" : "a missed attack"}</button>
           </span>
           <Segmented label="It can" value={effect.change}
             options={[
               { value: "reroll", label: "Reroll" }, { value: "add", label: "Add a die" }, { value: "twenty", label: "Make it a 20" },
-              ...(rolls.includes("attack") ? [{ value: "hit" as const, label: "Hit instead" }] : [])
+              ...(rolls.includes("attack") ? [{ value: "hit" as const, label: "Hit instead" }] : []),
+              { value: "subtract", label: "Take a die off a foe's roll" }
             ]}
             onChange={(change) => {
               const next = { ...effect, change };
               delete next.bonus;
               delete next.dice;
-              set(change === "add" ? { ...next, dice: "1d10" } : next);
+              delete next.againstFoes;
+              if (change === "subtract") delete next.forOthers;
+              set(change === "add" ? { ...next, dice: "1d10" } : change === "subtract" ? { ...next, dice: "1d6", againstFoes: { withinFt: 60 } } : next);
             }} />
           {effect.change === "reroll" ? (
             <>
@@ -1254,12 +1258,20 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           {effect.change === "add" ? (
             <input aria-label="Die it adds" className={styles.expression} value={effect.dice ?? ""} placeholder="1d10" onChange={(e) => set({ ...effect, dice: e.target.value.replace(/\s+/g, "") })} />
           ) : null}
+          {effect.change === "subtract" ? (
+            <span className={styles.inline}>
+              <input aria-label="Die it takes off" className={styles.expression} value={effect.dice ?? ""} placeholder="1d6" onChange={(e) => set({ ...effect, dice: e.target.value.replace(/\s+/g, "") })} />
+              <span>from a foe within</span>
+              <NumberField label="Foe within (ft)" value={effect.againstFoes?.withinFt ?? 60} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, againstFoes: { withinFt: n } })} />
+              <span>ft</span>
+            </span>
+          ) : null}
           {effect.change === "reroll" ? (
             <Check label="The new roll has advantage" checked={effect.advantage === true} onChange={(on) => set(opt(effect, "advantage", on ? true : undefined))} />
           ) : null}
           {/* Countercharm, Boon of Fate: another creature's roll. */}
-          <Check label="An ally's roll too" checked={Boolean(effect.forOthers)} onChange={(on) => set(opt(effect, "forOthers", on ? { withinFt: 30, includeSelf: true } : undefined))} />
-          {effect.forOthers ? (
+          {effect.change !== "subtract" ? <Check label="An ally's roll too" checked={Boolean(effect.forOthers)} onChange={(on) => set(opt(effect, "forOthers", on ? { withinFt: 30, includeSelf: true } : undefined))} /> : null}
+          {effect.forOthers && effect.change !== "subtract" ? (
             <span className={styles.inline}>
               <NumberField label="Ally within (ft)" value={effect.forOthers.withinFt} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, forOthers: { ...effect.forOthers!, withinFt: n } })} />
               <Check label="Its own too" checked={effect.forOthers.includeSelf === true} onChange={(on) => set({ ...effect, forOthers: opt(effect.forOthers!, "includeSelf", on ? true : undefined) })} />

@@ -2645,6 +2645,7 @@ function resolveAttackCore(
     critical = overridden === "critical";
   }
   // Heroic Inspiration, Luck, Boon of Combat Prowess: the attacker may change a miss it has seen (not one a DM ruled).
+  let forcedHit = false;
   if (!hit && !overridden) {
     const criticalAt = inputs.criticalRange.minimum;
     const changed = changeFailedD20(state, attacker, {
@@ -2656,6 +2657,17 @@ function resolveAttackCore(
       total = changed.total;
       critical = !changed.hit && natural >= criticalAt;
       hit = changed.hit || critical || (natural !== 1 && total >= targetAc);
+      forcedHit = changed.hit;
+    }
+  }
+  // Cutting Words, Boon of Fate: one of the attacker's foes may make a hit miss (not a critical hit, nor one a DM ruled).
+  if (hit && !critical && !overridden && !forcedHit) {
+    const hindered = hinderSucceededD20(state, attacker, {
+      roll: "attack", natural, modifier: inputs.totalBonus, against: targetAc, mode: rollMode, label: action.name
+    }, total, (t) => t >= targetAc);
+    if (hindered) {
+      total = hindered.total;
+      hit = hindered.success;
     }
   }
   // Adamantine: a critical hit against it is a normal hit.
@@ -8079,6 +8091,8 @@ function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: Fa
   for (const feature of featureSources(definition, combatant)) {
     for (const [index, effect] of (feature.effects ?? []).entries()) {
       if (effect.kind !== "d20-change" || !effect.rolls.includes(d20.roll) || (effect.change === "hit" && d20.roll !== "attack")) continue;
+      // Cutting Words: for a foe's success, not a failure.
+      if (effect.againstFoes || effect.change === "subtract") continue;
       // Its own roll, unless it's for others only; another's, only one within reach of it.
       if (own ? effect.forOthers && !effect.forOthers.includeSelf : !effect.forOthers || spatialDistance(state.snapshot, combatant, roller) > effect.forOthers.withinFt) continue;
       if (effect.reaction && !canAct(combatant, "reaction")) continue;
@@ -8101,6 +8115,9 @@ function d20ChangeChance(choice: D20ChangeChoice, d20: FailedD20, definition: Cr
   const attack = d20.roll === "attack";
   const needed = d20.against - d20.modifier;
   switch (effect.change) {
+    // Cutting Words: never helps a roll of its own side.
+    case "subtract":
+      return 0;
     case "hit":
       return 1;
     case "twenty":
@@ -8136,8 +8153,111 @@ function aiD20Change(combatant: CombatantState, choices: D20ChangeChoice[], d20:
     .sort((a, b) => Number(b.free) - Number(a.free) || b.chance - a.chance || (a.choice.effect.resourceCost?.amount ?? 0) - (b.choice.effect.resourceCost?.amount ?? 0))[0]?.choice;
 }
 
-/** "Reroll, +9", "Add 1d10", "Make it a 20", "Hit instead". */
+/**
+ * Cutting Words, Boon of Fate: the ways `owner` could make a foe's successful roll fail. Its own effects only, against a
+ * roller hostile to it within the effect's reach of it, with its reaction and the resource still to spend.
+ */
+function hinderChoices(state: EngineState, owner: CombatantState, d20: FailedD20, roller: CombatantState): D20ChangeChoice[] {
+  if (owner.state !== "active" || effectiveFaction(state.snapshot, owner) === effectiveFaction(state.snapshot, roller)) return [];
+  const definition = getDefinition(state.snapshot, owner);
+  const choices: D20ChangeChoice[] = [];
+  for (const feature of featureSources(definition, owner)) {
+    for (const [index, effect] of (feature.effects ?? []).entries()) {
+      if (effect.kind !== "d20-change" || effect.change !== "subtract" || !effect.againstFoes || !effect.rolls.includes(d20.roll)) continue;
+      if (spatialDistance(state.snapshot, owner, roller) > effect.againstFoes.withinFt) continue;
+      if (effect.reaction && !canAct(owner, "reaction")) continue;
+      if (effect.resourceCost && (owner.resources?.[effect.resourceCost.resourceId] ?? 0) < effect.resourceCost.amount) continue;
+      const key = `${owner.id}:${feature.id}:${index}`;
+      if (effect.oncePerTurn && owner.turnFlags?.d20ChangesUsed?.includes(key)) continue;
+      choices.push({ key, feature: feature.name, effect, owner });
+    }
+  }
+  return choices;
+}
+
+/** The chance taking a choice's dice off a total of `total` brings it below `against`. */
+function hinderChance(choice: D20ChangeChoice, total: number, against: number): number {
+  const parsed = parseDiceExpression(choice.effect.dice ?? "1d4");
+  const low = parsed.terms.reduce((sum, term) => sum + term.count, 0) + parsed.modifier;
+  const high = parsed.terms.reduce((sum, term) => sum + term.count * term.sides, 0) + parsed.modifier;
+  const needed = total - against + 1;
+  return high <= low ? (low >= needed ? 1 : 0) : Math.min(1, Math.max(0, (high - needed + 1) / (high - low + 1)));
+}
+
+/** The AI hinders a foe's success when its dice more likely than not make it fail (three in four when conservative). */
+function aiHinder(owner: CombatantState, choices: D20ChangeChoice[], total: number, against: number): D20ChangeChoice | undefined {
+  const bar = owner.resourceStance === "conservative" ? 0.75 : 0.5;
+  return choices
+    .map((choice) => ({ choice, chance: hinderChance(choice, total, against) }))
+    .filter((option) => option.chance >= bar)
+    .sort((a, b) => b.chance - a.chance || (a.choice.effect.resourceCost?.amount ?? 0) - (b.choice.effect.resourceCost?.amount ?? 0))[0]?.choice;
+}
+
+/**
+ * Cutting Words, Boon of Fate: a foe's attack roll that hit (not a critical hit) or save that succeeded, made to fail.
+ * The roller's foes who could, the nearest first, each once; a human playing one is asked, the AI decides for the rest
+ * (`aiHinder`). Logged as `RollChanged`. The total as it ends up and whether it still succeeds, or undefined when
+ * nobody changed it.
+ */
+function hinderSucceededD20(
+  state: EngineState,
+  roller: CombatantState,
+  d20: FailedD20,
+  total: number,
+  succeeds: (total: number) => boolean
+): { total: number; success: boolean } | undefined {
+  let changed: { total: number; success: boolean } | undefined;
+  const owners = state.snapshot.combatants
+    .filter((other) => other.id !== roller.id)
+    .sort((a, b) => spatialDistance(state.snapshot, roller, a) - spatialDistance(state.snapshot, roller, b) || a.id.localeCompare(b.id));
+  for (const owner of owners) {
+    const choices = hinderChoices(state, owner, d20, roller);
+    if (!choices.length) continue;
+    const definition = getDefinition(state.snapshot, owner);
+    const ai = aiHinder(owner, choices, total, d20.against);
+    const answer = askDecision<D20ChangeRequest>(state, {
+      kind: "d20-change", combatantId: owner.id, rollerId: roller.id, succeeded: true,
+      roll: d20.roll, natural: d20.natural, total, against: d20.against, label: d20.label,
+      options: choices.map((choice) => ({
+        id: choice.key,
+        name: choice.feature,
+        does: d20ChangeWords(choice.effect, definition),
+        ...(choice.effect.resourceCost ? { cost: { ...choice.effect.resourceCost, left: owner.resources?.[choice.effect.resourceCost.resourceId] ?? 0 } } : {})
+      })),
+      aiChoice: ai?.key ?? null
+    }, owner.id);
+    const picked = answer ? choices.find((choice) => choice.key === answer.optionId) : ai;
+    if (!picked) continue;
+    const effect = picked.effect;
+    if (effect.resourceCost) {
+      const { resourceId, amount } = effect.resourceCost;
+      owner.resources = { ...(owner.resources ?? {}), [resourceId]: (owner.resources?.[resourceId] ?? 0) - amount };
+    }
+    if (effect.oncePerTurn) owner.turnFlags = { ...(owner.turnFlags ?? {}), d20ChangesUsed: [...(owner.turnFlags?.d20ChangesUsed ?? []), picked.key] };
+    if (effect.reaction) {
+      owner.actionEconomy ??= { action: true, bonus: true, reaction: true };
+      owner.actionEconomy.reaction = false;
+    }
+    const before = total;
+    const rolled = rollDice(effect.dice ?? "1d4", state.rng);
+    total -= rolled.total;
+    const success = succeeds(total);
+    changed = { total, success };
+    const what = d20.roll === "save" ? "save" : "attack roll";
+    state.log.push(event(state, "RollChanged", `${owner.displayName} uses ${picked.feature} on ${roller.displayName}'s ${what}: it ${success ? "still succeeds" : "now fails"} (${total})`, {
+      combatantId: owner.id, rollerId: roller.id, feature: picked.feature, change: effect.change, roll: d20.roll,
+      before: { natural: d20.natural, total: before }, natural: d20.natural, total, against: d20.against, rolled,
+      ...(effect.resourceCost ? { resourceId: effect.resourceCost.resourceId, left: owner.resources?.[effect.resourceCost.resourceId] } : {}),
+      success, hindered: true
+    }));
+    if (!success) return changed;
+  }
+  return changed;
+}
+
+/** "Reroll, +9", "Add 1d10", "Make it a 20", "Hit instead", "Subtract 1d8". */
 function d20ChangeWords(effect: D20ChangeChoice["effect"], definition: CreatureDefinition): string {
+  if (effect.change === "subtract") return `Subtract ${effect.dice ?? "1d4"}`;
   if (effect.change === "reroll") {
     const bonus = effect.bonus ? resolveNumericFormula(effect.bonus, definition) : 0;
     return `Reroll${bonus ? `, +${bonus}` : ""}`;
@@ -8281,6 +8401,17 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
     if (changed) {
       result.roll = { ...roll, total: changed.total };
       result.success = changed.total >= ctx.dc;
+    }
+  }
+  // Boon of Fate: one of the roller's foes may make a made save fail (not one a DM ruled).
+  if (result.success && !overridden) {
+    const natural = roll.rolls.length > 1 ? roll.total - roll.modifier : roll.rolls[0]?.value ?? roll.total - roll.modifier;
+    const hindered = hinderSucceededD20(state, target, {
+      roll: "save", natural, modifier: roll.modifier, against: ctx.dc, mode: featureAdvantage.applied ? "advantage" : "normal", label: ctx.label
+    }, result.roll.total, (t) => t >= ctx.dc);
+    if (hindered) {
+      result.roll = { ...result.roll, total: hindered.total };
+      result.success = hindered.success;
     }
   }
   if (!result.success && ctx.kind !== "concentration") {

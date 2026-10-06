@@ -108,25 +108,13 @@ export const BARD: ClassDefinition = {
 };
 
 /** Cutting Words' cost to the attacker's roll: the Bardic Inspiration die's average, rounded up (d6 4 … d12 7). */
-const CUTTING_WORDS = Array.from({ length: 20 }, (_, index) => (index + 1 >= 15 ? 7 : index + 1 >= 10 ? 6 : index + 1 >= 5 ? 5 : 4));
-
+// Its reaction: a foe's hit within 60 ft loses a Bardic Inspiration die, rolled, maybe missing.
 const cuttingWords = runs("college-of-lore_cutting-words", {
-  grantedActions: [
-    {
-      // An attack on an ally: disadvantage on that roll.
-      kind: "activate-feature", id: "cutting-words", name: "Cutting Words", actionType: "reaction", featureId: "",
-      reaction: { trigger: { kind: "ally-targeted-by-attack", withinFt: 60 }, priority: "worthwhile" },
-      resourceCost: { resourceId: "bardic-inspiration", amount: 1 }, automationSupport: "full"
-    },
-    {
-      // A hit on the bard: the roll goes down by the die's average, used only when that makes it miss.
-      kind: "activate-feature", id: "cutting-words-self", name: "Cutting Words (you)", actionType: "reaction", featureId: "",
-      reaction: { trigger: { kind: "would-be-hit" }, target: "self", priority: "always", lastsFor: "triggering-attack" },
-      condition: { id: "cutting-words-active", name: "custom", durationRounds: 1, modifiers: { armorClass: 4 } },
-      resourceCost: { resourceId: "bardic-inspiration", amount: 1 }, automationSupport: "full"
-    }
-  ],
-  notSimulated: "an attack on an ally gets disadvantage, and one on you loses the die's average, instead of a rolled die; it isn't used on damage rolls or ability checks."
+  effects: [{
+    kind: "d20-change", rolls: ["attack"], change: "subtract", dice: "1d6", reaction: true, againstFoes: { withinFt: 60 },
+    resourceCost: { resourceId: "bardic-inspiration", amount: 1 }
+  }],
+  notSimulated: "taking the die off a damage roll or an ability check."
 });
 
 export const COLLEGE_OF_LORE: SubclassDefinition = {
@@ -135,11 +123,10 @@ export const COLLEGE_OF_LORE: SubclassDefinition = {
   source: srd52Source("srd-2024_college-of-lore"),
   edition: "2024",
   classId: "srd:class:bard",
-  table: [{ id: "cutting-words", label: "Cutting Words penalty", values: CUTTING_WORDS }],
   levels: [
     {
       level: 3,
-      grants: [grant("cutting-words", cuttingWords, { scale: [{ path: "grantedActions.1.condition.modifiers.armorClass", value: "{col:cutting-words}" }] })],
+      grants: [grant("cutting-words", cuttingWords, { scale: [{ path: "effects.0.dice", value: "1{col:bardic-die}" }] })],
       choices: [choice({ kind: "skills", id: "bonus-proficiencies", count: 3, from: "any" }, "college-of-lore_bonus-proficiencies")]
     },
     {

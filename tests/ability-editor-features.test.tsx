@@ -345,6 +345,20 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Crushing Blow").effects).toEqual([{ kind: "natural-twenty-damage" }]);
   });
 
+  it("Change a failed roll: a die off a foe's hit instead, for its reaction (Cutting Words)", async () => {
+    await blankFeature("Jeer");
+    const card = await addEffect(/^Change a failed roll/, "Change a failed roll");
+    await radio(card, "It can", "Take a die off a foe's roll");
+    await chip(card, "Rolls it changes", "a foe's hit");
+    await chip(card, "Rolls it changes", "a foe's made save");
+    await retype(card.getByLabelText("Die it takes off"), "1d8");
+    await retype(card.getByLabelText("Foe within (ft)"), "30");
+    await userEvent.click(card.getByRole("checkbox", { name: "Takes its reaction" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Jeer").effects).toEqual([{ kind: "d20-change", rolls: ["attack"], change: "subtract", dice: "1d8", againstFoes: { withinFt: 30 }, reaction: true }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;
