@@ -151,7 +151,8 @@ export const ROGUE: ClassDefinition = {
         grant("reliable-talent", informational("rogue_reliable-talent"))
       ]
     },
-    { level: 11, grants: [grant("improved-cunning-strike", reference("rogue_improved-cunning-strike"))] },
+    // Two Cunning Strike effects on one hit, paying both in Sneak Attack dice.
+    { level: 11, grants: [grant("improved-cunning-strike", runs("rogue_improved-cunning-strike", { effects: [{ kind: "paired-on-hit-options", featureId: SNEAK_ATTACK_ID }] }))] },
     { level: 14, grants: [grant("devious-strikes", deviousStrikes)] },
     { level: 15, grants: [grant("slippery-mind", informational("rogue_slippery-mind"), { adjust: { saves: ["wis", "cha"] } })] },
     { level: 18, grants: [grant("elusive", runs("rogue_elusive", { effects: [{ kind: "no-advantage-against" }] }))] },

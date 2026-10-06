@@ -23,7 +23,7 @@ its gaps, never dropped and never approximated without saying so.
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
-| Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
+| Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
@@ -54,7 +54,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
-| `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
@@ -328,7 +327,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Uncanny Dodge | full |  | Halves an attack roll's damage, taken by the AI for a cut of 5 or more or one that keeps it standing; damage that lands with the hit as a rider (a smite) is dealt apart and isn't halved. |
 | 7 | Evasion | full |  |  |
 | 7 | Reliable Talent | info |  | Ability checks. |
-| 11 | Improved Cunning Strike | manual | `dice-trade` |  |
+| 11 | Improved Cunning Strike | full |  | A copy of each attack with two Cunning Strike effects at once ("Cunning Strike: Poison + Trip"), paying both in Sneak Attack dice; only pairs the dice cover. |
 | 14 | Devious Strikes | full |  | Daze (on its next turn, only one of moving, an action and a bonus action), Knock Out (unconscious until it saves or takes damage) and Obscure (blinded until the end of its next turn). |
 | 15 | Slippery Mind | builder |  | Wisdom and Charisma save proficiency. |
 | 18 | Elusive | full |  | No advantage on attack rolls against it while it isn't incapacitated. |

@@ -975,6 +975,19 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "paired-on-hit-options": {
+      // The damage bonuses its options can be paid in (Sneak Attack).
+      const bonuses = [...(definition.features ?? []), ...(definition.traits ?? [])].filter((feature) => (feature.effects ?? []).some((entry) => entry.kind === "damage-bonus"));
+      return (
+        <span className={styles.inline}>
+          <span>Two options paid in the dice of</span>
+          <select aria-label="Damage bonus it pays in" value={effect.featureId} onChange={(e) => set({ ...effect, featureId: e.target.value })}>
+            <option value="">(pick one)</option>
+            {bonuses.map((feature) => <option key={feature.id} value={feature.id}>{feature.name}</option>)}
+          </select>
+        </span>
+      );
+    }
     case "mastery-swap":
       return (
         <div className={styles.typeChips} role="group" aria-label="Masteries it can use instead">

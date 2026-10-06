@@ -539,6 +539,28 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       (effect.kind === "on-hit-option" && feature.automationSupport !== "manual-only" ? [{ key: `${feature.id}:${index}`, option: effect.option }] : [])))
   ];
   if (!options.length) return [];
+  // Improved Cunning Strike: two options paid in the same bonus's dice, on one hit, paying both.
+  const paired = new Set(features.flatMap((feature) => (feature.effects ?? []).flatMap((effect) => (effect.kind === "paired-on-hit-options" ? [effect.featureId] : []))));
+  if (paired.size) {
+    const tradeable = options.filter(({ option }) => option.tradesDice && paired.has(option.tradesDice.featureId) && !option.bonusAction && !option.routineOnly && !option.forgoesAdvantage);
+    tradeable.forEach((first, index) => {
+      for (const second of tradeable.slice(index + 1)) {
+        const a = first.option;
+        const b = second.option;
+        if (a.tradesDice!.featureId !== b.tradesDice!.featureId) continue;
+        const move = a.move ?? b.move;
+        options.push({
+          key: `${first.key}+${second.key}`,
+          option: {
+            name: `${a.name} + ${b.name.replace(/^.*?: /, "")}`,
+            tradesDice: { featureId: a.tradesDice!.featureId, dice: a.tradesDice!.dice + b.tradesDice!.dice },
+            riders: [...a.riders, ...b.riders],
+            ...(move ? { move } : {})
+          }
+        });
+      }
+    });
+  }
   // An action's attacks; a bonus action's too when an option names it (Open Hand Technique on Flurry's strikes).
   const named = new Set(options.flatMap(({ option }) => option.actionIds ?? []));
   const attacks = listed.filter((action): action is AttackActionDefinition => action.kind === "attack"

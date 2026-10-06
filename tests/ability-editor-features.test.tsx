@@ -378,6 +378,16 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Adaptable").effects).toEqual([{ kind: "mastery-swap", masteries: ["push", "sap", "topple"] }]);
   });
 
+  it("Two on-hit options on one hit: which damage bonus pays (Improved Cunning Strike)", async () => {
+    await blankFeature("Double Feint");
+    const card = await addEffect(/^Two on-hit options on one hit/, "Two on-hit options on one hit");
+    const select = card.getByLabelText("Damage bonus it pays in") as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toContain("(pick one)");
+    await done(card);
+    await addToSheet();
+    expect(named("Double Feint").effects).toEqual([{ kind: "paired-on-hit-options", featureId: "" }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;

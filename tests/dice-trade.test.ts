@@ -207,3 +207,23 @@ describe("Cunning Strike on the sheet", () => {
     expect(text).toContain("a move of up to half its speed without provoking opportunity attacks");
   });
 });
+
+describe("Improved Cunning Strike (7aq)", () => {
+  it("two effects on one hit, paying both: only pairs the dice cover", () => {
+    const names = getExecutableActions(rogue(11)).map((entry) => entry.name);
+    expect(names).toContain("Shortsword (Cunning Strike: Poison + Trip)");
+    expect(names).toContain("Shortsword (Cunning Strike: Trip + Withdraw)");
+    expect(names.some((name) => name.includes(" + ") && name.includes("Knock Out"))).toBe(false);
+    expect(getExecutableActions(rogue(10)).some((entry) => entry.name.includes(" + "))).toBe(false);
+  });
+
+  it("poisons and trips, two dice of Sneak Attack given up", () => {
+    const { state, find, attack } = fight(rogue(11));
+    state.rng = d20s(15, 1, 1);
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", attack("Shortsword (Cunning Strike: Poison + Trip)").id);
+    expect(traded(state)[0]!.data).toMatchObject({ tradedDice: "2d6", tradedFrom: "Sneak Attack" });
+    const goblin = find("enemy-goblin-1");
+    expect(goblin.conditions?.some((condition) => condition.name === "prone")).toBe(true);
+    expect(goblin.conditions?.some((condition) => condition.name === "poisoned")).toBe(true);
+  });
+});

@@ -833,6 +833,14 @@ export type FeatureEffect =
   }
   | {
     /**
+     * Improved Cunning Strike: two of its on-hit options that trade dice of this feature's damage bonus (Sneak Attack)
+     * on one hit, paying both: a compiled copy for each pair.
+     */
+    kind: "paired-on-hit-options";
+    featureId: Id;
+  }
+  | {
+    /**
      * Tactical Master: an attack with a weapon whose mastery it uses can use one of these masteries instead: a compiled
      * copy of the attack for each (`<id>:mastery-<property>`).
      */

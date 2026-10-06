@@ -90,6 +90,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
   {
+    kind: "paired-on-hit-options", label: "Two on-hit options on one hit", hint: "Improved Cunning Strike: two Cunning Strike effects at once, paying both in Sneak Attack dice", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "paired-on-hit-options", featureId: "" })
+  },
+  {
     kind: "mastery-swap", label: "Another mastery for an attack", hint: "Tactical Master: Push, Sap or Slow in place of a weapon's own mastery", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "mastery-swap", masteries: ["push", "sap", "slow"] })
   },
