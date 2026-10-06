@@ -29,7 +29,7 @@ import { entryLabel } from "@/lib/character-builder/homebrew";
 import { formatBonus } from "@/lib/ui-helpers";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEncounterStore } from "@/store/encounter-store";
-import type { BuilderSeed } from "@/store/builder-ui-store";
+import { useBuilderUiStore, type BuilderSeed } from "@/store/builder-ui-store";
 import { ChoiceControl } from "./ChoiceControl";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import styles from "./builder.module.css";
@@ -180,7 +180,14 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
       storageKey="character-builder" initialPosition={BESIDE_SHEET}
     >
       <div className={styles.builder}>
-        <p className={styles.lede}>{buildLabel(draft, sources)}</p>
+        <p className={styles.lede}>
+          {buildLabel(draft, sources)}{" "}
+          {creating ? (
+            <button type="button" className={styles.linkButton} onClick={() => useBuilderUiStore.getState().openHomebrew()}>
+              Your own classes…
+            </button>
+          ) : null}
+        </p>
 
         <section className={styles.section} aria-label="Basics">
           <h4>Basics</h4>

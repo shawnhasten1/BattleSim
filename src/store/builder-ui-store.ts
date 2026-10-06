@@ -21,11 +21,18 @@ interface BuilderUiState {
   window: BuilderWindow | null;
   open: (window: BuilderWindow) => void;
   close: () => void;
+  /** The Homebrew window (plan Phase 8b): open beside any builder window. */
+  homebrew: boolean;
+  openHomebrew: () => void;
+  closeHomebrew: () => void;
 }
 
 /** Which character builder window is open. Not persisted and not undoable: the windows edit a draft until Apply. */
 export const useBuilderUiStore = create<BuilderUiState>((set) => ({
   window: null,
   open: (window) => set({ window }),
-  close: () => set({ window: null })
+  close: () => set({ window: null }),
+  homebrew: false,
+  openHomebrew: () => set({ homebrew: true }),
+  closeHomebrew: () => set({ homebrew: false })
 }));

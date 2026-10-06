@@ -15,6 +15,9 @@ for (const entry of SRD_2024_SPELL_INDEX.spells) {
   for (const list of entry.classes) SPELL_LISTS.set(list, [...(SPELL_LISTS.get(list) ?? []), srd2024SpellId(entry.slug)]);
 }
 
+/** The SRD's class spell lists by key (`"wizard"`), for a homebrew class to cast from. */
+export const SRD_SPELL_LISTS: string[] = [...SPELL_LISTS.keys()].sort();
+
 /** The bundled library, as the builder reads it. Spells are the 2024 ones (plan D12). */
 export const SRD_BUILDER_LIBRARY: BuilderLibrary = {
   feature: findSrdFeature,

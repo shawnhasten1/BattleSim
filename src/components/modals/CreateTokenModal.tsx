@@ -283,7 +283,15 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
             >
               <ListChecks size={14} /> Step through the choices…
             </button>
-            <p className={styles.status}>Quick build makes every choice for you; either way, you can change them later.</p>
+            <p className={styles.status}>
+              Quick build makes every choice for you; either way, you can change them later.{" "}
+              <button
+                type="button" className={styles.linkButton}
+                onClick={() => { useBuilderUiStore.getState().openHomebrew(); onClose(); }}
+              >
+                Your own classes (Homebrew)…
+              </button>
+            </p>
           </>
         ) : null}
 

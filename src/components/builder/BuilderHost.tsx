@@ -1,11 +1,23 @@
 "use client";
 
+import { HomebrewWindow } from "@/components/homebrew/HomebrewWindow";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { CharacterBuilder } from "./CharacterBuilder";
 import { LevelUpWindow } from "./LevelUpWindow";
 
-/** The character builder's window, whichever is open. `onCreated` opens the new character's sheet. */
+/** The character builder's window, whichever is open, and the Homebrew window. `onCreated` opens the new character's sheet. */
 export function BuilderHost({ onCreated }: { onCreated: () => void }) {
+  const homebrew = useBuilderUiStore((s) => s.homebrew);
+  const closeHomebrew = useBuilderUiStore((s) => s.closeHomebrew);
+  return (
+    <>
+      <BuilderWindow onCreated={onCreated} />
+      {homebrew ? <HomebrewWindow onClose={closeHomebrew} /> : null}
+    </>
+  );
+}
+
+function BuilderWindow({ onCreated }: { onCreated: () => void }) {
   const window = useBuilderUiStore((s) => s.window);
   const close = useBuilderUiStore((s) => s.close);
   if (!window) return null;

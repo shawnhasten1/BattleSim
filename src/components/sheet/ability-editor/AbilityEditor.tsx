@@ -66,6 +66,8 @@ export type AbilityEditorTarget =
     focus?: SectionId[];
     /** Pools it spends that the creature may lack (a copied monster ability's), offered as new pools. */
     pools?: Record<string, number>;
+    /** Handed back instead of put on the creature: the Homebrew window's class features. */
+    commit?: AbilityCommit;
   }
   | {
     mode: "nested";
@@ -79,6 +81,20 @@ export type AbilityEditorTarget =
     /** Each change, so the parent counts it as unsaved and a save from outside (switching tab) keeps it. */
     onWorking: (record: ActionDefinition) => void;
   };
+
+/**
+ * The Homebrew window's editor (plan Phase 8b): the record goes back to it, with the new pools it spends, instead of onto
+ * the creature, which is only a stand-in to preview it on (the class built to the level that grants it).
+ */
+export interface AbilityCommit {
+  /** The save button's label ("Done"). */
+  label: string;
+  /** What Back returns to ("Rogue, level 3"). */
+  backTo: string;
+  /** An ability being edited again rather than a new one: its sections open as an edit's do. */
+  existing?: boolean;
+  onCommit: (record: AbilityRecord, pools: Record<string, number>) => void;
+}
 
 /** What the sheet opens the editor on (a nested editor is only ever opened by another editor). */
 export type SheetEditorTarget = Exclude<AbilityEditorTarget, { mode: "nested" }>;
@@ -219,7 +235,8 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
   const replaceAbilityRecord = useEncounterStore((s) => s.replaceAbilityRecord);
   const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
   const nestedTarget = target.mode === "nested" ? target : undefined;
-  const isNew = target.mode === "new" || Boolean(nestedTarget?.isNew);
+  const commit = target.mode === "new" ? target.commit : undefined;
+  const isNew = (target.mode === "new" && !commit?.existing) || Boolean(nestedTarget?.isNew);
   // A potion that follows the table's rule takes what the rule says as it's edited, as the store will save it.
   const tableRules = useEncounterStore((s) => s.encounter.rules);
   const isItem = listNameOf(target.mode === "new" ? target.list : target.ref) === "items";
@@ -301,9 +318,9 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
 
   // The library creatures it names, fetched as they're picked so a save can embed them (a nested editor's parent does).
   const toFetch = useMemo(
-    () => (nestedTarget ? [] : creaturesToFetch(placeRecord(merged).definition, scene, fetched, unfetchable)),
+    () => (nestedTarget || commit ? [] : creaturesToFetch(placeRecord(merged).definition, scene, fetched, unfetchable)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [merged, scene, fetched, unfetchable, withPools, nestedTarget]
+    [merged, scene, fetched, unfetchable, withPools, nestedTarget, commit]
   );
   const fetchKey = toFetch.join("|");
   useEffect(() => {
@@ -384,6 +401,12 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
       close();
       return true;
     }
+    // The Homebrew window's: back to it, with the pools it spends (they become the grant's pool there).
+    if (commit) {
+      if (dirty || isNew) commit.onCommit(record, poolsUsedBy(record, pools));
+      close();
+      return true;
+    }
     if (!isNew && !dirty) {
       close();
       return true;
@@ -421,12 +444,12 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
 
   function requestClose() {
     if (!dirty) return close();
-    setLeaving(nestedTarget
+    setLeaving(nestedTarget || commit
       ? { message: `Keep your changes to ${name || "this ability"}?`, discard: () => close(), saveLabel: "Keep them", discardLabel: "Discard" }
       : { message: `Save your changes to ${name || "this ability"}?`, discard: () => close() });
   }
 
-  useEditorGuard({ dirty, label: name || "this ability", save, discard: () => close() }, !nestedTarget);
+  useEditorGuard({ dirty, label: name || "this ability", save, discard: () => close() }, !nestedTarget && !commit);
 
   // Unsaved changes survive nothing outside the app: ask before the page goes away.
   useEffect(() => {
@@ -563,8 +586,11 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
     <div ref={rootRef} className={styles.editor} tabIndex={-1} onKeyDown={onKeyDown} aria-label={`Edit ${name || `new ${kindLabel}`}`} role="region">
       <div className={styles.stickyHead}>
         <div className={styles.bar}>
-          <button type="button" className={styles.back} onClick={requestClose} aria-label={nestedTarget ? `Back to ${nestedTarget.parentName}` : "Back to abilities"}>
-            <ChevronLeft size={15} /> {nestedTarget ? nestedTarget.parentName : "Abilities"}
+          <button
+            type="button" className={styles.back} onClick={requestClose}
+            aria-label={nestedTarget ? `Back to ${nestedTarget.parentName}` : commit ? `Back to ${commit.backTo}` : "Back to abilities"}
+          >
+            <ChevronLeft size={15} /> {nestedTarget ? nestedTarget.parentName : commit ? commit.backTo : "Abilities"}
           </button>
           <span className={styles.crumb}>
             <span>{nestedTarget ? "›" : "/"}</span>{name || (isNew ? `New ${kindLabel}` : "Unnamed")}
@@ -580,7 +606,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
               type="button" className={`${styles.btn} ${styles.primary}`} onClick={save}
               disabled={!isNew && !dirty} title={!isNew && !dirty ? "Nothing has changed" : "Ctrl+Enter"}
             >
-              {isNew ? "Add to sheet" : "Save"}
+              {commit ? commit.label : isNew ? "Add to sheet" : "Save"}
             </button>
           )}
         </div>
