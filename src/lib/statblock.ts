@@ -727,6 +727,14 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       ].filter(Boolean);
       return `${S} has advantage on ${abilities.length ? `${joinList(abilities.map((ability) => ABILITY_NAME[ability]))} ` : ""}saving throws${against.length ? ` against ${joinList(against)}` : ""}${gate}.`;
     }
+    case "ability-score": {
+      const name = ABILITY_NAME[effect.ability];
+      const parts = [
+        effect.setTo !== undefined ? `${P} ${name} score is at least ${effect.setTo}` : "",
+        effect.bonus ? `${effect.setTo !== undefined ? "then it" : `${P} ${name} score`} ${effect.bonus > 0 ? "increases" : "decreases"} by ${Math.abs(effect.bonus)}${effect.bonus > 0 && effect.max ? `, to a maximum of ${effect.max}` : ""}` : ""
+      ].filter(Boolean);
+      return parts.length ? `${parts.join("; ")}.` : `${P} ${name} score doesn't change.`;
+    }
     case "hit-point-maximum": {
       const value = resolveNumericFormula(effect.bonus, definition);
       const words = effect.bonus.perLevel && !effect.bonus.base && !effect.bonus.ability && !effect.bonus.proficiency ? ` (${perLevelWords(effect.bonus)})` : "";
@@ -955,6 +963,10 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
       return `${adjustmentShorts([effect.adjustment])[0]}${effect.adjustment.nonMagicalOnly ? " (nonmagical)" : ""}${gate}`;
     case "save-advantage": return `advantage on ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves${effect.against?.source ? ` vs ${effect.against.source === "spell" ? "spells" : "magic"}` : effect.against?.conditions?.length ? ` vs ${joinList(effect.against.conditions, "or")}` : ""}${gate}`;
     case "hit-point-maximum": return `max HP ${formulaText(effect.bonus, definition)}`;
+    case "ability-score": return [
+      effect.setTo !== undefined ? `${effect.ability.toUpperCase()} at least ${effect.setTo}` : "",
+      effect.bonus ? `${effect.ability.toUpperCase()} ${effect.bonus > 0 ? "+" : "−"}${Math.abs(effect.bonus)}${effect.bonus > 0 && effect.max ? ` (max ${effect.max})` : ""}` : ""
+    ].filter(Boolean).join(", ") || `${effect.ability.toUpperCase()} score`;
     case "hp-regen": if (effect.temporary) return `${effect.amount} temp HP a turn`;
       return `regains ${effect.amount} HP a turn${effect.suppressedByDamageTypes?.length ? ` (not after ${joinList(effect.suppressedByDamageTypes, "or")})` : ""}`;
     case "survive-lethal": return `drops to ${effect.hpTo && effect.hpTo > 1 ? effect.hpTo : 1} HP instead of 0`;

@@ -670,6 +670,19 @@ export type FeatureEffect =
   }
   | {
     /**
+     * Its `ability` score while this works (stats.ts, `scoresWith`): at least `setTo` (Gauntlets of Ogre Power: Strength
+     * 19; nothing if it's already higher), or `bonus` more up to `max` (an Ioun Stone of Fortitude: +2, to 20). The
+     * highest `setTo` first, then each bonus. What's worked out from the score follows it, and so do listed save and
+     * skill totals; a creature with a character level gains Constitution's change for each level in hit points (D4).
+     */
+    kind: "ability-score";
+    ability: Ability;
+    setTo?: number;
+    bonus?: number;
+    max?: number;
+  }
+  | {
+    /**
      * Regains `amount` hit points at the start of the bearer's turn. `worksAtZero` (a troll) lets it work — and
      * keeps the creature from dying — at 0 HP; without it the creature needs at least 1 HP. Damage of a type in
      * `suppressedByDamageTypes` taken since its last turn switches it off for that turn (acid and fire vs a troll).

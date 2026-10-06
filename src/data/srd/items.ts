@@ -172,6 +172,12 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
       appliedCondition: { name: "custom", durationRounds: 600, modifiers: { attackRoll: 2, savingThrows: { ...ALL_SAVES } } },
       automationSupport: "full"
     }),
+  buffPotion("potion-of-giant-strength", "Potion of Giant Strength",
+    "When you drink this potion, your Strength score changes for 1 hour, to the giant's (hill 21, frost or stone 23, fire 25, cloud 27, storm 29). It has no effect if your Strength is already that high or higher. This one is a hill giant's: change the score in What it does.",
+    {
+      appliedCondition: { name: "custom", durationRounds: 600, effects: [{ kind: "ability-score", ability: "str", setTo: 21 }] },
+      automationSupport: "full"
+    }),
   buffPotion("potion-of-invulnerability", "Potion of Invulnerability",
     "A rare potion. For 1 minute after you drink it, you have resistance to all damage. Its syrupy liquid looks like liquefied iron.",
     {
@@ -252,6 +258,21 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
     "An uncommon brooch (requires attunement). While wearing it, you have resistance to force damage, and immunity to damage from the magic missile spell.",
     [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "force" } }],
     "the immunity to magic missile"),
+  worn("gauntlets-of-ogre-power", "Gauntlets of Ogre Power",
+    "Uncommon gauntlets (requires attunement). Your Strength score is 19 while you wear them. They have no effect if your Strength is already 19 or higher.",
+    [{ kind: "ability-score", ability: "str", setTo: 19 }]),
+  worn("amulet-of-health", "Amulet of Health",
+    "A rare amulet (requires attunement). Your Constitution score is 19 while you wear it. It has no effect if your Constitution is already 19 or higher.",
+    [{ kind: "ability-score", ability: "con", setTo: 19 }]),
+  worn("headband-of-intellect", "Headband of Intellect",
+    "An uncommon headband (requires attunement). Your Intelligence score is 19 while you wear it. It has no effect if your Intelligence is already 19 or higher.",
+    [{ kind: "ability-score", ability: "int", setTo: 19 }]),
+  ...([
+    ["hill", "Hill", 21, "rare"], ["stone", "Stone", 23, "very rare"], ["frost", "Frost", 23, "very rare"],
+    ["fire", "Fire", 25, "very rare"], ["cloud", "Cloud", 27, "legendary"], ["storm", "Storm", 29, "legendary"]
+  ] as const).map(([slug, kind, score, rarity]) => worn(`belt-of-${slug}-giant-strength`, `Belt of ${kind} Giant Strength`,
+    `A ${rarity} belt (requires attunement). While wearing it, your Strength score is ${score}. It has no effect if your Strength is already ${score} or higher.`,
+    [{ kind: "ability-score", ability: "str", setTo: score }])),
   worn("ring-of-resistance", "Ring of Resistance",
     "A rare ring (requires attunement). You have resistance to one damage type while wearing it; its gem shows which, as the DM chooses. This one resists fire (a garnet): change it in While carried.",
     [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "fire" } }]),
@@ -357,19 +378,10 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
   reference("healers-kit", "Healer's Kit", "gear",
     "A leather pouch of bandages, salves and splints, with ten uses. As an action, you can expend one use to stabilize a creature that has 0 hit points, without a Wisdom (Medicine) check. Not simulated yet: stabilize by hand.",
     { supply: supply(10) }),
-  reference("potion-of-giant-strength", "Potion of Giant Strength", "potion",
-    "When you drink this potion, your Strength score changes for 1 hour, to the giant's (hill 21, frost or stone 23, fire 25, cloud 27, storm 29). It has no effect if your Strength is already that high or higher. Not simulated yet: set the score by hand.",
-    { magical: true, supply: supply(1) }),
   reference("potion-of-flying", "Potion of Flying", "potion",
     "A very rare potion. When you drink it, you gain a flying speed equal to your walking speed for 1 hour and can hover. If you're in the air when it wears off, you fall unless you have some other means of staying aloft. Not simulated yet: give the creature a flying speed by hand.",
     { magical: true, supply: supply(1) }),
   reference("elixir-of-health", "Elixir of Health", "potion",
     "A rare potion. When you drink it, it cures any disease afflicting you, and it removes the blinded, deafened, paralyzed and poisoned conditions. Not simulated yet: remove them by hand.",
-    { magical: true, supply: supply(1) }),
-  reference("gauntlets-of-ogre-power", "Gauntlets of Ogre Power", "worn",
-    "Uncommon gauntlets (requires attunement). Your Strength score is 19 while you wear them. They have no effect if your Strength is already 19 or higher. Not simulated yet: set the score by hand.",
-    { magical: true, attunement: { attuned: true } }),
-  reference("amulet-of-health", "Amulet of Health", "worn",
-    "A rare amulet (requires attunement). Your Constitution score is 19 while you wear it. It has no effect if your Constitution is already 19 or higher. Not simulated yet: set the score by hand.",
-    { magical: true, attunement: { attuned: true } })
+    { magical: true, supply: supply(1) })
 ];

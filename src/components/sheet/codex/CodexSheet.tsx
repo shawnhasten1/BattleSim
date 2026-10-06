@@ -50,7 +50,7 @@ import {
   type MovementMode
 } from "@/lib/actor-sheet/edits";
 import { CODEX_PALETTES, hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
-import { hitPointsReadout, speedReadout } from "@/lib/actor-sheet/summaries";
+import { hitPointsReadout, scoresReadout, speedReadout } from "@/lib/actor-sheet/summaries";
 import { readBuild } from "@/lib/character-builder/summary";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { readJson, writeJson } from "@/lib/persist";
@@ -284,6 +284,9 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
           ) : (
             <div className={styles.stack}>
               <AbilityDials definition={definition} />
+              {scoresReadout(definition, combatant) ? (
+                <output className={styles.cap} aria-label="Scores with its effects">With its effects: {scoresReadout(definition, combatant)}</output>
+              ) : null}
               <div>
                 <div className={styles.tabs} role="tablist" aria-label="Codex sections">
                   {available.map((id) => (

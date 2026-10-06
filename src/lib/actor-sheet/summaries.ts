@@ -1,4 +1,4 @@
-import { abilityModifier, effectiveDefinition, hitPointParts, movementProfileOf, speedParts, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
+import { abilityModifier, effectiveDefinition, hitPointParts, movementProfileOf, scoreParts, speedParts, type Ability, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { formatChallengeRating } from "@/lib/srd-monster-tree";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
@@ -45,6 +45,21 @@ export function hitPointsReadout(definition: CreatureDefinition, combatant?: Com
   const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value)}`;
   const total = effectiveDefinition(definition, combatant).maxHp;
   return `${total}: ${parts.map((part, index) => (index === 0 ? `${part.value} ${part.label}` : `${part.label} ${signed(part.value)}`)).join(", ")}`;
+}
+
+/**
+ * What its effects make its ability scores, for the sheet beside the scores it edits: "STR 19 (18 base, Gauntlets of
+ * Ogre Power +1)". Undefined when nothing changes them.
+ */
+export function scoresReadout(definition: CreatureDefinition, combatant?: CombatantState): string | undefined {
+  const parts = scoreParts(definition, combatant);
+  const actual = effectiveDefinition(definition, combatant).abilities;
+  const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value)}`;
+  const text = (["str", "dex", "con", "int", "wis", "cha"] as Ability[])
+    .filter((ability) => parts[ability])
+    .map((ability) => `${ability.toUpperCase()} ${actual[ability]} (${parts[ability]!.map((part, index) => (index === 0 ? `${part.value} ${part.label}` : `${part.label} ${signed(part.value)}`)).join(", ")})`)
+    .join("; ");
+  return text || undefined;
 }
 
 function joinList(items: string[], conjunction = "and"): string {

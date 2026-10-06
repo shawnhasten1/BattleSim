@@ -444,6 +444,48 @@ function HitPointFields({ effect, set, definition }: {
   );
 }
 
+/**
+ * An ability score effect's fields: which score, and "at least" a number (Gauntlets of Ogre Power) or "more" up to a
+ * maximum (an Ioun Stone). It warns when the creature has attacks written with fixed numbers, which won't follow.
+ */
+function ScoreFields({ effect, set, definition }: {
+  effect: Extract<FeatureEffect, { kind: "ability-score" }>;
+  set: (next: FeatureEffect) => void;
+  definition: CreatureDefinition;
+}) {
+  const how = effect.bonus !== undefined && effect.setTo === undefined ? "bonus" : "setTo";
+  const fixed = getExecutableActions(definition).some((action) => action.kind === "attack" && action.attackBonus !== undefined && !action.attackBonusFormula);
+  return (
+    <>
+      <span className={styles.inline}>
+        <span>Its</span>
+        <AbilitySelect label="Which score" value={effect.ability} onChange={(ability) => ability && set({ ...effect, ability })} />
+        <span>score</span>
+        <Segmented
+          label="It" value={how}
+          options={[{ value: "setTo", label: "Is at least" }, { value: "bonus", label: "Goes up by" }]}
+          onChange={(next) => set(next === "setTo"
+            ? { kind: "ability-score", ability: effect.ability, setTo: effect.setTo ?? 19 }
+            : { kind: "ability-score", ability: effect.ability, bonus: effect.bonus ?? 2, max: effect.max ?? 20 })}
+        />
+      </span>
+      {how === "setTo" ? (
+        <span className={styles.inline}>
+          <NumberField label="Score at least" value={effect.setTo} min={1} max={30} onChange={(n) => n !== undefined && set({ ...effect, setTo: n })} />
+          <span>(no change if it's already higher)</span>
+        </span>
+      ) : (
+        <span className={styles.inline}>
+          <NumberField label="Score goes up by" value={effect.bonus} min={-10} max={10} onChange={(n) => n !== undefined && set({ ...effect, bonus: n })} />
+          <span>to a maximum of</span>
+          <NumberField label="Maximum score" value={effect.max} optional min={1} max={30} onChange={(n) => set(opt(effect, "max", n))} />
+        </span>
+      )}
+      {fixed ? <p className={styles.warningText}>Some of its attacks have a fixed attack bonus: those won&apos;t follow the score. Give them a formula to make them.</p> : null}
+    </>
+  );
+}
+
 type SpeedEffect = Extract<FeatureEffect, { kind: "speed" }>;
 type SpeedMode = keyof NonNullable<SpeedEffect["modes"]>;
 const SPEED_MODES: Array<{ mode: SpeedMode; label: string }> = [
@@ -1505,6 +1547,8 @@ function EffectFields({ effect, damageTypes, abilities, restricted, modifierKey,
     }
     case "hit-point-maximum":
       return <HitPointFields effect={effect} set={set} definition={definition} />;
+    case "ability-score":
+      return <ScoreFields effect={effect} set={set} definition={definition} />;
     case "hp-regen":
       return (
         <>

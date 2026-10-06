@@ -24,11 +24,11 @@ describe("the Add effect picker", () => {
     expect(document.activeElement).toBe(search);
     const common = within(picker.getByRole("group", { name: "Common on an item" }));
     expect(common.getAllByRole("button").map((button) => button.textContent)).toEqual(
-      ["AC bonus", "Bonus to saves", "Speed", "Max HP", "Resistance", "Bonus to hit", "Extra damage", "Advantage on saves", "Save DC bonus"]
+      ["AC bonus", "Bonus to saves", "Speed", "Ability score", "Max HP", "Resistance", "Bonus to hit", "Extra damage"]
     );
     const folds = picker.getAllByRole("button", { expanded: false });
     expect(folds.map((fold) => fold.textContent?.replace(/\d+$/, ""))).toEqual(
-      ["Movement", "Hit points", "AC & defenses", "Attacks & damage", "Spells", "Saves & d20 rolls", "Actions & turn", "Class & monster mechanics"]
+      ["Movement", "Hit points", "Ability scores & initiative", "AC & defenses", "Attacks & damage", "Spells", "Saves & d20 rolls", "Actions & turn", "Class & monster mechanics"]
     );
   });
 

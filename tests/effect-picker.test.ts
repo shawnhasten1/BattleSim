@@ -119,6 +119,12 @@ describe("searching for an effect", () => {
     expect(top("heroism")).toEqual({ kind: "hp-regen", example: "Heroism's temporary hit points" });
   });
 
+  it("finds ability scores by the score or the item", () => {
+    for (const query of ["ability score", "strength", "con", "stat"]) expect(top(query)?.kind, query).toBe("ability-score");
+    expect(top("gauntlets")).toEqual({ kind: "ability-score", example: "Strength 19, like Gauntlets of Ogre Power" });
+    expect(top("amulet of health")).toEqual({ kind: "ability-score", example: "Constitution 19, like an Amulet of Health" });
+  });
+
   it("finds nothing for what isn't an effect yet", () => {
     expect(searchEffects("xylophone")).toEqual([]);
   });

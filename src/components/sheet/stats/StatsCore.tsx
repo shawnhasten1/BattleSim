@@ -8,7 +8,7 @@ import { CREATURE_TYPES } from "@/lib/creature-types";
 import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { SheetNumber, SheetText } from "../SheetInputs";
-import { hitPointsReadout, speedReadout } from "@/lib/actor-sheet/summaries";
+import { hitPointsReadout, scoresReadout, speedReadout } from "@/lib/actor-sheet/summaries";
 import styles from "../sheet.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -53,6 +53,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
   // What its items and features make its speed: the field above edits the base.
   const speedNow = speedReadout(definition);
   const hitPointsNow = hitPointsReadout(definition);
+  const scoresNow = scoresReadout(definition);
 
   /** A movement mode set (or, with no feet, taken away; hover goes with fly). */
   function setMode(mode: MovementMode, feet: number | undefined) {
@@ -186,6 +187,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
           );
         })}
       </div>
+      {scoresNow ? <output className={styles.unit} aria-label="Scores with its effects">With its effects: {scoresNow}</output> : null}
       <span className={styles.scoresLegend}>
         Score, modifier, and saving throw (◆ proficient)
         <InfoTooltip label="About saving throws" content={SAVES_HELP} />

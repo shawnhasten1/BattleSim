@@ -75,6 +75,26 @@ describe("the hit point card", () => {
   });
 });
 
+describe("the ability score card", () => {
+  it("sets a score to at least a number, or raises it to a maximum", async () => {
+    render(<Cards />);
+    await pickEffect(section(), "gauntlets", "Strength 19, like Gauntlets of Ogre Power");
+    expect(latest).toEqual([{ kind: "ability-score", ability: "str", setTo: 19 }]);
+    const score = within(screen.getByRole("group", { name: "Ability score effect" }));
+    await userEvent.selectOptions(score.getByLabelText("Which score"), "con");
+    await userEvent.click(within(score.getByRole("radiogroup", { name: "It" })).getByRole("radio", { name: "Goes up by" }));
+    expect(latest).toEqual([{ kind: "ability-score", ability: "con", bonus: 2, max: 20 }]);
+    expect(score.getByText("Its Constitution score increases by 2, to a maximum of 20.")).toBeTruthy();
+  });
+
+  it("warns that attacks with a fixed bonus won't follow", async () => {
+    const claw = { kind: "attack" as const, id: "claw", name: "Claw", actionType: "action" as const, attackType: "melee" as const, ability: "str" as const, range: 5, reach: 5, attackBonus: 5, damage: [{ dice: "1d6", damageType: "slashing" as const }], automationSupport: "full" as const };
+    render(<Cards definition={{ ...barbarian, actions: [claw] }} effects={[{ kind: "ability-score", ability: "str", setTo: 19 }]} />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit ability score effect" }));
+    expect(screen.getByText(/fixed attack bonus/)).toBeTruthy();
+  });
+});
+
 describe("Aid before the fight", () => {
   const pristine = useEncounterStore.getState();
   beforeEach(() => useEncounterStore.setState(pristine, true));

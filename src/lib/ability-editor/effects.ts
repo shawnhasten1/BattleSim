@@ -12,11 +12,12 @@ export type EffectKind = FeatureEffect["kind"];
  * The Add effect picker's groups, named for what the DM wants to change (EFFECTS_PLAN.md, Phase 0). The class and
  * monster mechanics come last, in a fold of their own.
  */
-export type EffectGroup = "movement" | "hit-points" | "defense" | "attacks" | "spells" | "saves" | "turn" | "mechanics";
+export type EffectGroup = "movement" | "hit-points" | "scores" | "defense" | "attacks" | "spells" | "saves" | "turn" | "mechanics";
 
 export const GROUPS: Array<{ group: EffectGroup; label: string }> = [
   { group: "movement", label: "Movement" },
   { group: "hit-points", label: "Hit points" },
+  { group: "scores", label: "Ability scores & initiative" },
   { group: "defense", label: "AC & defenses" },
   { group: "attacks", label: "Attacks & damage" },
   { group: "spells", label: "Spells" },
@@ -104,6 +105,21 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     kind: "free-move", label: "A move with something else", hint: "Instinctive Pounce with Rage, Tactical Shift with Second Wind, a move after a critical hit", group: "movement", when: false, scope: false,
     keywords: ["move", "movement", "pounce", "tactical shift", "reposition", "extra movement"],
     blank: () => ({ kind: "free-move", on: "critical-hit" })
+  },
+  // Ability scores & initiative
+  {
+    kind: "ability-score", label: "Ability score", hint: "Set a score to at least a number (Gauntlets of Ogre Power: STR 19), or raise it to a maximum", group: "scores", when: false, scope: false, short: "Ability score",
+    keywords: [
+      "ability score", "score", "stat", "strength", "str", "dexterity", "dex", "constitution", "con", "intelligence", "int", "wisdom", "wis", "charisma", "cha"
+    ],
+    examples: [
+      { label: "Strength 19, like Gauntlets of Ogre Power", effects: () => [{ kind: "ability-score", ability: "str", setTo: 19 }] },
+      { label: "Constitution 19, like an Amulet of Health", keywords: ["health"], effects: () => [{ kind: "ability-score", ability: "con", setTo: 19 }] },
+      { label: "Intelligence 19, like a Headband of Intellect", keywords: ["intellect"], effects: () => [{ kind: "ability-score", ability: "int", setTo: 19 }] },
+      { label: "Strength 21, like a Belt of Hill Giant Strength", keywords: ["potion"], effects: () => [{ kind: "ability-score", ability: "str", setTo: 21 }] },
+      { label: "+2 Constitution, to a maximum of 20, like an Ioun Stone of Fortitude", keywords: ["fortitude"], effects: () => [{ kind: "ability-score", ability: "con", bonus: 2, max: 20 }] }
+    ],
+    blank: () => ({ kind: "ability-score", ability: "str", setTo: 19 })
   },
   // Hit points
   {
@@ -458,7 +474,7 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "resource-regain", timing: "turn-start", resourceId: "", amount: { base: 1 } })
   },
   {
-    kind: "initiative", label: "Initiative", hint: "Advantage on the roll (Feral Instinct) or a bonus to it (Alert)", group: "turn", when: false, scope: false,
+    kind: "initiative", label: "Initiative", hint: "Advantage on the roll (Feral Instinct) or a bonus to it (Alert)", group: "scores", when: false, scope: false,
     keywords: ["initiative", "go first", "turn order"],
     examples: [
       { label: "Alert", hint: "its proficiency bonus on initiative", effects: () => [{ kind: "initiative", bonus: { proficiency: true } }] },
@@ -513,7 +529,7 @@ export const EFFECT_SPECS = Object.fromEntries(EFFECT_KINDS.map((spec) => [spec.
 
 /** The usual effects for what they belong to, in the picker's Common row. Each has a `short` name. */
 export const COMMON: Record<EffectOwner, EffectKind[]> = {
-  item: ["armor-class-bonus", "save-bonus", "speed", "hit-point-maximum", "damage-adjustment", "attack-bonus", "damage-bonus", "save-advantage", "save-dc-bonus"],
+  item: ["armor-class-bonus", "save-bonus", "speed", "ability-score", "hit-point-maximum", "damage-adjustment", "attack-bonus", "damage-bonus"],
   buff: ["attack-bonus", "attack-advantage", "armor-class-bonus", "save-bonus", "speed", "hit-point-maximum", "damage-adjustment", "damage-bonus", "incoming-attack-modifier"],
   feature: ["damage-adjustment", "save-advantage", "damage-bonus", "attack-advantage", "armor-class-bonus", "speed", "hit-point-maximum", "condition-immunity", "hp-regen"]
 };

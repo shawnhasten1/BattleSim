@@ -2,7 +2,7 @@ import { isArmorItem, isWorn, slowedByArmor, type ArmorItem } from "./armor";
 // A cycle, used only inside functions: combat.ts reads this module's effectiveDefinition the same way.
 import { resolveNumericFormula } from "./combat";
 import { workingItems } from "./items";
-import type { CombatantState, CreatureDefinition, FeatureEffect, MovementProfile, SelfGate, SizeCategory } from "./types";
+import type { Ability, CombatantState, CreatureDefinition, FeatureEffect, MovementProfile, SelfGate, SizeCategory } from "./types";
 
 /**
  * A creature's stats as its effects make them (EFFECTS_PLAN.md): its speed and movement modes (Phase 1), hit point
@@ -14,9 +14,10 @@ import type { CombatantState, CreatureDefinition, FeatureEffect, MovementProfile
 
 type SpeedEffect = Extract<FeatureEffect, { kind: "speed" }>;
 type HitPointEffect = Extract<FeatureEffect, { kind: "hit-point-maximum" }>;
+type ScoreEffect = Extract<FeatureEffect, { kind: "ability-score" }>;
 
 /** The kinds that change the stat block itself. */
-const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed", "hit-point-maximum"]);
+const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed", "hit-point-maximum", "ability-score"]);
 
 /** A stat-changing effect and what it comes from (a feature's, item's or condition's name). */
 interface StatSource {
@@ -152,6 +153,84 @@ export function speedWith(definition: CreatureDefinition, sources: Array<{ label
   return { movement: { ...others, walk, ...(hover ? { hover } : {}) }, parts };
 }
 
+/* ─── ability scores ─────────────────────────────────────────────────────── */
+
+const ABILITY_LIST: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+/** The ability each skill uses, by its id with anything but letters taken out ("sleightofhand"). */
+const SKILL_ABILITY: Record<string, Ability> = {
+  acrobatics: "dex", animalhandling: "wis", arcana: "int", athletics: "str", deception: "cha", history: "int", insight: "wis",
+  intimidation: "cha", investigation: "int", medicine: "wis", nature: "int", perception: "wis", performance: "cha",
+  persuasion: "cha", religion: "int", sleightofhand: "dex", stealth: "dex", survival: "wis"
+};
+
+/**
+ * Its scores with these effects, and how each changed one came about. For each ability: the highest "at least" (Gauntlets
+ * of Ogre Power: Strength 19) when it's above the score, then each bonus up to its maximum (an Ioun Stone of Fortitude:
+ * +2, to 20). A bonus never takes a score past its maximum, nor down to it.
+ */
+export function scoresWith(abilities: Record<Ability, number>, sources: Array<{ label: string; effect: ScoreEffect }>): {
+  abilities: Record<Ability, number>;
+  parts: Partial<Record<Ability, StatPart[]>>;
+} {
+  const next = { ...abilities };
+  const parts: Partial<Record<Ability, StatPart[]>> = {};
+  for (const ability of ABILITY_LIST) {
+    const mine = sources.filter(({ effect }) => effect.ability === ability);
+    if (!mine.length) continue;
+    const list: StatPart[] = [{ label: "base", value: abilities[ability] }];
+    const floor = mine.filter(({ effect }) => effect.setTo !== undefined).sort((a, b) => b.effect.setTo! - a.effect.setTo!)[0];
+    if (floor && floor.effect.setTo! > next[ability]) {
+      list.push({ label: floor.label, value: floor.effect.setTo! - next[ability] });
+      next[ability] = floor.effect.setTo!;
+    }
+    for (const { label, effect } of mine) {
+      if (!effect.bonus) continue;
+      const raised = effect.bonus > 0 ? Math.max(next[ability], Math.min(effect.max ?? 30, next[ability] + effect.bonus)) : next[ability] + effect.bonus;
+      if (raised === next[ability]) continue;
+      list.push({ label, value: raised - next[ability] });
+      next[ability] = Math.max(1, raised);
+    }
+    if (list.length > 1) parts[ability] = list;
+  }
+  return { abilities: next, parts };
+}
+
+const modifier = (score: number) => Math.floor((score - 10) / 2);
+
+/** Its character level, or 0 for a creature without one (a monster: its hit points don't follow its Constitution). */
+function characterLevel(definition: CreatureDefinition): number {
+  return definition.character?.level ?? definition.character?.classes?.reduce((sum, entry) => sum + entry.level, 0) ?? 0;
+}
+
+/**
+ * The definition with new scores, and what follows them that's written down as a total: its listed saves and skills
+ * move by the modifier's change, and a creature with a character level gains (or loses) that change in Constitution for
+ * each level in hit points, as the rules say (D4). A fixed attack bonus or damage written as a number doesn't move.
+ */
+function withScores(definition: CreatureDefinition, abilities: Record<Ability, number>): CreatureDefinition {
+  const change = (ability: Ability) => modifier(abilities[ability]) - modifier(definition.abilities[ability]);
+  const next: CreatureDefinition = { ...definition, abilities };
+  if (definition.saves) {
+    const saves: Partial<Record<Ability, number>> = {};
+    for (const [ability, total] of Object.entries(definition.saves) as Array<[Ability, number | undefined]>) {
+      if (typeof total === "number") saves[ability] = total + change(ability);
+    }
+    next.saves = saves;
+  }
+  if (definition.skills) {
+    const skills: Record<string, number> = {};
+    for (const [skill, total] of Object.entries(definition.skills)) {
+      const ability = SKILL_ABILITY[skill.toLowerCase().replace(/[^a-z]/g, "")];
+      skills[skill] = ability ? total + change(ability) : total;
+    }
+    next.skills = skills;
+  }
+  const level = characterLevel(definition);
+  if (level && change("con")) next.maxHp = Math.max(1, definition.maxHp + change("con") * level);
+  return next;
+}
+
 /* ─── the creature as its effects make it ────────────────────────────────── */
 
 /** What it gets: the sources that apply now, gated, and a size change. */
@@ -160,9 +239,9 @@ function applying(definition: CreatureDefinition, combatant: CombatantState | un
   const fromConditions = conditionStatSources(combatant);
   const holds = (source: StatSource) => selfGateHolds(definition, combatant, source.effect as SelfGate);
   const sources = [...own, ...fromConditions.sources].filter(holds);
-  const speed = sources.filter((source): source is { label: string; effect: SpeedEffect } => source.effect.kind === "speed");
-  const hitPoints = sources.filter((source): source is { label: string; effect: HitPointEffect } => source.effect.kind === "hit-point-maximum");
-  return { speed, hitPoints, size: fromConditions.size };
+  const of = <K extends FeatureEffect["kind"]>(kind: K) =>
+    sources.filter((source): source is { label: string; effect: Extract<FeatureEffect, { kind: K }> } => source.effect.kind === kind);
+  return { speed: of("speed"), hitPoints: of("hit-point-maximum"), scores: of("ability-score"), size: fromConditions.size };
 }
 
 /* ─── hit points ─────────────────────────────────────────────────────────── */
@@ -183,19 +262,28 @@ export function hitPointsWith(definition: CreatureDefinition, sources: Array<{ l
   return { maxHp: Math.max(1, maxHp), parts };
 }
 
+/** The definition its scores make (scores first: Strength decides heavy armor's slowdown, Constitution hit points). */
+function scored(definition: CreatureDefinition, scores: Array<{ label: string; effect: ScoreEffect }>): CreatureDefinition {
+  if (!scores.length) return definition;
+  const { abilities } = scoresWith(definition.abilities, scores);
+  return ABILITY_LIST.some((ability) => abilities[ability] !== definition.abilities[ability]) ? withScores(definition, abilities) : definition;
+}
+
 const derived = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>();
 
 /**
  * The definition with its effects folded in: one object per base definition and change (so everything keyed on the
  * definition, like its compiled actions, works as it does for the base), or the definition itself when nothing changes
- * it. `speedIncludesArmor` tells `movementProfileOf` heavy armor's 10 ft is already taken off.
+ * it. Scores first, then speed and hit points on them. `speedIncludesArmor` tells `movementProfileOf` heavy armor's 10 ft
+ * is already taken off.
  */
 export function effectiveDefinition(definition: CreatureDefinition, combatant?: CombatantState): CreatureDefinition {
   // The hot path: nothing of its own and no condition that could change it.
   if (!ownStatSources(definition).length && !(combatant?.conditions ?? []).some((condition) => condition.effects?.length || condition.modifiers)) return definition;
-  const { speed, hitPoints, size } = applying(definition, combatant);
-  if (!speed.length && !hitPoints.length && !size) return definition;
-  const key = JSON.stringify([speed.map(({ effect }) => effect), hitPoints.map(({ effect }) => effect), size ?? null]);
+  const { speed, hitPoints, scores, size } = applying(definition, combatant);
+  if (!speed.length && !hitPoints.length && !scores.length && !size) return definition;
+  const effectsOf = (list: StatSource[]) => list.map(({ effect }) => effect);
+  const key = JSON.stringify([effectsOf(speed), effectsOf(hitPoints), effectsOf(scores), size ?? null]);
   let forms = derived.get(definition);
   if (!forms) {
     forms = new Map();
@@ -203,14 +291,15 @@ export function effectiveDefinition(definition: CreatureDefinition, combatant?: 
   }
   const known = forms.get(key);
   if (known) return known;
-  const form: CreatureDefinition = { ...definition, ...(size ? { size } : {}) };
+  const base = scored(definition, scores);
+  const form: CreatureDefinition = { ...base, ...(size ? { size } : {}) };
   if (speed.length) {
-    const { movement } = speedWith(definition, speed);
+    const { movement } = speedWith(base, speed);
     form.speed = movement.walk;
     form.movement = movement;
     form.speedIncludesArmor = true;
   }
-  if (hitPoints.length) form.maxHp = hitPointsWith(definition, hitPoints).maxHp;
+  if (hitPoints.length) form.maxHp = hitPointsWith(base, hitPoints).maxHp;
   forms.set(key, form);
   return form;
 }
@@ -223,17 +312,33 @@ export function actualMaxHp(definition: CreatureDefinition, combatant?: Combatan
   return effectiveDefinition(definition, combatant).maxHp;
 }
 
-/** How its hit point maximum comes about, for the sheet: "base 65 + Tough 12". Empty when nothing changes it. */
+/**
+ * How its hit point maximum comes about, for the sheet: "base 65, Amulet of Health (Constitution) +12, Tough +12". Empty
+ * when nothing changes it.
+ */
 export function hitPointParts(definition: CreatureDefinition, combatant?: CombatantState): StatPart[] {
-  const { hitPoints } = applying(definition, combatant);
-  if (!hitPoints.length) return [];
-  const { parts } = hitPointsWith(definition, hitPoints);
-  return parts.length > 1 ? parts : [];
+  const { hitPoints, scores } = applying(definition, combatant);
+  const base = scored(definition, scores);
+  const fromConstitution = base.maxHp - definition.maxHp;
+  if (!hitPoints.length && !fromConstitution) return [];
+  const { parts } = hitPointsWith(base, hitPoints);
+  const conSource = scoresWith(definition.abilities, scores).parts.con?.slice(1).map((part) => part.label).join(", ");
+  return [
+    { label: "base", value: definition.maxHp },
+    ...(fromConstitution ? [{ label: `${conSource ?? "Constitution"} (Constitution)`, value: fromConstitution }] : []),
+    ...parts.slice(1)
+  ];
 }
 
 /** How its speed comes about, for the sheet: "base 30 + Fast Movement 10 + Boots of Striding 10". Empty when nothing changes it. */
 export function speedParts(definition: CreatureDefinition, combatant?: CombatantState): StatPart[] {
-  const { speed } = applying(definition, combatant);
+  const { speed, scores } = applying(definition, combatant);
   if (!speed.length) return [];
-  return speedWith(definition, speed).parts;
+  return speedWith(scored(definition, scores), speed).parts;
+}
+
+/** How each score its effects change comes about, for the sheet: Strength "base 18, Gauntlets of Ogre Power +1". */
+export function scoreParts(definition: CreatureDefinition, combatant?: CombatantState): Partial<Record<Ability, StatPart[]>> {
+  const { scores } = applying(definition, combatant);
+  return scores.length ? scoresWith(definition.abilities, scores).parts : {};
 }
