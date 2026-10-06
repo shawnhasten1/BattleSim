@@ -1,0 +1,10 @@
+/* A message about the sheet windows, outside any of them: bottom centre of the page, above the windows. */
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: calc(var(--ui-z-sheet) + 10);
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  margin: 0;
+}

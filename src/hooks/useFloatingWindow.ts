@@ -26,22 +26,37 @@ export interface UseFloatingWindowResult {
   };
 }
 
+export interface UseFloatingWindowOptions {
+  /**
+   * Start at the remembered position (true, the default), or at `initial` while still remembering where it's dragged:
+   * the sheet windows cascade each new window from the one in front.
+   */
+  restore?: boolean;
+  /** Told each new position (the sheet windows note it for the next window's cascade). */
+  onMove?: (position: Position) => void;
+}
+
 /**
  * Title-bar drag + minimize state for a floating (non-modal) window. When
  * `storageKey` is given the dragged position is remembered per viewer in
- * localStorage. Single-window today; a manager can layer z-order on top later
- * without touching this.
+ * localStorage. Z-order belongs to whoever manages several windows (the sheet windows store).
  */
-export function useFloatingWindow(initial: Position, storageKey?: string): UseFloatingWindowResult {
+export function useFloatingWindow(initial: Position, storageKey?: string, options: UseFloatingWindowOptions = {}): UseFloatingWindowResult {
+  const { restore = true, onMove } = options;
   const [position, setPosition] = useState<Position>(() =>
-    storageKey ? readJson<Position>(`win:${storageKey}`, initial) : initial
+    storageKey && restore ? readJson<Position>(`win:${storageKey}`, initial) : initial
   );
   const [minimized, setMinimized] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+  // Only a drag is remembered: a window opened at a cascaded spot mustn't move the next one's remembered start.
+  const draggedRef = useRef(false);
 
   useEffect(() => {
-    if (storageKey) writeJson(`win:${storageKey}`, position);
-  }, [storageKey, position]);
+    if (storageKey && (restore || draggedRef.current)) writeJson(`win:${storageKey}`, position);
+    onMoveRef.current?.(position);
+  }, [storageKey, restore, position]);
 
   function onPointerDown(event: PointerEvent<HTMLElement>) {
     if (event.button !== 0) return;
@@ -57,6 +72,7 @@ export function useFloatingWindow(initial: Position, storageKey?: string): UseFl
   function onPointerMove(event: PointerEvent<HTMLElement>) {
     const drag = dragRef.current;
     if (!drag) return;
+    draggedRef.current = true;
     setPosition({
       x: clamp(event.clientX - drag.offsetX, 8, window.innerWidth - 120),
       y: clamp(event.clientY - drag.offsetY, 0, window.innerHeight - 44)

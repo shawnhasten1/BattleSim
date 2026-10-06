@@ -3,13 +3,15 @@ import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultConditionModifiers, type CombatantState } from "@/engine";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { SheetWindowsHost } from "@/components/sheet/SheetWindowsHost";
+import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 import type { Compendium } from "@/hooks/useCompendium";
 import { useEncounterStore } from "@/store/encounter-store";
 
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   window.localStorage.clear();
 });
 // Unmount, so a menu or tooltip left open (portalled to the body) doesn't re-render into the next test.
@@ -31,7 +33,7 @@ function patchToken(id: string, patch: Partial<CombatantState>) {
 /** The sheet on `combatantId`, with no undo history. */
 function openSheet(combatantId = "enemy-goblin-2") {
   useEncounterStore.setState({ selectedCombatantId: combatantId, undoStack: [] });
-  return render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+  return renderSheet(compendium);
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -165,9 +167,9 @@ describe("the automation count", () => {
 
 describe("a compendium message", () => {
   it("shows as a toast only when it arrives while the sheet is open", () => {
-    const view = render(<ActorSheet compendium={{ ...compendium, status: "Imported Lore Bard" } as Compendium} onClose={() => undefined} />);
+    const view = renderSheet({ ...compendium, status: "Imported Lore Bard" } as Compendium);
     expect(screen.queryByRole("status")).toBeNull();
-    act(() => view.rerender(<ActorSheet compendium={{ ...compendium, status: "Attached Longsword" } as Compendium} onClose={() => undefined} />));
+    act(() => view.rerender(<SheetWindowsHost compendium={{ ...compendium, status: "Attached Longsword" } as Compendium} />));
     expect(screen.getByRole("status").textContent).toBe("Attached Longsword");
   });
 });

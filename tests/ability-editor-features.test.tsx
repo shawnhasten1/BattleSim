@@ -5,7 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getExecutableActions, type ActionDefinition, type CreatureDefinition, type FeatureDefinition } from "@/engine";
 import { SRD_FEATURES, findSrdFeature } from "@/data/srd";
 import { loadSrdMonster } from "@/data/srd/monsters";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
 import type { Compendium } from "@/hooks/useCompendium";
 import { activationOf } from "@/lib/ability-editor/features";
@@ -20,6 +20,7 @@ import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   try { localStorage.clear(); } catch { /* private mode */ }
 });
 afterEach(() => { document.body.innerHTML = ""; });
@@ -830,7 +831,7 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
   it("keeps a granted ability's edits when the sheet saves on a tab switch", async () => {
     // The fighter has Second Wind: a feature that grants a bonus-action heal.
     const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
-    render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+    renderSheet(compendium);
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
     // Second Wind grants a bonus-action heal, so it's listed with the bonus actions.
     const features = screen.getByRole("region", { name: "Bonus actions" });

@@ -1,7 +1,7 @@
 "use client";
 
 import { Crosshair, ZoomIn, ZoomOut } from "lucide-react";
-import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { cellIntersectsArea, getDefinition, parseDiceExpression, sizeFootprint, wallCover, type CombatantState, type ConditionName, type CoverLevel, type CreatureDefinition, type DmChange, type TerrainZone, type WallSegment } from "@/engine";
 import { hasVanished, isDominated, isSurprised, TERRAIN_BRUSH_PRESETS, useEncounterStore, type GridAlignDraft, type TerrainBrushId } from "@/store/encounter-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
@@ -62,7 +62,8 @@ interface SceneCanvasProps {
   onCanvasDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onCanvasDrop: (event: DragEvent<HTMLDivElement>) => void;
   /** Open the floating actor sheet (owned by the page). Invoked from the token context menu. */
-  onEditActor?: () => void;
+  /** Opens a token's sheet window: its menu's "Edit sheet", or a double-click on it. */
+  onEditActor?: (combatantId: string) => void;
   /** Open the battle report (owned by the page): Play's end card offers it. */
   onOpenReport?: () => void;
 }
@@ -81,6 +82,20 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
   const removeCombatant = useEncounterStore((state) => state.removeCombatant);
   const removeCombatants = useEncounterStore((state) => state.removeCombatants);
   const duplicateCombatant = useEncounterStore((state) => state.duplicateCombatant);
+
+  // The last press on a token. A second plain press on it soon after, nearly in place, opens its sheet: no dblclick
+  // reaches a token, because its first press captures the pointer on the battlemap.
+  const lastPressRef = useRef<{ id: string; at: number; x: number; y: number } | null>(null);
+  function isDoublePress(event: ReactPointerEvent, id: string): boolean {
+    if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+      lastPressRef.current = null;
+      return false;
+    }
+    const last = lastPressRef.current;
+    const double = last !== null && last.id === id && event.timeStamp - last.at < 400 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 6;
+    lastPressRef.current = double ? null : { id, at: event.timeStamp, x: event.clientX, y: event.clientY };
+    return double;
+  }
   const updateHp = useEncounterStore((state) => state.updateHp);
   const setAltitude = useEncounterStore((state) => state.setAltitude);
   const adjustAltitude = useEncounterStore((state) => state.adjustAltitude);
@@ -425,7 +440,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         label: "Edit sheet",
         onSelect: () => {
           scene.selectCombatantOnBoard(combatant.id, false);
-          onEditActor?.();
+          onEditActor?.(combatant.id);
         }
       },
       { separator: true },
@@ -567,7 +582,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
         label: "Edit sheet",
         onSelect: () => {
           scene.selectCombatantOnBoard(combatant.id, false);
-          onEditActor?.();
+          onEditActor?.(combatant.id);
         }
       },
       { separator: true },
@@ -780,7 +795,10 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
               onDragOver={(event) => onTokenSrdDragOver(event, combatant.id)}
               onDragLeave={() => setSrdDropTokenId((current) => (current === combatant.id ? null : current))}
               onDrop={(event) => onTokenSrdDrop(event, combatant)}
-              onPointerDown={replaying ? undefined : (event) => scene.onTokenPointerDown(event, combatant.id)}
+              onPointerDown={replaying ? undefined : (event) => {
+                if (isDoublePress(event, combatant.id)) onEditActor?.(combatant.id);
+                scene.onTokenPointerDown(event, combatant.id);
+              }}
               // The Select tool drives select / drag / place entirely from the
               // pointer handlers above; every other tool owns a different layer
               // (walls, terrain) and must not be able to select a token, so the

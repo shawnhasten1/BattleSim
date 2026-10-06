@@ -2,13 +2,14 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 import type { Compendium } from "@/hooks/useCompendium";
 import { useEncounterStore } from "@/store/encounter-store";
 
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   window.localStorage.clear();
 });
 afterEach(() => { document.body.innerHTML = ""; });
@@ -21,7 +22,7 @@ const token = (id: string) => store().encounter.combatants.find((combatant) => c
 /** The sheet open on `combatantId`, on `tab`, with no undo history. */
 async function openSheet(combatantId: string, tab: "Stats" | "Token") {
   useEncounterStore.setState({ selectedCombatantId: combatantId, undoStack: [] });
-  render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+  renderSheet(compendium);
   await userEvent.click(screen.getByRole("tab", { name: tab }));
 }
 
@@ -95,7 +96,7 @@ describe("typing on the sheet", () => {
 
   it("a pool's size typed on the Abilities tab is one undo step", async () => {
     useEncounterStore.setState({ selectedCombatantId: "pc-fighter", undoStack: [] });
-    render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+    renderSheet(compendium);
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
     await userEvent.click(within(screen.getByRole("region", { name: "Resources" })).getByRole("button", { name: /^Resources/ }));
     await retype(within(screen.getByRole("group", { name: "Resource sizes" })).getByLabelText("Second Wind full"), "12");

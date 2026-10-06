@@ -28,7 +28,7 @@ const SAVE_LABELS: Record<LibraryStatus, string> = {
  * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself, and Make it its own
  * creature. Every item waits on `guard`, which asks first when an ability being edited has unsaved changes.
  */
-export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature }: {
+export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature, onShowToken }: {
   combatant: CombatantState;
   definition: CreatureDefinition;
   status: LibraryStatus;
@@ -36,6 +36,8 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   onToast: (toast: SheetToast) => void;
   /** After Make it its own creature: Stats, with the new creature's name ready to rename. */
   onOwnCreature: () => void;
+  /** Show another token of this creature in the window (the copy Duplicate token just made). */
+  onShowToken?: (combatantId: string) => void;
 }) {
   const saveDefinition = useEncounterStore((s) => s.saveDefinition);
   const copyLibraryDefinition = useEncounterStore((s) => s.copyLibraryDefinition);
@@ -68,7 +70,10 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
     duplicateCombatant(combatant.id);
     const state = useEncounterStore.getState();
     const copy = state.encounter.combatants.find((candidate) => candidate.id === state.selectedCombatantId);
-    if (copy && copy.id !== combatant.id) onToast({ message: `Added ${copy.displayName}, a copy of ${combatant.displayName}.` });
+    if (copy && copy.id !== combatant.id) {
+      onShowToken?.(copy.id);
+      onToast({ message: `Added ${copy.displayName}, a copy of ${combatant.displayName}.` });
+    }
   }
 
   function ownCreature() {

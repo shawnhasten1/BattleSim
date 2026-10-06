@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 import type { Compendium } from "@/hooks/useCompendium";
 import { useEncounterStore } from "@/store/encounter-store";
 
@@ -11,6 +11,7 @@ import { useEncounterStore } from "@/store/encounter-store";
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -25,7 +26,7 @@ const creature = (id: string) => store().encounter.definitions.find((definition)
 
 function openSheet(combatantId: string) {
   useEncounterStore.setState({ selectedCombatantId: combatantId, undoStack: [] });
-  return render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+  return renderSheet(compendium);
 }
 const caption = (tab: string) => document.getElementById(screen.getByRole("tab", { name: tab }).getAttribute("aria-describedby")!)!.textContent;
 const menuItem = async () => {

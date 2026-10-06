@@ -17,7 +17,7 @@ import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
 import { CombatPanel } from "@/components/sidebar/CombatPanel";
 import { CompendiumPanel } from "@/components/sidebar/CompendiumPanel";
 import { ScenePanel } from "@/components/sidebar/ScenePanel";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { SheetWindowsHost } from "@/components/sheet/SheetWindowsHost";
 import { BattleReport } from "@/components/combat/BattleReport";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
 import { SceneConfigModal } from "@/components/modals/SceneConfigModal";
@@ -28,6 +28,14 @@ import { useCompendium } from "@/hooks/useCompendium";
 import { useSyncEncounterRoute, type EncounterRouteParams } from "@/hooks/useSyncEncounterRoute";
 import type { CreatureDefinition } from "@/engine";
 import { useCatalogStore } from "@/store/catalog-store";
+import { useSheetWindowsStore } from "@/store/sheet-windows-store";
+
+/** Open the sheet of a token: the one given, or the selected one (a token just created, imported or built is selected). */
+function openSheet(combatantId?: string) {
+  const { selectedCombatantId, encounter } = useEncounterStore.getState();
+  const id = combatantId ?? selectedCombatantId ?? encounter.combatants[0]?.id;
+  if (id) useSheetWindowsStore.getState().open(id);
+}
 
 type SidebarTab = "actors" | "compendium" | "combat" | "scene";
 const SIDEBAR_TABS: ReadonlyArray<{ id: SidebarTab; label: string }> = [
@@ -67,7 +75,6 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   const [showGrid, setShowGrid] = useState(true);
   const [showHealthBars, setShowHealthBars] = useState(true);
   const [showElevation, setShowElevation] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "scene" | null>(null);
   const [createFolderId, setCreateFolderId] = useState<string | null>(null);
@@ -104,7 +111,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   const compendium = useCompendium({
     onCreatureImported: () => {
       setModal(null);
-      setSheetOpen(true);
+      openSheet();
     }
   });
 
@@ -216,7 +223,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
             showHealthBars={showHealthBars}
             onCanvasDragOver={onCanvasDragOver}
             onCanvasDrop={onCanvasDrop}
-            onEditActor={() => setSheetOpen(true)}
+            onEditActor={openSheet}
             onOpenReport={() => setReportOpen(true)}
           />
         }
@@ -229,7 +236,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
                   setCreateFolderId(folderId ?? null);
                   setModal("create");
                 }}
-                onOpenSheet={() => setSheetOpen(true)}
+                onOpenSheet={openSheet}
               />
             ) : null}
             {rightTab === "compendium" ? <CompendiumPanel compendium={compendium} /> : null}
@@ -239,13 +246,13 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
         }
       />
 
-      {sheetOpen ? <ActorSheet compendium={compendium} onClose={() => setSheetOpen(false)} /> : null}
+      <SheetWindowsHost compendium={compendium} />
       {reportOpen ? <BattleReport onClose={() => setReportOpen(false)} /> : null}
       {modal === "create" ? (
         <CreateTokenModal
           compendium={compendium}
           targetFolderId={createFolderId}
-          onCreated={() => setSheetOpen(true)}
+          onCreated={() => openSheet()}
           onClose={() => {
             setModal(null);
             setCreateFolderId(null);
@@ -253,7 +260,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
         />
       ) : null}
       {modal === "scene" ? <SceneConfigModal onClose={() => setModal(null)} /> : null}
-      <BuilderHost onCreated={() => setSheetOpen(true)} />
+      <BuilderHost onCreated={() => openSheet()} />
     </>
   );
 }

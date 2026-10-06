@@ -113,6 +113,19 @@
   color: var(--ui-text-dim);
 }
 
+/* Which of the creature's tokens the vitals (and the Token tab) are for. */
+.tokenSwitch {
+  max-width: 260px;
+  padding: 2px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .vitalsFacts {
   margin-left: auto;
   max-width: 270px;

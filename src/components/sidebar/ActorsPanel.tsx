@@ -21,7 +21,8 @@ interface ActorsPanelProps {
   compendium: Compendium;
   /** folderId, when opened from a folder's "create actor" icon, so the new actor is filed there automatically. */
   onOpenCreate: (folderId?: string) => void;
-  onOpenSheet: () => void;
+  /** Opens that token's sheet window. */
+  onOpenSheet: (combatantId: string) => void;
 }
 
 export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPanelProps) {
@@ -255,7 +256,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
             </div>
           </div>
           <div className={styles.actions}>
-            <button type="button" onClick={onOpenSheet}><Swords size={14} /> Sheet</button>
+            <button type="button" onClick={() => onOpenSheet(selectedCombatant.id)}><Swords size={14} /> Sheet</button>
             <button type="button" onClick={duplicateSelected}><Copy size={14} /> Duplicate</button>
             <button type="button" onClick={exportSelected}><Download size={14} /> Export</button>
             {templateIdSet.has(selectedDefinition.id) ? (

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ActionDefinition, CreatureDefinition, WeaponDefinition } from "@/engine";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { renderSheet, resetSheetWindows, sheetWindows } from "./helpers/sheet";
 import { ActionsTab } from "@/components/sheet/sheet-tabs/ActionsTab";
 import type { Compendium } from "@/hooks/useCompendium";
 import { blankWeapon } from "@/lib/ability-editor/templates";
@@ -18,6 +18,7 @@ import { startFromScratch } from "./helpers/abilities-tab";
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   try { localStorage.clear(); } catch { /* private mode */ }
 });
 afterEach(() => { document.body.innerHTML = ""; });
@@ -395,7 +396,7 @@ describe("the sheet around the editor", () => {
   const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
 
   async function editInSheet() {
-    render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+    renderSheet(compendium);
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
     await userEvent.type(nameBox(), " of Doom");
@@ -415,34 +416,26 @@ describe("the sheet around the editor", () => {
     expect(longsword().name).toBe("Longsword of Doom");
   });
 
-  it("stays on the creature being edited when another token is selected", async () => {
+  it("stays on its creature when another token is selected, keeping the edit", async () => {
     await editInSheet();
     const goblin = store().encounter.combatants.find((c) => c.faction === "enemy")!;
     act(() => store().selectCombatant(goblin.id));
 
-    const prompt = screen.getByRole("alertdialog", { name: "Unsaved changes" });
-    expect(prompt.textContent).toContain(`You selected ${goblin.displayName}.`);
-    expect(nameBox().value).toBe("Longsword of Doom");
-
-    await userEvent.click(within(prompt).getByRole("button", { name: "Keep editing" }));
-    expect(store().selectedCombatantId).toBe("pc-fighter");
-
-    act(() => store().selectCombatant(goblin.id));
-    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Discard and switch" }));
+    // A window belongs to its creature (CHARACTER_SHEET_WINDOWS_PLAN.md D2): selecting another token changes nothing.
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(longsword().name).toBe("Longsword");
-    expect(screen.getByRole("dialog").getAttribute("aria-label")).toContain("Goblin");
+    expect(nameBox().value).toBe("Longsword of Doom");
+    expect(screen.getByRole("dialog").getAttribute("aria-label")).not.toContain("Goblin");
   });
 
   it("asks before closing with changes", async () => {
-    let closed = false;
-    render(<ActorSheet compendium={compendium} onClose={() => { closed = true; }} />);
+    renderSheet(compendium);
+    const closed = () => sheetWindows().length === 0;
     await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
     await userEvent.type(nameBox(), "!");
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(closed).toBe(false);
+    expect(closed()).toBe(false);
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Discard" }));
-    expect(closed).toBe(true);
+    expect(closed()).toBe(true);
   });
 });

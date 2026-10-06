@@ -16,6 +16,14 @@ interface FloatingWindowProps {
   width?: number;
   /** Persist the dragged position under this key (localStorage). */
   storageKey?: string;
+  /** Start at `initialPosition` even when a position is remembered under `storageKey` (it's still remembered on drag). */
+  restorePosition?: boolean;
+  /** Told each new position. */
+  onMove?: (position: { x: number; y: number }) => void;
+  /** Stacking among the sheet windows: added to `--ui-z-sheet` (0-9; other windows sit at 10, above them). */
+  zIndex?: number;
+  /** A press or focus anywhere in the window: brings it to the front. */
+  onFocus?: () => void;
   /** Rendered in the title bar between the title and the window controls. */
   headerExtra?: ReactNode;
   /** Rendered under the title bar, above the scrolling body, so it stays in view (the sheet's vitals and tabs). */
@@ -42,6 +50,10 @@ export function FloatingWindow({
   initialPosition = { x: 72, y: 60 },
   width,
   storageKey,
+  restorePosition = true,
+  onMove,
+  zIndex,
+  onFocus,
   headerExtra,
   subheader,
   onDragOver,
@@ -50,7 +62,7 @@ export function FloatingWindow({
   dropActive,
   children
 }: FloatingWindowProps) {
-  const { position, minimized, toggleMinimize, titleBarProps } = useFloatingWindow(initialPosition, storageKey);
+  const { position, minimized, toggleMinimize, titleBarProps } = useFloatingWindow(initialPosition, storageKey, { restore: restorePosition, onMove });
   const windowRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -68,7 +80,9 @@ export function FloatingWindow({
       ref={windowRef}
       tabIndex={-1}
       className={[styles.window, dropActive ? styles.dropActive : ""].filter(Boolean).join(" ")}
-      style={{ left: position.x, top: position.y, width }}
+      style={{ left: position.x, top: position.y, width, ...(zIndex !== undefined ? { zIndex: `calc(var(--ui-z-sheet) + ${zIndex})` } : {}) }}
+      onPointerDownCapture={onFocus}
+      onFocusCapture={onFocus}
       role="dialog"
       aria-label={ariaLabel ?? (typeof title === "string" ? title : "Window")}
       // A React handler (not a native listener), so something inside that handles Escape itself — an open editor

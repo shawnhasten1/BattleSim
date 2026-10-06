@@ -2,16 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { getDefinition } from "@/engine";
-import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import type { Compendium } from "@/hooks/useCompendium";
 import type { CompendiumDragPayload } from "@/lib/compendium";
-import { creatureScope, libraryStatus } from "@/lib/actor-sheet/scope";
-import { readJson, writeJson } from "@/lib/persist";
+import { creatureScope, libraryStatus, tokensOf } from "@/lib/actor-sheet/scope";
 import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEncounterStore } from "@/store/encounter-store";
+import { shownDefinitionId, useSheetWindowsStore, type SheetWindow } from "@/store/sheet-windows-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { SheetGuardContext, type EditorGuard } from "./SheetGuard";
 import { UnsavedPrompt } from "./UnsavedPrompt";
@@ -23,24 +22,23 @@ import { ActionsTab } from "./sheet-tabs/ActionsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
 import abilityStyles from "./abilities/abilities.module.css";
 
-/** The tab the sheet opens on: the last one used, per browser (plan D10), or Stats. */
-const TAB_KEY = "actor-sheet-tab";
-function storedTab(): SheetTabId {
-  const stored = readJson<string>(TAB_KEY, "stats");
-  return stored === "abilities" || stored === "token" ? stored : "stats";
-}
-
 /**
- * Floating, draggable actor/token sheet for the selected combatant. Replaces
- * the old full-screen edit modal. Compendium items dragged anywhere onto the
- * window attach to this actor.
+ * One sheet window (CHARACTER_SHEET_WINDOWS_PLAN.md): a creature, edited for every token of it, with one of its tokens
+ * shown for the values that are that token's own (D2). Floating and draggable; several can be open at once, each in
+ * front when it's used. Compendium items dropped anywhere onto the window attach to this creature.
  *
- * Above its tabs, the token's vitals stay in view; the tabs are grouped by what they change (the creature, or this
- * token). While an ability editor inside has unsaved changes, the sheet asks before a tab switch, closing or a ⋯
- * action, and stays on that creature when another token is selected (asking whether to save first).
+ * Above its tabs, the shown token's vitals stay in view, with a switcher when the creature has several tokens. While an
+ * ability editor inside has unsaved changes, the window asks before a tab switch, closing or a ⋯ action. Switching the
+ * token never asks: the ability belongs to the creature, which stays the same.
  */
-export function ActorSheet({ compendium, onClose }: { compendium: Compendium; onClose: () => void }) {
-  const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
+export function ActorSheet({ sheet, rank, front, compendium }: {
+  sheet: SheetWindow;
+  /** Its place in the stack of sheet windows, 0 at the back. */
+  rank: number;
+  /** In front of every other sheet window: the one compendium messages show in. */
+  front: boolean;
+  compendium: Compendium;
+}) {
   const encounter = useEncounterStore((s) => s.encounter);
   const definitionsLibrary = useEncounterStore((s) => s.definitionsLibrary);
   const templateDefinitionIds = useEncounterStore((s) => s.templateDefinitionIds);
@@ -49,7 +47,13 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
   const attachSrdItem = useEncounterStore((s) => s.attachSrdItem);
-  const [tab, setTabState] = useState<SheetTabId>(storedTab);
+  const closeWindow = useSheetWindowsStore((s) => s.close);
+  const focusWindow = useSheetWindowsStore((s) => s.focus);
+  const setWindowTab = useSheetWindowsStore((s) => s.setTab);
+  const showToken = useSheetWindowsStore((s) => s.showToken);
+  const setDirty = useSheetWindowsStore((s) => s.setDirty);
+  const notePosition = useSheetWindowsStore((s) => s.notePosition);
+  const tab = sheet.tab;
   const [dropActive, setDropActive] = useState(false);
   const [toast, setToast] = useState<SheetToast | null>(null);
   // An ability the Token tab asked to open: the Abilities tab opens it in the editor as it mounts.
@@ -57,12 +61,10 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   // A creature just made from this token: Stats focuses its name, selected, ready to rename.
   const [focusName, setFocusName] = useState(false);
 
-  // The open editor's guard, and whether it has unsaved changes (state, so the sheet re-renders to pin itself).
+  // The open editor's guard, and whether it has unsaved changes (state, so the window re-renders).
   const guardRef = useRef<EditorGuard | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorLabel, setEditorLabel] = useState("");
-  // The creature being edited while there are unsaved changes: the sheet stays on it.
-  const [pinnedId, setPinnedId] = useState<string | null>(null);
   // A tab switch, close or ⋯ action waiting on "Save your changes?".
   const [pending, setPending] = useState<(() => void) | null>(null);
 
@@ -72,13 +74,16 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
     setEditorLabel(guard?.label ?? "");
   }, []);
   const registry = useMemo(() => ({ register }), [register]);
+  // A window with unsaved changes is never closed to make room for another (D3).
+  useEffect(() => setDirty(sheet.id, editorDirty), [setDirty, sheet.id, editorDirty]);
 
-  // A compendium message (a drop attached something, an import failed) shows as a toast, if it arrives while open.
+  // A compendium message (a drop attached something, an import failed) shows as a toast in the window in front, if it
+  // arrives while it's open.
   const shownStatus = useRef(compendium.status);
   useEffect(() => {
-    if (compendium.status && compendium.status !== shownStatus.current) setToast({ message: compendium.status });
+    if (front && compendium.status && compendium.status !== shownStatus.current) setToast({ message: compendium.status });
     shownStatus.current = compendium.status;
-  }, [compendium.status]);
+  }, [front, compendium.status]);
   // Taken once the Abilities tab has opened it: it mustn't open again, nor on another creature.
   useEffect(() => {
     if (tab === "abilities" && openFirst) setOpenFirst(null);
@@ -93,15 +98,12 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const pinned = pinnedId ? encounter.combatants.find((combatant) => combatant.id === pinnedId) : undefined;
-  const combatant = editorDirty && pinned ? pinned : selectedCombatant;
-  // Pin on the first unsaved change; let go once the changes are saved or dropped.
-  if (editorDirty && !pinnedId && combatant) setPinnedId(combatant.id);
-  if (!editorDirty && pinnedId) setPinnedId(null);
-
+  // Its token, or (gone a moment before the host moves the window on) another token of its creature.
+  const combatant = encounter.combatants.find((candidate) => candidate.id === sheet.combatantId)
+    ?? encounter.combatants.find((candidate) => shownDefinitionId(candidate) === sheet.definitionId);
   if (!combatant) return null;
-  const definition = combatant === selectedCombatant && selectedDefinition ? selectedDefinition : getDefinition(encounter, combatant);
-  const selectionMoved = editorDirty && pinned !== undefined && selectedCombatant !== undefined && selectedCombatant.id !== pinned.id;
+  const definition = getDefinition(encounter, combatant);
+  const tokens = tokensOf(encounter, definition.id);
   const status = libraryStatus(definition, definitionsLibrary, templateDefinitionIds);
   const scope = creatureScope(encounter, definition, status);
 
@@ -112,8 +114,19 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
   }
 
   function setTab(next: SheetTabId) {
-    setTabState(next);
-    writeJson(TAB_KEY, next);
+    setWindowTab(sheet.id, next);
+  }
+
+  /** Show `id`'s own values, and select it on the map. */
+  function switchToken(id: string) {
+    showToken(sheet.id, id);
+    selectCombatant(id);
+  }
+
+  /** A toast in this window, or outside it when the window is about to close (its creature's last token deleted). */
+  function showToast(next: SheetToast) {
+    if (tokensOf(useEncounterStore.getState().encounter, definition.id).length) setToast(next);
+    else useSheetWindowsStore.getState().notify(next);
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -127,6 +140,8 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
     setDropActive(false);
+    // In front, so the compendium's message about this drop shows here.
+    focusWindow(sheet.id);
     const srdRaw = event.dataTransfer.getData(SRD_DRAG_MIME);
     if (srdRaw) {
       event.preventDefault();
@@ -147,30 +162,38 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
     }
   }
 
+  const title = tokens.length > 1
+    ? <>{definition.name} <span>· {tokens.length} tokens</span></>
+    : combatant.displayName === definition.name
+      ? definition.name
+      : <>{combatant.displayName} <span>· {definition.name}</span></>;
+
   return (
     <FloatingWindow
-      title={
-        <>
-          {combatant.displayName} <span>· {definition.name}</span>
-        </>
-      }
+      title={title}
       ariaLabel={`${definition.name} sheet`}
       width={680}
-      storageKey="actor-sheet"
-      onClose={() => attempt(onClose)}
+      initialPosition={sheet.origin}
+      storageKey={`sheet-${sheet.style}`}
+      restorePosition={false}
+      onMove={(position) => notePosition(sheet.id, position)}
+      zIndex={rank}
+      onFocus={() => focusWindow(sheet.id)}
+      onClose={() => attempt(() => closeWindow(sheet.id))}
       headerExtra={
         <>
           <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
           <SheetMenu
-            combatant={combatant} definition={definition} status={status} guard={attempt} onToast={setToast}
+            combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
             onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
+            onShowToken={switchToken}
           />
           <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
         </>
       }
       subheader={
         <>
-          <VitalsStrip combatant={combatant} definition={definition} />
+          <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
           <ScopedTabs
             tab={tab} onSelect={(next) => attempt(() => setTab(next))}
             creature={definition.name} creatureCaption={scope.caption} creatureHelp={scope.help} token={combatant.displayName}
@@ -192,16 +215,6 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
               onKeep={() => setPending(null)}
             />
           ) : null}
-          {selectionMoved ? (
-            <UnsavedPrompt
-              message={`You selected ${selectedCombatant!.displayName}. Save your changes to ${editorLabel || "this ability"} on ${combatant.displayName} first?`}
-              saveLabel="Save and switch"
-              discardLabel="Discard and switch"
-              onSave={() => { guardRef.current?.save(); }}
-              onDiscard={() => { guardRef.current?.discard(); }}
-              onKeep={() => selectCombatant(combatant.id)}
-            />
-          ) : null}
         </>
       }
       dropActive={dropActive}
@@ -211,7 +224,7 @@ export function ActorSheet({ compendium, onClose }: { compendium: Compendium; on
     >
       <SheetGuardContext.Provider value={registry}>
         {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
-        {/* Keyed by creature: an ability being edited must not carry over to another creature when the selection changes. */}
+        {/* Keyed by creature: an ability being edited must not carry over to another creature (made its own, or a new form). */}
         {tab === "abilities" ? (
           <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
         ) : null}

@@ -14,6 +14,7 @@ import { useDisplayEncounter, useIsReplaying, usePlaybackCursor } from "@/hooks/
 import { ReplayBar } from "@/components/combat/ReplayBar";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { prepBuffLabel, prepBuffs } from "@/lib/actor-sheet/token";
+import { useSheetWindowsStore } from "@/store/sheet-windows-store";
 import styles from "./CombatPanel.module.css";
 import { hasCounterspellers, hasPotions, potionRulesInForce, ruleInForce } from "@/lib/campaign-rules";
 
@@ -105,6 +106,9 @@ export function CombatPanel() {
   const overrideRoll = useEncounterStore((state) => state.overrideRoll);
   const [playSetupOpen, setPlaySetupOpen] = useState(false);
   const [rollMenu, setRollMenu] = useState<{ x: number; y: number; item: RollItem } | null>(null);
+  // A row's own menu (right-click): Open sheet.
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; combatantId: string } | null>(null);
+  const openSheet = useSheetWindowsStore((state) => state.open);
   // In Play, which log entries are rolls since the last command (they can be overruled).
   const rollEntries = useMemo(() => (play ? rollsByLogIndex(log, recentRolls(play)) : new Map<number, RollItem>()), [play, log]);
   const { selectedCombatant } = useSelectedCombatant();
@@ -305,6 +309,13 @@ export function CombatPanel() {
                   .filter(Boolean)
                   .join(" ")}
                 onClick={() => selectCombatant(combatant.id)}
+                onDoubleClick={() => openSheet(combatant.id)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  selectCombatant(combatant.id);
+                  setRowMenu({ x: event.clientX, y: event.clientY, combatantId: combatant.id });
+                }}
+                title="Double-click to open its sheet"
               >
                 <span className={styles.init}>{combatant.initiative ?? "-"}</span>
                 <span className={styles.name}>{combatant.displayName}</span>
@@ -488,6 +499,13 @@ export function CombatPanel() {
           </ol>
           {rollMenu ? <ContextMenu x={rollMenu.x} y={rollMenu.y} items={overruleItems(rollMenu.item, overrideRoll)} onClose={() => setRollMenu(null)} /> : null}
         </details>
+      ) : null}
+      {rowMenu ? (
+        <ContextMenu
+          x={rowMenu.x} y={rowMenu.y}
+          items={[{ label: "Open sheet", onSelect: () => openSheet(rowMenu.combatantId) }]}
+          onClose={() => setRowMenu(null)}
+        />
       ) : null}
     </div>
   );

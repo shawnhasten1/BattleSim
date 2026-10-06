@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CombatantState } from "@/engine";
-import { ActorSheet } from "@/components/sheet/ActorSheet";
+import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 import { TokenTab } from "@/components/sheet/sheet-tabs/TokenTab";
 import type { Compendium } from "@/hooks/useCompendium";
 import { findAbility, type AbilityRef } from "@/lib/ability-editor/refs";
@@ -16,6 +16,7 @@ import { useEncounterStore } from "@/store/encounter-store";
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
+  resetSheetWindows();
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -118,7 +119,7 @@ describe("Token › Tactics", { timeout: 20000 }, () => {
   it("opens a name in the Abilities tab's editor, once", async () => {
     useEncounterStore.setState({ selectedCombatantId: "pc-fighter", undoStack: [] });
     const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
-    render(<ActorSheet compendium={compendium} onClose={() => undefined} />);
+    renderSheet(compendium);
     await userEvent.click(screen.getByRole("tab", { name: "Token" }));
     await userEvent.click(within(screen.getByRole("region", { name: "Tactics" })).getByRole("button", { name: "Longsword" }));
     expect(screen.getByRole("tab", { name: "Abilities" }).getAttribute("aria-selected")).toBe("true");

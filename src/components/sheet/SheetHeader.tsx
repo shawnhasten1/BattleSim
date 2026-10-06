@@ -19,9 +19,16 @@ const FACTIONS: Record<Faction, string> = { party: "Party", enemy: "Enemy", neut
 
 /**
  * The token's vitals, above the tabs so they're in view on every one (plan D2): HP and temp HP to edit, AC, speed and
- * faction, then its status, conditions and concentration, and + Condition.
+ * faction, then its status, conditions and concentration, and + Condition. When its creature has several tokens, a
+ * switcher picks which one's vitals these are (CHARACTER_SHEET_WINDOWS_PLAN.md D2).
  */
-export function VitalsStrip({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
+export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }: {
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  /** Every token of its creature; the switcher shows when there's more than one. */
+  tokens?: CombatantState[];
+  onShowToken?: (combatantId: string) => void;
+}) {
   const encounter = useEncounterStore((s) => s.encounter);
   const updateHp = useEncounterStore((s) => s.updateHp);
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
@@ -65,6 +72,20 @@ export function VitalsStrip({ combatant, definition }: { combatant: CombatantSta
     <div className={styles.vitals} role="group" aria-label="Vitals">
       <ActorThumbnail definition={definition} combatant={combatant} />
       <div className={styles.vitalsBody}>
+        {tokens.length > 1 && onShowToken ? (
+          <div className={styles.vitalsRow}>
+            <span className={styles.vitalsLabel}>Token</span>
+            <select
+              className={styles.tokenSwitch} aria-label="Token shown" value={combatant.id}
+              onChange={(event) => onShowToken(event.target.value)}
+            >
+              {tokens.map((token) => (
+                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{definition.maxHp} HP</option>
+              ))}
+            </select>
+            <span className={styles.vitalsDim}>{tokens.findIndex((token) => token.id === combatant.id) + 1} of {tokens.length}</span>
+          </div>
+        ) : null}
         <div className={styles.vitalsRow}>
           <span className={styles.vitalsLabel}>HP</span>
           <SheetNumber label="Hit points" className={styles.vitalsBox} value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
