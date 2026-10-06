@@ -77,11 +77,12 @@ the builder) opens Standard's editor in the same window.
 | D5 | Choosing a style | **A Standard \| Codex switch in each window's title bar.** A new window opens in the style last used for that kind of actor (player characters, or everything else), per browser. Both start as Standard until the DM picks Codex once. |
 | D6 | The Codex's colors | *Superseded by D12: Dark and Light.* **Three palettes, chosen per browser in the Codex's ⋯ menu:** **Ember** (dark, the default, matches the app), **Parchment** (light, for daylight and printing later) and **Faerie** (the original file's colors, kept because it costs nothing). A palette changes colors only. The ornaments are the same in all three (see "The Codex"). |
 | D7 | Fields the engine doesn't have | **None are added** (user, 2026-10-06). The Codex shows only what the model already has. The original's player, XP, inspiration, personality traits, ideals, bonds, flaws, appearance, backstory, notes, coins and free-text gear are left out, and so is any data change for them. |
-| D8 | Big edits from the Codex | **The Codex edits what fits on a paper sheet, in place:** scores, saves, skills, HP, temp HP, a typed AC, speed, alignment, languages and slot pips. An attack, spell, feature or item row has an Edit button that switches the window to Standard › Abilities with that ability open, and shows a "← Back to Codex" chip. There is no second ability editor. |
+| D8 | Big edits from the Codex | *Edit now opens the editor in the Codex: D13.* **The Codex edits what fits on a paper sheet, in place:** scores, saves, skills, HP, temp HP, a typed AC, speed, alignment, languages and slot pips. An attack, spell, feature or item row has an Edit button that switches the window to Standard › Abilities with that ability open, and shows a "← Back to Codex" chip. There is no second ability editor. |
 | D9 | Fields the builder owns | **Read-only on the Codex:** class, subclass, level, species and background. Next to them are "Level up…" and "Open in builder…", which open the existing builder windows. A score typed on a built character goes through `updateCreatureAbility`, so it already follows builder D6 and survives a level-up. |
 | D10 | Death saves and hit dice | (User, 2026-10-06.) **Death saves are shown as pips from token state, read-only.** The engine owns them, and there's no DM change for them yet. **Hit dice show their total** (for example "5d10 + 2d8" from the build), with nothing to spend, because rests are out of scope (builder D16). |
 | D11 | Fonts | *Superseded by D12: Fraunces and Figtree.* **Cormorant Garamond** for headings and numbers, through `next/font` and loaded only with the Codex. Body text uses the app's Signika. Pinyon Script (the script initial) is dropped, because the token's portrait takes its place. |
 | D12 | The Codex's design | **Character Codex.html, replacing the Faerie-based one** (user, 2026-10-06): a teal banner with an astrolabe and a level dial, a sidebar with the portrait in an octagonal copper frame and the vitals, ability dials, and Details, Items, Abilities and Spells tabs. Its own Dark and Light colours replace Ember, Parchment and Faerie, and its faces are Fraunces and Figtree. The fields it has that the app doesn't store (XP, Inspiration, coins, carry weight, the Biography tab) stay out, as D7 says (user, 2026-10-06). |
+| D13 | Editing an ability from the Codex | **In the Codex** (user, 2026-10-06), superseding D8's trip to Standard. Edit opens the ability editor, Standard's own component, in a Codex panel in place of the dials and tabs, with the banner and sidebar still in view. Inside the Codex root the app's `--ui-*` tokens are the palette's, so the editor takes the Codex's colours and font. Its unsaved changes are guarded as on Standard. |
 
 ## Part 1: several sheets at once
 
@@ -662,3 +663,35 @@ the Faerie-based Codex with it everywhere (D12), keeping out the fields the app 
   every Details field edited, a resistance tag added and removed, the chain shirt taken off (AC 16 → 13) and put back,
   Attacks with lines, a slot spent, a spell edited on Standard and back to the Spells tab, Light, an export read back,
   and three goblins' HP in one Codex. The guide's Codex section and screenshots were redone.
+
+### Phase 9 (2026-10-06): the ability editor inside the Codex
+
+The user asked for the ability builder to work inside the Codex theme, "exactly the same", so they don't have to switch
+to Standard (D13).
+
+- **`CodexSheet` hosts `AbilityEditor`**, the same component Standard's Abilities tab uses. Edit on any row (Items,
+  Abilities, Attacks, Spells) opens it in a Codex panel in place of the dials and tabs, with the banner and sidebar
+  still in view. It scrolls to the editor's top. Save, Cancel or the back link close it, and the Codex then returns to
+  its tab and scroll position, with the row's Edit focused (`data-row-id`, as `ActionsTab`'s `returnTo` does).
+- **Its unsaved changes are guarded as on Standard:** `ActorSheet` now wraps the Codex in `SheetGuardContext` too.
+  Switching to Standard, closing the window or the ⋯ actions ask first, and a window with an unsaved edit is never
+  closed to make room.
+- **The editor in the Codex's colours:**
+  - The Codex root maps more of the app's tokens to the palette: `--ui-panel`, `--ui-bg` (the editor's sticky head
+    takes the panel colour), `--ui-bg-deep`, `--ui-accent-soft`, `--ui-hp-red` and `--ui-font` (Figtree).
+  - The editor's hard-coded gold warning and green "simulated" colours became `var(--ui-warn, #d8b56a)` and
+    `var(--ui-good, …)`, so Standard is unchanged. Each palette sets its own (`--warn`, `--good`), readable on Light.
+  - Menus and tooltips portal outside the Codex root, so they keep the app's colours.
+- **`AbilityEditor` takes `backLabel`** (default "Abilities"): in the Codex its back link names the tab it came from
+  ("‹ Spells").
+- **Removed:** the Edit-on-Standard detour (`visiting`, the "← Back to the Codex" bar and its styles).
+- **Tests:** `tests/codex-sheet.test.tsx` (29):
+  - Edit opens the editor inside the Codex, in its palette, with no Standard tabs.
+  - Save is off until a change, marks the window dirty, renames, and returns to Abilities with the row focused.
+  - Cancel discards.
+  - Switching to Standard with changes asks, and Save there switches.
+  - A spell opens from Spells, and its back link reads "Back to spells".
+- **Full suite** passes. **Browser** (Chromium and Firefox, 9 checks each): Fire Bolt opened from Spells in the Codex
+  (Figtree, the panel-coloured head), popped out with the editor still open, Escape asking first, the Add effect menu
+  opening and closing in the popup, the back link, Light while editing, and Save returning to Spells with Fire Bolt's
+  row focused.

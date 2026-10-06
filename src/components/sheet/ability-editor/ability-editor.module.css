@@ -147,7 +147,7 @@
 }
 
 .simulated {
-  color: #6fa86f;
+  color: var(--ui-good, #6fa86f);
 }
 
 .simulated .supportDot {
@@ -191,7 +191,7 @@
   gap: 7px;
   font-size: 11.5px;
   line-height: 1.35;
-  color: #d8b56a;
+  color: var(--ui-warn, #d8b56a);
 }
 
 .warning svg {
@@ -341,7 +341,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #d8b56a;
+  background: var(--ui-warn, #d8b56a);
 }
 
 /* A section a recipe expects filled in. */
@@ -478,7 +478,7 @@
 }
 
 .mismatch {
-  color: #d8b56a;
+  color: var(--ui-warn, #d8b56a);
 }
 
 /* ── segmented choice ── */
@@ -970,7 +970,7 @@
   margin: 0;
   font-size: 11.5px;
   line-height: 1.35;
-  color: #d8b56a;
+  color: var(--ui-warn, #d8b56a);
 }
 
 /* a condition's own effects (a mark's), inside its card */
@@ -1104,7 +1104,7 @@
 }
 
 .diffAdded {
-  color: #7fc98f;
+  color: var(--ui-good, #7fc98f);
 }
 
 .diffRemoved {

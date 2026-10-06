@@ -225,10 +225,12 @@ function SupportBadge({ entry }: { entry: StatblockEntry }) {
 
 type Granting = { grantedActions?: ActionDefinition[] };
 
-export function AbilityEditor({ definition, target, onClose, pools: sharedPools }: {
+export function AbilityEditor({ definition, target, onClose, pools: sharedPools, backLabel = "Abilities" }: {
   definition: CreatureDefinition;
   target: AbilityEditorTarget;
   onClose: (result: AbilityEditorResult) => void;
+  /** What its back link goes back to: the Abilities tab, or (in the Codex) the tab it was opened from. */
+  backLabel?: string;
   /** A nested editor's pools are its parent's: a pool made for a granted ability is saved with the parent. */
   pools?: NewPools;
 }) {
@@ -590,9 +592,9 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
         <div className={styles.bar}>
           <button
             type="button" className={styles.back} onClick={requestClose}
-            aria-label={nestedTarget ? `Back to ${nestedTarget.parentName}` : commit ? `Back to ${commit.backTo}` : "Back to abilities"}
+            aria-label={nestedTarget ? `Back to ${nestedTarget.parentName}` : commit ? `Back to ${commit.backTo}` : `Back to ${backLabel.toLowerCase()}`}
           >
-            <ChevronLeft size={15} /> {nestedTarget ? nestedTarget.parentName : commit ? commit.backTo : "Abilities"}
+            <ChevronLeft size={15} /> {nestedTarget ? nestedTarget.parentName : commit ? commit.backTo : backLabel}
           </button>
           <span className={styles.crumb}>
             <span>{nestedTarget ? "›" : "/"}</span>{name || (isNew ? `New ${kindLabel}` : "Unnamed")}

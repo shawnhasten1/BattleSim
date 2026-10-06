@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   abilityModifier,
   armorClassOf,
@@ -17,7 +17,7 @@ import {
 } from "@/engine";
 import { abilityList, type ListGroup, type ListRow } from "@/lib/ability-editor/list";
 import { withWorn } from "@/lib/ability-editor/items";
-import type { AbilityRef } from "@/lib/ability-editor/refs";
+import { refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import {
   characterLevel,
   CONDITION_IMMUNITIES,
@@ -44,6 +44,8 @@ import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useBuildSources } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
 import { DAMAGE_TYPES } from "../ability-editor/DamageLines";
+import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
+import { refRowId } from "../abilities/AbilitiesList";
 import { ConditionsRow } from "../SheetHeader";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { Astrolabe, Portrait } from "./ornaments";
@@ -69,18 +71,26 @@ export interface CodexSheetProps {
   tokens: CombatantState[];
   onShowToken: (combatantId: string) => void;
   palette: CodexPaletteId;
-  /** Edit an ability on Standard's Abilities tab, in this window (plan D8). */
-  onEditAbility: (ref: AbilityRef) => void;
+}
+
+/** The nearest ancestor that scrolls: the window's body, in the page or popped out. */
+function scrollParent(node: HTMLElement | null): HTMLElement | null {
+  const view = node?.ownerDocument.defaultView;
+  for (let parent = node?.parentElement ?? null; parent && view; parent = parent.parentElement) {
+    const overflow = view.getComputedStyle(parent).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return parent;
+  }
+  return null;
 }
 
 /**
  * The Codex (CHARACTER_SHEET_WINDOWS_PLAN.md Part 3), in the design of Character Codex.html, over the same data and
  * store actions as the Standard sheet. A banner with its name and level, a sidebar with its portrait and vitals, its
- * ability dials, and tabs: Details, Items, Abilities, Spells. It edits what fits on a paper sheet in place; anything
- * bigger opens in Standard's editor. Creature values reach every token of the creature, and token values the token the
- * switcher shows.
+ * ability dials, and tabs: Details, Items, Abilities, Spells. It edits what fits on a paper sheet in place, and an
+ * ability, item or spell in the ability editor, Standard's own, opened here in a Codex panel (plan D13). Creature values
+ * reach every token of the creature, and token values the token the switcher shows.
  */
-export function CodexSheet({ combatant, definition, tokens, onShowToken, palette, onEditAbility }: CodexSheetProps) {
+export function CodexSheet({ combatant, definition, tokens, onShowToken, palette }: CodexSheetProps) {
   const theme = CODEX_PALETTES[palette];
   // The Abilities list's own groups and rows, so the Codex says what Standard says about each.
   const groups = abilityList(definition, combatant);
@@ -94,8 +104,40 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
     writeJson(TAB_KEY, next);
   };
 
+  // The ability editor, open in place of the dials and tabs; where the Codex was scrolled to, and the row to come back to.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState<SheetEditorTarget | null>(null);
+  const left = useRef<{ scrollTop: number; rowId: string } | null>(null);
+
+  function openEditor(ref: AbilityRef) {
+    if (ref.list === "granted") return;
+    left.current = { scrollTop: scrollParent(rootRef.current)?.scrollTop ?? 0, rowId: refRowId(ref) };
+    setEditing({ mode: "edit", ref });
+  }
+
+  function closeEditor(savedRef: AbilityRef | undefined) {
+    if (left.current && savedRef && savedRef.list !== "granted") left.current = { ...left.current, rowId: refRowId(savedRef) };
+    setEditing(null);
+  }
+
+  // Open: the editor at the top of the view. Closed: back where the Codex was, its row's Edit focused.
+  useLayoutEffect(() => {
+    const scroller = scrollParent(rootRef.current);
+    if (editing) {
+      if (scroller && editorRef.current) scroller.scrollTop = Math.max(0, editorRef.current.offsetTop - 8);
+      return;
+    }
+    const back = left.current;
+    if (!back) return;
+    left.current = null;
+    if (scroller) scroller.scrollTop = back.scrollTop;
+    rootRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(back.rowId)}"] button[aria-label^="Edit "]`)?.focus({ preventScroll: true });
+  }, [editing]);
+
   return (
     <div
+      ref={rootRef}
       className={`${styles.codex} ${codexDisplay.variable} ${codexBody.variable}`}
       data-palette={palette}
       data-dark={theme.dark}
@@ -105,22 +147,35 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
       <div className={styles.sheet}>
         <div className={styles.grid}>
           <Side combatant={combatant} definition={definition} />
-          <div className={styles.stack}>
-            <AbilityDials definition={definition} />
-            <div>
-              <div className={styles.tabs} role="tablist" aria-label="Codex sections">
-                {available.map((id) => (
-                  <button key={id} type="button" role="tab" className={styles.tab} aria-selected={id === tab} onClick={() => choose(id)}>
-                    {TAB_LABELS[id]}
-                  </button>
-                ))}
-              </div>
-              {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
-              {tab === "items" ? <Items definition={definition} groups={groups} onEdit={onEditAbility} /> : null}
-              {tab === "abilities" ? <Abilities groups={groups} onEdit={onEditAbility} /> : null}
-              {tab === "spells" && spellcasting ? <Spells group={spellcasting} combatant={combatant} definition={definition} onEdit={onEditAbility} /> : null}
+          {editing ? (
+            // The ability editor, exactly as on Standard, in the Codex's colours: its Save and Cancel bring the tabs back.
+            <div ref={editorRef} className={`${styles.panel} ${styles.editorPanel}`}>
+              <AbilityEditor
+                key={editing.mode === "edit" ? refKey(editing.ref) : "new"}
+                definition={definition}
+                target={editing}
+                onClose={({ savedRef }) => closeEditor(savedRef)}
+                backLabel={TAB_LABELS[tab]}
+              />
             </div>
-          </div>
+          ) : (
+            <div className={styles.stack}>
+              <AbilityDials definition={definition} />
+              <div>
+                <div className={styles.tabs} role="tablist" aria-label="Codex sections">
+                  {available.map((id) => (
+                    <button key={id} type="button" role="tab" className={styles.tab} aria-selected={id === tab} onClick={() => choose(id)}>
+                      {TAB_LABELS[id]}
+                    </button>
+                  ))}
+                </div>
+                {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
+                {tab === "items" ? <Items definition={definition} groups={groups} onEdit={openEditor} /> : null}
+                {tab === "abilities" ? <Abilities groups={groups} onEdit={openEditor} /> : null}
+                {tab === "spells" && spellcasting ? <Spells group={spellcasting} combatant={combatant} definition={definition} onEdit={openEditor} /> : null}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -148,7 +203,7 @@ function Heading({ id, icon, children }: { id: string; icon: keyof typeof ICONS;
 
 /* ─── the banner ─────────────────────────────────────────────────────────── */
 
-function Banner({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetProps, "palette" | "onEditAbility">) {
+function Banner({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetProps, "palette">) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const openBuilder = useBuilderUiStore((s) => s.open);
   const sources = useBuildSources();
@@ -533,13 +588,13 @@ const CHEVRON = <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1l5 4-5 
 
 /**
  * One row of the Abilities list: a chevron that opens its statblock line and chips, its name, what using it costs, how
- * it's used, and Edit (in Standard's editor). `lead` goes between the chevron and the name (the Items tab's worn box).
+ * it's used, and Edit (the ability editor, opened in the Codex). `lead` goes between the chevron and the name (the Items tab's worn box).
  */
 function Row({ row, activation, lead, onEdit }: { row: ListRow; activation?: string; lead?: ReactNode; onEdit: (ref: AbilityRef) => void }) {
   const [open, setOpen] = useState(false);
   const chips = [...(row.enabled === false ? ["off"] : []), ...row.chips];
   return (
-    <div className={styles.li}>
+    <div className={styles.li} data-row-id={refRowId(row.ref)}>
       <div className={`${styles.liRow} ${lead ? "" : styles.liRowNoPip}`}>
         <button type="button" className={styles.chev} aria-expanded={open} aria-label={`${row.name} details`} onClick={() => setOpen(!open)}>{CHEVRON}</button>
         {lead}
@@ -552,7 +607,7 @@ function Row({ row, activation, lead, onEdit }: { row: ListRow; activation?: str
         <div className={styles.ex}>
           {row.line ? <span>{row.line}</span> : null}
           {chips.length ? <span className={styles.exChips}>{chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
-          {!row.line && !chips.length ? <span>Edit opens it in Standard&apos;s editor.</span> : null}
+          {!row.line && !chips.length ? <span>Edit opens it in the ability editor.</span> : null}
         </div>
       ) : null}
     </div>
@@ -625,7 +680,7 @@ function Abilities({ groups, onEdit }: { groups: ListGroup[]; onEdit: (ref: Abil
         <section className={styles.panel} aria-labelledby="codex-attacks">
           <Heading id="codex-attacks" icon="sword">Attacks</Heading>
           {attacks.map((row) => (
-            <div key={row.key} className={styles.atkRow}>
+            <div key={row.key} className={styles.atkRow} data-row-id={refRowId(row.ref)}>
               <span className={styles.rowName}>{row.name}</span>
               <span className={styles.atkLine}>{row.line}</span>
               <button type="button" className={styles.edit} aria-label={`Edit ${row.name}`} onClick={() => onEdit(row.ref)}>Edit</button>
@@ -644,7 +699,7 @@ function Abilities({ groups, onEdit }: { groups: ListGroup[]; onEdit: (ref: Abil
             {group.rows.map((row) => <Row key={row.key} row={row} activation={ACTIVATION[group.id]} onEdit={onEdit} />)}
           </div>
         )) : <p className={styles.empty}>No other abilities yet: add them on Standard&apos;s Abilities tab.</p>}
-        <p className={styles.hint}>Open a row with the arrow for what it does. Edit opens it in Standard&apos;s editor.</p>
+        <p className={styles.hint}>Open a row with the arrow for what it does. Edit opens it in the ability editor, here.</p>
       </section>
     </div>
   );

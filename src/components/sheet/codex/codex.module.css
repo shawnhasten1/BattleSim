@@ -7,13 +7,24 @@
 
 .codex {
   container: codex / inline-size;
-  /* The app's own tokens, in this palette, for the shared pieces inside (the conditions row). */
+  /*
+   * The app's own tokens, in this palette, for the shared pieces inside: the conditions row, and the ability editor,
+   * which opens here in a panel (its sticky head takes the panel's colour).
+   */
   --ui-text: var(--ink);
   --ui-text-dim: var(--muted);
+  --ui-panel: var(--panel);
   --ui-panel-2: var(--panel-2);
+  --ui-bg: var(--panel);
+  --ui-bg-deep: var(--well);
   --ui-border: var(--edge);
   --ui-accent: var(--cu);
+  --ui-accent-soft: var(--cu-hi);
   --ui-on-accent: var(--cu-ink);
+  --ui-hp-red: var(--verm);
+  --ui-warn: var(--warn);
+  --ui-good: var(--good);
+  --ui-font: var(--ui);
   --display: var(--font-codex-display), Georgia, "Times New Roman", serif;
   --ui: var(--font-codex-body), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   min-height: 100%;
@@ -1231,6 +1242,17 @@ span.pip {
   flex-wrap: wrap;
   justify-content: center;
   min-height: 22px;
+}
+
+/* The ability editor, open in the Codex: a panel as wide as the main column, the editor's own controls in its colours. */
+.editorPanel {
+  min-width: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.editorPanel > * {
+  border-radius: 10px;
 }
 
 /* ── narrower windows ── */

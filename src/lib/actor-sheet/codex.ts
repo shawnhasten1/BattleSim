@@ -31,6 +31,7 @@ export const CODEX_PALETTES: Record<CodexPaletteId, CodexPalette> = {
       "--field": "#0F1F22", "--field-edge": "#2A464A",
       "--well": "#0A1618", "--row": "rgba(236,229,214,.07)",
       "--jade": "#3FA78A", "--jade-hi": "#6CCBAE", "--verm": "#E0604F", "--steel": "#79A6CE", "--pip": "#58716E",
+      "--warn": "#E2BC70", "--good": "#6CCBAE",
       "--shadow": "rgba(0,0,0,.5)"
     }
   },
@@ -46,6 +47,7 @@ export const CODEX_PALETTES: Record<CodexPaletteId, CodexPalette> = {
       "--field": "#FFFFFF", "--field-edge": "#C2CFCB",
       "--well": "#183034", "--row": "rgba(21,42,46,.09)",
       "--jade": "#2B8770", "--jade-hi": "#4CB094", "--verm": "#BF4337", "--steel": "#3B6890", "--pip": "#8BA09C",
+      "--warn": "#8A5F0E", "--good": "#22735F",
       "--shadow": "rgba(20,40,40,.18)"
     }
   }

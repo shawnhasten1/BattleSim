@@ -251,35 +251,72 @@ describe("a monster on the Codex", () => {
 });
 
 describe("the Codex's tabs", () => {
-  it("list abilities with Standard's lines, and Edit opens one on Standard and comes back", async () => {
+  it("opens an ability in the ability editor inside the Codex, and Save brings its tab back", async () => {
     await openCodex("pc-fighter");
     await userEvent.click(codexTab("Abilities"));
     const actions = within(screen.getByRole("group", { name: "Actions" }));
-    expect(actions.getByText("Longsword")).toBeTruthy();
     await userEvent.click(actions.getByRole("button", { name: "Longsword details" }));
     expect(actions.getByText(/to hit/)).toBeTruthy();
 
     await userEvent.click(actions.getByRole("button", { name: "Edit Longsword" }));
-    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Longsword");
-    expect(screen.getByRole("tab", { name: "Abilities" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("button", { name: "Standard" }).getAttribute("aria-pressed")).toBe("true");
+    const editor = screen.getByRole("region", { name: "Edit Longsword" });
+    // In the Codex, in its colours: the banner stays, Standard's tabs never show, and the window is still the Codex.
+    expect(editor.closest("[data-palette]")).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Name and level" })).toBeTruthy();
+    expect(screen.queryByRole("tablist", { name: "Actor sheet sections" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Codex sections" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("true");
     expect(sheetWindows()[0]!.style).toBe("codex");
-    await userEvent.click(screen.getByRole("button", { name: "← Back to the Codex" }));
-    expect(await screen.findByRole("group", { name: "Hit points" })).toBeTruthy();
-    // Back on the tab it was on.
+
+    const save = within(editor).getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    const name = within(editor).getByLabelText("Name") as HTMLInputElement;
+    await userEvent.clear(name);
+    await userEvent.type(name, "Arming Sword");
+    expect(sheetWindows()[0]!.dirty).toBe(true);
+    await userEvent.click(save);
+
+    expect(creature("def-fighter").actions.find((action) => action.id === "longsword")!.name).toBe("Arming Sword");
+    expect(screen.queryByRole("region", { name: /^Edit / })).toBeNull();
     expect(codexTab("Abilities").getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Edit Arming Sword");
   });
 
-  it("asks before going back with the edit unsaved", async () => {
+  it("Cancel leaves the ability as it was", async () => {
     await openCodex("pc-fighter");
     await userEvent.click(codexTab("Abilities"));
     await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
-    await userEvent.type(screen.getByLabelText("Name"), " of Doom");
-    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
+    const editor = screen.getByRole("region", { name: "Edit Longsword" });
+    await userEvent.type(within(editor).getByLabelText("Name"), "!");
+    await userEvent.click(within(editor).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("region", { name: /^Edit / })).toBeNull();
+    expect(creature("def-fighter").actions.find((action) => action.id === "longsword")!.name).toBe("Longsword");
+  });
+
+  it("asks before leaving the Codex with the editor's changes unsaved", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
+    await userEvent.type(within(screen.getByRole("region", { name: "Edit Longsword" })).getByLabelText("Name"), " of Doom");
+    await userEvent.click(screen.getByRole("button", { name: "Standard" }));
     const prompt = screen.getByRole("alertdialog", { name: "Unsaved changes" });
+    expect(sheetWindows()[0]!.style).toBe("codex");
     await userEvent.click(within(prompt).getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("group", { name: "Hit points" })).toBeTruthy();
-    expect(screen.getByText("Longsword of Doom")).toBeTruthy();
+    expect(sheetWindows()[0]!.style).toBe("standard");
+    expect(creature("def-fighter").actions.find((action) => action.id === "longsword")!.name).toBe("Longsword of Doom");
+  });
+
+  it("opens a spell from the Spells tab in the editor too", async () => {
+    const wizard = build("srd:class:wizard", "Ilse");
+    await openCodex(wizard.id);
+    await userEvent.click(codexTab("Spells"));
+    const edit = within(screen.getByRole("region", { name: "Spellcasting" })).getAllByRole("button", { name: /^Edit / })[0]!;
+    const spell = edit.getAttribute("aria-label")!.replace(/^Edit /, "");
+    await userEvent.click(edit);
+    expect(screen.getByRole("region", { name: `Edit ${spell}` })).toBeTruthy();
+    // Its back link goes back to the tab it came from.
+    await userEvent.click(screen.getByRole("button", { name: "Back to spells" }));
+    expect(codexTab("Spells").getAttribute("aria-selected")).toBe("true");
   });
 
   it("puts a character's weapons under Attacks, with their lines in view", async () => {
@@ -356,6 +393,9 @@ describe("the palettes", () => {
       expect(contrastRatio(tokens["--muted"]!, surface)).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(tokens["--cu"]!, surface)).toBeGreaterThanOrEqual(3);
       expect(contrastRatio(tokens["--faint"]!, surface)).toBeGreaterThanOrEqual(3);
+      // The ability editor's warning and "simulated" text, in the Codex.
+      expect(contrastRatio(tokens["--warn"]!, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(tokens["--good"]!, surface)).toBeGreaterThanOrEqual(4.5);
     }
   });
 

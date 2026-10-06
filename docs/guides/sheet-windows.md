@@ -67,9 +67,9 @@ Below the dials are the tabs.
 
 ![Spellcasting on the Codex](img/sheet-windows/06-spellcasting.png)
 
-**Edit** on any attack, ability, item or spell opens it in Standard's editor, in the same window. **← Back to the Codex** returns you to the tab and place you left.
+**Edit** on any attack, ability, item or spell opens it in the ability editor, right in the Codex and in its colours, with the banner and sidebar still in view. It's the same editor as on Standard and works the same way. **Save** or **Cancel**, or its back link (named for the tab you came from), returns you to that tab, where you were, with the row you edited in focus. Unsaved changes are guarded as on Standard: switching to Standard, closing the window or pressing Escape asks first.
 
-![Editing a spell from the Codex](img/sheet-windows/07-edit-on-standard.png)
+![Editing a spell in the Codex](img/sheet-windows/07-edit-in-codex.png)
 
 A monster's Codex leaves out what it hasn't got: a goblin has no Items or Spells tab. With several tokens, the switcher is in the banner, and the HP, conditions and slots are that token's.
 
