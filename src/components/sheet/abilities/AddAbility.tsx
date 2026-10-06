@@ -65,7 +65,7 @@ function onSheet(definition: CreatureDefinition): Set<string> {
  * to start from scratch. A row opens the editor on a ready copy, and nothing is added until Save; a library row's "+"
  * adds it at once and leaves the panel open for the next one, and it can be dragged onto the sheet.
  */
-export function AddAbility({ definition, compendium, onPrepared, onAttach, onBlank, onClose, initialFilter = "all" }: {
+export function AddAbility({ definition, compendium, onPrepared, onAttach, onBlank, onClose, initialFilter = "all", bare = false }: {
   definition: CreatureDefinition;
   compendium?: Compendium;
   onPrepared: (prepared: Prepared) => void;
@@ -74,6 +74,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   onClose: () => void;
   /** What it shows first: All, or (the Codex's Spells and Items tabs) Spells or Items. */
   initialFilter?: AddFilter;
+  /** Without its own frame, inside a panel that has one (the Codex's). */
+  bare?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AddFilter>(initialFilter);
@@ -149,7 +151,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   const open5eItems = filter === "items";
   const nothing = !showRecipes && !results.library.length && !results.monster.length;
   return (
-    <div className={styles.add} role="region" aria-label="Add ability">
+    <div className={`${styles.add} ${bare ? styles.addBare : ""}`} role="region" aria-label="Add ability">
       <input
         ref={searchRef} type="search" className={styles.search} aria-label="Search abilities" value={query}
         placeholder="Search weapons, spells, items, monster abilities and recipes" onChange={(event) => { setQuery(event.target.value); setOpen5e(false); }}

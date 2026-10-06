@@ -203,6 +203,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                 definition={definition}
                 compendium={compendium}
                 initialFilter={adding}
+                bare
                 onPrepared={(prepared) => editNew(preparedTarget(prepared))}
                 onBlank={(kind) => editNew(blankTarget(kind, definition))}
                 onAttach={attachFromLibrary}

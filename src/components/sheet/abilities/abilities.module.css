@@ -599,6 +599,14 @@
   background: var(--ui-panel);
 }
 
+/* Inside a panel with a frame of its own (the Codex): no second frame. */
+.addBare {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .search {
   width: 100%;
   box-sizing: border-box;
