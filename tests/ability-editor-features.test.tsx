@@ -12,6 +12,8 @@ import { activationOf } from "@/lib/ability-editor/features";
 import { featureStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
 import { startFromScratch } from "./helpers/abilities-tab";
+import { blankCharacter, quickBuild, rebuildActor } from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 
 /** Phase 4's done-when: features and traits built from a blank one in the editor, matching the library and the SRD. */
 
@@ -289,6 +291,62 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Steady Song").effects).toEqual([{
       kind: "d20-change", rolls: ["save"], change: "reroll", advantage: true, forOthers: { withinFt: 20, includeSelf: true }, reaction: true, againstConditions: ["frightened"]
     }]);
+  });
+
+  it("Spells at their maximum damage: up to which slot, and which spells (Overchannel)", async () => {
+    await blankFeature("Overload");
+    const card = await addEffect(/^Spells at their maximum damage/, "Spells at their maximum damage");
+    await retype(card.getByLabelText("Highest slot level"), "3");
+    await chip(card, "Spells cast as a class", "wizard");
+    await chip(card, "Spells cast as a class", "sorcerer");
+    await done(card);
+    await addToSheet();
+    expect(named("Overload").effects).toEqual([{ kind: "max-damage", maxSlot: 3, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["sorcerer"] }]);
+  });
+
+  it("Damage that ignores resistance: which types (Boon of Irresistible Offense)", async () => {
+    await blankFeature("Sunder");
+    const card = await addEffect(/^Damage that ignores resistance/, "Damage that ignores resistance");
+    await chip(card, "Its damage ignores resistance to", "piercing");
+    await chip(card, "Its damage ignores resistance to", "fire");
+    await done(card);
+    await addToSheet();
+    expect(named("Sunder").effects).toEqual([{ kind: "ignore-resistance", damageTypes: ["bludgeoning", "slashing", "fire"] }]);
+  });
+
+  it("Temporary hit points when a spell deals damage: how many, how far, which spells (Improved Blessed Strikes)", async () => {
+    await blankFeature("Warding Flame");
+    const card = await addEffect(/^Temporary hit points when a spell deals damage/, "Temporary hit points when a spell deals damage");
+    await radio(card, "Temporary hit points is", "A number");
+    await retype(card.getByLabelText("Temporary hit points"), "5");
+    await retype(card.getByLabelText("Reach of the gift (ft)"), "30");
+    await userEvent.click(card.getByRole("checkbox", { name: "Cantrips only" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Warding Flame").effects).toEqual([{ kind: "damage-vitality", tempHp: { base: 5 }, withinFt: 30, spellClasses: ["cleric"] }]);
+  });
+
+  it("An activation that keeps going on its own: how long (Persistent Rage)", async () => {
+    await blankFeature("Unending");
+    const card = await addEffect(/^An activation that keeps going on its own/, "An activation that keeps going on its own");
+    expect((card.getByLabelText("Which activation") as HTMLSelectElement).value).toBe("rage-active");
+    await retype(card.getByLabelText("Rounds it lasts"), "50");
+    await done(card);
+    await addToSheet();
+    expect(named("Unending").effects).toEqual([{ kind: "condition-persists", conditionId: "rage-active", durationRounds: 50 }]);
+  });
+
+  it("Rage's no-spells card on the sheet (7ae)", async () => {
+    const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
+    const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;
+    store().insertAbilityRecord("def-fighter", "features", structuredClone(rage));
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Rage" }));
+    const head = document.querySelector<HTMLElement>('[data-section="while-active"] > button')!;
+    if (head.getAttribute("aria-expanded") !== "true") await userEvent.click(head);
+    // A read-only card: it can be removed, not edited.
+    expect(inSection("while-active").getByRole("button", { name: "Remove no spells effect" })).toBeTruthy();
+    expect(inSection("while-active").getByText("It can't cast spells or concentrate on them.")).toBeTruthy();
   });
 
   it("Bigger healing: each of its three parts", async () => {

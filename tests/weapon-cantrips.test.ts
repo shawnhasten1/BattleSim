@@ -13,7 +13,7 @@ import {
 import { blankCharacter, quickBuild, rebuildActor, type CharacterBuild } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 import { castWith } from "@/lib/ability-editor/spells";
-import { familyKey } from "@/lib/play/hotbar";
+import { familyKey, hotbarFor } from "@/lib/play/hotbar";
 import { SRD_BUILDER_LIBRARY } from "@/lib/character-builder/srd";
 
 /**
@@ -82,6 +82,15 @@ describe("True Strike", () => {
     expect(components.reduce((sum, component) => sum + component.finalAmount, 0)).toBe(4 + mod(definition.abilities.cha) + 6);
   });
 
+  it("one hotbar button, a variant for each weapon", () => {
+    const definition = bard(5);
+    const { state } = scene(definition);
+    const buttons = hotbarFor(state.snapshot, "pc-fighter").tabs.flatMap((tab) => tab.buttons);
+    const strike = buttons.find((button) => button.name === "True Strike")!;
+    expect(strike.variants.map((variant) => variant.label)).toEqual((definition.weapons ?? [])
+      .filter((weapon) => weapon.baseWeapon && weapon.baseWeapon !== "unarmed-strike").map((weapon) => weapon.name));
+  });
+
   it("no extra radiant below 5th level", () => {
     const strike = getExecutableActions(bard(5)).find((action) => action.name === "True Strike (Dagger)")!;
     expect("damage" in strike && strike.damage.length).toBe(2);
@@ -105,6 +114,13 @@ describe("Shillelagh", () => {
     expect(actionProblem(state.snapshot, "pc-fighter", staff.id)).toBeUndefined();
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", staff.id);
     expect(dealt()[0]!.data!.totalApplied).toBe(10 + mod(definition.abilities.wis));
+  });
+
+  it("on the hotbar beside the plain staff, which comes first until the spell is on", () => {
+    const definition = druid();
+    const { state } = scene(definition);
+    const staff = hotbarFor(state.snapshot, "pc-fighter").tabs.flatMap((tab) => tab.buttons).find((button) => button.name === "Quarterstaff")!;
+    expect(staff.variants.map((variant) => [variant.label, variant.problem])).toEqual([["Normal", undefined], ["Shillelagh", "Only while Shillelagh lasts"]]);
   });
 
   it("isn't offered without a club or quarterstaff", () => {

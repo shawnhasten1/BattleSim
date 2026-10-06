@@ -400,8 +400,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     return {
       key: familyKey(base.id),
       tab: tabOf(base, granted),
-      // A wand's spell is "Web (Wand of Web)"; a potion's use is the potion.
-      name: item && base.name !== item.name ? `${base.name} (${item.name})` : base.name,
+      // A wand's spell is "Web (Wand of Web)"; a potion's use is the potion; True Strike's copies are True Strike.
+      name: item && base.name !== item.name ? `${base.name} (${item.name})` : base.viaWeapon ? base.name.replace(/ \([^)]*\)$/, "") : base.name,
       slot,
       variants,
       defaultVariant: Math.max(0, usable),
