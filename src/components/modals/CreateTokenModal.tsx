@@ -1,6 +1,6 @@
 "use client";
 
-import { ListChecks, Search, Swords, Trash2, Upload, UserPlus, Wand2 } from "lucide-react";
+import { ListChecks, Search, Swords, Trash2, Upload, UserPlus, Users, Wand2 } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { abilityModifier, parseCombatantPackage, type Ability, type CreatureDefinition, type CreatureType, type SizeCategory } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -8,7 +8,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { formatBonus } from "@/lib/ui-helpers";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
-import { quickBuild } from "@/lib/character-builder";
+import { QUICK_PARTY_CLASSES, quickBuild, quickParty } from "@/lib/character-builder";
 import { entryLabel } from "@/lib/character-builder/homebrew";
 import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
@@ -52,8 +52,11 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const importCombatantPackage = useEncounterStore((s) => s.importCombatantPackage);
   const moveDefinitionToFolder = useEncounterStore((s) => s.moveDefinitionToFolder);
   const createCharacter = useEncounterStore((s) => s.createCharacter);
+  const createParty = useEncounterStore((s) => s.createParty);
   const openBuilder = useBuilderUiStore((s) => s.open);
   const buildSources = useBuildSources();
+  // Quick party: four classes (changeable), built at the Level chosen above.
+  const [partyClasses, setPartyClasses] = useState<string[]>(() => QUICK_PARTY_CLASSES.filter((id) => buildSources.catalog.classes.some((entry) => entry.id === id)));
   const [character, setCharacter] = useState(() => {
     const first = buildSources.catalog.classes[0]!;
     return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "", speciesId: "" };
@@ -283,6 +286,31 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
             >
               <ListChecks size={14} /> Step through the choices…
             </button>
+            <fieldset className={styles.partyBox} aria-label="Quick party">
+              <legend>Quick party</legend>
+              <div className={styles.grid3}>
+                {partyClasses.map((classId, index) => (
+                  <label key={index} className={styles.field}>
+                    {`Member ${index + 1}`}
+                    <select
+                      aria-label={`Party member ${index + 1}`} value={classId}
+                      onChange={(e) => setPartyClasses(partyClasses.map((id, at) => (at === index ? e.target.value : id)))}
+                    >
+                      {buildSources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button" className={styles.secondary}
+                onClick={() => {
+                  const ids = createParty(quickParty(buildSources, partyClasses, character.level));
+                  finish(ids[ids.length - 1]);
+                }}
+              >
+                <Users size={14} /> Quick party: {partyClasses.length} at level {character.level}
+              </button>
+            </fieldset>
             <p className={styles.status}>
               Quick build makes every choice for you; either way, you can change them later.{" "}
               <button

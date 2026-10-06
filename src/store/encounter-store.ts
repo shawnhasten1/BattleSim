@@ -424,6 +424,8 @@ interface EncounterStore extends PlayActions {
    * after it. One undo step. Returns the new creature's id.
    */
   createCharacter: (input: { name: string; build: CharacterBuild; position?: Point }) => string;
+  /** Quick party: several built characters, each on a free square, named as given; one undo step. Their definition ids. */
+  createParty: (members: Array<{ name: string; build: CharacterBuild }>) => string[];
   /**
    * A built character rebuilt from a changed build (a level up or down, a choice changed). What the builder made and
    * the DM hasn't edited is replaced; `update` names edited ones to replace anyway. Tokens at full hit points, or with a
@@ -2976,6 +2978,36 @@ export const useEncounterStore = create<EncounterStore>()(
         });
         embedSpawnsOf(definition);
         return { changes: result.changes, warnings: result.warnings };
+      },
+      createParty: (members) => {
+        const sources = useCatalogStore.getState().sources;
+        const encounter = get().encounter;
+        const definitions = [...encounter.definitions];
+        const combatants = [...encounter.combatants];
+        const made: CreatureDefinition[] = [];
+        for (const member of members) {
+          const { definition: built } = rebuildActor(blankCharacter(`def-${crypto.randomUUID()}`, member.name), member.build, sources);
+          const definition: CreatureDefinition = { ...built, source: { provider: "homebrew" } };
+          definitions.push(definition);
+          combatants.push({
+            id: `combatant-${crypto.randomUUID()}`,
+            definitionId: definition.id,
+            displayName: member.name,
+            faction: "party",
+            position: openCellFor({ ...encounter, definitions, combatants }, sizeFootprint(definition.size)),
+            currentHp: definition.maxHp,
+            tempHp: 0,
+            resources: defaultResourcesForDefinition(definition),
+            state: "active",
+            tacticsProfile: defaultTacticsOf(definition),
+            resourceStance: definition.defaultResourceStance ?? "balanced"
+          });
+          made.push(definition);
+        }
+        if (!made.length) return [];
+        commitEncounter({ ...encounter, definitions, combatants }, { selectedCombatantId: combatants[combatants.length - 1]!.id });
+        for (const definition of made) embedSpawnsOf(definition);
+        return made.map((definition) => definition.id);
       },
       rebuildCharacter: (definitionId, build, update) => {
         const encounter = get().encounter;

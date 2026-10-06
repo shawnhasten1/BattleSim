@@ -67,6 +67,24 @@ export function quickBuild(sources: BuildSources, options: StartOptions): Charac
   return withSuggestions(startBuild(sources, options), sources);
 }
 
+/** The four classes a Quick party starts from (each can be changed): a front line, a healer, a skirmisher, a caster. */
+export const QUICK_PARTY_CLASSES = ["srd:class:fighter", "srd:class:cleric", "srd:class:rogue", "srd:class:wizard"];
+
+/**
+ * A Quick party: one quick build per class, all at `level`, each named after its class ("Fighter", and "Fighter 2" for a
+ * second one). Classes the catalog hasn't got are left out.
+ */
+export function quickParty(sources: BuildSources, classIds: string[], level: number): Array<{ name: string; build: CharacterBuild }> {
+  const named = new Map<string, number>();
+  return classIds.flatMap((classId) => {
+    const definition = sources.catalog.classes.find((entry) => entry.id === classId);
+    if (!definition) return [];
+    const count = (named.get(definition.name) ?? 0) + 1;
+    named.set(definition.name, count);
+    return [{ name: count > 1 ? `${definition.name} ${count}` : definition.name, build: quickBuild(sources, { classId, level }) }];
+  });
+}
+
 /** The build one level higher, in `classId` (default the class of its last level), with no choices made yet. */
 export function withLevelUp(build: CharacterBuild, classId?: string): CharacterBuild {
   if (build.levels.length >= 20) return build;

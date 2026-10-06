@@ -338,3 +338,26 @@
 .linkButton:hover {
   text-decoration: underline;
 }
+
+/* Create Token › Character: four classes built at once. */
+.partyBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+}
+
+.partyBox > legend {
+  padding: 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}
+
+.partyBox .grid3 {
+  grid-template-columns: 1fr 1fr;
+}

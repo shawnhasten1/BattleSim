@@ -59,6 +59,26 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
     expect(onCreated).toHaveBeenCalled();
   });
 
+  it("Quick party makes four characters at the level, each on its own square, in one undo step", async () => {
+    render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Character" }));
+    await userEvent.selectOptions(screen.getByLabelText("Level"), "5");
+    await userEvent.selectOptions(screen.getByLabelText("Party member 4"), "srd:class:fighter");
+    const before = store().encounter.combatants.length;
+    const depth = store().undoStack.length;
+    await userEvent.click(screen.getByRole("button", { name: /Quick party: 4 at level 5/ }));
+    const made = store().encounter.combatants.slice(before);
+    expect(made.map((token) => token.displayName)).toEqual(["Fighter", "Cleric", "Rogue", "Fighter 2"]);
+    expect(new Set(made.map((token) => `${token.position.x},${token.position.y}`)).size).toBe(4);
+    for (const token of made) {
+      const definition = store().encounter.definitions.find((entry) => entry.id === token.definitionId)!;
+      expect(definition.character?.level).toBe(5);
+      expect(token.faction).toBe("party");
+      expect(token.currentHp).toBe(definition.maxHp);
+    }
+    expect(store().undoStack.length).toBe(depth + 1);
+  });
+
   it("offers a homebrew class beside the SRD's, marked as homebrew, and quick builds it", async () => {
     const gunslinger = { ...SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === "srd:class:fighter")!, id: "homebrew:class:gunslinger", name: "Gunslinger", source: { provider: "homebrew" as const } };
     useCatalogStore.getState().setEntries([{ kind: "class", entry: gunslinger }]);
