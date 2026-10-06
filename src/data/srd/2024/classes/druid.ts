@@ -85,12 +85,32 @@ export const DRUID: ClassDefinition = {
           },
           {
             id: "potent-spellcasting", name: "Potent Spellcasting", description: "Wisdom on Druid cantrips' damage",
-            grants: [{ key: "elemental-fury", feature: reference("druid_elemental-fury", { name: "Elemental Fury: Potent Spellcasting" }) }]
+            grants: [
+              {
+                key: "elemental-fury",
+                feature: runs("druid_elemental-fury", {
+                  name: "Elemental Fury: Potent Spellcasting",
+                  effects: [{ kind: "spell-damage-ability", ability: "wis", cantripsOnly: true, spellClasses: ["druid"] }]
+                })
+              },
+              {
+                // Improved Elemental Fury, for a druid who took Potent Spellcasting: 300 ft more on a cantrip reaching 10 ft or more.
+                key: "improved-potent-spellcasting",
+                atLevel: 15,
+                feature: {
+                  id: "improved-potent-spellcasting", name: "Improved Elemental Fury: Potent Spellcasting", category: "feature",
+                  source: srd52Source("srd-2024_druid_improved-elemental-fury"),
+                  description: "A Druid cantrip with a range of 10 feet or more reaches 300 feet farther.",
+                  effects: [{ kind: "spell-range", bonus: 300, minRange: 10, cantripsOnly: true, spellClasses: ["druid"] }],
+                  automationSupport: "full"
+                }
+              }
+            ]
           }
         ]
       }, "druid_elemental-fury")]
     },
-    { level: 15, grants: [grant("improved-elemental-fury", runs("druid_improved-elemental-fury", { notSimulated: "Potent Spellcasting's longer cantrip range." }))] },
+    { level: 15, grants: [grant("improved-elemental-fury", runs("druid_improved-elemental-fury"))] },
     { level: 18, grants: [grant("beast-spells", reference("druid_beast-spells"))] },
     { level: 20, grants: [grant("archdruid", informational("druid_archdruid"))] }
   ],

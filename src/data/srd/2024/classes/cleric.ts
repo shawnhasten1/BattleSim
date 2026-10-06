@@ -127,13 +127,19 @@ export const CLERIC: ClassDefinition = {
           },
           {
             id: "potent-spellcasting", name: "Potent Spellcasting", description: "Wisdom on Cleric cantrips' damage",
-            grants: [{ key: "blessed-strikes", feature: reference("cleric_blessed-strikes", { name: "Blessed Strikes: Potent Spellcasting" }) }]
+            grants: [{
+              key: "blessed-strikes",
+              feature: runs("cleric_blessed-strikes", {
+                name: "Blessed Strikes: Potent Spellcasting",
+                effects: [{ kind: "spell-damage-ability", ability: "wis", cantripsOnly: true, spellClasses: ["cleric"] }]
+              })
+            }]
           }
         ]
       }, "cleric_blessed-strikes")]
     },
     { level: 10, grants: [grant("divine-intervention", reference("cleric_divine-intervention"))] },
-    { level: 14, grants: [grant("improved-blessed-strikes", runs("cleric_improved-blessed-strikes", { notSimulated: "Potent Spellcasting's temporary hit points." }))] },
+    { level: 14, grants: [grant("improved-blessed-strikes", runs("cleric_improved-blessed-strikes", { notSimulated: "Potent Spellcasting's temporary hit points when a cantrip deals damage." }))] },
     { level: 20, grants: [grant("greater-divine-intervention", informational("cleric_greater-divine-intervention"))] }
   ],
   startingEquipment: [

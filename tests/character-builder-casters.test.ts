@@ -113,11 +113,10 @@ describe("the Wizard (Evoker)", () => {
     for (const entry of signature) expect(wizard.resources?.[entry.resourceCost!.resourceId]).toBe(1);
   });
 
-  it("puts the Evoker's other features on as reference", () => {
+  it("runs Potent Cantrip and Empowered Evocation, and puts the Evoker's other features on as reference", () => {
     const wizard = built("wizard", 14);
-    for (const id of ["evoker-potent-cantrip", "evoker-sculpt-spells", "evoker-empowered-evocation", "evoker-overchannel"]) {
-      expect(feature(wizard, id).automationSupport).toBe("manual-only");
-    }
+    for (const id of ["evoker-potent-cantrip", "evoker-empowered-evocation"]) expect(feature(wizard, id).automationSupport).toBe("full");
+    for (const id of ["evoker-sculpt-spells", "evoker-overchannel"]) expect(feature(wizard, id).automationSupport).toBe("manual-only");
   });
 });
 

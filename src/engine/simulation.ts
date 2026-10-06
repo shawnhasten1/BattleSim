@@ -3761,7 +3761,9 @@ function expectedDamageAgainst(
       + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments);
     const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total);
-    return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
+    // Potent Cantrip: half the damage on a miss.
+    const onMiss = action.halfDamageOnMiss ? averageDamage(action, source, adjustments) * 0.5 * (1 - hitChance) * beams : 0;
+    return perHit * hitChance * beams + onMiss + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
   if (action.kind === "save" || action.kind === "area-save") {
     const average = averageDamage(action, source, adjustments);

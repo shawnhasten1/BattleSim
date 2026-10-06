@@ -100,7 +100,7 @@ export const EVOKER: SubclassDefinition = {
   levels: [
     {
       level: 3,
-      grants: [grant("potent-cantrip", reference("wizard_evoker_potent-cantrip"))],
+      grants: [grant("potent-cantrip", runs("wizard_evoker_potent-cantrip", { effects: [{ kind: "spell-half-on-miss", cantripsOnly: true }] }))],
       choices: [choice({
         kind: "spells", id: "evocation-savant", what: "spellbook", count: 2, school: "evocation", maxLevel: 2,
         label: "Evocation Savant: two evocation spells for the spellbook"
@@ -110,7 +110,12 @@ export const EVOKER: SubclassDefinition = {
     { level: 6, grants: [grant("sculpt-spells", reference("wizard_evoker_sculpt-spells"))] },
     savant(7),
     savant(9),
-    { level: 10, grants: [grant("empowered-evocation", reference("wizard_evoker_empowered-evocation"))] },
+    {
+      level: 10,
+      grants: [grant("empowered-evocation", runs("wizard_evoker_empowered-evocation", {
+        effects: [{ kind: "spell-damage-ability", ability: "int", spellSchools: ["evocation"], spellClasses: ["wizard"] }]
+      }))]
+    },
     savant(11),
     savant(13),
     { level: 14, grants: [grant("overchannel", reference("wizard_evoker_overchannel"))] },

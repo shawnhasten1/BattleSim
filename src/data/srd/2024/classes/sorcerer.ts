@@ -13,13 +13,12 @@ const innateSorcery = runs("sorcerer_innate-sorcery", {
     condition: {
       id: "innate-sorcery-active", name: "custom", durationRounds: 10,
       effects: [
-        { kind: "save-dc-bonus", bonus: { base: 1 }, spellsOnly: true },
-        { kind: "attack-advantage", condition: "always", spellsOnly: true }
+        { kind: "save-dc-bonus", bonus: { base: 1 }, spellsOnly: true, spellClasses: ["sorcerer"] },
+        { kind: "attack-advantage", condition: "always", spellsOnly: true, spellClasses: ["sorcerer"] }
       ]
     },
     automationSupport: "full"
-  }],
-  notSimulated: "it applies to every spell the sorcerer casts, not only Sorcerer spells."
+  }]
 });
 
 const METAMAGIC = srdReferenceOptions("sorcerer_metamagic-options", "Metamagic");
@@ -91,8 +90,10 @@ const affinity = (type: DamageType): PickOption => {
       key: "elemental-affinity",
       feature: runs("sorcerer_draconic-sorcery_elemental-affinity", {
         name: `Elemental Affinity (${name})`,
-        effects: [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: type } }],
-        notSimulated: `adding Charisma to one damage roll of a spell that deals ${type} damage.`
+        effects: [
+          { kind: "damage-adjustment", adjustment: { type: "resistance", damageType: type } },
+          { kind: "spell-damage-ability", ability: "cha", spellsOnly: true, damageTypes: [type] }
+        ]
       })
     }]
   };

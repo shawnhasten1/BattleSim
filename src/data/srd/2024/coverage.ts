@@ -41,7 +41,7 @@ export const GAPS = {
   "free-move": "Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step)",
   "ally-die": "A die given to an ally, or taken off an enemy's roll (Bardic Inspiration, Cutting Words)",
   "healing-bonus": "Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing)",
-  "spell-scope": "Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save",
+  "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
   "on-kill": "Something that happens when an enemy drops (Dark One's Blessing)",
   "pool-heal": "Healing from a pool by any amount (Lay on Hands, Preserve Life)",
@@ -156,9 +156,9 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "cleric_cleric-subclasses": SUBCLASS,
   "cleric_ability-score-improvement": FEAT_CHOICE,
   "cleric_sear-undead": partial(["ends-on-damage"], "The radiant damage runs with Turn Undead; see Channel Divinity."),
-  "cleric_blessed-strikes": partial(["spell-scope"], "Divine Strike runs; Potent Spellcasting (Wisdom on Cleric cantrips' damage) doesn't."),
+  "cleric_blessed-strikes": full("Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip."),
   "cleric_divine-intervention": manual(["free-cast-any"]),
-  "cleric_improved-blessed-strikes": partial(["spell-scope"], "Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't."),
+  "cleric_improved-blessed-strikes": partial(["damage-vitality"], "Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't."),
   "cleric_epic-boon": EPIC_BOON,
   "cleric_greater-divine-intervention": info("Wish."),
   "cleric_cleric-spell-list": SPELL_LIST,
@@ -179,8 +179,8 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "druid_druid-subclass": SUBCLASS,
   "druid_ability-score-improvement": FEAT_CHOICE,
   "druid_wild-resurgence": manual(["slot-conversion"]),
-  "druid_elemental-fury": partial(["spell-scope"], "Primal Strike runs; Potent Spellcasting doesn't."),
-  "druid_improved-elemental-fury": partial(["spell-scope"], "Primal Strike's 2d8 runs; the cantrip range doesn't matter on most maps."),
+  "druid_elemental-fury": full("Primal Strike, or Potent Spellcasting: Wisdom on one damage roll of each Druid cantrip."),
+  "druid_improved-elemental-fury": full("Primal Strike's 2d8, or Potent Spellcasting's 300 ft more on a Druid cantrip reaching 10 ft or more."),
   "druid_beast-spells": manual(["wild-shape"]),
   "druid_epic-boon": EPIC_BOON,
   druid_archdruid: info("A fight starts with full pools; turning Wild Shape into a slot isn't offered."),
@@ -330,7 +330,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "rogue_thief_thiefs-reflexes": manual(["extra-turn"]),
 
   /* Sorcerer */
-  "sorcerer_innate-sorcery": partial(["spell-scope"], "+1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice; on every spell, not only Sorcerer spells."),
+  "sorcerer_innate-sorcery": full("+1 to its Sorcerer spells' save DC and advantage on their attack rolls for 10 rounds, twice."),
   sorcerer_spellcasting: builder(),
   "sorcerer_font-of-magic": manual(["slot-conversion"], "The builder sizes the sorcery point pool."),
   sorcerer_metamagic: manual(["metamagic"]),
@@ -346,7 +346,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Draconic Sorcery */
   "sorcerer_draconic-sorcery_draconic-resilience": full("AC 10 + Dexterity + Charisma without armor, and hit points by sorcerer level."),
   "sorcerer_draconic-sorcery_draconic-spells": PREPARED("Draconic spells"),
-  "sorcerer_draconic-sorcery_elemental-affinity": partial(["spell-scope"], "The resistance runs; Charisma on a spell's damage doesn't."),
+  "sorcerer_draconic-sorcery_elemental-affinity": full("The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one."),
   "sorcerer_draconic-sorcery_dragon-wings": manual(["gain-speed"]),
   "sorcerer_draconic-sorcery_dragon-companion": manual(["summon-stat-blocks"]),
 
@@ -385,9 +385,9 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Evoker */
   "wizard_evoker_evocation-savant": builder(),
-  "wizard_evoker_potent-cantrip": manual(["spell-scope"]),
+  "wizard_evoker_potent-cantrip": full("Half a cantrip's damage on a miss or a made save, and nothing else."),
   "wizard_evoker_sculpt-spells": manual(["spare-allies"]),
-  "wizard_evoker_empowered-evocation": manual(["spell-scope"]),
+  "wizard_evoker_empowered-evocation": full("Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one."),
   "wizard_evoker_overchannel": manual(["max-damage"])
 };
 

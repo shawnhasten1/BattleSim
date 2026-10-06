@@ -416,6 +416,12 @@ export interface FeatureEffectScope {
   spellsOnly?: boolean;
   /** Restrict to actions that already deal at least one of these damage types (a Frost Staff amplifying cold spells, not adding cold to everything). */
   damageTypes?: DamageTypeReference[];
+  /** Only spells of these schools (Empowered Evocation: `["evocation"]`). */
+  spellSchools?: string[];
+  /** Only spells it casts as one of these classes (`SpellDefinition.spellClass`; Innate Sorcery: `["sorcerer"]`). */
+  spellClasses?: string[];
+  /** Only cantrips (Potent Spellcasting, Potent Cantrip). */
+  cantripsOnly?: boolean;
 }
 
 export interface FeatureEffectConditions {
@@ -640,7 +646,29 @@ export type FeatureEffect =
     actionIds?: Id[];
     /** Restrict to compiled spell actions (`action.spellLevel !== undefined`) instead of listing every spell id by hand. */
     spellsOnly?: boolean;
+    /** Only spells it casts as one of these classes (Innate Sorcery: `["sorcerer"]`). */
+    spellClasses?: string[];
   }
+  | ({
+    /**
+     * Its spells (as `FeatureEffectScope` narrows them) add an ability modifier to one damage roll: Potent
+     * Spellcasting (Wisdom on Cleric or Druid cantrips), Empowered Evocation (Intelligence on evocation spells),
+     * Elemental Affinity (Charisma on spells of its type: the first damage of that type). Folded into each compiled
+     * spell.
+     */
+    kind: "spell-damage-ability";
+    ability: Ability;
+  } & FeatureEffectScope)
+  | ({
+    /** Its spells (as scoped) deal half damage on a missed attack roll or a made save, and nothing else (Potent Cantrip). */
+    kind: "spell-half-on-miss";
+  } & FeatureEffectScope)
+  | ({
+    /** Its spells (as scoped) with a range of at least `minRange` feet reach `bonus` feet farther (Improved Elemental Fury: 300). */
+    kind: "spell-range";
+    bonus: number;
+    minRange?: number;
+  } & FeatureEffectScope)
   | {
     kind: "resource-regain";
     /** `"on-activate"` fires once from `resolveActivateFeatureAction`; the others fire at the bearer's turn boundary. */
@@ -1004,6 +1032,8 @@ export interface AttackActionDefinition {
   attackType: "melee" | "ranged" | "spell";
   /** Can only target a creature this attacker is grappling (a swallow: "one bite attack against a target it is grappling"). */
   requiresHeld?: boolean;
+  /** Half its damage on a miss, and nothing else (Potent Cantrip's cantrips). */
+  halfDamageOnMiss?: boolean;
   /**
    * Only usable after something this turn: `"charge-hit"` against a creature its charge / pounce already hit (Pounce,
    * Trampling Charge); `"dropped-creature"` once it has dropped a creature to 0 HP with a melee attack (Rampage).
@@ -1590,6 +1620,9 @@ export interface TransformActionDefinition {
 
 /** What `getExecutableActions` stamps on the copies it compiles. Never authored. */
 export interface CompiledActionMeta {
+  /** On a spell's action: its school, and the class it's cast as (`SpellDefinition.spellClass`), for features scoped to them. */
+  spellSchool?: string;
+  spellClass?: string;
   /**
    * On a spell cast with a higher slot (`<id>:upcast-N`): the slot level the spell's own cost names. Any leveled spell
    * can be cast with a higher slot, whether or not that makes it stronger.
@@ -1761,6 +1794,11 @@ export interface SpellDefinition {
   source?: SourceMetadata;
   level: number;
   school?: string;
+  /**
+   * The class this creature casts it as (`"cleric"`), when it's one of that class's spells: what makes it a "Cleric
+   * cantrip" for Potent Spellcasting or a "Sorcerer spell" for Innate Sorcery. The character builder sets it.
+   */
+  spellClass?: string;
   castingTime: "action" | "bonus" | "reaction";
   ritual?: boolean;
   /** Feet, or `"self"` / `"touch"` (resolved to 0 / 5 when compiling to an action). */

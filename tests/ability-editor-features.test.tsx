@@ -127,6 +127,37 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Second Try").effects).toEqual([{ kind: "d20-change", rolls: ["save"], change: "reroll" }]);
   });
 
+  it("An ability on spell damage: the ability, and which spells", async () => {
+    await blankFeature("Searing Focus");
+    const card = await addEffect(/^An ability on spell damage/, "An ability on spell damage");
+    await userEvent.selectOptions(card.getByLabelText("Ability it adds"), "cha");
+    await userEvent.click(card.getByRole("checkbox", { name: "Cantrips only" }));
+    await chip(card, "Spells of the school", "evocation");
+    await chip(card, "Spells cast as a class", "sorcerer");
+    await chip(card, "Only spells dealing", "fire");
+    await done(card);
+    await addToSheet();
+    expect(named("Searing Focus").effects).toEqual([{ kind: "spell-damage-ability", ability: "cha", spellSchools: ["evocation"], spellClasses: ["sorcerer"], damageTypes: ["fire"] }]);
+    expect(featureStatblock(named("Searing Focus"), fighter()).text).toBe("It adds its Charisma modifier to one damage roll of its Sorcerer evocation spells that deal fire damage.");
+  });
+
+  it("Half damage when a spell misses, and a longer spell range", async () => {
+    await blankFeature("Reach and Bite");
+    const half = await addEffect(/^Half damage when a spell misses/, "Half damage when a spell misses");
+    await chip(half, "Spells cast as a class", "wizard");
+    await done(half);
+    const range = await addEffect(/^Longer spell range/, "Longer spell range");
+    await retype(range.getByLabelText("Feet farther"), "60");
+    await retype(range.getByLabelText("Shortest range it lengthens"), "30");
+    await userEvent.click(range.getByRole("checkbox", { name: "Cantrips only" }));
+    await done(range);
+    await addToSheet();
+    expect(named("Reach and Bite").effects).toEqual([
+      { kind: "spell-half-on-miss", cantripsOnly: true, spellClasses: ["wizard"] },
+      { kind: "spell-range", bonus: 60, minRange: 30 }
+    ]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

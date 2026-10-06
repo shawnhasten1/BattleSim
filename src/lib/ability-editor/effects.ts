@@ -54,6 +54,18 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "critical-range", condition: "always", minimum: 19 })
   },
   {
+    kind: "spell-damage-ability", label: "An ability on spell damage", hint: "Potent Spellcasting, Empowered Evocation: its modifier on one damage roll of some spells", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "spell-damage-ability", ability: "wis", cantripsOnly: true })
+  },
+  {
+    kind: "spell-half-on-miss", label: "Half damage when a spell misses", hint: "Potent Cantrip: half on a miss or a made save, and nothing else", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "spell-half-on-miss", cantripsOnly: true })
+  },
+  {
+    kind: "spell-range", label: "Longer spell range", hint: "Improved Elemental Fury: 300 ft more on a cantrip reaching 10 ft or more", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "spell-range", bonus: 300, minRange: 10, cantripsOnly: true })
+  },
+  {
     kind: "damage-bonus", label: "Extra damage on its hits", hint: "Sneak Attack, Rage's +2, Divine Fury", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-bonus", condition: "always", damage: [{ dice: "1d6", damageType: "same-as-attack" }] })
   },

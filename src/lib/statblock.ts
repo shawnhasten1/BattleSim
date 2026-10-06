@@ -537,6 +537,16 @@ function usingText(effect: FeatureEffect): string {
     + (scope.damageTypes?.length ? ` that deal ${joinList(scope.damageTypes, "or")} damage` : "");
 }
 
+/** "its Cleric cantrips", "its evocation spells", "its spells that deal fire damage", "one of its cantrips". */
+function spellScopeText(effect: FeatureEffect, who: Who, one = false): string {
+  const scope = effect as { cantripsOnly?: boolean; spellSchools?: string[]; spellClasses?: string[]; damageTypes?: string[] };
+  const classes = scope.spellClasses?.length ? `${joinList(scope.spellClasses.map(capitalize), "or")} ` : "";
+  const schools = scope.spellSchools?.length ? `${joinList(scope.spellSchools, "or")} ` : "";
+  const noun = scope.cantripsOnly ? (one ? "cantrip" : "cantrips") : one ? "spell" : "spells";
+  const types = scope.damageTypes?.length ? ` that deal${one ? "s" : ""} ${joinList(scope.damageTypes, "or")} damage` : "";
+  return `${one ? `one of ${who.possessive} ` : `${who.possessive} `}${classes}${schools}${one ? `${noun}s`.replace(/ss$/, "s") : noun}${types}`;
+}
+
 /** "When it fails a saving throw, it can reroll the d20 and use the new roll, adding 9, by spending 1 Indomitable." */
 function d20ChangeSentence(effect: Extract<FeatureEffect, { kind: "d20-change" }>, definition: CreatureDefinition, who: Who): string {
   const when = effect.onNatural1
@@ -562,6 +572,12 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
     case "d20-change":
       return d20ChangeSentence(effect, definition, who);
+    case "spell-damage-ability":
+      return `${S} adds ${who.possessive} ${ABILITY_NAME[effect.ability]} modifier to one damage roll of ${spellScopeText(effect, who)}.`;
+    case "spell-half-on-miss":
+      return `When ${who.subject} misses with ${spellScopeText(effect, who, true)}, or a creature succeeds on a saving throw against one, it still takes half the damage, and nothing else.`;
+    case "spell-range":
+      return `${capitalize(spellScopeText(effect, who))} with a range of ${effect.minRange ?? 0} feet or more reach ${effect.bonus} feet farther.`;
     case "initiative": {
       const parts = [
         ...(effect.advantage ? ["has advantage on Initiative rolls"] : []),
@@ -706,6 +722,9 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "attack-advantage": return `${effect.mode ?? "advantage"} on ${scope}attacks${gate}`;
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
     case "critical-range": return `${scope}crits on ${effect.minimum}–20${gate}`;
+    case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
+    case "spell-half-on-miss": return `half damage on a miss or a save: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
+    case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "d20-change": {
       const failed = effect.onNatural1 ? "a 1" : joinList(effect.rolls.map((roll) => (roll === "save" ? "a failed save" : "a miss")), "or");
       const does = effect.change === "reroll" ? `reroll${effect.bonus ? ` +${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "").replace(/^\+/, "")}` : ""}`

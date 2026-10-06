@@ -595,6 +595,33 @@ function AbilitySelect({ label, value, onChange, none }: { label: string; value:
   );
 }
 
+const SPELL_SCHOOLS = ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"];
+const SPELL_CLASSES = ["bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"];
+
+type SpellScopeFields = { cantripsOnly?: boolean; spellSchools?: string[]; spellClasses?: string[] };
+
+/** Which spells an effect on spells covers: cantrips only, some schools, spells cast as some classes. None: every spell. */
+function SpellScope<E extends SpellScopeFields>({ effect, set }: { effect: E; set: (next: E) => void }) {
+  const toggle = (key: "spellSchools" | "spellClasses", item: string) => {
+    const list = effect[key] ?? [];
+    const next = list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item];
+    const copy = { ...effect };
+    delete copy[key];
+    set(next.length ? { ...copy, [key]: next } : copy);
+  };
+  return (
+    <>
+      <Check label="Cantrips only" checked={effect.cantripsOnly === true} onChange={(on) => { const copy = { ...effect }; delete copy.cantripsOnly; set(on ? { ...copy, cantripsOnly: true } : copy); }} />
+      <div className={styles.typeChips} role="group" aria-label="Spells of the school">
+        {SPELL_SCHOOLS.map((school) => <button key={school} type="button" aria-pressed={(effect.spellSchools ?? []).includes(school)} onClick={() => toggle("spellSchools", school)}>{school}</button>)}
+      </div>
+      <div className={styles.typeChips} role="group" aria-label="Spells cast as a class">
+        {SPELL_CLASSES.map((entry) => <button key={entry} type="button" aria-pressed={(effect.spellClasses ?? []).includes(entry)} onClick={() => toggle("spellClasses", entry)}>{entry}</button>)}
+      </div>
+    </>
+  );
+}
+
 function TypeChips({ label, value, onChange }: { label: string; value: DamageType[]; onChange: (next: DamageType[]) => void }) {
   return (
     <div className={styles.typeChips} role="group" aria-label={label}>
@@ -768,6 +795,39 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </>
       );
     }
+    case "spell-damage-ability":
+      return (
+        <>
+          <span className={styles.inline}>
+            <span>Adds its</span>
+            <select aria-label="Ability it adds" value={effect.ability} onChange={(e) => set({ ...effect, ability: e.target.value as Ability })}>
+              {(["str", "dex", "con", "int", "wis", "cha"] as Ability[]).map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+            </select>
+            <span>modifier to one damage roll of</span>
+          </span>
+          <SpellScope effect={effect} set={set} />
+          <TypeChips label="Only spells dealing" value={(effect.damageTypes ?? []) as DamageType[]} onChange={(types) => set(opt(effect, "damageTypes", types.length ? types : undefined))} />
+        </>
+      );
+    case "spell-half-on-miss":
+      return (
+        <>
+          <p className={styles.hint}>A missed attack roll, or a made save, still deals half the damage, and nothing else.</p>
+          <SpellScope effect={effect} set={set} />
+        </>
+      );
+    case "spell-range":
+      return (
+        <>
+          <span className={styles.inline}>
+            <NumberField label="Feet farther" value={effect.bonus} min={5} max={1000} step={5} onChange={(n) => n !== undefined && set({ ...effect, bonus: n })} />
+            <span>ft farther, for spells reaching at least</span>
+            <NumberField label="Shortest range it lengthens" value={effect.minRange ?? 0} min={0} max={1000} step={5} onChange={(n) => set(opt(effect, "minRange", n ? n : undefined))} />
+            <span>ft</span>
+          </span>
+          <SpellScope effect={effect} set={set} />
+        </>
+      );
     case "evasion":
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":

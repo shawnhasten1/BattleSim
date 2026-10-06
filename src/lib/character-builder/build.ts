@@ -287,6 +287,8 @@ interface SpellPick {
   via: "cantrip" | "prepared" | "always" | "free";
   /** Casts without a slot, from a pool of its own. */
   freeCasts?: Template | number | "at-will";
+  /** The one class list it was chosen from (Magic Initiate's Cleric list): whose spell it counts as, with no class of its own. */
+  list?: string;
 }
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
@@ -707,7 +709,7 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
     if (stored !== undefined) slot.value = chosen;
     slot.suggestion = chosen;
     slot.pending = false;
-    recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly);
+    recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly, lists);
     return;
   }
   const firstClass = classOf(state.sources, state.build.levels[0]?.classId ?? "");
@@ -734,11 +736,14 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
 
   if (stored !== undefined) slot.value = chosen;
   slot.pending = chosen.length < Math.min(count, chosen.length + candidates.length);
-  recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly);
+  recordSpellPicks(state, spec, context, chosen, book, ability, freeOnly, lists);
 }
 
 /** What a spell choice took: into the class's spellbook, or the character's spells. */
-function recordSpellPicks(state: WalkState, spec: SpellsChoice, context: ChoiceContext, chosen: string[], book: string[] | undefined, ability: Ability | undefined, freeOnly: boolean) {
+function recordSpellPicks(
+  state: WalkState, spec: SpellsChoice, context: ChoiceContext, chosen: string[], book: string[] | undefined, ability: Ability | undefined, freeOnly: boolean,
+  lists: string[]
+) {
   for (const id of chosen) {
     if (spec.what === "spellbook") {
       book?.push(id);
@@ -747,7 +752,8 @@ function recordSpellPicks(state: WalkState, spec: SpellsChoice, context: ChoiceC
     state.spellPicks.push({
       spell: id, owner: context.owner, ...(ability ? { ability } : {}),
       via: freeOnly ? "free" : spec.what === "cantrips" ? "cantrip" : spec.alwaysPrepared ? "always" : "prepared",
-      ...(spec.freeCasts !== undefined ? { freeCasts: spec.freeCasts } : {})
+      ...(spec.freeCasts !== undefined ? { freeCasts: spec.freeCasts } : {}),
+      ...(lists.length === 1 ? { list: lists[0] } : {})
     });
   }
 }
@@ -1253,10 +1259,18 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     }
     const slug = spellSlug(pick.spell);
     const cast = castAs(structuredClone(source) as SpellDefinition, pick.ability ?? spellcasting?.ability ?? "int", spellcasting?.ability);
+    // A class's (or its subclass's) spell is one of that class's spells: a "Cleric cantrip", a "Sorcerer spell". A feat's,
+    // chosen from one class's list (Magic Initiate's Cleric spells), counts as that class's.
+    const spellClass = pick.owner.classId ? slugOf(pick.owner.classId) : pick.list;
+    if (spellClass) cast.spellClass = spellClass;
     let id = `${pick.owner.idPrefix}-${slug}`;
     // A spell cast with slots: once, and only if there's a slot it can be cast with (a fighter's Magic Initiate spell
     // is its free cast alone).
     const slotted = pick.via !== "free" && (source.level === 0 || highestSlot >= source.level);
+    // Known twice (Magic Initiate's, then the class's): the one placed is still the class's spell too.
+    if (slotted && placedSpells.has(pick.spell) && cast.spellClass) {
+      for (const entry of spells) if (entry.from === pick.spell && !entry.spell.spellClass) entry.spell = { ...entry.spell, spellClass: cast.spellClass };
+    }
     if (slotted && !placedSpells.has(pick.spell)) {
       while (takenIds.has(id)) id = `${id}-2`;
       takenIds.add(id);

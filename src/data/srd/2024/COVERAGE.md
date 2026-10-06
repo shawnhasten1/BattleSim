@@ -17,16 +17,16 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 7 | 2 | 8 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
+| Cleric (Life Domain) | 17 | 1 | 3 | 5 | 7 | 1 |
+| Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 10 | 1 | 4 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 5 | 2 | 6 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
-| Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
+| Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
 | Feats | 17 | 4 | 2 | 7 | 4 | 0 |
 | Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
 
@@ -37,7 +37,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
-| `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 1 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Innate Sorcery (Sorcerer); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Remarkable Athlete (Champion); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
@@ -79,6 +78,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `relentless` | Dropping to more than 1 HP instead of 0, with a DC that rises each use (Relentless Rage) | Barbarian | 11 | Relentless Rage (Barbarian) |
+| `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
 | `max-damage` | Maximum damage instead of a roll (Overchannel) | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
@@ -162,9 +162,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Cleric Subclasses | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sear Undead | partial | `ends-on-damage` | The radiant damage runs with Turn Undead; see Channel Divinity. |
-| 7 | Blessed Strikes | partial | `spell-scope` | Divine Strike runs; Potent Spellcasting (Wisdom on Cleric cantrips' damage) doesn't. |
+| 7 | Blessed Strikes | full |  | Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip. |
 | 10 | Divine Intervention | manual | `free-cast-any` |  |
-| 14 | Improved Blessed Strikes | partial | `spell-scope` | Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't. |
+| 14 | Improved Blessed Strikes | partial | `damage-vitality` | Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Greater Divine Intervention | info |  | Wish. |
 | — | Cleric Spell List | builder |  | Read from each spell's own class list. |
@@ -191,8 +191,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Druid Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Wild Resurgence | manual | `slot-conversion` |  |
-| 7 | Elemental Fury | partial | `spell-scope` | Primal Strike runs; Potent Spellcasting doesn't. |
-| 15 | Improved Elemental Fury | partial | `spell-scope` | Primal Strike's 2d8 runs; the cantrip range doesn't matter on most maps. |
+| 7 | Elemental Fury | full |  | Primal Strike, or Potent Spellcasting: Wisdom on one damage roll of each Druid cantrip. |
+| 15 | Improved Elemental Fury | full |  | Primal Strike's 2d8, or Potent Spellcasting's 300 ft more on a Druid cantrip reaching 10 ft or more. |
 | 18 | Beast Spells | manual | `wild-shape` |  |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Archdruid | info |  | A fight starts with full pools; turning Wild Shape into a slot isn't offered. |
@@ -378,7 +378,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Innate Sorcery | partial | `spell-scope` | +1 to its spell save DC and advantage on its spell attacks for 10 rounds, twice; on every spell, not only Sorcerer spells. |
+| 1 | Innate Sorcery | full |  | +1 to its Sorcerer spells' save DC and advantage on their attack rolls for 10 rounds, twice. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Font of Magic | manual | `slot-conversion` | The builder sizes the sorcery point pool. |
 | 2, 10, 17 | Metamagic | manual | `metamagic` |  |
@@ -397,7 +397,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Draconic Resilience | full |  | AC 10 + Dexterity + Charisma without armor, and hit points by sorcerer level. |
 | 3 | Draconic Spells | builder |  | Draconic spells are always prepared. |
-| 6 | Elemental Affinity | partial | `spell-scope` | The resistance runs; Charisma on a spell's damage doesn't. |
+| 6 | Elemental Affinity | full |  | The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one. |
 | 14 | Dragon Wings | manual | `gain-speed` |  |
 | 18 | Dragon Companion | manual | `summon-stat-blocks` |  |
 
@@ -448,9 +448,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Evocation Savant | builder |  |  |
-| 3 | Potent Cantrip | manual | `spell-scope` |  |
+| 3 | Potent Cantrip | full |  | Half a cantrip's damage on a miss or a made save, and nothing else. |
 | 6 | Sculpt Spells | manual | `spare-allies` |  |
-| 10 | Empowered Evocation | manual | `spell-scope` |  |
+| 10 | Empowered Evocation | full |  | Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one. |
 | 14 | Overchannel | manual | `max-damage` |  |
 
 ## Feats

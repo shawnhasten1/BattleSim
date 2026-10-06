@@ -261,12 +261,55 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
+  const spellEffects = spellShapingEffects(definition);
   return dedupeActionsById([
     ...declared,
     ...synthesizeUtilityActions(declared),
     ...legendaryVariants(definition, declared),
     ...lairVariants(definition)
-  ]).map(withEffectiveAutomationSupport);
+  ]).map((action) => (spellEffects.length ? shapedSpell(action, spellEffects) : action)).map(withEffectiveAutomationSupport);
+}
+
+type SpellShapingEffect = Extract<FeatureEffect, { kind: "spell-damage-ability" | "spell-half-on-miss" | "spell-range" }>;
+
+/** The creature's effects that change its spells as they're compiled (Potent Spellcasting, Potent Cantrip). */
+function spellShapingEffects(definition: CreatureDefinition): SpellShapingEffect[] {
+  return [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => !feature.optional || feature.enabled)
+    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is SpellShapingEffect =>
+      effect.kind === "spell-damage-ability" || effect.kind === "spell-half-on-miss" || effect.kind === "spell-range"));
+}
+
+/**
+ * A spell action with what the creature's features do to its spells: an ability modifier on one damage roll (the
+ * first part with none, or of the effect's damage type), half damage on a miss or a made save, a longer range.
+ */
+function shapedSpell(action: ActionDefinition, effects: SpellShapingEffect[]): ActionDefinition {
+  if (!("spellLevel" in action) || action.spellLevel === undefined) return action;
+  let next = action;
+  for (const effect of effects) {
+    if (!spellScopeCovers(effect, next)) continue;
+    // One damage roll of the spell: not every beam of Magic Missile or Scorching Ray, so not a spell of several beams.
+    if (effect.kind === "spell-damage-ability" && ((next.kind === "attack" && next.attackDelivery !== "beams") || next.kind === "save" || next.kind === "area-save")) {
+      const damage = next.damage;
+      const types = effect.damageTypes;
+      if (types?.length && !damage.some((component) => types.includes(component.damageType))) continue;
+      const index = damage.findIndex((component) => !types?.length || types.includes(component.damageType));
+      const part = damage[index];
+      if (!part) continue;
+      const added = !part.abilityModifier ? { ...part, abilityModifier: effect.ability }
+        : !part.bonusFormula ? { ...part, bonusFormula: { ability: effect.ability } } : part;
+      next = { ...next, damage: damage.map((component, at) => (at === index ? added : component)) } as typeof next;
+    } else if (effect.kind === "spell-half-on-miss") {
+      if (next.kind === "attack") next = { ...next, halfDamageOnMiss: true };
+      else if ((next.kind === "save" || next.kind === "area-save") && (next.onSuccess ? next.onSuccess !== "half" : !next.halfDamageOnSuccess)) {
+        next = { ...next, onSuccess: "half", halfDamageOnSuccess: true } as typeof next;
+      }
+    } else if (effect.kind === "spell-range" && "range" in next && typeof next.range === "number" && next.range >= (effect.minRange ?? 0)) {
+      next = { ...next, range: next.range + effect.bonus } as typeof next;
+    }
+  }
+  return next;
 }
 
 /**
@@ -2116,7 +2159,13 @@ function resolveAttackCore(
       ...featureDamage.entries,
       ...targetHitDamage.entries
     ], attackerDefinition, attacker.id, { byAttack: true })
-    : 0;
+    // Potent Cantrip: a miss still deals half the damage, and nothing else.
+    : action.halfDamageOnMiss
+      ? applyDamageEntries(state, target, action.damage.map((component, index) => ({
+        component, critical: false, halve: true, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
+        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined
+      })), attackerDefinition, attacker.id)
+      : 0;
   let appliedConditionEffects: string[] = [];
   if (hit) {
     consumeTriggeredConditions(state, target, targetHitDamage.consumedConditionIds ?? []);
@@ -5440,6 +5489,8 @@ function stampSpellContext(
     ...withSpellcastingAttackAbility(action, definition),
     spellLevel: action.spellLevel ?? spell.level,
     upcast: action.upcast ?? spell.upcast,
+    ...(spell.school ? { spellSchool: spell.school.toLowerCase() } : {}),
+    ...(spell.spellClass ? { spellClass: spell.spellClass } : {}),
     ...(action.kind === "area-save" && spell.zone && !action.zone ? { zone: spell.zone } : {})
   };
   if (action.kind !== "healing" && spell.concentration && !action.concentration) {
@@ -6973,7 +7024,7 @@ function featureSaveDcModifier(
       if (effect.actionIds && !effect.actionIds.includes(upcastBaseId(action.id))) {
         continue;
       }
-      if (effect.spellsOnly && action.spellLevel === undefined) {
+      if (!spellScopeCovers(effect, action)) {
         continue;
       }
       total += resolveNumericFormula(effect.bonus, definition);
@@ -7067,6 +7118,19 @@ function featureEffectUseKey(feature: FeatureDefinitionSource, effect: FeatureEf
   return `${feature.id}:${explicitId ?? effectIndex}`;
 }
 
+/**
+ * Whether `action` is a spell an effect scoped to spells covers: any spell (`spellsOnly`), cantrips, spells of some
+ * schools, or spells cast as some classes. An effect with none of these covers anything.
+ */
+export function spellScopeCovers(effect: FeatureEffect, action: ActionDefinition): boolean {
+  const scope = effect as { spellsOnly?: boolean; cantripsOnly?: boolean; spellSchools?: string[]; spellClasses?: string[] };
+  const level = "spellLevel" in action ? action.spellLevel : undefined;
+  if ((scope.spellsOnly || scope.cantripsOnly || scope.spellSchools?.length || scope.spellClasses?.length) && level === undefined) return false;
+  if (scope.cantripsOnly && level !== 0) return false;
+  if (scope.spellSchools?.length && !scope.spellSchools.includes((action.spellSchool ?? "").toLowerCase())) return false;
+  return !scope.spellClasses?.length || scope.spellClasses.includes(action.spellClass ?? "");
+}
+
 function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefinition): boolean {
   if ("actionIds" in effect && effect.actionIds && !effect.actionIds.includes(upcastBaseId(action.id))) {
     return false;
@@ -7074,7 +7138,7 @@ function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefin
   if ("attackTypes" in effect && effect.attackTypes && !effect.attackTypes.includes(action.attackType)) {
     return false;
   }
-  if ("spellsOnly" in effect && effect.spellsOnly && action.spellLevel === undefined) {
+  if (!spellScopeCovers(effect, action)) {
     return false;
   }
   if ("damageTypes" in effect && effect.damageTypes
