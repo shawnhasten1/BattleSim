@@ -24,7 +24,7 @@ import { SheetSection } from "../SheetSection";
 import defenseStyles from "./defenses.module.css";
 import styles from "../sheet.module.css";
 import { buildLabel, readBuild, withLevelDown, type CharacterBuild } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 
 interface SectionProps {
@@ -191,7 +191,8 @@ export function SensesSection({ definition, open, onToggle }: SectionProps) {
 function BuiltLevelSection({ definition, build, open, onToggle }: SectionProps & { build: CharacterBuild }) {
   const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
   const openBuilder = useBuilderUiStore((s) => s.open);
-  const label = buildLabel(build, SRD_BUILD_SOURCES);
+  const buildSources = useBuildSources();
+  const label = buildLabel(build, buildSources);
   return (
     <SheetSection title="Class & level" summary={label} open={open} onToggle={onToggle}>
       <p className={styles.note}>

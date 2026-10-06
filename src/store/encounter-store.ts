@@ -97,7 +97,7 @@ import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/ma
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
 import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { useCatalogStore } from "@/store/catalog-store";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
 
@@ -2945,7 +2945,7 @@ export const useEncounterStore = create<EncounterStore>()(
       },
       createCharacter: ({ name, build, position }) => {
         const id = `def-${crypto.randomUUID()}`;
-        const { definition } = rebuildActor(blankCharacter(id, name), build, SRD_BUILD_SOURCES);
+        const { definition } = rebuildActor(blankCharacter(id, name), build, useCatalogStore.getState().sources);
         get().addCreatureDefinition({ ...definition, source: { provider: "homebrew" } }, "party", position);
         embedSpawnsOf(definition);
         // A player character's token is the character: "Vex", not "Vex 1". Part of the same undo step.
@@ -2962,7 +2962,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const encounter = get().encounter;
         const before = encounter.definitions.find((definition) => definition.id === definitionId);
         if (!before) return undefined;
-        const result = rebuildActor(before, build, SRD_BUILD_SOURCES, update);
+        const result = rebuildActor(before, build, useCatalogStore.getState().sources, update);
         commitEncounter({
           ...encounter,
           definitions: encounter.definitions.map((definition) => (definition.id === definitionId ? result.definition : definition)),

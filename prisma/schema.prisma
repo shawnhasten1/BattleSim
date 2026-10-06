@@ -22,6 +22,7 @@ model User {
   projects     Project[]
   definitions  CreatureDefinition[]
   folders      ActorFolder[]
+  catalogEntries CatalogEntry[]
 }
 
 model Account {
@@ -111,6 +112,29 @@ model CreatureDefinition {
   data           String
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+}
+
+/**
+ * A homebrew or imported character-builder entry (a class, subclass, feat, background or species): the JSON a
+ * `CatalogEntry` (src/lib/character-builder/homebrew.ts) holds, checked by its kind's schema on the way in.
+ */
+model CatalogEntry {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /** The entry's own id (`homebrew:class:…`, `open5e:…`): what a character's build names. Unique per account, so two accounts can import one file. */
+  entryId       String
+  /** class | subclass | feat | background | species */
+  kind          String
+  name          String
+  sourceKey     String?
+  sourceName    String?
+  schemaVersion Int      @default(1)
+  data          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([ownerId, entryId])
 }
 
 model ActorFolder {

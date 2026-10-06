@@ -10,6 +10,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { quickBuild, readBuild } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
+import { useCatalogStore } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
 
 /** PC builder plan, Phase 2: making a character, leveling it up, and what the sheet and the store do with a build. */
@@ -18,6 +19,7 @@ const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
   useBuilderUiStore.setState({ window: null });
+  useCatalogStore.getState().setEntries([]);
   try { localStorage.clear(); } catch { /* private mode */ }
 });
 afterEach(() => cleanup());
@@ -54,6 +56,21 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
     expect(token.currentHp).toBe(brakka.maxHp);
     expect(token.resources).toEqual(brakka.resources);
     expect(onCreated).toHaveBeenCalled();
+  });
+
+  it("offers a homebrew class beside the SRD's, marked as homebrew, and quick builds it", async () => {
+    const gunslinger = { ...SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === "srd:class:fighter")!, id: "homebrew:class:gunslinger", name: "Gunslinger", source: { provider: "homebrew" as const } };
+    useCatalogStore.getState().setEntries([{ kind: "class", entry: gunslinger }]);
+    render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Character" }));
+    const option = within(screen.getByLabelText("Class")).getByRole("option", { name: "Gunslinger (Homebrew)" });
+    expect(option).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText("Class"), "homebrew:class:gunslinger");
+    await userEvent.selectOptions(screen.getByLabelText("Level"), "3");
+    await userEvent.click(screen.getByRole("button", { name: /quick build/i }));
+    const built = definitionNamed("New Character");
+    expect(readBuild(built)?.levels.map((entry) => entry.classId)).toEqual(Array(3).fill("homebrew:class:gunslinger"));
+    expect(built.features?.some((feature) => feature.name === "Second Wind")).toBe(true);
   });
 
   it("Step through opens the builder with every choice suggested, and creates the character from it", async () => {
@@ -173,6 +190,19 @@ describe("leveling up", { timeout: 20000 }, () => {
     expect(after.maxHp).toBeGreaterThan(rogue.maxHp);
     expect(store().encounter.combatants.find((combatant) => combatant.id === token.id)!.currentHp).toBe(after.maxHp);
     expect(store().encounter.combatants.find((combatant) => combatant.id === "hurt")!.currentHp).toBe(5);
+  });
+
+  it("a character whose homebrew class has gone says so, and is left as it is", () => {
+    const gunslinger = { ...SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === "srd:class:rogue")!, id: "homebrew:class:gunslinger", name: "Gunslinger", source: { provider: "homebrew" as const } };
+    useCatalogStore.getState().setEntries([{ kind: "class", entry: gunslinger }]);
+    const id = store().createCharacter({ name: "Dex", build: quickBuild(useCatalogStore.getState().sources, { classId: gunslinger.id, level: 2 }) });
+    useCatalogStore.getState().setEntries([]);
+    useBuilderUiStore.getState().open({ kind: "level-up", definitionId: id });
+    render(<BuilderHost onCreated={() => undefined} />);
+    const dialog = screen.getByRole("dialog", { name: "Level up" });
+    expect(dialog.textContent).toMatch(/your catalog hasn't got: homebrew:class:gunslinger/);
+    expect(within(dialog).queryByRole("button", { name: /Level up to/ })).toBeNull();
+    expect(store().encounter.definitions.find((definition) => definition.id === id)!.character?.level).toBe(2);
   });
 
   it("Stats › Class & level offers Level up, Level down and the builder", async () => {

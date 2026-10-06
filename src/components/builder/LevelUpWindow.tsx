@@ -13,14 +13,13 @@ import {
   withSuggestions,
   type CharacterBuild
 } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import type { BuildSources } from "@/lib/character-builder/build";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEncounterStore } from "@/store/encounter-store";
 import { ChoiceControl } from "./ChoiceControl";
 import { BESIDE_SHEET, ChangeList } from "./CharacterBuilder";
+import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import styles from "./builder.module.css";
-
-const sources = SRD_BUILD_SOURCES;
 
 /**
  * Level up (plan, Phase 2): what the next level gives, and only the choices it asks for, already filled in with the
@@ -29,12 +28,19 @@ const sources = SRD_BUILD_SOURCES;
  */
 export function LevelUpWindow({ definitionId, onClose }: { definitionId: string; onClose: () => void }) {
   const definition = useEncounterStore((s) => s.encounter.definitions.find((entry) => entry.id === definitionId));
+  const { sources, missing, loading } = useBuilderSources(readBuild(definition));
+  if (missing.length) return <MissingCatalogNotice title="Level up" missing={missing} loading={loading} onClose={onClose} initialPosition={BESIDE_SHEET} />;
+  return <LevelUpBody definitionId={definitionId} onClose={onClose} sources={sources} />;
+}
+
+function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string; onClose: () => void; sources: BuildSources }) {
+  const definition = useEncounterStore((s) => s.encounter.definitions.find((entry) => entry.id === definitionId));
   const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
   const saved = readBuild(definition);
   const [draft, setDraft] = useState<CharacterBuild | undefined>(() => (saved && saved.levels.length < 20 ? withSuggestions(withLevelUp(saved), sources) : undefined));
   const [update, setUpdate] = useState<string[]>([]);
-  const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft]);
-  const preview = useMemo(() => (draft && definition ? rebuildActor(definition, draft, sources) : undefined), [draft, definition]);
+  const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
+  const preview = useMemo(() => (draft && definition ? rebuildActor(definition, draft, sources) : undefined), [draft, definition, sources]);
 
   if (!definition || !saved || !draft || !built || !preview) {
     return (

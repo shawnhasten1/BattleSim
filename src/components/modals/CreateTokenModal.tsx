@@ -9,7 +9,8 @@ import { formatBonus } from "@/lib/ui-helpers";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { quickBuild } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { entryLabel } from "@/lib/character-builder/homebrew";
+import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./modals.module.css";
 
@@ -52,8 +53,9 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const moveDefinitionToFolder = useEncounterStore((s) => s.moveDefinitionToFolder);
   const createCharacter = useEncounterStore((s) => s.createCharacter);
   const openBuilder = useBuilderUiStore((s) => s.open);
+  const buildSources = useBuildSources();
   const [character, setCharacter] = useState(() => {
-    const first = SRD_BUILD_SOURCES.catalog.classes[0]!;
+    const first = buildSources.catalog.classes[0]!;
     return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "", speciesId: "" };
   });
 
@@ -224,11 +226,11 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                 <select
                   value={character.classId}
                   onChange={(e) => {
-                    const chosen = SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === e.target.value);
+                    const chosen = buildSources.catalog.classes.find((entry) => entry.id === e.target.value);
                     setCharacter({ ...character, classId: e.target.value, backgroundId: chosen?.suggested.background ?? character.backgroundId });
                   }}
                 >
-                  {SRD_BUILD_SOURCES.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                  {buildSources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
                 </select>
               </label>
               <label className={styles.field}>
@@ -240,7 +242,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               <label className={styles.field}>
                 Background
                 <select value={character.backgroundId} onChange={(e) => setCharacter({ ...character, backgroundId: e.target.value })}>
-                  {SRD_BUILD_SOURCES.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                  {buildSources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
                 </select>
               </label>
             </div>
@@ -248,14 +250,14 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               Species
               <select value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
                 <option value="">None (set size, speed and senses by hand)</option>
-                {SRD_BUILD_SOURCES.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                {buildSources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
               </select>
             </label>
             <button
               type="button"
               className={styles.primary}
               onClick={() => {
-                const build = quickBuild(SRD_BUILD_SOURCES, {
+                const build = quickBuild(buildSources, {
                   classId: character.classId, level: character.level,
                   backgroundId: character.backgroundId || undefined, speciesId: character.speciesId || undefined
                 });

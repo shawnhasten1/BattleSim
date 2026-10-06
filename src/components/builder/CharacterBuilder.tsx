@@ -24,15 +24,15 @@ import {
   type CharacterBuild,
   type ChoiceSlot
 } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import type { BuildSources } from "@/lib/character-builder/build";
+import { entryLabel } from "@/lib/character-builder/homebrew";
 import { formatBonus } from "@/lib/ui-helpers";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEncounterStore } from "@/store/encounter-store";
 import type { BuilderSeed } from "@/store/builder-ui-store";
 import { ChoiceControl } from "./ChoiceControl";
+import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import styles from "./builder.module.css";
-
-const sources = SRD_BUILD_SOURCES;
 /** The builder's windows open beside the actor sheet (680 px wide at x 72), not on top of it. */
 export const BESIDE_SHEET = { x: 770, y: 60 };
 const ABILITY_LABELS: Record<Ability, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
@@ -77,12 +77,34 @@ function groups(slots: ChoiceSlot[]): Array<{ label: string; slots: ChoiceSlot[]
  * from the class and level picked in Create Token, every choice already suggested; for a built one it edits its build,
  * and shows what applying it would change before it does.
  */
-export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
+type BuilderProps = {
   seed?: BuilderSeed;
   definitionId?: string;
   onClose: () => void;
   onCreated?: (definitionId: string) => void;
-}) {
+};
+
+export function CharacterBuilder(props: BuilderProps) {
+  const definition = useEncounterStore((s) => (props.definitionId ? s.encounter.definitions.find((entry) => entry.id === props.definitionId) : undefined));
+  const saved = readBuild(definition);
+  // A new character's seed names its class, background and species as a build would.
+  const seeded = useMemo(() => (props.seed ? startBuildShape(props.seed) : undefined), [props.seed]);
+  const { sources, missing, loading } = useBuilderSources(saved ?? seeded);
+  if (missing.length) return <MissingCatalogNotice title="Character Builder" missing={missing} loading={loading} onClose={props.onClose} initialPosition={BESIDE_SHEET} />;
+  return <CharacterBuilderBody {...props} sources={sources} />;
+}
+
+/** Only what `missingFromCatalog` reads of a new character's seed. */
+function startBuildShape(seed: BuilderSeed): CharacterBuild {
+  return {
+    version: 1, edition: "2024", abilities: { method: "manual", base: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } },
+    background: { ...(seed.backgroundId ? { id: seed.backgroundId } : {}), increases: {} },
+    ...(seed.speciesId ? { species: { id: seed.speciesId } } : {}),
+    hp: { method: "average" }, levels: [{ classId: seed.classId, choices: {} }], made: {}
+  };
+}
+
+function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources }: BuilderProps & { sources: BuildSources }) {
   const definition = useEncounterStore((s) => (definitionId ? s.encounter.definitions.find((entry) => entry.id === definitionId) : undefined));
   const createCharacter = useEncounterStore((s) => s.createCharacter);
   const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
@@ -97,12 +119,12 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
   });
   const [update, setUpdate] = useState<string[]>([]);
 
-  const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft]);
+  const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
   // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
   const preview = useMemo(() => {
     if (!draft) return undefined;
     return rebuildActor(definition ?? blankCharacter("preview", name), draft, sources);
-  }, [draft, definition, name]);
+  }, [draft, definition, name, sources]);
 
   if (!draft || !built || !preview) {
     return (
@@ -172,7 +194,7 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
             <label className={styles.field}>
               Class
               <select value={classId} disabled={!creating} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
-                {sources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                {sources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
               </select>
             </label>
             <label className={styles.field}>
@@ -187,7 +209,7 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
             <label className={styles.field}>
               Background
               <select value={draft.background.id ?? ""} onChange={(event) => changeBackground(event.target.value)} aria-label="Background">
-                {sources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                {sources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
               </select>
             </label>
           </div>
@@ -196,7 +218,7 @@ export function CharacterBuilder({ seed, definitionId, onClose, onCreated }: {
               Species
               <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
                 <option value="">None (size, speed and senses by hand)</option>
-                {sources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                {sources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
               </select>
             </label>
             {species && species.sizes.length > 1 ? (

@@ -27,6 +27,7 @@ import { useSceneInteraction } from "@/hooks/useSceneInteraction";
 import { useCompendium } from "@/hooks/useCompendium";
 import { useSyncEncounterRoute, type EncounterRouteParams } from "@/hooks/useSyncEncounterRoute";
 import type { CreatureDefinition } from "@/engine";
+import { useCatalogStore } from "@/store/catalog-store";
 
 type SidebarTab = "actors" | "compendium" | "combat" | "scene";
 const SIDEBAR_TABS: ReadonlyArray<{ id: SidebarTab; label: string }> = [
@@ -123,6 +124,8 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
     void loadProjects();
     void loadDefinitionsLibrary();
     void loadActorFolders();
+    // The account's homebrew classes, subclasses, feats, backgrounds and species, for the character builder.
+    void useCatalogStore.getState().load();
   }, [loadActorFolders, loadDefinitionsLibrary, loadProjects]);
 
   function onCanvasDragOver(event: DragEvent<HTMLDivElement>) {

@@ -249,6 +249,11 @@ export interface SpellcastingProgression {
   kind: "full" | "half" | "third" | "pact";
   /** The class spell list key ("wizard"). */
   list: string;
+  /**
+   * A homebrew class's own list, as library spell ids: it is the list `list` names (a key of the class's own,
+   * "spiritbound-marksman"), for this class and anything else that names it.
+   */
+  spells?: string[];
   /** Cantrips known, by class level (20 entries). */
   cantrips?: number[];
   /** Level 1+ spells prepared, by class level (20 entries). Every 2024 caster prepares. */
@@ -417,12 +422,23 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   weapon: z.object({ id: z.string(), name: z.string().min(1) }).passthrough().optional(),
   onHitOf: z.object({ grant: z.string().min(1), action: z.number().int().min(0).optional(), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
   actionPatch: z.object({ grant: z.string().min(1), action: z.number().int().min(0), patch: z.record(z.string(), z.unknown()) }).optional(),
+  formsOf: z.object({
+    grant: z.string().min(1),
+    action: z.number().int().min(0),
+    forms: z.array(z.object({ id: z.string().min(1), label: z.string() }).passthrough() as unknown as z.ZodType<TransformForm>)
+  }).optional(),
   atLevel: z.number().int().min(1).max(20).optional(),
   replaces: z.string().optional(),
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),
   pool: z.object({ id: z.string().min(1), size: templateOrNumber }).optional(),
   spells: z.array(z.string().min(1)).optional(),
-  freeCasts: z.array(z.object({ spell: z.string().min(1), uses: z.union([templateOrNumber, z.literal("at-will")]) })).optional(),
+  freeCasts: z.array(z.object({
+    spell: z.string().min(1),
+    uses: z.union([templateOrNumber, z.literal("at-will")]),
+    pool: z.string().min(1).optional(),
+    label: z.string().min(1).optional(),
+    asAction: z.boolean().optional()
+  })).optional(),
   spellChanges: z.array(z.object({
     spell: z.string().min(1),
     damageAbility: abilitySchema.optional(),
@@ -432,7 +448,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
       dice: z.string().min(1).optional(),
       spillWithinFt: z.number().positive().optional(),
       keepsConcentrationOnDamage: z.boolean().optional()
-    }).optional()
+    }).optional(),
+    concentrationOptional: z.object({ durationRounds: z.number().int().positive() }).optional()
   })).optional(),
   adjust: z.object({
     speed: templateOrNumber.optional(),
@@ -511,7 +528,8 @@ const equipmentSchema = z.object({
 const spellcastingSchema = z.object({
   ability: abilitySchema,
   kind: z.enum(["full", "half", "third", "pact"]),
-  list: z.string(),
+  list: z.string().min(1),
+  spells: z.array(z.string().min(1)).optional(),
   cantrips: twenty(z.number().int().min(0)).optional(),
   prepared: twenty(z.number().int().min(0)),
   spellbook: z.object({ start: z.number().int(), perLevel: z.number().int() }).optional()

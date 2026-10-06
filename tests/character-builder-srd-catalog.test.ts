@@ -11,6 +11,7 @@ import {
   quickBuild,
   readBuild,
   rebuildActor,
+  speciesDefinitionSchema,
   subclassDefinitionSchema,
   withLevelUp,
   withSuggestions,
@@ -36,11 +37,18 @@ function agrees(feature: FeatureDefinition, verdict: CoverageEntry["verdict"]): 
 }
 
 describe("the 2024 catalog", () => {
-  it("passes its own schemas", () => {
-    for (const entry of SRD_2024_CATALOG.classes) expect(classDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
-    for (const entry of SRD_2024_CATALOG.subclasses) expect(subclassDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
-    for (const entry of SRD_2024_CATALOG.feats) expect(featDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
-    for (const entry of SRD_2024_CATALOG.backgrounds) expect(backgroundDefinitionSchema.safeParse(entry).success, entry.id).toBe(true);
+  it("passes its own schemas, each entry coming back exactly as it went in (a homebrew one is read the same way)", () => {
+    const roundTrips = (schema: { parse(value: unknown): unknown }, entries: Array<{ id: string }>) => {
+      for (const entry of entries) {
+        const json = JSON.parse(JSON.stringify(entry));
+        expect(schema.parse(json), entry.id).toEqual(json);
+      }
+    };
+    roundTrips(classDefinitionSchema, SRD_2024_CATALOG.classes);
+    roundTrips(subclassDefinitionSchema, SRD_2024_CATALOG.subclasses);
+    roundTrips(featDefinitionSchema, SRD_2024_CATALOG.feats);
+    roundTrips(backgroundDefinitionSchema, SRD_2024_CATALOG.backgrounds);
+    roundTrips(speciesDefinitionSchema, SRD_2024_CATALOG.species);
   });
 
   it("has all 17 feats and all four backgrounds, each pointing at a feat that exists", () => {
