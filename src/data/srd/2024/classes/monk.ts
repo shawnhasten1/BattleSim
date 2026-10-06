@@ -182,7 +182,10 @@ export const MONK: ClassDefinition = {
         grant("heightened-focus", runs("monk_heightened-focus", { notSimulated: "Step of the Wind carrying an ally." }), {
           actionPatch: { grant: "monks-focus", action: 2, patch: { tempHp: [{ dice: "{col:martial-arts}+{col:martial-arts}" }] } }
         }),
-        grant("self-restoration", reference("monk_self-restoration"))
+        // One of Charmed, Frightened or Poisoned ended at the end of each of its turns (going without food is outside a fight).
+        grant("self-restoration", runs("monk_self-restoration", {
+          effects: [{ kind: "shed-conditions", conditions: ["charmed", "frightened", "poisoned"], timing: "turn-end" }]
+        }))
       ]
     },
     {

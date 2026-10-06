@@ -71,7 +71,7 @@ describe("Lay On Hands", () => {
   it("reads as healing from its pool", () => {
     const definition = paladin();
     expect(actionStatblock(getExecutableActions(definition).find((entry) => entry.name === "Lay On Hands")!, definition).text)
-      .toBe("A creature it touches regains the hit points it's missing, as many as are left in its Lay On Hands pool, which spends them.");
+      .toBe("A creature it touches regains the hit points it's missing, as many as are left in its Lay On Hands pool, which spends them. First, for 5 of the pool each, it ends poisoned on the creature (the worst first).");
   });
 
   // Found in the Phase 7 browser check: the editor's pool picker read "lay on hand (25)".

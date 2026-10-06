@@ -20,8 +20,8 @@ its gaps, never dropped and never approximated without saying so.
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 11 | 3 | 3 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
+| Monk (Warrior of the Open Hand) | 26 | 12 | 3 | 2 | 5 | 4 |
+| Paladin (Oath of Devotion) | 23 | 10 | 1 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
@@ -39,7 +39,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 1 | Self-Restoration (Monk); Lay On Hands (Paladin); Restoring Touch (Paladin) |
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
@@ -243,7 +242,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |
 | 10 | Heightened Focus | partial | `combined-utility` | Three Flurry strikes, and two Martial Arts dice of temporary hit points with Patient Defense's spent point; Step of the Wind carrying an ally doesn't run. |
-| 10 | Self-Restoration | manual | `condition-removal` |  |
+| 10 | Self-Restoration | full |  | One of Charmed, Frightened or Poisoned (the worst) ended on itself at the end of each of its turns; going without food is outside a fight. |
 | 13 | Deflect Energy | full |  | Deflect Attacks against an attack roll of any other damage type. |
 | 14 | Disciplined Survivor | full |  | Proficiency in every save, and a Focus Point to reroll a failed one. |
 | 15 | Perfect Focus | info |  | A fight starts with full pools. |
@@ -264,7 +263,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Lay On Hands | partial | `condition-removal` | A bonus action healing what a creature it touches is missing, from a pool of 5 × paladin level; ending Poisoned with 5 points doesn't run. |
+| 1 | Lay On Hands | full |  | A bonus action healing what a creature it touches is missing, from a pool of 5 × paladin level, 5 of it first ending Poisoned; the AI lays hands on a downed or badly hurt ally, or a poisoned one. |
 | 1 | Spellcasting | builder |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Fighting Style | builder |  | A Fighting Style feat, or Blessed Warrior's two cantrips. |
@@ -278,7 +277,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 9 | Abjure Foes | partial | `target-count` | Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns, for every enemy within 60 ft (not Charisma-modifier many). |
 | 10 | Aura of Courage | full |  | Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there). |
 | 11 | Radiant Strikes | full |  |  |
-| 14 | Restoring Touch | manual | `condition-removal` |  |
+| 14 | Restoring Touch | full |  | Lay On Hands also ends Blinded, Charmed, Deafened, Frightened, Paralyzed or Stunned, 5 of the pool each, the worst first, before it heals; the AI frees a paralyzed or stunned ally first. |
 | 18 | Aura Expansion | builder |  | The auras' range becomes 30 ft. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | — | Paladin Spell List | builder |  | Read from each spell's own class list. |

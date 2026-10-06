@@ -36,9 +36,9 @@ export const PALADIN: ClassDefinition = {
         grant("lay-on-hands", runs("paladin_lay-on-hands", {
           grantedActions: [{
             kind: "healing", id: "lay-on-hands", name: "Lay On Hands", actionType: "bonus", range: 5, healing: [], targeting: { target: "single" },
-            fromPool: { resourceId: "lay-on-hands" }, automationSupport: "full"
-          }],
-          notSimulated: "spending 5 points to end the Poisoned condition."
+            // 5 of the pool ends Poisoned (Restoring Touch adds more conditions).
+            fromPool: { resourceId: "lay-on-hands" }, cures: { conditions: ["poisoned"], poolCost: 5 }, automationSupport: "full"
+          }]
         }), { pool: { id: "lay-on-hands", size: "{level*5}" } }),
         grant("spellcasting", runs("paladin_spellcasting")),
         grant("weapon-mastery", weaponMasteryFeature("paladin_weapon-mastery"))
@@ -109,7 +109,16 @@ export const PALADIN: ClassDefinition = {
         effects: [{ kind: "damage-bonus", attackTypes: ["melee"], damage: [{ dice: "1d8", damageType: "radiant", magical: true }] }]
       }))]
     },
-    { level: 14, grants: [grant("restoring-touch", reference("paladin_restoring-touch"))] },
+    {
+      level: 14,
+      // Lay On Hands can end Blinded, Charmed, Deafened, Frightened, Paralyzed and Stunned too, 5 of the pool each.
+      grants: [grant("restoring-touch", runs("paladin_restoring-touch"), {
+        actionPatch: {
+          grant: "lay-on-hands", action: 0,
+          patch: { cures: { conditions: ["poisoned", "blinded", "charmed", "deafened", "frightened", "paralyzed", "stunned"], poolCost: 5 } }
+        }
+      })]
+    },
     { level: 18, grants: [grant("aura-expansion", runs("paladin_aura-expansion"))] }
   ],
   startingEquipment: [

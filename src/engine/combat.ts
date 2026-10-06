@@ -890,11 +890,30 @@ export function resolveSaveDc(action: SaveActionDefinition | AreaSaveActionDefin
   return (action.dc ?? defaultSaveDc(definition, action.saveAbility)) + featureDcBonus.total;
 }
 
+/** Ends every instance of these conditions on `combatant` (a cure, Self-Restoration), logged as `by`'s doing. */
+function endConditionsNamed(state: EngineState, combatant: CombatantState, names: ConditionName[], by: string): void {
+  const ending = (combatant.conditions ?? []).filter((condition) => names.includes(condition.name));
+  if (!ending.length) return;
+  combatant.conditions = (combatant.conditions ?? []).filter((condition) => !names.includes(condition.name));
+  for (const condition of ending) {
+    state.log.push(event(state, "ConditionExpired", `${by} ends ${combatant.displayName}'s ${condition.name}`, {
+      combatantId: combatant.id, conditionId: condition.id, condition, reason: "cured", by
+    }));
+  }
+}
+
 export function applyTimedFeatureEffects(state: EngineState, combatantId: Id, timing: "turn-start" | "turn-end"): void {
   const combatant = findCombatant(state.snapshot, combatantId);
   const definition = getDefinition(state.snapshot, combatant);
   for (const source of featureSources(definition, combatant)) {
     for (const effect of source.effects ?? []) {
+      // Self-Restoration: one of these conditions ends on it.
+      if (effect.kind === "shed-conditions" && effect.timing === timing) {
+        const worst = (combatant.conditions ?? []).filter((condition) => effect.conditions.includes(condition.name))
+          .sort((a, b) => conditionSeverity(b.name) - conditionSeverity(a.name))[0];
+        if (worst) endConditionsNamed(state, combatant, [worst.name], source.name);
+        continue;
+      }
       if (effect.kind !== "resource-regain" || effect.timing !== timing) {
         continue;
       }
@@ -2995,8 +3014,19 @@ export function resolveHealingAction(
   const healSlot = healingSlotLevel(action);
   if (bonus.slotBonus && healSlot !== undefined && !action.fromPool) healingApplied += 2 + healSlot;
   if (action.fromPool) {
-    healingApplied = Math.max(0, Math.min(poolLeft, targetDefinition.maxHp - target.currentHp));
-    healer.resources = { ...(healer.resources ?? {}), [action.fromPool.resourceId]: poolLeft - healingApplied };
+    // Lay On Hands: the worst curable conditions ended first, the pool's cost each; what's left heals.
+    let pool = poolLeft;
+    if (action.cures) {
+      const curable = [...new Set((target.conditions ?? []).map((condition) => condition.name).filter((name) => action.cures!.conditions.includes(name)))]
+        .sort((a, b) => conditionSeverity(b) - conditionSeverity(a));
+      for (const name of curable) {
+        if (pool < action.cures.poolCost) break;
+        pool -= action.cures.poolCost;
+        endConditionsNamed(state, target, [name], action.name);
+      }
+    }
+    healingApplied = Math.max(0, Math.min(pool, targetDefinition.maxHp - target.currentHp));
+    healer.resources = { ...(healer.resources ?? {}), [action.fromPool.resourceId]: pool - healingApplied };
   }
   target.currentHp = Math.min(targetDefinition.maxHp, target.currentHp + healingApplied);
   if (target.currentHp > 0 && (target.state === "downed" || target.state === "defeated")) {

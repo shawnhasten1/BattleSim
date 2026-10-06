@@ -732,6 +732,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "shed-conditions":
+      return `At the ${effect.timing === "turn-start" ? "start" : "end"} of each of ${who.possessive} turns, ${who.subject} ends one of these conditions on ${who.object === "it" ? "itself" : who.object}: ${joinList(effect.conditions, "or")}.`;
     case "slot-recall":
       return `When ${who.subject} casts a spell with a level 1–${effect.maxLevel} spell slot, ${who.subject} rolls a d${effect.die}; if it comes up the slot's level, the slot isn't spent.`;
     case "spare-allies": {
@@ -871,6 +873,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
+    case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "slot-recall": return `a level 1–${effect.maxLevel} slot back on a d${effect.die} matching its level`;
     case "spare-allies": return `spares ${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""} allies in the areas of ${spellScopeText(effect, IT)}`;
   }
@@ -1189,7 +1192,9 @@ function healingBody(action: Extract<ActionDefinition, { kind: "healing" }>, def
   // Lay on Hands: what's missing, from a pool.
   if (action.fromPool) {
     return {
-      text: `${singleSubject(action, action.range)} regains the hit points it's missing, as many as are left in its ${action.name} pool, which spends them.`,
+      text: `${singleSubject(action, action.range)} regains the hit points it's missing, as many as are left in its ${action.name} pool, which spends them.`
+        // Lay On Hands' cures: the worst first, before it heals.
+        + (action.cures ? ` First, for ${action.cures.poolCost} of the pool each, it ends ${joinList(action.cures.conditions, "or")} on the creature (the worst first).` : ""),
       short: `heals from its ${action.name} pool · ${action.range} ft`,
       notSimulated: notesOf(action.riders)
     };

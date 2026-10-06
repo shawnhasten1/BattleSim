@@ -21,6 +21,9 @@ import { FeatureEffectCards } from "./FeatureEffectCards";
 import { PoolPicker, type NewPools } from "./LimitPicker";
 import styles from "./ability-editor.module.css";
 
+/** Conditions a healing pool can end (Lay On Hands, Restoring Touch). */
+const CURABLE: ConditionName[] = ["blinded", "charmed", "deafened", "frightened", "paralyzed", "poisoned", "stunned"];
+
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 type Modifiers = NonNullable<ConditionInstance["modifiers"]>;
@@ -64,9 +67,26 @@ export function HealingOutcome({ action, onChange, definition, newPools }: {
         />
       ) : null}
       {action.fromPool ? (
-        <PoolPicker definition={definition} newPools={newPools} noAmount startCreating={!action.fromPool.resourceId}
-          value={action.fromPool.resourceId ? { resourceId: action.fromPool.resourceId, amount: 1 } : undefined}
-          onChange={(cost) => onChange({ ...action, fromPool: { resourceId: cost.resourceId } })} />
+        <>
+          <PoolPicker definition={definition} newPools={newPools} noAmount startCreating={!action.fromPool.resourceId}
+            value={action.fromPool.resourceId ? { resourceId: action.fromPool.resourceId, amount: 1 } : undefined}
+            onChange={(cost) => onChange({ ...action, fromPool: { resourceId: cost.resourceId } })} />
+          {/* Lay On Hands: conditions it ends, a cost of the pool each. */}
+          <Check label="Can end conditions, from the pool" checked={Boolean(action.cures)}
+            onChange={(on) => { const next = { ...action }; delete next.cures; onChange(on ? { ...next, cures: { conditions: ["poisoned"], poolCost: 5 } } : next); }} />
+          {action.cures ? (
+            <>
+              <div className={styles.typeChips} role="group" aria-label="Conditions it ends">
+                {CURABLE.map((condition) => {
+                  const on = action.cures!.conditions.includes(condition);
+                  const next = on ? action.cures!.conditions.filter((entry) => entry !== condition) : [...action.cures!.conditions, condition];
+                  return <button key={condition} type="button" aria-pressed={on} onClick={() => next.length && onChange({ ...action, cures: { ...action.cures!, conditions: next } })}>{condition}</button>;
+                })}
+              </div>
+              <NumberField label="Pool cost each" value={action.cures.poolCost} min={1} max={99} onChange={(n) => n !== undefined && onChange({ ...action, cures: { ...action.cures!, poolCost: n } })} />
+            </>
+          ) : null}
+        </>
       ) : null}
       {action.divided ? (
         <>

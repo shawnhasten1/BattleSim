@@ -154,6 +154,15 @@ describe("spells built from a blank one", { timeout: 20000 }, () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect((fighter().bonusActions ?? []).find((action) => action.name === "Mending Touch")).toMatchObject({ fromPool: { resourceId: "second-wind" } });
 
+    // Lay On Hands' cures: which conditions, and their cost of the pool.
+    await userEvent.click(screen.getByRole("button", { name: "Edit Mending Touch" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Healing/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Can end conditions, from the pool" }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Conditions it ends" })).getByRole("button", { name: "stunned" }));
+    await retype("Pool cost each", "3");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().bonusActions ?? []).find((action) => action.name === "Mending Touch")).toMatchObject({ cures: { conditions: ["poisoned", "stunned"], poolCost: 3 } });
+
     await userEvent.click(screen.getByRole("button", { name: "Edit Mending Touch" }));
     await userEvent.click(screen.getByRole("button", { name: /^Healing/ }));
     await radio("How much it heals", "A total, shared out");

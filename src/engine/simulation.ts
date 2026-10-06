@@ -2056,12 +2056,11 @@ function selectHealingAction(
   slot: "action" | "bonus" = "action"
 ): HealingPlan | undefined {
   const definition = getDefinition(snapshot, actor);
+  const curable = (action: HealingAction, combatant: CombatantState) => (action.cures && action.fromPool
+    ? [...new Set((combatant.conditions ?? []).map((condition) => condition.name).filter((name) => action.cures!.conditions.includes(name)))]
+    : []);
   const woundedAllies = snapshot.combatants
-    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
-    .filter((combatant) => {
-      const allyDefinition = getDefinition(snapshot, combatant);
-      return combatant.currentHp < allyDefinition.maxHp;
-    });
+    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"));
   const healingActions = getExecutableActions(definition)
     .filter((action): action is HealingAction => action.kind === "healing"
       && action.actionType === slot
@@ -2071,6 +2070,8 @@ function selectHealingAction(
       && canPayResource(actor, action));
   const tactics = tacticsSettings(actor.tacticsProfile);
   const candidates = healingActions.flatMap((action) => woundedAllies
+    // Hurt, or (Lay On Hands' cures) with a condition it can end.
+    .filter((target) => target.currentHp < getDefinition(snapshot, target).maxHp || curable(action, target).length > 0)
     .filter((target) => !(action.targeting?.notSelf && target.id === actor.id))
     // A potion is given to someone who can't drink their own: down, or incapacitated.
     .filter((target) => action.item?.use !== "give" || target.state === "downed" || isIncapacitated(target))
@@ -2098,7 +2099,14 @@ function selectHealingAction(
       + (target.tags?.includes("low-priority") ? -15 : 0);
     if (priorityBonus > 0) reasons.push("guarded ally");
     if (priorityBonus < 0) reasons.push("tagged low-priority");
+    // Lay On Hands' cures: a paralyzed or stunned ally freed is worth a great deal, a poisoned one less.
+    const pool = action.fromPool ? actor.resources?.[action.fromPool.resourceId] ?? 0 : 0;
+    const cured = curable(action, target).sort((a, b) => conditionSeverity(b) - conditionSeverity(a))
+      .slice(0, action.cures ? Math.floor(pool / Math.max(1, action.cures.poolCost)) : 0);
+    const cureValue = cured.reduce((sum, name) => sum + conditionSeverity(name) * 60, 0);
+    if (cured.length) reasons.push(`ends ${joinNames(cured)}`);
     const score = (target.state === "downed" ? 95 : missingHpRatio * 45)
+      + cureValue
       + Math.min(average, missingHp)
       + priorityBonus
       - resourcePenalty
@@ -4093,6 +4101,11 @@ function expectedRiderControl(
 }
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
+
+/** "poisoned and stunned". */
+function joinNames(names: string[]): string {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
 
 /**
  * Resource conversions worth making at the start of its turn: a spell slot made (Font of Magic's from sorcery points, a

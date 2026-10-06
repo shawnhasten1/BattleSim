@@ -982,6 +982,20 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
     case "no-advantage-against":
       return <p className={styles.hint}>Nothing to set: attack rolls against it can&apos;t have advantage while it isn&apos;t incapacitated.</p>;
+    case "shed-conditions":
+      return (
+        <>
+          <div className={styles.typeChips} role="group" aria-label="Ends one of">
+            {CONDITIONS.map((condition) => {
+              const on = (effect.conditions as string[]).includes(condition);
+              const next = on ? effect.conditions.filter((entry) => entry !== condition) : [...effect.conditions, condition];
+              return <button key={condition} type="button" aria-pressed={on} onClick={() => next.length && set({ ...effect, conditions: next as ConditionName[] })}>{condition}</button>;
+            })}
+          </div>
+          <Segmented label="At the" value={effect.timing} options={[{ value: "turn-end", label: "End of its turn" }, { value: "turn-start", label: "Start of its turn" }]}
+            onChange={(timing) => set({ ...effect, timing })} />
+        </>
+      );
     case "condition-immunity":
       return (
         <div className={styles.typeChips} role="group" aria-label="Immune to">

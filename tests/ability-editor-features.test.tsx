@@ -257,6 +257,16 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Lucky Slots").effects).toEqual([{ kind: "slot-recall", maxLevel: 3, die: 6 }]);
   });
 
+  it("Ends a condition on itself each turn: which, and when (Self-Restoration)", async () => {
+    await blankFeature("Clear Mind");
+    const card = await addEffect(/^Ends a condition on itself each turn/, "Ends a condition on itself each turn");
+    await chip(card, "Ends one of", "poisoned");
+    await radio(card, "At the", "Start of its turn");
+    await done(card);
+    await addToSheet();
+    expect(named("Clear Mind").effects).toEqual([{ kind: "shed-conditions", conditions: ["charmed", "frightened"], timing: "turn-start" }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

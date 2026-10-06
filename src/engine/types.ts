@@ -819,6 +819,14 @@ export type FeatureEffect =
   }
   | {
     /**
+     * Self-Restoration: at the start or end of each of its turns, it ends one of these conditions on itself (the worst).
+     */
+    kind: "shed-conditions";
+    conditions: ConditionName[];
+    timing: "turn-start" | "turn-end";
+  }
+  | {
+    /**
      * Boon of Spell Recall: casting a spell with a slot of `maxLevel` or lower, a d`die` that comes up the slot's level
      * means the slot isn't spent.
      */
@@ -1568,6 +1576,12 @@ export interface HealingActionDefinition {
    * missing, up to what's left in `resourceId`, spending the pool point for point. Unusable with the pool empty.
    */
   fromPool?: { resourceId: string };
+  /**
+   * With `fromPool`: conditions it can end on the creature, `poolCost` of the pool each (Lay On Hands: Poisoned for 5;
+   * Restoring Touch adds Blinded, Charmed, Deafened, Frightened, Paralyzed and Stunned). The worst go first, as far as
+   * the pool goes; what's left heals.
+   */
+  cures?: { conditions: ConditionName[]; poolCost: number };
   /**
    * Healing shared out (Preserve Life, with `targeting: "chosen"`): `total` hit points, `healing` ignored, divided among
    * the creatures chosen, the most hurt first. `upToHalf`: none past half its hit point maximum; `bloodiedOnly`: only

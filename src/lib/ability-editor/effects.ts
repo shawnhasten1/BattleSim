@@ -74,6 +74,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "spare-allies", base: 1, plusSpellLevel: true, spellSchools: ["evocation"] })
   },
   {
+    kind: "shed-conditions", label: "Ends a condition on itself each turn", hint: "Self-Restoration: one of Charmed, Frightened or Poisoned at the end of its turn", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "shed-conditions", conditions: ["charmed", "frightened", "poisoned"], timing: "turn-end" })
+  },
+  {
     kind: "slot-recall", label: "A spell slot kept on a lucky roll", hint: "Boon of Spell Recall: a level 1-4 slot isn't spent when a d4 comes up its level", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "slot-recall", maxLevel: 4, die: 4 })
   },
