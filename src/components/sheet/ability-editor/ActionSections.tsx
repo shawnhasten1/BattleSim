@@ -92,7 +92,7 @@ export function actionSection(id: SectionId, props: ActionSectionProps): ReactNo
         </>
       );
     case "outcome":
-      if (action.kind === "healing") return <HealingOutcome action={action} onChange={onChange} definition={definition} />;
+      if (action.kind === "healing") return <HealingOutcome action={action} onChange={onChange} definition={definition} newPools={newPools} />;
       if (action.kind === "buff") return <BuffOutcome action={action} onChange={onChange} definition={definition} newPools={newPools} />;
       if (action.kind === "summon") return <SummonOutcome action={action} onChange={onChange} />;
       if (action.kind === "transform") return <ShapechangeOutcome action={action} onChange={onChange} selfId={definition.id} />;

@@ -15,10 +15,10 @@ import type {
 } from "@/engine";
 import { diceBinding } from "@/lib/ability-editor/bindings";
 import { componentAverage, roundsText } from "@/lib/statblock";
-import { Check, Field, More, NumberField } from "./controls";
+import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DAMAGE_TYPES, DamageLines } from "./DamageLines";
 import { FeatureEffectCards } from "./FeatureEffectCards";
-import type { NewPools } from "./LimitPicker";
+import { PoolPicker, type NewPools } from "./LimitPicker";
 import styles from "./ability-editor.module.css";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
@@ -28,17 +28,54 @@ type Modifiers = NonNullable<ConditionInstance["modifiers"]>;
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 
 /** How much a heal restores: lines of dice, each with the ability it adds. */
-export function HealingOutcome({ action, onChange, definition }: { action: HealingAction; onChange: (next: ActionDefinition) => void; definition: CreatureDefinition }) {
+/**
+ * How much a heal restores: lines of dice, each with the ability it adds; or what the creature is missing, from a pool
+ * (Lay on Hands); or a total shared out among the creatures chosen (Preserve Life).
+ */
+export function HealingOutcome({ action, onChange, definition, newPools }: {
+  action: HealingAction;
+  onChange: (next: ActionDefinition) => void;
+  definition: CreatureDefinition;
+  newPools: NewPools;
+}) {
+  const how = action.fromPool ? "pool" : action.divided ? "shared" : "rolled";
+  const choose = (next: string) => {
+    const base = { ...action };
+    delete base.fromPool;
+    delete base.divided;
+    if (next === "pool") onChange({ ...base, fromPool: { resourceId: "" } });
+    else if (next === "shared") onChange({ ...base, targeting: { target: "chosen" }, divided: { total: 10, upToHalf: true, bloodiedOnly: true } });
+    else onChange(base);
+  };
   return (
-    <DamageLines<HealingComponent>
-      variant="healing"
-      lines={action.healing}
-      onChange={(healing) => onChange({ ...action, healing })}
-      label="Healing"
-      averageOf={(component) => componentAverage(component, definition)}
-      newLine={() => ({ dice: "1d8", diceCount: 1, diceSize: 8 })}
-      emptyText="It heals nothing yet: add a line."
-    />
+    <>
+      <Segmented label="How much it heals" value={how}
+        options={[{ value: "rolled", label: "A roll" }, { value: "pool", label: "What's missing, from a pool" }, { value: "shared", label: "A total, shared out" }]}
+        onChange={choose} />
+      {how === "rolled" ? (
+        <DamageLines<HealingComponent>
+          variant="healing"
+          lines={action.healing}
+          onChange={(healing) => onChange({ ...action, healing })}
+          label="Healing"
+          averageOf={(component) => componentAverage(component, definition)}
+          newLine={() => ({ dice: "1d8", diceCount: 1, diceSize: 8 })}
+          emptyText="It heals nothing yet: add a line."
+        />
+      ) : null}
+      {action.fromPool ? (
+        <PoolPicker definition={definition} newPools={newPools} noAmount startCreating={!action.fromPool.resourceId}
+          value={action.fromPool.resourceId ? { resourceId: action.fromPool.resourceId, amount: 1 } : undefined}
+          onChange={(cost) => onChange({ ...action, fromPool: { resourceId: cost.resourceId } })} />
+      ) : null}
+      {action.divided ? (
+        <>
+          <NumberField label="Hit points shared" value={action.divided.total} min={1} max={500} onChange={(n) => n !== undefined && onChange({ ...action, divided: { ...action.divided!, total: n } })} />
+          <Check label="None past half its hit point maximum" checked={action.divided.upToHalf === true} onChange={(on) => onChange({ ...action, divided: { ...action.divided!, upToHalf: on || undefined } })} />
+          <Check label="Only bloodied creatures" checked={action.divided.bloodiedOnly === true} onChange={(on) => onChange({ ...action, divided: { ...action.divided!, bloodiedOnly: on || undefined } })} />
+        </>
+      ) : null}
+    </>
   );
 }
 

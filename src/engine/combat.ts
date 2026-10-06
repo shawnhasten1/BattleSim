@@ -2577,6 +2577,10 @@ export function resolveHealingAction(
   if (action.targeting?.target !== "self") {
     validateHealingTargeting(state.snapshot, healer, target, action);
   }
+  const poolLeft = action.fromPool ? healer.resources?.[action.fromPool.resourceId] ?? 0 : 0;
+  if (action.fromPool && poolLeft <= 0) {
+    throw new Error(`${healer.displayName} has nothing left of ${action.name}`);
+  }
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, { target });
   // Tactical Shift: Second Wind comes with a move.
@@ -2591,13 +2595,18 @@ export function resolveHealingAction(
   const upcastDice = slotsAboveBase > 0 && perSlotDice ? repeatDice(perSlotDice, slotsAboveBase) : "";
 
   let healingApplied = 0;
-  const rolls = action.healing.map((component, index) => {
+  // Lay on Hands: what the target is missing, from what's left in the pool.
+  const rolls = action.fromPool ? [] : action.healing.map((component, index) => {
     const abilityBonus = component.abilityModifier ? abilityModifier(healerDefinition.abilities[component.abilityModifier]) : 0;
     const dice = index === 0 && upcastDice ? `${component.dice}+${upcastDice}` : component.dice;
     const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
     healingApplied += roll.total;
     return roll;
   });
+  if (action.fromPool) {
+    healingApplied = Math.max(0, Math.min(poolLeft, targetDefinition.maxHp - target.currentHp));
+    healer.resources = { ...(healer.resources ?? {}), [action.fromPool.resourceId]: poolLeft - healingApplied };
+  }
   target.currentHp = Math.min(targetDefinition.maxHp, target.currentHp + healingApplied);
   if (target.currentHp > 0 && (target.state === "downed" || target.state === "defeated")) {
     target.state = "active";
@@ -2910,6 +2919,20 @@ export function resolveHealingBurstAction(
     return { healingApplied: 0, targetIds: [] };
   }
 
+  // Preserve Life: a total shared out, the most hurt first, each no further than its share allows.
+  if (action.divided) {
+    const shares = dividedHealing(state.snapshot, action.divided, targets);
+    let total = 0;
+    for (const { target, amount } of shares) {
+      healTo(state, target, amount);
+      total += amount;
+      state.log.push(event(state, "HealingApplied", `${target.displayName} regained ${amount} HP`, {
+        healerId, targetId: target.id, actionId, rolls: [], healingApplied: amount, currentHp: target.currentHp
+      }));
+    }
+    return { healingApplied: total, targetIds: shares.map(({ target }) => target.id) };
+  }
+
   // Rolled once for the whole cast — 5e RAW for both Prayer of Healing and
   // Mass Cure Wounds, and matches `resolveAreaSaveAction`'s own roll-once
   // convention for its blast damage.
@@ -2940,6 +2963,44 @@ export function resolveHealingBurstAction(
   }
 
   return { healingApplied, targetIds: targets.map((target) => target.id) };
+}
+
+/**
+ * How a shared-out heal divides (Preserve Life): the most hurt first, each up to half its maximum (or its maximum),
+ * only the bloodied if it says so, until the total runs out. Who gets what; nobody with nothing.
+ */
+export function dividedHealing(
+  snapshot: EncounterSnapshot,
+  divided: NonNullable<HealingActionDefinition["divided"]>,
+  targets: CombatantState[]
+): Array<{ target: CombatantState; amount: number }> {
+  let left = divided.total;
+  const shares: Array<{ target: CombatantState; amount: number }> = [];
+  const eligible = targets
+    .filter((target) => !divided.bloodiedOnly || isBloodied(snapshot, target))
+    .map((target) => {
+      const max = getDefinition(snapshot, target).maxHp;
+      return { target, need: Math.max(0, (divided.upToHalf ? Math.floor(max / 2) : max) - target.currentHp), ratio: target.currentHp / Math.max(1, max) };
+    })
+    .sort((a, b) => a.ratio - b.ratio || a.target.id.localeCompare(b.target.id));
+  for (const { target, need } of eligible) {
+    const amount = Math.min(need, left);
+    if (amount <= 0) continue;
+    shares.push({ target, amount });
+    left -= amount;
+  }
+  return shares;
+}
+
+/** Heal `target` by `amount`, bringing it back up from 0 HP. */
+function healTo(state: EngineState, target: CombatantState, amount: number): void {
+  const definition = getDefinition(state.snapshot, target);
+  target.currentHp = Math.min(definition.maxHp, target.currentHp + amount);
+  if (target.currentHp > 0 && (target.state === "downed" || target.state === "defeated")) {
+    target.state = "active";
+    target.deathSaves = { successes: 0, failures: 0, stable: false };
+    target.conditions = (target.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+  }
 }
 
 export function resolveActivateFeatureAction(

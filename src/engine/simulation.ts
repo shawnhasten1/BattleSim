@@ -4,6 +4,7 @@ import {
   canAct,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
+  dividedHealing,
   effectiveFaction,
   conditionSeverity,
   averageOfDice,
@@ -2006,7 +2007,8 @@ function selectHealingAction(
     const targetDefinition = getDefinition(snapshot, target);
     const missingHp = targetDefinition.maxHp - target.currentHp;
     const missingHpRatio = missingHp / Math.max(1, targetDefinition.maxHp);
-    const average = averageHealing(action, definition);
+    // Lay on Hands heals what's missing, as far as the pool goes.
+    const average = action.fromPool ? Math.min(missingHp, actor.resources?.[action.fromPool.resourceId] ?? 0) : averageHealing(action, definition);
     const distance = spatialDistance(snapshot, actor, target);
     const selfTarget = action.targeting?.target === "self" || (action.range === 0 && target.id === actor.id);
     const reachable = selfTarget || isValidTarget(snapshot, actor, target, action.range);
@@ -2323,6 +2325,19 @@ function selectHealingBurstAction(snapshot: EncounterSnapshot, actor: CombatantS
         .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && (combatant.state === "active" || combatant.state === "downed"))
         .filter((combatant) => combatant.currentHp < getDefinition(snapshot, combatant).maxHp)
         .filter((combatant) => isValidTarget(snapshot, actor, combatant, action.range));
+      // Preserve Life: worth what its shares do, and only when that's as much as a heal would need to be.
+      if (action.divided) {
+        const shares = dividedHealing(snapshot, action.divided, woundedAllies);
+        const value = shares.reduce((sum, { target, amount }) => {
+          const max = getDefinition(snapshot, target).maxHp;
+          return sum + (target.state === "downed" ? 95 : ((max - target.currentHp) / Math.max(1, max)) * 45) + amount - spatialDistance(snapshot, actor, target) / 20;
+        }, 0);
+        const score = value - resourcePenalty;
+        if (shares.length && score >= 35 && (!best || score > best.score)) {
+          best = { action, targets: shares.map(({ target }) => target), score, reasons: [`shares healing among ${shares.length} allies`] };
+        }
+        continue;
+      }
       const scored = woundedAllies
         .map((target) => ({ target, value: scoreFor(target) - spatialDistance(snapshot, actor, target) / 20 }))
         .sort((a, b) => b.value - a.value);
@@ -3607,6 +3622,10 @@ function threatensWoundedAlly(snapshot: EncounterSnapshot, actor: CombatantState
 
 function canPayResource(actor: CombatantState, action: ActionDefinition, executables?: ActionDefinition[]): boolean {
   if ("resourceCost" in action && action.resourceCost && (actor.resources?.[action.resourceCost.resourceId] ?? 0) < action.resourceCost.amount) {
+    return false;
+  }
+  // Lay on Hands: anything left in its pool.
+  if (action.kind === "healing" && action.fromPool && (actor.resources?.[action.fromPool.resourceId] ?? 0) <= 0) {
     return false;
   }
   // The same spell for a pricier slot isn't a choice while a cheaper one is left.

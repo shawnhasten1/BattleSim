@@ -33,7 +33,13 @@ export const PALADIN: ClassDefinition = {
     {
       level: 1,
       grants: [
-        grant("lay-on-hands", reference("paladin_lay-on-hands"), { pool: { id: "lay-on-hands", size: "{level*5}" } }),
+        grant("lay-on-hands", runs("paladin_lay-on-hands", {
+          grantedActions: [{
+            kind: "healing", id: "lay-on-hands", name: "Lay On Hands", actionType: "bonus", range: 5, healing: [], targeting: { target: "single" },
+            fromPool: { resourceId: "lay-on-hands" }, automationSupport: "full"
+          }],
+          notSimulated: "spending 5 points to end the Poisoned condition."
+        }), { pool: { id: "lay-on-hands", size: "{level*5}" } }),
         grant("spellcasting", runs("paladin_spellcasting")),
         grant("weapon-mastery", weaponMasteryFeature("paladin_weapon-mastery"))
       ],

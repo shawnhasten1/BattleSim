@@ -121,6 +121,33 @@ describe("spells built from a blank one", { timeout: 20000 }, () => {
     expect(fighter().spells!.at(-1)).toMatchObject({ range: "touch", action: { kind: "healing" } });
   });
 
+  it("a heal by any amount: what's missing from a pool, or a total shared out", async () => {
+    store().insertAbilityRecord("def-fighter", "bonusActions", {
+      kind: "healing", id: "", name: "Mending Touch", actionType: "bonus", range: 5, healing: [{ dice: "1d8" }], targeting: { target: "single" }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Mending Touch" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Healing/ }));
+    await radio("How much it heals", "What's missing, from a pool");
+    // The fighter's Second Wind pool, or a new one.
+    const pool = screen.getAllByRole("combobox").find((box) => within(box).queryByRole("option", { name: /second wind/i }));
+    expect(pool).toBeDefined();
+    await userEvent.selectOptions(pool!, within(pool!).getByRole("option", { name: /second wind/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().bonusActions ?? []).find((action) => action.name === "Mending Touch")).toMatchObject({ fromPool: { resourceId: "second-wind" } });
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Mending Touch" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Healing/ }));
+    await radio("How much it heals", "A total, shared out");
+    await retype("Hit points shared", "25");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Only bloodied creatures" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    const shared = (fighter().bonusActions ?? []).find((action) => action.name === "Mending Touch")!;
+    expect(shared).toMatchObject({ targeting: { target: "chosen" }, divided: { total: 25, upToHalf: true } });
+    expect(shared).not.toHaveProperty("fromPool");
+    expect(shared.kind === "healing" && shared.divided?.bloodiedOnly).toBeFalsy();
+  });
+
   it("Bless: up to three creatures gain +2 to attacks and saves while it concentrates", async () => {
     await blank("Spell");
     await retype("Name", "Bless");

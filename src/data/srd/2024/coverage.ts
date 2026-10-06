@@ -44,7 +44,6 @@ export const GAPS = {
   "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
   "on-kill": "Something that happens when an enemy drops (Dark One's Blessing)",
-  "pool-heal": "Healing from a pool by any amount (Lay on Hands, Preserve Life)",
   metamagic: "Spending sorcery points to change a spell as it's cast",
   "slot-conversion": "Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
@@ -166,7 +165,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Life Domain */
   "cleric_life-domain_disciple-of-life": manual(["healing-bonus"]),
   "cleric_life-domain_life-domain-spells": PREPARED("Life Domain spells"),
-  "cleric_life-domain_preserve-life": manual(["pool-heal"]),
+  "cleric_life-domain_preserve-life": full("Five times the cleric level shared among bloodied creatures within 30 ft, the most hurt first, none past half its maximum; the AI uses it when the shares are worth a heal."),
   "cleric_life-domain_blessed-healer": manual(["healing-bonus"]),
   "cleric_life-domain_supreme-healing": manual(["healing-bonus"]),
 
@@ -249,7 +248,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_warrior-of-the-open-hand_quivering-palm": manual(["delayed-damage"]),
 
   /* Paladin */
-  "paladin_lay-on-hands": manual(["pool-heal"], "The builder sizes the pool (5 × paladin level)."),
+  "paladin_lay-on-hands": partial(["condition-removal"], "A bonus action healing what a creature it touches is missing, from a pool of 5 × paladin level; ending Poisoned with 5 points doesn't run."),
   paladin_spellcasting: builder(),
   "paladin_weapon-mastery": MASTERY,
   "paladin_fighting-style": builder("A Fighting Style feat, or Blessed Warrior's two cantrips."),

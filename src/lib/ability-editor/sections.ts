@@ -245,7 +245,11 @@ const UTILITY_WORDS = { dash: "Dash", disengage: "Disengage", dodge: "Dodge", hi
 
 /** What an automatic ability does: "9 (1d8 + 4)", "+2 AC · 1 minute", "summons 1d4 Dust Mephit", "Dash". */
 function outcomeSummary(action: ActionDefinition, definition: CreatureDefinition): string {
-  if (action.kind === "healing") return `heals ${healingShort(action.healing, definition)}`;
+  if (action.kind === "healing") {
+    if (action.fromPool) return "heals what's missing, from a pool";
+    if (action.divided) return `shares ${action.divided.total} HP`;
+    return `heals ${healingShort(action.healing, definition)}`;
+  }
   if (action.kind === "summon") {
     if (!action.options.length) return "nothing yet";
     const options = action.options.map((option) => `${typeof option.count === "number" ? option.count : option.count.dice} ${option.label}`);

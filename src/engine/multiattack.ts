@@ -143,8 +143,10 @@ export function attackReach(action: AttackActionDefinition): number {
 }
 
 /** Whether the creature can pay for an attack right now (a charge, ki, a spell slot). */
-export function canPayFor(combatant: CombatantState, action: { resourceCost?: { resourceId: string; amount: number } }): boolean {
+export function canPayFor(combatant: CombatantState, action: { resourceCost?: { resourceId: string; amount: number }; fromPool?: { resourceId: string } }): boolean {
   const cost = action.resourceCost;
+  // Lay on Hands: anything left in its pool.
+  if (action.fromPool && (combatant.resources?.[action.fromPool.resourceId] ?? 0) <= 0) return false;
   return !cost || (combatant.resources?.[cost.resourceId] ?? 0) >= cost.amount;
 }
 

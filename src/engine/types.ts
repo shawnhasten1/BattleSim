@@ -1352,6 +1352,17 @@ export interface HealingActionDefinition {
   upcast?: SpellUpcast;
   /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
   usage?: ActionUsage;
+  /**
+   * Healing drawn from a pool by any amount (Lay on Hands): `healing` is ignored; it restores what the target is
+   * missing, up to what's left in `resourceId`, spending the pool point for point. Unusable with the pool empty.
+   */
+  fromPool?: { resourceId: string };
+  /**
+   * Healing shared out (Preserve Life, with `targeting: "chosen"`): `total` hit points, `healing` ignored, divided among
+   * the creatures chosen, the most hurt first. `upToHalf`: none past half its hit point maximum; `bloodiedOnly`: only
+   * creatures at half their hit points or fewer.
+   */
+  divided?: { total: number; upToHalf?: boolean; bloodiedOnly?: boolean };
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 

@@ -1074,6 +1074,23 @@ function saveBody(action: SaveAction, definition: CreatureDefinition): Body {
 }
 
 function healingBody(action: Extract<ActionDefinition, { kind: "healing" }>, definition: CreatureDefinition): Body {
+  // Lay on Hands: what's missing, from a pool.
+  if (action.fromPool) {
+    return {
+      text: `${singleSubject(action, action.range)} regains the hit points it's missing, as many as are left in its ${action.name} pool, which spends them.`,
+      short: `heals from its ${action.name} pool · ${action.range} ft`,
+      notSimulated: notesOf(action.riders)
+    };
+  }
+  // Preserve Life: a total shared out.
+  if (action.divided) {
+    const { total, upToHalf, bloodiedOnly } = action.divided;
+    return {
+      text: `It shares ${total} hit points among ${bloodiedOnly ? "bloodied " : ""}creatures of its choice within ${action.range} feet${upToHalf ? ", none past half its hit point maximum" : ""}.`,
+      short: `${total} HP shared · ${action.range} ft`,
+      notSimulated: notesOf(action.riders)
+    };
+  }
   const amount = healingText(action.healing, definition);
   const mode = action.targeting?.target ?? "single";
   let text: string;

@@ -171,7 +171,13 @@ export const LIFE_DOMAIN: SubclassDefinition = {
       grants: [
         grant("disciple-of-life", reference("cleric_life-domain_disciple-of-life")),
         grant("life-domain-spells", runs("cleric_life-domain_life-domain-spells"), { spells: ["aid", "bless", "cure-wounds", "lesser-restoration"].map(spell) }),
-        grant("preserve-life", reference("cleric_life-domain_preserve-life"))
+        grant("preserve-life", runs("cleric_life-domain_preserve-life", {
+          grantedActions: [{
+            kind: "healing", id: "preserve-life", name: "Preserve Life", actionType: "action", range: 30, healing: [], targeting: { target: "chosen" },
+            divided: { total: 15, upToHalf: true, bloodiedOnly: true },
+            resourceCost: { resourceId: "channel-divinity", amount: 1 }, automationSupport: "full"
+          }]
+        }), { scale: [{ path: "grantedActions.0.divided.total", value: "{level*5}" }] })
       ]
     },
     { level: 5, grants: [{ key: "life-domain-spells-5", spells: ["mass-healing-word", "revivify"].map(spell) }] },

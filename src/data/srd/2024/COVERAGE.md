@@ -17,11 +17,11 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 8 | 2 | 7 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 1 | 3 | 5 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 2 | 3 | 4 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 12 | 0 | 3 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
+| Paladin (Oath of Devotion) | 23 | 6 | 2 | 6 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 5 | 2 | 6 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
@@ -42,16 +42,15 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
+| `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 1 | Self-Restoration (Monk); Lay On Hands (Paladin); Restoring Touch (Paladin) |
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
-| `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
 | `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
 | `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
-| `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 10 | Self-Restoration (Monk); Restoring Touch (Paladin) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `damage-dice` | Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting) | Feats | 1 | Great Weapon Fighting (feat); Savage Attacker (feat) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
@@ -175,7 +174,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Disciple of Life | manual | `healing-bonus` |  |
 | 3 | Life Domain Spells | builder |  | Life Domain spells are always prepared. |
-| 3 | Preserve Life | manual | `pool-heal` |  |
+| 3 | Preserve Life | full |  | Five times the cleric level shared among bloodied creatures within 30 ft, the most hurt first, none past half its maximum; the AI uses it when the shares are worth a heal. |
 | 6 | Blessed Healer | manual | `healing-bonus` |  |
 | 17 | Supreme Healing | manual | `healing-bonus` |  |
 
@@ -279,7 +278,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Lay On Hands | manual | `pool-heal` | The builder sizes the pool (5 × paladin level). |
+| 1 | Lay On Hands | partial | `condition-removal` | A bonus action healing what a creature it touches is missing, from a pool of 5 × paladin level; ending Poisoned with 5 points doesn't run. |
 | 1 | Spellcasting | builder |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Fighting Style | builder |  | A Fighting Style feat, or Blessed Warrior's two cantrips. |
