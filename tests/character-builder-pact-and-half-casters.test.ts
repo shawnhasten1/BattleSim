@@ -105,10 +105,11 @@ describe("the Paladin (Oath of Devotion)", () => {
     expect(built("paladin", 9).resources).toMatchObject({ "slot-3": 2, "lay-on-hands": 45 });
   });
 
-  it("Paladin's Smite: Divine Smite always prepared, once free (reference until smites run)", () => {
+  it("Paladin's Smite: Divine Smite always prepared, once free, a smite on each melee weapon attack", () => {
     const paladin = built("paladin", 2);
     expect(paladin.spells!.filter((entry) => entry.name.startsWith("Divine Smite")).map((entry) => entry.name).sort()).toEqual(["Divine Smite", "Divine Smite (free)"]);
-    expect(paladin.spells!.find((entry) => entry.name === "Divine Smite")?.automationSupport).toBe("manual-only");
+    expect(paladin.spells!.find((entry) => entry.name === "Divine Smite")).toMatchObject({ automationSupport: "full", onHit: { bonusAction: true } });
+    expect(getExecutableActions(paladin).some((entry) => /\(Divine Smite \(free\)\)$/.test(entry.name))).toBe(true);
   });
 
   it("Aura of Protection reaches 10 ft, 30 from 18th level; Radiant Strikes adds 1d8 on melee hits", () => {

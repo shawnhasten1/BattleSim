@@ -151,7 +151,8 @@ export const NOT_COPIED: Readonly<Record<string, string>> = {
 
 /** A 2024 spell as authored here: `spells.ts` adds its id, source, name, level, school and slot cost. */
 export type AuthoredSpell = Omit<SpellDefinition, "id" | "source" | "name" | "level" | "school" | "action"> & {
-  action: DistributiveOmit<ActionDefinition, "id" | "name">;
+  /** Absent for a smite (`onHit`): what it adds to a hit is what runs. */
+  action?: DistributiveOmit<ActionDefinition, "id" | "name">;
 };
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -290,6 +291,48 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
     }
   },
 
+  /* ── smites: cast as a bonus action right after a hit (an on-hit option on each attack they can follow) ──────── */
+  "divine-smite": {
+    castingTime: "bonus", range: "self", automationSupport: "full",
+    onHit: {
+      name: "Divine Smite", attackTypes: ["melee"], weaponOnly: true, bonusAction: true, upcast: { damageDice: "1d8" },
+      riders: [
+        { kind: "damage", when: "on-hit", components: [{ dice: "2d8", damageType: "radiant", magical: true }] },
+        { kind: "damage", when: "on-hit", components: [{ dice: "1d8", damageType: "radiant", magical: true }], restrictToCreatureTypes: ["fiend", "undead"] }
+      ]
+    }
+  },
+  "searing-smite": {
+    castingTime: "bonus", range: "self", automationSupport: "partial",
+    description: "Not simulated: the 1d6 fire at the start of each of the target's turns until it makes a Constitution save.",
+    onHit: {
+      name: "Searing Smite", attackTypes: ["melee"], weaponOnly: true, bonusAction: true, upcast: { damageDice: "1d6" },
+      riders: [{ kind: "damage", when: "on-hit", components: [{ dice: "1d6", damageType: "fire", magical: true }] }]
+    }
+  },
+  "shining-smite": {
+    castingTime: "bonus", range: "self", concentration: true, automationSupport: "partial",
+    description: "Attack rolls against the target have advantage, approximated as +5; its light, and losing the benefit of being invisible, aren't simulated.",
+    onHit: {
+      name: "Shining Smite", attackTypes: ["melee"], weaponOnly: true, bonusAction: true, upcast: { damageDice: "1d6" },
+      riders: [
+        { kind: "damage", when: "on-hit", components: [{ dice: "2d6", damageType: "radiant", magical: true }] },
+        { kind: "condition", when: "on-hit", condition: { custom: "shining-smite" }, conditionKey: "Shining Smite", modifiers: { incomingAttackRoll: 5 }, duration: { kind: "concentration" } }
+      ]
+    }
+  },
+  "ensnaring-strike": {
+    castingTime: "bonus", range: "self", concentration: true, automationSupport: "partial",
+    description: "Not simulated: a Large or larger creature's advantage on the save, the 1d6 piercing at the start of its turns, and breaking free with a Strength (Athletics) check.",
+    onHit: {
+      name: "Ensnaring Strike", weaponOnly: true, bonusAction: true,
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "restrained", duration: { kind: "concentration" },
+        save: { ability: "str", dcFormula: { base: 8, ability: "spellcasting", proficiency: true }, onSuccess: "negates" }
+      }]
+    }
+  },
+
   /* ── new in the 2024 library ────────────────────────────────────────────────────────────────────────────────── */
   "sorcerous-burst": {
     castingTime: "action", range: 120, automationSupport: "partial",
@@ -343,10 +386,6 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
  */
 export const SPELL_GAPS: Readonly<Record<string, { gaps: GapCode[]; note: string }>> = {
   counterspell: { gaps: ["counterspell-save"], note: "The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent." },
-  "divine-smite": { gaps: ["smite"], note: "Cast as a bonus action right after hitting." },
-  "searing-smite": { gaps: ["smite"], note: "Cast as a bonus action right after hitting." },
-  "shining-smite": { gaps: ["smite"], note: "Cast as a bonus action right after hitting." },
-  "ensnaring-strike": { gaps: ["smite"], note: "Cast as a bonus action right after hitting." },
   "hunters-mark": { gaps: ["mark"], note: "Extra damage against the marked target, moved when it drops." },
   hex: { gaps: ["mark"], note: "Extra damage against the marked target, moved when it drops." },
   "true-strike": { gaps: ["weapon-cantrip"], note: "A weapon attack made with the spellcasting ability." },

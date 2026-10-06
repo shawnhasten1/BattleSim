@@ -13,6 +13,8 @@ import { FULL_CASTER_SLOTS, PACT_SLOTS } from "./slots";
  * note makes the AI leave the action alone). A spell that's only partly simulated still runs.
  */
 export function spellRuns(spell: SpellDefinition | undefined): boolean {
+  // A smite: no action of its own, its hits' upgrade runs.
+  if (spell?.onHit) return spell.automationSupport !== "manual-only" && spell.automationSupport !== "unsupported";
   const action = spell?.action;
   if (!spell || !action || action.kind === "unsupported") return false;
   if (spell.automationSupport === "manual-only" || spell.automationSupport === "unsupported" || action.automationSupport !== "full") return false;

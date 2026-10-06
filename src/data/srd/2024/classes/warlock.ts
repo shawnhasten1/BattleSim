@@ -88,8 +88,28 @@ const INVOCATIONS: Record<string, Partial<Pick<PickOption, "repeatable" | "choic
       lists: ["bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"]
     }]
   },
+  "eldritch-smite": {
+    grants: (text) => [{
+      key: "eldritch-smite",
+      feature: {
+        ...text, automationSupport: "partial", description: `${text.description}\n\nNot simulated: the target must be Huge or smaller to be knocked prone.`,
+        effects: [{
+          kind: "on-hit-option",
+          option: {
+            name: "Eldritch Smite", actionIds: [PACT_WEAPON_ACTION], oncePerTurn: true,
+            // 1d8 and 1d8 a slot level: 2d8 with a 1st-level slot, a pact slot's level adding the rest.
+            resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { damageDice: "1d8" },
+            riders: [
+              { kind: "damage", when: "on-hit", components: [{ dice: "2d8", damageType: "force", magical: true }] },
+              { kind: "condition", when: "on-hit", condition: "prone", duration: { kind: "permanent" } }
+            ]
+          }
+        }]
+      }
+    }]
+  },
   // Manual: what they do doesn't run yet.
-  "eldritch-mind": {}, "eldritch-smite": {}, "gift-of-the-protectors": {}, "investment-of-the-chain-master": {}, "pact-of-the-chain": {}
+  "eldritch-mind": {}, "gift-of-the-protectors": {}, "investment-of-the-chain-master": {}, "pact-of-the-chain": {}
 };
 
 /** Each invocation as a pick option: its prerequisite read from its text, what runs authored above, the rest text. */

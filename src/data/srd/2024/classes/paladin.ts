@@ -41,7 +41,7 @@ export const PALADIN: ClassDefinition = {
     },
     {
       level: 2,
-      grants: [grant("paladins-smite", reference("paladin_paladins-smite"), {
+      grants: [grant("paladins-smite", runs("paladin_paladins-smite"), {
         spells: [spell("divine-smite")], freeCasts: [{ spell: spell("divine-smite"), uses: 1 }]
       })],
       choices: [choice({
@@ -113,7 +113,7 @@ export const PALADIN: ClassDefinition = {
     epicBoon: "srd:feat:boon-of-truesight",
     equipment: "A",
     cantrips: ["sacred-flame", "guidance"].map(spell),
-    spells: ["bless", "cure-wounds", "shield-of-faith", "aid", "banishment"].map(spell)
+    spells: ["searing-smite", "bless", "cure-wounds", "shield-of-faith", "shining-smite", "aid", "banishment"].map(spell)
   },
   description: "A holy warrior bound by a sacred oath."
 };

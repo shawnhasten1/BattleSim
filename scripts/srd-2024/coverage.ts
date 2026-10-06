@@ -71,7 +71,7 @@ export function checkSpellCoverage(index: Srd2024SpellIndex): string[] {
 
 /** A spell's verdict: it runs, runs in part (its description says what doesn't), or is reference only. */
 function spellVerdict(spell: SpellDefinition | undefined): Verdict {
-  if (!spell?.action || spell.automationSupport === "manual-only") return "manual";
+  if ((!spell?.action && !spell?.onHit) || spell.automationSupport === "manual-only") return "manual";
   if (!spellRuns(spell)) return "partial";
   return spell.automationSupport === "full" ? "full" : "partial";
 }
@@ -115,10 +115,10 @@ function renderSpells(index: Srd2024SpellIndex, line: (text?: string) => void) {
   line("|---|---|---|---|---|---|");
   for (const entry of [...index.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))) {
     const spell = spellOf(entry.slug);
-    if (!spell?.action) continue;
+    if (!spell?.action && !spell?.onHit) continue;
     const from = spellBasisOf(entry.slug) === "2014" ? "2014 copy" : changedSince2014(entry.slug) ? "changed in 2024" : "new";
     const verdict = spellVerdict(spell);
-    const noted = "riders" in spell.action && spell.action.riders?.some((rider) => rider.kind === "note");
+    const noted = spell.action && "riders" in spell.action && spell.action.riders?.some((rider) => rider.kind === "note");
     const fixed = COPY_FIXES[entry.slug] ? `Changed from the 2014 copy: ${COPY_FIXES[entry.slug]!.why}.` : "";
     const note = [noted ? "Its effect is a note for the DM, so the AI doesn't cast it." : verdict === "partial" ? spell.description ?? "" : "", fixed].filter(Boolean).join(" ");
     line(`| ${cell(entry.name)} | ${ORDINALS[entry.level]} | ${entry.classes.join(", ")} | ${from} | ${verdict} | ${cell(note)} |`);

@@ -42,6 +42,7 @@ import {
   type LegendaryActionRef,
   type MultiattackStep,
   type NumericFormula,
+  type OnHitOption,
   type ReactionTrigger,
   type ResourceCost,
   type RiderDuration,
@@ -632,7 +633,21 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return effect.weapons === "all"
         ? `${S} can use the mastery property of every weapon.`
         : `${S} can use the mastery properties of ${joinList(effect.weapons.map((kind) => kind.replace(/-/g, " ")))}.`;
+    case "on-hit-option":
+      return onHitOptionSentence(effect.option, definition, who);
   }
+}
+
+/** "When it hits with a melee weapon attack, it can spend a level 1 spell slot (and its bonus action) to deal an extra 2d8 radiant damage." */
+export function onHitOptionSentence(option: OnHitOption, definition: CreatureDefinition, who: Who = IT): string {
+  const types = option.attackTypes?.length ? `${joinList(option.attackTypes, "or")} ` : "";
+  const what = option.weaponOnly ? `a ${types}weapon attack` : `a ${types}attack`;
+  const cost = [option.resourceCost ? costText(option.resourceCost) : "", option.bonusAction ? "its bonus action" : ""].filter(Boolean);
+  const spend = cost.length ? ` spend ${cost.join(" and ")} to` : "";
+  const effects = option.riders.map((rider) => riderShort(rider, definition, 10, true)).filter(Boolean);
+  const once = option.oncePerTurn ? " Once per turn." : "";
+  const higher = option.upcast ? ` A higher slot adds ${option.upcast.damageDice} per level.` : "";
+  return `When ${who.subject} hits with ${what}, ${who.subject} can${spend} add: ${effects.join(", ")}.${once}${higher}`;
 }
 
 const GATE_SHORT: Record<Exclude<FeatureCondition, "always" | "charged">, string> = {
@@ -692,6 +707,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "evasion": return "evasion";
     case "no-critical-hits": return "no critical hits against it";
     case "weapon-mastery": return effect.weapons === "all" ? "masters every weapon" : `masters ${effect.weapons.map((kind) => kind.replace(/-/g, " ")).join(", ")}`;
+    case "on-hit-option": return `on a hit: ${effect.option.name}`;
   }
 }
 

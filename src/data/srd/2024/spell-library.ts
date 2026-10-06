@@ -83,6 +83,11 @@ function referenceSpell(entry: ReferenceSpell): SpellDefinition {
 function stamped(entry: ReferenceSpell, spell: SpellDefinition | AuthoredSpell): SpellDefinition {
   const id = srd2024SpellId(entry.slug);
   const cost = slotCost(entry.level);
+  if (!spell.action) {
+    // A smite: its hit's upgrade runs, nothing to stamp but the spell itself.
+    const { id: _id, source: _source, ...rest } = spell as SpellDefinition;
+    return { ...rest, id, name: entry.name, source: srd52Source(entry.key), level: entry.level, school: entry.school, ...(cost ? { resourceCost: spell.resourceCost ?? cost } : {}), components: componentsOf(entry.components) };
+  }
   const action = spell.action as ActionDefinition;
   const actionCost = "resourceCost" in action && action.resourceCost ? action.resourceCost : cost;
   const placed = {

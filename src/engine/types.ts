@@ -646,8 +646,39 @@ export type FeatureEffect =
      */
     kind: "weapon-mastery";
     weapons: string[] | "all";
+  }
+  | {
+    /** Something its hits can be upgraded with for a cost paid only when it lands (Eldritch Smite, Fire's Burn). */
+    kind: "on-hit-option";
+    option: OnHitOption;
   };
 
+/**
+ * Something an attack's hit can be upgraded with, for a cost paid only when it lands: a smite spell (Divine Smite), an
+ * invocation (Eldritch Smite), a species' boon (a goliath's Fire's Burn). Compiled into a variant of each attack it can
+ * follow ("Longsword (Divine Smite)"), the upgrade as on-hit riders; the AI picks the variant when the damage is worth
+ * the cost, and the cost is paid only on a hit.
+ */
+export interface OnHitOption {
+  /** On the variant's name: "Longsword (Divine Smite)". */
+  name: string;
+  /** The attacks it can follow, by type. Absent: any. */
+  attackTypes?: Array<"melee" | "ranged" | "spell">;
+  /** Only these attacks (a pact weapon's), by action id. */
+  actionIds?: Id[];
+  /** Only weapon attacks (a melee weapon or an Unarmed Strike), not spells. Default false. */
+  weaponOnly?: boolean;
+  /** What the hit gets: damage, a condition. */
+  riders: ActionRider[];
+  /** What a use spends: a spell slot, a pool. */
+  resourceCost?: ResourceCost;
+  /** It takes the bonus action (a smite spell is cast as one). */
+  bonusAction?: boolean;
+  /** Once a turn, whichever attack it follows. */
+  oncePerTurn?: boolean;
+  /** Cast with a higher slot: this much more on its first damage rider per level above the spell's. A variant per slot. */
+  upcast?: { damageDice: string };
+}
 /**
  * An always-on aura a creature radiates (Stench, Fear Aura, a balor's Fire Aura). Unlike `FeatureDefinition.aura`
  * (a buff it shares), this does something TO the creatures near it at a turn boundary:
@@ -748,10 +779,25 @@ interface ActionRiderCommon {
   id?: Id;
   /** Fire at most once per the source creature's turn (Sneak-Attack style). */
   oncePerTurn?: boolean;
+  /**
+   * With `oncePerTurn`: riders with the same key share the once, whatever action carries them (one Eldritch Smite a
+   * turn, whichever weapon hits). Without it, each action's rider has its own.
+   */
+  onceKey?: string;
+  /**
+   * Riders in a group land together: once one is skipped (no resource, no bonus action, already used this turn), the
+   * rest of its group after it are too (Divine Smite's extra die against undead needs the smite).
+   */
+  group?: string;
 }
 
 interface TriggeredRider extends ActionRiderCommon {
   when: RiderGate;
+  /**
+   * Takes the source's bonus action when it fires (a smite spell, cast as a bonus action right after a hit). Skipped,
+   * costing nothing, when that's already been used this turn.
+   */
+  economy?: "bonus";
   /**
    * Charges this rider spends, on top of the parent action's own `resourceCost`.
    * If unpayable the rider is skipped and the parent action still resolves.
@@ -949,6 +995,11 @@ export interface AttackActionDefinition {
   beamCountByLevel?: Array<{ atLevel: number; count: number }>;
   /** Skip the attack roll — each beam's damage always lands (Magic Missile). */
   autoHit?: boolean;
+  /**
+   * Its `resourceCost` is an on-hit rider's, shown on the attack so planning sees what it spends: paid when the rider
+   * lands, not when the attack is made (a weapon's charge, Stunning Strike's focus point, a smite's slot).
+   */
+  costPaidOnHit?: boolean;
   /** On-hit effects: extra damage, a save-or-condition, a shove. */
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
@@ -1644,6 +1695,11 @@ export interface SpellDefinition {
   /** Authoring convenience for an `area-save` action's `zone` — stamped onto the compiled action by `stampSpellContext`, same as `concentration`. */
   zone?: ZonePersistence;
   action?: ActionDefinition;
+  /**
+   * A spell cast as an attack hits (a smite): what it adds to the hit. It has no action of its own; each attack it can
+   * follow gets a variant with it (`OnHitOption`).
+   */
+  onHit?: OnHitOption;
   description?: string;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
@@ -2287,6 +2343,9 @@ const sizeSchema = z.enum(["tiny", "small", "medium", "large", "huge", "gargantu
 const triggeredRiderBase = {
   id: z.string().optional(),
   oncePerTurn: z.boolean().optional(),
+  onceKey: z.string().optional(),
+  group: z.string().optional(),
+  economy: z.literal("bonus").optional(),
   when: riderGateSchema,
   resourceCost: resourceCostSchema.optional(),
   activation: z.enum(["always", "optional"]).optional(),

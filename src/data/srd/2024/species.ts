@@ -203,6 +203,7 @@ const GNOME: SpeciesDefinition = {
 /* ── Goliath ────────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 const GIANT_POOL = { id: "giant-ancestry", size: "{pb}" };
+const GIANT_USE = { resourceId: "giant-ancestry", amount: 1 };
 const giant = (id: string, name: string, feature: FeatureGrant["feature"]): PickOption => ({
   id, name, grants: [{ key: "giant-ancestry", feature, pool: GIANT_POOL }]
 });
@@ -214,9 +215,28 @@ const GIANT_ANCESTRIES: PickOption[] = [
       resourceCost: { resourceId: "giant-ancestry", amount: 1 }, automationSupport: "full"
     }]
   })),
-  giant("fire", "Fire's Burn (Fire Giant)", reference(trait("goliath", "Giant Ancestry"), { name: "Giant Ancestry: Fire's Burn" })),
-  giant("frost", "Frost's Chill (Frost Giant)", reference(trait("goliath", "Giant Ancestry"), { name: "Giant Ancestry: Frost's Chill" })),
-  giant("hill", "Hill's Tumble (Hill Giant)", reference(trait("goliath", "Giant Ancestry"), { name: "Giant Ancestry: Hill's Tumble" })),
+  giant("fire", "Fire's Burn (Fire Giant)", runs(trait("goliath", "Giant Ancestry"), {
+    name: "Giant Ancestry: Fire's Burn",
+    effects: [{ kind: "on-hit-option", option: { name: "Fire's Burn", resourceCost: GIANT_USE, riders: [{ kind: "damage", when: "on-hit", components: [{ dice: "1d10", damageType: "fire", magical: true }] }] } }]
+  })),
+  giant("frost", "Frost's Chill (Frost Giant)", runs(trait("goliath", "Giant Ancestry"), {
+    name: "Giant Ancestry: Frost's Chill",
+    effects: [{
+      kind: "on-hit-option",
+      option: {
+        name: "Frost's Chill", resourceCost: GIANT_USE,
+        riders: [
+          { kind: "damage", when: "on-hit", components: [{ dice: "1d6", damageType: "cold", magical: true }] },
+          { kind: "condition", when: "on-hit", condition: { custom: "frosts-chill" }, conditionKey: "Frost's Chill", modifiers: { speedPenaltyFt: 10 }, duration: { kind: "until-source-turn", timing: "start" } }
+        ]
+      }
+    }]
+  })),
+  giant("hill", "Hill's Tumble (Hill Giant)", runs(trait("goliath", "Giant Ancestry"), {
+    name: "Giant Ancestry: Hill's Tumble",
+    effects: [{ kind: "on-hit-option", option: { name: "Hill's Tumble", resourceCost: GIANT_USE, riders: [{ kind: "condition", when: "on-hit", condition: "prone", duration: { kind: "permanent" } }] } }],
+    notSimulated: "the target must be Large or smaller."
+  })),
   giant("stone", "Stone's Endurance (Stone Giant)", reference(trait("goliath", "Giant Ancestry"), { name: "Giant Ancestry: Stone's Endurance" })),
   giant("storm", "Storm's Thunder (Storm Giant)", runs(trait("goliath", "Giant Ancestry"), {
     name: "Giant Ancestry: Storm's Thunder",

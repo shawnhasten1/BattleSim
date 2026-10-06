@@ -213,6 +213,8 @@ export function withSpellLevel(spell: SpellDefinition, level: number): SpellDefi
  * has to be on the action too.
  */
 export function spellIsReference(spell: SpellDefinition): boolean {
+  // A smite has no action: what it adds to a hit is what runs.
+  if (spell.onHit) return spell.automationSupport === "manual-only" || spell.automationSupport === "unsupported";
   return !spell.action || spell.action.kind === "unsupported" || spell.automationSupport === "manual-only" || spell.action.automationSupport === "manual-only";
 }
 

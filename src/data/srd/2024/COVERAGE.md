@@ -21,7 +21,7 @@ its gaps, never dropped and never approximated without saying so.
 | Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 6 | 0 | 9 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 7 | 5 | 5 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 5 | 1 | 8 | 8 | 1 |
+| Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 3 | 2 | 7 | 9 | 2 |
 | Rogue (Thief) | 23 | 3 | 2 | 8 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
@@ -38,7 +38,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
 | `d20-reroll` | Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate) | Bard, Fighter, Monk, Rogue, Warlock, Feats, Species | 1 | Countercharm (Bard); Indomitable (Fighter); Heroic Warrior (Champion); Disciplined Survivor (Monk); Stroke of Luck (Rogue); Dark One's Own Luck (Fiend Patron); Boon of Combat Prowess (feat); Boon of Fate (feat); Luck (Halfling); Resourceful (Human) |
-| `smite` | Spending a slot or a use when an attack hits (Divine Smite, Eldritch Smite, Fire's Burn, Hurl Through Hell) | Paladin, Warlock, Species, Spells | 1 | Paladin's Smite (Paladin); Smite of Protection (Oath of Devotion); Eldritch Invocation Options (Warlock); Hurl Through Hell (Fiend Patron); Giant Ancestry (Goliath); Divine Smite (spell); Searing Smite (spell); Shining Smite (spell); Ensnaring Strike (spell) |
 | `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 1 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Innate Sorcery (Sorcerer); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
 | `damage-reaction` | A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance) | Monk, Ranger, Rogue, Species | 1 | Deflect Attacks (Monk); Deflect Energy (Monk); Superior Hunter's Defense (Hunter); Uncanny Dodge (Rogue); Giant Ancestry (Goliath) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
@@ -56,6 +55,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 10 | Self-Restoration (Monk); Restoring Touch (Paladin) |
+| `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `ally-die` | A die given to an ally, or taken off an enemy's roll (Bardic Inspiration, Cutting Words) | Bard | 1 | Bardic Inspiration (Bard); Cutting Words (College of Lore); Peerless Skill (College of Lore) |
 | `damage-dice` | Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting) | Feats | 1 | Great Weapon Fighting (feat); Savage Attacker (feat) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
@@ -286,7 +286,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Spellcasting | builder |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Fighting Style | builder |  | A Fighting Style feat, or Blessed Warrior's two cantrips. |
-| 2 | Paladin's Smite | manual | `smite` | Divine Smite is always prepared. |
+| 2 | Paladin's Smite | full |  | Divine Smite is always prepared and cast once without a slot: a variant of each melee attack that adds its damage on a hit, taking the bonus action, chosen by the AI when the damage is worth the slot. |
 | 3 | Channel Divinity | info |  | Divine Sense; the builder sizes the pool for the subclass's options. |
 | 3 | Paladin Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
@@ -417,7 +417,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 11, 13, 15, 17 | Mystic Arcanum | builder |  | A 6th- to 9th-level spell cast once without a slot. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Eldritch Master | info |  | Magical Cunning is outside a fight. |
-| — | Eldritch Invocation Options | partial | `smite`, `concentration-saves` | Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Smite, Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked. |
+| — | Eldritch Invocation Options | partial | `concentration-saves` | Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic, Eldritch Smite spends a pact slot on a hit); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked. |
 | — | Warlock Spell List | builder |  | Read from each spell's own class list. |
 
 ### Fiend Patron (Warlock subclass)
@@ -499,7 +499,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Gnome | Darkvision | info |  | There's no vision in the simulator. |
 | Gnome | Gnomish Cunning | full |  | Advantage on Intelligence, Wisdom and Charisma saves. |
 | Gnome | Gnomish Lineage | builder |  | The lineage's cantrips and spells. |
-| Goliath | Giant Ancestry | partial | `smite`, `damage-reaction` | Cloud's Jaunt (a teleport) and Storm's Thunder (a reaction when hit) run; Fire's Burn, Frost's Chill and Hill's Tumble spend a use on a hit, and Stone's Endurance cuts damage. |
+| Goliath | Giant Ancestry | partial | `damage-reaction` | Cloud's Jaunt (a teleport), Storm's Thunder (a reaction when hit), and Fire's Burn, Frost's Chill and Hill's Tumble (spending a use on a hit) run; Stone's Endurance cuts damage, which doesn't. |
 | Goliath | Large Form | manual | `size-change` |  |
 | Goliath | Powerful Build | info |  | Escaping grapples and carrying. |
 | Halfling | Brave | full |  | Advantage on saves against Frightened. |
@@ -518,9 +518,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 84 of which run in the simulator. 65 are copied from the 2014 library
-(their rules didn't change in a way the simulator models) and 20 are written for 2024: 14 that changed,
-6 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
+339 SRD 5.2 spells, 88 of which run in the simulator. 65 are copied from the 2014 library
+(their rules didn't change in a way the simulator models) and 24 are written for 2024: 14 that changed,
+10 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
 | Class | Spells | Run | Cantrip | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th |
@@ -528,8 +528,8 @@ spell on a class's list and suggests the ones that run first.
 | Bard | 130 | 28 | 2/10 | 7/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
 | Cleric | 109 | 23 | 1/7 | 7/15 | 4/17 | 2/19 | 1/9 | 3/13 | 3/11 | 1/8 | 1/5 | 0/5 |
 | Druid | 124 | 27 | 3/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
-| Paladin | 38 | 5 | — | 3/13 | 1/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
-| Ranger | 48 | 7 | — | 2/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
+| Paladin | 38 | 8 | — | 5/13 | 2/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
+| Ranger | 48 | 8 | — | 3/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
 | Sorcerer | 140 | 54 | 7/16 | 8/21 | 9/27 | 6/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
 | Warlock | 72 | 20 | 3/7 | 4/12 | 3/10 | 2/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
 | Wizard | 218 | 53 | 6/15 | 9/30 | 10/36 | 6/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
@@ -557,6 +557,8 @@ spell on a class's list and suggests the ones that run first.
 | Chromatic Orb | 1st | sorcerer, wizard | new | partial | Thunder damage here: you choose the type each time you cast it (change it to suit). Not simulated: the orb leaping to another target on matching dice. |
 | Cure Wounds | 1st | bard, cleric, druid, paladin, ranger | changed in 2024 | full |  |
 | Dissonant Whispers | 1st | bard | new | partial | Not simulated: on a failed save the target uses its reaction to move away from you. |
+| Divine Smite | 1st | paladin | new | full |  |
+| Ensnaring Strike | 1st | ranger | new | partial | Not simulated: a Large or larger creature's advantage on the save, the 1d6 piercing at the start of its turns, and breaking free with a Strength (Athletics) check. |
 | Entangle | 1st | druid, ranger | 2014 copy | full |  |
 | Faerie Fire | 1st | bard, druid | 2014 copy | partial | Its effect is a note for the DM, so the AI doesn't cast it. |
 | Grease | 1st | sorcerer, wizard | 2014 copy | full |  |
@@ -567,6 +569,7 @@ spell on a class's list and suggests the ones that run first.
 | Inflict Wounds | 1st | cleric | changed in 2024 | full |  |
 | Mage Armor | 1st | sorcerer, wizard | 2014 copy | full |  |
 | Magic Missile | 1st | sorcerer, wizard | 2014 copy | full |  |
+| Searing Smite | 1st | paladin | new | partial | Not simulated: the 1d6 fire at the start of each of the target's turns until it makes a Constitution save. |
 | Shield | 1st | sorcerer, wizard | 2014 copy | full |  |
 | Shield of Faith | 1st | cleric, paladin | 2014 copy | full |  |
 | Thunderwave | 1st | bard, druid, sorcerer, wizard | 2014 copy | full |  |
@@ -582,6 +585,7 @@ spell on a class's list and suggests the ones that run first.
 | Moonbeam | 2nd | druid | 2014 copy | full | Changed from the 2014 copy: in 2024 it strikes when it appears, and when a creature enters it or ends its turn there. |
 | Scorching Ray | 2nd | sorcerer, wizard | 2014 copy | full |  |
 | Shatter | 2nd | bard, sorcerer, wizard | 2014 copy | full |  |
+| Shining Smite | 2nd | paladin | new | partial | Attack rolls against the target have advantage, approximated as +5; its light, and losing the benefit of being invisible, aren't simulated. |
 | Spike Growth | 2nd | druid, ranger | 2014 copy | full |  |
 | Spiritual Weapon | 2nd | cleric | changed in 2024 | partial | Simulated as one attack each time it's cast: moving the force and attacking again on later turns isn't. |
 | Web | 2nd | sorcerer, wizard | 2014 copy | full |  |
@@ -629,10 +633,6 @@ spell on a class's list and suggests the ones that run first.
 | Spell | Level | Classes | Gaps | Note |
 |---|---|---|---|---|
 | Counterspell | 3rd | sorcerer, warlock, wizard | `counterspell-save` | The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent. |
-| Divine Smite | 1st | paladin | `smite` | Cast as a bonus action right after hitting. |
-| Searing Smite | 1st | paladin | `smite` | Cast as a bonus action right after hitting. |
-| Shining Smite | 2nd | paladin | `smite` | Cast as a bonus action right after hitting. |
-| Ensnaring Strike | 1st | ranger | `smite` | Cast as a bonus action right after hitting. |
 | Hunter's Mark | 1st | ranger | `mark` | Extra damage against the marked target, moved when it drops. |
 | Hex | 1st | warlock | `mark` | Extra damage against the marked target, moved when it drops. |
 | True Strike | Cantrip | bard, sorcerer, warlock, wizard | `weapon-cantrip` | A weapon attack made with the spellcasting ability. |

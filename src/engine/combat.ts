@@ -2,7 +2,7 @@ import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazard
 import { activeMastery, isLightWeapon, masteryRiders } from "./mastery";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
-import { attackFamilyId, canPayFor, defaultSwingAttack, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { armoredAc, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
@@ -43,6 +43,7 @@ import type {
   Id,
   ItemUseMeta,
   MultiattackActionDefinition,
+  OnHitOption,
   NumericFormula,
   Point,
   ReactionMeta,
@@ -253,7 +254,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
-  const declared = [...listed, ...nickVariants(definition, listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -263,6 +264,78 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...legendaryVariants(definition, declared),
     ...lairVariants(definition)
   ]).map(withEffectiveAutomationSupport);
+}
+
+/** A spell slot's level from its pool id (`slot-3` → 3). */
+const slotLevelOf = (resourceId: string | undefined) => (resourceId && /^slot-\d$/.test(resourceId) ? Number(resourceId.slice(5)) : undefined);
+
+/**
+ * Each on-hit option the creature has (a smite spell, Eldritch Smite, a goliath's boon) as a variant of every attack it
+ * can follow: "Longsword (Divine Smite)". One that spends a spell slot gets a variant for each slot level the creature
+ * has from its own up, its first damage growing by its upcast dice. Its riders form a group that lands together, the
+ * first carrying the cost (paid on a hit: `costPaidOnHit`), the bonus action and the once a turn.
+ */
+function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefinition[]): AttackActionDefinition[] {
+  const features = [...(definition.features ?? []), ...(definition.traits ?? [])].filter((feature) => !feature.optional || feature.enabled);
+  // A spell's: named for the spell ("Divine Smite (free)"), spending what the spell does (a slot, or a free cast's pool).
+  const options: Array<{ key: string; option: OnHitOption; spellLevel?: number }> = [
+    ...(definition.spells ?? [])
+      .filter((spell) => spell.onHit && spell.automationSupport !== "manual-only" && spell.automationSupport !== "unsupported")
+      .map((spell) => {
+        const cost = spell.onHit!.resourceCost ?? spell.resourceCost;
+        const slot = slotLevelOf(cost?.resourceId) !== undefined;
+        return {
+          key: spell.id,
+          option: { ...spell.onHit!, name: spell.name, ...(cost ? { resourceCost: cost } : {}), ...(slot ? {} : { upcast: undefined }) },
+          ...(slot ? { spellLevel: spell.level } : {})
+        };
+      }),
+    ...features.flatMap((feature) => (feature.effects ?? []).flatMap((effect, index) =>
+      (effect.kind === "on-hit-option" && feature.automationSupport !== "manual-only" ? [{ key: `${feature.id}:${index}`, option: effect.option }] : [])))
+  ];
+  if (!options.length) return [];
+  const attacks = listed.filter((action): action is AttackActionDefinition => action.kind === "attack" && action.actionType === "action"
+    && !isAttackVariant(action) && !action.item && !action.resourceCost && action.automationSupport === "full");
+  const slots = Object.entries(definition.resources ?? {}).filter(([, count]) => count > 0).map(([id]) => slotLevelOf(id)).filter((level): level is number => level !== undefined);
+  const out: AttackActionDefinition[] = [];
+  options.forEach(({ key, option, spellLevel }, optionIndex) => {
+    const base = spellLevel ?? slotLevelOf(option.resourceCost?.resourceId);
+    // A slot-spending option: a variant per slot level it can use (only its own without upcast dice).
+    const levels: Array<number | undefined> = base !== undefined && (spellLevel !== undefined || option.resourceCost)
+      ? [...new Set(slots)].filter((level) => level >= base && (option.upcast || level === base)).sort((a, b) => a - b)
+      : [undefined];
+    for (const attack of attacks) {
+      if (option.attackTypes && !option.attackTypes.includes(attack.attackType)) continue;
+      if (option.weaponOnly && attack.attackType === "spell") continue;
+      if (option.actionIds && !option.actionIds.includes(attack.id)) continue;
+      levels.forEach((level, levelIndex) => {
+        const cost = level !== undefined ? { resourceId: `slot-${level}`, amount: 1 } : option.resourceCost;
+        const extra = level !== undefined && base !== undefined && option.upcast && level > base ? repeatDice(option.upcast.damageDice, level - base) : "";
+        const once = option.oncePerTurn || option.bonusAction;
+        let grown = false;
+        const riders = option.riders.map((rider, index): ActionRider => {
+          if (rider.kind === "note") return rider;
+          let next = { ...rider, id: `${key}:on-hit-${index + 1}`, group: key, ...(once ? { oncePerTurn: true, onceKey: `${key}:${index + 1}` } : {}) } as ActionRider;
+          if (index === 0) {
+            next = { ...next, ...(cost ? { resourceCost: cost } : {}), ...(option.bonusAction ? { economy: "bonus" as const } : {}) } as ActionRider;
+          }
+          if (extra && !grown && next.kind === "damage") {
+            grown = true;
+            next = { ...next, components: next.components.map((component, componentIndex) => (componentIndex === 0 ? { ...component, dice: `${component.dice}+${extra}` } : component)) };
+          }
+          return next;
+        });
+        out.push({
+          ...attack,
+          id: `${attack.id}:charged-${100 + optionIndex * 10 + levelIndex}`,
+          name: `${attack.name} (${option.name}${level !== undefined && level !== base ? `, level ${level}` : ""})`,
+          riders: [...(attack.riders ?? []), ...riders],
+          ...(cost ? { resourceCost: cost, costPaidOnHit: true } : {})
+        });
+      });
+    }
+  });
+  return out;
 }
 
 /**
@@ -4910,10 +4983,13 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
     if (available < action.resourceCost.amount) {
       throw new Error(`${combatant.displayName} lacks ${action.resourceCost.resourceId}`);
     }
-    combatant.resources = {
-      ...(combatant.resources ?? {}),
-      [action.resourceCost.resourceId]: available - action.resourceCost.amount
-    };
+    // An on-hit upgrade's cost is its rider's, paid when it lands.
+    if (!(action.kind === "attack" && action.costPaidOnHit)) {
+      combatant.resources = {
+        ...(combatant.resources ?? {}),
+        [action.resourceCost.resourceId]: available - action.resourceCost.amount
+      };
+    }
   }
   if (slot !== "free") {
     combatant.actionEconomy[slot] = false;
@@ -5083,8 +5159,10 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
       // Surface the rider's cost on the action itself so the AI's existing
       // resourceCost-based affordability filter / scoring penalty (which only
       // ever looks at the action's own `resourceCost`) sees this variant as
-      // costing something, and won't offer it when unaffordable.
-      resourceCost: rider.resourceCost
+      // costing something, and won't offer it when unaffordable. The rider pays
+      // it, on a hit; the attack itself doesn't (`costPaidOnHit`).
+      resourceCost: rider.resourceCost,
+      costPaidOnHit: true
     })));
     out.push(...upgraded);
   }
@@ -5718,6 +5796,7 @@ function riderGatePasses(gate: RiderGate, ctx: RiderContext): boolean {
 }
 
 function riderUseKey(actionId: Id, rider: ActionRider, index: number): string {
+  if (rider.onceKey) return rider.onceKey;
   const explicit = "id" in rider && typeof rider.id === "string" ? rider.id : String(index);
   return `${actionId}:${explicit}`;
 }
@@ -6044,13 +6123,25 @@ function applyActionRiders(
     return outcome;
   }
   const targetDefinition = getDefinition(state.snapshot, target);
+  // Groups whose riders stopped landing (see `ActionRider.group`).
+  const stopped = new Set<string>();
 
   riders.forEach((rider, index) => {
     if (rider.kind === "note" || !riderGatePasses(rider.when, ctx)) {
       return;
     }
+    if (rider.group && stopped.has(rider.group)) {
+      return;
+    }
+    const stop = () => { if (rider.group) stopped.add(rider.group); };
     const useKey = riderUseKey(ctx.actionId, rider, index);
     if (rider.oncePerTurn && wasRiderUsedThisTurn(state, source.id, useKey)) {
+      stop();
+      return;
+    }
+    // A smite takes the bonus action: none left, no smite.
+    if (rider.economy === "bonus" && source.actionEconomy?.bonus === false) {
+      stop();
       return;
     }
     if (!riderAffectsCreatureType(rider, targetDefinition)) {
@@ -6063,9 +6154,14 @@ function applyActionRiders(
         state.log.push(event(state, "AutomationWarning",
           `${source.displayName} has no ${rider.resourceCost.resourceId} left for ${rider.kind} on ${ctx.actionId}`,
           { sourceId: source.id, actionId: ctx.actionId, riderUseKey: useKey }));
+        stop();
         return;
       }
       source.resources = { ...(source.resources ?? {}), [rider.resourceCost.resourceId]: held - rider.resourceCost.amount };
+    }
+    if (rider.economy === "bonus") {
+      source.actionEconomy ??= { action: true, bonus: true, reaction: true };
+      source.actionEconomy.bonus = false;
     }
 
     if (rider.kind === "damage") {

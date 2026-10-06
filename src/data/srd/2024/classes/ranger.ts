@@ -93,7 +93,7 @@ export const RANGER: ClassDefinition = {
     epicBoon: "srd:feat:boon-of-dimensional-travel",
     equipment: "A",
     cantrips: ["starry-wisp", "guidance"].map(spell),
-    spells: ["cure-wounds", "entangle", "spike-growth", "gust-of-wind", "aid", "stoneskin", "dominate-beast"].map(spell)
+    spells: ["ensnaring-strike", "cure-wounds", "entangle", "spike-growth", "gust-of-wind", "aid", "stoneskin", "dominate-beast"].map(spell)
   },
   description: "A wandering warrior who hunts with weapon and spell."
 };
