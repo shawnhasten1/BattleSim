@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomebrewWindow } from "@/components/homebrew/HomebrewWindow";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
 import type { Compendium } from "@/hooks/useCompendium";
-import { quickBuild, readBuild, type CatalogEntry, type ClassDefinition } from "@/lib/character-builder";
+import { quickBuild, readBuild, type CatalogEntry, type ClassDefinition, type SubclassDefinition } from "@/lib/character-builder";
 import { useCatalogStore } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
 
@@ -42,7 +42,7 @@ describe("the Homebrew window", { timeout: 30000 }, () => {
   it("makes a class: its basics, a table column, a level 1 feature from the ability editor with a pool that follows the column", async () => {
     render(<HomebrewWindow onClose={() => undefined} />);
     const window = screen.getByRole("dialog", { name: "Homebrew" });
-    await userEvent.click(within(window).getByRole("button", { name: /New class/ }));
+    await userEvent.selectOptions(within(window).getByLabelText("New entry"), "class");
     const name = within(window).getByLabelText("Name");
     await userEvent.clear(name);
     await userEvent.type(name, "Gunslinger");
@@ -99,7 +99,7 @@ describe("the Homebrew window", { timeout: 30000 }, () => {
     expect(within(window).getByText("Not saved yet")).toBeTruthy();
 
     // Leaving it asks first.
-    await userEvent.click(within(window).getByRole("button", { name: /New class/ }));
+    await userEvent.selectOptions(within(window).getByLabelText("New entry"), "class");
     expect(within(window).getByRole("alert").textContent).toMatch(/unsaved changes/);
     await userEvent.click(within(window).getByRole("button", { name: "Keep editing" }));
     expect((within(window).getByLabelText("Name") as HTMLInputElement).value).toBe("Rogue (homebrew)");
@@ -134,5 +134,89 @@ describe("the Homebrew window", { timeout: 30000 }, () => {
     render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
     await userEvent.click(screen.getByRole("tab", { name: "Character" }));
     expect(within(screen.getByLabelText("Class")).getByRole("option", { name: "Cutpurse (Homebrew)" })).toBeTruthy();
+  });
+});
+
+/** Makes a new entry of a kind in the open window, names it, and returns the window. */
+async function newEntry(kind: string, name: string) {
+  const window = screen.getByRole("dialog", { name: "Homebrew" });
+  await userEvent.selectOptions(within(window).getByLabelText("New entry"), kind);
+  const field = within(window).getByLabelText("Name");
+  await userEvent.clear(field);
+  await userEvent.type(field, name);
+  return window;
+}
+
+/** Adds a feature at a level (or to a feat) through the ability editor. */
+async function addFeature(window: HTMLElement, name: string, level?: string) {
+  if (level) await userEvent.click(within(window).getByRole("button", { name: level }));
+  await userEvent.click(within(window).getAllByRole("button", { name: "+ Feature" })[0]!);
+  const editor = within(screen.getByRole("dialog", { name: "Homebrew" })).getByRole("region", { name: /Edit/ });
+  const field = within(editor).getByLabelText("Name");
+  await userEvent.clear(field);
+  await userEvent.type(field, name);
+  await userEvent.click(within(editor).getByRole("button", { name: "Done" }));
+}
+
+async function saveOpen(window: HTMLElement, name: string) {
+  await userEvent.click(within(window).getByRole("button", { name: /^Save/ }));
+  await within(window).findByText(new RegExp(`Saved ${name}`));
+}
+
+describe("the Homebrew window's other editors (Phase 8c)", { timeout: 30000 }, () => {
+  it("makes a third-caster subclass for the SRD Rogue, which a rogue then takes", async () => {
+    render(<HomebrewWindow onClose={() => undefined} />);
+    const window = await newEntry("subclass", "Shadow Arcanist");
+    await userEvent.selectOptions(within(window).getByLabelText("Class"), "srd:class:rogue");
+    await userEvent.click(within(window).getByRole("button", { name: "+ Spellcasting" }));
+    await userEvent.selectOptions(within(window).getByLabelText("Spell slots"), "third");
+    for (let level = 3; level <= 20; level += 1) {
+      fireEvent.change(within(window).getByLabelText(`Cantrips known, level ${level}`), { target: { value: "3" } });
+      fireEvent.change(within(window).getByLabelText(`Spells prepared, level ${level}`), { target: { value: String(Math.min(13, level)) } });
+    }
+    await addFeature(window, "Veil Step", "Level 3");
+    await saveOpen(window, "Shadow Arcanist");
+
+    const saved = posted[0] as { kind: string; entry: SubclassDefinition };
+    expect(saved).toMatchObject({ kind: "subclass", entry: { classId: "srd:class:rogue", spellcasting: { kind: "third", ability: "int", list: "wizard" } } });
+    const sources = useCatalogStore.getState().sources;
+    const build = quickBuild(sources, { classId: "srd:class:rogue", level: 5 });
+    const chosen = { ...build, levels: build.levels.map((entry, index) => (index === 2 ? { ...entry, choices: { ...entry.choices, subclass: saved.entry.id } } : entry)) };
+    const id = useEncounterStore.getState().createCharacter({ name: "Nyx", build: chosen });
+    const nyx = useEncounterStore.getState().encounter.definitions.find((definition) => definition.id === id)!;
+    expect(nyx.features?.some((feature) => feature.name === "Veil Step")).toBe(true);
+    expect(nyx.resources?.["slot-1"]).toBeGreaterThan(0);
+  });
+
+  it("makes an origin feat, a background that gives it, and a species", async () => {
+    render(<HomebrewWindow onClose={() => undefined} />);
+    let window = await newEntry("feat", "Lucky Charm");
+    await userEvent.selectOptions(within(window).getByLabelText("Category"), "origin");
+    await addFeature(window, "Charm");
+    await saveOpen(window, "Lucky Charm");
+
+    window = await newEntry("background", "Wanderer");
+    const feat = (posted[0] as { entry: { id: string } }).entry.id;
+    expect(within(within(window).getByLabelText("Origin feat")).getByRole("option", { name: "Lucky Charm (Homebrew)" })).toBeTruthy();
+    await userEvent.selectOptions(within(window).getByLabelText("Origin feat"), feat);
+    const skills = within(window).getByRole("group", { name: "Skills" });
+    await userEvent.click(within(skills).getByRole("checkbox", { name: "Survival" }));
+    await userEvent.click(within(skills).getByRole("checkbox", { name: "Perception" }));
+    await saveOpen(window, "Wanderer");
+
+    window = await newEntry("species", "Tallfolk");
+    fireEvent.change(within(window).getByLabelText("Speed"), { target: { value: "35" } });
+    await addFeature(window, "Long Stride", "Character level 1");
+    await saveOpen(window, "Tallfolk");
+
+    const sources = useCatalogStore.getState().sources;
+    const background = sources.catalog.backgrounds.find((entry) => entry.name === "Wanderer")!;
+    const species = sources.catalog.species.find((entry) => entry.name === "Tallfolk")!;
+    expect(background).toMatchObject({ feat, skills: ["perception", "survival"] });
+    const id = useEncounterStore.getState().createCharacter({ name: "Wren", build: quickBuild(sources, { classId: "srd:class:fighter", level: 1, backgroundId: background.id, speciesId: species.id }) });
+    const wren = useEncounterStore.getState().encounter.definitions.find((definition) => definition.id === id)!;
+    const names = (wren.features ?? []).map((feature) => feature.name);
+    expect(names).toEqual(expect.arrayContaining(["Charm", "Long Stride"]));
+    expect(wren.speed).toBe(35);
   });
 });

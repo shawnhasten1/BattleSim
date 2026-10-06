@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Copy, Download, FilePlus2, Save, Trash2, Upload } from "lucide-react";
+import { Copy, Download, Save, Trash2, Upload } from "lucide-react";
 import type { FeatureDefinition } from "@/engine";
 import {
   blankEntry,
@@ -15,6 +15,7 @@ import {
   missingFor,
   previewCharacter,
   readCatalogFile,
+  type Catalog,
   type CatalogEntry,
   type CatalogKind,
   type ClassTableColumn
@@ -27,6 +28,7 @@ import { AbilityEditor } from "@/components/sheet/ability-editor/AbilityEditor";
 import { useCatalogStore } from "@/store/catalog-store";
 import { ClassEditor } from "./ClassEditor";
 import { HomebrewContext, type HomebrewContextValue } from "./controls";
+import { BackgroundEditor, FeatEditor, SpeciesEditor, SubclassEditor } from "./OtherEditors";
 import styles from "./homebrew.module.css";
 
 /** A feature open in the ability editor, and where it goes back to. */
@@ -41,13 +43,11 @@ type Message = { error?: boolean; text: string; details?: string[] };
 
 const key = (item: CatalogEntry) => `${item.kind}|${item.entry.id}`;
 
-/** The kinds this window can make and edit so far. */
-const EDITABLE: CatalogKind[] = ["class"];
 
 /**
- * The Homebrew window (PC builder plan, Phase 8b): the account's own classes (and in time subclasses, feats, backgrounds
- * and species) beside the SRD's. Make one, copy an SRD one, import or export a file; each is edited as a draft and
- * saved to the account, and every character built from it levels with the saved version.
+ * The Homebrew window (PC builder plan, Phases 8b and 8c): the account's own classes, subclasses, feats, backgrounds and
+ * species beside the SRD's. Make one, copy an SRD one, import or export a file; each is edited as a draft and saved to
+ * the account, and every character built from it levels with the saved version.
  */
 export function HomebrewWindow({ onClose }: { onClose: () => void }) {
   const entries = useCatalogStore((s) => s.entries);
@@ -174,16 +174,22 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
         {featureEditor}
         <div className={styles.window} hidden={Boolean(featureEditor)}>
           <nav className={styles.side} aria-label="Homebrew entries">
-            <div className={styles.row}>
-              {EDITABLE.map((kind) => (
-                <button
-                  key={kind} type="button" className={styles.btn}
-                  onClick={() => leave(() => openEntry(blankEntry(kind, `New ${CATALOG_KIND_LABELS[kind].toLowerCase()}`, taken), null))}
-                >
-                  <FilePlus2 size={12} /> New {CATALOG_KIND_LABELS[kind].toLowerCase()}
-                </button>
-              ))}
-            </div>
+            <label className={styles.field}>
+              New
+              <select
+                value="" aria-label="New entry"
+                onChange={(event) => {
+                  const kind = event.target.value as CatalogKind;
+                  if (!kind) return;
+                  // A new subclass starts on the class open now, or the first class.
+                  const classId = draft?.kind === "class" ? draft.entry.id : draft?.kind === "subclass" ? draft.entry.classId : undefined;
+                  leave(() => openEntry(blankEntry(kind, `New ${CATALOG_KIND_LABELS[kind].toLowerCase()}`, taken, classId ?? sources.catalog.classes[0]?.id), null));
+                }}
+              >
+                <option value="">Make a new…</option>
+                {CATALOG_KINDS.map((kind) => <option key={kind} value={kind}>{CATALOG_KIND_LABELS[kind]}</option>)}
+              </select>
+            </label>
             <label className={styles.field}>
               Copy an SRD entry
               <select
@@ -195,7 +201,7 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
                 }}
               >
                 <option value="">Choose…</option>
-                {EDITABLE.map((kind) => (
+                {CATALOG_KINDS.map((kind) => (
                   <optgroup key={kind} label={CATALOG_KIND_LABELS[kind]}>
                     {srdOfKind(kind).map((item) => <option key={item.entry.id} value={`${kind}|${item.entry.id}`}>{item.entry.name}</option>)}
                   </optgroup>
@@ -275,15 +281,17 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
                       <button type="button" className={styles.link} onClick={() => setLeaving(null)}>Keep editing</button>
                     </p>
                   ) : null}
-                  <EntryEditor item={draft} onChange={setDraft} />
+                  <EntryEditor item={draft} catalog={sources.catalog} onChange={setDraft} />
                 </div>
               </>
             ) : (
               <div className={styles.body}>
                 <Notices message={message} problems={null} onDismiss={() => setMessage(null)} />
                 <p className={styles.dim}>
-                  Your own classes, beside the SRD&apos;s: make one, copy an SRD class to change, or import a file. A class saved
-                  here is offered in Create Token&apos;s Character tab and in the builder, and its characters level up with it.
+                  Your own classes, subclasses, feats, backgrounds and species, beside the SRD&apos;s: make one, copy an SRD one
+                  to change, or import a file. What you save here is offered in Create Token&apos;s Character tab and in the
+                  builder, and characters built from it level up with it. A subclass can go on an SRD class (an Arcane
+                  Trickster on the Rogue).
                 </p>
                 <p className={styles.dim}>
                   <Copy size={12} /> Copying an SRD class is the quickest start for a variant: it keeps every feature, and you
@@ -323,11 +331,17 @@ function Notices({ message, problems, onDismiss }: { message: Message | null; pr
   );
 }
 
-function EntryEditor({ item, onChange }: { item: CatalogEntry; onChange: (next: CatalogEntry) => void }) {
+function EntryEditor({ item, catalog, onChange }: { item: CatalogEntry; catalog: Catalog; onChange: (next: CatalogEntry) => void }) {
   switch (item.kind) {
     case "class":
       return <ClassEditor entry={item.entry} onChange={(entry) => onChange({ kind: "class", entry })} />;
-    default:
-      return <p className={styles.dim}>This {CATALOG_KIND_LABELS[item.kind].toLowerCase()} can be exported or deleted here; its editor comes next.</p>;
+    case "subclass":
+      return <SubclassEditor entry={item.entry} classes={catalog.classes} onChange={(entry) => onChange({ kind: "subclass", entry })} />;
+    case "feat":
+      return <FeatEditor entry={item.entry} onChange={(entry) => onChange({ kind: "feat", entry })} />;
+    case "background":
+      return <BackgroundEditor entry={item.entry} feats={catalog.feats} onChange={(entry) => onChange({ kind: "background", entry })} />;
+    case "species":
+      return <SpeciesEditor entry={item.entry} onChange={(entry) => onChange({ kind: "species", entry })} />;
   }
 }
