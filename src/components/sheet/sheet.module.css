@@ -856,3 +856,26 @@
 .linkBtn:hover {
   color: var(--ui-accent);
 }
+
+/* ── the sheet's frame content: the same body in a window in the page or popped out ── */
+
+/* Where a frame holds the body, and the body itself: a column that fills the frame. */
+.frameSlot,
+.frameContent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The vitals, tabs and any "Save your changes?" prompt: always in view. */
+.frameHead {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.frameScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

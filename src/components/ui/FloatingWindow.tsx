@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, X } from "lucide-react";
+import { ExternalLink, Minus, X } from "lucide-react";
 import { useEffect, useRef, type DragEvent, type ReactNode } from "react";
 import { useFloatingWindow, useWindowResize, type ResizeLimits } from "@/hooks/useFloatingWindow";
 import styles from "./FloatingWindow.module.css";
@@ -29,6 +29,13 @@ interface FloatingWindowProps {
    * it's first resized, it's `width` wide and as tall as its content.
    */
   resizable?: ResizeLimits;
+  /** Shows a Pop out control in the title bar (a sheet moving to a browser window of its own). */
+  onPopOut?: () => void;
+  /**
+   * The body scrolls (the default), or it's a fixed column that fills the window and its content scrolls itself (the
+   * sheet keeps its vitals and tabs in view that way).
+   */
+  scrollBody?: boolean;
   /** Rendered in the title bar between the title and the window controls. */
   headerExtra?: ReactNode;
   /** Rendered under the title bar, above the scrolling body, so it stays in view (the sheet's vitals and tabs). */
@@ -62,6 +69,8 @@ export function FloatingWindow({
   zIndex,
   onFocus,
   resizable,
+  onPopOut,
+  scrollBody = true,
   headerExtra,
   subheader,
   onDragOver,
@@ -111,6 +120,11 @@ export function FloatingWindow({
       <header className={styles.titleBar} {...titleBarProps}>
         <span className={styles.title}>{title}</span>
         {headerExtra}
+        {onPopOut ? (
+          <button type="button" className={styles.ctrl} onClick={onPopOut} aria-label="Pop out" title="Pop out into a window of its own">
+            <ExternalLink size={13} />
+          </button>
+        ) : null}
         <button type="button" className={styles.ctrl} onClick={toggleMinimize} aria-label={minimized ? "Expand" : "Minimize"}>
           <Minus size={13} />
         </button>
@@ -120,7 +134,7 @@ export function FloatingWindow({
       </header>
       {subheader ? <div className={styles.subheader} hidden={minimized}>{subheader}</div> : null}
       {/* Hidden, not unmounted: minimizing mustn't throw away what's open inside (an ability being edited). */}
-      <div className={styles.body} hidden={minimized}>{children}</div>
+      <div className={scrollBody ? styles.body : styles.column} hidden={minimized}>{children}</div>
       {resizable && !minimized ? <div className={styles.grip} aria-hidden="true" {...gripProps} /> : null}
     </div>
   );

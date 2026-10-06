@@ -485,3 +485,31 @@ Chromium-only):
   `document.activeElement`, `document.add/removeEventListener` and `window.add/removeEventListener` in `sheet/**` and
   `ui/**` without `// main-window only`. With the old `ContextMenu` swapped back in, three of them fail. Full suite:
   249 files, 2777 tests.
+
+### Phase 4 (2026-10-06)
+
+- **`PopoutWindow`** (from the spike), plus `popupBounds` and **`PopoutFrame`**. The frame's bar holds the title, the
+  sheet's controls (automation count, ⋯, info), Undo, Redo and Dock, and it reports a press inside as focus.
+  `openPopup` copies the main page's stylesheets and `<html>` classes. A `MutationObserver` mirrors stylesheets added
+  or removed later. The popup's `<html>` and `<body>` get the app's background and a dark `color-scheme`.
+- **Where the build differs: a relocatable body.** Switching frames would remount the sheet's body and lose an ability
+  being edited, so the "dock back so nothing is lost" rule needed more than the plan said. `src/components/ui/
+  Relocatable.tsx` makes a node (`useRelocatable`) that the body is portalled into once. Each frame holds it in a
+  `RelocatableSlot`, which moves the node in as it mounts. React listens on a portal's container, so events keep
+  arriving after the node moves into the popup's document. The body's `OwnerDocumentContext` is the popup's document
+  while popped out, and otherwise whatever it inherits. `FloatingWindow` gained `onPopOut` (a Pop out control in its
+  title bar) and `scrollBody={false}` (a column the body fills; the sheet's vitals and tabs stay put and its content
+  scrolls below them).
+- **Closing:** Dock and every in-page close unmount `PopoutWindow`, which closes the popup a tick later (Strict Mode
+  safe) and saves its size and position first (`popup:sheet-<style>`). The DM closing the popup docks the sheet if its
+  editor has unsaved changes, and closes it otherwise. The main page's `pagehide` closes every popup.
+- **Builder windows:** a popped-out sheet in front that sees a builder or Homebrew window open says "Opened in the main
+  window."
+- **Tests:** `tests/popout-window.test.tsx` (14). `window.open` is stubbed with a second happy-dom window, which
+  covers `openPopup` (features, title, classes, stylesheets, blocked), the stylesheet mirror, both kinds of close, the
+  main page going, pop out and Dock keeping the tab, an unsaved ability edit kept through pop out and Dock, closing
+  with unsaved changes docking, edits from the popup with its Undo, the builder toast, and a scene change closing the
+  popup. Full suite: 250 files, 2791 tests. Browser (Playwright, Chromium and Firefox, 14 checks each): two sheets
+  popped out at once and titled, an HP edit in a popup reaching the map's health bar and Undo there taking it back,
+  menus and conditions in the popup, an unsaved edit through Dock and a second pop out, closing with unsaved changes
+  docking, the next popup opening at the last one's size, and a reload closing the popups.

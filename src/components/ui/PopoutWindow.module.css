@@ -1,0 +1,82 @@
+/* A popped-out window's frame: it fills the browser window. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(var(--ui-panel), var(--ui-panel)), var(--ui-bg);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: 13px;
+}
+
+.frame.dropActive {
+  box-shadow: inset 0 0 0 2px var(--ui-accent);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background: var(--ui-panel-2);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title span {
+  font-weight: 400;
+  color: var(--ui-text-dim);
+}
+
+.ctrl {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.ctrl:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ui-text);
+}
+
+.dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dock:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

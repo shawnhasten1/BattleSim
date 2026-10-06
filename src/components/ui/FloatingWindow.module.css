@@ -76,6 +76,18 @@
   overflow-y: auto;
 }
 
+/* A body that doesn't scroll itself: a column its content fills (and scrolls within). */
+.column {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.column[hidden] {
+  display: none;
+}
+
 /* The corner grip of a resizable window: two short diagonal strokes. */
 .grip {
   position: absolute;

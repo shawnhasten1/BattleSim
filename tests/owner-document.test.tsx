@@ -106,7 +106,8 @@ describe("window globals in sheet and UI code", () => {
   // Inside a popped-out sheet these still mean the main window (CHARACTER_SHEET_WINDOWS_PLAN.md Part 2): code there
   // uses the owner document (useOwnerDocument, or an element's ownerDocument) instead. A line that really means the
   // main window says so with "// main-window only".
-  const PATTERN = /\bdocument\.(body|activeElement|addEventListener|removeEventListener)\b|\bwindow\.(addEventListener|removeEventListener)\b/;
+  // The globals themselves, not another window's (`popup.document.body`).
+  const PATTERN = /(?<![.\w])document\.(body|activeElement|addEventListener|removeEventListener)\b|(?<![.\w])window\.(addEventListener|removeEventListener)\b/;
   const roots = ["src/components/sheet", "src/components/ui"];
 
   function files(dir: string): string[] {

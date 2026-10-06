@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { getDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
 import type { CompendiumDragPayload } from "@/lib/compendium";
@@ -9,6 +10,11 @@ import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
+import { openPopup, PopoutFrame, PopoutWindow, type PopupBounds } from "@/components/ui/PopoutWindow";
+import { RelocatableSlot, useRelocatable } from "@/components/ui/Relocatable";
+import { OwnerDocumentContext } from "@/hooks/useOwnerDocument";
+import { readJson, writeJson } from "@/lib/persist";
+import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useEncounterStore } from "@/store/encounter-store";
 import { shownDefinitionId, useSheetWindowsStore, type SheetWindow } from "@/store/sheet-windows-store";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
@@ -21,9 +27,12 @@ import { StatsTab } from "./sheet-tabs/StatsTab";
 import { ActionsTab } from "./sheet-tabs/ActionsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
 import abilityStyles from "./abilities/abilities.module.css";
+import styles from "./sheet.module.css";
 
 /** How small (and how wide) a sheet window can be made. */
 const SHEET_LIMITS = { minWidth: 560, minHeight: 320, maxWidth: 1400 };
+/** A popped-out sheet's first size, until one has been popped out and sized (then that's remembered, per style). */
+const POPUP_SIZE: PopupBounds = { width: 760, height: 900 };
 
 /**
  * One sheet window (CHARACTER_SHEET_WINDOWS_PLAN.md): a creature, edited for every token of it, with one of its tokens
@@ -56,7 +65,17 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const showToken = useSheetWindowsStore((s) => s.showToken);
   const setDirty = useSheetWindowsStore((s) => s.setDirty);
   const notePosition = useSheetWindowsStore((s) => s.notePosition);
+  const popOutWindow = useSheetWindowsStore((s) => s.popOut);
+  const dockWindow = useSheetWindowsStore((s) => s.dock);
+  const undo = useEncounterStore((s) => s.undo);
+  const redo = useEncounterStore((s) => s.redo);
   const tab = sheet.tab;
+  const popup = sheet.popup;
+  // The body, rendered once into a node that the frames take turns holding, so popping out or docking keeps what's open
+  // inside (an ability being edited) as it was.
+  const holder = useRelocatable(styles.frameContent);
+  // The document this window is in when it isn't popped out (the main page's, unless a test puts it elsewhere).
+  const inheritedDocument = useContext(OwnerDocumentContext);
   const [dropActive, setDropActive] = useState(false);
   const [toast, setToast] = useState<SheetToast | null>(null);
   // An ability the Token tab asked to open: the Abilities tab opens it in the editor as it mounts.
@@ -100,6 +119,15 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     const timer = window.setTimeout(() => setToast(null), 8000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+  // The builder and Homebrew windows open in the main page: a popped-out sheet that opened one says so.
+  const builderWindow = useBuilderUiStore((s) => s.window);
+  const homebrewOpen = useBuilderUiStore((s) => s.homebrew);
+  const seenBuilder = useRef({ builderWindow, homebrewOpen });
+  useEffect(() => {
+    const opened = (builderWindow !== null && builderWindow !== seenBuilder.current.builderWindow) || (homebrewOpen && !seenBuilder.current.homebrewOpen);
+    seenBuilder.current = { builderWindow, homebrewOpen };
+    if (opened && popup && front) setToast({ message: "Opened in the main window." });
+  }, [builderWindow, homebrewOpen, popup, front]);
 
   // Its token, or (gone a moment before the host moves the window on) another token of its creature.
   const combatant = encounter.combatants.find((candidate) => candidate.id === sheet.combatantId)
@@ -170,84 +198,136 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     : combatant.displayName === definition.name
       ? definition.name
       : <>{combatant.displayName} <span>· {definition.name}</span></>;
+  const titleText = tokens.length > 1
+    ? `${definition.name} · ${tokens.length} tokens`
+    : combatant.displayName === definition.name ? definition.name : `${combatant.displayName} · ${definition.name}`;
 
-  return (
-    <FloatingWindow
-      title={title}
-      ariaLabel={`${definition.name} sheet`}
-      width={680}
-      resizable={SHEET_LIMITS}
-      initialPosition={sheet.origin}
-      storageKey={`sheet-${sheet.style}`}
-      restorePosition={false}
-      onMove={(position) => notePosition(sheet.id, position)}
-      zIndex={rank}
-      onFocus={() => focusWindow(sheet.id)}
-      onClose={() => attempt(() => closeWindow(sheet.id))}
-      headerExtra={
-        <>
-          <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
-          <SheetMenu
-            combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
-            onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
-            onShowToken={switchToken}
+  /** Into a browser window of its own (Part 2), where the last one of this style was, or a message if it was blocked. */
+  function popOut() {
+    const bounds = readJson<PopupBounds>(`popup:sheet-${sheet.style}`, POPUP_SIZE);
+    const opened = openPopup(`battlesim-${sheet.id}`, bounds, `${titleText} — BattleSim`);
+    if (!opened) {
+      setToast({ message: "Your browser blocked the pop-out. Allow pop-ups for this site and try again." });
+      return;
+    }
+    popOutWindow(sheet.id, opened);
+  }
+
+  /** The DM closed the browser window: a sheet with unsaved changes comes back into the page, any other closes. */
+  function onPopupClosed() {
+    if (guardRef.current?.dirty) dockWindow(sheet.id);
+    else closeWindow(sheet.id);
+  }
+
+  const controls = (
+    <>
+      <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
+      <SheetMenu
+        combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
+        onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
+        onShowToken={switchToken}
+      />
+      <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
+    </>
+  );
+
+  const body = holder ? createPortal(
+    // Menus and tooltips inside open in the sheet's own document: the popup's while it's popped out.
+    <OwnerDocumentContext.Provider value={popup ? popup.document : inheritedDocument}>
+      <div className={styles.frameHead}>
+        <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
+        <ScopedTabs
+          tab={tab} onSelect={(next) => attempt(() => setTab(next))}
+          creature={definition.name} creatureCaption={scope.caption} creatureHelp={scope.help} token={combatant.displayName}
+        />
+        {pending ? (
+          <UnsavedPrompt
+            message={`Save your changes to ${editorLabel || "this ability"} first?`}
+            onSave={() => {
+              const run = pending;
+              setPending(null);
+              if (guardRef.current?.save() !== false) run();
+            }}
+            onDiscard={() => {
+              const run = pending;
+              setPending(null);
+              guardRef.current?.discard();
+              run();
+            }}
+            onKeep={() => setPending(null)}
           />
-          <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
-        </>
-      }
-      subheader={
-        <>
-          <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
-          <ScopedTabs
-            tab={tab} onSelect={(next) => attempt(() => setTab(next))}
-            creature={definition.name} creatureCaption={scope.caption} creatureHelp={scope.help} token={combatant.displayName}
-          />
-          {pending ? (
-            <UnsavedPrompt
-              message={`Save your changes to ${editorLabel || "this ability"} first?`}
-              onSave={() => {
-                const run = pending;
-                setPending(null);
-                if (guardRef.current?.save() !== false) run();
-              }}
-              onDiscard={() => {
-                const run = pending;
-                setPending(null);
-                guardRef.current?.discard();
-                run();
-              }}
-              onKeep={() => setPending(null)}
+        ) : null}
+      </div>
+      <div className={styles.frameScroll}>
+        <SheetGuardContext.Provider value={registry}>
+          {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
+          {/* Keyed by creature: an ability being edited must not carry over to another creature (made its own, or a new form). */}
+          {tab === "abilities" ? (
+            <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
+          ) : null}
+          {tab === "token" ? (
+            <TokenTab
+              combatant={combatant} definition={definition}
+              onOpenAbility={(ref) => attempt(() => { setOpenFirst(ref); setTab("abilities"); })}
             />
           ) : null}
-        </>
-      }
-      dropActive={dropActive}
-      onDragOver={onDragOver}
-      onDragLeave={() => setDropActive(false)}
-      onDrop={onDrop}
-    >
-      <SheetGuardContext.Provider value={registry}>
-        {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
-        {/* Keyed by creature: an ability being edited must not carry over to another creature (made its own, or a new form). */}
-        {tab === "abilities" ? (
-          <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
+        </SheetGuardContext.Provider>
+        {toast ? (
+          // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.
+          <div className={abilityStyles.toast} role="status">
+            <span>{toast.message}</span>
+            {toast.undo ? (
+              <button type="button" onClick={() => { toast.undo!(); setToast(null); }}>Undo</button>
+            ) : null}
+          </div>
         ) : null}
-        {tab === "token" ? (
-          <TokenTab
-            combatant={combatant} definition={definition}
-            onOpenAbility={(ref) => attempt(() => { setOpenFirst(ref); setTab("abilities"); })}
-          />
-        ) : null}
-      </SheetGuardContext.Provider>
-      {toast ? (
-        // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.
-        <div className={abilityStyles.toast} role="status">
-          <span>{toast.message}</span>
-          {toast.undo ? (
-            <button type="button" onClick={() => { toast.undo!(); setToast(null); }}>Undo</button>
-          ) : null}
-        </div>
-      ) : null}
-    </FloatingWindow>
+      </div>
+    </OwnerDocumentContext.Provider>,
+    holder
+  ) : null;
+
+  if (popup) {
+    return (
+      <>
+        {body}
+        <PopoutWindow popup={popup} title={`${titleText} — BattleSim`} onClosed={onPopupClosed} onBounds={(bounds) => writeJson(`popup:sheet-${sheet.style}`, bounds)}>
+          <PopoutFrame
+            title={title} ariaLabel={`${definition.name} sheet`} controls={controls}
+            onUndo={undo} onRedo={redo} onDock={() => dockWindow(sheet.id)} onFocus={() => focusWindow(sheet.id)}
+            dropActive={dropActive} onDragOver={onDragOver} onDragLeave={() => setDropActive(false)} onDrop={onDrop}
+          >
+            <RelocatableSlot node={holder} className={styles.frameSlot} />
+          </PopoutFrame>
+        </PopoutWindow>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {body}
+      <FloatingWindow
+        title={title}
+        ariaLabel={`${definition.name} sheet`}
+        width={680}
+        resizable={SHEET_LIMITS}
+        initialPosition={sheet.origin}
+        storageKey={`sheet-${sheet.style}`}
+        restorePosition={false}
+        onMove={(position) => notePosition(sheet.id, position)}
+        zIndex={rank}
+        onFocus={() => focusWindow(sheet.id)}
+        onClose={() => attempt(() => closeWindow(sheet.id))}
+        onPopOut={popOut}
+        scrollBody={false}
+        headerExtra={controls}
+        dropActive={dropActive}
+        onDragOver={onDragOver}
+        onDragLeave={() => setDropActive(false)}
+        onDrop={onDrop}
+      >
+        <RelocatableSlot node={holder} className={styles.frameSlot} />
+      </FloatingWindow>
+    </>
   );
 }
