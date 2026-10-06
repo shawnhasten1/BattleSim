@@ -6,6 +6,9 @@
  */
 
 /** The Abilities list's dots, which the sheet's title bar counts. */
+/** What every creature can do without anything on its sheet: the foot of the Abilities list, on Standard and the Codex. */
+export const STANDARD_ACTIONS = "Every creature can Dash · Disengage · Dodge · Hide · Help — no setup needed.";
+
 export const AUTOMATION_HELP = (
   <dl>
     <div>

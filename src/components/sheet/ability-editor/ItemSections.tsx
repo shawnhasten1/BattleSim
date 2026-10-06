@@ -11,6 +11,7 @@ import {
   potionTimingText,
   supplyIdOf,
   withArmor,
+  withAttuned,
   withDrinkTiming,
   withGiveTiming,
   withItemType,
@@ -91,7 +92,7 @@ function ItemBasics({ item, onChange }: { item: ItemDefinition; onChange: (next:
       <Check copy="itemMagical" checked={item.magical === true} onChange={(on) => onChange(opt(item, "magical", on ? true : undefined))} />
       <Check copy="itemAttunement" checked={Boolean(item.attunement)} onChange={(on) => onChange(opt(item, "attunement", on ? { attuned: true } : undefined))} />
       {item.attunement ? (
-        <Check copy="itemAttuned" checked={item.attunement.attuned} onChange={(attuned) => onChange({ ...item, attunement: { attuned } })} />
+        <Check copy="itemAttuned" checked={item.attunement.attuned} onChange={(attuned) => onChange(withAttuned(item, attuned))} />
       ) : null}
     </>
   );

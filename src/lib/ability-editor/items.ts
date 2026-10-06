@@ -25,6 +25,11 @@ export function withWorn(item: ItemDefinition, worn: boolean): ItemDefinition {
   return worn ? rest : { ...rest, equipped: false };
 }
 
+/** An item that needs attunement, attuned or not (until it's attuned, it does nothing): the editor's box and the Codex's pill. */
+export function withAttuned(item: ItemDefinition, attuned: boolean): ItemDefinition {
+  return { ...item, attunement: { attuned } };
+}
+
 export function drinkTiming(item: ItemDefinition): "action" | "bonus" {
   return item.grantedActions?.find(isDrinkUse)?.actionType === "bonus" ? "bonus" : "action";
 }

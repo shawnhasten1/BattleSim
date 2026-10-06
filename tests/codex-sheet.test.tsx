@@ -747,6 +747,29 @@ describe("the Token tab in the Codex", () => {
   });
 });
 
+describe("the rest of Standard's Abilities in the Codex", () => {
+  it("switches an item's attunement on its Items row, as the editor does", async () => {
+    store().insertAbilityRecord("def-fighter", "items", {
+      id: "", name: "Ring of Warmth", type: "worn", magical: true, attunement: { attuned: false }, automationSupport: "manual-only"
+    } as never);
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Items"));
+    const attuned = screen.getByRole("switch", { name: "Ring of Warmth attuned" });
+    expect(attuned.getAttribute("aria-checked")).toBe("false");
+    await userEvent.click(attuned);
+    expect(creature("def-fighter").items!.find((item) => item.name === "Ring of Warmth")!.attunement).toEqual({ attuned: true });
+    expect(screen.getByRole("switch", { name: "Ring of Warmth attuned" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("says what every creature can do, and what the dots mean", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const abilities = within(screen.getByRole("region", { name: /^Abilities/ }));
+    expect(abilities.getByText(/Every creature can Dash · Disengage · Dodge · Hide · Help/)).toBeTruthy();
+    expect(abilities.getByRole("button", { name: "About automation levels" })).toBeTruthy();
+  });
+});
+
 describe("Add ability in the Codex", () => {
   it("opens in the Codex, and a library row's + adds it at once", async () => {
     await openCodex("pc-fighter");

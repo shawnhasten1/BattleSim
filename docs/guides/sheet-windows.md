@@ -42,28 +42,37 @@ Click **Codex** in a sheet's title bar to show it as the Codex, a character shee
 
 ![A cleric's Codex, popped out](img/sheet-windows/03-popped-out.png)
 
-The Codex edits what you'd fill in on a paper sheet. It saves the same way Standard does, so the two never disagree.
+The Codex does everything Standard does, laid out like a paper sheet. It saves the same way Standard does, so the two never disagree, and you never need to switch to Standard to finish a job.
 
-- **The banner:** the name, what it is (class and subclass, species, background), and its alignment, which you can type. The dial shows its level, or a monster's challenge rating. A character made with the builder reads its level from the build, with **Level up…** and **Open in the builder…** beside it. A hand-made character's level can be typed into the dial.
-- **The sidebar:** the token's art, then armor class (worked out from worn armor, or typed when there's none), initiative, speed and proficiency. Below them are hit points and temp HP, hit dice and death saves.
+- **The banner:** the name, what it is (class and subclass, species, background), and its alignment, which you can type. The dial shows its level, or a monster's challenge rating. A character made with the builder reads its level from the build, with **Level up…** and **Open in the builder…** beside it. A hand-made character's level can be typed into the dial, and a monster's challenge rating picked in it (its proficiency follows, as on Stats).
+- **The sidebar:** the token's art, then armor class, initiative, speed and proficiency. When worn armor works out the AC, **AC without armor** is typed below the tiles. Proficiency can be typed over what its level gives (a built character's comes from its build). **Speeds** adds fly, swim, climb or burrow, with **hover** for a flier. Then hit points (the maximum can be typed too, and a token at full stays full), temp HP, hit dice and death saves.
 - **Ability dials:** type a score into a dial. The modifier is the copper pill below it.
 
 Below the dials are the tabs.
 
 - **Details:**
-  - **Skills,** with each one's bonus and passive score. Click a skill's box for proficiency, again for expertise, and once more to clear it.
-  - **Saving throws.** A save's box switches proficiency on or off. A dashed box is a number of its own (one typed on Standard).
-  - **Origin:** creature type, size, species, background and languages.
-  - **Defenses & conditions:** damage immunities, resistances and vulnerabilities, and the conditions it's immune to, each a tag. **×** takes a tag off, and the dashed "Add…" picks a new one. Its conditions right now are below, with **+ Condition**.
-- **Items:** weapons, armor and shields, consumables and gear. The box beside armor or a shield puts it on or takes it off, and the AC follows.
+  - **Skills,** with each one's bonus and passive score. Click a skill's box for proficiency, again for expertise, and once more to clear it. Or type a bonus as a statblock prints it (a dashed box is a number of its own), and clear it to go back.
+  - **Saving throws.** A save's box switches proficiency on or off, and its bonus can be typed in the same way.
+  - **Origin:** creature type, size, species, background, languages, senses (darkvision and the rest, in feet) and the source it came from.
+  - **Defenses & conditions:** damage immunities, resistances and vulnerabilities, and the conditions it's immune to, each a tag. **×** takes a tag off, and the dashed "Add…" picks a new one. **More defenses** opens Standard's full list, for one with a qualifier ("from nonmagical attacks") or damage it absorbs. Its conditions right now are below, with **+ Condition**.
+  - **Level & CR** (or **Class & level** for a character made with the builder): challenge rating, proficiency, caster level, a hand-made character's classes and **Rebuild with the builder…**, or **Level down**.
+- **Items:** weapons, armor and shields, consumables and gear. The box beside armor or a shield puts it on or takes it off, and the AC follows. **Attuned** switches attunement for an item that needs it.
 
 ![The Items tab](img/sheet-windows/04-items.png)
 
-- **Abilities:** its attacks, each with its to-hit and damage, then its actions, bonus actions, reactions and features. The arrow opens a row to show what it does.
+- **Abilities:** its attacks, each with its to-hit and damage, then its actions, bonus actions, reactions and features. The arrow opens a row to show what it does. The dot before each name says how much of it the simulator runs (● as written, ◐ partly, ○ reference only); hover it for why.
 
 ![The Abilities tab, a row opened](img/sheet-windows/05-abilities.png)
 
-- **Spells:** spellcasting ability, save DC and attack bonus, then spell slots and spells by level. A filled slot box is a slot the token still has. Click one to spend it, or click an empty one to get it back.
+Every row has Standard's **⋯** menu: **Duplicate**, **Move to** actions, bonus actions or reactions, and **Delete**. Deleting asks first when a multiattack or a legendary action uses it, under the row, with a replacement to pick. Afterwards, "Deleted Bite. **Undo**" shows at the foot of the window. An optional rule has a **Use it** switch on its row.
+
+![A row's ⋯ menu](img/sheet-windows/10-row-menu.png)
+
+A row that spends something (uses, a recharge, charges, or a pool like Channel Divinity) shows it as boxes for the token shown. A filled box spends one, and an empty one gets it back. A recharge says **Ready** or **Recharging**. **Resources**, at the top of Abilities and Spells, is Standard's list: what this token has left and what every token starts with, **Refill all**, and a spell slot level or a named pool to add.
+
+![Resources open, and uses on the rows](img/sheet-windows/11-resources.png)
+
+- **Spells:** spellcasting ability (pick another, or Auto), save DC and attack bonus, then spell slots and spells by level. A filled slot box is a slot the token still has. Click one to spend it, or click an empty one to get it back. If a spell could get the SRD's upcasting, it's offered here, and an Open5e item the library has simulated is offered on Items.
 
 ![Spellcasting on the Codex](img/sheet-windows/06-spellcasting.png)
 
@@ -75,7 +84,11 @@ Below the dials are the tabs.
 
 ![Add ability in the Codex](img/sheet-windows/07-add-ability.png)
 
-A monster's Codex leaves out what it hasn't got: a goblin has no Items or Spells tab. With several tokens, the switcher is in the banner, and the HP, conditions and slots are that token's.
+- **Token:** Standard's Token tab, for the token shown: its name and faction, how it starts this fight, its tactics ("Use these for every Goblin"), how it looks on the map, and its state and square. A name under "What the AI will use" opens that ability in the editor, here.
+
+![The Token tab](img/sheet-windows/12-token.png)
+
+A monster's Codex leaves out what it hasn't got: a goblin has no Items or Spells tab. With several tokens, the switcher is in the banner, and the HP, conditions, slots, uses and Token tab are that token's.
 
 ![Three goblins in one Codex](img/sheet-windows/09-goblins.png)
 

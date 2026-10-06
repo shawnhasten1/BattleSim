@@ -17,7 +17,9 @@ import {
   type SizeCategory
 } from "@/engine";
 import { abilityList, type ListGroup, type ListRow } from "@/lib/ability-editor/list";
-import { withWorn } from "@/lib/ability-editor/items";
+import { withAttuned, withWorn } from "@/lib/ability-editor/items";
+import { AUTOMATION_HELP, STANDARD_ACTIONS } from "@/lib/sheet-help";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import { recordPool, resourceRows, type ResourceRow } from "@/lib/actor-sheet/resources";
 import {
@@ -860,9 +862,10 @@ function RowEnd({ row }: { row: ListRow }) {
 /**
  * One row of the Abilities list: a chevron that opens its statblock line and chips, its name, an optional rule's Use it,
  * what using it costs, how it's used, Edit (the ability editor, opened in the Codex) and its ⋯ menu. `lead` goes between
- * the chevron and the name (the Items tab's worn box). Its delete prompt opens under it.
+ * the chevron and the name (the Items tab's worn box), and `toggle` in Use it's place (an item's Attuned). Its delete
+ * prompt opens under it.
  */
-function Row({ row, activation, lead }: { row: ListRow; activation?: string; lead?: ReactNode }) {
+function Row({ row, activation, lead, toggle }: { row: ListRow; activation?: string; lead?: ReactNode; toggle?: ReactNode }) {
   const kit = useRowKit();
   const [open, setOpen] = useState(false);
   const id = refRowId(row.ref);
@@ -875,7 +878,7 @@ function Row({ row, activation, lead }: { row: ListRow; activation?: string; lea
         <button type="button" className={styles.chev} aria-expanded={open} aria-label={`${row.name} details`} onClick={() => setOpen(!open)}>{CHEVRON}</button>
         {lead}
         <RowName row={row} />
-        {row.enabled !== undefined ? (
+        {toggle ?? (row.enabled !== undefined ? (
           <button
             type="button" role="switch" className={styles.useSwitch} aria-checked={row.enabled} aria-label={`Use ${row.name}`}
             title="An optional rule: what it grants is only available while it's on"
@@ -883,7 +886,7 @@ function Row({ row, activation, lead }: { row: ListRow; activation?: string; lea
           >
             Use it
           </button>
-        ) : <span />}
+        ) : <span />)}
         {pool ? <Uses pool={pool} cost={row.cost} /> : row.cost ? <span className={styles.usePill}>{row.cost}</span> : <span />}
         {activation ? <span className={styles.actPill}>{activation}</span> : <span />}
         <RowEnd row={row} />
@@ -977,12 +980,24 @@ function Items({ definition, groups, onAdd }: { definition: CreatureDefinition; 
                   onClick={() => replaceAbilityRecord(definition.id, row.ref, withWorn(item, !row.worn))}
                 />
               ) : <span className={styles.pip} aria-hidden="true" style={{ visibility: "hidden" }} />;
-              return <Row key={row.key} row={row} lead={lead} />;
+              // Character Codex's Attuned: one that needs attunement does nothing until it's attuned.
+              const toggle = item?.attunement ? (
+                <button
+                  type="button" role="switch" className={styles.useSwitch} aria-checked={item.attunement.attuned} aria-label={`${row.name} attuned`}
+                  title="It needs attunement: until it's attuned, it does nothing"
+                  onClick={() => replaceAbilityRecord(definition.id, row.ref, withAttuned(item, !item.attunement!.attuned))}
+                >
+                  Attuned
+                </button>
+              ) : undefined;
+              return <Row key={row.key} row={row} lead={lead} toggle={toggle} />;
             })}
           </div>
         );
       })}
-      <p className={styles.hint}>A filled box is worn armor or a worn shield. Open a row with the arrow for what it does.</p>
+      <p className={styles.hint}>
+        A filled box is worn armor or a worn shield, and Attuned is an item it&apos;s attuned to. Open a row with the arrow for what it does.
+      </p>
       <button type="button" className={styles.btnDash} onClick={onAdd}>Add item</button>
     </section>
   );
@@ -1030,7 +1045,10 @@ function Abilities({ combatant, definition, groups, onAdd }: {
         </section>
       ) : null}
       <section className={styles.panel} aria-labelledby="codex-abilities">
-        <Heading id="codex-abilities" icon="star">Abilities</Heading>
+        <div className={styles.workHead}>
+          <Heading id="codex-abilities" icon="star">Abilities</Heading>
+          <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
+        </div>
         {shown.length ? shown.map((group) => (
           <div key={group.id} className={styles.grp} role="group" aria-label={group.id === "traits" ? "Features & traits" : group.title}>
             <div className={styles.grpHead}>
@@ -1041,6 +1059,7 @@ function Abilities({ combatant, definition, groups, onAdd }: {
           </div>
         )) : <p className={styles.empty}>No other abilities yet.</p>}
         <p className={styles.hint}>Open a row with the arrow for what it does. Edit opens it in the ability editor, here.</p>
+        <p className={styles.hint}>{STANDARD_ACTIONS}</p>
         <button type="button" className={styles.btnDash} onClick={onAdd}>Add ability</button>
       </section>
     </div>

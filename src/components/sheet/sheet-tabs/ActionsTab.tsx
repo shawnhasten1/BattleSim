@@ -16,7 +16,7 @@ import { SpellcastingHeading } from "../abilities/SpellcastingHeading";
 import { ItemOffers } from "../abilities/ItemOffers";
 import { UpcastOffers } from "../abilities/UpcastOffers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { AUTOMATION_HELP } from "@/lib/sheet-help";
+import { AUTOMATION_HELP, STANDARD_ACTIONS } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
 import abilityStyles from "../abilities/abilities.module.css";
 
@@ -140,7 +140,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
       <div className={abilityStyles.standard}>
         <h4>Standard actions</h4>
         <p style={{ margin: 0, fontSize: 11, color: "var(--ui-text-dim)" }}>
-          Every creature can Dash · Disengage · Dodge · Hide · Help — no setup needed.
+          {STANDARD_ACTIONS}
         </p>
       </div>
 

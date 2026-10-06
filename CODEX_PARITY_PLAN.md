@@ -1,8 +1,8 @@
 # Codex Parity Plan: everything Standard does, in the Codex
 
-**Status:** being built on branch `sheet-windows` (2026-10-06). It follows `CHARACTER_SHEET_WINDOWS_PLAN.md` (Phases
-0–10). The user accepted the decisions' defaults and asked for every phase, committed as each is done. See "Built so
-far" at the end.
+**Status:** complete, built 2026-10-06 on branch `sheet-windows`, one commit per phase. It follows
+`CHARACTER_SHEET_WINDOWS_PLAN.md` (Phases 0–10). The user accepted every decision's default and asked for all the
+phases. See "Built so far" at the end.
 
 The Codex can now edit and add abilities in place (that plan's D13 and D14). But Standard's sheet still does things the
 Codex can't. The user found the first one: an ability can't be deleted from the Codex. This plan lists every gap and
@@ -214,3 +214,34 @@ both the Codex popped out and the Codex in the page.
 - Tests: 4 in `tests/codex-sheet.test.tsx`. The monster test's tab list now includes Token. Browser checks passed 10/10
   in Chromium and in Firefox: in the page, popped out, the switcher, Light, and 640 px. The check caught that the
   hosted-fields rule outranked the token name's face, and that is fixed.
+
+### Phase 5: the rest, and a parity check
+
+- The Items tab has an **Attuned** switch on each item that needs attunement (P8). It makes the same record change as
+  the editor's box, through a shared `withAttuned` in `src/lib/ability-editor/items.ts`, which `ItemSections` uses too.
+- The foot of Abilities has Standard's "Every creature can Dash · Disengage · Dodge · Hide · Help" line (one text,
+  `STANDARD_ACTIONS` in `src/lib/sheet-help.tsx`, used by both sheets). Its heading has "About automation levels".
+- Colour sweep: the editor's three remaining white overlays (a section head's hover, a menu item's focus, the "more
+  set" chip) are now `--ui-hover` or a mix of `--ui-accent`, with Standard's values kept. The only hard-coded colours
+  left in hosted code are token-appearance data defaults (a glow and a border colour), which aren't UI theming.
+- The guide's Codex section (`docs/guides/sheet-windows.md`) covers the ⋯ menu, uses and Resources, the new Details
+  edits, More defenses, Level & CR, Attuned and the Token tab. Screenshots 03–06, 08 and 09 were retaken, and 10 (⋯
+  menu), 11 (Resources and uses) and 12 (Token) are new.
+- **`tests/codex-parity.test.tsx`** is the parity checklist. For four creatures (a fighter with a bit of everything, a
+  built fighter, a goblin, and a built wizard), it reads every control each sheet shows (every tab, every fold open)
+  by role and accessible name. Each Standard name must appear in the Codex as it is, under the name `ALIASES` gives it
+  ("STR score" is "Strength score"), or in `STANDARD_ONLY` with a reason. Only Stats' four help tooltips are listed
+  there. Another test fails on an alias or Standard-only entry that no fixture uses any more. Breaking one alias on
+  purpose made all four fixtures fail and name the control.
+- Two things were found while building it. Names are collected through Testing Library's `name` callback, not
+  `dom-accessibility-api`, whose package `exports` hide its types from `next build`. The Phase 3 hosted-fields rule
+  outranked a narrower Codex rule. That was fixed for the token name, so watch for it in the future.
+
+## Where the build differs from the plan
+
+- Plan item 14, "Add a skill", needed nothing new. The Codex lists all 18 skills, and cycling a box does what
+  Standard's Add a skill does.
+- Senses are a column of four in Origin rather than a grid. In a grid, the labels were clipped.
+- The Resources panel is hosted on both Abilities and Spells, as P4 said, and it's the same component both times.
+- The Codex's uses boxes are named "Rage left: 2 of 3", apart from the Resources list's "Rage: 2 of 3 left", because
+  both can be on screen for the same pool.
