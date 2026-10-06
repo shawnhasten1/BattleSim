@@ -108,8 +108,14 @@ const INVOCATIONS: Record<string, Partial<Pick<PickOption, "repeatable" | "choic
       }
     }]
   },
+  "eldritch-mind": {
+    grants: (text) => [{
+      key: "eldritch-mind",
+      feature: { ...text, automationSupport: "full", effects: [{ kind: "save-advantage", ability: "con", against: { concentration: true } }] }
+    }]
+  },
   // Manual: what they do doesn't run yet.
-  "eldritch-mind": {}, "gift-of-the-protectors": {}, "investment-of-the-chain-master": {}, "pact-of-the-chain": {}
+  "gift-of-the-protectors": {}, "investment-of-the-chain-master": {}, "pact-of-the-chain": {}
 };
 
 /** Each invocation as a pick option: its prerequisite read from its text, what runs authored above, the rest text. */

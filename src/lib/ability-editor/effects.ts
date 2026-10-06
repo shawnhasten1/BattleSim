@@ -107,6 +107,18 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "fire" } })
   },
   {
+    kind: "no-advantage-against", label: "No advantage against it", hint: "Elusive: attack rolls against it can't have advantage while it can act", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "no-advantage-against" })
+  },
+  {
+    kind: "save-floor", label: "A save no lower than the score", hint: "Indomitable Might: a Strength save totalling less than the score uses the score", theme: "saves", when: false, scope: false,
+    blank: () => ({ kind: "save-floor", ability: "str" })
+  },
+  {
+    kind: "death-saves", label: "Better death saves", hint: "Defy Death: advantage, and 18–20 counting as a 20", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "death-saves", advantage: true })
+  },
+  {
     kind: "evasion", label: "Evasion", hint: "A DEX save for half takes none on a success", theme: "defense", when: false, scope: false,
     blank: () => ({ kind: "evasion" })
   },

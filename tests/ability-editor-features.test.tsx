@@ -199,6 +199,29 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Heavy Hands").effects).toEqual([{ kind: "damage-dice", condition: "always", minimumDie: 2, rollTwice: true, oncePerTurn: true, weaponProperties: ["finesse"], twoHanded: true }]);
   });
 
+  it("Last-ditch defenses: no advantage against it, a save floor, better death saves, bloodied regeneration", async () => {
+    await blankFeature("Stubborn");
+    await done(await addEffect(/^No advantage against it/, "No advantage against it"));
+    const floor = await addEffect(/^A save no lower than the score/, "A save no lower than the score");
+    await userEvent.selectOptions(floor.getByLabelText("Which save"), "con");
+    await done(floor);
+    const death = await addEffect(/^Better death saves/, "Better death saves");
+    await retype(death.getByLabelText("Counts as a 20 from"), "18");
+    await userEvent.click(death.getByRole("checkbox", { name: "Advantage on death saves" }));
+    await done(death);
+    const regen = await addEffect(/^Regenerates/, "Regenerates");
+    await userEvent.click(regen.getByRole("checkbox", { name: "Only while it's bloodied" }));
+    await done(regen);
+    const mind = await addEffect(/^Advantage on its saves/, "Advantage on its saves");
+    await userEvent.click(mind.getByRole("checkbox", { name: "Only saves to keep concentration" }));
+    await done(mind);
+    await addToSheet();
+    const effects = named("Stubborn").effects!;
+    expect(effects.slice(0, 3)).toEqual([{ kind: "no-advantage-against" }, { kind: "save-floor", ability: "con" }, { kind: "death-saves", twentyFrom: 18 }]);
+    expect(effects[3]).toMatchObject({ kind: "hp-regen", whileBloodied: true });
+    expect(effects[4]).toMatchObject({ kind: "save-advantage", against: { concentration: true } });
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

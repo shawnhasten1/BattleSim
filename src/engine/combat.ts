@@ -1923,7 +1923,10 @@ export function attackRollInputs(
   const nextAttack = nextAttackConditions(attacker, target);
   for (const { condition } of nextAttack) featureAdvantage.sources.push(condition.sourceName ?? condition.id);
   const longRange = attackIsAtLongRange(state.snapshot, attacker, target, action);
-  const advantage = Boolean(options.advantage || featureAdvantage.advantage || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "advantage"));
+  // Elusive: no advantage against it while it can act.
+  const deniesAdvantage = !(target.conditions ?? []).some((condition) => INCAPACITATING_CONDITIONS.has(condition.name))
+    && featureSources(targetDefinition, target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "no-advantage-against"));
+  const advantage = !deniesAdvantage && Boolean(options.advantage || featureAdvantage.advantage || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "advantage"));
   const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage
     || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "disadvantage"));
   const rollMode = attackRollMode({ advantage, disadvantage });
@@ -3161,8 +3164,13 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
     };
   }
 
-  const roll = rollDice("1d20", state.rng);
-  const natural = roll.rolls[0]?.value ?? roll.total;
+  // Defy Death: advantage, and 18-20 counting as a 20.
+  const deathSaveFeatures = featureSources(getDefinition(state.snapshot, combatant), combatant)
+    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "death-saves" }> => effect.kind === "death-saves"));
+  const roll = deathSaveFeatures.some((effect) => effect.advantage) ? rollD20(state.rng, { advantage: true }) : rollDice("1d20", state.rng);
+  const rolledNatural = deathSaveFeatures.some((effect) => effect.advantage) ? roll.total : roll.rolls[0]?.value ?? roll.total;
+  const twentyFrom = Math.min(20, ...deathSaveFeatures.map((effect) => effect.twentyFrom ?? 20));
+  const natural = rolledNatural >= twentyFrom ? 20 : rolledNatural;
   // A DM may overrule it (Play): one success or one failure, without a natural 20's or 1's extra effect.
   const overridden = askDecision<RollRequest>(state, {
     kind: "roll", rollerId: combatant.id, purpose: "death-save", natural, total: natural, against: 10,
@@ -5023,8 +5031,11 @@ function survivesLethal(state: EngineState, target: CombatantState, definition: 
       if (effect.excludedDamageTypes?.some((type) => hit.damageTypes.includes(type))) continue;
       if (effect.maxDamage !== undefined && hit.taken > effect.maxDamage) continue;
       if (effect.resourceId && (target.resources?.[effect.resourceId] ?? 0) < 1) continue;
+      if (effect.whileCondition && !(target.conditions ?? []).some((condition) => condition.id === effect.whileCondition)) continue;
       if (effect.save) {
-        const dc = effect.save.dcBase + hit.taken;
+        // Relentless Rage: 5 more for each time it was tried before; Undead Fortitude: the damage taken.
+        const tried = state.log.filter((entry) => entry.type === "SaveRolled" && entry.data?.targetId === target.id && entry.data?.featureId === feature.id).length;
+        const dc = effect.save.dcBase + (effect.dcStep !== undefined ? effect.dcStep * tried : hit.taken);
         const save = rollSavingThrow(state, target, { ability: effect.save.ability, dc, kind: "feature" });
         state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${effect.save.ability.toUpperCase()} save against ${feature.name}`, {
           targetId: target.id, saveRoll: save.roll, total: save.roll.total, dc, success: save.success, featureId: feature.id
@@ -5034,8 +5045,8 @@ function survivesLethal(state: EngineState, target: CombatantState, definition: 
       if (effect.resourceId) {
         target.resources = { ...(target.resources ?? {}), [effect.resourceId]: (target.resources?.[effect.resourceId] ?? 0) - 1 };
       }
-      target.currentHp = 1;
-      state.log.push(event(state, "SurvivedLethal", `${target.displayName} refuses to fall (${feature.name}) and stays at 1 HP`, {
+      target.currentHp = Math.max(1, Math.min(definition.maxHp, effect.hpTo ?? 1));
+      state.log.push(event(state, "SurvivedLethal", `${target.displayName} refuses to fall (${feature.name}) and stays at ${target.currentHp} HP`, {
         combatantId: target.id, featureId: feature.id, resourceId: effect.resourceId,
         ...(effect.resourceId ? { next: target.resources?.[effect.resourceId] } : {})
       }));
@@ -5062,6 +5073,7 @@ export function applyRegeneration(state: EngineState, actor: CombatantState): vo
         continue;
       }
       if (actor.currentHp < 1 && !effect.worksAtZero) continue;
+      if (effect.whileBloodied && (actor.currentHp < 1 || !isBloodied(state.snapshot, actor))) continue;
       const healed = Math.min(effect.amount, definition.maxHp - actor.currentHp);
       if (healed <= 0) continue;
       actor.currentHp += healed;
@@ -6809,7 +6821,10 @@ function featureSaveModifier(
  * being charmed / frightened / prone…" (by the condition the save is against). A save against being dominated
  * also counts as one against being charmed.
  */
-export function saveAdvantageApplies(effect: Extract<FeatureEffect, { kind: "save-advantage" }>, ctx: Pick<SaveContext, "ability" | "sourceAction" | "conditions">): boolean {
+export function saveAdvantageApplies(effect: Extract<FeatureEffect, { kind: "save-advantage" }>, ctx: Pick<SaveContext, "ability" | "sourceAction" | "conditions"> & { kind?: SaveKind }): boolean {
+  if (effect.against?.concentration && ctx.kind !== "concentration") {
+    return false;
+  }
   const hasAbilityFilter = effect.ability !== undefined || (effect.abilities?.length ?? 0) > 0;
   if (hasAbilityFilter && effect.ability !== ctx.ability && !effect.abilities?.includes(ctx.ability)) {
     return false;
@@ -7136,9 +7151,13 @@ function changeFailedD20(
 export function rollSavingThrow(state: EngineState, target: CombatantState, ctx: SaveContext): SavingThrowResult {
   const definition = getDefinition(state.snapshot, target);
   const { bonus, featureBonus, featureAdvantage } = saveRollInputs(state, target, ctx);
-  const roll = rollD20WithBonus(state.rng, bonus, {
+  let roll = rollD20WithBonus(state.rng, bonus, {
     advantage: featureAdvantage.applied
   });
+  // Indomitable Might: a Strength save totalling less than the score uses the score.
+  const floor = featureSources(definition, target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "save-floor" && effect.ability === ctx.ability))
+    ? definition.abilities[ctx.ability] : undefined;
+  if (floor !== undefined && roll.total < floor) roll = { ...roll, total: floor, expression: `${roll.expression} (its score, ${floor})` };
   const result: SavingThrowResult = { roll, success: roll.total >= ctx.dc, dc: ctx.dc, featureBonus, featureAdvantage };
   // A DM may overrule the roll (Play). Legendary Resistance below then sees the outcome as ruled.
   const overridden = askDecision<RollRequest>(state, {

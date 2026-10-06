@@ -31,7 +31,6 @@ export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
   "max-damage": "Maximum damage instead of a roll (Overchannel)",
   "d20-reroll": "Changing another creature's d20 roll (Countercharm, Boon of Fate)",
-  "roll-floor": "A roll that can't come out below a number (Indomitable Might)",
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Trading damage dice for an effect (Cunning Strike, Brutal Strike)",
@@ -52,10 +51,6 @@ export const GAPS = {
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "reaction-attack": "A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect)",
   "oa-defense": "Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense)",
-  "deny-advantage": "Attacks against it can't have advantage (Elusive)",
-  "death-saves": "Death saving throw rules (Defy Death)",
-  "gated-regen": "Regaining hit points only while bloodied (Heroic Rally)",
-  relentless: "Dropping to more than 1 HP instead of 0, with a DC that rises each use (Relentless Rage)",
   "ends-on-damage": "A condition that ends when the creature takes damage (Turn Undead, Abjure Foes)",
   "action-limits": "A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes)",
   "condition-removal": "Ending a condition with a feature (Self-Restoration, Restoring Touch)",
@@ -70,7 +65,6 @@ export const GAPS = {
   stealth: "Hiding and invisibility you give yourself (there's no stealth in the simulator)",
   "move-through": "Moving through a larger creature's space (Halfling Nimbleness)",
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
-  "concentration-saves": "Advantage on concentration saves (Eldritch Mind)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
@@ -110,11 +104,11 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_feral-instinct": full("Advantage on Initiative rolls."),
   "barbarian_instinctive-pounce": full("Half its speed more movement the turn it rages."),
   "barbarian_brutal-strike": manual(["dice-trade"]),
-  "barbarian_relentless-rage": manual(["relentless"]),
+  "barbarian_relentless-rage": full("While raging: a DC 10 Constitution save, 5 higher each time after the first this fight, for twice the barbarian level in hit points."),
   "barbarian_improved-brutal-strike": manual(["dice-trade"]),
   "barbarian_persistent-rage": info("A fight starts with full pools, and the simulated rage already lasts the fight."),
   "barbarian_improved-brutal-strike-enhanced": manual(["dice-trade"]),
-  "barbarian_indomitable-might": manual(["roll-floor"]),
+  "barbarian_indomitable-might": full("A Strength save totalling less than the Strength score uses the score; checks are outside a fight."),
   "barbarian_epic-boon": EPIC_BOON,
   "barbarian_primal-champion": builder("+4 Strength and Constitution, to a maximum of 25."),
 
@@ -212,7 +206,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_champion_additional-fighting-style": builder("Another Fighting Style feat."),
   "fighter_champion_heroic-warrior": full("Heroic Inspiration back at the start of each turn without it; spent rerolling a failed save or a missed attack roll."),
   "fighter_champion_superior-critical": full("18 to 20."),
-  "fighter_champion_survivor": manual(["death-saves", "gated-regen"]),
+  "fighter_champion_survivor": full("Advantage on death saves, 18–20 counting as 20, and 5 + Constitution hit points at the start of each turn while bloodied."),
 
   /* Monk */
   "monk_martial-arts": full("An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked."),
@@ -314,7 +308,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "rogue_improved-cunning-strike": manual(["dice-trade"]),
   "rogue_devious-strikes": manual(["dice-trade"]),
   "rogue_slippery-mind": builder("Wisdom and Charisma save proficiency."),
-  rogue_elusive: manual(["deny-advantage"]),
+  rogue_elusive: full("No advantage on attack rolls against it while it isn't incapacitated."),
   "rogue_epic-boon": EPIC_BOON,
   "rogue_stroke-of-luck": full("A failed save or a missed attack roll becomes a 20; ability checks are outside a fight."),
 
@@ -356,7 +350,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "warlock_mystic-arcanum": builder("A 6th- to 9th-level spell cast once without a slot."),
   "warlock_epic-boon": EPIC_BOON,
   "warlock_eldritch-master": info("Magical Cunning is outside a fight."),
-  "warlock_eldritch-invocation-options": partial(["concentration-saves"], "Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic, Eldritch Smite spends a pact slot on a hit); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked."),
+  "warlock_eldritch-invocation-options": partial(["summon-stat-blocks"], "Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic, Eldritch Smite spends a pact slot on a hit); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Mind is advantage on concentration saves; Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked."),
   "warlock_warlock-spell-list": SPELL_LIST,
 
   /* Fiend Patron */

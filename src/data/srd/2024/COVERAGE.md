@@ -15,15 +15,15 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 8 | 2 | 7 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 10 | 2 | 5 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 5 | 3 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 12 | 0 | 3 | 5 | 1 |
+| Fighter (Champion) | 21 | 13 | 0 | 2 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 2 | 6 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 6 | 1 | 6 | 6 | 4 |
+| Rogue (Thief) | 23 | 7 | 1 | 5 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
@@ -38,8 +38,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
+| `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 1 | Self-Restoration (Monk); Lay On Hands (Paladin); Restoring Touch (Paladin) |
@@ -73,19 +73,13 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
-| `relentless` | Dropping to more than 1 HP instead of 0, with a DC that rises each use (Relentless Rage) | Barbarian | 11 | Relentless Rage (Barbarian) |
 | `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
 | `max-damage` | Maximum damage instead of a roll (Overchannel) | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | Rogue | 17 | Thief's Reflexes (Thief) |
-| `death-saves` | Death saving throw rules (Defy Death) | Fighter | 18 | Survivor (Champion) |
-| `deny-advantage` | Attacks against it can't have advantage (Elusive) | Rogue | 18 | Elusive (Rogue) |
-| `gated-regen` | Regaining hit points only while bloodied (Heroic Rally) | Fighter | 18 | Survivor (Champion) |
-| `roll-floor` | A roll that can't come out below a number (Indomitable Might) | Barbarian | 18 | Indomitable Might (Barbarian) |
 | `activated-aura` | An aura switched on for a while (Holy Nimbus) | Paladin | 20 | Holy Nimbus (Oath of Devotion) |
 | `extra-target` | A spell aimed at a second creature for free (Words of Creation) | Bard | 20 | Words of Creation (Bard) |
-| `concentration-saves` | Advantage on concentration saves (Eldritch Mind) | Warlock | — | Eldritch Invocation Options (Warlock) |
 
 ## Barbarian
 
@@ -104,11 +98,11 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 7 | Feral Instinct | full |  | Advantage on Initiative rolls. |
 | 7 | Instinctive Pounce | full |  | Half its speed more movement the turn it rages. |
 | 9 | Brutal Strike | manual | `dice-trade` |  |
-| 11 | Relentless Rage | manual | `relentless` |  |
+| 11 | Relentless Rage | full |  | While raging: a DC 10 Constitution save, 5 higher each time after the first this fight, for twice the barbarian level in hit points. |
 | 13 | Improved Brutal Strike | manual | `dice-trade` |  |
 | 15 | Persistent Rage | info |  | A fight starts with full pools, and the simulated rage already lasts the fight. |
 | 17 | Improved Brutal Strike (Enhanced) | manual | `dice-trade` |  |
-| 18 | Indomitable Might | manual | `roll-floor` |  |
+| 18 | Indomitable Might | full |  | A Strength save totalling less than the Strength score uses the score; checks are outside a fight. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Primal Champion | builder |  | +4 Strength and Constitution, to a maximum of 25. |
 
@@ -233,7 +227,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 7 | Additional Fighting Style | builder |  | Another Fighting Style feat. |
 | 10 | Heroic Warrior | full |  | Heroic Inspiration back at the start of each turn without it; spent rerolling a failed save or a missed attack roll. |
 | 15 | Superior Critical | full |  | 18 to 20. |
-| 18 | Survivor | manual | `death-saves`, `gated-regen` |  |
+| 18 | Survivor | full |  | Advantage on death saves, 18–20 counting as 20, and 5 + Constitution hit points at the start of each turn while bloodied. |
 
 ## Monk
 
@@ -356,7 +350,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 11 | Improved Cunning Strike | manual | `dice-trade` |  |
 | 14 | Devious Strikes | manual | `dice-trade` |  |
 | 15 | Slippery Mind | builder |  | Wisdom and Charisma save proficiency. |
-| 18 | Elusive | manual | `deny-advantage` |  |
+| 18 | Elusive | full |  | No advantage on attack rolls against it while it isn't incapacitated. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Stroke of Luck | full |  | A failed save or a missed attack roll becomes a 20; ability checks are outside a fight. |
 
@@ -410,7 +404,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 11, 13, 15, 17 | Mystic Arcanum | builder |  | A 6th- to 9th-level spell cast once without a slot. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Eldritch Master | info |  | Magical Cunning is outside a fight. |
-| — | Eldritch Invocation Options | partial | `concentration-saves` | Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic, Eldritch Smite spends a pact slot on a hit); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Mind, Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked. |
+| — | Eldritch Invocation Options | partial | `summon-stat-blocks` | Agonizing Blast, Repelling Blast and Eldritch Spear change Eldritch Blast; Armor of Shadows is Mage Armor at will; Pact of the Blade is a longsword pact weapon with Charisma (Thirsting and Devouring Blade attack with it 2 and 3 times, Lifedrinker adds 1d6 necrotic, Eldritch Smite spends a pact slot on a hit); Pact of the Tome's cantrips and Lessons of the First Ones' feat are chosen. Eldritch Mind is advantage on concentration saves; Gift of the Protectors and the Chain don't run; the rest are outside a fight. Prerequisites (level, pact) are checked. |
 | — | Warlock Spell List | builder |  | Read from each spell's own class list. |
 
 ### Fiend Patron (Warlock subclass)

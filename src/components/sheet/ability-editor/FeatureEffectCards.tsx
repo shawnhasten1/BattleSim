@@ -847,6 +847,29 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "no-advantage-against":
+      return <p className={styles.hint}>Nothing to set: attack rolls against it can&apos;t have advantage while it isn&apos;t incapacitated.</p>;
+    case "save-floor":
+      return (
+        <span className={styles.inline}>
+          <span>A</span>
+          <select aria-label="Which save" value={effect.ability} onChange={(e) => set({ ...effect, ability: e.target.value as Ability })}>
+            {(["str", "dex", "con", "int", "wis", "cha"] as Ability[]).map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+          </select>
+          <span>save totalling less than the score uses the score</span>
+        </span>
+      );
+    case "death-saves":
+      return (
+        <>
+          <Check label="Advantage on death saves" checked={effect.advantage === true} onChange={(on) => set(opt(effect, "advantage", on ? true : undefined))} />
+          <span className={styles.inline}>
+            <span>A roll of</span>
+            <NumberField label="Counts as a 20 from" value={effect.twentyFrom ?? 20} min={2} max={20} onChange={(n) => set(opt(effect, "twentyFrom", n && n < 20 ? n : undefined))} />
+            <span>or higher counts as a 20</span>
+          </span>
+        </>
+      );
     case "damage-dice":
       return (
         <>
@@ -943,6 +966,11 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
               const against = opt({ ...effect.against }, "source", next === "any" ? undefined : next);
               set(opt(effect, "against", Object.keys(against).length ? against : undefined));
             }} />
+          <Check label="Only saves to keep concentration" checked={effect.against?.concentration === true}
+            onChange={(on) => {
+              const against = opt({ ...effect.against }, "concentration", on ? true : undefined);
+              set(opt(effect, "against", Object.keys(against).length ? against : undefined));
+            }} />
         </>
       );
     }
@@ -1009,6 +1037,7 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
             <span>hit points at the start of its turn</span>
           </span>
           <Check copy="worksAtZero" checked={effect.worksAtZero === true} onChange={(on) => set(opt(effect, "worksAtZero", on ? true : undefined))} />
+          <Check label="Only while it's bloodied" checked={effect.whileBloodied === true} onChange={(on) => set(opt(effect, "whileBloodied", on ? true : undefined))} />
           <Field copy="regenStoppedBy">
             <TypeChips label="Stopped by" value={effect.suppressedByDamageTypes ?? []} onChange={(list) => set(opt(effect, "suppressedByDamageTypes", list.length ? list : undefined))} />
           </Field>

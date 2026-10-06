@@ -640,7 +640,7 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} has advantage on ${abilities.length ? `${joinList(abilities.map((ability) => ABILITY_NAME[ability]))} ` : ""}saving throws${against.length ? ` against ${joinList(against)}` : ""}${gate}.`;
     }
     case "hp-regen":
-      return `${S} regains ${effect.amount} hit points at the start of its turn${effect.worksAtZero ? ", even at 0 hit points" : " if it has at least 1 hit point"}.`
+      return `${S} regains ${effect.amount} hit points at the start of its turn${effect.whileBloodied ? " while it's bloodied and has at least 1 hit point" : effect.worksAtZero ? ", even at 0 hit points" : " if it has at least 1 hit point"}.`
         + (effect.suppressedByDamageTypes?.length ? ` If it takes ${joinList(effect.suppressedByDamageTypes, "or")} damage, this doesn't work at the start of its next turn.` : "");
     case "survive-lethal": {
       const unless = [
@@ -648,12 +648,22 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
         effect.excludeCritical ? "it's from a critical hit" : ""
       ].filter(Boolean);
       const how = effect.save
-        ? `${who.subject} makes a ${ABILITY_NAME[effect.save.ability]} saving throw with a DC of ${effect.save.dcBase} + the damage taken, and on a success it drops`
+        ? `${who.subject} makes a ${ABILITY_NAME[effect.save.ability]} saving throw with a DC of ${effect.save.dcBase}${effect.dcStep !== undefined ? `, ${effect.dcStep} higher each time after the first` : " + the damage taken"}, and on a success it drops`
         : `${who.subject} drops`;
-      return `If damage reduces ${who.object} to 0 hit points, ${how} to 1 hit point instead`
+      const to = effect.hpTo && effect.hpTo > 1 ? `${effect.hpTo} hit points` : "1 hit point";
+      return `If damage reduces ${who.object} to 0 hit points${effect.whileCondition === "rage-active" ? " while it rages" : effect.whileCondition ? ` while it's ${effect.whileCondition.replace(/-/g, " ")}` : ""}, ${how} to ${to} instead`
         + `${effect.maxDamage ? ` (only for ${effect.maxDamage} damage or less)` : ""}${unless.length ? `, unless ${joinList(unless, "or")}` : ""}`
         + `${effect.resourceId ? ` (uses 1 ${poolName(effect.resourceId)})` : ""}.`;
     }
+    case "no-advantage-against":
+      return `Attack rolls against ${who.object} can't have advantage while ${who.subject} isn't incapacitated.`;
+    case "save-floor":
+      return `When ${who.subject} makes a ${ABILITY_NAME[effect.ability]} saving throw totalling less than ${who.possessive} ${ABILITY_NAME[effect.ability]} score, ${who.subject} uses the score instead.`;
+    case "death-saves":
+      return `${S} ${joinList([
+        ...(effect.advantage ? ["has advantage on death saving throws"] : []),
+        ...(effect.twentyFrom && effect.twentyFrom < 20 ? [`treats a roll of ${effect.twentyFrom}–20 on one as a 20`] : [])
+      ]) || "makes death saving throws as usual"}.`;
     case "auto-succeed-save": {
       const against = effect.against?.source === "spell" ? " against a spell" : effect.against?.source === "magical" ? " against magic" : "";
       return `If ${who.subject} fails a saving throw${against}, it can choose to succeed instead (uses 1 ${poolName(effect.resourceId)}).`;
@@ -763,7 +773,10 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
       return `${adjustmentShorts([effect.adjustment])[0]}${effect.adjustment.nonMagicalOnly ? " (nonmagical)" : ""}${gate}`;
     case "save-advantage": return `advantage on ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves${effect.against?.source ? ` vs ${effect.against.source === "spell" ? "spells" : "magic"}` : effect.against?.conditions?.length ? ` vs ${joinList(effect.against.conditions, "or")}` : ""}${gate}`;
     case "hp-regen": return `regains ${effect.amount} HP a turn${effect.suppressedByDamageTypes?.length ? ` (not after ${joinList(effect.suppressedByDamageTypes, "or")})` : ""}`;
-    case "survive-lethal": return "drops to 1 HP instead of 0";
+    case "survive-lethal": return `drops to ${effect.hpTo && effect.hpTo > 1 ? effect.hpTo : 1} HP instead of 0`;
+    case "no-advantage-against": return "no advantage against it";
+    case "save-floor": return `${effect.ability.toUpperCase()} saves at least its score`;
+    case "death-saves": return [effect.advantage ? "advantage on death saves" : "", effect.twentyFrom && effect.twentyFrom < 20 ? `${effect.twentyFrom}–20 counts as 20` : ""].filter(Boolean).join(", ") || "death saves";
     case "auto-succeed-save": return "can turn a failed save into a success";
     case "split-on-damage": return `splits when hit by ${joinList(effect.triggerDamageTypes, "or")}`;
     case "swarm-damage": return "less damage when bloodied";

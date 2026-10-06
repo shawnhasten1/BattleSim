@@ -98,7 +98,7 @@ export const ROGUE: ClassDefinition = {
     { level: 11, grants: [grant("improved-cunning-strike", reference("rogue_improved-cunning-strike"))] },
     { level: 14, grants: [grant("devious-strikes", reference("rogue_devious-strikes"))] },
     { level: 15, grants: [grant("slippery-mind", informational("rogue_slippery-mind"), { adjust: { saves: ["wis", "cha"] } })] },
-    { level: 18, grants: [grant("elusive", reference("rogue_elusive"))] },
+    { level: 18, grants: [grant("elusive", runs("rogue_elusive", { effects: [{ kind: "no-advantage-against" }] }))] },
     {
       level: 20,
       grants: [grant("stroke-of-luck", runs("rogue_stroke-of-luck", {

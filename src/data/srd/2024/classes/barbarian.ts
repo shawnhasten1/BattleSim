@@ -101,11 +101,16 @@ export const BARBARIAN: ClassDefinition = {
       ]
     },
     { level: 9, grants: [grant("brutal-strike", reference("barbarian_brutal-strike"))] },
-    { level: 11, grants: [grant("relentless-rage", reference("barbarian_relentless-rage"))] },
+    {
+      level: 11,
+      grants: [grant("relentless-rage", runs("barbarian_relentless-rage", {
+        effects: [{ kind: "survive-lethal", whileCondition: "rage-active", save: { ability: "con", dcBase: 10 }, dcStep: 5, hpTo: 22 }]
+      }), { scale: [{ path: "effects.0.hpTo", value: "{level*2}" }] })]
+    },
     { level: 13, grants: [grant("improved-brutal-strike", reference("barbarian_improved-brutal-strike"))] },
     { level: 15, grants: [grant("persistent-rage", informational("barbarian_persistent-rage"))] },
     { level: 17, grants: [grant("improved-brutal-strike-enhanced", reference("barbarian_improved-brutal-strike-enhanced"))] },
-    { level: 18, grants: [grant("indomitable-might", reference("barbarian_indomitable-might"))] },
+    { level: 18, grants: [grant("indomitable-might", runs("barbarian_indomitable-might", { effects: [{ kind: "save-floor", ability: "str" }] }))] },
     { level: 20, grants: [grant("primal-champion", informational("barbarian_primal-champion"), { adjust: { abilities: { str: 4, con: 4 }, abilityMax: 25 } })] }
   ],
   startingEquipment: [

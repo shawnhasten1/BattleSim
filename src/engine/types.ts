@@ -453,6 +453,8 @@ export interface FeatureEffectConditions {
 export interface SaveScope {
   source?: "spell" | "magical";
   conditions?: ConditionName[];
+  /** Only saves to keep concentration (Eldritch Mind). */
+  concentration?: boolean;
 }
 
 export interface FeatureEffectSaveGate {
@@ -622,6 +624,8 @@ export type FeatureEffect =
     amount: number;
     worksAtZero?: boolean;
     suppressedByDamageTypes?: DamageType[];
+    /** Only while it's bloodied and has at least 1 hit point (Heroic Rally). */
+    whileBloodied?: boolean;
   }
   | {
     /**
@@ -635,6 +639,28 @@ export type FeatureEffect =
     excludedDamageTypes?: DamageType[];
     excludeCritical?: boolean;
     resourceId?: string;
+    /**
+     * Relentless Rage: the save's DC is `dcBase` plus this for each time it was tried before this fight's (in place of
+     * the damage taken), only while it holds `whileCondition`, and it's left at `hpTo` hit points rather than 1.
+     */
+    dcStep?: number;
+    whileCondition?: string;
+    hpTo?: number;
+  }
+  | {
+    /** Attack rolls against it can't have advantage while it isn't incapacitated (Elusive). */
+    kind: "no-advantage-against";
+  }
+  | {
+    /** A saving throw of `ability` totalling less than that score uses the score (Indomitable Might). */
+    kind: "save-floor";
+    ability: Ability;
+  }
+  | {
+    /** Its death saving throws: advantage, and a natural roll from `twentyFrom` up counts as a 20 (Defy Death). */
+    kind: "death-saves";
+    advantage?: boolean;
+    twentyFrom?: number;
   }
   | {
     /**

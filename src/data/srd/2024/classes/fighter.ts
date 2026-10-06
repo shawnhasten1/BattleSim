@@ -152,6 +152,11 @@ export const CHAMPION: SubclassDefinition = {
       }), { pool: { id: "heroic-inspiration", size: 1 } })]
     },
     { level: 15, grants: [grant("superior-critical", critical("fighter_champion_superior-critical", 18), { replaces: "improved-critical" })] },
-    { level: 18, grants: [grant("survivor", reference("fighter_champion_survivor"))] }
+    {
+      level: 18,
+      grants: [grant("survivor", runs("fighter_champion_survivor", {
+        effects: [{ kind: "death-saves", advantage: true, twentyFrom: 18 }, { kind: "hp-regen", amount: 5, whileBloodied: true }]
+      }), { scale: [{ path: "effects.1.amount", value: "{mod:con+5}" }] })]
+    }
   ]
 };
