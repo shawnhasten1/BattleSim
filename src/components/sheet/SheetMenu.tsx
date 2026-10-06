@@ -8,6 +8,7 @@ import { exportCombatant } from "@/lib/actor-sheet/export";
 import { ownCreatureBlock, type LibraryStatus } from "@/lib/actor-sheet/scope";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { readBuild } from "@/lib/character-builder";
+import { useOwnerDocument } from "@/hooks/useOwnerDocument";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./sheet.module.css";
 
@@ -50,6 +51,8 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   const selectCombatant = useEncounterStore((s) => s.selectCombatant);
   const undo = useEncounterStore((s) => s.undo);
   const openBuilder = useBuilderUiStore((s) => s.open);
+  // The menu's own document: a popped-out sheet exports from its own window.
+  const ownerDocument = useOwnerDocument();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const build = readBuild(definition);
 
@@ -119,7 +122,7 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
       { separator: true as const }
     ] : []),
     { label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) },
-    { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition)) },
+    { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition, ownerDocument)) },
     { separator: true },
     { label: "Duplicate token", onSelect: () => guard(duplicate) },
     {

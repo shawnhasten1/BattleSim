@@ -2,10 +2,14 @@ import type { CombatantState, CreatureDefinition, TokenVisuals } from "@/engine"
 import { resolveTokenVisuals } from "@/lib/token-image";
 
 /** Trigger a browser download of `payload` as pretty-printed JSON. */
-export function downloadJson(filename: string, payload: unknown): void {
+/**
+ * Download `payload` as a JSON file. `from` is the document the click was in: a popped-out sheet's, so the download
+ * starts in the window the DM is using (a browser only lets the window that was clicked start one).
+ */
+export function downloadJson(filename: string, payload: unknown, from: Document = document): void {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+  const anchor = from.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   anchor.click();

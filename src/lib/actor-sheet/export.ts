@@ -7,7 +7,7 @@ export function combatantPackage(combatant: CombatantState, definition: Creature
   return { kind: "battle-sim-combatant", schemaVersion: ENCOUNTER_SCHEMA_VERSION, exportedAt, definition: structuredClone(definition), combatant: rest };
 }
 
-/** Downloads a token as `Goblin 1.enemy.json` (the Actors panel's and the sheet's Export). */
-export function exportCombatant(combatant: CombatantState, definition: CreatureDefinition): void {
-  downloadJson(`${safeFileName(combatant.displayName)}.${combatant.faction}.json`, combatantPackage(combatant, definition));
+/** Downloads a token as `Goblin 1.enemy.json` (the Actors panel's and the sheet's Export), from the document clicked in. */
+export function exportCombatant(combatant: CombatantState, definition: CreatureDefinition, from?: Document): void {
+  downloadJson(`${safeFileName(combatant.displayName)}.${combatant.faction}.json`, combatantPackage(combatant, definition), from);
 }

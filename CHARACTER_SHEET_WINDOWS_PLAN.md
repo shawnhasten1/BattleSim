@@ -1,10 +1,27 @@
 # Character Sheet Windows Plan: several sheets at once, popped out, and a styled Codex sheet
 
-**Status:** planned 2026-10-06, not built. On 2026-10-06 the user set D2 (a window belongs to the creature, so its edits
-reach all of its tokens), D7 (no new descriptive fields) and D10 (as proposed). The other decisions use their defaults
-until the user changes them.
-Suggested branch: `sheet-windows`, cut from `pc-builder` (or from master once `pc-builder` is merged). The Codex reads
-the builder's `character.build`, and Stats › Class & level only exists on that branch.
+**Status:** built (2026-10-06) on branch `sheet-windows`, cut from `pc-builder`, Phases 0 to 7, one commit per
+phase; not merged or pushed. The Phase 0 spike is on `sheet-windows-spike`. On 2026-10-06 the user set D2 (a window
+belongs to the creature, so its edits reach all of its tokens; token values stay per token), D7 (no new descriptive
+fields) and D10 (as proposed). The other decisions took their defaults. "Built so far" at the end has each phase.
+
+## Where the build differs from this plan
+
+- **The body is relocatable** (Phase 4). Switching frames would have remounted it and lost an ability being edited.
+  So the body is portalled once into a node that the in-page window and the popup take turns holding.
+- **`ActorSheet` stayed one component** rather than splitting into `SheetBody` and `ActorSheetWindow`. The
+  relocatable body did the job the split was for.
+- **Owner documents** (Phase 3): components that hold a ref to their own element read the document from it. Only
+  `ContextMenu`, `InfoTooltip` and the sheet body use the context.
+- **Openers:** the Combat panel had no row menu, so a row double-click and a right-click menu with **Open sheet** were
+  added. A token's double-click is detected by hand.
+- **The Codex:** Faerie is the original's dark set only. "Proficiencies & languages" is Languages only. No ✦ for
+  always-prepared spells (the creature doesn't record which they are).
+- **Found while building:** an Export from a popped-out sheet's ⋯ started its download in the main window, which
+  browsers ignore. `downloadJson` now takes the document clicked in.
+- **Left for the user:** two checks automation can't do. One is typing in a popped-out sheet while the main window is
+  really minimized. The other is dragging a compendium entry from the main window onto a popped-out sheet. Both should
+  work (Phase 0 note).
 
 The user asked for three things:
 
@@ -577,3 +594,29 @@ Chromium-only):
   reads "A level 5 Wizard (Evoker), Sage by trade", the slots read 4/3/2, an orb spends a 2nd-level slot, Edit opens
   Fire Bolt in Standard's editor in the 960-wide window, Back returns to the same scroll position (1336 px), and at
   1000 px and up the top row is three columns.
+
+### Phase 7 (2026-10-06)
+
+- **Guide:** `docs/guides/sheet-windows.md` ("Open several sheets, pop them out, and use the Codex"), with 8
+  screenshots in `public/guides/img/sheet-windows/` taken during the from-blank pass. The README's feature list
+  mentions sheet windows. The existing guides still read true ("select it and click **Sheet**").
+- **The from-blank pass** (Playwright, a new browser profile, Chromium and Firefox, 9 checks each):
+  1. Create Token › Character › Quick build makes a level 3 cleric and opens its sheet.
+  2. Two windows open side by side.
+  3. The cleric's Codex is popped out, and in the popup: name, alignment, a typed score and a stepper, a save orb,
+     a skill orb to expertise, languages, −1 HP, temp HP, two conditions added and one removed, and a level 1 slot
+     spent. All of it reached the store.
+  4. The palettes, then a spell edited on Standard in the popup and back.
+  5. ⋯ › Export JSON from the popup was read back with every edit.
+  6. Docked.
+  7. Three goblins in one Codex window, each given its own HP through the switcher, and a speed edit reaching all three.
+- **Found and fixed there:** Export from a popped-out sheet built its download link in the main window, and nothing
+  downloaded. `downloadJson(filename, payload, from)` and `exportCombatant(…, from)` take the document clicked in, and
+  the ⋯ menu passes its owner document. Test: `popout-window.test.tsx` "exports from its own window".
+- **Several windows during a fight** (the Phase 1 note): Auto Run doesn't touch the encounter while it replays, so
+  open sheets don't re-render then. With Step (a commit per turn), 20 steps with four sheets open (two Standard, two
+  Codex, in the dev build) took a median of 17.1 ms each, against 16.7 ms with none, and 566 ms against 474 ms in
+  all. Not stopping minimized windows from rendering, since nothing calls for it.
+- **`next build`** compiles with the lazily loaded Codex and its `next/font` face, with no warnings.
+- **`Faerie Codex.html`** stays where it is, untracked: it's the user's file. The Codex took what it needed.
+- **Full suite:** 251 files, 2817 tests.

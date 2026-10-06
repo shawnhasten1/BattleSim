@@ -230,6 +230,18 @@ describe("a popped-out sheet", () => {
     act(() => useBuilderUiStore.getState().close());
   });
 
+  it("exports from its own window, where the DM clicked", () => {
+    renderSheet(compendium, "pc-fighter");
+    act(() => screen.getByRole("button", { name: "Pop out" }).click());
+    const made = vi.spyOn(popupDocument(), "createElement");
+    const fromMain = vi.spyOn(document, "createElement");
+    act(() => popupButton("More actions").click());
+    const exportItem = [...popupDocument().querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.includes("Export JSON")) as HTMLElement;
+    act(() => exportItem.click());
+    expect(made.mock.calls.some(([tag]) => tag === "a")).toBe(true);
+    expect(fromMain.mock.calls.some(([tag]) => tag === "a")).toBe(false);
+  });
+
   it("closes its browser window when the scene changes", async () => {
     renderSheet(compendium, "pc-fighter");
     act(() => screen.getByRole("button", { name: "Pop out" }).click());
