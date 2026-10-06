@@ -7,6 +7,7 @@ import {
   diceTradeCost,
   onlyWhenEmptyProblem,
   spellTurnProblem,
+  whileConditionProblem,
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
@@ -3734,6 +3735,7 @@ function canPayResource(actor: CombatantState, action: ActionDefinition, executa
   if (action.extraCost && (actor.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) return false;
   if (spellTurnProblem(actor, action)) return false;
   if (onlyWhenEmptyProblem(actor, action)) return false;
+  if (whileConditionProblem(actor, action)) return false;
   // Lay on Hands: anything left in its pool.
   if (action.kind === "healing" && action.fromPool && (actor.resources?.[action.fromPool.resourceId] ?? 0) <= 0) {
     return false;

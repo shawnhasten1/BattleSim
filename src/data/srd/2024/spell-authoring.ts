@@ -212,6 +212,37 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
       damage: [{ dice: "1d8", damageType: "fire", magical: true, scaling: cantrip("d8") }], automationSupport: "full"
     }
   },
+  "true-strike": {
+    // One attack with a weapon it carries, using the spellcasting ability; radiant or the weapon's type, and more
+    // radiant from 5th level. A copy per weapon (`withWeapon`).
+    castingTime: "action", range: "self", automationSupport: "full",
+    action: {
+      kind: "attack", actionType: "action", attackType: "melee", ability: "int", attackBonusFormula: { ability: "int", proficiency: true }, range: 5,
+      damage: [],
+      withWeapon: {
+        damageTypeOption: "radiant",
+        extraDamage: [{
+          dice: "0", damageType: "radiant", magical: true,
+          scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "1d6" }, { atLevel: 11, dice: "2d6" }, { atLevel: 17, dice: "3d6" }] }
+        }]
+      },
+      automationSupport: "full"
+    }
+  },
+  shillelagh: {
+    // A minute of a club's or quarterstaff's melee attacks with the spellcasting ability, a d8 (d10, d12, 2d6 as it
+    // grows), force or the weapon's type: copies of the weapon's attacks while it lasts (`imbuesWeapon`).
+    castingTime: "bonus", range: "self", automationSupport: "full",
+    action: {
+      kind: "buff", actionType: "bonus", range: 0, targeting: { target: "self" },
+      appliedCondition: { id: "shillelagh", name: "custom", durationRounds: 10 },
+      imbuesWeapon: {
+        weapons: ["club", "quarterstaff"], meleeOnly: true, ability: "wis", damageTypeOption: "force",
+        damage: { dice: "1d8", scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 5, dice: "1d10" }, { atLevel: 11, dice: "1d12" }, { atLevel: 17, dice: "2d6" }] } }
+      },
+      automationSupport: "full"
+    }
+  },
   "cure-wounds": {
     castingTime: "action", range: "touch", upcast: { perSlotAboveBase: { damageDice: "2d8" } }, automationSupport: "full",
     action: {
@@ -420,7 +451,4 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
  * Why a reference-only spell the classes would want doesn't run yet: the engine gap that would make it (plan Phase 7).
  * Listed in the coverage audit; spells without an entry are reference only because nobody has authored them yet.
  */
-export const SPELL_GAPS: Readonly<Record<string, { gaps: GapCode[]; note: string }>> = {
-  "true-strike": { gaps: ["weapon-cantrip"], note: "A weapon attack made with the spellcasting ability." },
-  shillelagh: { gaps: ["weapon-cantrip"], note: "A club or quarterstaff that uses the spellcasting ability." }
-};
+export const SPELL_GAPS: Readonly<Record<string, { gaps: GapCode[]; note: string }>> = {};

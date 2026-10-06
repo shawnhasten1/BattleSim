@@ -124,7 +124,7 @@ export interface HotbarModel {
  * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
  * potion, a wand's spell for more charges.
  */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+|overchannel)$/;
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+|overchannel|imbued|with-[a-z0-9-]+)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -274,6 +274,8 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];
     return action.id === base.id || !option ? action.name : option;
   }
+  // True Strike: the weapon it's made with.
+  if (action.viaWeapon) return action.viaWeapon.name;
   const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined);
   // Metamagic or Overchannel: the slot, and the option ("3rd · Quickened", "3rd · Overchannel").
   const meta = action.metamagic ? ` · ${action.metamagic.name.replace(/ Spell$/, "")}` : action.maximizeDamage ? " · Overchannel" : "";
@@ -282,6 +284,8 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
   const parts: string[] = [];
   if (/:power(?::|$)/.test(action.id)) parts.push("Power Attack");
   if (/:charged(?:-\d+)?$/.test(action.id)) parts.push("Spend a charge");
+  // Shillelagh: the weapon while the spell is on.
+  if (action.whileCondition) parts.push(action.whileCondition.name);
   return parts.length ? parts.join(" + ") : "Normal";
 }
 

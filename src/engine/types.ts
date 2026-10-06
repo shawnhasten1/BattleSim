@@ -1359,6 +1359,11 @@ export interface AttackActionDefinition {
   /** Only as a swing of a routine (Open Hand Technique's options on Flurry of Blows' strikes). */
   routineOnly?: boolean;
   /**
+   * True Strike: the spell is an attack with one of the caster's weapons (`WeaponCantrip`). `getExecutableActions`
+   * compiles a copy of the spell for each weapon that fits and drops this action, whose own numbers aren't used.
+   */
+  withWeapon?: WeaponCantrip;
+  /**
    * Its `resourceCost` is an on-hit rider's, shown on the attack so planning sees what it spends: paid when the rider
    * lands, not when the attack is made (a weapon's charge, Stunning Strike's focus point, a smite's slot).
    */
@@ -1738,7 +1743,32 @@ export interface BuffActionDefinition {
    * `moveWith` says otherwise) moves the mark to another creature, without a slot, for as long as concentration lasts.
    */
   mark?: MarkSpec;
+  /**
+   * Shillelagh: while the condition lasts, attacks with the caster's weapons that fit are made as `WeaponCantrip`
+   * says: compiled copies of those weapons' attacks, usable only while it does. Without a weapon that fits, the
+   * spell isn't offered.
+   */
+  imbuesWeapon?: WeaponCantrip;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
+/**
+ * True Strike, Shillelagh: an attack with one of the caster's weapons (one it carries, never an Unarmed Strike) that
+ * uses its spellcasting ability for the attack and damage rolls.
+ */
+export interface WeaponCantrip {
+  /** Only weapons of these kinds (`WeaponDefinition.baseWeapon`; Shillelagh: club, quarterstaff). None: any. */
+  weapons?: string[];
+  /** Only its melee attacks (Shillelagh). */
+  meleeOnly?: boolean;
+  /** The ability it uses: the caster's spellcasting ability unless a class or feat cast it with another. */
+  ability?: Ability | "spellcasting";
+  /** The weapon's damage die becomes this (Shillelagh: a d8, growing with the caster's level). */
+  damage?: Pick<DamageComponent, "dice" | "scaling">;
+  /** It can deal this type instead of the weapon's (True Strike: radiant; Shillelagh: force). */
+  damageTypeOption?: DamageType;
+  /** More damage with it (True Strike's radiant, from 5th level: dice of "0" until then). */
+  extraDamage?: DamageComponent[];
 }
 
 export interface MarkSpec {
@@ -1986,6 +2016,10 @@ export interface CompiledActionMeta {
   rerollDamageDice?: number;
   /** Overchannel (`<id>:overchannel`): its damage dice give their highest. */
   maximizeDamage?: boolean;
+  /** True Strike's copies (`<spell>:with-<weapon>`): the weapon it's made with. */
+  viaWeapon?: { id: Id; name: string };
+  /** Shillelagh's copies (`<weapon attack>:imbued`): usable only while the attacker has this condition (the spell's). */
+  whileCondition?: { id: Id; name: string };
   /**
    * Careful Spell, Sculpt Spells: this many of the caster's allies in the area (the fewest hit points first) succeed on
    * their saves without rolling, and take no damage when a success would halve it.

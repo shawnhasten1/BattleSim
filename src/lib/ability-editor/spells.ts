@@ -268,6 +268,9 @@ export function castWith(spell: SpellDefinition, casting: Ability): SpellDefinit
     }
   } else if (action.kind === "healing") {
     next = { ...action, healing: action.healing.map(line) };
+  } else if (action.kind === "buff" && action.imbuesWeapon) {
+    // Shillelagh: the weapon's attacks use the casting ability.
+    next = { ...action, imbuesWeapon: { ...action.imbuesWeapon, ability: casting } };
   }
   return next === action ? spell : { ...spell, action: next };
 }

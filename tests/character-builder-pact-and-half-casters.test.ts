@@ -183,9 +183,9 @@ describe("built pact and half casters in a fight", { timeout: 30000 }, () => {
   const declared = (result: ReturnType<typeof fight>, name: RegExp) =>
     result.log.filter((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "pc-fighter" && name.test(String(entry.data?.actionName)));
 
-  it("the warlock blasts", () => {
+  it("the warlock blasts, or strikes with True Strike once foes close in (7af)", () => {
     const result = fight(built("warlock", 5), "warlock");
-    expect(declared(result, /^Eldritch Blast$/).length).toBeGreaterThan(0);
+    expect(declared(result, /^(Eldritch Blast|True Strike \(.*\))$/).length).toBeGreaterThan(0);
     expect(result.outcome.completed).toBe(true);
   });
 

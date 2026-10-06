@@ -62,6 +62,7 @@ import type {
   SaveActionDefinition,
   TerrainZone,
   UtilityActionDefinition,
+  WeaponCantrip,
   ZoneTrigger
 } from "./types";
 import {
@@ -262,7 +263,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   const weaponGrantedActions = (definition.weapons ?? []).flatMap((weapon) => weapon.grantedActions ?? []);
   const itemUses = workingItems(definition).flatMap(compileItemUses);
 
-  const listed = [
+  const plain = [
     ...definition.actions,
     ...(definition.bonusActions ?? []),
     ...(definition.reactions ?? []),
@@ -273,6 +274,9 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
+  // True Strike, Shillelagh: the spell's attacks with the creature's weapons, in place of the spell's own action.
+  const weaponCantrips = weaponCantripVariants(definition, plain);
+  const listed = [...plain.filter((action) => !weaponCantrips.spent.has(action.id)), ...weaponCantrips.copies];
   const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
@@ -289,6 +293,88 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   ]).map((action) => (spellEffects.length ? shapedSpell(action, spellEffects) : action))
     .map((action) => (sculpting.length ? sculptedSpell(action, sculpting) : action))
     .map(withEffectiveAutomationSupport);
+}
+
+/**
+ * True Strike, Shillelagh: a spell's attack with each of the creature's weapons that fits (never an Unarmed Strike),
+ * using the spellcasting ability for the attack and damage rolls (`weaponCantripAttack`). True Strike's copies are the
+ * spell, cast with its own action (`<spell>:with-<weapon>`); Shillelagh's are the weapon's own attacks while its buff
+ * lasts (`<weapon attack>:imbued`), so the Attack action's swings can take them. `spent`: the spell actions they stand
+ * in for (True Strike's), and a Shillelagh with no weapon to take.
+ */
+function weaponCantripVariants(definition: CreatureDefinition, listed: ActionDefinition[]): { copies: ActionDefinition[]; spent: Set<Id> } {
+  const copies: ActionDefinition[] = [];
+  const spent = new Set<Id>();
+  const level = casterLevelOf(definition);
+  for (const spell of listed) {
+    const cantrip = spell.kind === "attack" ? spell.withWeapon : spell.kind === "buff" ? spell.imbuesWeapon : undefined;
+    if (!cantrip) continue;
+    const ability = spell.kind === "attack" ? spell.ability
+      : cantrip.ability && cantrip.ability !== "spellcasting" ? cantrip.ability : spellcastingAbility(definition);
+    let fits = 0;
+    for (const weapon of definition.weapons ?? []) {
+      if (!weapon.baseWeapon || weapon.baseWeapon === "unarmed-strike" || weapon.attackType === "focus") continue;
+      if (cantrip.weapons?.length && !cantrip.weapons.includes(weapon.baseWeapon)) continue;
+      const weaponActionId = weapon.actionId ?? `weapon:${weapon.id}`;
+      const base = listed.find((entry): entry is AttackActionDefinition => entry.kind === "attack" && entry.id === weaponActionId && entry.actionType === "action");
+      if (!base || (cantrip.meleeOnly && base.attackType !== "melee")) continue;
+      fits += 1;
+      const attack = weaponCantripAttack(base, cantrip, ability, level);
+      if (spell.kind === "attack") {
+        copies.push({
+          ...attack,
+          id: `${spell.id}:with-${weapon.id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          name: `${spell.name} (${weapon.name})`,
+          actionType: spell.actionType,
+          resourceCost: spell.resourceCost,
+          spellLevel: spell.spellLevel,
+          ...(spell.spellSchool ? { spellSchool: spell.spellSchool } : {}),
+          ...(spell.spellClass ? { spellClass: spell.spellClass } : {}),
+          viaWeapon: { id: weapon.id, name: weapon.name },
+          automationSupport: spell.automationSupport
+        });
+      } else if (spell.kind === "buff") {
+        copies.push({
+          ...attack,
+          id: `${base.id}:imbued`,
+          name: `${base.name} (${spell.name})`,
+          whileCondition: { id: spell.appliedCondition.id ?? upcastBaseId(spell.id), name: spell.name }
+        });
+      }
+    }
+    if (spell.kind === "attack" || fits === 0) spent.add(spell.id);
+  }
+  return { copies, spent };
+}
+
+/** One weapon's attack made as a `WeaponCantrip` says: the spellcasting ability, its die and damage type choice, more damage. */
+function weaponCantripAttack(base: AttackActionDefinition, cantrip: WeaponCantrip, ability: Ability, level: number): AttackActionDefinition {
+  const weaponType = base.damage[0]?.damageType;
+  const option = cantrip.damageTypeOption;
+  // True Strike's extra radiant only once it has some (5th level on).
+  const extra = (cantrip.extraDamage ?? []).filter((component) => resolveScaledDamage(component.dice, component.scaling, { casterLevel: level }) !== "0");
+  return {
+    ...base,
+    ability,
+    attackBonusFormula: { ...(base.attackBonusFormula ?? {}), ability, proficiency: true },
+    magical: true,
+    damage: [
+      ...base.damage.map((component, index) => (index !== 0 ? component : {
+        ...component,
+        ...(cantrip.damage ? { dice: cantrip.damage.dice, scaling: cantrip.damage.scaling } : {}),
+        ...(component.abilityModifier ? { abilityModifier: ability } : {}),
+        magical: true,
+        ...(option && weaponType && weaponType !== "same-as-attack" && weaponType !== option ? { damageTypeOptions: [weaponType, option] } : {})
+      })),
+      ...extra
+    ]
+  };
+}
+
+/** Shillelagh's copies: why the attack can't be made now (its spell isn't on), or undefined. */
+export function whileConditionProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  const needs = action.whileCondition;
+  return needs && !(combatant.conditions ?? []).some((condition) => condition.id === needs.id) ? `Only while ${needs.name} lasts` : undefined;
 }
 
 /** Sculpt Spells: an area spell in scope spares its allies: as many as the effect says, plus the spell's level. */
@@ -6198,7 +6284,7 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
       throw new Error(`${combatant.displayName} cannot take a ${slot} right now`);
     }
   }
-  const turnProblem = spellTurnProblem(combatant, action);
+  const turnProblem = spellTurnProblem(combatant, action) ?? whileConditionProblem(combatant, action);
   if (turnProblem) throw new Error(`${combatant.displayName}: ${turnProblem}`);
   if (onlyWhenEmptyProblem(combatant, action)) throw new Error(`${combatant.displayName}: ${onlyWhenEmptyProblem(combatant, action)}`);
   // Metamagic's sorcery points, beside the slot.

@@ -42,7 +42,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
 | `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
@@ -495,21 +494,21 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 91 of which run in the simulator. 65 are copied from the 2014 library
-(their rules didn't change in a way the simulator models) and 27 are written for 2024: 15 that changed,
-12 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
+339 SRD 5.2 spells, 93 of which run in the simulator. 65 are copied from the 2014 library
+(their rules didn't change in a way the simulator models) and 29 are written for 2024: 15 that changed,
+14 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
 | Class | Spells | Run | Cantrip | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Bard | 130 | 28 | 2/10 | 7/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
+| Bard | 130 | 29 | 3/10 | 7/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
 | Cleric | 109 | 23 | 1/7 | 7/15 | 4/17 | 2/19 | 1/9 | 3/13 | 3/11 | 1/8 | 1/5 | 0/5 |
-| Druid | 124 | 27 | 3/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
+| Druid | 124 | 28 | 4/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
 | Paladin | 38 | 8 | — | 5/13 | 2/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
 | Ranger | 48 | 9 | — | 4/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
-| Sorcerer | 140 | 55 | 7/16 | 8/21 | 9/27 | 7/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
-| Warlock | 72 | 22 | 3/7 | 5/12 | 3/10 | 3/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
-| Wizard | 218 | 54 | 6/15 | 9/30 | 10/36 | 7/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
+| Sorcerer | 140 | 56 | 8/16 | 8/21 | 9/27 | 7/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
+| Warlock | 72 | 23 | 4/7 | 5/12 | 3/10 | 3/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
+| Wizard | 218 | 55 | 7/15 | 9/30 | 10/36 | 7/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
 
 ### Spells with a simulation
 
@@ -523,9 +522,11 @@ spell on a class's list and suggests the ones that run first.
 | Produce Flame | Cantrip | druid | changed in 2024 | partial | Simulated as the hurl (a Magic action, 60 ft): the bonus action that makes the flame is taken before the fight. |
 | Ray of Frost | Cantrip | sorcerer, wizard | 2014 copy | full |  |
 | Sacred Flame | Cantrip | cleric | 2014 copy | full |  |
+| Shillelagh | Cantrip | druid | new | full |  |
 | Shocking Grasp | Cantrip | sorcerer, wizard | 2014 copy | full |  |
 | Sorcerous Burst | Cantrip | sorcerer | new | partial | Thunder damage here: you choose the type each time you cast it (change it to suit). Not simulated: rolling another d8 for each 8. |
 | Starry Wisp | Cantrip | bard, druid | new | partial | Not simulated: the dim light, and the target losing the benefit of being invisible. |
+| True Strike | Cantrip | bard, sorcerer, warlock, wizard | new | full |  |
 | Vicious Mockery | Cantrip | bard | changed in 2024 | full |  |
 | Bane | 1st | bard, cleric, warlock | 2014 copy | full |  |
 | Bless | 1st | cleric, paladin | 2014 copy | full |  |
@@ -612,8 +613,6 @@ spell on a class's list and suggests the ones that run first.
 
 | Spell | Level | Classes | Gaps | Note |
 |---|---|---|---|---|
-| True Strike | Cantrip | bard, sorcerer, warlock, wizard | `weapon-cantrip` | A weapon attack made with the spellcasting ability. |
-| Shillelagh | Cantrip | druid | `weapon-cantrip` | A club or quarterstaff that uses the spellcasting ability. |
 
 ### 2014 library spells without a 2024 copy
 

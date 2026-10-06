@@ -74,7 +74,7 @@ export function swingsOf(attacks: MultiattackStep[]): MultiattackSwing[] {
  * Variant ids compiled beside a plain attack: a weapon's power attack or attack that spends a charge, a spell attack
  * cast with a higher slot.
  */
-const VARIANT_ID = /:(?:power|charged(?:-\d+)?|upcast-\d+)(?::|$)/;
+const VARIANT_ID = /:(?:power|charged(?:-\d+)?|upcast-\d+|imbued|with-[a-z0-9-]+)(?::|$)/;
 
 /** Whether an attack is a variant of another (`…:power`, `…:charged-2`, `…:upcast-3`), not a plain attack of its own. */
 export function isAttackVariant(action: ActionDefinition): boolean {
@@ -143,8 +143,10 @@ export function attackReach(action: AttackActionDefinition): number {
 }
 
 /** Whether the creature can pay for an attack right now (a charge, ki, a spell slot). */
-export function canPayFor(combatant: CombatantState, action: { resourceCost?: { resourceId: string; amount: number }; fromPool?: { resourceId: string }; extraCost?: { resourceId: string; amount: number } }): boolean {
+export function canPayFor(combatant: CombatantState, action: { resourceCost?: { resourceId: string; amount: number }; fromPool?: { resourceId: string }; extraCost?: { resourceId: string; amount: number }; whileCondition?: { id: Id } }): boolean {
   const cost = action.resourceCost;
+  // Shillelagh's copies: only while the spell is on.
+  if (action.whileCondition && !(combatant.conditions ?? []).some((condition) => condition.id === action.whileCondition!.id)) return false;
   // Lay on Hands: anything left in its pool.
   if (action.fromPool && (combatant.resources?.[action.fromPool.resourceId] ?? 0) <= 0) return false;
   // Metamagic's sorcery points.

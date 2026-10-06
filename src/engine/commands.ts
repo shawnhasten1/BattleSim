@@ -11,6 +11,7 @@ import {
   onHitTermsProblem,
   onlyWhenEmptyProblem,
   spellTurnProblem,
+  whileConditionProblem,
   moveCombatant,
   placeByDm,
   repositionZone,
@@ -219,6 +220,8 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
     return `${actor.displayName} can do only one of moving, an action and a bonus action this turn`;
   }
   if (!canAct(actor, slot)) return slot === "free" ? `${actor.displayName} can't act right now` : `${actor.displayName} can't take a ${SLOT_NAME[slot]} right now`;
+  const gated = whileConditionProblem(actor, action);
+  if (gated) return gated;
   if (!canPayFor(actor, action as { resourceCost?: { resourceId: string; amount: number } })) return costProblem(actor, action);
   // Quickened Spell and level 1+ spells in one turn.
   const spellTurn = spellTurnProblem(actor, action);
