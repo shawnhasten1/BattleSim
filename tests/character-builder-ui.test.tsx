@@ -19,7 +19,7 @@ import { useEncounterStore } from "@/store/encounter-store";
 const pristine = useEncounterStore.getState();
 beforeEach(() => {
   useEncounterStore.setState(pristine, true);
-  useBuilderUiStore.setState({ window: null });
+  useBuilderUiStore.setState({ window: null, homebrew: false });
   useCatalogStore.getState().setEntries([]);
   try { localStorage.clear(); } catch { /* private mode */ }
 });
@@ -77,6 +77,21 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
       expect(token.currentHp).toBe(definition.maxHp);
     }
     expect(store().undoStack.length).toBe(depth + 1);
+  });
+
+  it("Homebrew content… opens the Homebrew window, from the Character tab and from a new character's builder", async () => {
+    render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Character" }));
+    await userEvent.click(screen.getByRole("button", { name: "Homebrew content…" }));
+    expect(useBuilderUiStore.getState().homebrew).toBe(true);
+    cleanup();
+
+    useBuilderUiStore.setState({ homebrew: false });
+    useBuilderUiStore.getState().open({ kind: "create", seed: { name: "Vex", classId: "srd:class:rogue", level: 1 } });
+    render(<BuilderHost onCreated={() => undefined} />);
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Character builder" })).getByRole("button", { name: "Homebrew content…" }));
+    expect(useBuilderUiStore.getState().homebrew).toBe(true);
+    expect(screen.getByRole("dialog", { name: "Homebrew" })).toBeTruthy();
   });
 
   it("offers a homebrew class beside the SRD's, marked as homebrew, and quick builds it", async () => {

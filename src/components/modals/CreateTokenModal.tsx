@@ -316,8 +316,9 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               <button
                 type="button" className={styles.linkButton}
                 onClick={() => { useBuilderUiStore.getState().openHomebrew(); onClose(); }}
+                title="Your own classes, subclasses, feats, backgrounds and species, beside the SRD's"
               >
-                Your own classes (Homebrew)…
+                Homebrew content…
               </button>
             </p>
           </>

@@ -1,6 +1,6 @@
 # Guide: Build player characters with the character builder
 
-The character builder makes player characters from the 2024 rules (SRD 5.2): pick a class, a level, a background and a species, and it works out the scores, hit points, saves, skills, spells and every class and subclass feature up to that level. Leveling up adds what the next level gives. This guide makes a rogue, levels it up and into a second class, turns a hand-built PC into a built one, makes a whole party in one click, and adds your own classes.
+The character builder makes player characters from the 2024 rules (SRD 5.2): pick a class, a level, a background and a species, and it works out the scores, hit points, saves, skills, spells and every class and subclass feature up to that level. Leveling up adds what the next level gives. This guide makes a rogue, levels it up and into a second class, turns a hand-built PC into a built one, makes a whole party in one click, and adds homebrew content of your own.
 
 > **What you'll end up with:** a Rogue 4 / Fighter 1, a rebuilt Barbarian, a party of four at 5th level, and your homebrew classes and subclasses offered beside the SRD's.
 
@@ -78,9 +78,9 @@ Each one is quick built, named after its class, and put on its own square. It's 
 
 ![The party on the map](img/build-a-character/10-party-on-the-map.png)
 
-## 6. Your own classes (homebrew)
+## 6. Homebrew: your own classes, subclasses, feats, backgrounds and species
 
-**Your own classes (Homebrew)…**, at the bottom of the Character tab, opens the **Homebrew** window. What you save there belongs to your account and is offered in the Character tab and the builder beside the SRD's, marked *(Homebrew)*. Characters built from it level up with it.
+**Homebrew content…**, at the bottom of the Character tab (and at the top of the builder window), opens the **Homebrew** window. What you save there belongs to your account and is offered in the Character tab and the builder beside the SRD's, marked *(Homebrew)*. Characters built from it level up with it.
 
 ![The Homebrew window, empty](img/build-a-character/11-homebrew.png)
 

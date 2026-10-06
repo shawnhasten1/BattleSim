@@ -206,8 +206,11 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         <p className={styles.lede}>
           {buildLabel(draft, sources)}{" "}
           {creating ? (
-            <button type="button" className={styles.linkButton} onClick={() => useBuilderUiStore.getState().openHomebrew()}>
-              Your own classes…
+            <button
+              type="button" className={styles.linkButton} onClick={() => useBuilderUiStore.getState().openHomebrew()}
+              title="Your own classes, subclasses, feats, backgrounds and species, beside the SRD's"
+            >
+              Homebrew content…
             </button>
           ) : null}
         </p>
