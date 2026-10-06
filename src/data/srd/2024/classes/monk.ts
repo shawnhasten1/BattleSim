@@ -1,4 +1,4 @@
-import type { ActionDefinition, DamageType, WeaponDefinition } from "@/engine";
+import type { ActionDefinition, ActionRider, DamageType, FeatureEffect, WeaponDefinition } from "@/engine";
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, fromLevels, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -58,6 +58,11 @@ const DEFLECT_SCALE = [
   { path: "grantedActions.0.damageCut.redirect.damage.0.dice", value: "{col:martial-arts}+{col:martial-arts}" },
   { path: "grantedActions.1.damageCut.bonus", value: "{level}" }
 ];
+
+/** An Open Hand Technique effect: an option on Flurry of Blows' strikes only. */
+const openHand = (name: string, riders: ActionRider[]): FeatureEffect => ({
+  kind: "on-hit-option", option: { name: `Open Hand: ${name}`, actionIds: [UNARMED_BONUS], routineOnly: true, riders }
+});
 
 const martialArts = runs("monk_martial-arts", {
   automationSupport: "full",
@@ -243,13 +248,19 @@ export const OPEN_HAND: SubclassDefinition = {
   levels: [
     {
       level: 3,
+      // One of Addle, Push or Topple on each Flurry of Blows hit: a choice of strike in the routine.
       grants: [grant("open-hand-technique", runs("monk_warrior-of-the-open-hand_open-hand-technique", {
-        effects: [{
-          kind: "apply-condition-on-hit", actionIds: [UNARMED_BONUS], condition: "always",
-          appliedCondition: { name: "prone" },
-          save: { ability: "dex", dcFormula: FOCUS_DC }
-        }],
-        notSimulated: "every Flurry hit tries Topple (a Dexterity save or prone); Push and Addle aren't offered, and the bonus action's single Unarmed Strike gets it too."
+        effects: [
+          openHand("Addle", [{
+            kind: "condition", when: "on-hit", condition: { custom: "Addled" }, conditionKey: "Addle",
+            modifiers: { deniesOpportunityAttacks: true }, duration: { kind: "until-start-of-next-turn" }
+          }]),
+          openHand("Push", [{ kind: "push", when: "on-hit", distance: 15, save: { ability: "str", dcFormula: FOCUS_DC } }]),
+          openHand("Topple", [{
+            kind: "condition", when: "on-hit", condition: "prone", duration: { kind: "until-start-of-next-turn" },
+            save: { ability: "dex", dcFormula: FOCUS_DC, onSuccess: "negates" }
+          }])
+        ]
       }))]
     },
     {

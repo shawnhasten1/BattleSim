@@ -5,6 +5,7 @@ import {
   getExecutableActions,
   resolveActivateFeatureAction,
   resolveAttack,
+  resolveMultiattackAction,
   sampleEncounter,
   SeededRandom,
   type CreatureDefinition,
@@ -155,7 +156,10 @@ describe("the Monk", () => {
     const monk = built("monk", 3);
     const state = fightWith(monk);
     state.rng = scripted([19, 4, 1]);
-    resolveAttack(state, "pc-fighter", "enemy-goblin-1", "monk-martial-arts:bonus");
+    // Phase 7aa: Topple is one of Flurry of Blows' strikes, not the plain bonus one.
+    const topple = getExecutableActions(monk).find((action) => action.name.includes("Open Hand: Topple"))!;
+    const flurry = getExecutableActions(monk).find((action) => action.name === "Flurry of Blows")!;
+    resolveMultiattackAction(state, "pc-fighter", ["enemy-goblin-1"], flurry.id, { attackActionIds: [topple.id, topple.id] });
     expect(state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.conditions?.some((condition) => condition.name === "prone")).toBe(true);
   });
 

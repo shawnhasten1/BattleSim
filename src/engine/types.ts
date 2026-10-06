@@ -903,6 +903,11 @@ export interface OnHitOption {
   forgoesAdvantage?: { whileCondition?: string };
   /** Only attacks that use one of these abilities (Brutal Strike: Strength). */
   abilities?: Ability[];
+  /**
+   * Only as a swing of a routine, not on its own (Open Hand Technique: Flurry of Blows' strikes, not the Martial Arts
+   * bonus one). With `actionIds`, a bonus action's attack can take it too.
+   */
+  routineOnly?: boolean;
 }
 
 /**
@@ -1125,6 +1130,8 @@ export type ActionRider =
       distance: number;
       /** Only pushes a creature this size or smaller (weapon mastery's Push: Large). */
       maxSize?: SizeCategory;
+      /** A made save stops it (Open Hand Technique's Push: Strength). */
+      save?: { ability: Ability; dc?: number; dcFormula?: NumericFormula };
     })
   | (TriggeredRider & {
       /**
@@ -1295,6 +1302,8 @@ export interface AttackActionDefinition {
   beamCountByLevel?: Array<{ atLevel: number; count: number }>;
   /** Skip the attack roll — each beam's damage always lands (Magic Missile). */
   autoHit?: boolean;
+  /** Only as a swing of a routine (Open Hand Technique's options on Flurry of Blows' strikes). */
+  routineOnly?: boolean;
   /**
    * Its `resourceCost` is an on-hit rider's, shown on the attack so planning sees what it spends: paid when the rider
    * lands, not when the attack is made (a weapon's charge, Stunning Strike's focus point, a smite's slot).
@@ -2812,7 +2821,10 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
     endsOnDamage: z.boolean().optional(),
     maxSize: sizeSchema.optional()
   }),
-  z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number(), maxSize: sizeSchema.optional() }),
+  z.object({
+    ...triggeredRiderBase, kind: z.literal("push"), distance: z.number(), maxSize: sizeSchema.optional(),
+    save: z.object({ ability: abilitySchema, dc: z.number().int().optional(), dcFormula: numericFormulaSchema.optional() }).optional()
+  }),
   z.object({
     ...triggeredRiderBase,
     kind: z.literal("swallow"),

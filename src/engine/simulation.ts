@@ -584,7 +584,10 @@ function bestSwingAttack(
       ? (expectedRiderControl({ ...attack, riders: (attack.riders ?? []).filter((rider) => rider.group === terms.group) }, source, target, weigh.tactics)
         + diceTradeValue(weigh.snapshot, sourceCombatant, source, attack, targetCombatant, target, weigh.tactics, weigh.log)) / 2
       : 0;
-    const value = damage - cost + trade;
+    // An on-hit option's condition (Open Hand Technique's Topple, Ensnaring Strike): its control, with the board.
+    const grouped = (attack.riders ?? []).filter((rider) => rider.group);
+    const control = weigh && grouped.length && !terms?.tradesDice ? expectedRiderControl({ ...attack, riders: grouped }, source, target, weigh.tactics) / 2 : 0;
+    const value = damage - cost + trade + control;
     if (!best || value > best.value + 1e-9) best = { attack, value, damage, hitChance };
   }
   return best;
@@ -3020,8 +3023,8 @@ function selectOffensivePlan(
   const executables = getExecutableActions(definition);
   const candidates = (options.actions ?? executables)
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action, executables) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
-    // Brutal Strike: not without Reckless Attack on.
-    .filter((action) => !onHitTermsProblem(snapshot, actor, action))
+    // Brutal Strike: not without Reckless Attack on. Open Hand Technique's: only in Flurry of Blows.
+    .filter((action) => !onHitTermsProblem(snapshot, actor, action) && !(action.kind === "attack" && action.routineOnly))
     // Don't trade a still-working concentration effect for a new one.
     .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
     // A routine of "any weapon attack" swings is planned two ways: close in and swing, or shoot from here.

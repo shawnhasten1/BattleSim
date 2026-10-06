@@ -413,7 +413,10 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       (effect.kind === "on-hit-option" && feature.automationSupport !== "manual-only" ? [{ key: `${feature.id}:${index}`, option: effect.option }] : [])))
   ];
   if (!options.length) return [];
-  const attacks = listed.filter((action): action is AttackActionDefinition => action.kind === "attack" && action.actionType === "action"
+  // An action's attacks; a bonus action's too when an option names it (Open Hand Technique on Flurry's strikes).
+  const named = new Set(options.flatMap(({ option }) => option.actionIds ?? []));
+  const attacks = listed.filter((action): action is AttackActionDefinition => action.kind === "attack"
+    && (action.actionType === "action" || (action.actionType === "bonus" && named.has(action.id)))
     && !isAttackVariant(action) && !action.item && !action.resourceCost && action.automationSupport === "full");
   const slots = Object.entries(definition.resources ?? {}).filter(([, count]) => count > 0).map(([id]) => slotLevelOf(id)).filter((level): level is number => level !== undefined);
   const out: AttackActionDefinition[] = [];
@@ -441,6 +444,7 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       if (option.attackTypes && !option.attackTypes.includes(attack.attackType)) continue;
       if (option.weaponOnly && attack.attackType === "spell") continue;
       if (option.actionIds && !option.actionIds.includes(attack.id)) continue;
+      if (!option.actionIds && attack.actionType !== "action") continue;
       if (traded && !featureAppliesToAction(traded, attack)) continue;
       if (option.abilities && !option.abilities.includes(attack.ability)) continue;
       levels.forEach((level, levelIndex) => {
@@ -465,7 +469,8 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
           name: `${attack.name} (${option.name}${level !== undefined && level !== base ? `, level ${level}` : ""})`,
           riders: [...(attack.riders ?? []), ...riders],
           ...(cost ? { resourceCost: cost, costPaidOnHit: true } : {}),
-          ...(terms ? { onHitTerms: terms } : {})
+          ...(terms ? { onHitTerms: terms } : {}),
+          ...(option.routineOnly ? { routineOnly: true } : {})
         });
       });
     }
@@ -7326,6 +7331,15 @@ function applyActionRiders(
     } else if (rider.kind === "push") {
       // Weapon mastery's Push: only a Large or smaller creature moves.
       if (rider.maxSize && SIZE_ORDER.indexOf(targetDefinition.size) > SIZE_ORDER.indexOf(rider.maxSize)) return;
+      // Open Hand Technique's Push: a made Strength save stops it.
+      if (rider.save) {
+        const dc = rider.save.dc ?? (rider.save.dcFormula ? resolveNumericFormula(rider.save.dcFormula, sourceDefinition) : ctx.fallbackDc);
+        const saved = rollSavingThrow(state, target, { ability: rider.save.ability, dc, kind: "feature" });
+        state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${rider.save.ability.toUpperCase()} save against being pushed`, {
+          targetId: target.id, attackerId: source.id, actionId: ctx.actionId, saveRoll: saved.roll, total: saved.roll.total, dc, success: saved.success
+        }));
+        if (saved.success) return;
+      }
       pushCombatant(state, target, rider.distance, ctx.origin ?? source.position);
     } else if (rider.kind === "swallow") {
       if (!applySwallow(state, source, target, targetDefinition, rider, ctx.actionId)) {

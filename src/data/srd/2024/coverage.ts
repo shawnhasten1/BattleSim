@@ -62,7 +62,6 @@ export const GAPS = {
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
-  "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
   "weapon-cantrip": "A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
 } as const;
@@ -227,7 +226,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_body-and-mind": builder("+4 Dexterity and Wisdom, to a maximum of 25."),
 
   /* Warrior of the Open Hand */
-  "monk_warrior-of-the-open-hand_open-hand-technique": partial(["rider-choice"], "Topple (a Dexterity save or Prone) on each Flurry hit; Push and Addle aren't offered."),
+  "monk_warrior-of-the-open-hand_open-hand-technique": full("Addle (no opportunity attacks), Push (a Strength save or 15 ft) or Topple (a Dexterity save or prone) on each Flurry of Blows hit: a choice of strike in the routine, not the Martial Arts bonus strike. The AI picks the one whose condition it values most: Topple."),
   "monk_warrior-of-the-open-hand_wholeness-of-body": full(),
   "monk_warrior-of-the-open-hand_fleet-step": manual(["free-move"]),
   "monk_warrior-of-the-open-hand_quivering-palm": manual(["delayed-damage"]),

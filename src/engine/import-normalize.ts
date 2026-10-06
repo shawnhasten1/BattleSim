@@ -987,7 +987,12 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
   }
   if (input.kind === "push") {
     const maxSize = SIZES.find((size) => size === input.maxSize);
-    return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5, ...(maxSize ? { maxSize } : {}) };
+    // Open Hand Technique's Push: a save that stops it.
+    const save = normalizeRiderSave(input.save);
+    return {
+      ...base, kind: "push", distance: numberField(input, "distance") ?? 5, ...(maxSize ? { maxSize } : {}),
+      ...(save ? { save: { ability: save.ability, ...(save.dc !== undefined ? { dc: save.dc } : {}), ...(save.dcFormula ? { dcFormula: save.dcFormula } : {}) } } : {})
+    };
   }
   // Grapples and swallows are structured records with no legacy shapes to translate; keep them as authored.
   if (input.kind === "hold" && numberField(input, "escapeDc") !== undefined) {

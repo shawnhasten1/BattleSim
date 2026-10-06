@@ -328,7 +328,7 @@ function riderQualifiers(rider: ActionRider): string {
 }
 
 /** A rider's save DC, falling back to `fallbackDc` the way the engine does. */
-function riderDc(save: NonNullable<ConditionRider["save"]>, definition: CreatureDefinition, fallbackDc: number): number {
+function riderDc(save: { dc?: number; dcFormula?: NumericFormula }, definition: CreatureDefinition, fallbackDc: number): number {
   return save.dc ?? (save.dcFormula ? resolveNumericFormula(save.dcFormula, definition) : fallbackDc);
 }
 
@@ -362,7 +362,9 @@ function riderSentence(rider: ActionRider, definition: CreatureDefinition, fallb
     case "healing":
       return `${rider.target === "self" ? "It" : S} regains ${healingText(rider.components, definition)} hit points${qualifiers}.`;
     case "push":
-      return `${S} is pushed up to ${rider.distance} feet away${qualifiers}.`;
+      return rider.save && rollsOwnSave
+        ? `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or be pushed up to ${rider.distance} feet away${qualifiers}.`
+        : `${S} is pushed up to ${rider.distance} feet away${qualifiers}.`;
     case "hold": {
       const size = rider.maxSize ? ` if it is ${rider.maxSize} or smaller` : "";
       return `${S} is grappled (escape DC ${rider.escapeDc})${size}${qualifiers}.`
@@ -412,7 +414,7 @@ function riderShortOf(rider: ActionRider, definition: CreatureDefinition, fallba
     }
     case "damage": return `+${damageShort(rider.components, definition)}`;
     case "healing": return `heals ${healingText(rider.components, definition)}`;
-    case "push": return `push ${rider.distance} ft`;
+    case "push": return `${rider.save && rollsOwnSave ? `DC ${riderDc(rider.save, definition, fallbackDc)} ${rider.save.ability.toUpperCase()} or ` : ""}push ${rider.distance} ft`;
     case "hold": return `grappled${rider.restrained ? " and restrained" : ""} (DC ${rider.escapeDc})`;
     case "swallow": return "swallows";
     case "note": return "";

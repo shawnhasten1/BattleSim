@@ -20,7 +20,7 @@ its gaps, never dropped and never approximated without saying so.
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 12 | 3 | 2 | 5 | 4 |
+| Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 10 | 1 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
@@ -56,7 +56,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
-| `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
@@ -254,7 +253,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Open Hand Technique | partial | `rider-choice` | Topple (a Dexterity save or Prone) on each Flurry hit; Push and Addle aren't offered. |
+| 3 | Open Hand Technique | full |  | Addle (no opportunity attacks), Push (a Strength save or 15 ft) or Topple (a Dexterity save or prone) on each Flurry of Blows hit: a choice of strike in the routine, not the Martial Arts bonus strike. The AI picks the one whose condition it values most: Topple. |
 | 6 | Wholeness of Body | full |  |  |
 | 11 | Fleet Step | manual | `free-move` |  |
 | 17 | Quivering Palm | manual | `delayed-damage` |  |

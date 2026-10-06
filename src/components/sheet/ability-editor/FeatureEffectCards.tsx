@@ -726,6 +726,7 @@ function OnHitOptionFields({ option, onChange, context }: { option: OnHitOption;
         ))}
       </span>
       <Check label="Weapon attacks only" checked={option.weaponOnly === true} onChange={(on) => onChange(opt(option, "weaponOnly", on ? true : undefined))} />
+      <Check label="Only on a routine's strikes (Open Hand Technique: Flurry of Blows)" checked={option.routineOnly === true} onChange={(on) => onChange(opt(option, "routineOnly", on ? true : undefined))} />
       <span className={styles.typeChips} role="group" aria-label="Only attacks using">
         {(["str", "dex", "con", "int", "wis", "cha"] as const).map((name) => (
           <button key={name} type="button" aria-pressed={abilities.includes(name)} onClick={() => toggleAbility(name)}>{name.toUpperCase()}</button>
