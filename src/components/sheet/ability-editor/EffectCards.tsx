@@ -500,6 +500,8 @@ function ConditionFields({ rider, onChange, definition, context }: {
       <DurationField rider={rider} onChange={onChange} />
       <Check label="Ends early if it takes damage" checked={rider.endsOnDamage === true}
         onChange={(on) => { const next = { ...rider }; delete next.endsOnDamage; onChange(on ? { ...next, endsOnDamage: true } : next); }} />
+      <Check label="Ends early if this creature is incapacitated or dies" checked={rider.endsWithSource === true}
+        onChange={(on) => { const next = { ...rider }; delete next.endsWithSource; onChange(on ? { ...next, endsWithSource: true } : next); }} />
     </>
   );
 }
