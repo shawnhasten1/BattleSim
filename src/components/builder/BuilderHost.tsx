@@ -23,5 +23,6 @@ function BuilderWindow({ onCreated }: { onCreated: () => void }) {
   if (!window) return null;
   if (window.kind === "level-up") return <LevelUpWindow key={window.definitionId} definitionId={window.definitionId} onClose={close} />;
   if (window.kind === "edit") return <CharacterBuilder key={window.definitionId} definitionId={window.definitionId} onClose={close} />;
+  if (window.kind === "adopt") return <CharacterBuilder key={`adopt-${window.definitionId}`} definitionId={window.definitionId} adopt onClose={close} />;
   return <CharacterBuilder key={`create-${window.seed.classId}-${window.seed.name}`} seed={window.seed} onClose={close} onCreated={onCreated} />;
 }

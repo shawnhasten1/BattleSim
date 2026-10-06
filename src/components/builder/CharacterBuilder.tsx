@@ -20,6 +20,8 @@ import {
   withLevelDown,
   withLevelUp,
   withSuggestions,
+  adoptionBuild,
+  sameNamedAbilities,
   type BuildChange,
   type CharacterBuild,
   type ChoiceSlot
@@ -80,6 +82,8 @@ function groups(slots: ChoiceSlot[]): Array<{ label: string; slots: ChoiceSlot[]
 type BuilderProps = {
   seed?: BuilderSeed;
   definitionId?: string;
+  /** A hand-built PC to rebuild with the builder (plan D10). */
+  adopt?: boolean;
   onClose: () => void;
   onCreated?: (definitionId: string) => void;
 };
@@ -104,20 +108,28 @@ function startBuildShape(seed: BuilderSeed): CharacterBuild {
   };
 }
 
-function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources }: BuilderProps & { sources: BuildSources }) {
+function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, sources }: BuilderProps & { sources: BuildSources }) {
   const definition = useEncounterStore((s) => (definitionId ? s.encounter.definitions.find((entry) => entry.id === definitionId) : undefined));
   const createCharacter = useEncounterStore((s) => s.createCharacter);
   const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
+  const adoptCharacter = useEncounterStore((s) => s.adoptCharacter);
   const saved = readBuild(definition);
   const creating = !definitionId;
+  // A hand-built PC, rebuilt: its classes matched by name (the first class when none is), its scores and HP kept.
+  const adopting = Boolean(adopt && definition && !saved);
+  const [adoption] = useState(() => (adopting && definition
+    ? adoptionBuild(definition, sources) ?? adoptionBuild(definition, sources, sources.catalog.classes[0]?.id)
+    : undefined));
 
   const [name, setName] = useState(seed?.name ?? "New Character");
   const [draft, setDraft] = useState<CharacterBuild | undefined>(() => {
     if (saved) return saved;
+    if (adoption) return adoption.build;
     if (!seed) return undefined;
     return withSuggestions(startBuild(sources, { classId: seed.classId, level: seed.level, backgroundId: seed.backgroundId, speciesId: seed.speciesId }), sources);
   });
   const [update, setUpdate] = useState<string[]>([]);
+  const [removeTwins, setRemoveTwins] = useState(false);
 
   const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
   // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
@@ -144,6 +156,13 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
   const set = (next: CharacterBuild) => setDraft(next);
 
   function changeClass(nextClass: string) {
+    // Rebuilding: the chosen class at the PC's level, its scores and HP still kept.
+    const chosen = sources.catalog.classes.find((entry) => entry.id === nextClass);
+    if (adopting && definition && chosen) {
+      const asClass = { ...definition, character: { ...definition.character, classes: [{ name: chosen.name, level: draft!.levels.length }] } };
+      const next = adoptionBuild(asClass, sources);
+      if (next) return set(next.build);
+    }
     set(withSuggestions(startBuild(sources, { classId: nextClass, level: draft!.levels.length, backgroundId: draft!.background.id, speciesId: draft!.species?.id }), sources));
   }
 
@@ -164,6 +183,8 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
     if (creating) {
       const id = createCharacter({ name: name.trim() || "New Character", build: draft! });
       onCreated?.(id);
+    } else if (adopting) {
+      adoptCharacter(definitionId!, draft!, removeTwins);
     } else {
       rebuildCharacter(definitionId!, draft!, update);
     }
@@ -171,9 +192,11 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
   }
 
   const finalScores = built.fields.abilities;
+  // Rebuilding: the PC's own abilities named like something the builder adds.
+  const twins = adopting ? sameNamedAbilities(preview.definition) : [];
   return (
     <FloatingWindow
-      title={creating ? "New character" : `Character Builder · ${definition?.name ?? ""}`}
+      title={creating ? "New character" : adopting ? `Rebuild with the builder · ${definition?.name ?? ""}` : `Character Builder · ${definition?.name ?? ""}`}
       ariaLabel="Character builder"
       onClose={onClose}
       width={600}
@@ -188,6 +211,15 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
             </button>
           ) : null}
         </p>
+        {adopting ? (
+          <div className={styles.warning} role="note">
+            <p className={styles.dim}>
+              {definition?.name} becomes a built character: its class features become the 2024 versions, its ability scores and
+              hit point maximum stay as they are, and nothing is added to its equipment. Its own abilities stay too.
+            </p>
+            {adoption?.notes.length ? <ul className={styles.dim}>{adoption.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
+          </div>
+        ) : null}
 
         <section className={styles.section} aria-label="Basics">
           <h4>Basics</h4>
@@ -200,7 +232,7 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
             ) : null}
             <label className={styles.field}>
               Class
-              <select value={classId} disabled={!creating} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
+              <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
                 {sources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
               </select>
             </label>
@@ -354,6 +386,20 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
           ) : null}
         </section>
 
+        {twins.length ? (
+          <section className={styles.section} aria-label="Named twice">
+            <h4>Named like what the builder adds</h4>
+            <p className={styles.dim}>
+              These are its own, made by hand, and the builder adds one of the same name: {twins.map((twin) => twin.name).join(", ")}.
+              Keep them to compare, or take them off.
+            </p>
+            <label className={styles.checkRow}>
+              <input type="checkbox" checked={removeTwins} onChange={(event) => setRemoveTwins(event.target.checked)} />
+              Remove my versions when rebuilding
+            </label>
+          </section>
+        ) : null}
+
         <section className={styles.section} aria-label={creating ? "Summary" : "What changes"}>
           <h4>{creating ? "Summary" : "What applying changes"}</h4>
           <Summary definition={preview.definition} />
@@ -364,7 +410,7 @@ function CharacterBuilderBody({ seed, definitionId, onClose, onCreated, sources 
         <div className={styles.actions}>
           <button type="button" className={styles.secondary} onClick={onClose}>Cancel</button>
           <button type="button" className={styles.primary} disabled={Boolean(scores)} onClick={apply}>
-            {creating ? "Create character" : "Apply"}
+            {creating ? "Create character" : adopting ? "Rebuild" : "Apply"}
           </button>
         </div>
         {pending.length ? <p className={styles.dim}>Choices still open are left out until they&apos;re made.</p> : null}

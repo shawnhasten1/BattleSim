@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseCombatantPackage, type CreatureDefinition } from "@/engine";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
@@ -241,6 +242,45 @@ describe("leveling up", { timeout: 20000 }, () => {
     expect(store().encounter.definitions.find((definition) => definition.id === rogue.id)!.character?.level).toBe(1);
     await userEvent.click(screen.getByRole("button", { name: "Open in the builder…" }));
     expect(useBuilderUiStore.getState().window).toEqual({ kind: "edit", definitionId: rogue.id });
+  });
+});
+
+describe("rebuilding a hand-built PC with the builder (plan D10)", { timeout: 20000 }, () => {
+  it("Level & CR offers it; the builder keeps its scores and HP, lists its look-alike abilities, and can take them off", async () => {
+    const pkg = parseCombatantPackage(JSON.parse(readFileSync("barbarian-template.json", "utf-8")));
+    store().importCombatantPackage(pkg);
+    const before = store().encounter.definitions.find((definition) => definition.name === pkg.definition.name)!;
+    const token = tokenOf(before);
+    function Live() {
+      const encounter = useEncounterStore((s) => s.encounter);
+      return <StatsTab combatant={encounter.combatants.find((c) => c.id === token.id)!} definition={encounter.definitions.find((d) => d.id === before.id)!} />;
+    }
+    render(<Live />);
+    await userEvent.click(screen.getByRole("button", { name: /^Level & CR/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Rebuild with the builder…" }));
+    expect(useBuilderUiStore.getState().window).toEqual({ kind: "adopt", definitionId: before.id });
+    cleanup();
+
+    render(<BuilderHost onCreated={() => undefined} />);
+    const builder = screen.getByRole("dialog", { name: "Character builder" });
+    expect(within(builder).getByRole("note").textContent).toMatch(/becomes a built character/);
+    expect((within(builder).getByLabelText("Class") as HTMLSelectElement).value).toBe("srd:class:barbarian");
+    expect((within(builder).getByLabelText("Level") as HTMLSelectElement).value).toBe("6");
+    const twins = within(builder).getByRole("region", { name: "Named twice" });
+    expect(twins.textContent).toMatch(/Rage/);
+    await userEvent.click(within(twins).getByRole("checkbox", { name: "Remove my versions when rebuilding" }));
+    const depth = store().undoStack.length;
+    await userEvent.click(within(builder).getByRole("button", { name: "Rebuild" }));
+
+    const after = store().encounter.definitions.find((definition) => definition.id === before.id)!;
+    expect(readBuild(after)?.levels).toHaveLength(6);
+    expect(after.abilities).toEqual(before.abilities);
+    expect(after.maxHp).toBe(before.maxHp);
+    expect(after.features?.filter((feature) => feature.name === "Rage")).toHaveLength(1);
+    expect(after.weapons?.map((weapon) => weapon.name)).toEqual(["+1 Greataxe"]);
+    expect(store().undoStack.length).toBe(depth + 1);
+    store().undo();
+    expect(readBuild(store().encounter.definitions.find((definition) => definition.id === before.id))).toBeUndefined();
   });
 });
 

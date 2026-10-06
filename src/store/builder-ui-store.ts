@@ -15,7 +15,9 @@ export interface BuilderSeed {
 export type BuilderWindow =
   | { kind: "create"; seed: BuilderSeed }
   | { kind: "edit"; definitionId: string }
-  | { kind: "level-up"; definitionId: string };
+  | { kind: "level-up"; definitionId: string }
+  /** A hand-built PC, rebuilt with the builder (plan D10). */
+  | { kind: "adopt"; definitionId: string };
 
 interface BuilderUiState {
   window: BuilderWindow | null;

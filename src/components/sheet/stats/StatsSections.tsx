@@ -228,6 +228,7 @@ export function LevelSection({ definition, open, onToggle }: SectionProps) {
 
 function TypedLevelSection({ definition, open, onToggle }: SectionProps) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
+  const openBuilder = useBuilderUiStore((s) => s.open);
   const classes = definition.character?.classes ?? [];
   const casts = Boolean(definition.spells?.length);
   const setClasses = (next: ClassEntry[]) => update(definition.id, { character: withClasses(definition.character, next) });
@@ -291,6 +292,16 @@ function TypedLevelSection({ definition, open, onToggle }: SectionProps) {
       >
         + Add a class
       </button>
+      {/* A hand-built PC can become a built one at its level (plan D10). */}
+      {definition.character ? (
+        <button
+          type="button" className={styles.addSmall}
+          title="Make it a built character at this level: its class features become the 2024 versions, its scores and HP stay, and Level up works from then on"
+          onClick={() => openBuilder({ kind: "adopt", definitionId: definition.id })}
+        >
+          Rebuild with the builder…
+        </button>
+      ) : null}
       <p className={styles.note}>
         Its level sets its cantrips&apos; damage, and its proficiency bonus when Proficiency is blank; with classes, it&apos;s
         their total. The challenge rating is for your reference (and the AC a multiattack&apos;s preview aims at); choosing

@@ -96,7 +96,7 @@ import { createPlayActions, persistedPlay, restorePlay, sessionStatusOf, type Pl
 import { copyMapImage, deleteMapImage, getMapImage, putMapImage } from "@/lib/mapImageStore";
 import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
-import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
+import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, sameNamedAbilities, withoutAbilities, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
 import { useCatalogStore } from "@/store/catalog-store";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
@@ -431,6 +431,11 @@ interface EncounterStore extends PlayActions {
    * isn't in the scene.
    */
   rebuildCharacter: (definitionId: string, build: CharacterBuild, update?: string[]) => { changes: BuildChange[]; warnings: string[] } | undefined;
+  /**
+   * "Rebuild with the builder" (plan D10): a hand-built PC takes `build` (`adoptionBuild`'s, as the DM left it). Its
+   * own abilities stay, or with `removeTwins` the ones named like something the builder added go. One undo step.
+   */
+  adoptCharacter: (definitionId: string, build: CharacterBuild, removeTwins?: boolean) => { changes: BuildChange[]; warnings: string[] } | undefined;
   updateCombatant: (combatantId: string, updates: Partial<Pick<CombatantState, "displayName" | "faction" | "position" | "tempHp" | "state" | "tacticsProfile" | "tokenVisuals">>) => void;
   /** Bench one or more tokens as reinforcements arriving on a given round (≤ 1 / undefined = on the board). */
   setArrivesRound: (combatantIds: string[], arrivesRound: number | undefined) => void;
@@ -2957,6 +2962,20 @@ export const useEncounterStore = create<EncounterStore>()(
           }
         });
         return id;
+      },
+      adoptCharacter: (definitionId, build, removeTwins) => {
+        const encounter = get().encounter;
+        const before = encounter.definitions.find((definition) => definition.id === definitionId);
+        if (!before) return undefined;
+        const result = rebuildActor(before, build, useCatalogStore.getState().sources);
+        const definition = removeTwins ? withoutAbilities(result.definition, sameNamedAbilities(result.definition)) : result.definition;
+        commitEncounter({
+          ...encounter,
+          definitions: encounter.definitions.map((candidate) => (candidate.id === definitionId ? definition : candidate)),
+          combatants: encounter.combatants.map((combatant) => tokenAfterRebuild(combatant, before, definition))
+        });
+        embedSpawnsOf(definition);
+        return { changes: result.changes, warnings: result.warnings };
       },
       rebuildCharacter: (definitionId, build, update) => {
         const encounter = get().encounter;
