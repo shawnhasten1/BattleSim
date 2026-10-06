@@ -18,7 +18,7 @@ its gaps, never dropped and never approximated without saying so.
 | Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 7 | 1 | 1 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
+| Druid (Circle of the Land) | 19 | 4 | 1 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 10 | 1 | 3 | 8 | 1 |
@@ -50,7 +50,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
-| `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
@@ -180,7 +179,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Circle of the Land Spells | builder |  | The chosen land's spells are always prepared. |
-| 3 | Land's Aid | partial | `mixed-area` | The area damage runs; healing one creature in it isn't part of the same action. |
+| 3 | Land's Aid | full |  | The sphere's necrotic damage to its foes, then the same dice of healing for the ally in it with the least of its hit points left (itself too, one at 0 first). |
 | 6 | Natural Recovery | builder |  | A circle spell cast once without a slot; recovering slots on a short rest is outside a fight. |
 | 10 | Nature's Ward | full |  | Immunity to Poisoned and the land's resistance. |
 | 14 | Nature's Sanctuary | manual | `zone-cover` |  |

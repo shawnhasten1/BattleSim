@@ -3033,7 +3033,30 @@ export function resolveAreaSaveAction(
   if (action.zone?.applyOnCast) {
     createZone(state, attacker, action, origin, dc);
   }
+  if (action.healsOneAlly?.length) healOneInArea(state, attacker, attackerDefinition, action, origin, aimVector);
   return { targets };
+}
+
+/**
+ * Land's Aid: one of the caster's side in the area (the caster too) regains the action's healing: the one with the least
+ * of its hit points left, a creature at 0 (not dead) first.
+ */
+function healOneInArea(state: EngineState, caster: CombatantState, casterDefinition: CreatureDefinition, action: AreaSaveActionDefinition, origin: Point, aimVector?: AimVector): void {
+  const faction = effectiveFaction(state.snapshot, caster);
+  const definitionsById = new Map(state.snapshot.definitions.map((definition) => [definition.id, definition]));
+  const share = (combatant: CombatantState) => combatant.currentHp / Math.max(1, getDefinition(state.snapshot, combatant).maxHp);
+  const ally = combatantsInArea(state.snapshot.map, origin, action.area, state.snapshot.combatants, definitionsById, aimVector, { includeDowned: true })
+    .filter((combatant) => (combatant.state === "active" || combatant.state === "downed") && effectiveFaction(state.snapshot, combatant) === faction
+      && combatant.currentHp < getDefinition(state.snapshot, combatant).maxHp)
+    .sort((a, b) => share(a) - share(b) || a.id.localeCompare(b.id))[0];
+  if (!ally) return;
+  const rolls = action.healsOneAlly!.map((component) => rollDice(withBonus(component.dice, component.abilityModifier ? abilityModifier(casterDefinition.abilities[component.abilityModifier]) : 0), state.rng));
+  const amount = rolls.reduce((sum, roll) => sum + roll.total, 0);
+  const before = ally.currentHp;
+  healTo(state, ally, amount);
+  state.log.push(event(state, "HealingApplied", `${ally.displayName} regained ${ally.currentHp - before} HP from ${caster.displayName}'s ${action.name}`, {
+    healerId: caster.id, targetId: ally.id, actionId: action.id, rolls, healingApplied: ally.currentHp - before, currentHp: ally.currentHp
+  }));
 }
 
 /**

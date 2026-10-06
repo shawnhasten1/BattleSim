@@ -204,10 +204,11 @@ export const CIRCLE_OF_THE_LAND: SubclassDefinition = {
           saveAbility: "con", dcFormula: { base: 8, ability: "wis", proficiency: true },
           area: { type: "circle", size: 10 }, targeting: { origin: "point", range: 60 },
           damage: [{ dice: "2d6", damageType: "necrotic", magical: true }], halfDamageOnSuccess: true, onSuccess: "half", affects: "hostile",
+          // And one creature of its choice in the sphere regains as many dice.
+          healsOneAlly: [{ dice: "2d6" }],
           resourceCost: { resourceId: "wild-shape", amount: 1 }, automationSupport: "full"
-        }],
-        notSimulated: "the healing for one creature in the sphere."
-      }), { scale: [{ path: "grantedActions.0.damage.0.dice", value: "{col:lands-aid}" }] })],
+        }]
+      }), { scale: [{ path: "grantedActions.0.damage.0.dice", value: "{col:lands-aid}" }, { path: "grantedActions.0.healsOneAlly.0.dice", value: "{col:lands-aid}" }] })],
       choices: [choice({
         kind: "pick", id: "land", label: "Land (its circle spells)", count: 1, options: LANDS.map(land)
       }, "druid_circle-of-the-land_spell-list")]

@@ -50,7 +50,6 @@ export const GAPS = {
   "wild-shape": "Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
   "free-cast-any": "Casting any spell of a level from a list for free, chosen when cast (Divine Intervention)",
-  "mixed-area": "An area that harms enemies and heals one ally at once (Land's Aid)",
   "zone-cover": "A movable zone that gives cover and shares a resistance (Nature's Sanctuary)",
   "combined-utility": "Step of the Wind carrying an ally with the monk (Heightened Focus)",
   stealth: "Hiding and invisibility you give yourself (there's no stealth in the simulator)",
@@ -165,7 +164,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Circle of the Land */
   "druid_circle-of-the-land_spell-list": PREPARED("The chosen land's spells"),
-  "druid_circle-of-the-land_lands-aid": partial(["mixed-area"], "The area damage runs; healing one creature in it isn't part of the same action."),
+  "druid_circle-of-the-land_lands-aid": full("The sphere's necrotic damage to its foes, then the same dice of healing for the ally in it with the least of its hit points left (itself too, one at 0 first)."),
   "druid_circle-of-the-land_natural-recovery": builder("A circle spell cast once without a slot; recovering slots on a short rest is outside a fight."),
   "druid_circle-of-the-land_natures-ward": full("Immunity to Poisoned and the land's resistance."),
   "druid_circle-of-the-land_natures-sanctuary": manual(["zone-cover"]),

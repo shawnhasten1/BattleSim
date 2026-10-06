@@ -3187,12 +3187,21 @@ function areaPlanValue(
       + expectedRiderControl(action, definition, combatantDefinition, tactics)
       + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
   }, 0);
-  const friendlyRisk = affected
-    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && !spared.has(combatant.id))
+  const allies = affected.filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor));
+  // Land's Aid harms only its foes, and wants its ally in it.
+  const friendlyRisk = action.healsOneAlly?.length && action.affects === "hostile" ? 0 : allies
+    .filter((combatant) => !spared.has(combatant.id))
     .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant), combatant), 0);
-  let score = hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
+  // Land's Aid: the most hurt ally in it heals, worth what it gets back.
+  const healValue = action.healsOneAlly?.length
+    ? Math.max(0, ...allies.filter((ally) => ally.state === "active" || ally.state === "downed").map((ally) => Math.min(
+      getDefinition(snapshot, ally).maxHp - ally.currentHp,
+      action.healsOneAlly!.reduce((sum, component) => sum + averageHealingDice(component.dice), 0))))
+    : 0;
+  let score = hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5 + healValue;
   const reasons = [`${hostiles.length} hostile targets`];
   if (friendlyRisk > 0) reasons.push("friendly fire risk");
+  if (healValue > 0) reasons.push("heals an ally");
   if (action.zone) {
     const predictedValue = predictedZoneApproachValue(snapshot, actor, definition, action, origin, aimVector, affected, tactics);
     score += predictedValue * (1.2 + tactics.areaWeight);
@@ -4420,6 +4429,16 @@ function defenseMultiplier(
     return Math.max(...component.damageTypeOptions.map((type) => damageAdjustmentMultiplier(type, targetAdjustments, origin)));
   }
   return component.damageType === "same-as-attack" ? 1 : damageAdjustmentMultiplier(component.damageType, targetAdjustments, origin);
+}
+
+/** A heal's dice on average ("2d6" → 7). */
+function averageHealingDice(dice: string): number {
+  try {
+    const parsed = parseDiceExpression(dice);
+    return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
+  } catch {
+    return 0;
+  }
 }
 
 /** The damage types whose resistance a creature's damage ignores, kept per definition. */

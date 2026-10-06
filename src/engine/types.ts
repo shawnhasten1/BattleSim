@@ -1466,6 +1466,11 @@ export interface AreaSaveActionDefinition {
   halfDamageOnSuccess: boolean;
   onSuccess?: "half" | "none" | "negates";
   affects: "hostile" | "all";
+  /**
+   * Land's Aid: one of the caster's side in the area (itself too) regains this much: the one with the least of its hit
+   * points left, a creature at 0 first.
+   */
+  healsOneAlly?: HealingComponent[];
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
   concentration?: boolean;

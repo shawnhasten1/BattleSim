@@ -1183,7 +1183,13 @@ function areaBody(action: AreaAction, definition: CreatureDefinition): Body {
   const notSimulated = notesOf(action.riders);
   if (!zone) {
     const clause = saveClause(action, definition, `Each ${who} ${areaWhere(action)}`, A_CREATURE);
-    return { text: clause.text, short: [areaShort(action), clause.short || `DC ${resolveSaveDc(action, definition)} ${action.saveAbility.toUpperCase()}`].join(" · "), notSimulated };
+    // Land's Aid: and one of its side in the area heals.
+    const heal = action.healsOneAlly?.length ? healingText(action.healsOneAlly, definition) : "";
+    return {
+      text: clause.text + (heal ? ` One creature of its choice in the area regains ${heal} hit points.` : ""),
+      short: [areaShort(action), clause.short || `DC ${resolveSaveDc(action, definition)} ${action.saveAbility.toUpperCase()}`, ...(heal ? [`one ally heals ${heal}`] : [])].join(" · "),
+      notSimulated
+    };
   }
   const triggers = zoneTriggers(zone);
   const affected = `${who === "enemy" ? "An enemy" : "A creature"} that ${joinList(triggers, "or")}`;
