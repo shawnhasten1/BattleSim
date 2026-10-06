@@ -337,7 +337,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...withCantrips.map((action) => (replacements.routineOnly.has(action.id) ? { ...action, routineOnly: true } : action)),
     ...replacements.copies
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...masterySwapVariants(definition, listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...masterySwapVariants(definition, listed), ...concentrationFreeVariants(listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -405,6 +405,13 @@ function weaponCantripVariants(definition: CreatureDefinition, listed: ActionDef
     if (spell.kind === "attack" || fits === 0) spent.add(spell.id);
   }
   return { copies, spent };
+}
+
+/** Dragon Companion: a summon that can be cast without concentration, as a copy that lasts the shorter time. */
+function concentrationFreeVariants(listed: ActionDefinition[]): ActionDefinition[] {
+  return listed.flatMap((action) => (action.kind === "summon" && action.concentrationOptional && action.concentration
+    ? [{ ...action, id: `${action.id}:no-concentration`, name: `${action.name} (no concentration)`, concentration: false, durationRounds: action.concentrationOptional.durationRounds }]
+    : []));
 }
 
 /**
@@ -5242,7 +5249,9 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
     applyCondition(state, caster.id, {
       id: `${caster.id}:shared-resistances`, name: "custom", sourceName: "Shared Resistances", sourceCombatantId: caster.id,
       startedRound: state.snapshot.round, modifiers: { damageAdjustments: [{ type: "resistance", damageType: chosen.template.damageType }] },
-      ...(action.concentration ? { concentration: true } : {})
+      ...(action.concentration ? { concentration: true } : {}),
+      // As long as the spell: without concentration, its shorter time.
+      ...(action.durationRounds ? { expiresAt: { round: state.snapshot.round + action.durationRounds, turnIndex: state.snapshot.turnIndex, timing: "end" as const } } : {})
     });
   }
   state.log.push(event(state, "CombatantSpawned",

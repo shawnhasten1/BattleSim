@@ -124,7 +124,7 @@ export interface HotbarModel {
  * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
  * potion, a wand's spell for more charges.
  */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z+]+(?:-free)?|overchannel|imbued|with-[a-z0-9-]+|mastery-[a-z]+)$/;
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z+]+(?:-free)?|overchannel|no-concentration|imbued|with-[a-z0-9-]+|mastery-[a-z]+)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {

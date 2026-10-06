@@ -33,10 +33,8 @@ export const GAPS = {
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
-  "gain-speed": "Dragon Wings again for sorcery points",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "summon-stat-blocks": "Familiars: a summon that can't attack but helps (Find Familiar)",
-  "concentration-optional": "Casting a concentration spell without concentration, for a shorter time (Dragon Companion)",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
   "zone-cover": "A movable zone that gives cover and shares a resistance (Nature's Sanctuary)",
   "combined-utility": "Step of the Wind carrying an ally with the monk (Heightened Focus)",
@@ -309,8 +307,8 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "sorcerer_draconic-sorcery_draconic-resilience": full("AC 10 + Dexterity + Charisma without armor, and hit points by sorcerer level."),
   "sorcerer_draconic-sorcery_draconic-spells": PREPARED("Draconic spells"),
   "sorcerer_draconic-sorcery_elemental-affinity": full("The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one."),
-  "sorcerer_draconic-sorcery_dragon-wings": partial(["gain-speed"], "A bonus action: a fly speed of 60 ft for an hour, once a fight; again for 3 sorcery points doesn't run."),
-  "sorcerer_draconic-sorcery_dragon-companion": partial(["concentration-optional"], "Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; casting it without concentration doesn't run."),
+  "sorcerer_draconic-sorcery_dragon-wings": full("A bonus action: a fly speed of 60 ft for an hour, once a fight, then again for 3 sorcery points."),
+  "sorcerer_draconic-sorcery_dragon-companion": full("Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; or cast without concentration, for a minute (\"Summon Dragon (no concentration)\")."),
 
   /* Warlock */
   "warlock_eldritch-invocations": builder("Invocation choices, as many as the table gives."),

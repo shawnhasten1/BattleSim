@@ -198,23 +198,28 @@ export const DRACONIC_SORCERY: SubclassDefinition = {
     { level: 9, grants: [{ key: "draconic-spells-9", spells: ["legend-lore", "summon-dragon"].map(spell) }] },
     {
       level: 14,
-      // A bonus action: a fly speed of 60 ft for an hour, once a fight (or for 3 sorcery points, not modeled).
+      // A bonus action: a fly speed of 60 ft for an hour, once a fight, then for 3 sorcery points.
       grants: [grant("dragon-wings", runs("sorcerer_draconic-sorcery_dragon-wings", {
         grantedActions: [{
           kind: "activate-feature", id: "dragon-wings", name: "Dragon Wings", actionType: "bonus", featureId: "",
           resourceCost: { resourceId: "dragon-wings", amount: 1 },
           condition: { id: "dragon-wings-active", name: "custom", durationRounds: 600, modifiers: { flySpeed: 60 } },
           automationSupport: "full"
-        }],
-        notSimulated: "using it again for 3 sorcery points."
+        }, {
+          kind: "activate-feature", id: "dragon-wings-points", name: "Dragon Wings (3 sorcery points)", actionType: "bonus", featureId: "",
+          resourceCost: SORCERY_POINTS(3), onlyWhenEmpty: "dragon-wings",
+          condition: { id: "dragon-wings-active", name: "custom", durationRounds: 600, modifiers: { flySpeed: 60 } },
+          automationSupport: "full"
+        }]
       }), { pool: { id: "dragon-wings", size: 1 } })]
     },
     {
       level: 18,
-      // Summon Dragon always prepared, and once without a slot.
-      grants: [grant("dragon-companion", runs("sorcerer_draconic-sorcery_dragon-companion", {
-        notSimulated: "casting it without concentration (for 1 minute)."
-      }), { spells: [spell("summon-dragon")], freeCasts: [{ spell: spell("summon-dragon"), uses: 1 }] })]
+      // Summon Dragon always prepared, once without a slot, and without concentration (for a minute) if it likes.
+      grants: [grant("dragon-companion", runs("sorcerer_draconic-sorcery_dragon-companion"), {
+        spells: [spell("summon-dragon")], freeCasts: [{ spell: spell("summon-dragon"), uses: 1 }],
+        spellChanges: [{ spell: spell("summon-dragon"), concentrationOptional: { durationRounds: 10 } }]
+      })]
     }
   ]
 };

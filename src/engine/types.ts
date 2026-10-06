@@ -2063,6 +2063,11 @@ export interface SummonActionDefinition {
   concentration?: boolean;
   /** It shares the summoner's initiative, taking its turn right after the summoner's (Find Steed, Summon Dragon). */
   sharesInitiative?: boolean;
+  /**
+   * Dragon Companion: it can also be cast without concentration, lasting this many rounds instead: a compiled copy
+   * (`<id>:no-concentration`).
+   */
+  concentrationOptional?: { durationRounds: number };
   /** How many summoned-of-summoned generations deep this can go before a spawned creature's own summon actions are refused. Default 2. */
   maxGeneration?: number;
   resourceCost?: ResourceCost;

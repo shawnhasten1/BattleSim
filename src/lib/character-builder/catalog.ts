@@ -152,6 +152,8 @@ export interface SpellChange {
   range?: number;
   riders?: ActionRider[];
   mark?: { dice?: string; spillWithinFt?: number; keepsConcentrationOnDamage?: boolean };
+  /** Dragon Companion: a summon it can also cast without concentration, lasting this many rounds. */
+  concentrationOptional?: { durationRounds: number };
 }
 
 export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon";

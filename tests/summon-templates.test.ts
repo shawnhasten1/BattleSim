@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionProblem,
   collectDependencies,
   createEngineState,
   getExecutableActions,
@@ -82,5 +83,22 @@ describe("Summon Dragon (Dragon Companion)", () => {
     expect(made.actions[0]).toMatchObject({ kind: "multiattack", attacks: [{ actionId: "breath-weapon", count: 1 }, { actionId: "rend", count: 2 }] });
     const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
     expect(me.conditions?.find((condition) => condition.sourceName === "Shared Resistances")?.modifiers?.damageAdjustments).toEqual([{ type: "resistance", damageType: "fire" }]);
+  });
+});
+
+describe("Dragon Companion without concentration, and Dragon Wings again (7bb)", () => {
+  it("a copy of Summon Dragon without concentration, for a minute; Dragon Wings for 3 sorcery points once its use is gone", () => {
+    let build = quickBuild(sources, { classId: "srd:class:sorcerer", level: 18 });
+    build = withSuggestions(withChoice(build, { kind: "level", index: 2 }, ["subclass"], "srd:subclass:draconic-sorcery"), sources);
+    const sorcerer = rebuildActor(blankCharacter("def-fighter", "PC"), build, sources).definition;
+    const actions = getExecutableActions(sorcerer);
+    expect(actions.find((action) => action.name === "Summon Dragon (free) (no concentration)")).toMatchObject({ concentration: false, durationRounds: 10 });
+    const { state, free } = scene(sorcerer);
+    resolveSummonAction(state, "pc-fighter", free("Summon Dragon (free) (no concentration)").id, "cold");
+    const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    expect(me.concentration).toBeUndefined();
+    expect(me.conditions?.find((condition) => condition.sourceName === "Shared Resistances")?.expiresAt?.round).toBe(11);
+    const points = actions.find((action) => action.name === "Dragon Wings (3 sorcery points)")!;
+    expect(actionProblem(state.snapshot, "pc-fighter", points.id)).toBe("Only with no dragon wings left");
   });
 });

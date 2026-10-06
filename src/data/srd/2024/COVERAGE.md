@@ -24,7 +24,7 @@ its gaps, never dropped and never approximated without saying so.
 | Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 7 | 2 | 0 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 9 | 2 | 2 | 4 | 0 |
@@ -44,12 +44,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
-| `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | Rogue | 17 | Thief's Reflexes (Thief) |
-| `concentration-optional` | Casting a concentration spell without concentration, for a shorter time (Dragon Companion) | Sorcerer | 18 | Dragon Companion (Draconic Sorcery) |
 | `activated-aura` | An aura switched on for a while (Holy Nimbus) | Paladin | 20 | Holy Nimbus (Oath of Devotion) |
 | `extra-target` | A spell aimed at a second creature for free (Words of Creation) | Bard | 20 | Words of Creation (Bard) |
 
@@ -360,8 +358,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Draconic Resilience | full |  | AC 10 + Dexterity + Charisma without armor, and hit points by sorcerer level. |
 | 3 | Draconic Spells | builder |  | Draconic spells are always prepared. |
 | 6 | Elemental Affinity | full |  | The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one. |
-| 14 | Dragon Wings | partial | `gain-speed` | A bonus action: a fly speed of 60 ft for an hour, once a fight; again for 3 sorcery points doesn't run. |
-| 18 | Dragon Companion | partial | `concentration-optional` | Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; casting it without concentration doesn't run. |
+| 14 | Dragon Wings | full |  | A bonus action: a fly speed of 60 ft for an hour, once a fight, then again for 3 sorcery points. |
+| 18 | Dragon Companion | full |  | Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; or cast without concentration, for a minute ("Summon Dragon (no concentration)"). |
 
 ## Warlock
 

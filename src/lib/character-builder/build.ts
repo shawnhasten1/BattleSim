@@ -1074,6 +1074,7 @@ function changedSpell(spell: SpellDefinition, change: SpellChange): SpellDefinit
   }
   if (change.range !== undefined && "range" in next) next = { ...next, range: change.range } as ActionDefinition;
   if (change.mark && next.kind === "buff" && next.mark) next = changedMark(next, change.mark);
+  if (change.concentrationOptional && next.kind === "summon") next = { ...next, concentrationOptional: change.concentrationOptional };
   if (change.riders?.length && "riders" in next) {
     const existing = next.riders ?? [];
     next = { ...next, riders: [...existing, ...change.riders.map((rider, index) => ({ ...rider, id: `${action.id}-rider-${existing.length + index + 1}` }))] } as ActionDefinition;
