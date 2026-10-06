@@ -1394,7 +1394,8 @@ function activationText(action: ActivateAction, definition: CreatureDefinition, 
   if (action.gains) {
     const what = action.gains.resourceId.replace(/[-_]+/g, " ");
     const amount = action.gains.amount === "slot-level" ? `as many ${what} as the slot's level` : costText({ resourceId: action.gains.resourceId, amount: action.gains.amount }, definition);
-    const empty = action.onlyWhenEmpty ? ` It can do this only with no ${action.onlyWhenEmpty.replace(/[-_]+/g, " ")} left.` : "";
+    const empty = (action.onlyWhenEmpty ? ` It can do this only with no ${action.onlyWhenEmpty.replace(/[-_]+/g, " ")} left${action.oncePerTurn ? ", once on each of its turns" : ""}.` : "")
+      || (action.oncePerTurn ? " It can do this once on each of its turns." : "");
     return { text: `It gains ${amount}${action.gains.max !== undefined ? ` (to at most ${action.gains.max})` : ""}.${empty}`, short: `gains ${amount}` };
   }
   const now = onActivatePhrases(feature, definition);

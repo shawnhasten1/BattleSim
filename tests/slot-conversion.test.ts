@@ -151,3 +151,21 @@ describe("Boon of Spell Recall", () => {
     expect(state.log.some((entry) => entry.type === "FeatureEffectApplied" && entry.data?.recalled === true)).toBe(true);
   });
 });
+
+describe("Wild Resurgence's once a turn (7ar)", () => {
+  it("a slot for a Wild Shape use only once on each of its turns", () => {
+    const druid = rebuildActor(blankCharacter("def-fighter", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:druid", level: 5 }), SRD_BUILD_SOURCES).definition;
+    const toShape = getExecutableActions(druid).find((action) => action.name === "Wild Resurgence: Slot to Wild Shape")!;
+    expect(toShape).toMatchObject({ oncePerTurn: true });
+    const snapshot = structuredClone(sampleEncounter);
+    snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), { ...druid, id: "def-fighter" }];
+    const state = createEngineState(snapshot);
+    const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    state.snapshot.turnIndex = state.snapshot.combatants.indexOf(me);
+    me.resources = { ...(druid.resources ?? {}), "wild-shape": 0 };
+    expect(actionProblem(state.snapshot, "pc-fighter", toShape.id)).toBeUndefined();
+    resolveActivateFeatureAction(state, "pc-fighter", toShape.id);
+    me.resources = { ...me.resources, "wild-shape": 0 };
+    expect(actionProblem(state.snapshot, "pc-fighter", toShape.id)).toBe("Only once a turn");
+  });
+});

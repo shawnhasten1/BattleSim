@@ -18,7 +18,7 @@ its gaps, never dropped and never approximated without saying so.
 | Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 4 | 1 | 4 | 8 | 2 |
+| Druid (Circle of the Land) | 19 | 5 | 0 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
@@ -49,7 +49,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
-| `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
@@ -160,7 +159,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 2 | Wild Shape | manual | `wild-shape` | Its uses are counted (Land's Aid spends them). Shifting needs the beast forms in the encounter and temporary hit points on shifting: plan Phase 7. |
 | 3 | Druid Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
-| 5 | Wild Resurgence | partial | `slot-conversion` | A slot for a Wild Shape use once none are left, and a Wild Shape use for a 1st-level slot once; the once a turn for the first isn't checked. |
+| 5 | Wild Resurgence | full |  | A slot for a Wild Shape use once none are left, once on each of its turns, and a Wild Shape use for a 1st-level slot once. |
 | 7 | Elemental Fury | full |  | Primal Strike, or Potent Spellcasting: Wisdom on one damage roll of each Druid cantrip. |
 | 15 | Improved Elemental Fury | full |  | Primal Strike's 2d8, or Potent Spellcasting's 300 ft more on a Druid cantrip reaching 10 ft or more. |
 | 18 | Beast Spells | manual | `wild-shape` |  |

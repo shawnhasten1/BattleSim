@@ -828,6 +828,8 @@ function metamagicVariant(option: MetamagicOption, spell: ActionDefinition, defi
 
 /** Sorcery Incarnate, Wild Resurgence: why it can't be used while some of a resource is left, or undefined. */
 export function onlyWhenEmptyProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  // Wild Resurgence: once on each of its turns.
+  if (action.kind === "activate-feature" && action.oncePerTurn && combatant.turnFlags?.activationsUsed?.includes(action.id)) return "Only once a turn";
   const pool = action.kind === "activate-feature" ? action.onlyWhenEmpty : undefined;
   return pool && (combatant.resources?.[pool] ?? 0) > 0 ? `Only with no ${pool.replace(/[-_]+/g, " ")} left` : undefined;
 }
@@ -3800,6 +3802,7 @@ export function resolveActivateFeatureAction(
   }
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action);
+  if (action.oncePerTurn) actor.turnFlags = { ...(actor.turnFlags ?? {}), activationsUsed: [...(actor.turnFlags?.activationsUsed ?? []), action.id] };
   if (action.resourceCost) grantFreeMoves(state, actor, { spends: action.resourceCost.resourceId });
   // Font of Magic, Font of Inspiration: what it was spent for.
   if (action.gains) {

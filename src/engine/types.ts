@@ -1860,6 +1860,8 @@ export interface ActivateFeatureActionDefinition {
   gains?: { resourceId: string; amount: number | "slot-level"; max?: number };
   /** Only with none of this left (Sorcery Incarnate: Innate Sorcery for sorcery points once its uses are gone). */
   onlyWhenEmpty?: string;
+  /** Once on each of its turns (Wild Resurgence's Wild Shape use from a slot). */
+  oncePerTurn?: boolean;
   /** Only before it has moved this turn (Steady Aim). */
   stillOnly?: boolean;
   condition?: {
@@ -2634,6 +2636,8 @@ export interface TurnFlags {
   disengaged?: boolean;
   /** Movement already spent this turn, in grid squares (path-cost units). */
   movementUsed?: number;
+  /** Activations used this turn that are once a turn (Wild Resurgence). */
+  activationsUsed?: Id[];
   /** Where this turn's movement began — a charge is measured from here. */
   movedFrom?: Point;
   /** Creatures a charge / pounce has hit this turn (unlocks `onlyAfter: "charge-hit"` attacks against them). */

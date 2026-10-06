@@ -71,15 +71,14 @@ export const DRUID: ClassDefinition = {
         grantedActions: [
           {
             kind: "activate-feature", id: "wild-resurgence-shape", name: "Wild Resurgence: Slot to Wild Shape", actionType: "free", featureId: "",
-            resourceCost: { resourceId: "slot-1", amount: 1 }, gains: { resourceId: "wild-shape", amount: 1 }, onlyWhenEmpty: "wild-shape", automationSupport: "full"
+            resourceCost: { resourceId: "slot-1", amount: 1 }, gains: { resourceId: "wild-shape", amount: 1 }, onlyWhenEmpty: "wild-shape", oncePerTurn: true, automationSupport: "full"
           },
           {
             kind: "activate-feature", id: "wild-resurgence-slot", name: "Wild Resurgence: Wild Shape to Slot", actionType: "free", featureId: "",
             resourceCost: { resourceId: "wild-shape", amount: 1 }, extraCost: { resourceId: "wild-resurgence", amount: 1 },
             gains: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
           }
-        ],
-        notSimulated: "once on each of its turns isn't checked for a Wild Shape use from a slot."
+        ]
       }), { pool: { id: "wild-resurgence", size: 1 } })]
     },
     {
