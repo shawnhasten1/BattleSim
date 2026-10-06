@@ -5,50 +5,60 @@ import { tokenVisualsFor } from "@/lib/ui-helpers";
 import { useDeviceTokenImages } from "@/store/token-pack-store";
 import styles from "./codex.module.css";
 
-/** A gilt corner flourish for the hero panel: a curling stroke ending in an ember bead. */
-export function Filigree({ corner }: { corner: "top-left" | "bottom-right" }) {
+const COPPER = "#F2B488";
+const BONE = "#ECE5D6";
+const C = 220;
+
+/** A point `r` from the centre at `degrees` (0 = east, clockwise, as SVG's y axis runs down). */
+function at(r: number, degrees: number): [number, number] {
+  const radians = (degrees * Math.PI) / 180;
+  return [C + r * Math.cos(radians), C + r * Math.sin(radians)];
+}
+
+const RINGS: Array<[number, number, number]> = [[210, 0.32, 1.2], [196, 0.22, 0.8], [158, 0.2, 1], [118, 0.16, 1], [64, 0.18, 1], [20, 0.25, 1]];
+const TICKS = Array.from({ length: 72 }, (_, index) => index * 5);
+const SPOKES = Array.from({ length: 12 }, (_, index) => index * 30);
+const polygon = (offset: number) => [0, 90, 180, 270].map((angle) => at(158, angle + offset).map((value) => value.toFixed(1)).join(",")).join(" ");
+
+/**
+ * The banner's astrolabe (Character Codex.html's, drawn here rather than embedded as an image): rings, a degree scale
+ * with a long tick every 30°, spokes, and two inscribed squares.
+ */
+export function Astrolabe() {
   return (
-    <svg className={`${styles.filigree} ${corner === "top-left" ? styles.filigreeTopLeft : styles.filigreeBottomRight}`} viewBox="0 0 60 60" aria-hidden="true">
-      <path d="M4 56 C6 34 18 16 52 6" />
-      <path d="M14 46 C20 40 26 38 32 39" />
-      <path d="M22 30 C28 22 34 20 40 21" />
-      <path d="M4 56 C10 52 12 46 10 40" />
-      <circle cx="52" cy="6" r="2.4" />
+    <svg className={styles.astrolabe} viewBox="0 0 440 440" aria-hidden="true">
+      {RINGS.map(([r, opacity, width]) => (
+        <circle key={r} cx={C} cy={C} r={r} fill="none" stroke={COPPER} strokeOpacity={opacity} strokeWidth={width} />
+      ))}
+      {TICKS.map((angle) => {
+        const major = angle % 30 === 0;
+        const [x1, y1] = at(196, angle);
+        const [x2, y2] = at(major ? 182 : 210, angle);
+        return <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COPPER} strokeOpacity={major ? 0.4 : 0.22} strokeWidth={1} />;
+      })}
+      {SPOKES.map((angle) => {
+        const [x1, y1] = at(64, angle);
+        const [x2, y2] = at(158, angle);
+        return <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} stroke={BONE} strokeOpacity={0.08} strokeWidth={1} />;
+      })}
+      <polygon points={polygon(0)} fill="none" stroke={COPPER} strokeOpacity={0.13} strokeWidth={1} />
+      <polygon points={polygon(45)} fill="none" stroke={COPPER} strokeOpacity={0.13} strokeWidth={1} />
+      <circle cx={C} cy={266} r={98} fill="none" stroke={BONE} strokeOpacity={0.1} strokeWidth={1} />
+      <circle cx={190} cy={200} r={130} fill="none" stroke={BONE} strokeOpacity={0.06} strokeWidth={1} />
     </svg>
   );
 }
 
-/**
- * The token's portrait in a gilded ring with twelve ticks, like an initiative dial (the Faerie Codex's fairy ring, made
- * to fit a battle sheet). The ring flares once whenever it mounts; the Codex remounts it when the name's first letter
- * changes, as the original did for its initial.
- */
-export function PortraitRing({ definition, combatant }: { definition: CreatureDefinition; combatant: CombatantState }) {
+/** The token's art in the sidebar's octagonal copper frame, or its initials. */
+export function Portrait({ definition, combatant }: { definition: CreatureDefinition; combatant: CombatantState }) {
   const deviceImages = useDeviceTokenImages();
   const visuals = tokenVisualsFor(definition, combatant, deviceImages);
   const initials = (combatant.displayName || definition.name).slice(0, 2);
-  const ticks = Array.from({ length: 12 }, (_, index) => index * 30);
   return (
-    <div className={`${styles.ring} ${styles.flare}`} aria-hidden="true">
-      <svg className={styles.ringTicks} viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r="56" />
-        {ticks.map((angle) => (
-          <line key={angle} x1="60" y1="2" x2="60" y2={angle % 90 === 0 ? 11 : 8} transform={`rotate(${angle} 60 60)`} />
-        ))}
-      </svg>
-      <div className={styles.portrait} style={visuals.borderColor ? { boxShadow: `0 0 0 2px ${visuals.borderColor}, 0 0 26px var(--gild-glow)` } : undefined}>
+    <div className={styles.pframe} aria-hidden="true">
+      <div className={styles.portrait}>
         {visuals.imageUrl ? <img src={visuals.imageUrl} alt="" draggable={false} /> : <span>{initials}</span>}
       </div>
     </div>
-  );
-}
-
-/** A heater-shield crest behind an ability score (the original's leaf). */
-export function Crest() {
-  return (
-    <svg viewBox="0 0 100 112" aria-hidden="true">
-      <path className={styles.crestOutline} d="M8 6 H92 V52 C92 80 72 98 50 108 C28 98 8 80 8 52 Z" />
-      <path className={styles.crestInner} d="M16 14 H84 V52 C84 75 68 90 50 99 C32 90 16 75 16 52 Z" />
-    </svg>
   );
 }

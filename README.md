@@ -37,7 +37,7 @@ Local-first, map-aware encounter simulator, compatible with fifth edition. The c
 - Open5e V2 compendium search for creatures, spells, items/weapons, features/rules, and conditions.
 - Drag-and-drop compendium import to the map or selected actor sheet with manual-only fallback for unsupported automation.
 - Foundry-like token/actor sheet tabs separate token instance state from reusable actor definition data.
-- Sheet windows: one per creature (its edits reach every token of it), several open at once, resizable, and able to pop out into browser windows of their own; any sheet can be shown as the Codex, a styled character sheet with three palettes. See `docs/guides/sheet-windows.md`.
+- Sheet windows: one per creature (its edits reach every token of it), several open at once, resizable, and able to pop out into browser windows of their own; any sheet can be shown as the Codex, a styled character sheet (dark or light) in the design of `Character Codex.html`. See `docs/guides/sheet-windows.md`.
 - Imported weapons, spells, features, traits, and actions expose source metadata and automation support in a sheet inspector.
 
 ## Player And Enemy JSON

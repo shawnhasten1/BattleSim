@@ -15,7 +15,7 @@ export interface SheetStyleInfo {
  */
 export const SHEET_STYLES: Record<SheetStyle, SheetStyleInfo> = {
   standard: { label: "Standard", width: 680, limits: { minWidth: 560, minHeight: 320, maxWidth: 1400 } },
-  codex: { label: "Codex", width: 960, height: 760, limits: { minWidth: 640, minHeight: 360, maxWidth: 1600 } }
+  codex: { label: "Codex", width: 1060, height: 860, limits: { minWidth: 640, minHeight: 360, maxWidth: 1600 } }
 };
 
 export const SHEET_STYLE_IDS = Object.keys(SHEET_STYLES) as SheetStyle[];

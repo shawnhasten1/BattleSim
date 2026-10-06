@@ -3,7 +3,10 @@ import {
   proficiencyForChallengeRating,
   proficiencyFromDefinition,
   type Ability,
-  type CreatureDefinition
+  type ConditionImmunity,
+  type CreatureDefinition,
+  type DamageAdjustment,
+  type DamageType
 } from "@/engine";
 
 type Character = NonNullable<CreatureDefinition["character"]>;
@@ -112,6 +115,39 @@ export function withSkill(definition: CreatureDefinition, id: string, bonus: num
   const { [id]: _dropped, ...rest } = definition.skills ?? {};
   const skills = bonus === undefined ? rest : { ...rest, [id]: bonus };
   return { skills: Object.keys(skills).length ? skills : undefined };
+}
+
+/* ─── defenses, one at a time (the Codex's tags) ─────────────────────────── */
+
+/** The conditions a creature can be immune to, in statblock order. */
+export const CONDITION_IMMUNITIES: ConditionImmunity[] = [
+  "blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "paralyzed",
+  "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"
+];
+
+
+const sameAdjustment = (a: DamageAdjustment, b: DamageAdjustment) =>
+  a.type === b.type && a.damageType === b.damageType && Boolean(a.nonMagicalOnly) === Boolean(b.nonMagicalOnly)
+  && [...(a.exceptMaterials ?? [])].sort().join() === [...(b.exceptMaterials ?? [])].sort().join();
+
+/** That damage adjustment taken off, exactly as it is (its qualifiers too). */
+export function withoutAdjustment(definition: CreatureDefinition, adjustment: DamageAdjustment): Pick<CreatureDefinition, "damageAdjustments"> {
+  const next = (definition.damageAdjustments ?? []).filter((entry) => !sameAdjustment(entry, adjustment));
+  return { damageAdjustments: next.length ? next : undefined };
+}
+
+/** A plain damage adjustment (no qualifiers) added, unless it's there already. */
+export function withAdjustment(definition: CreatureDefinition, type: DamageAdjustment["type"], damageType: DamageType): Pick<CreatureDefinition, "damageAdjustments"> {
+  const adjustment: DamageAdjustment = { type, damageType };
+  const current = definition.damageAdjustments ?? [];
+  return { damageAdjustments: current.some((entry) => sameAdjustment(entry, adjustment)) ? current : [...current, adjustment] };
+}
+
+/** A condition it's immune to, added or taken off. */
+export function withConditionImmunity(definition: CreatureDefinition, condition: ConditionImmunity, immune: boolean): Pick<CreatureDefinition, "conditionImmunities"> {
+  const current = (definition.conditionImmunities ?? []).filter((entry) => entry !== condition);
+  const next = immune ? [...current, condition] : current;
+  return { conditionImmunities: next.length ? next : undefined };
 }
 
 export function skillKind(definition: CreatureDefinition, id: string): ProficiencyKind {

@@ -84,9 +84,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     // Capture phase: close before other Escape handlers (e.g. the wall-chain one) act.
     ownerDocument.addEventListener("pointerdown", onPointerDown, true);
     ownerDocument.addEventListener("keydown", onKeyDown, true);
-    ownerWindow.addEventListener("scroll", onClose, true);
+    // A scroll closes it, but only from the next frame: a browser delivers a scroll on the frame after it happens, so
+    // the one that brought its button into view just before the click would close the menu as it opened.
+    const listen = ownerWindow.requestAnimationFrame(() => ownerWindow.addEventListener("scroll", onClose, true));
     ownerWindow.addEventListener("resize", onClose);
     return () => {
+      ownerWindow.cancelAnimationFrame(listen);
       ownerDocument.removeEventListener("pointerdown", onPointerDown, true);
       ownerDocument.removeEventListener("keydown", onKeyDown, true);
       ownerWindow.removeEventListener("scroll", onClose, true);

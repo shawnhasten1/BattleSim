@@ -13,6 +13,7 @@ import {
   withChallengeRating,
   withClasses,
   withLevel,
+  CONDITION_IMMUNITIES,
   type ClassEntry
 } from "@/lib/actor-sheet/edits";
 import { challengeLine, defensesLine, passivePerception, sensesLine, skillsLine } from "@/lib/actor-sheet/summaries";
@@ -86,11 +87,6 @@ export function SkillsSection({ definition, open, onToggle }: SectionProps) {
     </SheetSection>
   );
 }
-
-const CONDITION_IMMUNITIES: ConditionImmunity[] = [
-  "blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "paralyzed",
-  "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"
-];
 
 /** Its damage resistances, immunities, vulnerabilities and absorptions, and the conditions it's immune to. */
 export function DefensesSection({ definition, open, onToggle }: SectionProps) {

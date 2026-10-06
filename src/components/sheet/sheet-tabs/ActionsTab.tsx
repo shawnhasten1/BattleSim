@@ -12,6 +12,7 @@ import { blankLegendaryAction } from "@/lib/ability-editor/legendary";
 import { abilityList, duplicateOf, type ListRow, type MoveTarget } from "@/lib/ability-editor/list";
 import { blankMultiattack, stepChoices } from "@/lib/ability-editor/sequence";
 import { withActionType } from "@/lib/ability-editor/spells";
+import { withWorn } from "@/lib/ability-editor/items";
 import {
   blankAttack,
   blankDeathEffect,
@@ -309,8 +310,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
             const id = row.ref.id;
             const item = definition.items?.find((candidate) => candidate.id === id);
             if (!item) return;
-            const { equipped: _equipped, ...rest } = item;
-            replaceAbilityRecord(definition.id, row.ref, on ? rest : { ...rest, equipped: false });
+            replaceAbilityRecord(definition.id, row.ref, withWorn(item, on));
           }
         }}
       />

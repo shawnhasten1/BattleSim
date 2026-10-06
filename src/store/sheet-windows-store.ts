@@ -4,7 +4,7 @@ import { create } from "zustand";
 import type { CombatantState, EncounterSnapshot } from "@/engine";
 import type { SheetTabId } from "@/components/sheet/ScopedTabs";
 import { readJson, writeJson } from "@/lib/persist";
-import { CODEX_PALETTE_IDS, type CodexPaletteId } from "@/lib/actor-sheet/codex";
+import { paletteFrom, type CodexPaletteId } from "@/lib/actor-sheet/codex";
 import { useEncounterStore } from "./encounter-store";
 
 /** How a sheet looks: today's sheet, or the Codex (CHARACTER_SHEET_WINDOWS_PLAN.md Part 3). */
@@ -51,10 +51,9 @@ const TAB_KEY = "actor-sheet-tab";
 const STYLE_KEY = "sheet-style";
 const PALETTE_KEY = "codex-palette";
 
-/** The Codex's palette, per browser (D6): Ember until another is picked. */
+/** The Codex's palette, per browser (D6): Dark until Light is picked. */
 function storedPalette(): CodexPaletteId {
-  const stored = readJson<string>(PALETTE_KEY, "ember");
-  return (CODEX_PALETTE_IDS as string[]).includes(stored) ? (stored as CodexPaletteId) : "ember";
+  return paletteFrom(readJson<unknown>(PALETTE_KEY, "dark"));
 }
 
 /** The creature a token shows now: a shapechanger in another form shows that form. */

@@ -15,8 +15,8 @@ fields) and D10 (as proposed). The other decisions took their defaults. "Built s
   `ContextMenu`, `InfoTooltip` and the sheet body use the context.
 - **Openers:** the Combat panel had no row menu, so a row double-click and a right-click menu with **Open sheet** were
   added. A token's double-click is detected by hand.
-- **The Codex:** Faerie is the original's dark set only. "Proficiencies & languages" is Languages only. No ✦ for
-  always-prepared spells (the creature doesn't record which they are).
+- **The Codex was redesigned after it was built** (Phase 8, D12): it now follows Character Codex.html, not the Faerie
+  Codex. No ✦ for always-prepared spells (the creature doesn't record which they are).
 - **Found while building:** an Export from a popped-out sheet's ⋯ started its download in the main window, which
   browsers ignore. `downloadJson` now takes the document clicked in.
 - **Left for the user:** two checks automation can't do. One is typing in a popped-out sheet while the main window is
@@ -75,12 +75,13 @@ the builder) opens Standard's editor in the same window.
 | D3 | How many | **Up to 8 open at once** (8 creatures), in the page and popped out combined. Opening a 9th closes the one that was focused least recently, with a toast. A window with unsaved ability-editor changes is never closed this way, and the 9th is refused instead. |
 | D4 | After a reload | **No windows come back,** the same as today. Each style remembers its last size, and its last popped-out size and screen position, per browser. Popped-out windows close when the main page reloads or closes. They can't outlive it, because their React tree lives there. |
 | D5 | Choosing a style | **A Standard \| Codex switch in each window's title bar.** A new window opens in the style last used for that kind of actor (player characters, or everything else), per browser. Both start as Standard until the DM picks Codex once. |
-| D6 | The Codex's colors | **Three palettes, chosen per browser in the Codex's ⋯ menu:** **Ember** (dark, the default, matches the app), **Parchment** (light, for daylight and printing later) and **Faerie** (the original file's colors, kept because it costs nothing). A palette changes colors only. The ornaments are the same in all three (see "The Codex"). |
+| D6 | The Codex's colors | *Superseded by D12: Dark and Light.* **Three palettes, chosen per browser in the Codex's ⋯ menu:** **Ember** (dark, the default, matches the app), **Parchment** (light, for daylight and printing later) and **Faerie** (the original file's colors, kept because it costs nothing). A palette changes colors only. The ornaments are the same in all three (see "The Codex"). |
 | D7 | Fields the engine doesn't have | **None are added** (user, 2026-10-06). The Codex shows only what the model already has. The original's player, XP, inspiration, personality traits, ideals, bonds, flaws, appearance, backstory, notes, coins and free-text gear are left out, and so is any data change for them. |
 | D8 | Big edits from the Codex | **The Codex edits what fits on a paper sheet, in place:** scores, saves, skills, HP, temp HP, a typed AC, speed, alignment, languages and slot pips. An attack, spell, feature or item row has an Edit button that switches the window to Standard › Abilities with that ability open, and shows a "← Back to Codex" chip. There is no second ability editor. |
 | D9 | Fields the builder owns | **Read-only on the Codex:** class, subclass, level, species and background. Next to them are "Level up…" and "Open in builder…", which open the existing builder windows. A score typed on a built character goes through `updateCreatureAbility`, so it already follows builder D6 and survives a level-up. |
 | D10 | Death saves and hit dice | (User, 2026-10-06.) **Death saves are shown as pips from token state, read-only.** The engine owns them, and there's no DM change for them yet. **Hit dice show their total** (for example "5d10 + 2d8" from the build), with nothing to spend, because rests are out of scope (builder D16). |
-| D11 | Fonts | **Cormorant Garamond** for headings and numbers, through `next/font` and loaded only with the Codex. Body text uses the app's Signika. Pinyon Script (the script initial) is dropped, because the token's portrait takes its place. |
+| D11 | Fonts | *Superseded by D12: Fraunces and Figtree.* **Cormorant Garamond** for headings and numbers, through `next/font` and loaded only with the Codex. Body text uses the app's Signika. Pinyon Script (the script initial) is dropped, because the token's portrait takes its place. |
+| D12 | The Codex's design | **Character Codex.html, replacing the Faerie-based one** (user, 2026-10-06): a teal banner with an astrolabe and a level dial, a sidebar with the portrait in an octagonal copper frame and the vitals, ability dials, and Details, Items, Abilities and Spells tabs. Its own Dark and Light colours replace Ember, Parchment and Faerie, and its faces are Fraunces and Figtree. The fields it has that the app doesn't store (XP, Inspiration, coins, carry weight, the Biography tab) stay out, as D7 says (user, 2026-10-06). |
 
 ## Part 1: several sheets at once
 
@@ -620,3 +621,44 @@ Chromium-only):
 - **`next build`** compiles with the lazily loaded Codex and its `next/font` face, with no warnings.
 - **`Faerie Codex.html`** stays where it is, untracked: it's the user's file. The Codex took what it needed.
 - **Full suite:** 251 files, 2817 tests.
+
+### Phase 8 (2026-10-06): the Codex in the design of Character Codex.html
+
+The user asked for the pop-out to be "more like Character Codex.html", a second hand-made sheet. They chose to replace
+the Faerie-based Codex with it everywhere (D12), keeping out the fields the app doesn't store (D7).
+
+- **The layout:**
+  - A banner (deep teal in both palettes, with an astrolabe drawn as SVG, `Astrolabe` in `ornaments.tsx`) holding the
+    name, pills for what it is, species, background and alignment (typed), the token switcher, and the level dial.
+    The dial shows a built character's level read-only, a hand-made character's level typed (`withLevel`, as on
+    Stats), or a monster's CR.
+  - A sidebar with the token's art in the octagonal copper frame, AC, initiative, speed and proficiency tiles, HP with
+    temp HP, hit dice and death saves.
+  - Ability dials with copper modifier pills.
+  - Tabs: **Details** (skills with bonus and passive; saves in two columns; Origin with type, size, species,
+    background and languages; Defenses & conditions as tags), **Items** (weapons, armor & shields with a worn box,
+    consumables, gear), **Abilities** (Attacks with each weapon's line in view, then actions, bonus actions, reactions
+    and features, each row opening on its chevron) and **Spells** (ability, DC and attack tiles, slot boxes, spells by
+    level). Items and Spells only show when it has something for them. The tab is remembered per browser
+    (`codex-tab`), so Back from Standard returns to it.
+- **Container queries** follow the original's breakpoints: the sidebar narrows below 1000 px, the sidebar sits above
+  the main column below 880 px (Details stacks), abilities go to three a row below 640 px, and everything is one
+  column below 520 px. The Codex window now opens at 1060 × 860.
+- **Palettes:** `CODEX_PALETTES` is the original's dark and light sets (`dark`, `light`). A palette stored from before
+  carries over (`paletteFrom`: Parchment is Light, the others Dark). `--faint` is a shade lighter than the original
+  in each, so its hint text meets 3:1 on both panel colours.
+- **Shared, not copied:**
+  - `withWorn` (`lib/ability-editor/items.ts`) is Standard's Worn switch, now used by both.
+  - `withAdjustment`, `withoutAdjustment` and `withConditionImmunity` are in `lib/actor-sheet/edits.ts` for the tags.
+  - `CONDITION_IMMUNITIES` moved there from Stats.
+- **Found and fixed:** `ContextMenu` closed on a scroll the browser delivered on the frame it opened in. A click on a
+  button that first had to be scrolled into view (the Codex's + Condition, low in Details) opened the menu and closed
+  it at once. It now listens for scrolls from the next frame (`tests/context-menu.test.tsx`).
+- **Dropped with the old design:** the − and + steppers on scores and HP. The original has neither.
+- **Tests:** `tests/codex-sheet.test.tsx` was rewritten (27). It covers the defense tags (adding and removing, a
+  qualified one exactly), the worn box changing the AC, the Attacks panel, a hand-made level typed into the dial, a
+  monster's CR dial and tabs, the remembered tab, and the palette carry-over. The full suite passes. Browser
+  (Chromium and Firefox, 11 checks each), from blank: a level 3 cleric's Codex popped out with Fraunces and Figtree,
+  every Details field edited, a resistance tag added and removed, the chain shirt taken off (AC 16 → 13) and put back,
+  Attacks with lines, a slot spent, a spell edited on Standard and back to the Spells tab, Light, an export read back,
+  and three goblins' HP in one Codex. The guide's Codex section and screenshots were redone.

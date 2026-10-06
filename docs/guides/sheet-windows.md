@@ -38,39 +38,48 @@ Click the **pop out** icon in a sheet's title bar. The sheet moves into a browse
 
 ## 4. The Codex
 
-Click **Codex** in a sheet's title bar to show it as the Codex. **Standard** switches it back. Player characters and everything else each remember the style you last used, so your party can open in the Codex while monsters stay on Standard.
+Click **Codex** in a sheet's title bar to show it as the Codex, a character sheet in teal and copper. **Standard** switches it back. Player characters and everything else each remember the style you last used, so your party can open in the Codex while monsters stay on Standard. The Codex is at its best popped out, in a window of its own.
 
-![The Codex](img/sheet-windows/02-codex-ember.png)
+![A cleric's Codex, popped out](img/sheet-windows/03-popped-out.png)
 
 The Codex edits what you'd fill in on a paper sheet. It saves the same way Standard does, so the two never disagree.
 
-- **Who it is:** the name and alignment. A character made with the builder reads its class, level, background and species from the build, with **Level up…** and **Open in the builder…** beside them.
-- **Scores:** type a score, or use **−** and **+**. The modifier is the gem below.
-- **Vitals:** armor class (worked out from worn armor, or typed when there's none), initiative, speed and proficiency. Below them are hit points with **−** and **+**, temp HP, conditions, death saves and hit dice.
-- **Saving throws and skills:** click an orb. A save's orb switches proficiency on or off. A skill's orb goes from proficient to expertise to none. A dashed orb is a number of its own (one typed on Standard).
-- **Spell slots:** a lit orb is a slot the token still has. Click one to spend it, or click a dark orb to get one back.
+- **The banner:** the name, what it is (class and subclass, species, background), and its alignment, which you can type. The dial shows its level, or a monster's challenge rating. A character made with the builder reads its level from the build, with **Level up…** and **Open in the builder…** beside it. A hand-made character's level can be typed into the dial.
+- **The sidebar:** the token's art, then armor class (worked out from worn armor, or typed when there's none), initiative, speed and proficiency. Below them are hit points and temp HP, hit dice and death saves.
+- **Ability dials:** type a score into a dial. The modifier is the copper pill below it.
 
-![Spellcasting on the Codex](img/sheet-windows/05-spellcasting.png)
+Below the dials are the tabs.
 
-Attacks, spells, equipment and features are listed as they read on Standard's Abilities tab. **Edit** on any of them opens it in Standard's editor, in the same window. **← Back to the Codex** returns you to where you were on the Codex.
+- **Details:**
+  - **Skills,** with each one's bonus and passive score. Click a skill's box for proficiency, again for expertise, and once more to clear it.
+  - **Saving throws.** A save's box switches proficiency on or off. A dashed box is a number of its own (one typed on Standard).
+  - **Origin:** creature type, size, species, background and languages.
+  - **Defenses & conditions:** damage immunities, resistances and vulnerabilities, and the conditions it's immune to, each a tag. **×** takes a tag off, and the dashed "Add…" picks a new one. Its conditions right now are below, with **+ Condition**.
+- **Items:** weapons, armor and shields, consumables and gear. The box beside armor or a shield puts it on or takes it off, and the AC follows.
 
-![Editing a spell from the Codex](img/sheet-windows/06-edit-on-standard.png)
+![The Items tab](img/sheet-windows/04-items.png)
 
-A monster's Codex leaves out what it hasn't got, so a goblin's is a short card. Its token switcher is in the header.
+- **Abilities:** its attacks, each with its to-hit and damage, then its actions, bonus actions, reactions and features. The arrow opens a row to show what it does.
 
-![Three goblins in one Codex](img/sheet-windows/07-goblins.png)
+![The Abilities tab, a row opened](img/sheet-windows/05-abilities.png)
 
-### Colours
+- **Spells:** spellcasting ability, save DC and attack bonus, then spell slots and spells by level. A filled slot box is a slot the token still has. Click one to spend it, or click an empty one to get it back.
 
-⋯ › **Codex colours** picks one of three palettes, for every Codex in this browser:
+![Spellcasting on the Codex](img/sheet-windows/06-spellcasting.png)
 
-- **Ember** (the default): ink and parchment with ember and gold, like the rest of the app.
-- **Parchment:** a light page, for daylight.
-- **Faerie:** the colours of the Faerie Codex the Codex grew from.
+**Edit** on any attack, ability, item or spell opens it in Standard's editor, in the same window. **← Back to the Codex** returns you to the tab and place you left.
 
-![Parchment](img/sheet-windows/04-codex-parchment.png)
+![Editing a spell from the Codex](img/sheet-windows/07-edit-on-standard.png)
 
-![Faerie](img/sheet-windows/04-codex-faerie.png)
+A monster's Codex leaves out what it hasn't got: a goblin has no Items or Spells tab. With several tokens, the switcher is in the banner, and the HP, conditions and slots are that token's.
+
+![Three goblins in one Codex](img/sheet-windows/09-goblins.png)
+
+### Light and dark
+
+⋯ › **Codex colours** switches every Codex in this browser between **Dark** (the default) and **Light**. The banner stays dark teal in both.
+
+![The Codex in Light](img/sheet-windows/08-codex-light.png)
 
 ---
 

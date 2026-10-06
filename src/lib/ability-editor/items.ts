@@ -19,6 +19,12 @@ import {
 import { blankAttack, blankBuff, blankHeal, blankSpecialAction } from "./templates";
 
 /** The slot drinking a potion takes: its first drink's (an action, when it has none yet). */
+/** Armor or a shield worn (only worn armor counts toward AC) or carried: Standard's Worn switch and the Codex's orb. */
+export function withWorn(item: ItemDefinition, worn: boolean): ItemDefinition {
+  const { equipped: _equipped, ...rest } = item;
+  return worn ? rest : { ...rest, equipped: false };
+}
+
 export function drinkTiming(item: ItemDefinition): "action" | "bonus" {
   return item.grantedActions?.find(isDrinkUse)?.actionType === "bonus" ? "bonus" : "action";
 }

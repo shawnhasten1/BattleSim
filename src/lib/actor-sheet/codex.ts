@@ -3,13 +3,14 @@ import type { CharacterBuild } from "@/lib/character-builder/build-record";
 import type { BuildSources } from "@/lib/character-builder/build";
 import { formatChallengeRating } from "@/lib/srd-monster-tree";
 
-/* ─── palettes (CHARACTER_SHEET_WINDOWS_PLAN.md D6) ───────────────────────── */
+/* ─── palettes (CHARACTER_SHEET_WINDOWS_PLAN.md D6, as Character Codex.html has them) ─── */
 
-export type CodexPaletteId = "ember" | "parchment" | "faerie";
+export type CodexPaletteId = "dark" | "light";
 
 /**
- * A Codex palette: CSS custom properties set on the Codex's root. A palette changes colours only; the ornaments are the
- * same in each. `--panel` is what text sits on, so `--ink`, `--muted` and `--accent` are checked against it.
+ * A Codex palette: CSS custom properties set on the Codex's root, the Character Codex's own dark and light sets. The
+ * banner across the top is the same deep teal in both. `--panel` is what text sits on, so `--ink`, `--muted`, `--cu`
+ * (copper) and `--faint` are checked against it.
  */
 export interface CodexPalette {
   label: string;
@@ -18,66 +19,45 @@ export interface CodexPalette {
 }
 
 export const CODEX_PALETTES: Record<CodexPaletteId, CodexPalette> = {
-  // Dark, the default: ink-black leather, parchment text, ember and gold, as the app's own shell.
-  ember: {
-    label: "Ember",
+  dark: {
+    label: "Dark",
     dark: true,
     tokens: {
-      "--bg": "#14110E", "--bg-top": "#17130F", "--bg-bot": "#100D0B",
-      "--aura-1": "rgba(217,138,61,.10)", "--aura-2": "rgba(201,162,39,.07)",
-      "--panel": "#1D1915", "--panel-2": "#26201A",
-      "--ink": "#E8DCC4", "--muted": "#A79B88",
-      "--accent": "#D98A3D", "--accent-soft": "rgba(217,138,61,.28)",
-      "--gild": "#C9A227", "--gild-glow": "rgba(201,162,39,.45)",
-      "--gem-hi": "#F2B66B", "--gem-lo": "#7A3F12", "--gem-ink": "#FFF6E8",
-      "--good": "#C9A227", "--bad": "#C2524E", "--temp": "#6F8FB5",
-      "--line": "rgba(217,138,61,.34)", "--line-soft": "rgba(232,220,196,.14)",
-      "--rule": "rgba(232,220,196,.10)", "--field": "rgba(232,220,196,.05)",
-      "--shadow": "rgba(0,0,0,.5)",
-      "--sheen": "linear-gradient(130deg,rgba(217,138,61,.75),rgba(201,162,39,.6) 35%,rgba(138,106,58,.55) 65%,rgba(122,46,42,.6))"
+      "--page": "#0E1C1F", "--dot": "rgba(160,210,200,.06)",
+      "--panel": "#15282C", "--panel-2": "#1A3135", "--panel-hi": "#1F393E",
+      "--edge": "#2E4D52", "--edge-2": "#223D41",
+      "--ink": "#ECE5D6", "--muted": "#97ACA8", "--faint": "#6C8582",
+      "--cu": "#DD8E57", "--cu-hi": "#F2B488", "--cu-lo": "#9E5A2C", "--cu-ink": "#1B120B", "--cu-soft": "rgba(221,142,87,.14)",
+      "--field": "#0F1F22", "--field-edge": "#2A464A",
+      "--well": "#0A1618", "--row": "rgba(236,229,214,.07)",
+      "--jade": "#3FA78A", "--jade-hi": "#6CCBAE", "--verm": "#E0604F", "--steel": "#79A6CE", "--pip": "#58716E",
+      "--shadow": "rgba(0,0,0,.5)"
     }
   },
-  // Light, for daylight (and, later, printing): cream paper, iron-gall ink, oxblood and old gold.
-  parchment: {
-    label: "Parchment",
+  light: {
+    label: "Light",
     dark: false,
     tokens: {
-      "--bg": "#EFE6D2", "--bg-top": "#F2EAD8", "--bg-bot": "#E9DEC6",
-      "--aura-1": "rgba(140,47,31,.07)", "--aura-2": "rgba(154,116,23,.08)",
-      "--panel": "#F8F2E4", "--panel-2": "#F1E8D4",
-      "--ink": "#2B2118", "--muted": "#6A5E4C",
-      "--accent": "#8C2F1F", "--accent-soft": "rgba(140,47,31,.2)",
-      "--gild": "#9A7417", "--gild-glow": "rgba(154,116,23,.35)",
-      "--gem-hi": "#C0533F", "--gem-lo": "#5E1A10", "--gem-ink": "#FFF6EC",
-      "--good": "#8A6A12", "--bad": "#8C2F1F", "--temp": "#3D6EA6",
-      "--line": "rgba(140,47,31,.32)", "--line-soft": "rgba(43,33,24,.16)",
-      "--rule": "rgba(43,33,24,.12)", "--field": "rgba(43,33,24,.045)",
-      "--shadow": "rgba(60,40,20,.18)",
-      "--sheen": "linear-gradient(130deg,rgba(140,47,31,.55),rgba(154,116,23,.5) 40%,rgba(90,70,40,.4))"
-    }
-  },
-  // The original Faerie Codex's dark set, kept as it was.
-  faerie: {
-    label: "Faerie",
-    dark: true,
-    tokens: {
-      "--bg": "#18122C", "--bg-top": "#1C1435", "--bg-bot": "#0D2024",
-      "--aura-1": "rgba(233,160,215,.14)", "--aura-2": "rgba(130,230,200,.09)",
-      "--panel": "#211A3B", "--panel-2": "#2A2149",
-      "--ink": "#EFE9F8", "--muted": "#AEA5C7",
-      "--accent": "#EFB4DF", "--accent-soft": "rgba(239,180,223,.3)",
-      "--gild": "#9DEFD3", "--gild-glow": "rgba(157,239,211,.5)",
-      "--gem-hi": "#43B497", "--gem-lo": "#1C5B58", "--gem-ink": "#F3FFFA",
-      "--good": "#9DEFD3", "--bad": "#E4587A", "--temp": "#9DEFD3",
-      "--line": "rgba(239,180,223,.36)", "--line-soft": "rgba(174,165,199,.18)",
-      "--rule": "rgba(239,233,248,.10)", "--field": "rgba(239,233,248,.05)",
-      "--shadow": "rgba(0,0,0,.45)",
-      "--sheen": "linear-gradient(130deg,rgba(240,166,207,.65),rgba(157,239,211,.55) 35%,rgba(190,170,255,.55) 65%,rgba(255,220,150,.5))"
+      "--page": "#E3E8E5", "--dot": "rgba(21,42,46,.11)",
+      "--panel": "#F6F8F6", "--panel-2": "#EAF0ED", "--panel-hi": "#FFFFFF",
+      "--edge": "#B0C1BD", "--edge-2": "#D3DDDA",
+      "--ink": "#152A2E", "--muted": "#4B6360", "--faint": "#71877F",
+      "--cu": "#AC5C27", "--cu-hi": "#D58A55", "--cu-lo": "#7B3F17", "--cu-ink": "#FFF8F1", "--cu-soft": "rgba(172,92,39,.13)",
+      "--field": "#FFFFFF", "--field-edge": "#C2CFCB",
+      "--well": "#183034", "--row": "rgba(21,42,46,.09)",
+      "--jade": "#2B8770", "--jade-hi": "#4CB094", "--verm": "#BF4337", "--steel": "#3B6890", "--pip": "#8BA09C",
+      "--shadow": "rgba(20,40,40,.18)"
     }
   }
 };
 
 export const CODEX_PALETTE_IDS = Object.keys(CODEX_PALETTES) as CodexPaletteId[];
+
+/** A palette remembered from before (the Faerie-based Codex's): its light one is Light, the others Dark. */
+export function paletteFrom(stored: unknown): CodexPaletteId {
+  if (stored === "light" || stored === "parchment") return "light";
+  return "dark";
+}
 
 /** WCAG relative luminance of a #RRGGBB colour. */
 function luminance(hex: string): number {
