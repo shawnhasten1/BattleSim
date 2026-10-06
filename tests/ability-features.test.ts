@@ -11,7 +11,7 @@ import { SRD_MONSTER_INDEX, loadSrdMonster } from "@/data/srd/monsters";
 import {
   EFFECT_KINDS,
   EFFECT_SPECS,
-  THEMES,
+  GROUPS,
   effectCards,
   expandCard,
   modifierCards,
@@ -62,13 +62,13 @@ beforeAll(async () => {
 });
 
 describe("the effect registry", () => {
-  it("covers every kind once, each in a theme, each blank its own kind", () => {
+  it("covers every kind once, each in a group, each blank its own kind", () => {
     const kinds = EFFECT_KINDS.map((spec) => spec.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
     expect(kinds).toHaveLength(55);
     for (const spec of EFFECT_KINDS) {
       expect(spec.blank().kind).toBe(spec.kind);
-      expect(THEMES.map((theme) => theme.theme)).toContain(spec.theme);
+      expect(GROUPS.map((entry) => entry.group)).toContain(spec.group);
     }
   });
 

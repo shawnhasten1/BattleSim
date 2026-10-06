@@ -945,18 +945,6 @@
 
 /* ── the effect menu, grouped by theme ── */
 
-.menuGrouped {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 2px 8px;
-  align-self: stretch;
-}
-
-.menuGroup {
-  display: flex;
-  flex-direction: column;
-}
-
 .menuGroupTitle {
   padding: 6px 8px 2px;
   font-size: 10px;
@@ -1113,4 +1101,209 @@
 
 .diffGap {
   color: var(--ui-text-dim);
+}
+
+/* ── the Add effect picker (EffectPicker) ── */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: stretch;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.pickerSearch {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.pickerSearch:focus-visible {
+  outline: 1px solid var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.pickerCommon {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.pickerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 2px;
+}
+
+.pickerChips button,
+.pickerExample {
+  padding: 2px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pickerChips button:hover,
+.pickerChips button:focus-visible,
+.pickerExample:hover,
+.pickerExample:focus-visible {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  outline: none;
+}
+
+.pickerFold {
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerFoldHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border: none;
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerFoldHead:hover,
+.pickerFoldHead:focus-visible {
+  background: var(--ui-hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+.pickerChevron {
+  flex: none;
+  color: var(--ui-text-dim);
+  transition: transform 0.12s ease;
+}
+
+.pickerFoldHead[aria-expanded="true"] .pickerChevron {
+  transform: rotate(90deg);
+}
+
+.pickerCount {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ui-text-dim);
+}
+
+.pickerList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+}
+
+.pickerEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 2px;
+}
+
+.pickerKind {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerKind > span:last-child {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ui-text-dim);
+}
+
+.pickerKind:hover,
+.pickerKind:focus-visible {
+  background: var(--ui-hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+.pickerKindLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pickerExamples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 4px 16px;
+}
+
+.pickerExamplesTitle {
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+.pickerExample {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+}
+
+/* What Enter adds. */
+.pickerTop {
+  border-color: var(--ui-accent-soft);
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+}
+
+.pickerEnter {
+  color: var(--ui-accent);
+}
+
+.pickerEmpty {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ui-text-dim);
+}
+
+.pickerEmpty p {
+  margin: 0 0 6px;
 }

@@ -33,6 +33,17 @@ export async function useRecipe(label: string, query = label): Promise<void> {
   await userEvent.click(within(screen.getByRole("region", { name: "Recipes" })).getByRole("button", { name: new RegExp(`^${escape(label)} ·`) }));
 }
 
+/**
+ * Add effect (the one in `scope`) → search `query` → the row whose name starts with `row`: a kind's label, or an
+ * example's ("Pack Tactics"). Picking it adds the effect, filled in, and opens its card.
+ */
+export async function pickEffect(scope: ReturnType<typeof within>, query: string, row: string | RegExp = query): Promise<void> {
+  await userEvent.click(scope.getByRole("button", { name: "Add effect" }));
+  const picker = within(screen.getByRole("dialog", { name: "Add effect" }));
+  await userEvent.type(picker.getByRole("searchbox", { name: "Search effects" }), query);
+  await userEvent.click(picker.getByRole("button", { name: typeof row === "string" ? new RegExp(`^${escape(row)}`) : row }));
+}
+
 /** Add → search → a library row: the editor opens on a copy, added on Save. */
 export async function openFromLibrary(name: string, query = name): Promise<void> {
   await searchAdd(query);

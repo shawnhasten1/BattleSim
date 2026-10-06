@@ -296,10 +296,11 @@ function FeatureWhileActive({ feature, onChange, definition, newPools }: {
     <>
       <FeatureEffectCards
         groups={groups}
-        onAdd={(effect) => {
-          const group = groupForNew(feature, effect);
+        onAdd={(effects) => {
+          // An example's effects are one kind, so they go together.
+          const group = groupForNew(feature, effects[0]!);
           const current = groups.find((candidate) => candidate.id === group)?.effects ?? [];
-          onChange(withGroupEffects(feature, group, [...current, effect]));
+          onChange(withGroupEffects(feature, group, [...current, ...effects]));
           return group;
         }}
         definition={definition}

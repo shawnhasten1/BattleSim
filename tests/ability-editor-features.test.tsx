@@ -11,7 +11,7 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { activationOf } from "@/lib/ability-editor/features";
 import { featureStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
-import { startFromScratch } from "./helpers/abilities-tab";
+import { pickEffect, startFromScratch } from "./helpers/abilities-tab";
 import { blankCharacter, quickBuild, rebuildActor } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 
@@ -47,9 +47,8 @@ const radio = (scope: ReturnType<typeof within>, group: string, option: string) 
   userEvent.click(within(scope.getByRole("radiogroup", { name: group })).getByRole("radio", { name: option }));
 const chip = (scope: ReturnType<typeof within>, group: string, name: string) =>
   userEvent.click(within(scope.getByRole("group", { name: group })).getByRole("button", { name }));
-async function addEffect(menuItem: RegExp, cardLabel: string) {
-  await userEvent.click(inSection("while-active").getByRole("button", { name: "Add effect" }));
-  await userEvent.click(screen.getByRole("menuitem", { name: menuItem }));
+async function addEffect(row: RegExp, cardLabel: string) {
+  await pickEffect(inSection("while-active"), cardLabel, row);
   return within(screen.getByRole("group", { name: `${cardLabel} effect` }));
 }
 async function retype(box: HTMLElement, value: string) {
@@ -69,6 +68,20 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     await addToSheet();
     expect(named("Pack Tactics")).toMatchObject({ category: "trait", effects: findSrdFeature("srd:feature:pack-tactics")!.effects });
     expect((fighter().traits ?? []).some((trait) => trait.name === "Pack Tactics")).toBe(true);
+  });
+
+  it("starts from an example: resistance to three damage types is one card, filled in", async () => {
+    await blankFeature("Stoneskin Hide");
+    await pickEffect(inSection("while-active"), "resistance rage", "Bludgeoning, piercing and slashing resistance, like Rage");
+    const card = within(screen.getByRole("group", { name: "Resistance effect" }));
+    for (const type of ["bludgeoning", "piercing", "slashing"]) {
+      expect(card.getByRole("button", { name: type }).getAttribute("aria-pressed")).toBe("true");
+    }
+    await done(card);
+    await addToSheet();
+    expect(named("Stoneskin Hide").effects).toEqual(["bludgeoning", "piercing", "slashing"].map((damageType) => (
+      { kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType } }
+    )));
   });
 
   it("Superior Critical: a critical hit on 18 to 20 with melee and ranged attacks", async () => {
@@ -817,8 +830,7 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     await retype(screen.getByLabelText("Name"), "Battle Focus");
     await radio(inSection("roll"), "How it works", "Automatic");
     await radio(inSection("roll"), "It", "Grants a benefit");
-    await userEvent.click(inSection("outcome").getByRole("button", { name: "Add effect" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: /^Advantage on its attacks/ }));
+    await pickEffect(inSection("outcome"), "Advantage on its attacks");
     const card = within(screen.getByRole("group", { name: "Advantage on its attacks effect" }));
     await chip(card, "Attacks", "melee");
     await done(card);

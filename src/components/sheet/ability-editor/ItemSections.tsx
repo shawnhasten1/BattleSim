@@ -73,6 +73,7 @@ export function itemSection(id: SectionId, props: ItemSectionProps): ReactNode {
           groups={[{ id: "always", place: "always", effects: item.effects ?? [], onChange: (effects) => onChange(opt(item, "effects", effects.length ? effects : undefined)) }]}
           definition={definition}
           newPools={newPools}
+          owner="item"
           emptyText="Nothing while it's carried."
         />
       );

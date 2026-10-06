@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Plus, X } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   abilityModifier,
@@ -25,10 +25,8 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import {
-  EFFECT_KINDS,
   EFFECT_SPECS,
   SELF_WHEN_CONDITIONS,
-  THEMES,
   WHEN_CONDITIONS,
   effectCards,
   expandCard,
@@ -42,6 +40,7 @@ import {
   withWhen,
   type ConditionModifiers,
   type EffectKindSpec,
+  type EffectOwner,
   type WhenValue
 } from "@/lib/ability-editor/effects";
 import { poolOptions } from "@/lib/ability-editor/pools";
@@ -49,6 +48,7 @@ import { componentAverage, effectCardSentence, modifiersSentence } from "@/lib/s
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DAMAGE_TYPES, DamageLines } from "./DamageLines";
 import { EffectCards } from "./EffectCards";
+import { EffectPicker } from "./EffectPicker";
 import { PoolPicker, type NewPools } from "./LimitPicker";
 import styles from "./ability-editor.module.css";
 
@@ -90,7 +90,7 @@ interface CardEdit {
   abilities?: Ability[];
 }
 
-/** Whether the Add menu offers a kind here. */
+/** Whether the Add effect picker offers a kind here. */
 function offered(spec: EffectKindSpec, places: EffectPlace[], activated: boolean): boolean {
   if (spec.conditionOnly && !places.includes("condition")) return false;
   if (spec.kind === "extra-action" && !activated) return false;
@@ -107,27 +107,31 @@ interface CardContext {
 
 export interface FeatureEffectCardsProps {
   groups: CardGroup[];
-  /** Adds a new effect at the end of the group it belongs in, and says which. Without it, it goes in the first group. */
-  onAdd?: (effect: FeatureEffect) => string;
+  /**
+   * Adds new effects (one, or an example's several) at the end of the group they belong in, and says which. Without it,
+   * they go in the first group.
+   */
+  onAdd?: (effects: FeatureEffect[]) => string;
   definition: CreatureDefinition;
   newPools: NewPools;
   /** The feature switches on: an extra action, and regaining something when it does, make sense. */
   activated?: boolean;
   /** An item's charges come first among pools. */
   weapon?: WeaponDefinition;
+  /** What the effects belong to, for the picker's Common row. Absent: a buff when every group is a condition, else an item with a weapon, else a feature. */
+  owner?: EffectOwner;
   emptyText: string;
 }
 
 /**
  * Effect cards for what a feature, an item or a condition does while it's in force: each a sentence that opens to its
- * fields, "When" and "Which attacks", grouped by where they're stored. One Add menu, sorted by theme.
+ * fields, "When" and "Which attacks", grouped by where they're stored. One Add effect picker (`EffectPicker`).
  */
-export function FeatureEffectCards({ groups, onAdd, definition, newPools, activated = false, weapon, emptyText }: FeatureEffectCardsProps) {
+export function FeatureEffectCards({ groups, onAdd, definition, newPools, activated = false, weapon, owner, emptyText }: FeatureEffectCardsProps) {
   const [open, setOpen] = useState<string | null>(null);
   // The effect just added: a card of its own until it's closed (see `effectCards`).
   const [fresh, setFresh] = useState<{ group: string; from: number; count: number } | null>(null);
   const [adding, setAdding] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const places = groups.map((group) => group.place);
   const attacks = useMemo(
@@ -137,40 +141,34 @@ export function FeatureEffectCards({ groups, onAdd, definition, newPools, activa
   );
   const context: CardContext = { definition, newPools, activated, weapon, attacks };
 
-  useEffect(() => {
-    if (!adding) return;
-    menuRef.current?.querySelector("button")?.focus();
-    // A click anywhere else closes the menu.
-    function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (menuRef.current?.contains(target) || addRef.current?.contains(target)) return;
-      setAdding(false);
-    }
-    // The menu's own document: a popped-out sheet's, or the main one.
-    const doc = menuRef.current?.ownerDocument ?? document;
-    doc.addEventListener("pointerdown", onPointerDown, true);
-    return () => doc.removeEventListener("pointerdown", onPointerDown, true);
-  }, [adding]);
-
   function close() {
     setOpen(null);
     setFresh(null);
   }
 
-  function add(spec: EffectKindSpec) {
-    const blank = spec.blank();
+  function add(picked: FeatureEffect[]) {
     // A resource it regains starts as the first pool it has (ki, an item's charges), when it has one.
     const firstPool = poolOptions(definition, weapon, newPools.pools)[0]?.id;
-    const effect = blank.kind === "resource-regain" && !blank.resourceId && firstPool ? { ...blank, resourceId: firstPool } : blank;
-    const target = onAdd ? groups.find((group) => group.id === onAdd(effect)) : groups[0];
-    if (!onAdd && target) target.onChange([...target.effects, effect]);
+    const effects = picked.map((effect) => (effect.kind === "resource-regain" && !effect.resourceId && firstPool ? { ...effect, resourceId: firstPool } : effect));
+    const target = onAdd ? groups.find((group) => group.id === onAdd(effects)) : groups[0];
+    if (!onAdd && target) target.onChange([...target.effects, ...effects]);
     if (target) {
-      // It lands at the end of its group.
-      setFresh({ group: target.id, from: target.effects.length, count: 1 });
+      // They land at the end of their group, a card of their own (resistances to several types are one card).
+      setFresh({ group: target.id, from: target.effects.length, count: effects.length });
       setOpen(`${target.id}:e${target.effects.length}`);
     }
-    setAdding(false);
+    closePicker();
   }
+
+  function closePicker() {
+    setAdding(false);
+    addRef.current?.focus();
+  }
+
+  // One function while the places stay the same, so the picker's search isn't redone for nothing.
+  const placesKey = places.join(",");
+  const isOffered = useCallback((spec: EffectKindSpec) => offered(spec, placesKey.split(",") as EffectPlace[], activated), [placesKey, activated]);
+  const pickerOwner: EffectOwner = owner ?? (groups.every((group) => group.place === "condition") ? "buff" : weapon ? "item" : "feature");
 
   const total = groups.reduce((sum, group) => sum + group.effects.length + modifierCards(group.modifiers).length, 0);
   return (
@@ -237,38 +235,10 @@ export function FeatureEffectCards({ groups, onAdd, definition, newPools, activa
           </div>
         );
       })}
-      <button ref={addRef} type="button" className={styles.addLine} aria-expanded={adding} aria-haspopup="menu" onClick={() => setAdding((v) => !v)}>
+      <button ref={addRef} type="button" className={styles.addLine} aria-expanded={adding} aria-haspopup="dialog" onClick={() => setAdding((v) => !v)}>
         <Plus size={12} /> Add effect
       </button>
-      {adding ? (
-        <div
-          ref={menuRef} className={`${styles.menu} ${styles.menuGrouped}`} role="menu" aria-label="Add effect"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") { event.stopPropagation(); setAdding(false); addRef.current?.focus(); }
-            if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-            event.preventDefault();
-            const items = [...(menuRef.current?.querySelectorAll("button") ?? [])];
-            const at = items.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLButtonElement);
-            items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
-          }}
-        >
-          {THEMES.map(({ theme, label }) => {
-            const kinds = EFFECT_KINDS.filter((spec) => spec.theme === theme && offered(spec, places, activated));
-            if (!kinds.length) return null;
-            return (
-              <div key={theme} role="group" aria-label={label} className={styles.menuGroup}>
-                <span className={styles.menuGroupTitle} aria-hidden>{label}</span>
-                {kinds.map((spec) => (
-                  <button key={spec.kind} type="button" role="menuitem" onClick={() => add(spec)}>
-                    {spec.label}
-                    <span>{spec.hint}</span>
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
+      {adding ? <EffectPicker offered={isOffered} owner={pickerOwner} onPick={add} onClose={closePicker} anchorRef={addRef} /> : null}
     </div>
   );
 }
