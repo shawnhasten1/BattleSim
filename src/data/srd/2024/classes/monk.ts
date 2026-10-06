@@ -156,7 +156,7 @@ export const MONK: ClassDefinition = {
       grants: [
         grant("extra-attack", attacks("monk_extra-attack", 2)),
         grant("stunning-strike", runs("monk_stunning-strike", {
-          notSimulated: "a successful save's halved speed and advantage against the target; it works with the Unarmed Strike, not monk weapons."
+          notSimulated: "it works with the Unarmed Strike, not Monk weapons."
         }), {
           onHitOf: {
             grant: "martial-arts",

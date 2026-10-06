@@ -590,7 +590,9 @@ function bestSwingAttack(
     // An on-hit option's condition (Open Hand Technique's Topple, Ensnaring Strike): its control, with the board.
     const grouped = (attack.riders ?? []).filter((rider) => rider.group);
     const control = weigh && grouped.length && !terms?.tradesDice ? expectedRiderControl({ ...attack, riders: grouped }, source, target, weigh.tactics) / 2 : 0;
-    const value = damage - cost + trade + control;
+    // Stunning Strike: a paid upgrade that takes the target's turn is worth that turn.
+    const denial = turnDenialValue(attack, source, target, targetCombatant);
+    const value = damage - cost + trade + control + denial;
     if (!best || value > best.value + 1e-9) best = { attack, value, damage, hitChance };
   }
   return best;
@@ -3047,6 +3049,8 @@ function selectOffensivePlan(
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
+      // Stunning Strike: what the target would do with the turn it loses (on the damage scale of 2).
+      const denialValue = turnDenialValue(action, definition, targetDefinition, target) * 2;
       const tradeValue = diceTradeValue(snapshot, actor, definition, action, target, targetDefinition, tactics);
       // Subtle Spell: worth its point only when a foe near enough could counter the spell.
       const subtleValue = action.metamagic?.option === "subtle" ? (counterThreatNear(snapshot, actor) ? 4 * Math.max(1, castLevelOf(action) ?? 1) : -2) : 0;
@@ -3092,6 +3096,7 @@ function selectOffensivePlan(
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
       if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
       if (controlValue > 0) reasons.push("imposes a condition");
+      if (denialValue > 0) reasons.push("may take its turn");
       if (tradeValue !== 0 && action.kind === "attack" && action.onHitTerms?.tradesDice) {
         reasons.push(tradeValue > -1 ? `${action.onHitTerms.name} for ${action.onHitTerms.tradesDice.dice} damage ${action.onHitTerms.tradesDice.dice === 1 ? "die" : "dice"}` : `no ${action.onHitTerms.name} without the bonus it spends`);
       }
@@ -3101,6 +3106,7 @@ function selectOffensivePlan(
       if (tagPressure < 0) reasons.push("tagged low-priority");
       let score = expectedDamage * 2
         + controlValue
+        + denialValue
         + tradeValue
         + subtleValue
         + extendedValue
@@ -4160,6 +4166,42 @@ function expectedRiderControl(
 }
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
+
+/** Conditions that take a creature's turn from it. */
+const TURN_TAKING: ReadonlySet<ConditionName> = new Set<ConditionName>(["stunned", "paralyzed", "incapacitated", "unconscious", "petrified"]);
+
+/**
+ * Stunning Strike: an on-hit upgrade paid for when it lands (`costPaidOnHit`) that takes the target's turn is worth what
+ * the target would deal in that turn, at the chance it lands; nothing on a target already out of it. Only such paid
+ * upgrades: a monster's own riders keep their tactics' control weights.
+ */
+function turnDenialValue(action: OffensiveAction, source: CreatureDefinition, target: CreatureDefinition, targetCombatant?: CombatantState): number {
+  if (action.kind !== "attack" || !action.costPaidOnHit) return 0;
+  if ((targetCombatant?.conditions ?? []).some((condition) => TURN_TAKING.has(condition.name))) return 0;
+  const riders = (action.riders ?? []).filter((rider): rider is ConditionRider => rider.kind === "condition" && Boolean(rider.resourceCost)
+    && typeof rider.condition === "string" && TURN_TAKING.has(rider.condition) && !isImmuneToCondition(target, rider.condition)
+    && riderAffectsCreatureType(rider, target));
+  if (!riders.length) return 0;
+  // A creature the hit itself likely drops loses nothing to a stun.
+  const hit = averageDamage(action, source);
+  const left = targetCombatant?.currentHp ?? target.maxHp;
+  const survives = left > hit * 1.5 ? 1 : left > hit ? 0.5 : 0.1;
+  const threat = threatPerRound(target);
+  return Math.max(...riders.map((rider) => riderLandChance(action, rider, source, target) * threat)) * survives;
+}
+
+/** What a creature deals in a turn, roughly: its best offensive action's average damage, at a typical chance to land. */
+const threatByDefinition = new WeakMap<CreatureDefinition, number>();
+
+function threatPerRound(definition: CreatureDefinition): number {
+  const known = threatByDefinition.get(definition);
+  if (known !== undefined) return known;
+  const actions = getExecutableActions(definition).filter((action) => action.actionType === "action" && action.automationSupport === "full"
+    && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"));
+  const threat = Math.max(0, ...actions.map((action) => averageDamage(action, definition))) * 0.65;
+  threatByDefinition.set(definition, threat);
+  return threat;
+}
 
 /** "poisoned and stunned". */
 function joinNames(names: string[]): string {

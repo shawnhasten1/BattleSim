@@ -48,7 +48,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
-| `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
+| `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
@@ -226,7 +226,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 4 | Slow Fall | info |  | Falling. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Stunning Strike | partial | `ai-control-value` | Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI spends focus on it only under Controller tactics. |
+| 5 | Stunning Strike | partial | `monk-weapons` | Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics. Not on Monk weapons. |
 | 6 | Empowered Strikes | full |  | Its Unarmed Strike deals force damage from 6th level. |
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |

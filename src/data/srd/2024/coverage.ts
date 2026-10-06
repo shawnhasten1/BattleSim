@@ -31,6 +31,7 @@ export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
   initiative: "Swapping initiative with an ally (Alert)",
+  "monk-weapons": "A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Two Cunning Strike effects on one hit (Improved Cunning Strike)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
@@ -53,7 +54,6 @@ export const GAPS = {
   "move-through": "Moving through a larger creature's space (Halfling Nimbleness)",
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
-  "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
 } as const;
 
 export type GapCode = keyof typeof GAPS;
@@ -199,7 +199,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_uncanny-metabolism": info("A fight starts with full pools and hit points."),
   "monk_deflect-attacks": full("1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources."),
   "monk_monk-subclass": SUBCLASS,
-  "monk_stunning-strike": partial(["ai-control-value"], "Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI spends focus on it only under Controller tactics."),
+  "monk_stunning-strike": partial(["monk-weapons"], "Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics. Not on Monk weapons."),
   "monk_ability-score-improvement": FEAT_CHOICE,
   "monk_slow-fall": info("Falling."),
   "monk_extra-attack": full(),
