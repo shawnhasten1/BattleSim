@@ -159,8 +159,10 @@ export function EffectCards({ riders, onChange, definition, context, weapon, new
       if (menuRef.current?.contains(target) || addRef.current?.contains(target)) return;
       setAdding(false);
     }
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+    // The menu's own document: a popped-out sheet's, or the main one.
+    const doc = menuRef.current?.ownerDocument ?? document;
+    doc.addEventListener("pointerdown", onPointerDown, true);
+    return () => doc.removeEventListener("pointerdown", onPointerDown, true);
   }, [adding]);
 
   const replace = (index: number, next: Rider) => onChange(riders.map((rider, i) => (i === index ? next : rider)));
@@ -224,7 +226,7 @@ export function EffectCards({ riders, onChange, definition, context, weapon, new
             if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
             event.preventDefault();
             const items = [...(menuRef.current?.querySelectorAll("button") ?? [])];
-            const at = items.indexOf(document.activeElement as HTMLButtonElement);
+            const at = items.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLButtonElement);
             items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
           }}
         >

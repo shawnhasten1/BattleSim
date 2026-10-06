@@ -467,3 +467,21 @@ Chromium-only):
   style (`winsize:sheet-standard`).
 - **Tests:** 4 more in `tests/useFloatingWindow.test.tsx`. Browser: 6 checks (grip, resize, the body scrolls, clamped
   at the minimum, minimized, remembered after a reload).
+
+### Phase 3 (2026-10-06)
+
+- **`src/hooks/useOwnerDocument.ts`** (`OwnerDocumentContext`, `useOwnerDocument`, `useOwnerWindow`) from the spike.
+  Both hooks are safe on the server, where there's no `document`: InfoTooltip renders its trigger there.
+- **`ContextMenu` and `InfoTooltip`** portal to, listen on and clamp to the owner document and window (from the spike).
+- **Where the build differs:** components that hold a ref to their own element read the document from it
+  (`menuRef.current.ownerDocument`, `event.currentTarget.ownerDocument`) instead of the context. That covers
+  `AbilitiesList`'s row menu, the effect menus in `EffectCards`, `FeatureEffectCards` and `FeatureSections`,
+  `FloatingWindow`'s focus restore, `useFloatingWindow`'s drag clamp, and `AbilityEditor`'s `requestAnimationFrame`.
+  `Modal` does the same (no sheet uses it, but it's under `ui/`). `useFloatingWindow`'s `instanceof Element` became a
+  `closest` check. `AbilityEditor`'s `beforeunload` stays on the main window, marked `// main-window only`.
+- **Tests:** `tests/owner-document.test.tsx`. A sheet is portalled into a second happy-dom `Window` (its own `Element`
+  class, like a real popup). The ⋯ menu, the condition menu (its choice reaching the token), a tooltip and an ability
+  row's ⋯ menu open there and close on a click there. The grep guard fails on `document.body`,
+  `document.activeElement`, `document.add/removeEventListener` and `window.add/removeEventListener` in `sheet/**` and
+  `ui/**` without `// main-window only`. With the old `ContextMenu` swapped back in, three of them fail. Full suite:
+  249 files, 2777 tests.

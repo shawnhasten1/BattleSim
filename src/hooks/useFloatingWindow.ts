@@ -60,7 +60,9 @@ export function useFloatingWindow(initial: Position, storageKey?: string, option
 
   function onPointerDown(event: PointerEvent<HTMLElement>) {
     if (event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("button")) return;
+    // Not `instanceof Element`: a node in another window (a popped-out sheet) is another window's Element.
+    const target = event.target as Partial<Element> | null;
+    if (target && typeof target.closest === "function" && target.closest("button")) return;
     dragRef.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX - position.x,
@@ -73,9 +75,10 @@ export function useFloatingWindow(initial: Position, storageKey?: string, option
     const drag = dragRef.current;
     if (!drag) return;
     draggedRef.current = true;
+    const view = event.currentTarget.ownerDocument?.defaultView ?? window;
     setPosition({
-      x: clamp(event.clientX - drag.offsetX, 8, window.innerWidth - 120),
-      y: clamp(event.clientY - drag.offsetY, 0, window.innerHeight - 44)
+      x: clamp(event.clientX - drag.offsetX, 8, view.innerWidth - 120),
+      y: clamp(event.clientY - drag.offsetY, 0, view.innerHeight - 44)
     });
   }
 

@@ -3,6 +3,7 @@
 import { HelpCircle } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useOwnerDocument, useOwnerWindow } from "@/hooks/useOwnerDocument";
 import styles from "./InfoTooltip.module.css";
 
 interface InfoTooltipProps {
@@ -16,7 +17,7 @@ interface InfoTooltipProps {
 
 /**
  * A small "?" icon that reveals an explanatory bubble on hover/focus (and on
- * tap, for touch devices). Portalled to `document.body` and position-clamped
+ * tap, for touch devices). Portalled to its document's body (a popped-out sheet's, or the main one) and position-clamped
  * like `ContextMenu`, so it's safe to drop into any panel regardless of that
  * panel's `overflow`/scroll — e.g. the sheet's `FloatingWindow` clips content
  * past its edges. Content is caller-supplied, so this is the one reusable
@@ -27,6 +28,8 @@ export function InfoTooltip({ label, content, children, className }: InfoTooltip
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
+  const ownerDocument = useOwnerDocument();
+  const ownerWindow = useOwnerWindow();
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -36,12 +39,12 @@ export function InfoTooltip({ label, content, children, className }: InfoTooltip
     const anchor = trigger.getBoundingClientRect();
     const size = bubble.getBoundingClientRect();
     const pad = 8;
-    const x = Math.max(pad, Math.min(anchor.left, window.innerWidth - size.width - pad));
+    const x = Math.max(pad, Math.min(anchor.left, ownerWindow.innerWidth - size.width - pad));
     // Prefer below the trigger; flip above if there's no room.
     const below = anchor.bottom + 6;
-    const y = below + size.height > window.innerHeight - pad ? anchor.top - size.height - 6 : below;
+    const y = below + size.height > ownerWindow.innerHeight - pad ? anchor.top - size.height - 6 : below;
     setPos({ x, y: Math.max(pad, y) });
-  }, [open]);
+  }, [open, ownerWindow]);
 
   useEffect(() => {
     if (!open) return;
@@ -55,22 +58,22 @@ export function InfoTooltip({ label, content, children, className }: InfoTooltip
       setOpen(false);
       // Opened from the keyboard, Escape only closes the bubble; it isn't also a "close" for the window or editor
       // around it. (Opened by hovering, it closes the bubble and carries on as usual.)
-      if (triggerRef.current === document.activeElement) event.stopPropagation();
+      if (triggerRef.current === ownerDocument.activeElement) event.stopPropagation();
     }
     function onDismiss() {
       setOpen(false);
     }
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("scroll", onDismiss, true);
-    window.addEventListener("resize", onDismiss);
+    ownerDocument.addEventListener("pointerdown", onPointerDown, true);
+    ownerDocument.addEventListener("keydown", onKeyDown, true);
+    ownerWindow.addEventListener("scroll", onDismiss, true);
+    ownerWindow.addEventListener("resize", onDismiss);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("scroll", onDismiss, true);
-      window.removeEventListener("resize", onDismiss);
+      ownerDocument.removeEventListener("pointerdown", onPointerDown, true);
+      ownerDocument.removeEventListener("keydown", onKeyDown, true);
+      ownerWindow.removeEventListener("scroll", onDismiss, true);
+      ownerWindow.removeEventListener("resize", onDismiss);
     };
-  }, [open]);
+  }, [open, ownerDocument, ownerWindow]);
 
   return (
     <>
@@ -87,12 +90,12 @@ export function InfoTooltip({ label, content, children, className }: InfoTooltip
       >
         {children ?? <HelpCircle size={13} />}
       </button>
-      {open && typeof document !== "undefined"
+      {open
         ? createPortal(
           <div ref={bubbleRef} role="tooltip" className={styles.bubble} style={{ left: pos.x, top: pos.y }}>
             {content}
           </div>,
-          document.body
+          ownerDocument.body
         )
         : null}
     </>

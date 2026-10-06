@@ -31,8 +31,10 @@ export function Modal({ open, onClose, title, children, footer, maxWidth }: Moda
 
   useEffect(() => {
     if (!open) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
+    // The panel's own document: never anywhere but the main page today, but kept to it like the other windows.
+    const doc = panel?.ownerDocument ?? document;
+    const previouslyFocused = doc.activeElement as HTMLElement | null;
     (panel?.querySelector<HTMLElement>(FOCUSABLE) ?? panel)?.focus({ preventScroll: true });
 
     function onKeyDown(event: KeyboardEvent) {
@@ -45,18 +47,18 @@ export function Modal({ open, onClose, title, children, footer, maxWidth }: Moda
       if (items.length === 0) return;
       const first = items[0];
       const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (event.shiftKey && doc.activeElement === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && doc.activeElement === last) {
         event.preventDefault();
         first.focus();
       }
     }
 
-    document.addEventListener("keydown", onKeyDown, true);
+    doc.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
+      doc.removeEventListener("keydown", onKeyDown, true);
       previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, [open]);

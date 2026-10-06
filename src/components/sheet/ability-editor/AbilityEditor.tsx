@@ -451,12 +451,13 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
 
   useEditorGuard({ dirty, label: name || "this ability", save, discard: () => close() }, !nestedTarget && !commit);
 
-  // Unsaved changes survive nothing outside the app: ask before the page goes away.
+  // Unsaved changes survive nothing outside the app: ask before the page goes away. (The main page: a popped-out sheet
+  // closed with unsaved changes docks back into it instead.)
   useEffect(() => {
     if (!dirty || nestedTarget) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("beforeunload", onBeforeUnload); // main-window only
+    return () => window.removeEventListener("beforeunload", onBeforeUnload); // main-window only
   }, [dirty, nestedTarget]);
 
   useEffect(() => {
@@ -497,7 +498,8 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools 
 
   function showSection(id: SectionId) {
     setOpen((current) => new Set([...current, id]));
-    requestAnimationFrame(() => {
+    // The editor's own window: the main one's frames stop while it's hidden behind a popped-out sheet.
+    (rootRef.current?.ownerDocument.defaultView ?? window).requestAnimationFrame(() => {
       const head = rootRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"] button`);
       head?.scrollIntoView({ block: "nearest" });
       head?.focus({ preventScroll: true });

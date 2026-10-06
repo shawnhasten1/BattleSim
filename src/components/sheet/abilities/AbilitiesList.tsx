@@ -113,8 +113,10 @@ function RowMenu({ row, handlers }: { row: ListRow; handlers: RowHandlers }) {
     const onPointer = (event: PointerEvent) => {
       if (!menuRef.current?.contains(event.target as Node) && !buttonRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    window.addEventListener("pointerdown", onPointer);
-    return () => window.removeEventListener("pointerdown", onPointer);
+    // The menu's own window: a popped-out sheet's, or the main one.
+    const view = menuRef.current?.ownerDocument.defaultView ?? window;
+    view.addEventListener("pointerdown", onPointer);
+    return () => view.removeEventListener("pointerdown", onPointer);
   }, [open]);
 
   function choose(action: () => void) {
@@ -132,7 +134,7 @@ function RowMenu({ row, handlers }: { row: ListRow; handlers: RowHandlers }) {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
     const items = [...(menuRef.current?.querySelectorAll("button") ?? [])];
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const at = items.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLButtonElement);
     items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
   }
 

@@ -77,7 +77,7 @@ export function FloatingWindow({
   onCloseRef.current = onClose;
 
   useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previouslyFocused = (windowRef.current?.ownerDocument ?? document).activeElement as HTMLElement | null;
     windowRef.current?.focus({ preventScroll: true });
     return () => {
       previouslyFocused?.focus?.({ preventScroll: true });

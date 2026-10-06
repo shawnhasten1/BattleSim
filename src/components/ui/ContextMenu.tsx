@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useOwnerDocument, useOwnerWindow } from "@/hooks/useOwnerDocument";
 import styles from "./ContextMenu.module.css";
 
 export type ContextMenuItem =
@@ -46,13 +47,16 @@ interface ContextMenuProps {
 }
 
 /**
- * A cursor-anchored popup menu. Portalled to `document.body` so no ancestor
+ * A cursor-anchored popup menu. Portalled to the body of its document (a popped-out sheet's, or the main one) so no ancestor
  * `transform` / `overflow` can clip it; clamped into the viewport once its size
  * is known. Dismisses on outside pointerdown, Escape, scroll, or resize, and
  * after any item is chosen. Reusable — not wall-specific.
  */
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // In a popped-out sheet, the popup's document and window, not the main ones.
+  const ownerDocument = useOwnerDocument();
+  const ownerWindow = useOwnerWindow();
   const hintId = useId();
   const [pos, setPos] = useState({ x, y });
 
@@ -62,10 +66,10 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     const rect = el.getBoundingClientRect();
     const pad = 8;
     setPos({
-      x: Math.max(pad, Math.min(x, window.innerWidth - rect.width - pad)),
-      y: Math.max(pad, Math.min(y, window.innerHeight - rect.height - pad))
+      x: Math.max(pad, Math.min(x, ownerWindow.innerWidth - rect.width - pad)),
+      y: Math.max(pad, Math.min(y, ownerWindow.innerHeight - rect.height - pad))
     });
-  }, [x, y, items]);
+  }, [x, y, items, ownerWindow]);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -78,17 +82,17 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       }
     }
     // Capture phase: close before other Escape handlers (e.g. the wall-chain one) act.
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("scroll", onClose, true);
-    window.addEventListener("resize", onClose);
+    ownerDocument.addEventListener("pointerdown", onPointerDown, true);
+    ownerDocument.addEventListener("keydown", onKeyDown, true);
+    ownerWindow.addEventListener("scroll", onClose, true);
+    ownerWindow.addEventListener("resize", onClose);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("scroll", onClose, true);
-      window.removeEventListener("resize", onClose);
+      ownerDocument.removeEventListener("pointerdown", onPointerDown, true);
+      ownerDocument.removeEventListener("keydown", onKeyDown, true);
+      ownerWindow.removeEventListener("scroll", onClose, true);
+      ownerWindow.removeEventListener("resize", onClose);
     };
-  }, [onClose]);
+  }, [onClose, ownerDocument, ownerWindow]);
 
   if (typeof document === "undefined") return null;
 
@@ -169,6 +173,6 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         );
       })}
     </div>,
-    document.body
+    ownerDocument.body
   );
 }
