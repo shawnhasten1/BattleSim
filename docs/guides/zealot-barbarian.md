@@ -95,7 +95,7 @@ The recipe gives you: **+2** damage on STR melee hits, **resistance** to bludgeo
 
 ### 3c. Add Divine Fury
 
-Click **+ Add effect**. The menu is grouped by what an effect changes (its attacks, its defense, saving throws, staying alive, its turn). Choose **Extra damage on its hits**, then set the card up like this:
+Click **+ Add effect** and type **extra damage** in its search (or open the **Attacks & damage** fold). Choose **Extra damage on its hits**, then set the card up like this:
 
 ![The Divine Fury card](img/zealot-barbarian/10-divine-fury-effect.png)
 

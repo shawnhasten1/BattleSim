@@ -624,17 +624,22 @@ const SECTIONS: Section[] = [
           <li>
             <strong>While active</strong> — what it does, as cards that each read as a sentence. A feature that&apos;s
             switched on groups them by when they apply: <em>When it activates</em> (an extra action, a resource back)
-            and <em>While it&apos;s active</em>. <strong>Add effect</strong> lists every kind, grouped by what it
-            changes: its attacks (advantage, a bonus to hit, extra damage, damage with a save, a condition on its hits,
-            swarm damage), its defense (attacks against it, AC, a resistance, immunity or vulnerability or absorbing a
-            damage type as healing, Evasion, hurting what hits it in melee), saving throws, staying alive
-            (regeneration, dropping to 1 HP instead of 0, splitting) and its turn. A bonus is a number or an ability
-            modifier (Aura of Protection&apos;s Charisma). A feature from an older save can list bonuses the simulator
+            and <em>While it&apos;s active</em>. <strong>Add effect</strong> opens on a search: type what you&apos;re
+            after (&ldquo;speed&rdquo;, &ldquo;resistance&rdquo;, &ldquo;tough&rdquo;, an item&apos;s name) and pick the
+            effect, or one of its examples, which comes filled in. Without a search it shows the usual effects for what
+            you&apos;re editing, then every kind in folds by what it changes: movement (speed, flying, ignoring difficult
+            terrain), hit points (the maximum, regeneration, dropping to 1 HP instead of 0), scores, size and
+            initiative, AC and defenses (resistances, damage reduction, Evasion), attacks and damage, spells, saves and
+            d20 rolls, its turn, and class and monster mechanics. The{" "}
+            <a href="/docs/guides/add-an-effect">Add an effect guide</a> walks through it. Speed, hit points and
+            scores it changes show on Stats under the numbers you type. A bonus is a number or an ability modifier
+            (Aura of Protection&apos;s Charisma), or so many for each level. A feature from an older save can list bonuses the simulator
             never applied: <strong>Make them effects</strong> turns them into cards it does.
             A card&apos;s <strong>When</strong> limits it (an ally next to the target, after a charge, while
-            it&apos;s bloodied; with several picked, any one of them or all of them) and <strong>Which attacks</strong>{" "}
-            limits it to melee, ranged or spell attacks and the ability they use, with specific attacks under More
-            options. A condition on its hits can be a <em>mark of its own</em> whose own cards say what it does, such
+            it&apos;s bloodied; with several picked, any one of them or all of them), <strong>While</strong> to the
+            armor it wears, a shield, or one of its activations being on (Fast Movement: no heavy armor), and{" "}
+            <strong>Which attacks</strong> to melee, ranged or spell attacks and the ability they use, with specific
+            attacks and creature types under More options. A condition on its hits can be a <em>mark of its own</em> whose own cards say what it does, such
             as &ldquo;hits against it deal more&rdquo;.
           </li>
           <li>
