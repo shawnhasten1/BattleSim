@@ -311,7 +311,8 @@ const HALFLING: SpeciesDefinition = {
     level: 1,
     grants: [
       { key: "brave", feature: runs(trait("halfling", "Brave"), { effects: [{ kind: "save-advantage", against: { conditions: ["frightened"] } }] }) },
-      { key: "halfling-nimbleness", feature: reference(trait("halfling", "Halfling Nimbleness")) },
+      // Every creature here can move through another's space (at double cost): nothing more to run.
+      { key: "halfling-nimbleness", feature: runs(trait("halfling", "Halfling Nimbleness")) },
       {
         key: "luck",
         feature: runs(trait("halfling", "Luck"), {

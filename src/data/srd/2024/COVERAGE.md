@@ -28,7 +28,7 @@ its gaps, never dropped and never approximated without saying so.
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 9 | 2 | 2 | 4 | 0 |
-| Species traits | 33 | 13 | 0 | 1 | 8 | 11 |
+| Species traits | 33 | 14 | 0 | 0 | 8 | 11 |
 
 ## Gaps, most widespread first
 
@@ -43,7 +43,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
-| `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
@@ -468,7 +467,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Goliath | Large Form | full |  | A bonus action, with room for it: Large, with 10 ft more speed, for 10 minutes, once a fight. Its advantage on Strength checks is nothing in a fight here (there are no checks). |
 | Goliath | Powerful Build | info |  | Escaping grapples and carrying. |
 | Halfling | Brave | full |  | Advantage on saves against Frightened. |
-| Halfling | Halfling Nimbleness | manual | `move-through` |  |
+| Halfling | Halfling Nimbleness | full |  | The simulator lets any creature move through another's space, at double the cost (a simplification of the 2024 rule), so moving through a larger one's needs nothing more. |
 | Halfling | Luck | full |  | A 1 on a failed save or a missed attack roll is rerolled; ability checks are outside a fight. |
 | Halfling | Naturally Stealthy | info |  | Hiding. |
 | Human | Resourceful | full |  | Heroic Inspiration, spent rerolling a failed save or a missed attack roll (the die that matters in a fight). |

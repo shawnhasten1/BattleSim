@@ -46,7 +46,6 @@ export const GAPS = {
   "zone-cover": "A movable zone that gives cover and shares a resistance (Nature's Sanctuary)",
   "combined-utility": "Step of the Wind carrying an ally with the monk (Heightened Focus)",
   stealth: "Hiding and invisibility you give yourself (there's no stealth in the simulator)",
-  "move-through": "Moving through a larger creature's space (Halfling Nimbleness)",
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
 } as const;
@@ -403,7 +402,7 @@ export const SPECIES_COVERAGE: Record<string, CoverageEntry> = {
   "goliath:large-form": full("A bonus action, with room for it: Large, with 10 ft more speed, for 10 minutes, once a fight. Its advantage on Strength checks is nothing in a fight here (there are no checks)."),
   "goliath:powerful-build": info("Escaping grapples and carrying."),
   "halfling:brave": full("Advantage on saves against Frightened."),
-  "halfling:halfling-nimbleness": manual(["move-through"]),
+  "halfling:halfling-nimbleness": full("The simulator lets any creature move through another's space, at double the cost (a simplification of the 2024 rule), so moving through a larger one's needs nothing more."),
   "halfling:luck": full("A 1 on a failed save or a missed attack roll is rerolled; ability checks are outside a fight."),
   "halfling:naturally-stealthy": info("Hiding."),
   "human:resourceful": full("Heroic Inspiration, spent rerolling a failed save or a missed attack roll (the die that matters in a fight)."),
