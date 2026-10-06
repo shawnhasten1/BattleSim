@@ -217,6 +217,7 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
     return `${actor.displayName} isn't grappled`;
   }
   if (action.kind === "buff" && action.mark?.moving) return markMoveProblem(snapshot, actor, action);
+  if (action.kind === "activate-feature" && action.stillOnly && (actor.turnFlags?.movementUsed ?? 0) > 0) return `${actor.displayName} has already moved this turn`;
   return undefined;
 }
 

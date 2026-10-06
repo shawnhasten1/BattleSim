@@ -126,7 +126,14 @@ export const MONK: ClassDefinition = {
             riders: [{
               kind: "condition", when: "on-hit", condition: "stunned", oncePerTurn: true,
               duration: { kind: "until-source-turn", timing: "start" },
-              save: { ability: "con", dcFormula: FOCUS_DC, onSuccess: "negates" },
+              save: {
+                ability: "con", dcFormula: FOCUS_DC, onSuccess: "negates",
+                // On a success: speed halved, and the monk's next attack against it with advantage, until its next turn.
+                instead: {
+                  condition: { custom: "Staggered" }, conditionKey: "Stunning Strike", duration: { kind: "until-source-turn", timing: "start" },
+                  modifiers: { movementMultiplier: 2 }, nextAttack: { role: "against", mode: "advantage" }
+                }
+              },
               resourceCost: { resourceId: "focus-points", amount: 1 }, activation: "optional"
             }]
           }

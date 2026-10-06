@@ -1127,11 +1127,23 @@ function normalizeRiderSave(input: unknown): RiderSave | undefined {
   if (!ability) {
     return undefined;
   }
+  // Stunning Strike: what a made save gives instead, a condition rider's own fields.
+  const instead = isRecord(input.instead)
+    ? normalizeRider({ ...input.instead, kind: "condition", when: "on-hit" }, "on-hit", 0) as Extract<ActionRider, { kind: "condition" }> | null
+    : null;
   return {
     ability,
     dc: numberField(input, "dc"),
     dcFormula: isRecord(input.dcFormula) ? input.dcFormula as NumericFormula : undefined,
-    onSuccess: input.onSuccess === "ends-early" ? "ends-early" : "negates"
+    onSuccess: input.onSuccess === "ends-early" ? "ends-early" : "negates",
+    ...(instead ? {
+      instead: {
+        condition: instead.condition, duration: instead.duration,
+        ...(instead.modifiers ? { modifiers: instead.modifiers } : {}),
+        ...(instead.conditionKey ? { conditionKey: instead.conditionKey } : {}),
+        ...(instead.nextAttack ? { nextAttack: instead.nextAttack } : {})
+      }
+    } : {})
   };
 }
 

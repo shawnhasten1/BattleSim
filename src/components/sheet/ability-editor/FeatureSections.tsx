@@ -195,6 +195,16 @@ export function ActivationUse({ activation, onChange, definition, newPools, park
         </>
       ) : null}
       <LimitPicker action={activation} onChange={(next) => onChange(next as Activation)} definition={definition} newPools={newPools} />
+      <Check label="Only before it moves on its turn" checked={activation.stillOnly === true}
+        onChange={(on) => { const next = { ...activation }; delete next.stillOnly; onChange(on ? { ...next, stillOnly: true } : next); }} />
+      {activation.condition ? (
+        <Check label="Its next attack roll has advantage (used up by it)" checked={activation.condition.nextAttack?.role === "made" && activation.condition.nextAttack.mode === "advantage"}
+          onChange={(on) => {
+            const condition = { ...activation.condition! };
+            delete condition.nextAttack;
+            onChange({ ...activation, condition: on ? { ...condition, nextAttack: { role: "made", mode: "advantage" } } : condition });
+          }} />
+      ) : null}
     </>
   );
 }

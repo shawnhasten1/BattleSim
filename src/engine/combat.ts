@@ -2179,6 +2179,9 @@ function resolveAttackCore(
   if (hit) {
     consumeTriggeredConditions(state, target, targetHitDamage.consumedConditionIds ?? []);
     appliedConditionEffects = applyOnHitFeatureConditions(state, attacker, target, action, attackerDefinition, { rollMode, critical });
+  } else {
+    // Studied Attacks: a miss sets up the next attack.
+    appliedConditionEffects = applyOnHitFeatureConditions(state, attacker, target, action, attackerDefinition, { rollMode, critical }, true);
   }
   if (action.riders?.length) {
     const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
@@ -3076,6 +3079,9 @@ export function resolveActivateFeatureAction(
   const action = findActionDefinition(actorDefinition, actionId);
   if (!action || action.kind !== "activate-feature") {
     throw new Error(`Feature activation ${actionId} is not available to ${actor.displayName}`);
+  }
+  if (action.stillOnly && (actor.turnFlags?.movementUsed ?? 0) > 0) {
+    throw new Error(`${actor.displayName} has already moved this turn`);
   }
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action);
@@ -5882,7 +5888,8 @@ function applyFeatureActivationCondition(
     sourceName: feature?.name,
     sourceCombatantId: actor.id,
     startedRound: state.snapshot.round,
-    expiresAt: durationRounds
+    // 0: until the end of this turn (Steady Aim).
+    expiresAt: durationRounds !== undefined && (durationRounds > 0 || durationRounds === 0)
       ? {
         round: state.snapshot.round + durationRounds,
         turnIndex: state.snapshot.turnIndex,
@@ -5890,7 +5897,8 @@ function applyFeatureActivationCondition(
       }
       : undefined,
     modifiers: action.condition.modifiers,
-    effects: action.condition.effects
+    effects: action.condition.effects,
+    ...(action.condition.nextAttack ? { nextAttack: action.condition.nextAttack } : {})
   });
   return conditionId;
 }
@@ -6189,12 +6197,14 @@ function applyOnHitFeatureConditions(
   target: CombatantState,
   action: AttackActionDefinition,
   definition: CreatureDefinition,
-  context: AttackFeatureContext
+  context: AttackFeatureContext,
+  onMiss = false
 ): string[] {
   const sources: string[] = [];
   for (const feature of featureSources(definition, attacker)) {
     for (const [effectIndex, effect] of (feature.effects ?? []).entries()) {
       if (effect.kind !== "apply-condition-on-hit"
+        || (effect.onMiss === true) !== onMiss
         || !featureAppliesToAction(effect, action)
         || !featureConditionsMet(state, attacker, target, effect, context)) {
         continue;
@@ -6236,7 +6246,10 @@ function applyOnHitFeatureConditions(
           }
           : undefined,
         modifiers: effect.appliedCondition.modifiers ?? (effect.appliedCondition.name ? defaultConditionModifiers(effect.appliedCondition.name) : undefined),
-        effects: effect.appliedCondition.effects
+        effects: effect.appliedCondition.effects,
+        ...(effect.appliedCondition.nextAttack
+          ? { nextAttack: { ...effect.appliedCondition.nextAttack, ...(effect.appliedCondition.nextAttack.role === "against" ? { by: attacker.id } : {}) } }
+          : {})
       });
       markFeatureEffectApplied(state, attacker, recipient, action, feature, effect, effectIndex, {
         appliedConditionId: conditionId
@@ -6529,6 +6542,11 @@ function applyConditionRider(
       saveRoll: roll, total: roll.total, dc, success, viaRider: true
     }));
     if (success && rider.save.onSuccess === "negates") {
+      // Stunning Strike: a made save still leaves something.
+      if (rider.save.instead) {
+        return applyConditionRider(state, source, target, sourceDefinition, targetDefinition,
+          { ...rider, ...rider.save.instead, save: undefined, id: `${rider.id ?? "cond"}-instead` }, ctx);
+      }
       return null;
     }
   }

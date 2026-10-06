@@ -1440,7 +1440,7 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     return undefined;
   }
 
-  const activation = selectFeatureActivationAction(state.snapshot, actor);
+  const activation = selectFeatureActivationAction(state.snapshot, actor, plan);
   if (activation) {
     state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${activation.action.name}`, {
       combatantId: actor.id,
@@ -2737,7 +2737,7 @@ function selectMeleeGapCloserReposition(
   return best;
 }
 
-function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: CombatantState): FeatureActivationPlan | undefined {
+function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: CombatantState, plan?: OffensivePlan): FeatureActivationPlan | undefined {
   const definition = getDefinition(snapshot, actor);
   const hostiles = snapshot.combatants.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
   if (hostiles.length === 0) {
@@ -2749,10 +2749,14 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       && action.automationSupport === "full"
       && canPayResource(actor, action)
       && Boolean(action.condition)
-      && !hasActiveFeatureCondition(actor, action.featureId));
+      && !hasActiveFeatureCondition(actor, action.featureId)
+      // Steady Aim: only standing still with an attack in reach from here, before it has moved.
+      && (!action.stillOnly || ((actor.turnFlags?.movementUsed ?? 0) === 0 && plan !== undefined
+        && (plan.action.kind === "attack" || plan.action.kind === "multiattack") && isValidTarget(snapshot, actor, plan.target, plan.range))));
   const candidates = actions.map((action) => {
     const effects = action.condition?.effects ?? [];
-    const hasOffense = effects.some((effect) => effect.kind === "damage-bonus" || effect.kind === "attack-bonus" || effect.kind === "attack-advantage");
+    const hasOffense = effects.some((effect) => effect.kind === "damage-bonus" || effect.kind === "attack-bonus" || effect.kind === "attack-advantage")
+      || (action.condition?.nextAttack?.role === "made" && action.condition.nextAttack.mode === "advantage");
     const hasDefense = effects.some((effect) => effect.kind === "damage-adjustment"
       || effect.kind === "armor-class-bonus"
       || effect.kind === "save-bonus"

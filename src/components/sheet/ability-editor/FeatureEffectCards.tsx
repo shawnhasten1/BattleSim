@@ -1129,8 +1129,24 @@ function ConditionOnHitFields({ effect, onChange, context, id }: {
   const own = name === "custom";
   const setApplied = (next: FeatureEffectConditionApplication) => onChange({ ...effect, appliedCondition: next });
   const choices = CONDITIONS.includes(name) || own ? CONDITIONS : [...CONDITIONS, name];
+  const next = applied.nextAttack ? `${applied.nextAttack.role}-${applied.nextAttack.mode}` : "none";
   return (
     <>
+      <Check label="On a miss instead of a hit" checked={effect.onMiss === true} onChange={(on) => onChange(opt(effect, "onMiss", on ? true : undefined))} />
+      <Segmented label="The next attack roll" value={next}
+        options={[
+          { value: "none", label: "Unchanged" },
+          { value: "against-advantage", label: "Its next against the target: advantage" },
+          { value: "made-advantage", label: "Its own next: advantage" },
+          { value: "made-disadvantage", label: "The target's next: disadvantage" }
+        ]}
+        onChange={(value) => {
+          const copy = { ...applied };
+          delete copy.nextAttack;
+          if (value === "none") return setApplied(copy);
+          const [role, mode] = value.split("-") as ["made" | "against", "advantage" | "disadvantage"];
+          setApplied({ ...copy, nextAttack: { role, mode } });
+        }} />
       <span className={styles.inline}>
         <label htmlFor={id}>Condition</label>
         <select id={id} value={name} onChange={(e) => setApplied({ ...applied, name: e.target.value as ConditionName })}>

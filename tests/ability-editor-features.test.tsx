@@ -222,6 +222,16 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(effects[4]).toMatchObject({ kind: "save-advantage", against: { concentration: true } });
   });
 
+  it("A condition on its misses that sets up the next attack (Studied Attacks)", async () => {
+    await blankFeature("Studied");
+    const card = await addEffect(/^A condition on its hits/, "A condition on its hits");
+    await userEvent.click(card.getByRole("checkbox", { name: "On a miss instead of a hit" }));
+    await radio(card, "The next attack roll", "Its next against the target: advantage");
+    await done(card);
+    await addToSheet();
+    expect(named("Studied").effects?.[0]).toMatchObject({ kind: "apply-condition-on-hit", onMiss: true, appliedCondition: { nextAttack: { role: "against", mode: "advantage" } } });
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");
@@ -453,6 +463,22 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     expect(inSection("use").queryByRole("radiogroup", { name: "What it does to the damage" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).not.toHaveProperty("damageCut");
+  });
+
+  it("an activation only before it moves, giving its next attack advantage (Steady Aim)", async () => {
+    store().insertAbilityRecord("def-fighter", "bonusActions", {
+      kind: "activate-feature", id: "", name: "Take Aim", actionType: "bonus", featureId: "take-aim",
+      condition: { id: "take-aim-active", name: "custom", durationRounds: 1 }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Take Aim" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    await userEvent.click(inSection("use").getByRole("checkbox", { name: "Only before it moves on its turn" }));
+    await userEvent.click(inSection("use").getByRole("checkbox", { name: "Its next attack roll has advantage (used up by it)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().bonusActions ?? []).find((action) => action.name === "Take Aim")).toMatchObject({
+      stillOnly: true, condition: { nextAttack: { role: "made", mode: "advantage" } }
+    });
   });
 
   it("gives a buff's other effects as cards: advantage on attacks while it lasts", async () => {

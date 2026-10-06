@@ -93,7 +93,15 @@ export const FIGHTER: ClassDefinition = {
       ]
     },
     { level: 11, grants: [grant("two-extra-attacks", attacks("fighter_two-extra-attacks", 3), { replaces: "extra-attack" })] },
-    { level: 13, grants: [grant("studied-attacks", reference("fighter_studied-attacks"))] },
+    {
+      level: 13,
+      grants: [grant("studied-attacks", runs("fighter_studied-attacks", {
+        effects: [{
+          kind: "apply-condition-on-hit", onMiss: true, condition: "always",
+          appliedCondition: { name: "custom", durationRounds: 1, nextAttack: { role: "against", mode: "advantage" } }
+        }]
+      }))]
+    },
     { level: 20, grants: [grant("three-extra-attacks", attacks("fighter_three-extra-attacks", 4), { replaces: "two-extra-attacks" })] }
   ],
   startingEquipment: [

@@ -470,6 +470,8 @@ export interface FeatureEffectConditionApplication {
   durationRounds?: number;
   modifiers?: ConditionInstance["modifiers"];
   effects?: FeatureEffect[];
+  /** It changes, and is used up by, the next attack roll (Studied Attacks: the next against the target, by its giver). */
+  nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
 }
 
 export type FeatureEffect =
@@ -578,6 +580,8 @@ export type FeatureEffect =
     target?: "self" | "target";
     appliedCondition: FeatureEffectConditionApplication;
     oncePerTurn?: boolean;
+    /** On a miss instead of a hit (Studied Attacks). */
+    onMiss?: boolean;
     /** The target resists with this save (a charge's "DC 13 Strength saving throw or be knocked prone"). */
     save?: FeatureEffectSaveGate;
   } & FeatureEffectScope & FeatureEffectConditions)
@@ -914,6 +918,17 @@ export interface RiderSave {
    * clear it.
    */
   onSuccess: "negates" | "ends-early";
+  /**
+   * With `"negates"`: a lesser condition a made save gives instead (Stunning Strike: speed halved, and the next attack
+   * against it with advantage, until the start of the source's next turn).
+   */
+  instead?: {
+    condition: ConditionName | { custom: string };
+    duration: RiderDuration;
+    modifiers?: ConditionInstance["modifiers"];
+    conditionKey?: string;
+    nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
+  };
 }
 
 interface ActionRiderCommon {
@@ -1537,12 +1552,17 @@ export interface ActivateFeatureActionDefinition {
   reaction?: ReactionMeta;
   featureId: Id;
   resourceCost?: ResourceCost;
+  /** Only before it has moved this turn (Steady Aim). */
+  stillOnly?: boolean;
   condition?: {
     id?: Id;
     name?: ConditionName;
+    /** Rounds it lasts, ending at the end of the turn it was taken on (0: the end of this turn). */
     durationRounds?: number;
     modifiers?: ConditionInstance["modifiers"];
     effects?: FeatureEffect[];
+    /** It changes, and is used up by, the next attack roll (Steady Aim: its own next one, with advantage). */
+    nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
   };
   /** What a `would-take-damage` reaction does to the damage about to land. */
   damageCut?: DamageCut;

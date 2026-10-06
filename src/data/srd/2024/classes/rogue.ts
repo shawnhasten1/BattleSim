@@ -28,15 +28,15 @@ const cunningAction = runs("rogue_cunning-action", {
 const steadyAim = runs("rogue_steady-aim", {
   grantedActions: [{
     kind: "activate-feature", id: "steady-aim", name: "Steady Aim", actionType: "bonus", featureId: "",
+    // Before moving; advantage on its next attack roll, and no more movement, this turn.
+    stillOnly: true,
     condition: {
-      id: "steady-aim-active", name: "custom", durationRounds: 1,
-      modifiers: { movementMultiplier: 0 },
-      effects: [{ kind: "attack-advantage", condition: "always" }]
+      id: "steady-aim-active", name: "custom", durationRounds: 0,
+      modifiers: { movementMultiplier: 999 },
+      nextAttack: { role: "made", mode: "advantage" }
     },
-    // Not having moved first isn't checked, so the AI doesn't take it on its own: it would stop where it stands.
-    automationSupport: "partial"
-  }],
-  notSimulated: "that it can't be used after moving this turn. The AI leaves it to you."
+    automationSupport: "full"
+  }]
 });
 
 export const ROGUE: ClassDefinition = {

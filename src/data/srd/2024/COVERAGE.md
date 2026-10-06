@@ -19,11 +19,11 @@ its gaps, never dropped and never approximated without saying so.
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 5 | 3 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 13 | 0 | 2 | 5 | 1 |
+| Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 2 | 6 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 7 | 1 | 5 | 6 | 4 |
+| Rogue (Thief) | 23 | 8 | 0 | 5 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
@@ -40,7 +40,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 1 | Self-Restoration (Monk); Lay On Hands (Paladin); Restoring Touch (Paladin) |
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
@@ -214,7 +213,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 9, 13, 17 | Indomitable | full |  | Rerolls a failed save with the fighter level added. |
 | 9 | Tactical Master | manual | `weapon-mastery` |  |
 | 11 | Two Extra Attacks | full |  |  |
-| 13 | Studied Attacks | manual | `next-attack` |  |
+| 13 | Studied Attacks | full |  | A miss gives advantage on its next attack roll against that creature, until the end of its next turn. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Three Extra Attacks | full |  |  |
 
@@ -243,7 +242,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 4 | Slow Fall | info |  | Falling. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Stunning Strike | partial | `next-attack`, `ai-control-value` | Stunned on a failed save runs, on the Unarmed Strike; on a success, halved speed and advantage on the next attack don't. The AI spends focus on it only under Controller tactics. |
+| 5 | Stunning Strike | partial | `ai-control-value` | Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI spends focus on it only under Controller tactics. |
 | 6 | Empowered Strikes | full |  | Its Unarmed Strike deals force damage from 6th level. |
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |
@@ -341,7 +340,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Cunning Action | full |  | Dash and Disengage run; Hide is reference. |
 | 3 | Rogue Subclass | builder |  | The subclass choice. |
-| 3 | Steady Aim | partial | `next-attack` | Advantage on its attacks this turn and no movement; not having moved first isn't checked. |
+| 3 | Steady Aim | full |  | Before moving: advantage on its next attack roll, and no more movement, this turn. The AI takes it with an attack in reach from where it stands. |
 | 4, 8, 10, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Cunning Strike | manual | `dice-trade` |  |
 | 5 | Uncanny Dodge | full |  | Halves an attack roll's damage, taken by the AI for a cut of 5 or more or one that keeps it standing; damage that lands with the hit as a rider (a smite) is dealt apart and isn't halved. |

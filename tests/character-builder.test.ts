@@ -235,9 +235,9 @@ describe("a Rogue", () => {
     expect(rogue.movement).toEqual({ walk: 30, climb: 30 });
   });
 
-  it("leaves Steady Aim to the DM: it can't check it hasn't moved", () => {
+  it("runs Steady Aim: only before moving", () => {
     const rogue = rebuildActor(blankCharacter("def-r", "Rogue"), quick(ROGUE, 3), sources).definition;
-    expect(getExecutableActions(rogue).find((action) => action.name === "Steady Aim")?.automationSupport).toBe("partial");
+    expect(getExecutableActions(rogue).find((action) => action.name === "Steady Aim")).toMatchObject({ automationSupport: "full", stillOnly: true });
   });
 });
 

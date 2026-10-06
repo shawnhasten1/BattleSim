@@ -620,10 +620,13 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
         effects: applied.effects
       } as ConditionPhrase;
       const whom = effect.target === "self" ? who.subject : "the target";
-      const outcome = effect.save
-        ? `${whom} must succeed on a ${effect.save.dc ? `DC ${effect.save.dc} ` : ""}${ABILITY_NAME[effect.save.ability]} saving throw or ${beCondition(condition, definition)}`
-        : `${whom} ${isCondition(condition, definition)}`;
-      return `When ${who.subject} hits with ${article(attackScope(effect, definition) || "attack")} ${attackScope(effect, definition)}attack${gate}, ${outcome}${effect.oncePerTurn ? " (once per turn)" : ""}.`;
+      // Studied Attacks: what the next attack roll gets.
+      const outcome = applied.nextAttack
+        ? `${who.possessive} next attack roll${applied.nextAttack.role === "against" ? " against it" : ""} has ${applied.nextAttack.mode}${applied.durationRounds ? " before the end of its next turn" : ""}`
+        : effect.save
+          ? `${whom} must succeed on a ${effect.save.dc ? `DC ${effect.save.dc} ` : ""}${ABILITY_NAME[effect.save.ability]} saving throw or ${beCondition(condition, definition)}`
+          : `${whom} ${isCondition(condition, definition)}`;
+      return `When ${who.subject} ${effect.onMiss ? "misses" : "hits"} with ${article(attackScope(effect, definition) || "attack")} ${attackScope(effect, definition)}attack${gate}, ${outcome}${effect.oncePerTurn ? " (once per turn)" : ""}.`;
     }
     case "incoming-hit-damage":
       // Read from a condition on the creature that's hit: the hit itself deals more (a hunter's mark), and by default
@@ -766,7 +769,8 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "apply-condition-on-hit": {
       const applied = effect.appliedCondition;
       const name = applied.name && applied.name !== "custom" ? applied.name : applied.effects?.length || applied.modifiers ? "marked" : "a condition";
-      return `hits: ${effect.save ? `DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} or ` : ""}${name}${gate}`;
+      if (applied.nextAttack) return `${effect.onMiss ? "misses" : "hits"}: ${applied.nextAttack.mode} on the next attack${applied.nextAttack.role === "against" ? " against it" : ""}`;
+      return `${effect.onMiss ? "misses" : "hits"}: ${effect.save ? `DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} or ` : ""}${name}${gate}`;
     }
     case "incoming-hit-damage": return `${effect.onlyFromSource ? "the marker " : ""}hitting it: ${damageShort(effect.damage, definition)}`;
     case "damage-adjustment":
@@ -1226,12 +1230,19 @@ function damageCutText(cut: NonNullable<ActivateAction["damageCut"]>): { text: s
 function activationText(action: ActivateAction, definition: CreatureDefinition, feature = featureById(definition, action.featureId)): { text: string; short: string } {
   if (action.damageCut) return damageCutText(action.damageCut);
   const now = onActivatePhrases(feature, definition);
-  const lasting = [...modifierSentences(action.condition?.modifiers, IT), ...effectSentences(action.condition?.effects, definition, IT)];
+  const next = action.condition?.nextAttack;
+  const lasting = [
+    ...(action.stillOnly ? ["It can do this only before it moves on its turn."] : []),
+    ...(next ? [`Its next attack roll${next.role === "against" ? " against it" : ""}${action.condition?.durationRounds === 0 ? " this turn" : ""} has ${next.mode}.`] : []),
+    ...modifierSentences(action.condition?.modifiers, IT),
+    ...effectSentences(action.condition?.effects, definition, IT)
+  ];
   // A reaction's own "lasts for" (a Parry's one attack, Shield's until its next turn) wins over the condition's rounds.
   const lastsFor = action.actionType === "reaction" ? action.reaction?.lastsFor : undefined;
   const lasts = lastsFor === "triggering-attack" ? " against that attack"
     : lastsFor === "until-start-of-next-turn" ? " until the start of its next turn"
-      : action.condition?.durationRounds ? ` for ${roundsText(action.condition.durationRounds)}` : "";
+      : action.condition?.durationRounds === 0 ? " until the end of the turn"
+        : action.condition?.durationRounds ? ` for ${roundsText(action.condition.durationRounds)}` : "";
   const nowText = now.length ? `It can ${joinList(now)}.` : "";
   if (!lasting.length) {
     return { text: nowText || "It activates this.", short: now.length ? joinList(now) : "activates" };
