@@ -5,7 +5,7 @@ import { wildShapeForm } from "./wild-shape";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
-import { armoredAc, type ArmoredAc, type UnarmoredFormula } from "./armor";
+import { armoredAc, isArmorItem, isWorn, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
@@ -297,7 +297,8 @@ export function getExecutableActions(definition: CreatureDefinition): ActionDefi
 }
 
 function compileExecutableActions(definition: CreatureDefinition): ActionDefinition[] {
-  const weaponActions = (definition.weapons ?? []).flatMap((weapon) => weaponToActions(definition, weapon));
+  // Martial Arts: a monk's Monk weapons attack as its Unarmed Strike does.
+  const weaponActions = martialArtsWeapons(definition).flatMap((weapon) => weaponToActions(definition, weapon));
   const spellActions = (definition.spells ?? [])
     .flatMap((spell) => (spell.action ? [stampSpellContext(spell.action, spell, definition)] : []));
   // An optional variant rule (a demon's Summon Demon) grants nothing until the DM switches it on.
@@ -404,6 +405,34 @@ function weaponCantripVariants(definition: CreatureDefinition, listed: ActionDef
     if (spell.kind === "attack" || fits === 0) spent.add(spell.id);
   }
   return { copies, spent };
+}
+
+/**
+ * Martial Arts: a monk's weapons, its Monk weapons (simple melee, and martial melee with the Light property) attacking as
+ * its Unarmed Strike does while it wears no armor and holds no shield: the better of Dexterity and Strength, the Martial
+ * Arts die when that's bigger, and the Unarmed Strike's options on a hit (Stunning Strike). The rest as they are.
+ */
+function martialArtsWeapons(definition: CreatureDefinition): NonNullable<CreatureDefinition["weapons"]> {
+  const weapons = definition.weapons ?? [];
+  const effect = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only")
+    .flatMap((feature) => feature.effects ?? [])
+    .find((candidate): candidate is Extract<FeatureEffect, { kind: "martial-arts-weapons" }> => candidate.kind === "martial-arts-weapons");
+  const unarmed = effect ? weapons.find((weapon) => weapon.id === effect.weaponId) : undefined;
+  if (!unarmed) return weapons;
+  if ((definition.items ?? []).some((item) => isArmorItem(item) && isWorn(item))) return weapons;
+  const die = unarmed.damage[0]?.dice;
+  const options = (unarmed.onHit ?? []).filter(isOptionalRider);
+  return weapons.map((weapon) => {
+    if (weapon === unarmed || weapon.attackType !== "melee" || !(weapon.category === "simple" || (weapon.category === "martial" && isLightWeapon(weapon)))) return weapon;
+    const own = weapon.damage[0];
+    if (!own) return weapon;
+    const dice = die && averageOfDice(die) > averageOfDice(own.dice) ? die : own.dice;
+    const first = { ...own, dice };
+    // Its damage adds the ability its attack uses (the better of the two).
+    delete first.abilityModifier;
+    return { ...weapon, ability: "finesse" as const, damage: [first, ...weapon.damage.slice(1)], onHit: [...(weapon.onHit ?? []), ...options] };
+  });
 }
 
 /**

@@ -751,6 +751,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
     case "condition-persists":
       return `${P} ${activationNamed(definition, effect.conditionId)} needs nothing to keep it going, and ends early only if ${who.subject} falls unconscious${effect.durationRounds ? `; it lasts ${roundsText(effect.durationRounds)}` : ""}.`;
+    case "martial-arts-weapons":
+      return `While ${who.subject} wears no armor and holds no shield, ${who.possessive} Monk weapons (simple melee weapons, and martial melee weapons with the Light property) use Dexterity when that's better, the Martial Arts die when that's bigger, and ${who.possessive} Unarmed Strike's options on a hit.`;
     case "paired-on-hit-options": {
       const bonus = [...(definition.features ?? []), ...(definition.traits ?? [])].find((feature) => feature.id === effect.featureId)?.name ?? "its damage bonus";
       return `${S} can use two of ${who.possessive} options paid in ${bonus} dice on the same hit, paying for both.`;
@@ -918,6 +920,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
     case "condition-persists": return `${activationNamed(definition, effect.conditionId)} needs no upkeep${effect.durationRounds ? `, ${roundsText(effect.durationRounds)}` : ""}`;
+    case "martial-arts-weapons": return "Monk weapons attack as its Unarmed Strike";
     case "paired-on-hit-options": return "two of its on-hit options on one hit";
     case "mastery-swap": return `can use ${joinList(effect.masteries, "or")} instead of a weapon's mastery`;
     case "attack-defense": return effect.against === "opportunity" ? "disadvantage on opportunity attacks against it" : "disadvantage on further attacks this turn by one that hit it";

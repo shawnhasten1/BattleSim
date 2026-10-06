@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createEngineState, sampleEncounter, takeAutomatedTurn, type CreatureDefinition } from "@/engine";
+import { createEngineState, getExecutableActions, sampleEncounter, takeAutomatedTurn, type CreatureDefinition } from "@/engine";
 import { loadSrdMonster } from "@/data/srd/monsters";
+import { findSrdItem } from "@/data/srd";
 import { blankCharacter, quickBuild, rebuildActor } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 
@@ -44,5 +45,16 @@ describe("Stunning Strike's worth to the AI", () => {
     const small = paidSwings(goblin);
     expect(small.swings).toBeGreaterThan(0);
     expect(small.paid).toBe(0);
+  });
+});
+
+describe("Martial Arts on Monk weapons (7aw)", () => {
+  it("a Monk weapon attacks with Dexterity and the Martial Arts die, and can carry Stunning Strike; not in armor", () => {
+    const actions = getExecutableActions(monk);
+    const spear = actions.find((action) => action.name === "Spear" && action.actionType === "action")!;
+    expect(spear).toMatchObject({ ability: "dex", damage: [{ dice: "1d8" }] });
+    expect(actions.some((action) => action.name === "Spear (1 focus point)")).toBe(true);
+    const armored: CreatureDefinition = { ...monk, items: [...(monk.items ?? []), findSrdItem("srd:item:leather-armor")!] };
+    expect(getExecutableActions(armored).find((action) => action.name === "Spear" && action.actionType === "action")).toMatchObject({ ability: "str", damage: [{ dice: "1d6" }] });
   });
 });

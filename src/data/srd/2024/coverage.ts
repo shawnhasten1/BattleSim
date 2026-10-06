@@ -30,7 +30,6 @@ export interface CoverageEntry {
 export const GAPS = {
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
   initiative: "Swapping initiative with an ally (Alert)",
-  "monk-weapons": "A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
   "ally-die": "A rolled die taken off an enemy's damage roll (Cutting Words)",
@@ -186,14 +185,14 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_champion_survivor": full("Advantage on death saves, 18–20 counting as 20, and 5 + Constitution hit points at the start of each turn while bloodied."),
 
   /* Monk */
-  "monk_martial-arts": full("An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked."),
+  "monk_martial-arts": full("An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action; Monk weapons attack the same way (and carry Stunning Strike) while it wears no armor and holds no shield."),
   "monk_unarmored-defense": full(),
   "monk_monks-focus": full("Flurry of Blows, and Disengage and Dash as bonus actions; for a Focus Point, Patient Defense's Disengage and Dodge, or Step of the Wind's Dash and Disengage, in one bonus action (the doubled jump is outside the grid). The AI takes the free ones."),
   "monk_unarmored-movement": builder("Speed by level; armor isn't checked."),
   "monk_uncanny-metabolism": info("A fight starts with full pools and hit points."),
   "monk_deflect-attacks": full("1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources."),
   "monk_monk-subclass": SUBCLASS,
-  "monk_stunning-strike": partial(["monk-weapons"], "Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics. Not on Monk weapons."),
+  "monk_stunning-strike": full("Stunned on a failed save, on the Unarmed Strike or a Monk weapon; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics."),
   "monk_ability-score-improvement": FEAT_CHOICE,
   "monk_slow-fall": info("Falling."),
   "monk_extra-attack": full(),

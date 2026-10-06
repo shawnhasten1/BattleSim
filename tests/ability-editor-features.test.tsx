@@ -388,6 +388,15 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Double Feint").effects).toEqual([{ kind: "paired-on-hit-options", featureId: "" }]);
   });
 
+  it("Monk weapons as its Unarmed Strike: which weapon is its Unarmed Strike (Martial Arts)", async () => {
+    await blankFeature("Open Palm");
+    const card = await addEffect(/^Monk weapons as its Unarmed Strike/, "Monk weapons as its Unarmed Strike");
+    expect((card.getByLabelText("Its Unarmed Strike") as HTMLSelectElement).value).toBe("");
+    await done(card);
+    await addToSheet();
+    expect(named("Open Palm").effects).toEqual([{ kind: "martial-arts-weapons", weaponId: "" }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;

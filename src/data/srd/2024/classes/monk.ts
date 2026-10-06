@@ -64,9 +64,10 @@ const openHand = (name: string, riders: ActionRider[]): FeatureEffect => ({
   kind: "on-hit-option", option: { name: `Open Hand: ${name}`, actionIds: [UNARMED_BONUS], routineOnly: true, riders }
 });
 
+// Its Monk weapons attack as its Unarmed Strike does (the builder's id for it: the class prefix and the grant's key).
 const martialArts = runs("monk_martial-arts", {
   automationSupport: "full",
-  notSimulated: "the Martial Arts die is the Unarmed Strike's; monk weapons keep their own die, and wearing armor or a shield isn't checked."
+  effects: [{ kind: "martial-arts-weapons", weaponId: "monk-martial-arts" }]
 });
 
 const monksFocus = runs("monk_monks-focus", {
@@ -155,9 +156,7 @@ export const MONK: ClassDefinition = {
       level: 5,
       grants: [
         grant("extra-attack", attacks("monk_extra-attack", 2)),
-        grant("stunning-strike", runs("monk_stunning-strike", {
-          notSimulated: "it works with the Unarmed Strike, not Monk weapons."
-        }), {
+        grant("stunning-strike", runs("monk_stunning-strike"), {
           onHitOf: {
             grant: "martial-arts",
             riders: [{

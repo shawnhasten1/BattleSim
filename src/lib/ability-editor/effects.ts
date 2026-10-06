@@ -90,6 +90,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
   {
+    kind: "martial-arts-weapons", label: "Monk weapons as its Unarmed Strike", hint: "Martial Arts: Dexterity, the Martial Arts die and Stunning Strike on its Monk weapons too", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "martial-arts-weapons", weaponId: "" })
+  },
+  {
     kind: "paired-on-hit-options", label: "Two on-hit options on one hit", hint: "Improved Cunning Strike: two Cunning Strike effects at once, paying both in Sneak Attack dice", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "paired-on-hit-options", featureId: "" })
   },

@@ -833,6 +833,15 @@ export type FeatureEffect =
   }
   | {
     /**
+     * Martial Arts: while it wears no armor and holds no shield, its Monk weapons (simple melee weapons, and martial
+     * melee weapons with the Light property) attack as its Unarmed Strike (`weaponId`) does: with Dexterity when that's
+     * better, the Martial Arts die when that's bigger, and the Unarmed Strike's options on a hit (Stunning Strike).
+     */
+    kind: "martial-arts-weapons";
+    weaponId: Id;
+  }
+  | {
+    /**
      * Improved Cunning Strike: two of its on-hit options that trade dice of this feature's damage bonus (Sneak Attack)
      * on one hit, paying both: a compiled copy for each pair.
      */

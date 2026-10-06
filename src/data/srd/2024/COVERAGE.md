@@ -20,7 +20,7 @@ its gaps, never dropped and never approximated without saying so.
 | Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
+| Monk (Warrior of the Open Hand) | 26 | 14 | 1 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
@@ -44,7 +44,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
-| `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
@@ -210,7 +209,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked. |
+| 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action; Monk weapons attack the same way (and carry Stunning Strike) while it wears no armor and holds no shield. |
 | 1 | Unarmored Defense | full |  |  |
 | 2 | Monk's Focus | full |  | Flurry of Blows, and Disengage and Dash as bonus actions; for a Focus Point, Patient Defense's Disengage and Dodge, or Step of the Wind's Dash and Disengage, in one bonus action (the doubled jump is outside the grid). The AI takes the free ones. |
 | 2 | Unarmored Movement | builder |  | Speed by level; armor isn't checked. |
@@ -220,7 +219,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 4 | Slow Fall | info |  | Falling. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Stunning Strike | partial | `monk-weapons` | Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics. Not on Monk weapons. |
+| 5 | Stunning Strike | full |  | Stunned on a failed save, on the Unarmed Strike or a Monk weapon; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI weighs a stun at what the target would deal in the turn it loses, so it spends focus on big threats likely to survive the hit, under any tactics. |
 | 6 | Empowered Strikes | full |  | Its Unarmed Strike deals force damage from 6th level. |
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |

@@ -975,6 +975,17 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "martial-arts-weapons":
+      return (
+        <span className={styles.inline}>
+          <span>Its Monk weapons attack as</span>
+          <select aria-label="Its Unarmed Strike" value={effect.weaponId} onChange={(e) => set({ ...effect, weaponId: e.target.value })}>
+            <option value="">(pick one)</option>
+            {(definition.weapons ?? []).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+          </select>
+          <span>does</span>
+        </span>
+      );
     case "paired-on-hit-options": {
       // The damage bonuses its options can be paid in (Sneak Attack).
       const bonuses = [...(definition.features ?? []), ...(definition.traits ?? [])].filter((feature) => (feature.effects ?? []).some((entry) => entry.kind === "damage-bonus"));
