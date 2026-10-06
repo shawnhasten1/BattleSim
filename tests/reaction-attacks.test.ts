@@ -3,6 +3,7 @@ import {
   createEngineState,
   getExecutableActions,
   resolveAttack,
+  resolveSaveAction,
   sampleEncounter,
   type CreatureDefinition,
   type RandomSource,
@@ -159,5 +160,36 @@ describe("Deflect Attacks' redirect", () => {
     const definition = monk();
     const redirect = getExecutableActions(definition).find((entry) => entry.name === "Deflect Attacks (redirect)")!;
     expect(actionStatblock(redirect, definition).text).toContain("If that reduces it to 0, it can spend 1 focus point to redirect it: a creature within 5 feet (after a melee attack) or 60 feet (after a ranged one) must succeed on a DC");
+  });
+});
+
+describe("Retaliation against damage that isn't a hit (7ay)", () => {
+  const berserker = () => built("barbarian", 10, "srd:subclass:path-of-the-berserker");
+  const spitting = (gap: number) => {
+    const scene = goblinAttacks(berserker(), { gap });
+    scene.state.snapshot.definitions = scene.state.snapshot.definitions.map((entry) => (entry.id === "def-goblin"
+      ? {
+        ...entry,
+        actions: [...entry.actions, {
+          kind: "save" as const, id: "spit", name: "Spit", actionType: "action" as const, saveAbility: "dex" as const, dc: 30, range: 30,
+          damage: [{ dice: "2d6", damageType: "acid" as const }], halfDamageOnSuccess: false, onSuccess: "none" as const, automationSupport: "full" as const
+        }]
+      }
+      : entry));
+    return scene;
+  };
+
+  it("a creature within 5 ft that damages it with a save gets the swing back", () => {
+    const { state } = spitting(1);
+    state.rng = d20s(1, 15);
+    resolveSaveAction(state, "enemy-goblin-1", "pc-fighter", "spit");
+    expect(swingsBy(state, "pc-fighter")).toHaveLength(1);
+  });
+
+  it("not from farther off", () => {
+    const { state } = spitting(3);
+    state.rng = d20s(1, 15);
+    resolveSaveAction(state, "enemy-goblin-1", "pc-fighter", "spit");
+    expect(swingsBy(state, "pc-fighter")).toHaveLength(0);
   });
 });

@@ -37,7 +37,6 @@ export const GAPS = {
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
   "gain-speed": "Dragon Wings again for sorcery points",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
-  "reaction-attack": "A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage)",
   "summon-stat-blocks": "Familiars: a summon that can't attack but helps (Find Familiar)",
   "concentration-optional": "Casting a concentration spell without concentration, for a shorter time (Dragon Companion)",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
@@ -90,7 +89,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Path of the Berserker */
   "path-of-the-berserker_frenzy": full("The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging and reckless."),
   "path-of-the-berserker_mindless-rage": full("Immune to Charmed and Frightened while raging; raging ends them."),
-  "path-of-the-berserker_retaliation": partial(["reaction-attack"], "A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it."),
+  "path-of-the-berserker_retaliation": full("A melee attack with its reaction when a creature within 5 ft damages it, by an attack's hit or a save or area of its own, the most damaging weapon first."),
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),
 
   /* Bard */

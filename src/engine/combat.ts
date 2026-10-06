@@ -3086,8 +3086,15 @@ function resolveSaveAgainstTarget(
     success,
     damageApplied
   }));
+  damagedByEffect(state, attacker, target, action, damageApplied);
 
   return { success, saveRoll, total: saveRoll.total, dc, damageApplied };
+}
+
+/** Retaliation: damage from a creature's save or area (not an attack's hit) opens the same window a hit does. */
+function damagedByEffect(state: EngineState, source: CombatantState, target: CombatantState, action: { id: Id; name: string }, damage: number): void {
+  if (damage <= 0 || target.id === source.id || target.state !== "active") return;
+  runReactionWindow(state, { kind: "hit-by-attack", sourceId: source.id, targetId: target.id, actionId: action.id, actionName: action.name, damageTaken: damage, notAttack: true });
 }
 
 export function resolveAreaSaveAction(
@@ -3196,6 +3203,7 @@ export function resolveAreaSaveAction(
       ...(spared.has(target.id) ? { spared: true } : {}),
       ...(heightened ? { heightened: true } : {})
     }));
+    damagedByEffect(state, attacker, target, action, damageApplied);
 
     return { targetId: target.id, success, damageApplied };
   });
@@ -9260,6 +9268,8 @@ export interface ReactionEvent {
   targetAc?: number;
   /** Damage the triggering hit dealt (`hit-by-attack`), or is about to deal (`would-take-damage`). */
   damageTaken?: number;
+  /** `hit-by-attack` for damage that wasn't an attack's hit (a save's, an area's): only `anyDamage` triggers take it. */
+  notAttack?: boolean;
   /** The types of the damage about to land (`would-take-damage`). */
   damageTypes?: DamageType[];
   /** Whether that damage is an attack roll's hit (`would-take-damage`). */
@@ -9319,6 +9329,7 @@ function reactionTriggerPasses(
       // Retaliation: an attacker within reach of it, and the hit hurt.
       const source = trigger.withinFt !== undefined ? state.snapshot.combatants.find((combatant) => combatant.id === event.sourceId) : undefined;
       return reactor.id === event.targetId
+        && (!event.notAttack || trigger.anyDamage === true)
         && (!trigger.meleeOnly || event.attackType === "melee")
         && (trigger.withinFt === undefined || (source !== undefined && spatialDistance(state.snapshot, reactor, source) <= trigger.withinFt))
         && (!trigger.damaged || (event.damageTaken ?? 0) > 0);

@@ -15,7 +15,7 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
+| Barbarian (Path of the Berserker) | 24 | 18 | 0 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
-| `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
@@ -87,7 +86,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Frenzy | full |  | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging and reckless. |
 | 6 | Mindless Rage | full |  | Immune to Charmed and Frightened while raging; raging ends them. |
-| 10 | Retaliation | partial | `reaction-attack` | A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it. |
+| 10 | Retaliation | full |  | A melee attack with its reaction when a creature within 5 ft damages it, by an attack's hit or a save or area of its own, the most damaging weapon first. |
 | 14 | Intimidating Presence | full |  | A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered. |
 
 ## Bard

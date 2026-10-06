@@ -223,8 +223,7 @@ export const BERSERKER: SubclassDefinition = {
     {
       level: 10,
       grants: [grant("retaliation", runs("path-of-the-berserker_retaliation", {
-        effects: [{ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 5, damaged: true }, attackTypes: ["melee"] }],
-        notSimulated: "damage from within 5 feet that isn't an attack's hit (a spell's save, an aura) doesn't offer it."
+        effects: [{ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 5, damaged: true, anyDamage: true }, attackTypes: ["melee"] }]
       }))]
     },
     {

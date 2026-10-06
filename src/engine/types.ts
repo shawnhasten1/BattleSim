@@ -1294,6 +1294,8 @@ export type ReactionTrigger =
     withinFt?: number;
     /** Only when the hit dealt the reactor damage (Retaliation: "when you take damage"). */
     damaged?: boolean;
+    /** Damage from the creature that isn't an attack's hit counts too: a spell's save, an area (Retaliation). */
+    anyDamage?: boolean;
   }
   /**
    * The reactor is about to take damage: rolled, its resistances counted, not yet landed. An activation's `damageCut`
