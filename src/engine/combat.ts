@@ -6817,6 +6817,8 @@ interface D20ChangeChoice {
   key: string;
   feature: string;
   effect: Extract<FeatureEffect, { kind: "d20-change" }>;
+  /** The condition it comes from, when it's one (a Bardic Inspiration die), to end it once used (`usedUp`). */
+  conditionId?: Id;
 }
 
 /** The ways `combatant` could change this failed roll now: each feature once a roll, paid for, not spent this turn. */
@@ -6830,7 +6832,8 @@ function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: Fa
       const key = `${feature.id}:${index}`;
       if (used.has(key) || (effect.oncePerTurn && combatant.turnFlags?.d20ChangesUsed?.includes(key))) continue;
       if (effect.resourceCost && (combatant.resources?.[effect.resourceCost.resourceId] ?? 0) < effect.resourceCost.amount) continue;
-      choices.push({ key, feature: feature.name, effect });
+      const condition = (combatant.conditions ?? []).find((candidate) => candidate.effects === feature.effects);
+      choices.push({ key, feature: feature.name, effect, ...(condition ? { conditionId: condition.id } : {}) });
     }
   }
   return choices;
@@ -6948,6 +6951,14 @@ function changeFailedD20(
     }
     changedAny = true;
     const success = hit || succeeds(d20.natural, total);
+    // A Bardic Inspiration die is gone once rolled; Peerless Skill's use comes back if the roll still fails.
+    if (effect.usedUp && picked.conditionId) {
+      combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.id !== picked.conditionId);
+    }
+    if (effect.refundOnFailure && !success && effect.resourceCost) {
+      const { resourceId, amount } = effect.resourceCost;
+      combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) + amount };
+    }
     state.log.push(event(state, "RollChanged", `${combatant.displayName} uses ${picked.feature}: ${d20.roll === "save" ? "the save" : "the attack roll"} ${success ? "now succeeds" : "still fails"}${hit ? "" : ` (${total})`}`, {
       combatantId: combatant.id, feature: picked.feature, change: effect.change, roll: d20.roll, before, natural: d20.natural, total, against: d20.against,
       ...(rolled ? { rolled } : {}), ...(effect.resourceCost ? { resourceId: effect.resourceCost.resourceId, left: combatant.resources?.[effect.resourceCost.resourceId] } : {}), success

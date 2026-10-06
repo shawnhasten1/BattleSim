@@ -39,7 +39,7 @@ export const GAPS = {
   "next-attack": "Advantage on the next attack roll against a creature, or on the next one this turn",
   "follow-up-attack": "An extra attack against a second creature near the first (Horde Breaker, Cleave)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
-  "ally-die": "A die given to an ally, or taken off an enemy's roll (Bardic Inspiration, Cutting Words)",
+  "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
   "healing-bonus": "Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing)",
   "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
@@ -129,7 +129,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),
 
   /* Bard */
-  "bard_bardic-inspiration": manual(["ally-die"], "The builder sizes the pool (Charisma modifier) and its die."),
+  "bard_bardic-inspiration": full("A bonus action gives an ally within 60 ft a die (the AI gives it to an ally without one), added to a failed save or missed attack roll it could turn; checks are outside a fight."),
   bard_spellcasting: builder(),
   bard_expertise: builder(),
   "bard_jack-of-all-trades": info("Ability checks."),
@@ -147,7 +147,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "college-of-lore_bonus-proficiencies": builder(),
   "college-of-lore_cutting-words": partial(["ally-die"], "An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't."),
   "college-of-lore_magical-discoveries": builder(),
-  "college-of-lore_peerless-skill": manual(["ally-die"]),
+  "college-of-lore_peerless-skill": full("A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight."),
 
   /* Cleric */
   "cleric_divine-order": builder("Protector: martial weapons and heavy armor. Thaumaturge: a cantrip (its check bonus is outside a fight)."),

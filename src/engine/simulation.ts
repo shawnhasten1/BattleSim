@@ -2407,7 +2407,8 @@ function selectBuffAction(
 
   const candidates = buffActions.flatMap((action) => {
     const mode = action.targeting?.target ?? "single";
-    const eligible = mode === "self" ? [actor] : allies;
+    // Bardic Inspiration goes to someone else.
+    const eligible = mode === "self" ? [actor] : action.targeting?.notSelf ? allies.filter((ally) => ally.id !== actor.id) : allies;
     const conditionId = action.appliedCondition.id ?? upcastBaseId(action.id);
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     return eligible

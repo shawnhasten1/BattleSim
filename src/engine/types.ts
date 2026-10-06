@@ -490,6 +490,10 @@ export type FeatureEffect =
     onNatural1?: boolean;
     resourceCost?: ResourceCost;
     oncePerTurn?: boolean;
+    /** On a condition: using it ends the condition (a Bardic Inspiration die, given by a bard's buff). */
+    usedUp?: boolean;
+    /** Its resource comes back when the roll still fails (Peerless Skill). */
+    refundOnFailure?: boolean;
   }
   | {
     /**

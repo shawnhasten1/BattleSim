@@ -16,7 +16,7 @@ its gaps, never dropped and never approximated without saying so.
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 8 | 2 | 7 | 6 | 1 |
-| Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
+| Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 1 | 3 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 12 | 0 | 3 | 5 | 1 |
@@ -53,7 +53,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 10 | Self-Restoration (Monk); Restoring Touch (Paladin) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `ally-die` | A die given to an ally, or taken off an enemy's roll (Bardic Inspiration, Cutting Words) | Bard | 1 | Bardic Inspiration (Bard); Cutting Words (College of Lore); Peerless Skill (College of Lore) |
 | `damage-dice` | Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting) | Feats | 1 | Great Weapon Fighting (feat); Savage Attacker (feat) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
@@ -66,6 +65,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `healing-bonus` | Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing) | Cleric | 3 | Disciple of Life (Life Domain); Blessed Healer (Life Domain); Supreme Healing (Life Domain) |
+| `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `on-kill` | Something that happens when an enemy drops (Dark One's Blessing) | Warlock | 3 | Dark One's Blessing (Fiend Patron) |
@@ -129,7 +129,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Bardic Inspiration | manual | `ally-die` | The builder sizes the pool (Charisma modifier) and its die. |
+| 1 | Bardic Inspiration | full |  | A bonus action gives an ally within 60 ft a die (the AI gives it to an ally without one), added to a failed save or missed attack roll it could turn; checks are outside a fight. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Expertise | builder |  |  |
 | 2 | Jack of All Trades | info |  | Ability checks. |
@@ -150,7 +150,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Bonus Proficiencies | builder |  |  |
 | 3 | Cutting Words | partial | `ally-die` | An attack on an ally gets disadvantage; a hit on the bard loses the die's average when that makes it miss. Damage rolls and checks aren't. |
 | 6 | Magical Discoveries | builder |  |  |
-| 14 | Peerless Skill | manual | `ally-die` |  |
+| 14 | Peerless Skill | full |  | A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight. |
 
 ## Cleric
 

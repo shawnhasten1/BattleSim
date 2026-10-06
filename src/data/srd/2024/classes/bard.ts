@@ -33,7 +33,19 @@ export const BARD: ClassDefinition = {
     {
       level: 1,
       grants: [
-        grant("bardic-inspiration", reference("bard_bardic-inspiration"), { pool: { id: "bardic-inspiration", size: "{mod:cha|min:1}" } }),
+        grant("bardic-inspiration", runs("bard_bardic-inspiration", {
+          grantedActions: [{
+            kind: "buff", id: "bardic-inspiration", name: "Bardic Inspiration", actionType: "bonus", range: 60, targeting: { target: "single", notSelf: true },
+            appliedCondition: {
+              id: "bardic-inspiration", name: "custom", durationRounds: 600,
+              effects: [{ kind: "d20-change", rolls: ["attack", "save"], change: "add", dice: "1d6", usedUp: true }]
+            },
+            resourceCost: { resourceId: "bardic-inspiration", amount: 1 }, automationSupport: "full"
+          }]
+        }), {
+          pool: { id: "bardic-inspiration", size: "{mod:cha|min:1}" },
+          scale: [{ path: "grantedActions.0.appliedCondition.effects.0.dice", value: "1{col:bardic-die}" }]
+        }),
         grant("spellcasting", runs("bard_spellcasting"))
       ]
     },
@@ -120,6 +132,11 @@ export const COLLEGE_OF_LORE: SubclassDefinition = {
         label: "Magical Discoveries: two Cleric, Druid or Wizard spells, always prepared"
       }, "college-of-lore_magical-discoveries")]
     },
-    { level: 14, grants: [grant("peerless-skill", reference("college-of-lore_peerless-skill"))] }
+    {
+      level: 14,
+      grants: [grant("peerless-skill", runs("college-of-lore_peerless-skill", {
+        effects: [{ kind: "d20-change", rolls: ["attack"], change: "add", dice: "1d6", resourceCost: { resourceId: "bardic-inspiration", amount: 1 }, refundOnFailure: true }]
+      }), { scale: [{ path: "effects.0.dice", value: "1{col:bardic-die}" }] })]
+    }
   ]
 };
