@@ -154,7 +154,11 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     effects: [{ kind: "d20-change", rolls: ["attack", "save"], change: "add", dice: "2d4", resourceCost: { resourceId: "boon-of-fate", amount: 1 }, forOthers: { withinFt: 60, includeSelf: true } }],
     notSimulated: "the 2d4 as a penalty on another creature's success, and on ability checks."
   }), { grants: [{ key: "boon-of-fate-use", pool: { id: "boon-of-fate", size: 1 } }] }),
-  epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", reference({ feat: "boon-of-irresistible-offense" })),
+  // Its bludgeoning, piercing and slashing damage ignores resistance.
+  epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", runs({ feat: "boon-of-irresistible-offense" }, {
+    effects: [{ kind: "ignore-resistance", damageTypes: ["bludgeoning", "piercing", "slashing"] }],
+    notSimulated: "Overwhelming Strike's extra damage on a 20."
+  })),
   epicBoon("boon-of-spell-recall", "Boon of Spell Recall", runs({ feat: "boon-of-spell-recall" }, {
     effects: [{ kind: "slot-recall", maxLevel: 4, die: 4 }]
   }), { prerequisite: { feature: "Spellcasting" } }),

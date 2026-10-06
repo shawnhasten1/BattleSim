@@ -82,6 +82,18 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "slot-recall", maxLevel: 4, die: 4 })
   },
   {
+    kind: "max-damage", label: "Spells at their maximum damage", hint: "Overchannel: a Wizard spell of level 1-5 that deals damage, at its dice's highest, once", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
+  },
+  {
+    kind: "ignore-resistance", label: "Damage that ignores resistance", hint: "Boon of Irresistible Offense: its bludgeoning, piercing and slashing damage", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "ignore-resistance", damageTypes: ["bludgeoning", "piercing", "slashing"] })
+  },
+  {
+    kind: "damage-vitality", label: "Temporary hit points when a spell deals damage", hint: "Improved Blessed Strikes: twice its Wisdom modifier, to itself or a creature within 60 ft, when a Cleric cantrip deals damage", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "damage-vitality", tempHp: { ability: "wis", multiplier: 2 }, withinFt: 60, cantripsOnly: true, spellClasses: ["cleric"] })
+  },
+  {
     kind: "metamagic", label: "A Metamagic option", hint: "Quickened, Twinned, Heightened…: a copy of each spell it changes, for sorcery points", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "metamagic", option: "quickened", resourceCost: { resourceId: "sorcery-points", amount: 2 } })
   },

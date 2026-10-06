@@ -10,6 +10,7 @@ import {
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
+  resistanceIgnoredBy,
   damageAdjustmentsFor,
   dividedHealing,
   healingBonusOf,
@@ -4259,8 +4260,10 @@ export function averageDamage(
       return sum + (attack ? averageDamage(attack, source, targetAdjustments, critical) : 0);
     }, 0);
   }
-  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source, critical) * defenseMultiplier(component, targetAdjustments), 0);
-  return base + averageUpcastDiceBonus(action) * (critical ? 2 : 1);
+  // Overchannel: every die at its highest.
+  const maximize = action.maximizeDamage === true;
+  const base = action.damage.reduce((sum, component) => sum + averageDamageComponent(component, source, critical, maximize) * defenseMultiplier(component, targetAdjustments, source), 0);
+  return base + averageUpcastDiceBonus(action, maximize) * (critical ? 2 : 1);
 }
 
 /** How many extra targets a save action's upcast grants for free at whatever slot tier its own `resourceCost` implies (Hold Person-style). 0 for a base cast or an action with no `upcast.targets`. */
@@ -4401,22 +4404,33 @@ function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {
  */
 function defenseMultiplier(
   component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number],
-  targetAdjustments: CreatureDefinition["damageAdjustments"]
+  targetAdjustments: CreatureDefinition["damageAdjustments"],
+  /** Whose damage it is: its Boon of Irresistible Offense counts. */
+  source?: CreatureDefinition
 ): number {
   if (!targetAdjustments?.length) {
     return 1;
   }
-  const origin = { magical: component.magical === true, material: component.material };
+  const ignoresResistance = source ? ignoredResistances(source) : undefined;
+  const origin = { magical: component.magical === true, material: component.material, ...(ignoresResistance ? { ignoresResistance } : {}) };
   if (component.damageTypeOptions?.length) {
     return Math.max(...component.damageTypeOptions.map((type) => damageAdjustmentMultiplier(type, targetAdjustments, origin)));
   }
   return component.damageType === "same-as-attack" ? 1 : damageAdjustmentMultiplier(component.damageType, targetAdjustments, origin);
 }
 
-function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>, critical = false): number {
+/** The damage types whose resistance a creature's damage ignores, kept per definition. */
+const ignoredResistancesByDefinition = new WeakMap<CreatureDefinition, ReturnType<typeof resistanceIgnoredBy>>();
+
+function ignoredResistances(definition: CreatureDefinition): ReturnType<typeof resistanceIgnoredBy> {
+  if (!ignoredResistancesByDefinition.has(definition)) ignoredResistancesByDefinition.set(definition, resistanceIgnoredBy(definition));
+  return ignoredResistancesByDefinition.get(definition);
+}
+
+function averageDamageComponent(component: Extract<ActionDefinition, { kind: "attack" }>["damage"][number], source: ReturnType<typeof getDefinition>, critical = false, maximize = false): number {
   const casterLevel = source.character?.level ?? 1;
   const parsed = parseDiceExpression(resolveScaledDamage(component.dice, component.scaling, { casterLevel }));
-  const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) * (critical ? 2 : 1) + parsed.modifier;
+  const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * (maximize ? term.sides : (term.sides + 1) / 2), 0) * (critical ? 2 : 1) + parsed.modifier;
   const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
   const formulaBonus = resolveNumericFormula(component.bonusFormula, source);
   return diceAverage + abilityBonus + formulaBonus;

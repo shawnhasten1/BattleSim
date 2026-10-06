@@ -734,6 +734,12 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "ignore-resistance":
+      return `${P} ${joinList(effect.damageTypes)} damage ignores resistance.`;
+    case "max-damage":
+      return `When ${who.subject} casts ${spellScopeText(effect, who, true)} with a level 1–${effect.maxSlot} spell slot and it deals damage, ${who.subject} can deal its maximum damage, spending ${costText(effect.resourceCost, definition)}.`;
+    case "damage-vitality":
+      return `When ${who.subject} deals damage with ${spellScopeText(effect, who, true)}, ${who.subject} can give ${who.object === "it" ? "itself" : who.object} or a creature within ${effect.withinFt} feet of ${who.object} ${Math.max(0, resolveNumericFormula(effect.tempHp, definition))} temporary hit points.`;
     case "follow-up-attack":
       return `Once on each of ${who.possessive} turns, when ${who.subject} makes an attack with a weapon, ${who.subject} can make another attack with the same weapon against a different creature within ${effect.withinFt} feet of the original target and within the weapon's range, one ${who.subject} hasn't attacked this turn.`;
     case "shed-conditions":
@@ -879,6 +885,9 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
+    case "ignore-resistance": return `${joinList(effect.damageTypes)} damage ignores resistance`;
+    case "max-damage": return `maximum damage from ${spellScopeText(effect, IT)} cast at level 1–${effect.maxSlot} (${costText(effect.resourceCost, definition)})`;
+    case "damage-vitality": return `${Math.max(0, resolveNumericFormula(effect.tempHp, definition))} temp HP within ${effect.withinFt} ft when ${spellScopeText(effect, IT)} deal damage`;
     case "slot-recall": return `a level 1–${effect.maxLevel} slot back on a d${effect.die} matching its level`;
     case "spare-allies": return `spares ${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""} allies in the areas of ${spellScopeText(effect, IT)}`;
   }

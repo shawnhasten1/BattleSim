@@ -124,7 +124,7 @@ export interface HotbarModel {
  * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
  * potion, a wand's spell for more charges.
  */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+)$/;
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+|overchannel)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -275,8 +275,8 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
     return action.id === base.id || !option ? action.name : option;
   }
   const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined);
-  // Metamagic: the slot, and the option ("3rd · Quickened").
-  const meta = action.metamagic ? ` · ${action.metamagic.name.replace(/ Spell$/, "")}` : "";
+  // Metamagic or Overchannel: the slot, and the option ("3rd · Quickened", "3rd · Overchannel").
+  const meta = action.metamagic ? ` · ${action.metamagic.name.replace(/ Spell$/, "")}` : action.maximizeDamage ? " · Overchannel" : "";
   if (slot !== undefined && (slotFamily || ("spellLevel" in action && action.spellLevel != null))) return `${slotLabel(action, slot)}${meta}`;
   if (meta) return meta.slice(3);
   const parts: string[] = [];

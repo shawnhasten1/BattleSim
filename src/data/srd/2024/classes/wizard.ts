@@ -122,7 +122,14 @@ export const EVOKER: SubclassDefinition = {
     },
     savant(11),
     savant(13),
-    { level: 14, grants: [grant("overchannel", reference("wizard_evoker_overchannel"))] },
+    {
+      level: 14,
+      // A Wizard spell of level 1-5 that deals damage, at its maximum: the first time, with no harm, so once a fight.
+      grants: [grant("overchannel", runs("wizard_evoker_overchannel", {
+        effects: [{ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] }],
+        notSimulated: "using it again before a Long Rest, for necrotic damage to itself."
+      }), { pool: { id: "overchannel", size: 1 } })]
+    },
     savant(15),
     savant(17)
   ]

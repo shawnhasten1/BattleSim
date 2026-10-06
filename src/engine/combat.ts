@@ -192,6 +192,8 @@ interface DamageApplicationEntry {
   rollTwice?: boolean;
   /** Empowered Spell: up to this many dice below average rolled again. */
   rerollLowDice?: number;
+  /** Overchannel: every die gives its highest. */
+  maximize?: boolean;
 }
 
 interface FeatureDamageResolution {
@@ -271,7 +273,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -568,6 +570,29 @@ function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinit
         metamagic: { option: effect.option, name: `${name} Spell` }, extraCost: effect.resourceCost
       } as ActionDefinition);
     }
+  }
+  return out;
+}
+
+/**
+ * Overchannel: a copy of each spell in scope that deals damage, cast with a slot of level 1 to the effect's highest (a
+ * copy at a higher slot too), at its dice's highest ("Fireball (Overchannel)", `<id>:overchannel`), paying the effect's
+ * cost beside the slot.
+ */
+function maxDamageVariants(definition: CreatureDefinition, listed: ActionDefinition[]): ActionDefinition[] {
+  const effects = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only")
+    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "max-damage" }> => effect.kind === "max-damage"));
+  if (!effects.length) return [];
+  const out: ActionDefinition[] = [];
+  for (const spell of listed) {
+    if (spell.kind !== "attack" && spell.kind !== "save" && spell.kind !== "area-save") continue;
+    if (spell.item || spell.automationSupport !== "full" || spell.actionType === "reaction" || !spell.damage.some((component) => /d\d/.test(component.dice))) continue;
+    // Cast with a slot: not a free cast.
+    const slot = spellSlotLevel(spell.resourceCost?.resourceId);
+    const effect = effects.find((entry) => slot !== undefined && slot >= 1 && slot <= entry.maxSlot && spellScopeCovers(entry, spell));
+    if (!effect) continue;
+    out.push({ ...spell, id: `${spell.id}:overchannel`, name: `${spell.name} (Overchannel)`, maximizeDamage: true, extraCost: effect.resourceCost } as ActionDefinition);
   }
   return out;
 }
@@ -2321,6 +2346,34 @@ function cleaveAfterHit(state: EngineState, attacker: CombatantState, first: Com
 }
 
 /**
+ * Improved Blessed Strikes (Potent Spellcasting): when a spell in scope deals damage, temporary hit points to the caster or
+ * an ally within the effect's feet: the one with the least of its hit points left (temporary ones counted), the caster
+ * first on a tie. They don't add to what one already has: the larger stays.
+ */
+function damageVitality(state: EngineState, caster: CombatantState, definition: CreatureDefinition, action: ActionDefinition, dealt: number): void {
+  if (dealt <= 0 || caster.state !== "active") return;
+  for (const feature of featureSources(definition, caster)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "damage-vitality" || !("spellLevel" in action) || !spellScopeCovers(effect, action)) continue;
+      const amount = resolveNumericFormula(effect.tempHp, definition);
+      if (amount <= 0) return;
+      const faction = effectiveFaction(state.snapshot, caster);
+      const share = (combatant: CombatantState) => (combatant.currentHp + combatant.tempHp) / Math.max(1, getDefinition(state.snapshot, combatant).maxHp);
+      const recipient = state.snapshot.combatants
+        .filter((combatant) => combatant.state === "active" && combatant.tempHp < amount && effectiveFaction(state.snapshot, combatant) === faction
+          && (combatant.id === caster.id || spatialDistance(state.snapshot, caster, combatant) <= effect.withinFt))
+        .sort((a, b) => share(a) - share(b) || Number(b.id === caster.id) - Number(a.id === caster.id) || a.id.localeCompare(b.id))[0];
+      if (!recipient) return;
+      recipient.tempHp = amount;
+      state.log.push(event(state, "FeatureEffectApplied", `${caster.displayName}'s ${feature.name}: ${recipient.displayName} gains ${amount} temporary hit points`, {
+        combatantId: caster.id, targetId: recipient.id, actionId: action.id, featureName: feature.name, effectKind: "damage-vitality", amount, tempHp: recipient.tempHp
+      }));
+      return;
+    }
+  }
+}
+
+/**
  * Horde Breaker: once on each of its turns, after an attack with a weapon, another with the same weapon at a different
  * creature within the effect's feet of the first target, in reach or range, that it hasn't attacked this turn: the one
  * likeliest to drop.
@@ -2520,7 +2573,8 @@ function resolveAttackCore(
         component, critical, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
         extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined,
         ...(index === 0 && (action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {}),
-        ...diceRules
+        ...diceRules,
+        ...((action as ActionDefinition).maximizeDamage ? { maximize: true } : {})
       })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
@@ -2529,9 +2583,11 @@ function resolveAttackCore(
     : action.halfDamageOnMiss
       ? applyDamageEntries(state, target, action.damage.map((component, index) => ({
         component, critical: false, halve: true, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
-        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined
+        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined,
+        ...((action as ActionDefinition).maximizeDamage ? { maximize: true } : {})
       })), attackerDefinition, attacker.id)
       : 0;
+  damageVitality(state, attacker, attackerDefinition, action, damageApplied);
   let appliedConditionEffects: string[] = [];
   if (hit) {
     consumeTriggeredConditions(state, target, targetHitDamage.consumedConditionIds ?? []);
@@ -2697,9 +2753,11 @@ function resolveSaveAgainstTarget(
       halve: outcome.halve,
       casterLevel: scaling.casterLevel,
       extraDiceOnFirst: scaling.upcastDamageDice,
-      ...((action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {})
+      ...((action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {}),
+      ...((action as ActionDefinition).maximizeDamage ? { maximize: true } : {})
     }, attacker.id)
     : 0;
+  damageVitality(state, attacker, attackerDefinition, action, damageApplied);
 
   if (!(success && onSuccess === "negates")) {
     applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
@@ -2785,8 +2843,9 @@ export function resolveAreaSaveAction(
     ? rollAreaDamage(state, areaDamageTypesChosen(state, attacker, action.damage, affected), attackerDefinition, {
       casterLevel: scaling.casterLevel,
       extraDiceOnFirst: scaling.upcastDamageDice,
-      ...(action.rerollDamageDice ? { rerollLowDice: action.rerollDamageDice } : {})
-    })
+      ...(action.rerollDamageDice ? { rerollLowDice: action.rerollDamageDice } : {}),
+      ...(action.maximizeDamage ? { maximize: true } : {})
+    }, attacker)
     : [];
   const { heightenedId, spared } = areaSaveChoices(state, attacker, action, affected);
 
@@ -2834,6 +2893,7 @@ export function resolveAreaSaveAction(
 
     return { targetId: target.id, success, damageApplied };
   });
+  damageVitality(state, attacker, attackerDefinition, action, targets.reduce((sum, entry) => sum + entry.damageApplied, 0));
 
   state.log.push(event(state, "AreaSaveResolved", `${attacker.displayName} resolved ${action.name} at (${origin.x}, ${origin.y})`, {
     attackerId,
@@ -5159,7 +5219,7 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id; triggerDamageType?: DamageType; rerollLowDice?: number } = {},
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id; triggerDamageType?: DamageType; rerollLowDice?: number; maximize?: boolean } = {},
   sourceId?: Id
 ): number {
   return applyDamageEntries(
@@ -5172,6 +5232,7 @@ function applyDamageComponents(
       casterLevel: options.casterLevel,
       extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined,
       ...(index === 0 && options.rerollLowDice ? { rerollLowDice: options.rerollLowDice } : {}),
+      ...(options.maximize ? { maximize: true } : {}),
       ...(options.triggerDamageType ? { triggerDamageType: options.triggerDamageType } : {})
     })),
     source,
@@ -5192,6 +5253,8 @@ function applyDamageEntries(
   const hpBefore = target.currentHp + target.tempHp;
   let totalApplied = 0;
   let totalAbsorbed = 0;
+  const sourceCombatant = sourceId ? state.snapshot.combatants.find((combatant) => combatant.id === sourceId) : undefined;
+  const ignored = resistanceIgnoredBy(source, sourceCombatant);
   const rolled = entries.map((entry): PendingDamage & { roll: DiceRollResult } => {
     const component = entry.component;
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: entry.casterLevel });
@@ -5205,13 +5268,14 @@ function applyDamageEntries(
       const rolled = rollDice(withBonus(dice, abilityBonus), state.rng);
       return entry.minimumDie ? withMinimumDie(rolled, entry.minimumDie) : rolled;
     };
-    let roll = rollOnce();
-    if (entry.rollTwice) {
+    let roll = entry.maximize ? maximizedRoll(withBonus(dice, abilityBonus)) : rollOnce();
+    if (entry.rollTwice && !entry.maximize) {
       const again = rollOnce();
       if (again.total > roll.total) roll = again;
     }
-    if (entry.rerollLowDice) roll = rerollLowDice(roll, entry.rerollLowDice, state.rng);
-    const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
+    if (entry.rerollLowDice && !entry.maximize) roll = rerollLowDice(roll, entry.rerollLowDice, state.rng);
+    const ignoresResistance = entry.sourceDefinition && entry.sourceDefinition !== source ? resistanceIgnoredBy(entry.sourceDefinition) : ignored;
+    const origin: DamageOrigin = { magical: component.magical === true, material: component.material, ...(ignoresResistance ? { ignoresResistance } : {}) };
     const damageType = component.damageTypeOptions?.length
       ? bestDamageTypeOption(component.damageTypeOptions, damageAdjustmentsFor(targetDefinition, target), origin)
       : resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
@@ -5432,6 +5496,8 @@ interface RolledDamageComponent {
   base: number;
   magical: boolean;
   material?: DamageComponent["material"];
+  /** Boon of Irresistible Offense: the types the caster's damage ignores resistance to. */
+  ignoresResistance?: DamageType[];
 }
 
 /**
@@ -5451,7 +5517,8 @@ function areaDamageTypesChosen(state: EngineState, caster: CombatantState, damag
   return damage.map((component) => {
     const options = component.damageTypeOptions;
     if (!options?.length) return component;
-    const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
+    const ignoresResistance = resistanceIgnoredBy(getDefinition(state.snapshot, caster), caster);
+    const origin: DamageOrigin = { magical: component.magical === true, material: component.material, ...(ignoresResistance ? { ignoresResistance } : {}) };
     const worth = (type: DamageType) => foes.reduce((sum, foe) => sum + adjustDamage(1000, type, damageAdjustmentsFor(getDefinition(state.snapshot, foe), foe), origin), 0);
     const best = options.reduce((top, type) => (worth(type) > worth(top) ? type : top), options.includes(component.damageType as DamageType) ? component.damageType as DamageType : options[0]!);
     const chosen = { ...component, damageType: best };
@@ -5464,21 +5531,25 @@ function rollAreaDamage(
   state: EngineState,
   damage: DamageComponent[],
   source: CreatureDefinition,
-  options: { casterLevel?: number; extraDiceOnFirst?: string; rerollLowDice?: number } = {}
+  options: { casterLevel?: number; extraDiceOnFirst?: string; rerollLowDice?: number; maximize?: boolean } = {},
+  sourceCombatant?: CombatantState
 ): RolledDamageComponent[] {
+  const ignoresResistance = resistanceIgnoredBy(source, sourceCombatant);
   return damage.map((component, index) => {
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: options.casterLevel });
     const dice = index === 0 && options.extraDiceOnFirst ? `${scaledBase}+${options.extraDiceOnFirst}` : scaledBase;
     const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
-    const rolled = rollDice(withBonus(dice, abilityBonus), state.rng);
+    // Overchannel: every die at its highest.
+    const rolled = options.maximize ? maximizedRoll(withBonus(dice, abilityBonus)) : rollDice(withBonus(dice, abilityBonus), state.rng);
     // Empowered Spell: the blast's low dice rolled again, once for everyone it hits.
-    const roll = index === 0 && options.rerollLowDice ? rerollLowDice(rolled, options.rerollLowDice, state.rng) : rolled;
+    const roll = index === 0 && options.rerollLowDice && !options.maximize ? rerollLowDice(rolled, options.rerollLowDice, state.rng) : rolled;
     return {
       damageType: resolveDamageTypeReference(component.damageType, undefined),
       roll,
       base: roll.total + resolveNumericFormula(component.bonusFormula, source),
       magical: component.magical === true,
-      material: component.material
+      material: component.material,
+      ...(ignoresResistance ? { ignoresResistance } : {})
     };
   });
 }
@@ -5496,7 +5567,8 @@ function applyRolledAreaDamage(
   let totalApplied = 0;
   let totalAbsorbed = 0;
   const pending = rolled.map((entry): PendingDamage => ({
-    damageType: entry.damageType, base: entry.base, origin: { magical: entry.magical, material: entry.material }, halve
+    damageType: entry.damageType, base: entry.base, halve,
+    origin: { magical: entry.magical, material: entry.material, ...(entry.ignoresResistance ? { ignoresResistance: entry.ignoresResistance } : {}) }
   }));
   const landing = damageAfterReaction(state, target, targetDefinition, pending, sourceId, false);
   const components = rolled.map((entry, index) => {
@@ -5863,6 +5935,15 @@ function resolveOneDeathEffect(
 export interface DamageOrigin {
   magical?: boolean;
   material?: DamageComponent["material"];
+  /** Boon of Irresistible Offense: resistance to these types doesn't count against it. */
+  ignoresResistance?: DamageType[];
+}
+
+/** Boon of Irresistible Offense: the damage types whose resistance a creature's damage ignores, or undefined for none. */
+export function resistanceIgnoredBy(definition: CreatureDefinition, combatant?: CombatantState): DamageType[] | undefined {
+  const types = featureSources(definition, combatant)
+    .flatMap((feature) => (feature.effects ?? []).flatMap((effect) => (effect.kind === "ignore-resistance" ? effect.damageTypes : [])));
+  return types.length ? [...new Set(types)] : undefined;
 }
 
 /**
@@ -5878,6 +5959,9 @@ function adjustmentApplies(adjustment: DamageAdjustment, damageType: DamageType,
     return false;
   }
   if (origin.material && adjustment.exceptMaterials?.includes(origin.material)) {
+    return false;
+  }
+  if (adjustment.type === "resistance" && origin.ignoresResistance?.includes(damageType)) {
     return false;
   }
   return true;
@@ -8128,7 +8212,7 @@ function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefin
     return false;
   }
   if ("damageTypes" in effect && effect.damageTypes
-    && !action.damage.some((component) => effect.damageTypes!.includes(component.damageType))) {
+    && !action.damage.some((component) => (effect.damageTypes as DamageTypeReference[]).includes(component.damageType))) {
     return false;
   }
   return !("abilities" in effect) || !effect.abilities || effect.abilities.includes(action.ability);

@@ -947,6 +947,32 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
             value={effect.resourceCost.resourceId ? effect.resourceCost : undefined} onChange={(resourceCost) => set({ ...effect, resourceCost })} />
         </>
       );
+    case "max-damage":
+      return (
+        <>
+          <span className={styles.inline}>
+            <span>At its maximum damage when cast with a slot of level 1 to</span>
+            <NumberField label="Highest slot level" value={effect.maxSlot} min={1} max={9} onChange={(n) => n !== undefined && set({ ...effect, maxSlot: n })} />
+          </span>
+          <PoolPicker definition={definition} weapon={weapon} newPools={newPools} startCreating={!effect.resourceCost.resourceId}
+            value={effect.resourceCost.resourceId ? effect.resourceCost : undefined} onChange={(resourceCost) => set({ ...effect, resourceCost })} />
+          <SpellScope effect={effect} set={set} />
+        </>
+      );
+    case "ignore-resistance":
+      return <TypeChips label="Its damage ignores resistance to" value={effect.damageTypes} onChange={(damageTypes) => damageTypes.length && set({ ...effect, damageTypes })} />;
+    case "damage-vitality":
+      return (
+        <>
+          <FormulaField label="Temporary hit points" value={effect.tempHp} definition={definition} onChange={(tempHp) => set({ ...effect, tempHp })} />
+          <span className={styles.inline}>
+            <span>to itself or a creature within</span>
+            <NumberField label="Reach of the gift (ft)" value={effect.withinFt} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, withinFt: n })} />
+            <span>ft, when one of these spells deals damage</span>
+          </span>
+          <SpellScope effect={effect} set={set} />
+        </>
+      );
     case "spare-allies":
       return (
         <>

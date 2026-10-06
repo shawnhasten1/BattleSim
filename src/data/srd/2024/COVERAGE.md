@@ -17,7 +17,7 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 14 | 3 | 0 | 6 | 1 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 7 | 1 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
@@ -26,8 +26,8 @@ its gaps, never dropped and never approximated without saying so.
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
-| Wizard (Evoker) | 16 | 3 | 0 | 1 | 9 | 3 |
-| Feats | 17 | 7 | 3 | 3 | 4 | 0 |
+| Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
+| Feats | 17 | 7 | 4 | 2 | 4 | 0 |
 | Species traits | 33 | 10 | 1 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -47,9 +47,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
 | `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
-| `ignore-resistance` | Damage that ignores resistance (Boon of Irresistible Offense) | Feats | 1 | Boon of Irresistible Offense (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
+| `nat20-damage` | Extra damage on an attack roll of 20 (Overwhelming Strike) | Feats | 1 | Boon of Irresistible Offense (feat) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
@@ -65,8 +65,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
-| `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
-| `max-damage` | Maximum damage instead of a roll (Overchannel) | Wizard | 14 | Overchannel (Evoker) |
+| `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | Rogue | 17 | Thief's Reflexes (Thief) |
@@ -146,7 +145,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Sear Undead | full |  | The radiant damage with Turn Undead, which doesn't end the turning. |
 | 7 | Blessed Strikes | full |  | Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip. |
 | 10 | Divine Intervention | manual | `free-cast-any` |  |
-| 14 | Improved Blessed Strikes | partial | `damage-vitality` | Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't. |
+| 14 | Improved Blessed Strikes | full |  | Divine Strike's 2d8; or with Potent Spellcasting, twice its Wisdom modifier in temporary hit points, to itself or the most hurt ally within 60 ft, when a Cleric cantrip deals damage. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Greater Divine Intervention | info |  | Wish. |
 | — | Cleric Spell List | builder |  | Read from each spell's own class list. |
@@ -433,7 +432,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Potent Cantrip | full |  | Half a cantrip's damage on a miss or a made save, and nothing else. |
 | 6 | Sculpt Spells | full |  | 1 + the spell's level of its allies in an evocation's area (the fewest hit points first) succeed on their saves without rolling and take no damage where a success would halve it; the AI's area weighing leaves them out of its friendly fire. |
 | 10 | Empowered Evocation | full |  | Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one. |
-| 14 | Overchannel | manual | `max-damage` |  |
+| 14 | Overchannel | partial | `max-damage` | A Wizard spell of level 1-5 that deals damage, at its dice's highest, once a fight: its harmless first use. Using it again, for necrotic damage, doesn't run. |
 
 ## Feats
 
@@ -445,7 +444,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Boon of Combat Prowess | epic-boon | full |  | The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
 | Boon of Fate | epic-boon | partial | `d20-reroll` | 2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1. |
-| Boon of Irresistible Offense | epic-boon | manual | `ignore-resistance` | The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
+| Boon of Irresistible Offense | epic-boon | partial | `nat20-damage` | Its bludgeoning, piercing and slashing damage ignores resistance; the builder adds the +1 to a score. Overwhelming Strike's extra damage on a 20 doesn't run. |
 | Boon of Spell Recall | epic-boon | full |  | A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score. |
 | Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |
 | Boon of Truesight | epic-boon | builder |  | +1 to a score; truesight is a sense the simulator doesn't use. |

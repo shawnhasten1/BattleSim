@@ -29,7 +29,8 @@ export interface CoverageEntry {
 /** What the engine lacks, grouped so one engine change closes a family (plan Phase 7). */
 export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
-  "max-damage": "Maximum damage instead of a roll (Overchannel)",
+  "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
+  "nat20-damage": "Extra damage on an attack roll of 20 (Overwhelming Strike)",
   "d20-reroll": "A penalty on another creature's successful d20 roll (Boon of Fate)",
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
@@ -37,7 +38,6 @@ export const GAPS = {
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
   flee: "A creature that must spend its turns moving away from its source (Turn Undead)",
   "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
-  "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   metamagic: "Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis)",
   "slot-conversion": "Once a turn for a slot turned into a Wild Shape use (Wild Resurgence)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
@@ -55,7 +55,6 @@ export const GAPS = {
   "mixed-area": "An area that harms enemies and heals one ally at once (Land's Aid)",
   "zone-cover": "A movable zone that gives cover and shares a resistance (Nature's Sanctuary)",
   "combined-utility": "Step of the Wind carrying an ally with the monk (Heightened Focus)",
-  "ignore-resistance": "Damage that ignores resistance (Boon of Irresistible Offense)",
   stealth: "Hiding and invisibility you give yourself (there's no stealth in the simulator)",
   "move-through": "Moving through a larger creature's space (Halfling Nimbleness)",
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
@@ -140,7 +139,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "cleric_sear-undead": full("The radiant damage with Turn Undead, which doesn't end the turning."),
   "cleric_blessed-strikes": full("Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip."),
   "cleric_divine-intervention": manual(["free-cast-any"]),
-  "cleric_improved-blessed-strikes": partial(["damage-vitality"], "Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't."),
+  "cleric_improved-blessed-strikes": full("Divine Strike's 2d8; or with Potent Spellcasting, twice its Wisdom modifier in temporary hit points, to itself or the most hurt ally within 60 ft, when a Cleric cantrip deals damage."),
   "cleric_epic-boon": EPIC_BOON,
   "cleric_greater-divine-intervention": info("Wish."),
   "cleric_cleric-spell-list": SPELL_LIST,
@@ -370,7 +369,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "wizard_evoker_potent-cantrip": full("Half a cantrip's damage on a miss or a made save, and nothing else."),
   "wizard_evoker_sculpt-spells": full("1 + the spell's level of its allies in an evocation's area (the fewest hit points first) succeed on their saves without rolling and take no damage where a success would halve it; the AI's area weighing leaves them out of its friendly fire."),
   "wizard_evoker_empowered-evocation": full("Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one."),
-  "wizard_evoker_overchannel": manual(["max-damage"])
+  "wizard_evoker_overchannel": partial(["max-damage"], "A Wizard spell of level 1-5 that deals damage, at its dice's highest, once a fight: its harmless first use. Using it again, for necrotic damage, doesn't run.")
 };
 
 /** Feats, by Open5e key without its `srd-2024_` prefix. */
@@ -381,7 +380,7 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   "boon-of-combat-prowess": full("The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn."),
   "boon-of-dimensional-travel": manual(["free-move"], "The builder adds the +1 to a score; the teleport after an attack doesn't run."),
   "boon-of-fate": partial(["d20-reroll"], "2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1."),
-  "boon-of-irresistible-offense": manual(["ignore-resistance"], "The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run."),
+  "boon-of-irresistible-offense": partial(["nat20-damage"], "Its bludgeoning, piercing and slashing damage ignores resistance; the builder adds the +1 to a score. Overwhelming Strike's extra damage on a 20 doesn't run."),
   "boon-of-spell-recall": full("A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score."),
   "boon-of-the-night-spirit": manual(["stealth"], "The builder adds the +1 to a score; invisibility and resistance in darkness don't run."),
   "boon-of-truesight": builder("+1 to a score; truesight is a sense the simulator doesn't use."),

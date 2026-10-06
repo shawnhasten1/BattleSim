@@ -133,13 +133,25 @@ export const CLERIC: ClassDefinition = {
                 name: "Blessed Strikes: Potent Spellcasting",
                 effects: [{ kind: "spell-damage-ability", ability: "wis", cantripsOnly: true, spellClasses: ["cleric"] }]
               })
+            }, {
+              // Improved Blessed Strikes, for a cleric who took Potent Spellcasting: temporary hit points when a cantrip deals damage.
+              key: "improved-potent-spellcasting",
+              atLevel: 14,
+              feature: {
+                id: "improved-potent-spellcasting", name: "Improved Blessed Strikes: Potent Spellcasting", category: "feature",
+                source: srd52Source("srd-2024_cleric_improved-blessed-strikes"),
+                description: "When it deals damage with a Cleric cantrip, it can give itself or a creature within 60 feet of itself temporary hit points equal to twice its Wisdom modifier.",
+                effects: [{ kind: "damage-vitality", tempHp: { ability: "wis", multiplier: 2 }, withinFt: 60, cantripsOnly: true, spellClasses: ["cleric"] }],
+                automationSupport: "full"
+              }
             }]
           }
         ]
       }, "cleric_blessed-strikes")]
     },
     { level: 10, grants: [grant("divine-intervention", reference("cleric_divine-intervention"))] },
-    { level: 14, grants: [grant("improved-blessed-strikes", runs("cleric_improved-blessed-strikes", { notSimulated: "Potent Spellcasting's temporary hit points when a cantrip deals damage." }))] },
+    // Divine Strike's 2d8 is its column; Potent Spellcasting's temporary hit points come with that choice.
+    { level: 14, grants: [grant("improved-blessed-strikes", runs("cleric_improved-blessed-strikes"))] },
     { level: 20, grants: [grant("greater-divine-intervention", informational("cleric_greater-divine-intervention"))] }
   ],
   startingEquipment: [

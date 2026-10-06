@@ -113,10 +113,10 @@ describe("the Wizard (Evoker)", () => {
     for (const entry of signature) expect(wizard.resources?.[entry.resourceCost!.resourceId]).toBe(1);
   });
 
-  it("runs Potent Cantrip, Empowered Evocation and Sculpt Spells (7w), and puts Overchannel on as reference", () => {
+  it("runs Potent Cantrip, Empowered Evocation and Sculpt Spells (7w), and Overchannel's first use (7ad)", () => {
     const wizard = built("wizard", 14);
     for (const id of ["evoker-potent-cantrip", "evoker-empowered-evocation", "evoker-sculpt-spells"]) expect(feature(wizard, id).automationSupport).toBe("full");
-    expect(feature(wizard, "evoker-overchannel").automationSupport).toBe("manual-only");
+    expect(feature(wizard, "evoker-overchannel").automationSupport).toBe("partial");
   });
 });
 

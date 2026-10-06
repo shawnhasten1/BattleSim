@@ -838,6 +838,29 @@ export type FeatureEffect =
     withinFt: number;
   } & FeatureEffectScope)
   | {
+    /** Boon of Irresistible Offense: its damage of these types ignores resistance (not immunity). */
+    kind: "ignore-resistance";
+    damageTypes: DamageType[];
+  }
+  | ({
+    /**
+     * Overchannel: a copy of each spell in scope cast with a slot of level 1 to `maxSlot` that deals damage, at its
+     * dice's highest (`<id>:overchannel`), paying `resourceCost` beside the slot.
+     */
+    kind: "max-damage";
+    maxSlot: number;
+    resourceCost: ResourceCost;
+  } & FeatureEffectScope)
+  | ({
+    /**
+     * Improved Blessed Strikes (Potent Spellcasting): when a spell in scope deals damage, `tempHp` temporary hit points
+     * to the caster or a creature within `withinFt` of it: the ally with the least of its hit points left.
+     */
+    kind: "damage-vitality";
+    tempHp: NumericFormula;
+    withinFt: number;
+  } & FeatureEffectScope)
+  | {
     /**
      * Self-Restoration: at the start or end of each of its turns, it ends one of these conditions on itself (the worst).
      */
@@ -1946,6 +1969,8 @@ export interface CompiledActionMeta {
   extraCost?: ResourceCost;
   /** Empowered Spell: up to this many of its damage dice below average rolled again (the first damage line's). */
   rerollDamageDice?: number;
+  /** Overchannel (`<id>:overchannel`): its damage dice give their highest. */
+  maximizeDamage?: boolean;
   /**
    * Careful Spell, Sculpt Spells: this many of the caster's allies in the area (the fewest hit points first) succeed on
    * their saves without rolling, and take no damage when a success would halve it.
