@@ -9,6 +9,7 @@ import {
   limitedToOneThing,
   markMoveProblem,
   onHitTermsProblem,
+  onlyWhenEmptyProblem,
   spellTurnProblem,
   moveCombatant,
   placeByDm,
@@ -222,6 +223,8 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   // Quickened Spell and level 1+ spells in one turn.
   const spellTurn = spellTurnProblem(actor, action);
   if (spellTurn) return spellTurn;
+  const empty = onlyWhenEmptyProblem(actor, action);
+  if (empty) return empty;
   if (action.kind === "utility" && action.mode === "escape" && !(actor.conditions ?? []).some((condition) => condition.hold)) {
     return `${actor.displayName} isn't grappled`;
   }

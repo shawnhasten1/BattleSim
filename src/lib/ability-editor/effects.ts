@@ -74,6 +74,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "spare-allies", base: 1, plusSpellLevel: true, spellSchools: ["evocation"] })
   },
   {
+    kind: "slot-recall", label: "A spell slot kept on a lucky roll", hint: "Boon of Spell Recall: a level 1-4 slot isn't spent when a d4 comes up its level", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "slot-recall", maxLevel: 4, die: 4 })
+  },
+  {
     kind: "metamagic", label: "A Metamagic option", hint: "Quickened, Twinned, Heightened…: a copy of each spell it changes, for sorcery points", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "metamagic", option: "quickened", resourceCost: { resourceId: "sorcery-points", amount: 2 } })
   },

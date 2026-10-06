@@ -151,7 +151,9 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
   epicBoon("boon-of-dimensional-travel", "Boon of Dimensional Travel", reference({ feat: "boon-of-dimensional-travel" })),
   epicBoon("boon-of-fate", "Boon of Fate", reference({ feat: "boon-of-fate" })),
   epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", reference({ feat: "boon-of-irresistible-offense" })),
-  epicBoon("boon-of-spell-recall", "Boon of Spell Recall", reference({ feat: "boon-of-spell-recall" }), { prerequisite: { feature: "Spellcasting" } }),
+  epicBoon("boon-of-spell-recall", "Boon of Spell Recall", runs({ feat: "boon-of-spell-recall" }, {
+    effects: [{ kind: "slot-recall", maxLevel: 4, die: 4 }]
+  }), { prerequisite: { feature: "Spellcasting" } }),
   epicBoon("boon-of-the-night-spirit", "Boon of the Night Spirit", reference({ feat: "boon-of-the-night-spirit" })),
   epicBoon("boon-of-truesight", "Boon of Truesight", informational({ feat: "boon-of-truesight" }), {
     grants: [{ key: "truesight", adjust: { senses: { truesight: 60 } } }]

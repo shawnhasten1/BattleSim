@@ -64,7 +64,24 @@ export const DRUID: ClassDefinition = {
       ]
     },
     { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "druid_druid-subclass")] },
-    { level: 5, grants: [grant("wild-resurgence", reference("druid_wild-resurgence"))] },
+    {
+      level: 5,
+      // A slot for a Wild Shape use once none are left; a Wild Shape use for a 1st-level slot, once (its own pool).
+      grants: [grant("wild-resurgence", runs("druid_wild-resurgence", {
+        grantedActions: [
+          {
+            kind: "activate-feature", id: "wild-resurgence-shape", name: "Wild Resurgence: Slot to Wild Shape", actionType: "free", featureId: "",
+            resourceCost: { resourceId: "slot-1", amount: 1 }, gains: { resourceId: "wild-shape", amount: 1 }, onlyWhenEmpty: "wild-shape", automationSupport: "full"
+          },
+          {
+            kind: "activate-feature", id: "wild-resurgence-slot", name: "Wild Resurgence: Wild Shape to Slot", actionType: "free", featureId: "",
+            resourceCost: { resourceId: "wild-shape", amount: 1 }, extraCost: { resourceId: "wild-resurgence", amount: 1 },
+            gains: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+          }
+        ],
+        notSimulated: "once on each of its turns isn't checked for a Wild Shape use from a slot."
+      }), { pool: { id: "wild-resurgence", size: 1 } })]
+    },
     {
       level: 7,
       grants: [],

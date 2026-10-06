@@ -817,6 +817,15 @@ export type FeatureEffect =
     kind: "on-hit-option";
     option: OnHitOption;
   }
+  | {
+    /**
+     * Boon of Spell Recall: casting a spell with a slot of `maxLevel` or lower, a d`die` that comes up the slot's level
+     * means the slot isn't spent.
+     */
+    kind: "slot-recall";
+    maxLevel: number;
+    die: number;
+  }
   | ({
     /**
      * Sculpt Spells: its area spells in scope (evocations) spare `base` (+ the spell's level, with `plusSpellLevel`) of
@@ -1683,6 +1692,14 @@ export interface ActivateFeatureActionDefinition {
   reaction?: ReactionMeta;
   featureId: Id;
   resourceCost?: ResourceCost;
+  /**
+   * What using it gives back, paid for by `resourceCost`: a resource turned into another (Font of Magic: sorcery points
+   * into a spell slot, or a slot into as many points as its level, `"slot-level"`; Font of Inspiration: a slot into a
+   * Bardic Inspiration use). Never past `max`.
+   */
+  gains?: { resourceId: string; amount: number | "slot-level"; max?: number };
+  /** Only with none of this left (Sorcery Incarnate: Innate Sorcery for sorcery points once its uses are gone). */
+  onlyWhenEmpty?: string;
   /** Only before it has moved this turn (Steady Aim). */
   stillOnly?: boolean;
   condition?: {

@@ -732,6 +732,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "slot-recall":
+      return `When ${who.subject} casts a spell with a level 1–${effect.maxLevel} spell slot, ${who.subject} rolls a d${effect.die}; if it comes up the slot's level, the slot isn't spent.`;
     case "spare-allies": {
       const count = `${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""}`;
       return `When ${who.subject} casts ${spellScopeText(effect, who, true)} that forces saving throws in an area, ${count} of ${who.possessive} allies in its area succeed on their saves without rolling, and take no damage where a success would halve it.`;
@@ -869,6 +871,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
+    case "slot-recall": return `a level 1–${effect.maxLevel} slot back on a d${effect.die} matching its level`;
     case "spare-allies": return `spares ${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""} allies in the areas of ${spellScopeText(effect, IT)}`;
   }
 }
@@ -1314,6 +1317,13 @@ function damageCutText(cut: NonNullable<ActivateAction["damageCut"]>, definition
 /** What an activation does: its immediate effect and the state it puts the creature in. */
 function activationText(action: ActivateAction, definition: CreatureDefinition, feature = featureById(definition, action.featureId)): { text: string; short: string } {
   if (action.damageCut) return damageCutText(action.damageCut, definition);
+  // Font of Magic, Font of Inspiration: one resource turned into another.
+  if (action.gains) {
+    const what = action.gains.resourceId.replace(/[-_]+/g, " ");
+    const amount = action.gains.amount === "slot-level" ? `as many ${what} as the slot's level` : costText({ resourceId: action.gains.resourceId, amount: action.gains.amount }, definition);
+    const empty = action.onlyWhenEmpty ? ` It can do this only with no ${action.onlyWhenEmpty.replace(/[-_]+/g, " ")} left.` : "";
+    return { text: `It gains ${amount}${action.gains.max !== undefined ? ` (to at most ${action.gains.max})` : ""}.${empty}`, short: `gains ${amount}` };
+  }
   const now = onActivatePhrases(feature, definition);
   const next = action.condition?.nextAttack;
   const lasting = [

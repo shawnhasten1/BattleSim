@@ -47,7 +47,7 @@ import { Check, Field, More, NumberField, Segmented } from "./controls";
 import type { CopyKey } from "./copy";
 import { DamageLines } from "./DamageLines";
 import { FeatureEffectCards } from "./FeatureEffectCards";
-import { LimitPicker, type NewPools } from "./LimitPicker";
+import { LimitPicker, PoolPicker, type NewPools } from "./LimitPicker";
 import { DurationSelect } from "./OutcomeSections";
 import { ACTIVATION_TRIGGERS, DamageCutControls, ReactionControls } from "./ReactionControls";
 import styles from "./ability-editor.module.css";
@@ -195,6 +195,26 @@ export function ActivationUse({ activation, onChange, definition, newPools, park
         </>
       ) : null}
       <LimitPicker action={activation} onChange={(next) => onChange(next as Activation)} definition={definition} newPools={newPools} />
+      <Check label="Gives a resource back for what it spends (Font of Magic)" checked={Boolean(activation.gains)}
+        onChange={(on) => { const next = { ...activation }; delete next.gains; onChange(on ? { ...next, gains: { resourceId: "", amount: 1 } } : next); }} />
+      {activation.gains ? (
+        <>
+          <PoolPicker definition={definition} newPools={newPools} gives noAmount={activation.gains.amount === "slot-level"} startCreating={!activation.gains.resourceId}
+            value={activation.gains.resourceId ? { resourceId: activation.gains.resourceId, amount: typeof activation.gains.amount === "number" ? activation.gains.amount : 1 } : undefined}
+            onChange={(cost) => onChange({ ...activation, gains: { ...activation.gains!, resourceId: cost.resourceId, ...(activation.gains!.amount === "slot-level" ? {} : { amount: cost.amount }) } })} />
+          <Check label="As many as the spent slot's level" checked={activation.gains.amount === "slot-level"}
+            onChange={(on) => onChange({ ...activation, gains: { ...activation.gains!, amount: on ? "slot-level" : 1 } })} />
+          <NumberField label="Never more than" value={activation.gains.max} optional min={1} max={999} placeholder="no limit"
+            onChange={(n) => { const gains = { ...activation.gains! }; delete gains.max; onChange({ ...activation, gains: n === undefined ? gains : { ...gains, max: n } }); }} />
+        </>
+      ) : null}
+      <Check label="Only with none of a resource left (Sorcery Incarnate)" checked={activation.onlyWhenEmpty !== undefined}
+        onChange={(on) => { const next = { ...activation }; delete next.onlyWhenEmpty; onChange(on ? { ...next, onlyWhenEmpty: "" } : next); }} />
+      {activation.onlyWhenEmpty !== undefined ? (
+        <PoolPicker definition={definition} newPools={newPools} noAmount startCreating={!activation.onlyWhenEmpty}
+          value={activation.onlyWhenEmpty ? { resourceId: activation.onlyWhenEmpty, amount: 1 } : undefined}
+          onChange={(cost) => onChange({ ...activation, onlyWhenEmpty: cost.resourceId })} />
+      ) : null}
       <Check label="Only before it moves on its turn" checked={activation.stillOnly === true}
         onChange={(on) => { const next = { ...activation }; delete next.stillOnly; onChange(on ? { ...next, stillOnly: true } : next); }} />
       {activation.condition ? (

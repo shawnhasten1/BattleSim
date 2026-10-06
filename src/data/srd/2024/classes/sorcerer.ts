@@ -1,4 +1,5 @@
-import type { DamageType, FeatureEffect } from "@/engine";
+import type { ActionDefinition, DamageType, FeatureEffect } from "@/engine";
+import type { FeatureGrant } from "@/lib/character-builder/catalog";
 import type { ClassDefinition, PickOption, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, spell, srdReferenceOptions, srdSpellcasting } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -6,20 +7,51 @@ import { WIZARD_SPELLS } from "./wizard";
 
 const ref = srdClass("sorcerer");
 
-const innateSorcery = runs("sorcerer_innate-sorcery", {
-  grantedActions: [{
-    kind: "activate-feature", id: "innate-sorcery", name: "Innate Sorcery", actionType: "bonus", featureId: "",
-    resourceCost: { resourceId: "innate-sorcery", amount: 1 },
-    condition: {
-      id: "innate-sorcery-active", name: "custom", durationRounds: 10,
-      effects: [
-        { kind: "save-dc-bonus", bonus: { base: 1 }, spellsOnly: true, spellClasses: ["sorcerer"] },
-        { kind: "attack-advantage", condition: "always", spellsOnly: true, spellClasses: ["sorcerer"] }
-      ]
-    },
-    automationSupport: "full"
-  }]
-});
+/** Innate Sorcery's minute: +1 to its Sorcerer spells' save DC and advantage on their attack rolls. */
+const INNATE_SORCERY: ActionDefinition = {
+  kind: "activate-feature", id: "innate-sorcery", name: "Innate Sorcery", actionType: "bonus", featureId: "",
+  resourceCost: { resourceId: "innate-sorcery", amount: 1 },
+  condition: {
+    id: "innate-sorcery-active", name: "custom", durationRounds: 10,
+    effects: [
+      { kind: "save-dc-bonus", bonus: { base: 1 }, spellsOnly: true, spellClasses: ["sorcerer"] },
+      { kind: "attack-advantage", condition: "always", spellsOnly: true, spellClasses: ["sorcerer"] }
+    ]
+  },
+  automationSupport: "full"
+};
+
+const innateSorcery = runs("sorcerer_innate-sorcery", { grantedActions: [INNATE_SORCERY] });
+
+/** Font of Magic's Creating Spell Slots table: each slot level, its sorcery point cost and the sorcerer level it needs. */
+const SLOT_COSTS = [{ slot: 1, cost: 2, level: 2 }, { slot: 2, cost: 3, level: 3 }, { slot: 3, cost: 5, level: 5 }, { slot: 4, cost: 6, level: 7 }, { slot: 5, cost: 7, level: 9 }];
+const ORDINAL = ["", "1st", "2nd", "3rd", "4th", "5th"];
+
+/**
+ * Font of Magic at this sorcerer level: a slot turned into as many sorcery points as its level (no action, the table's
+ * points at most; a copy for each slot level it has), and a slot made from points (a bonus action) of each level the
+ * table allows. A later level's grant takes the earlier one's place, with one more slot level.
+ */
+function fontOfMagic(level: number, replaces?: string): FeatureGrant {
+  return grant(`font-of-magic${replaces ? `-${level}` : ""}`, runs("sorcerer_font-of-magic", {
+    grantedActions: [
+      {
+        kind: "activate-feature", id: "font-of-magic-points", name: "Font of Magic: Slot to Sorcery Points", actionType: "free", featureId: "",
+        resourceCost: { resourceId: "slot-1", amount: 1 }, gains: { resourceId: "sorcery-points", amount: "slot-level", max: 2 },
+        automationSupport: "full"
+      },
+      ...SLOT_COSTS.filter((entry) => entry.level <= level).map((entry): ActionDefinition => ({
+        kind: "activate-feature", id: `font-of-magic-slot-${entry.slot}`, name: `Font of Magic: Create a ${ORDINAL[entry.slot]}-Level Slot`,
+        actionType: "bonus", featureId: "", resourceCost: SORCERY_POINTS(entry.cost), gains: { resourceId: `slot-${entry.slot}`, amount: 1 },
+        automationSupport: "full"
+      }))
+    ]
+  }), {
+    pool: { id: "sorcery-points", size: "{col:sorcery-points}" },
+    scale: [{ path: "grantedActions.0.gains.max", value: "{col:sorcery-points}" }],
+    ...(replaces ? { replaces } : {})
+  });
+}
 
 const SORCERY_POINTS = (amount: number) => ({ resourceId: "sorcery-points", amount });
 
@@ -78,14 +110,25 @@ export const SORCERER: ClassDefinition = {
     {
       level: 2,
       grants: [
-        grant("font-of-magic", reference("sorcerer_font-of-magic"), { pool: { id: "sorcery-points", size: "{col:sorcery-points}" } }),
+        fontOfMagic(2),
         grant("metamagic", reference("sorcerer_metamagic"))
       ],
       choices: [choice(metamagic(2), "sorcerer_metamagic-options")]
     },
-    { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "sorcerer_sorcerer-subclass")] },
-    { level: 5, grants: [grant("sorcerous-restoration", informational("sorcerer_sorcerous-restoration"))] },
-    { level: 7, grants: [grant("sorcery-incarnate", reference("sorcerer_sorcery-incarnate"))] },
+    { level: 3, grants: [fontOfMagic(3, "font-of-magic")], choices: [choice({ kind: "subclass", id: "subclass" }, "sorcerer_sorcerer-subclass")] },
+    { level: 5, grants: [grant("sorcerous-restoration", informational("sorcerer_sorcerous-restoration")), fontOfMagic(5, "font-of-magic-3")] },
+    {
+      level: 7,
+      grants: [
+        // Innate Sorcery for 2 sorcery points once its uses are gone.
+        grant("sorcery-incarnate", runs("sorcerer_sorcery-incarnate", {
+          grantedActions: [{ ...INNATE_SORCERY, id: "innate-sorcery-points", name: "Innate Sorcery (2 sorcery points)", resourceCost: SORCERY_POINTS(2), onlyWhenEmpty: "innate-sorcery" } as ActionDefinition],
+          notSimulated: "two Metamagic options on one spell while Innate Sorcery is active."
+        })),
+        fontOfMagic(7, "font-of-magic-5")
+      ]
+    },
+    { level: 9, grants: [fontOfMagic(9, "font-of-magic-7")] },
     { level: 10, grants: [], choices: [metamagic(2)] },
     { level: 17, grants: [], choices: [metamagic(2)] },
     { level: 20, grants: [grant("arcane-apotheosis", reference("sorcerer_arcane-apotheosis"))] }

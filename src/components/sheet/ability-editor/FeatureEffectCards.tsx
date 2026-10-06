@@ -924,6 +924,16 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           <TypeChips label="Only spells dealing" value={(effect.damageTypes ?? []) as DamageType[]} onChange={(types) => set(opt(effect, "damageTypes", types.length ? types : undefined))} />
         </>
       );
+    case "slot-recall":
+      return (
+        <span className={styles.inline}>
+          <span>A slot of level</span>
+          <NumberField label="Highest slot level" value={effect.maxLevel} min={1} max={9} onChange={(n) => n !== undefined && set({ ...effect, maxLevel: n })} />
+          <span>or lower is kept when a d</span>
+          <NumberField label="Die size" value={effect.die} min={2} max={20} onChange={(n) => n !== undefined && set({ ...effect, die: n })} />
+          <span>comes up its level</span>
+        </span>
+      );
     case "metamagic":
       return (
         <>

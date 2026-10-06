@@ -618,6 +618,12 @@ function metamagicVariant(option: MetamagicOption, spell: ActionDefinition, defi
   }
 }
 
+/** Sorcery Incarnate, Wild Resurgence: why it can't be used while some of a resource is left, or undefined. */
+export function onlyWhenEmptyProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  const pool = action.kind === "activate-feature" ? action.onlyWhenEmpty : undefined;
+  return pool && (combatant.resources?.[pool] ?? 0) > 0 ? `Only with no ${pool.replace(/[-_]+/g, " ")} left` : undefined;
+}
+
 /**
  * Quickened Spell's rule: it can't be used after a level 1+ spell this turn, and no level 1+ spell can be cast after it.
  * Why `action` can't be cast now under it, or undefined.
@@ -3400,6 +3406,17 @@ export function resolveActivateFeatureAction(
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action);
   if (action.resourceCost) grantFreeMoves(state, actor, { spends: action.resourceCost.resourceId });
+  // Font of Magic, Font of Inspiration: what it was spent for.
+  if (action.gains) {
+    const { resourceId, max } = action.gains;
+    const amount = action.gains.amount === "slot-level" ? spellSlotLevel(action.resourceCost?.resourceId) ?? 0 : action.gains.amount;
+    const previous = actor.resources?.[resourceId] ?? 0;
+    const next = Math.min(max ?? Number.POSITIVE_INFINITY, previous + amount);
+    actor.resources = { ...(actor.resources ?? {}), [resourceId]: next };
+    state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName}'s ${action.name}: ${next - previous} ${resourceId.replace(/[-_]+/g, " ")} back`, {
+      combatantId: actorId, actionId, featureId: action.featureId, resourceId, previous, next, effectKind: "resource-conversion"
+    }));
+  }
 
   const feature = featureSources(actorDefinition, actor).find((candidate) => candidate.id === action.featureId);
   // A self-contained activation (its own `condition` buff, or a reaction whose
@@ -4807,6 +4824,41 @@ function declareAction(
   action: ActionDefinition,
   targetInfo: { target?: CombatantState; origin?: Point; aimVector?: { x: number; y: number }; message?: string } = {}
 ): void {
+  announceAction(state, actor, action, targetInfo);
+  recallSpellSlot(state, actor, action);
+}
+
+/**
+ * Boon of Spell Recall: a spell cast with a slot of its `maxLevel` or lower; a d`die` that comes up the slot's level
+ * gives the slot back.
+ */
+function recallSpellSlot(state: EngineState, actor: CombatantState, action: ActionDefinition): void {
+  if (!("spellLevel" in action) || action.spellLevel == null || action.item) return;
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  const slot = spellSlotLevel(cost?.resourceId);
+  if (!cost || slot === undefined) return;
+  const definition = getDefinition(state.snapshot, actor);
+  for (const feature of featureSources(definition, actor)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "slot-recall" || slot > effect.maxLevel) continue;
+      const roll = rollDice(`1d${effect.die}`, state.rng);
+      const recalled = roll.total === slot;
+      if (recalled) actor.resources = { ...(actor.resources ?? {}), [cost.resourceId]: (actor.resources?.[cost.resourceId] ?? 0) + cost.amount };
+      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName}'s ${feature.name}: ${roll.total}${recalled ? ", the slot isn't spent" : ""}`, {
+        combatantId: actor.id, featureId: feature.id, featureName: feature.name, effectKind: effect.kind, roll, recalled
+      }));
+      return;
+    }
+  }
+}
+
+/** The log's "it uses this" line: what, on whom or where, and what it cost. */
+function announceAction(
+  state: EngineState,
+  actor: CombatantState,
+  action: ActionDefinition,
+  targetInfo: { target?: CombatantState; origin?: Point; aimVector?: { x: number; y: number }; message?: string }
+): void {
   const targetText = targetInfo.target
     ? ` on ${targetInfo.target.displayName}`
     : targetInfo.origin
@@ -5975,6 +6027,7 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
   }
   const turnProblem = spellTurnProblem(combatant, action);
   if (turnProblem) throw new Error(`${combatant.displayName}: ${turnProblem}`);
+  if (onlyWhenEmptyProblem(combatant, action)) throw new Error(`${combatant.displayName}: ${onlyWhenEmptyProblem(combatant, action)}`);
   // Metamagic's sorcery points, beside the slot.
   if (action.extraCost && (combatant.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) {
     throw new Error(`${combatant.displayName} lacks ${action.extraCost.resourceId}`);
@@ -9066,6 +9119,7 @@ function canSpendResource(combatant: CombatantState, action: ActionDefinition): 
   if (action.extraCost && (combatant.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) {
     return false;
   }
+  if (onlyWhenEmptyProblem(combatant, action)) return false;
   if (!("resourceCost" in action) || !action.resourceCost) {
     return true;
   }

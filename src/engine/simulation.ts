@@ -5,6 +5,7 @@ import {
   areaSaveChoices,
   damageBonusExpected,
   diceTradeCost,
+  onlyWhenEmptyProblem,
   spellTurnProblem,
   limitedToOneThing,
   onHitTermsProblem,
@@ -1301,6 +1302,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   if (actor.conditions?.some((condition) => condition.modifiers?.forcesRandomAction)) {
     return resolveConfusedTurn(state, actor);
   }
+
+  takeResourceConversions(state, actor);
 
   // Someone in a grapple spends the action breaking free when there's a fair chance of it (a restrained creature
   // fights at a penalty and can't move, so it matters most then); otherwise it fights on from where it is.
@@ -2814,7 +2817,7 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       && action.automationSupport === "full"
       && canPayResource(actor, action)
       && Boolean(action.condition)
-      && !hasActiveFeatureCondition(actor, action.featureId)
+      && !hasActiveFeatureCondition(actor, action.featureId, action.condition?.id)
       // Steady Aim: only standing still with an attack in reach from here, before it has moved.
       && (!action.stillOnly || ((actor.turnFlags?.movementUsed ?? 0) === 0 && plan !== undefined
         && (plan.action.kind === "attack" || plan.action.kind === "multiattack") && isValidTarget(snapshot, actor, plan.target, plan.range))));
@@ -2881,7 +2884,7 @@ function selectFreeActivations(snapshot: EncounterSnapshot, actor: CombatantStat
   const chosen: FeatureActivationPlan[] = [];
   for (const action of executables) {
     if (action.kind !== "activate-feature" || action.actionType !== "free" || action.automationSupport !== "full") continue;
-    if (!action.condition || !canPayResource(actor, action) || hasActiveFeatureCondition(actor, action.featureId)) continue;
+    if (!action.condition || !canPayResource(actor, action) || hasActiveFeatureCondition(actor, action.featureId, action.condition?.id)) continue;
     const effects = action.condition.effects ?? [];
     const offense = effects.filter((effect) => effect.kind === "damage-bonus" || effect.kind === "attack-bonus" || effect.kind === "attack-advantage");
     const defense = effects.some((effect) => effect.kind === "damage-adjustment" || effect.kind === "armor-class-bonus"
@@ -2932,8 +2935,9 @@ export function takeSurgedAction(state: EngineState, actor: CombatantState): boo
   return true;
 }
 
-function hasActiveFeatureCondition(actor: CombatantState, featureId: string): boolean {
-  return (actor.conditions ?? []).some((condition) => condition.sourceId === featureId);
+function hasActiveFeatureCondition(actor: CombatantState, featureId: string, conditionId?: string): boolean {
+  // Its own condition, or the same one from another feature (Innate Sorcery bought with sorcery points).
+  return (actor.conditions ?? []).some((condition) => condition.sourceId === featureId || (conditionId !== undefined && condition.id === conditionId));
 }
 
 /** Roughly how much a creature is worth having on the field as a fresh ally: its durability plus its best attack. */
@@ -3715,6 +3719,7 @@ function canPayResource(actor: CombatantState, action: ActionDefinition, executa
   // Metamagic's sorcery points, and Quickened Spell's rule about level 1+ spells this turn.
   if (action.extraCost && (actor.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) return false;
   if (spellTurnProblem(actor, action)) return false;
+  if (onlyWhenEmptyProblem(actor, action)) return false;
   // Lay on Hands: anything left in its pool.
   if (action.kind === "healing" && action.fromPool && (actor.resources?.[action.fromPool.resourceId] ?? 0) <= 0) {
     return false;
@@ -4086,6 +4091,45 @@ function expectedRiderControl(
 }
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
+
+/**
+ * Resource conversions worth making at the start of its turn: a spell slot made (Font of Magic's from sorcery points, a
+ * bonus action; Wild Resurgence's from a Wild Shape use, no action) once it has none left, the highest it can afford;
+ * and a pool it spends that has run dry (Bardic Inspiration, Wild Shape) topped up with its lowest slot, no action,
+ * unless it's conservative.
+ */
+function takeResourceConversions(state: EngineState, actor: CombatantState): void {
+  const executables = getExecutableActions(getDefinition(state.snapshot, actor));
+  const conversions = executables.filter((action): action is Extract<ActionDefinition, { kind: "activate-feature" }> =>
+    action.kind === "activate-feature" && Boolean(action.gains) && action.automationSupport === "full" && canPayResource(actor, action));
+  if (!conversions.length) return;
+  const convert = (action: Extract<ActionDefinition, { kind: "activate-feature" }>, why: string) => {
+    state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${action.name}`, { combatantId: actor.id, actionId: action.id, reasons: [why], slot: action.actionType }));
+    resolveActivateFeatureAction(state, actor.id, action.id);
+  };
+  const slotsLeft = Object.entries(actor.resources ?? {}).some(([id, count]) => spellSlotLevel(id) !== undefined && count > 0);
+  if (!slotsLeft) {
+    const make = conversions
+      .filter((action) => spellSlotLevel(action.gains!.resourceId) !== undefined && (action.actionType === "free" || (action.actionType === "bonus" && canAct(actor, "bonus"))))
+      .sort((a, b) => spellSlotLevel(b.gains!.resourceId)! - spellSlotLevel(a.gains!.resourceId)! || (a.actionType === "free" ? -1 : 1))[0];
+    if (make) convert(make, "no spell slots left");
+  }
+  if (actor.resourceStance === "conservative") return;
+  const refilled = new Set<string>();
+  const fromSlots = conversions
+    .filter((action) => action.actionType === "free" && spellSlotLevel(action.resourceCost?.resourceId) !== undefined && spellSlotLevel(action.gains!.resourceId) === undefined)
+    .sort((a, b) => spellSlotLevel(a.resourceCost?.resourceId)! - spellSlotLevel(b.resourceCost?.resourceId)!);
+  for (const action of fromSlots) {
+    const pool = action.gains!.resourceId;
+    if (refilled.has(pool) || (actor.resources?.[pool] ?? 0) > 0 || !canPayResource(actor, action)) continue;
+    // Only a pool something it can do spends (not the conversions themselves).
+    const spent = executables.some((other) => other.id !== action.id && !(other.kind === "activate-feature" && other.gains)
+      && "resourceCost" in other && other.resourceCost?.resourceId === pool);
+    if (!spent) continue;
+    refilled.add(pool);
+    convert(action, `no ${pool.replace(/[-_]+/g, " ")} left`);
+  }
+}
 
 /** Whether a foe within 60 ft could counter a spell `actor` casts now: a counter it can pay for, with its reaction. */
 function counterThreatNear(snapshot: EncounterSnapshot, actor: CombatantState): boolean {

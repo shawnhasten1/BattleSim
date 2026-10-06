@@ -16,18 +16,18 @@ its gaps, never dropped and never approximated without saying so.
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 14 | 3 | 0 | 6 | 1 |
-| Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
+| Bard (College of Lore) | 17 | 3 | 2 | 1 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
+| Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 10 | 4 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 4 | 0 | 5 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 0 | 1 | 9 | 3 |
-| Feats | 17 | 6 | 2 | 5 | 4 | 0 |
+| Feats | 17 | 7 | 2 | 4 | 4 | 0 |
 | Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -37,7 +37,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
-| `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
@@ -61,6 +60,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
+| `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
@@ -120,7 +120,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 2 | Jack of All Trades | info |  | Ability checks. |
 | 3 | Bard Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
-| 5 | Font of Inspiration | manual | `slot-conversion` | Regaining on a short rest is outside a fight; turning a slot into an inspiration isn't offered. |
+| 5 | Font of Inspiration | full |  | A spell slot (no action) for a Bardic Inspiration use back; the AI does it with its lowest slot once its uses are gone, unless it's conservative. Regaining uses on a short rest is outside a fight. |
 | 7 | Countercharm | manual | `d20-reroll` |  |
 | 10 | Magical Secrets | builder |  | Prepared spells from the Bard, Cleric, Druid and Wizard lists. |
 | 18 | Superior Inspiration | info |  | A fight starts with full pools. |
@@ -175,7 +175,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 2 | Wild Shape | manual | `wild-shape` | Its uses are counted (Land's Aid spends them). Shifting needs the beast forms in the encounter and temporary hit points on shifting: plan Phase 7. |
 | 3 | Druid Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
-| 5 | Wild Resurgence | manual | `slot-conversion` |  |
+| 5 | Wild Resurgence | partial | `slot-conversion` | A slot for a Wild Shape use once none are left, and a Wild Shape use for a 1st-level slot once; the once a turn for the first isn't checked. |
 | 7 | Elemental Fury | full |  | Primal Strike, or Potent Spellcasting: Wisdom on one damage roll of each Druid cantrip. |
 | 15 | Improved Elemental Fury | full |  | Primal Strike's 2d8, or Potent Spellcasting's 300 ft more on a Druid cantrip reaching 10 ft or more. |
 | 18 | Beast Spells | manual | `wild-shape` |  |
@@ -365,12 +365,12 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Innate Sorcery | full |  | +1 to its Sorcerer spells' save DC and advantage on their attack rolls for 10 rounds, twice. |
 | 1 | Spellcasting | builder |  |  |
-| 2 | Font of Magic | manual | `slot-conversion` | The builder sizes the sorcery point pool. |
+| 2 | Font of Magic | full |  | A slot turned into as many sorcery points as its level (no action, the table's points at most), and a slot of each level the Creating Spell Slots table allows made from points (a bonus action). The AI makes a slot, the highest it can afford, once it has none left. |
 | 2, 10, 17 | Metamagic | builder |  | Two Metamagic options at 2nd level, and two more at 10th and 17th (see Metamagic Options). |
 | 3 | Sorcerer Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sorcerous Restoration | info |  | A short rest. |
-| 7 | Sorcery Incarnate | manual | `metamagic` |  |
+| 7 | Sorcery Incarnate | partial | `metamagic` | Innate Sorcery for 2 sorcery points once its uses are gone; two Metamagic options on one spell don't run. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Arcane Apotheosis | manual | `metamagic` |  |
 | — | Metamagic Options | full |  | Each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot: Careful (allies in an area, the fewest hit points first, succeed and take no damage), Distant, Empowered (the lowest dice below average rolled again), Extended (advantage on its Concentration saves, a minute or more doubled), Heightened (an area's foe with the most hit points, or the target, at disadvantage on its saves against it, the repeats too), Quickened (no other level 1+ spell that turn), Subtle (it can't be countered), Transmuted (the best of the six types) and Twinned; Seeking Spell rerolls a missed spell attack. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts subtly when a foe within 60 ft could counter. |
@@ -449,7 +449,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
 | Boon of Fate | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; changing a d20 Test doesn't run. |
 | Boon of Irresistible Offense | epic-boon | manual | `ignore-resistance` | The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
-| Boon of Spell Recall | epic-boon | manual | `slot-conversion` | The builder adds the +1 to a score; keeping a slot doesn't run. |
+| Boon of Spell Recall | epic-boon | full |  | A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score. |
 | Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |
 | Boon of Truesight | epic-boon | builder |  | +1 to a score; truesight is a sense the simulator doesn't use. |
 | Defense | fighting-style | full |  | +1 AC; whether armor is worn isn't checked. |

@@ -55,7 +55,16 @@ export const BARD: ClassDefinition = {
       choices: [choice({ kind: "expertise", id: "expertise", count: 2 }, "bard_expertise")]
     },
     { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "bard_bard-subclass")] },
-    { level: 5, grants: [grant("font-of-inspiration", reference("bard_font-of-inspiration"))] },
+    {
+      level: 5,
+      // A slot (of any level: a copy for each) for a Bardic Inspiration use back, no action.
+      grants: [grant("font-of-inspiration", runs("bard_font-of-inspiration", {
+        grantedActions: [{
+          kind: "activate-feature", id: "font-of-inspiration", name: "Font of Inspiration", actionType: "free", featureId: "",
+          resourceCost: { resourceId: "slot-1", amount: 1 }, gains: { resourceId: "bardic-inspiration", amount: 1, max: 1 }, automationSupport: "full"
+        }]
+      }), { scale: [{ path: "grantedActions.0.gains.max", value: "{mod:cha|min:1}" }] })]
+    },
     { level: 7, grants: [grant("countercharm", reference("bard_countercharm"))] },
     { level: 9, grants: [], choices: [{ kind: "expertise", id: "expertise", count: 2 }] },
     {

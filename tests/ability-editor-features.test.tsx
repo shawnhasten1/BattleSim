@@ -247,6 +247,16 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Careful Weave").effects).toEqual([{ kind: "spare-allies", base: 2, spellSchools: ["evocation"] }]);
   });
 
+  it("A spell slot kept on a lucky roll: how high, and the die", async () => {
+    await blankFeature("Lucky Slots");
+    const card = await addEffect(/^A spell slot kept on a lucky roll/, "A spell slot kept on a lucky roll");
+    await retype(card.getByLabelText("Highest slot level"), "3");
+    await retype(card.getByLabelText("Die size"), "6");
+    await done(card);
+    await addToSheet();
+    expect(named("Lucky Slots").effects).toEqual([{ kind: "slot-recall", maxLevel: 3, die: 6 }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");
@@ -591,6 +601,28 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     const turned = (fighter().reactions ?? []).find((action) => action.name === "Turn Aside");
     expect(turned?.kind === "activate-feature" && turned.damageCut).not.toHaveProperty("redirect");
+  });
+
+  it("an activation that turns one resource into another, only with none of a third left", async () => {
+    store().insertAbilityRecord("def-fighter", "bonusActions", {
+      kind: "activate-feature", id: "", name: "Second Breath", actionType: "bonus", featureId: "second-breath",
+      resourceCost: { resourceId: "second-wind", amount: 1 }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Second Breath" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    const use = inSection("use");
+    await userEvent.click(use.getByRole("checkbox", { name: /^Gives a resource back/ }));
+    // The new control's pool list, waiting on "A new pool…".
+    const gains = use.getAllByRole("combobox").find((box) => (box as HTMLSelectElement).value === "__new");
+    await userEvent.selectOptions(gains!, within(gains!).getByRole("option", { name: /second wind/i }));
+    await userEvent.click(use.getByRole("checkbox", { name: "As many as the spent slot's level" }));
+    await retype(use.getByLabelText("Never more than"), "3");
+    await userEvent.click(use.getByRole("checkbox", { name: /^Only with none of a resource left/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().bonusActions ?? []).find((action) => action.name === "Second Breath")).toMatchObject({
+      gains: { resourceId: "second-wind", amount: "slot-level", max: 3 }, onlyWhenEmpty: ""
+    });
   });
 
   it("a counter by the 2024 rules: the caster's save, no check above the slot", async () => {

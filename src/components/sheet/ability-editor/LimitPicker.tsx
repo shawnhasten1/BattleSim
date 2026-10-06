@@ -188,7 +188,7 @@ function SharedPool({ definition, action, limit, onChange }: {
 
 /** Which pool it spends from, and how much: the creature's pools, the weapon's charges, or a new pool named here. */
 export function PoolPicker({
-  definition, weapon, newPools, value, onChange, startCreating, noAmount
+  definition, weapon, newPools, value, onChange, startCreating, noAmount, gives
 }: {
   definition: CreatureDefinition;
   weapon?: WeaponDefinition;
@@ -198,6 +198,8 @@ export function PoolPicker({
   startCreating?: boolean;
   /** It always spends one (Legendary Resistance), so there's no amount to set. */
   noAmount?: boolean;
+  /** The amount is given back, not spent (Font of Magic's slot). */
+  gives?: boolean;
 }) {
   const options = poolOptions(definition, weapon, newPools.pools);
   const [creating, setCreating] = useState(Boolean(startCreating) || options.length === 0);
@@ -235,8 +237,8 @@ export function PoolPicker({
           </select>
           {value && !creating && !noAmount ? (
             <>
-              <span>spends</span>
-              <NumberField label="Amount spent" value={value.amount} min={1} max={99} onChange={(n) => n !== undefined && onChange({ ...value, amount: n })} />
+              <span>{gives ? "gives" : "spends"}</span>
+              <NumberField label={gives ? "Amount given" : "Amount spent"} value={value.amount} min={1} max={99} onChange={(n) => n !== undefined && onChange({ ...value, amount: n })} />
             </>
           ) : null}
         </span>
