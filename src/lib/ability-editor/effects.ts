@@ -70,6 +70,14 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "spell-half-on-miss", cantripsOnly: true })
   },
   {
+    kind: "spare-allies", label: "Allies spared by its area spells", hint: "Sculpt Spells: 1 + the spell's level of its allies succeed and take no damage", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "spare-allies", base: 1, plusSpellLevel: true, spellSchools: ["evocation"] })
+  },
+  {
+    kind: "metamagic", label: "A Metamagic option", hint: "Quickened, Twinned, Heightened…: a copy of each spell it changes, for sorcery points", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "metamagic", option: "quickened", resourceCost: { resourceId: "sorcery-points", amount: 2 } })
+  },
+  {
     kind: "spell-range", label: "Longer spell range", hint: "Improved Elemental Fury: 300 ft more on a cantrip reaching 10 ft or more", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "spell-range", bonus: 300, minRange: 10, cantripsOnly: true })
   },

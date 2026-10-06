@@ -817,6 +817,15 @@ export type FeatureEffect =
     kind: "on-hit-option";
     option: OnHitOption;
   }
+  | ({
+    /**
+     * Sculpt Spells: its area spells in scope (evocations) spare `base` (+ the spell's level, with `plusSpellLevel`) of
+     * its allies in the area, who succeed on their saves without rolling and take no damage on a success.
+     */
+    kind: "spare-allies";
+    base: number;
+    plusSpellLevel?: boolean;
+  } & FeatureEffectScope)
   | {
     /**
      * A Metamagic option it knows: each spell it can change gets a copy cast with it ("Fireball (Quickened)"), paying
@@ -1871,6 +1880,13 @@ export interface CompiledActionMeta {
   metamagic?: { option: MetamagicOption; name: string };
   /** A second cost paid along with `resourceCost`: Metamagic's sorcery points beside the spell's slot. */
   extraCost?: ResourceCost;
+  /** Empowered Spell: up to this many of its damage dice below average rolled again (the first damage line's). */
+  rerollDamageDice?: number;
+  /**
+   * Careful Spell, Sculpt Spells: this many of the caster's allies in the area (the fewest hit points first) succeed on
+   * their saves without rolling, and take no damage when a success would halve it.
+   */
+  spares?: { count: number };
 }
 
 /** Which item a compiled action uses, and how. Stamped by `getExecutableActions` on every item use. */
@@ -2363,6 +2379,8 @@ export interface ConditionInstance {
     ability: Ability;
     dc: number;
     timing: "turn-start" | "turn-end";
+    /** Heightened Spell: its target's saves against the spell are at disadvantage, the repeats too. */
+    disadvantage?: boolean;
   };
   /**
    * Sustained by a concentrating caster (`sourceCombatantId`). Breaking that

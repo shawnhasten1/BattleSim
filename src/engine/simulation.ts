@@ -2,6 +2,7 @@ import {
   activeFactions,
   armorClassOf,
   canAct,
+  areaSaveChoices,
   damageBonusExpected,
   diceTradeCost,
   spellTurnProblem,
@@ -3022,6 +3023,8 @@ function selectOffensivePlan(
       const tradeValue = diceTradeValue(snapshot, actor, definition, action, target, targetDefinition, tactics);
       // Subtle Spell: worth its point only when a foe near enough could counter the spell.
       const subtleValue = action.metamagic?.option === "subtle" ? (counterThreatNear(snapshot, actor) ? 4 * Math.max(1, castLevelOf(action) ?? 1) : -2) : 0;
+      // Extended Spell: a concentration spell of 2nd level or more is likelier to last (advantage on its saves).
+      const extendedValue = action.metamagic?.option === "extended" ? 2 * Math.max(0, (castLevelOf(action) ?? 0) - 1) : 0;
       const chargeValue = expectedChargeValue(snapshot, actor, definition, action, target, range, canMoveIntoRange);
       const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
@@ -3073,6 +3076,7 @@ function selectOffensivePlan(
         + controlValue
         + tradeValue
         + subtleValue
+        + extendedValue
         + chargeValue * 2
         + preferredBonus
         + killPressure
@@ -3155,15 +3159,17 @@ function areaPlanValue(
     // A self-origin blast never catches its own caster (matches resolution).
     .filter((combatant) => !(fromSelf && combatant.id === actor.id));
   const hostiles = affected.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
+  // Heightened Spell's target and the allies Careful Spell or Sculpt Spells spares, as the engine picks them.
+  const { heightenedId, spared } = areaSaveChoices({ snapshot }, actor, action, affected);
   const hostileValue = hostiles.reduce((sum, combatant) => {
     const combatantDefinition = getDefinition(snapshot, combatant);
     return sum
-      + expectedDamageAgainst(action, definition, actor, combatantDefinition, combatant)
+      + expectedDamageAgainst(action, definition, actor, combatantDefinition, combatant, { saveDisadvantage: combatant.id === heightenedId })
       + expectedRiderControl(action, definition, combatantDefinition, tactics)
       + tagPriorityValue(combatant.tags) * tactics.priorityWeight;
   }, 0);
   const friendlyRisk = affected
-    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor))
+    .filter((combatant) => effectiveFaction(snapshot, combatant) === effectiveFaction(snapshot, actor) && !spared.has(combatant.id))
     .reduce((sum, combatant) => sum + expectedDamageAgainst(action, definition, actor, getDefinition(snapshot, combatant), combatant), 0);
   let score = hostileValue * (1.2 + tactics.areaWeight) - friendlyRisk * 2.5;
   const reasons = [`${hostiles.length} hostile targets`];
@@ -3861,7 +3867,8 @@ function expectedDamageAgainst(
   source: ReturnType<typeof getDefinition>,
   sourceCombatant: CombatantState,
   target: ReturnType<typeof getDefinition>,
-  targetCombatant?: CombatantState
+  targetCombatant?: CombatantState,
+  options: { saveDisadvantage?: boolean } = {}
 ): number {
   const casterLevel = source.character?.level ?? 1;
   // The target's resistances, immunities, vulnerabilities and absorption — with its live conditions and
@@ -3869,7 +3876,7 @@ function expectedDamageAgainst(
   const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
   if (action.kind === "attack") {
     const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set())
-      + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments);
+      + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments) + empoweredGain(action);
     const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total);
     // Potent Cantrip: half the damage on a miss.
@@ -3877,11 +3884,14 @@ function expectedDamageAgainst(
     return perHit * hitChance * beams + onMiss + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
   }
   if (action.kind === "save" || action.kind === "area-save") {
-    const average = averageDamage(action, source, adjustments);
+    const average = averageDamage(action, source, adjustments) + empoweredGain(action);
+    // Heightened Spell: a single target's save is at disadvantage (an area's chosen one, `options.saveDisadvantage`).
+    const heightened = options.saveDisadvantage === true || (action.kind === "save" && action.metamagic?.option === "heightened");
     const failChance = chanceToFailSave(
       resolveSaveDc(action, source),
       target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
-      targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action), targetCombatant)
+      targetHasSaveAdvantage(target, action, action.saveAbility, riderConditionNames(action), targetCombatant),
+      heightened
     );
     const damageEv = average * (failChance + (saveOnSuccessIsHalf(action) ? (1 - failChance) * 0.5 : 0));
     return damageEv + expectedRiderDamage(action, source, target, { failChance });
@@ -3925,10 +3935,29 @@ function riderConditionNames(action: OffensiveAction): ConditionName[] {
   return riders.flatMap((rider) => (rider.kind === "condition" && typeof rider.condition === "string" ? [rider.condition] : []));
 }
 
-function chanceToFailSave(dc: number, saveBonus: number, advantage = false): number {
+function chanceToFailSave(dc: number, saveBonus: number, advantage = false, disadvantage = false): number {
   const successChance = clamp((21 - (dc - saveBonus)) / 20, 0.05, 0.95);
   const failChance = 1 - successChance;
+  if (advantage && disadvantage) return failChance;
+  // Disadvantage (Heightened Spell): it fails unless both dice succeed.
+  if (disadvantage) return 1 - successChance * successChance;
   return advantage ? failChance * failChance : failChance;
+}
+
+/**
+ * Empowered Spell's expected gain: the lowest dice below average rolled again, up to its count, each such die worth a
+ * quarter of its size more on average (a d6 below 3.5 averages 2; rerolled, 3.5).
+ */
+function empoweredGain(action: OffensiveAction): number {
+  const count = action.rerollDamageDice ?? 0;
+  if (!count || !("damage" in action)) return 0;
+  const first = action.damage[0];
+  const match = first ? /^(\d+)d(\d+)/.exec(first.dice) : null;
+  if (!match) return 0;
+  const dice = Number(match[1]);
+  const sides = Number(match[2]);
+  // About half the dice come up below average; the reroll takes the lowest of them.
+  return Math.min(count, Math.ceil(dice / 2)) * (sides + 1) / 4 * 1.5;
 }
 
 /** Chance a rider's gate passes, given the parent action's hit / save odds. */

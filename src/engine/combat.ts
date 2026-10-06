@@ -43,6 +43,7 @@ import type {
   Id,
   ItemUseMeta,
   MultiattackActionDefinition,
+  CompiledActionMeta,
   DamageRedirect,
   MetamagicOption,
   NextAttackChange,
@@ -189,6 +190,8 @@ interface DamageApplicationEntry {
   minimumDie?: number;
   /** Savage Attacker: rolled twice, the higher kept. */
   rollTwice?: boolean;
+  /** Empowered Spell: up to this many dice below average rolled again. */
+  rerollLowDice?: number;
 }
 
 interface FeatureDamageResolution {
@@ -273,12 +276,25 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
   const spellEffects = spellShapingEffects(definition);
+  const sculpting = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => !feature.optional || feature.enabled)
+    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "spare-allies" }> => effect.kind === "spare-allies"));
   return dedupeActionsById([
     ...declared,
     ...synthesizeUtilityActions(declared),
     ...legendaryVariants(definition, declared),
     ...lairVariants(definition)
-  ]).map((action) => (spellEffects.length ? shapedSpell(action, spellEffects) : action)).map(withEffectiveAutomationSupport);
+  ]).map((action) => (spellEffects.length ? shapedSpell(action, spellEffects) : action))
+    .map((action) => (sculpting.length ? sculptedSpell(action, sculpting) : action))
+    .map(withEffectiveAutomationSupport);
+}
+
+/** Sculpt Spells: an area spell in scope spares its allies: as many as the effect says, plus the spell's level. */
+function sculptedSpell(action: ActionDefinition, effects: Array<Extract<FeatureEffect, { kind: "spare-allies" }>>): ActionDefinition {
+  if (action.kind !== "area-save") return action;
+  const level = castLevelOf(action) ?? 0;
+  const count = Math.max(0, ...effects.filter((effect) => spellScopeCovers(effect, action)).map((effect) => effect.base + (effect.plusSpellLevel ? level : 0)));
+  return count > (action.spares?.count ?? 0) ? { ...action, spares: { count } } : action;
 }
 
 type SpellShapingEffect = Extract<FeatureEffect, { kind: "spell-damage-ability" | "spell-half-on-miss" | "spell-range" }>;
@@ -539,7 +555,7 @@ function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinit
   const out: ActionDefinition[] = [];
   for (const effect of effects) {
     for (const spell of spells) {
-      const changed = metamagicVariant(effect.option, spell);
+      const changed = metamagicVariant(effect.option, spell, definition);
       if (!changed) continue;
       const name = METAMAGIC_NAMES[effect.option];
       out.push({
@@ -552,8 +568,27 @@ function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinit
 }
 
 /** A spell as one Metamagic option changes it, or undefined when the option doesn't apply to it. */
-function metamagicVariant(option: MetamagicOption, spell: ActionDefinition): ActionDefinition | undefined {
+function metamagicVariant(option: MetamagicOption, spell: ActionDefinition, definition: CreatureDefinition): ActionDefinition | undefined {
+  // Careful and Empowered: as many as the Charisma modifier (at least one).
+  const charisma = Math.max(1, abilityModifier(definition.abilities.cha));
   switch (option) {
+    case "heightened":
+      return spell.kind === "save" || spell.kind === "area-save" ? spell : undefined;
+    case "careful":
+      return spell.kind === "area-save" && spell.affects !== "hostile" ? { ...spell, spares: { count: Math.max(charisma, spell.spares?.count ?? 0) } } : undefined;
+    case "empowered":
+      return (spell.kind === "attack" || spell.kind === "save" || spell.kind === "area-save") && spell.damage.some((component) => /d\d/.test(component.dice))
+        ? { ...spell, rerollDamageDice: charisma } as ActionDefinition : undefined;
+    case "extended": {
+      // A concentration spell: advantage on its Concentration saves, and a minute or more of it lasts twice as long.
+      if (!("concentration" in spell) || !spell.concentration) return undefined;
+      const longer = <T extends { duration: RiderDuration }>(rider: T): T => (rider.duration.kind === "rounds" && rider.duration.rounds >= 10
+        ? { ...rider, duration: { ...rider.duration, rounds: rider.duration.rounds * 2 } } : rider);
+      const riders = "riders" in spell && spell.riders ? spell.riders.map((rider) => (rider.kind === "condition" ? longer(rider) : rider)) : undefined;
+      const applied = spell.kind === "buff" && spell.appliedCondition.durationRounds && spell.appliedCondition.durationRounds >= 10
+        ? { appliedCondition: { ...spell.appliedCondition, durationRounds: spell.appliedCondition.durationRounds * 2 } } : {};
+      return { ...spell, ...(riders ? { riders } : {}), ...applied } as ActionDefinition;
+    }
     case "quickened":
       return spell.actionType === "action" ? { ...spell, actionType: "bonus" } : undefined;
     case "distant": {
@@ -2410,6 +2445,7 @@ function resolveAttackCore(
       ...(action.bloodiedDamage && attacker.currentHp <= Math.floor(attackerDefinition.maxHp / 2) ? action.bloodiedDamage : action.damage).map((component, index) => ({
         component, critical, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
         extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined,
+        ...(index === 0 && (action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {}),
         ...diceRules
       })),
       ...featureDamage.entries,
@@ -2546,7 +2582,8 @@ export function resolveSaveAction(
 
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const dc = resolveSaveDc(action, attackerDefinition, attacker);
-  const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId);
+  // Heightened Spell: the spell's own target saves at disadvantage.
+  const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId, action.metamagic?.option === "heightened");
 
   // Upcast-granted bonus targets (Hold Person-style): same save/DC/riders, no extra resource spend.
   for (const bonusId of options.bonusTargetIds ?? []) {
@@ -2567,12 +2604,13 @@ function resolveSaveAgainstTarget(
   target: CombatantState,
   scaling: DamageScalingContext,
   dc: number,
-  actionId: Id
+  actionId: Id,
+  heightened = false
 ): SaveResult {
   const targetDefinition = getDefinition(state.snapshot, target);
   const cover = action.saveAbility === "dex" ? coverAgainst(state.snapshot, attacker, target) : null;
   const coverSaveBonus = cover?.acBonus ?? 0;
-  const save = rollSavingThrow(state, target, actionSaveContext(action, dc, coverSaveBonus));
+  const save = rollSavingThrow(state, target, { ...actionSaveContext(action, dc, coverSaveBonus), ...(heightened ? { disadvantage: true } : {}) });
   const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   if (success) recordSavedAgainst(attacker, target, action);
   const onSuccess = resolveOnSuccess(action);
@@ -2582,14 +2620,15 @@ function resolveSaveAgainstTarget(
     ? applyDamageComponents(state, target, action.damage, attackerDefinition, false, {
       halve: outcome.halve,
       casterLevel: scaling.casterLevel,
-      extraDiceOnFirst: scaling.upcastDamageDice
+      extraDiceOnFirst: scaling.upcastDamageDice,
+      ...((action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {})
     }, attacker.id)
     : 0;
 
   if (!(success && onSuccess === "negates")) {
     applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
       actionId, landed: true, saved: success, saveAbility: action.saveAbility, fallbackDc: dc,
-      concentrating: action.concentration, origin: attacker.position
+      concentrating: action.concentration, origin: attacker.position, ...(heightened ? { heightened: true } : {})
     });
   }
 
@@ -2669,27 +2708,34 @@ export function resolveAreaSaveAction(
   const blastRoll = action.damage.length
     ? rollAreaDamage(state, areaDamageTypesChosen(state, attacker, action.damage, affected), attackerDefinition, {
       casterLevel: scaling.casterLevel,
-      extraDiceOnFirst: scaling.upcastDamageDice
+      extraDiceOnFirst: scaling.upcastDamageDice,
+      ...(action.rerollDamageDice ? { rerollLowDice: action.rerollDamageDice } : {})
     })
     : [];
+  const { heightenedId, spared } = areaSaveChoices(state, attacker, action, affected);
 
   const targets = affected.map((target) => {
     const targetDefinition = getDefinition(state.snapshot, target);
     const cover = areaCoverFor(target);
     const coverSaveBonus = action.saveAbility === "dex" ? (cover?.dexSaveBonus ?? 0) : 0;
-    const save = rollSavingThrow(state, target, actionSaveContext(action, dc, coverSaveBonus));
+    const heightened = target.id === heightenedId;
+    // Careful Spell, Sculpt Spells: a spared ally succeeds without rolling.
+    const save = spared.has(target.id)
+      ? { roll: { expression: "spared", rolls: [], modifier: 0, total: 0 }, success: true, featureBonus: { total: 0, sources: [] as string[] }, featureAdvantage: { applied: false, sources: [] as string[] } }
+      : rollSavingThrow(state, target, { ...actionSaveContext(action, dc, coverSaveBonus), ...(heightened ? { disadvantage: true } : {}) });
     const { roll: saveRoll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
     if (success) recordSavedAgainst(attacker, target, action);
     const outcome = saveDamageOutcome(state, target, action.saveAbility, onSuccess, success);
-    const dealsDamage = outcome.dealsDamage;
+    // A spared creature takes nothing where a success would halve it.
+    const dealsDamage = outcome.dealsDamage && !spared.has(target.id);
     const damageApplied = dealsDamage && blastRoll.length
       ? applyRolledAreaDamage(state, target, blastRoll, outcome.halve, attacker.id)
       : 0;
 
-    if (!(success && onSuccess === "negates")) {
+    if (!(success && onSuccess === "negates") && !spared.has(target.id)) {
       applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
         actionId, landed: true, saved: success, saveAbility: action.saveAbility, fallbackDc: dc,
-        concentrating: action.concentration, origin
+        concentrating: action.concentration, origin, ...(heightened ? { heightened: true } : {})
       });
     }
 
@@ -2705,7 +2751,9 @@ export function resolveAreaSaveAction(
       coverSaveBonus,
       appliedSaveEffects: [...featureSaveBonus.sources, ...featureSaveAdvantage.sources],
       success,
-      damageApplied
+      damageApplied,
+      ...(spared.has(target.id) ? { spared: true } : {}),
+      ...(heightened ? { heightened: true } : {})
     }));
 
     return { targetId: target.id, success, damageApplied };
@@ -2722,6 +2770,20 @@ export function resolveAreaSaveAction(
     createZone(state, attacker, action, origin, dc);
   }
   return { targets };
+}
+
+/**
+ * Heightened Spell's target in an area (the foe with the most hit points left) and the allies Careful Spell or Sculpt
+ * Spells spares (the fewest hit points first). Shared with the AI's weighing of the area.
+ */
+export function areaSaveChoices(state: { snapshot: EncounterSnapshot }, caster: CombatantState, action: AreaSaveActionDefinition & CompiledActionMeta, caught: CombatantState[]): { heightenedId?: Id; spared: Set<Id> } {
+  const faction = effectiveFaction(state.snapshot, caster);
+  const foes = caught.filter((target) => effectiveFaction(state.snapshot, target) !== faction);
+  const allies = caught.filter((target) => effectiveFaction(state.snapshot, target) === faction);
+  const heightenedId = action.metamagic?.option === "heightened"
+    ? [...foes].sort((a, b) => b.currentHp - a.currentHp || a.id.localeCompare(b.id))[0]?.id : undefined;
+  const spared = new Set([...allies].sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id)).slice(0, action.spares?.count ?? 0).map((target) => target.id));
+  return { heightenedId, spared };
 }
 
 /**
@@ -4964,7 +5026,7 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id; triggerDamageType?: DamageType } = {},
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id; triggerDamageType?: DamageType; rerollLowDice?: number } = {},
   sourceId?: Id
 ): number {
   return applyDamageEntries(
@@ -4976,6 +5038,7 @@ function applyDamageComponents(
       halve: options.halve,
       casterLevel: options.casterLevel,
       extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined,
+      ...(index === 0 && options.rerollLowDice ? { rerollLowDice: options.rerollLowDice } : {}),
       ...(options.triggerDamageType ? { triggerDamageType: options.triggerDamageType } : {})
     })),
     source,
@@ -5014,6 +5077,7 @@ function applyDamageEntries(
       const again = rollOnce();
       if (again.total > roll.total) roll = again;
     }
+    if (entry.rerollLowDice) roll = rerollLowDice(roll, entry.rerollLowDice, state.rng);
     const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
     const damageType = component.damageTypeOptions?.length
       ? bestDamageTypeOption(component.damageTypeOptions, damageAdjustmentsFor(targetDefinition, target), origin)
@@ -5063,6 +5127,21 @@ function applyDamageEntries(
 }
 
 /** A roll with every die below `minimum` counted as `minimum` (Great Weapon Fighting's 1s and 2s as 3s). */
+/** Empowered Spell: up to `count` of a roll's dice below their average rolled again, the lowest first; the new ones stand. */
+function rerollLowDice(roll: DiceRollResult, count: number, rng: RandomSource): DiceRollResult {
+  const low = roll.rolls.map((die, index) => ({ die, index }))
+    .filter(({ die }) => die.sign > 0 && die.value < (die.sides + 1) / 2)
+    .sort((a, b) => a.die.value - b.die.value || a.index - b.index)
+    .slice(0, Math.max(0, count));
+  if (!low.length) return roll;
+  const rolls = [...roll.rolls];
+  for (const { index } of low) rolls[index] = { ...rolls[index]!, value: rng.nextInt(1, rolls[index]!.sides) };
+  return {
+    ...roll, rolls, expression: `${roll.expression} (${low.length} rerolled)`,
+    total: rolls.reduce((sum, die) => sum + die.sign * die.value, 0) + roll.modifier
+  };
+}
+
 function withMinimumDie(roll: DiceRollResult, minimum: number): DiceRollResult {
   const rolls = roll.rolls.map((die) => (die.sign > 0 && die.value < minimum && die.sides >= minimum ? { ...die, value: minimum } : die));
   return { ...roll, rolls, total: rolls.reduce((sum, die) => sum + die.sign * die.value, 0) + roll.modifier };
@@ -5252,13 +5331,15 @@ function rollAreaDamage(
   state: EngineState,
   damage: DamageComponent[],
   source: CreatureDefinition,
-  options: { casterLevel?: number; extraDiceOnFirst?: string } = {}
+  options: { casterLevel?: number; extraDiceOnFirst?: string; rerollLowDice?: number } = {}
 ): RolledDamageComponent[] {
   return damage.map((component, index) => {
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: options.casterLevel });
     const dice = index === 0 && options.extraDiceOnFirst ? `${scaledBase}+${options.extraDiceOnFirst}` : scaledBase;
     const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
-    const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
+    const rolled = rollDice(withBonus(dice, abilityBonus), state.rng);
+    // Empowered Spell: the blast's low dice rolled again, once for everyone it hits.
+    const roll = index === 0 && options.rerollLowDice ? rerollLowDice(rolled, options.rerollLowDice, state.rng) : rolled;
     return {
       damageType: resolveDamageTypeReference(component.damageType, undefined),
       roll,
@@ -6725,6 +6806,8 @@ interface RiderContext {
   origin?: Point;
   /** The attack's own damage type: what a rider's "same as the attack" damage is (Brutal Strike's extra die). */
   triggerDamageType?: DamageType;
+  /** Heightened Spell's target: its repeated saves against the spell are at disadvantage too. */
+  heightened?: boolean;
 }
 
 interface RiderOutcome {
@@ -7035,7 +7118,7 @@ function applyConditionRider(
     ...(rider.nextSave ? { nextSave: rider.nextSave } : {}),
     ...(rider.endsOnDamage ? { endsOnDamage: true } : {}),
     repeatSave: expiry.repeatTiming && repeatAbility
-      ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming }
+      ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming, ...(ctx.heightened ? { disadvantage: true } : {}) }
       : undefined,
     concentration: expiry.concentration || ctx.concentrating || undefined
   };
@@ -7240,7 +7323,7 @@ export function runRepeatedSaves(state: EngineState, combatantId: Id, timing: "t
       ? state.snapshot.combatants.find((candidate) => candidate.id === condition.sourceCombatantId)
       : undefined;
     const save = rollSavingThrow(state, combatant, {
-      ability: repeat.ability, dc: repeat.dc, kind: "repeat",
+      ability: repeat.ability, dc: repeat.dc, kind: "repeat", ...(repeat.disadvantage ? { disadvantage: true } : {}),
       sourceAction: conditionSource && condition.sourceId
         ? saveSourceOf(findActionDefinition(getDefinition(state.snapshot, conditionSource), condition.sourceId))
         : undefined,
@@ -7386,6 +7469,9 @@ export interface SaveContext {
   expectedDamage?: number;
   /** What forced the save ("Fireball"), for a prompt or the roll strip. */
   label?: string;
+  /** Heightened Spell: disadvantage on it. Extended Spell: advantage on a Concentration save for it. */
+  disadvantage?: boolean;
+  advantage?: boolean;
 }
 
 export interface SavingThrowResult {
@@ -7648,8 +7734,8 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
     }
   }
   let roll = rollD20WithBonus(state.rng, bonus, {
-    advantage: featureAdvantage.applied || nextSave.some((condition) => condition.nextSave!.mode === "advantage"),
-    disadvantage: nextSave.some((condition) => condition.nextSave!.mode === "disadvantage")
+    advantage: featureAdvantage.applied || ctx.advantage === true || nextSave.some((condition) => condition.nextSave!.mode === "advantage"),
+    disadvantage: ctx.disadvantage === true || nextSave.some((condition) => condition.nextSave!.mode === "disadvantage")
   });
   // Indomitable Might: a Strength save totalling less than the score uses the score.
   const floor = featureSources(definition, target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "save-floor" && effect.ability === ctx.ability))
@@ -8011,6 +8097,15 @@ export function proficiencyForChallengeRating(cr: number): number {
   return 9;
 }
 
+/** Extended Spell: what `caster` concentrates on (a condition it keeps up, or a zone) was cast with it. */
+function concentratingOnExtended(state: EngineState, caster: CombatantState): boolean {
+  const definition = getDefinition(state.snapshot, caster);
+  const extended = (actionId: Id | undefined) => Boolean(actionId) && findActionDefinition(definition, actionId!)?.metamagic?.option === "extended";
+  return state.snapshot.combatants.some((combatant) => (combatant.conditions ?? [])
+    .some((condition) => condition.concentration && condition.sourceCombatantId === caster.id && extended(condition.sourceId)))
+    || (state.snapshot.activeZones ?? []).some((zone) => zone.sourceCombatantId === caster.id && extended(zone.sourceActionId));
+}
+
 function resolveConcentration(state: EngineState, combatant: CombatantState, damageTaken: number): void {
   // Relentless Hunter: taking damage doesn't threaten its Hunter's Mark.
   if (!combatant.concentration || combatant.concentration.keptOnDamage) {
@@ -8018,7 +8113,7 @@ function resolveConcentration(state: EngineState, combatant: CombatantState, dam
   }
   const definition = getDefinition(state.snapshot, combatant);
   const dc = Math.max(10, Math.floor(damageTaken / 2));
-  const save = rollSavingThrow(state, combatant, { ability: "con", dc, kind: "concentration" });
+  const save = rollSavingThrow(state, combatant, { ability: "con", dc, kind: "concentration", ...(concentratingOnExtended(state, combatant) ? { advantage: true } : {}) });
   const { roll, success, featureBonus: featureSaveBonus, featureAdvantage: featureSaveAdvantage } = save;
   if (!success) {
     breakConcentration(state, combatant.id);

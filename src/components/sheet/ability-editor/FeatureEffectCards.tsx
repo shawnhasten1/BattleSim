@@ -7,6 +7,7 @@ import {
   abilityModifier,
   getExecutableActions,
   isUpcastVariant,
+  METAMAGIC_NAMES,
   proficiencyFromDefinition,
   resolveNumericFormula,
   type Ability,
@@ -18,6 +19,7 @@ import {
   type FeatureEffect,
   type FeatureEffectConditionApplication,
   type FeatureEffectSaveGate,
+  type MetamagicOption,
   type NumericFormula,
   type OnHitOption,
   type WeaponDefinition
@@ -920,6 +922,29 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           </span>
           <SpellScope effect={effect} set={set} />
           <TypeChips label="Only spells dealing" value={(effect.damageTypes ?? []) as DamageType[]} onChange={(types) => set(opt(effect, "damageTypes", types.length ? types : undefined))} />
+        </>
+      );
+    case "metamagic":
+      return (
+        <>
+          <span className={styles.inline}>
+            <select aria-label="Metamagic option" value={effect.option} onChange={(e) => set({ ...effect, option: e.target.value as MetamagicOption })}>
+              {(Object.keys(METAMAGIC_NAMES) as MetamagicOption[]).map((option) => <option key={option} value={option}>{`${METAMAGIC_NAMES[option]} Spell`}</option>)}
+            </select>
+          </span>
+          <PoolPicker definition={definition} weapon={weapon} newPools={newPools} startCreating={!effect.resourceCost.resourceId}
+            value={effect.resourceCost.resourceId ? effect.resourceCost : undefined} onChange={(resourceCost) => set({ ...effect, resourceCost })} />
+        </>
+      );
+    case "spare-allies":
+      return (
+        <>
+          <span className={styles.inline}>
+            <span>Spares</span>
+            <NumberField label="Allies it spares" value={effect.base} min={0} max={20} onChange={(n) => n !== undefined && set({ ...effect, base: n })} />
+            <Check label="plus the spell's level" checked={effect.plusSpellLevel === true} onChange={(on) => set(opt(effect, "plusSpellLevel", on ? true : undefined))} />
+          </span>
+          <SpellScope effect={effect} set={set} />
         </>
       );
     case "spell-half-on-miss":

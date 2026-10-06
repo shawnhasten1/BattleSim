@@ -228,6 +228,25 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(getExecutableActions(fighter()).some((action) => action.actionType === "reaction" && action.name.endsWith("(Riposte)"))).toBe(true);
   });
 
+  it("A Metamagic option: which, and what it spends", async () => {
+    await blankFeature("Quick Casting");
+    const card = await addEffect(/^A Metamagic option/, "A Metamagic option");
+    await userEvent.selectOptions(card.getByLabelText("Metamagic option"), "heightened");
+    await done(card);
+    await addToSheet();
+    expect(named("Quick Casting").effects).toEqual([{ kind: "metamagic", option: "heightened", resourceCost: { resourceId: "sorcery-points", amount: 2 } }]);
+  });
+
+  it("Allies spared by its area spells: how many, and which spells", async () => {
+    await blankFeature("Careful Weave");
+    const card = await addEffect(/^Allies spared by its area spells/, "Allies spared by its area spells");
+    await retype(card.getByLabelText("Allies it spares"), "2");
+    await userEvent.click(card.getByRole("checkbox", { name: "plus the spell's level" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Careful Weave").effects).toEqual([{ kind: "spare-allies", base: 2, spellSchools: ["evocation"] }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

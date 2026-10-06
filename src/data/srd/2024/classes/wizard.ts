@@ -107,7 +107,11 @@ export const EVOKER: SubclassDefinition = {
       }, "wizard_evoker_evocation-savant")]
     },
     savant(5),
-    { level: 6, grants: [grant("sculpt-spells", reference("wizard_evoker_sculpt-spells"))] },
+    {
+      level: 6,
+      // Its evocations spare 1 + the spell's level of its allies in the area.
+      grants: [grant("sculpt-spells", runs("wizard_evoker_sculpt-spells", { effects: [{ kind: "spare-allies", base: 1, plusSpellLevel: true, spellSchools: ["evocation"] }] }))]
+    },
     savant(7),
     savant(9),
     {

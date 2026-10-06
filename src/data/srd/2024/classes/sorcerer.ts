@@ -25,7 +25,11 @@ const SORCERY_POINTS = (amount: number) => ({ resourceId: "sorcery-points", amou
 
 /** What each Metamagic option does in a fight, for the ones the engine runs (the rest stay the SRD's text). */
 const METAMAGIC_EFFECTS: Record<string, FeatureEffect> = {
+  "careful-spell": { kind: "metamagic", option: "careful", resourceCost: SORCERY_POINTS(1) },
   "distant-spell": { kind: "metamagic", option: "distant", resourceCost: SORCERY_POINTS(1) },
+  "empowered-spell": { kind: "metamagic", option: "empowered", resourceCost: SORCERY_POINTS(1) },
+  "extended-spell": { kind: "metamagic", option: "extended", resourceCost: SORCERY_POINTS(1) },
+  "heightened-spell": { kind: "metamagic", option: "heightened", resourceCost: SORCERY_POINTS(2) },
   "quickened-spell": { kind: "metamagic", option: "quickened", resourceCost: SORCERY_POINTS(2) },
   // A missed spell attack rolled again.
   "seeking-spell": { kind: "d20-change", rolls: ["attack"], change: "reroll", resourceCost: SORCERY_POINTS(1), spellAttacksOnly: true },

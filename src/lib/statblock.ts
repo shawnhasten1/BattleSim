@@ -732,6 +732,10 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "spare-allies": {
+      const count = `${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""}`;
+      return `When ${who.subject} casts ${spellScopeText(effect, who, true)} that forces saving throws in an area, ${count} of ${who.possessive} allies in its area succeed on their saves without rolling, and take no damage where a success would halve it.`;
+    }
     case "reaction-attack": {
       const from = effect.trigger.withinFt !== undefined ? ` by a creature within ${effect.trigger.withinFt} feet of ${who.object}` : "";
       const types = joinList(effect.attackTypes ?? ["melee"], "or");
@@ -865,6 +869,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
+    case "spare-allies": return `spares ${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""} allies in the areas of ${spellScopeText(effect, IT)}`;
   }
 }
 

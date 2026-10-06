@@ -39,8 +39,7 @@ export const GAPS = {
   flee: "A creature that must spend its turns moving away from its source (Turn Undead)",
   "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
   "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
-  "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
-  metamagic: "Careful, Empowered, Extended and Heightened Spell, and two options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis)",
+  metamagic: "Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis)",
   "slot-conversion": "Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
   "size-change": "Changing size (Large Form)",
@@ -326,7 +325,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "sorcerer_sorcery-incarnate": manual(["metamagic"]),
   "sorcerer_epic-boon": EPIC_BOON,
   "sorcerer_arcane-apotheosis": manual(["metamagic"]),
-  "sorcerer_metamagic-options": partial(["metamagic"], "Distant, Quickened (no other level 1+ spell that turn), Seeking, Subtle (it can't be countered), Transmuted (the best of the six types against each target) and Twinned run: each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot. Careful, Empowered, Extended and Heightened don't yet. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts it subtly when a foe within 60 ft could counter it."),
+  "sorcerer_metamagic-options": full("Each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot: Careful (allies in an area, the fewest hit points first, succeed and take no damage), Distant, Empowered (the lowest dice below average rolled again), Extended (advantage on its Concentration saves, a minute or more doubled), Heightened (an area's foe with the most hit points, or the target, at disadvantage on its saves against it, the repeats too), Quickened (no other level 1+ spell that turn), Subtle (it can't be countered), Transmuted (the best of the six types) and Twinned; Seeking Spell rerolls a missed spell attack. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts subtly when a foe within 60 ft could counter."),
   "sorcerer_sorcerer-spell-list": SPELL_LIST,
 
   /* Draconic Sorcery */
@@ -372,7 +371,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Evoker */
   "wizard_evoker_evocation-savant": builder(),
   "wizard_evoker_potent-cantrip": full("Half a cantrip's damage on a miss or a made save, and nothing else."),
-  "wizard_evoker_sculpt-spells": manual(["spare-allies"]),
+  "wizard_evoker_sculpt-spells": full("1 + the spell's level of its allies in an evocation's area (the fewest hit points first) succeed on their saves without rolling and take no damage where a success would halve it; the AI's area weighing leaves them out of its friendly fire."),
   "wizard_evoker_empowered-evocation": full("Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one."),
   "wizard_evoker_overchannel": manual(["max-damage"])
 };

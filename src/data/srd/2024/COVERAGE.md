@@ -24,9 +24,9 @@ its gaps, never dropped and never approximated without saying so.
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 3 | 1 | 5 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 4 | 0 | 5 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
-| Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
+| Wizard (Evoker) | 16 | 3 | 0 | 1 | 9 | 3 |
 | Feats | 17 | 6 | 2 | 5 | 4 | 0 |
 | Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
 
@@ -61,8 +61,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
-| `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
-| `metamagic` | Careful, Empowered, Extended and Heightened Spell, and two options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
+| `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
@@ -374,7 +373,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 7 | Sorcery Incarnate | manual | `metamagic` |  |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Arcane Apotheosis | manual | `metamagic` |  |
-| — | Metamagic Options | partial | `metamagic` | Distant, Quickened (no other level 1+ spell that turn), Seeking, Subtle (it can't be countered), Transmuted (the best of the six types against each target) and Twinned run: each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot. Careful, Empowered, Extended and Heightened don't yet. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts it subtly when a foe within 60 ft could counter it. |
+| — | Metamagic Options | full |  | Each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot: Careful (allies in an area, the fewest hit points first, succeed and take no damage), Distant, Empowered (the lowest dice below average rolled again), Extended (advantage on its Concentration saves, a minute or more doubled), Heightened (an area's foe with the most hit points, or the target, at disadvantage on its saves against it, the repeats too), Quickened (no other level 1+ spell that turn), Subtle (it can't be countered), Transmuted (the best of the six types) and Twinned; Seeking Spell rerolls a missed spell attack. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts subtly when a foe within 60 ft could counter. |
 | — | Sorcerer Spell List | builder |  | Read from each spell's own class list. |
 
 ### Draconic Sorcery (Sorcerer subclass)
@@ -435,7 +434,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Evocation Savant | builder |  |  |
 | 3 | Potent Cantrip | full |  | Half a cantrip's damage on a miss or a made save, and nothing else. |
-| 6 | Sculpt Spells | manual | `spare-allies` |  |
+| 6 | Sculpt Spells | full |  | 1 + the spell's level of its allies in an evocation's area (the fewest hit points first) succeed on their saves without rolling and take no damage where a success would halve it; the AI's area weighing leaves them out of its friendly fire. |
 | 10 | Empowered Evocation | full |  | Intelligence on one damage roll of each Wizard evocation spell; not on a spell of several beams (Magic Missile, Scorching Ray), where it would land on every one. |
 | 14 | Overchannel | manual | `max-damage` |  |
 

@@ -113,10 +113,10 @@ describe("the Wizard (Evoker)", () => {
     for (const entry of signature) expect(wizard.resources?.[entry.resourceCost!.resourceId]).toBe(1);
   });
 
-  it("runs Potent Cantrip and Empowered Evocation, and puts the Evoker's other features on as reference", () => {
+  it("runs Potent Cantrip, Empowered Evocation and Sculpt Spells (7w), and puts Overchannel on as reference", () => {
     const wizard = built("wizard", 14);
-    for (const id of ["evoker-potent-cantrip", "evoker-empowered-evocation"]) expect(feature(wizard, id).automationSupport).toBe("full");
-    for (const id of ["evoker-sculpt-spells", "evoker-overchannel"]) expect(feature(wizard, id).automationSupport).toBe("manual-only");
+    for (const id of ["evoker-potent-cantrip", "evoker-empowered-evocation", "evoker-sculpt-spells"]) expect(feature(wizard, id).automationSupport).toBe("full");
+    expect(feature(wizard, "evoker-overchannel").automationSupport).toBe("manual-only");
   });
 });
 
@@ -147,8 +147,8 @@ describe("the Sorcerer (Draconic Sorcery)", () => {
     const options = sorcerer.features!.filter((entry) => entry.name.startsWith("Metamagic: "));
     expect(options).toHaveLength(6);
     expect(new Set(options.map((entry) => entry.name)).size).toBe(6);
-    // Phase 7v: six of them run; Careful, Empowered, Extended and Heightened are still the SRD's text.
-    for (const option of options) expect(option.automationSupport, option.name).toBe(/Careful|Empowered|Extended|Heightened/.test(option.name) ? "manual-only" : "full");
+    // Phases 7v and 7w: every option runs.
+    for (const option of options) expect(option.automationSupport, option.name).toBe("full");
   });
 
   it("Draconic Resilience: AC 10 + Dex + Cha unarmored, and a hit point per sorcerer level", () => {

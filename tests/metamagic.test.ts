@@ -5,6 +5,7 @@ import {
   getExecutableActions,
   resolveAreaSaveAction,
   resolveAttack,
+  resolveSaveAction,
   sampleEncounter,
   takeAutomatedTurn,
   type ActionDefinition,
@@ -208,5 +209,94 @@ describe("the AI and Subtle Spell", () => {
 
   it("keeps its points without one", () => {
     expect(cast(false).some((message) => message.includes("(Subtle)"))).toBe(false);
+  });
+});
+
+/* ─── Phase 7w: Heightened, Careful, Empowered, Extended, and Sculpt Spells ─────────────────────────────────────── */
+
+const saves = (state: ReturnType<typeof createEngineState>) => state.log.filter((entry) => entry.type === "SaveRolled");
+
+describe("Heightened Spell", () => {
+  it("a single target saves at disadvantage, its repeats too", () => {
+    const definition = sorcerer(["heightened-spell"]);
+    const state = createEngineState(scene(definition));
+    state.rng = d20s(19, 2);
+    resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", named(definition, "Hold Person (Heightened)").id);
+    expect((saves(state)[0]?.data?.saveRoll as { rolls: unknown[] }).rolls).toHaveLength(2);
+    const held = state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.conditions?.find((condition) => condition.name === "paralyzed");
+    expect(held?.repeatSave?.disadvantage).toBe(true);
+  });
+
+  it("in an area, the foe with the most hit points", () => {
+    const definition = sorcerer(["heightened-spell"]);
+    const snapshot = scene(definition);
+    snapshot.combatants.find((token) => token.id === "enemy-goblin-2")!.currentHp = 150;
+    const state = createEngineState(snapshot);
+    state.rng = d20s(1, 1, 1, 1);
+    resolveAreaSaveAction(state, "pc-fighter", { x: 9, y: 3 }, named(definition, "Fireball (Heightened)").id);
+    const heightened = saves(state).filter((entry) => entry.data?.heightened).map((entry) => entry.data?.targetId);
+    expect(heightened).toEqual(["enemy-goblin-1"]);
+  });
+});
+
+describe("Careful Spell and Sculpt Spells", () => {
+  it("Careful: allies in the area (Charisma-modifier many) succeed and take nothing", () => {
+    const definition = sorcerer(["careful-spell"]);
+    const snapshot = scene(definition);
+    snapshot.combatants.find((token) => token.id === "pc-archer")!.position = { x: 9, y: 4 };
+    const state = createEngineState(snapshot);
+    const archerHp = state.snapshot.combatants.find((token) => token.id === "pc-archer")!.currentHp;
+    state.rng = d20s(1, 1, 1, 1);
+    resolveAreaSaveAction(state, "pc-fighter", { x: 9, y: 3 }, named(definition, "Fireball (Careful)").id);
+    expect(saves(state).find((entry) => entry.data?.targetId === "pc-archer")?.data).toMatchObject({ spared: true, success: true, damageApplied: 0 });
+    expect(state.snapshot.combatants.find((token) => token.id === "pc-archer")!.currentHp).toBe(archerHp);
+    expect(saves(state).find((entry) => entry.data?.targetId === "enemy-goblin-1")?.data?.spared).toBeUndefined();
+  });
+
+  it("Sculpt Spells: an evoker's evocations spare 1 + the spell's level", () => {
+    const evoker = actor(withSuggestions(withChoice(quickBuild(sources, { classId: "srd:class:wizard", level: 6 }), { kind: "level", index: 2 }, ["subclass"], "srd:subclass:evoker"), sources));
+    const fireball = getExecutableActions({ ...evoker, spells: [...(evoker.spells ?? []), structuredClone(findSrd2024Spell("srd:spell:fireball-2024")!) as SpellDefinition] })
+      .find((entry) => entry.name === "Fireball" && entry.kind === "area-save");
+    expect(fireball?.kind === "area-save" && fireball.spares).toEqual({ count: 4 });
+  });
+
+  it("the AI throws a careful Fireball over an ally beside its foes", () => {
+    // Only Fireball: no line or cone that misses the ally.
+    const full = sorcerer(["careful-spell"]);
+    const definition = { ...full, spells: (full.spells ?? []).filter((known) => known.name === "Fireball") };
+    const snapshot = scene(definition);
+    snapshot.combatants.find((token) => token.id === "pc-archer")!.position = { x: 9, y: 4 };
+    const state = createEngineState(snapshot);
+    state.rng = d20s(1, 1, 1, 1);
+    takeAutomatedTurn(state, state.snapshot.combatants.find((token) => token.id === "pc-fighter")!);
+    const cast = state.log.filter((entry) => entry.type === "ActionDeclared").map((entry) => entry.message);
+    expect(cast.some((message) => message.includes("Fireball (Careful)"))).toBe(true);
+  });
+});
+
+describe("Empowered and Extended Spell", () => {
+  it("Empowered: the lowest damage dice rolled again", () => {
+    const definition = sorcerer(["empowered-spell"]);
+    const state = createEngineState(scene(definition));
+    state.rng = d20s(1, 1);
+    resolveAreaSaveAction(state, "pc-fighter", { x: 9, y: 3 }, named(definition, "Fireball (Empowered)").id);
+    const hit = state.log.find((entry) => entry.type === "DamageApplied");
+    const charisma = Math.max(1, Math.floor((definition.abilities.cha - 10) / 2));
+    expect((hit?.data?.components as Array<{ roll: { expression: string } }>)[0]?.roll.expression).toContain(`(${charisma} rerolled)`);
+  });
+
+  it("Extended: advantage on the Concentration saves for it", () => {
+    const definition = sorcerer(["extended-spell"]);
+    const state = createEngineState(scene(definition));
+    state.rng = d20s(1);
+    resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", named(definition, "Hold Person (Extended)").id);
+    const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    // No Shield: its reaction is spent.
+    me.actionEconomy = { action: false, bonus: true, reaction: false };
+    state.rng = d20s(19, 3);
+    resolveAttack(state, "enemy-goblin-2", "pc-fighter", getExecutableActions(state.snapshot.definitions.find((entry) => entry.id === "def-goblin")!).find((entry) => entry.kind === "attack" && entry.attackType === "ranged")!.id);
+    const check = state.log.find((entry) => entry.type === "ConcentrationChecked");
+    expect((check?.data?.roll as { rolls: unknown[] })?.rolls).toHaveLength(2);
+    expect(me.concentration).toBeDefined();
   });
 });
