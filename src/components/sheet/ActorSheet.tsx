@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { getDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -89,6 +89,15 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const [openFirst, setOpenFirst] = useState<AbilityRef | null>(null);
   // A creature just made from this token: Stats focuses its name, selected, ready to rename.
   const [focusName, setFocusName] = useState(false);
+  // The Codex sent the DM to Standard's Abilities to edit something (plan D8): Standard shows until Back, which returns
+  // to the Codex where it was scrolled to.
+  const [visiting, setVisiting] = useState(false);
+  const codexScroll = useRef<HTMLDivElement | null>(null);
+  const codexScrollTop = useRef(0);
+  const showingCodex = sheet.style === "codex" && !visiting;
+  useLayoutEffect(() => {
+    if (showingCodex && codexScroll.current) codexScroll.current.scrollTop = codexScrollTop.current;
+  }, [showingCodex]);
 
   // The open editor's guard, and whether it has unsaved changes (state, so the window re-renders).
   const guardRef = useRef<EditorGuard | null>(null);
@@ -159,7 +168,26 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   /** Standard or the Codex, remembered for this kind of actor (D5). Asks first if an ability has unsaved changes. */
   function switchStyle(next: SheetStyle) {
-    attempt(() => setWindowStyle(sheet.id, next, kind));
+    if (visiting && next === "codex") {
+      backToCodex();
+      return;
+    }
+    attempt(() => {
+      setVisiting(false);
+      setWindowStyle(sheet.id, next, kind);
+    });
+  }
+
+  /** From the Codex: Standard's Abilities tab, in this window, with `ref` open in the editor. */
+  function editFromCodex(ref: AbilityRef) {
+    codexScrollTop.current = codexScroll.current?.scrollTop ?? 0;
+    setOpenFirst(ref);
+    setVisiting(true);
+    setTab("abilities");
+  }
+
+  function backToCodex() {
+    attempt(() => setVisiting(false));
   }
 
   /** Show `id`'s own values, and select it on the map. */
@@ -246,7 +274,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   const controls = (
     <>
-      <StyleSwitch style={sheet.style} onChange={switchStyle} />
+      <StyleSwitch style={showingCodex ? "codex" : "standard"} onChange={switchStyle} />
       <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
       <SheetMenu
         combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
@@ -289,12 +317,15 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const body = holder ? createPortal(
     // Menus and tooltips inside open in the sheet's own document: the popup's while it's popped out.
     <OwnerDocumentContext.Provider value={popup ? popup.document : inheritedDocument}>
-      {sheet.style === "codex" ? (
+      {showingCodex ? (
         <>
           {prompt ? <div className={styles.frameHead}>{prompt}</div> : null}
-          <div className={styles.frameScroll}>
+          <div className={styles.frameScroll} ref={codexScroll}>
             <Suspense fallback={<p className={styles.loading}>Opening the Codex…</p>}>
-              <CodexSheet combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} palette={palette} />
+              <CodexSheet
+                combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} palette={palette}
+                onEditAbility={editFromCodex}
+              />
             </Suspense>
             {toastView}
           </div>
@@ -302,6 +333,12 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
       ) : (
         <>
           <div className={styles.frameHead}>
+            {visiting ? (
+              <div className={styles.backBar}>
+                <button type="button" onClick={backToCodex}>← Back to the Codex</button>
+                <span>Editing on Standard. The Codex keeps its place.</span>
+              </div>
+            ) : null}
             <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
             <ScopedTabs
               tab={tab} onSelect={(next) => attempt(() => setTab(next))}

@@ -551,3 +551,29 @@ Chromium-only):
   sheet popped out and switched to the Codex in the popup gets the Codex's late-loaded CSS and font there. Edits there
   reach the store and the map. Docked it's the Codex at 960 wide, and Standard is back at 680 with the edit. A
   goblin's Codex edits the token it shows.
+
+### Phase 6 (2026-10-06)
+
+- **The Codex's bottom half reads the Abilities list's own model** (`abilityList(definition, combatant)`), so every
+  row says what Standard says: its name, cost, statblock line and chips, with Edit. The panels are **Attacks &
+  actions** (actions, bonus actions and reactions, each titled), **Equipment** (the items group, with "worn" on worn
+  armor), **Spellcasting**, **Features & traits**, and the legendary, lair and on-death groups when it has them. A
+  section with nothing in it isn't drawn, and a lone panel in a row spans it, so a goblin's Codex has no Equipment or
+  Spellcasting.
+- **Spellcasting:** ability, save DC and attack bonus (the list's `spellcasting` facts), slot orbs per level for the
+  token shown (`updateResource` on its `slot-N`: a lit orb spends one, a dark one gives one back), then the spells by
+  level with "n of m slots".
+- **Edit → Standard** (D8): the window shows Standard's Abilities tab with that ability open (Standard's `openFirst`),
+  under a "← Back to the Codex" bar, in the Codex-sized window. The window's style stays Codex, and the switch shows
+  Standard while you're there. Back (or the switch's Codex) asks first if the edit is unsaved, and returns to the Codex
+  where it was scrolled to.
+- **Where the build differs:** no ✦ for always-prepared spells. Which spells are always prepared is only in the
+  build's records, not on the creature or the list's rows. The rows show Standard's chips (concentration, costs)
+  instead.
+- **Tests:** 6 more in `tests/codex-sheet.test.tsx` (25): the rows and their Edit, editing on Standard and Back, the
+  prompt on Back with the edit unsaved (Save keeps the new name), a slot spent and given back on the token shown and
+  not its copy, a built fighter with no Spellcasting but worn Equipment, a goblin with neither. Full suite: 251 files,
+  2816 tests. Browser (Chromium and Firefox, 7 checks each), with a built level 5 wizard put into the scene: the hero
+  reads "A level 5 Wizard (Evoker), Sage by trade", the slots read 4/3/2, an orb spends a 2nd-level slot, Edit opens
+  Fire Bolt in Standard's editor in the 960-wide window, Back returns to the same scroll position (1336 px), and at
+  1000 px and up the top row is three columns.

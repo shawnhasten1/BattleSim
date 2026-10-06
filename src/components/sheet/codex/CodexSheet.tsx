@@ -11,6 +11,8 @@ import { formatBonus } from "@/lib/ui-helpers";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useBuildSources } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
+import { abilityList, type ListGroup, type ListRow } from "@/lib/ability-editor/list";
+import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { ConditionsRow } from "../SheetHeader";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { Crest, Filigree, PortraitRing } from "./ornaments";
@@ -30,6 +32,8 @@ export interface CodexSheetProps {
   tokens: CombatantState[];
   onShowToken: (combatantId: string) => void;
   palette: CodexPaletteId;
+  /** Edit an ability on Standard's Abilities tab, in this window (plan D8). */
+  onEditAbility: (ref: AbilityRef) => void;
 }
 
 /**
@@ -37,8 +41,16 @@ export interface CodexSheetProps {
  * and store actions as the Standard sheet. It edits what fits on a paper sheet in place; everything else stays on
  * Standard. Creature values reach every token of the creature, and token values the token the switcher shows.
  */
-export function CodexSheet({ combatant, definition, tokens, onShowToken, palette }: CodexSheetProps) {
+export function CodexSheet({ combatant, definition, tokens, onShowToken, palette, onEditAbility }: CodexSheetProps) {
   const theme = CODEX_PALETTES[palette];
+  // The Abilities list's own groups and rows, so the Codex says what Standard says about each.
+  const groups = abilityList(definition, combatant);
+  const group = (id: ListGroup["id"]) => groups.find((entry) => entry.id === id);
+  const actions = (["actions", "bonus", "reactions"] as const).map(group).filter((entry): entry is ListGroup => Boolean(entry));
+  const spellcasting = group("spellcasting");
+  const items = group("items");
+  const traits = group("traits");
+  const more = (["legendary", "lair", "death"] as const).map(group).filter((entry): entry is ListGroup => Boolean(entry));
   return (
     <div
       className={`${styles.codex} ${codexDisplay.variable}`}
@@ -53,13 +65,150 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
         <Saves definition={definition} />
         <Skills definition={definition} />
       </div>
+      {actions.length || items ? (
+        <div className={styles.row2}>
+          {actions.length ? (
+            <RowsPanel id="codex-actions" title="Attacks & actions" groups={actions} onEdit={onEditAbility} />
+          ) : null}
+          {items ? <RowsPanel id="codex-equipment" title="Equipment" groups={[items]} onEdit={onEditAbility} single /> : null}
+        </div>
+      ) : null}
+      {spellcasting ? <Spellcasting group={spellcasting} combatant={combatant} definition={definition} onEdit={onEditAbility} /> : null}
+      {traits || more.length ? (
+        <div className={styles.row2}>
+          {traits ? <RowsPanel id="codex-features" title="Features & traits" groups={[traits]} onEdit={onEditAbility} single /> : null}
+          {more.map((entry) => (
+            <RowsPanel key={entry.id} id={`codex-${entry.id}`} title={entry.title} groups={[entry]} onEdit={onEditAbility} single />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
+/* ─── abilities: the Abilities list's rows, to read, with Edit ───────────── */
+
+/** A panel of the list's groups: each group's title (unless the panel holds only one), then its rows. */
+function RowsPanel({ id, title, groups, onEdit, single }: {
+  id: string;
+  title: string;
+  groups: ListGroup[];
+  onEdit: (ref: AbilityRef) => void;
+  /** One group, titled by the panel itself. */
+  single?: boolean;
+}) {
+  return (
+    <section className={styles.panel} aria-labelledby={id}>
+      <h2 className={styles.heading} id={id}>{title}</h2>
+      {groups.map((entry) => (
+        <div key={entry.id} className={styles.rowGroup}>
+          {!single || entry.note ? (
+            <h3 className={styles.groupTitle}>
+              {single ? null : entry.title}
+              {entry.note ? <span>{single ? entry.note : ` · ${entry.note}`}</span> : null}
+            </h3>
+          ) : null}
+          {entry.rows.map((row) => <AbilityRow key={row.key} row={row} onEdit={onEdit} />)}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** One ability: its name and what using it costs, the statblock's line, its chips, and Edit. */
+function AbilityRow({ row, onEdit }: { row: ListRow; onEdit: (ref: AbilityRef) => void }) {
+  const chips = [...(row.worn ? ["worn"] : []), ...(row.enabled === false ? ["off"] : []), ...row.chips];
+  return (
+    <div className={styles.abilityRow}>
+      <div className={styles.rowText}>
+        <span className={styles.rowName}>
+          {row.name}
+          {row.cost ? <span className={styles.rowCost}> · {row.cost}</span> : null}
+        </span>
+        {row.line ? <span className={styles.rowLine}>{row.line}</span> : null}
+        {chips.length ? <span className={styles.rowChips}>{chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
+      </div>
+      <button type="button" className={styles.edit} aria-label={`Edit ${row.name}`} onClick={() => onEdit(row.ref)}>Edit</button>
+    </div>
+  );
+}
+
+/* ─── spellcasting ───────────────────────────────────────────────────────── */
+
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+
+/**
+ * How it casts (ability, DC, attack bonus), its slots as orbs on the token shown (lit: still there; a lit orb spends
+ * one, a dark one gives one back), and its spells by level.
+ */
+function Spellcasting({ group, combatant, definition, onEdit }: {
+  group: ListGroup;
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  onEdit: (ref: AbilityRef) => void;
+}) {
+  const updateResource = useEncounterStore((s) => s.updateResource);
+  const facts = group.spellcasting;
+  const slotted = (group.levels ?? []).filter((level) => level.level > 0 && definition.resources?.[`slot-${level.level}`] !== undefined);
+  return (
+    <section className={styles.panel} aria-labelledby="codex-spells">
+      <h2 className={styles.heading} id="codex-spells">Spellcasting</h2>
+      {facts ? (
+        <div className={`${styles.plaques} ${styles.plaques3}`}>
+          <div className={styles.plaque}>
+            <output className={styles.plaqueValue} aria-label="Spellcasting ability">{facts.ability.toUpperCase()}</output>
+            <span className={styles.plaqueLabel}>Spellcasting ability</span>
+          </div>
+          <div className={styles.plaque}>
+            <output className={styles.plaqueValue} aria-label="Spell save DC">{facts.dc}</output>
+            <span className={styles.plaqueLabel}>Spell save DC</span>
+          </div>
+          <div className={styles.plaque}>
+            <output className={styles.plaqueValue} aria-label="Spell attack bonus">{formatBonus(facts.toHit)}</output>
+            <span className={styles.plaqueLabel}>Spell attack bonus</span>
+          </div>
+        </div>
+      ) : null}
+      {slotted.length ? (
+        <>
+          <h3 className={styles.groupTitle}>Spell slots<span> · {combatant.displayName}: lit orbs are slots it still has</span></h3>
+          <div className={styles.slots}>
+            {slotted.map(({ level }) => {
+              const resource = `slot-${level}`;
+              const full = definition.resources![resource]!;
+              const now = Math.min(full, combatant.resources?.[resource] ?? 0);
+              return (
+                <div key={level} className={styles.slot} role="group" aria-label={`Level ${level} spell slots: ${now} of ${full}`}>
+                  <span className={styles.slotLevel} aria-hidden="true">{ROMAN[level] ?? level}</span>
+                  <span className={styles.slotPips}>
+                    {Array.from({ length: full }, (_, index) => (
+                      <button
+                        key={index} type="button" className={styles.pip} data-v={index < now ? 1 : 0}
+                        aria-label={`Level ${level} slot ${index + 1}, ${index < now ? "there: spend it" : "spent: get it back"}`}
+                        onClick={() => updateResource(combatant.id, resource, index < now ? now - 1 : Math.min(full, now + 1))}
+                      />
+                    ))}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+      {(group.levels ?? []).map((level) => (
+        <div key={level.level} className={styles.rowGroup}>
+          <h3 className={styles.groupTitle}>{level.title}{level.slots ? <span> · {level.slots}</span> : null}</h3>
+          {level.rows.map((row) => <AbilityRow key={row.key} row={row} onEdit={onEdit} />)}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+
 /* ─── the hero ───────────────────────────────────────────────────────────── */
 
-function Hero({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetProps, "palette">) {
+function Hero({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetProps, "palette" | "onEditAbility">) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const openBuilder = useBuilderUiStore((s) => s.open);
   const sources = useBuildSources();

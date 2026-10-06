@@ -849,3 +849,154 @@
     transition: none;
   }
 }
+
+/* ── abilities, spells and equipment: the Abilities list's rows ── */
+
+.row2 > :only-child {
+  grid-column: 1 / -1;
+}
+
+.rowGroup + .rowGroup {
+  margin-top: 10px;
+}
+
+.groupTitle {
+  margin: 4px 0;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--accent);
+}
+
+.groupTitle span {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.abilityRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--rule);
+}
+
+.abilityRow:last-child {
+  border-bottom: 0;
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rowName {
+  font-weight: 600;
+}
+
+.rowCost {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.rowLine {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.rowChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.rowChips span {
+  padding: 0 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.edit {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.edit:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+
+.plaques3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 8px;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.slot {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px 4px 12px 4px;
+  background: var(--panel-2);
+}
+
+.slotLevel {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.slotPips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.slotPips .pip {
+  --pc: var(--good);
+}
+
+@container codex (max-width: 999px) {
+  .slots {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@container codex (max-width: 699px) {
+  .slots {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .plaques3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

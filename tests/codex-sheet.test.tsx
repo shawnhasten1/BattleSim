@@ -215,6 +215,76 @@ describe("choosing a style", () => {
   });
 });
 
+describe("the Codex's abilities, spells and equipment", () => {
+  function build(classId: string, name: string, level = 3) {
+    const recipe = quickBuild(SRD_BUILD_SOURCES, { classId, level });
+    let id = "";
+    act(() => { id = store().createCharacter({ name, build: recipe }); });
+    return store().encounter.combatants.find((combatant) => combatant.definitionId === id)!;
+  }
+
+  it("lists the Abilities list's rows, with Standard's statblock line", async () => {
+    await openCodex("pc-fighter");
+    const actions = within(screen.getByRole("region", { name: "Attacks & actions" }));
+    expect(actions.getByText("Longsword")).toBeTruthy();
+    expect(actions.getByRole("button", { name: "Edit Longsword" })).toBeTruthy();
+  });
+
+  it("edits a row on Standard's Abilities tab, in the same window, and comes back", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Longsword");
+    expect(screen.getByRole("tab", { name: "Abilities" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: "Standard" }).getAttribute("aria-pressed")).toBe("true");
+    // The window is still the Codex's: back is one click.
+    expect(sheetWindows()[0]!.style).toBe("codex");
+    await userEvent.click(screen.getByRole("button", { name: "← Back to the Codex" }));
+    expect(await screen.findByRole("group", { name: "Hit points" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Abilities" })).toBeNull();
+  });
+
+  it("asks before going back with the edit unsaved", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(screen.getByRole("button", { name: "Edit Longsword" }));
+    await userEvent.type(screen.getByLabelText("Name"), " of Doom");
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
+    const prompt = screen.getByRole("alertdialog", { name: "Unsaved changes" });
+    await userEvent.click(within(prompt).getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("group", { name: "Hit points" })).toBeTruthy();
+    expect(screen.getByText("Longsword of Doom")).toBeTruthy();
+  });
+
+  it("spends and gives back a slot on the token shown, and no other", async () => {
+    const wizard = build("srd:class:wizard", "Ilse");
+    act(() => store().duplicateCombatant(wizard.id));
+    const copy = store().encounter.combatants.find((combatant) => combatant.definitionId === wizard.definitionId && combatant.id !== wizard.id)!;
+    await openCodex(wizard.id);
+    const spells = within(screen.getByRole("region", { name: "Spellcasting" }));
+    expect(spells.getByRole("group", { name: "Level 1 spell slots: 4 of 4" })).toBeTruthy();
+    await userEvent.click(spells.getByRole("button", { name: "Level 1 slot 4, there: spend it" }));
+    expect(token(wizard.id).resources?.["slot-1"]).toBe(3);
+    expect(token(copy.id).resources?.["slot-1"]).toBe(4);
+    await userEvent.click(spells.getByRole("button", { name: "Level 1 slot 4, spent: get it back" }));
+    expect(token(wizard.id).resources?.["slot-1"]).toBe(4);
+    expect(spells.getByLabelText("Spell save DC").textContent).toMatch(/^\d+$/);
+  });
+
+  it("leaves out what a creature hasn't got: a fighter has no spellcasting", async () => {
+    const fighter = build("srd:class:fighter", "Mira");
+    await openCodex(fighter.id);
+    expect(screen.queryByRole("region", { name: "Spellcasting" })).toBeNull();
+    const equipment = within(screen.getByRole("region", { name: "Equipment" }));
+    expect(equipment.getAllByText("worn").length).toBeGreaterThan(0);
+  });
+
+  it("keeps a monster's card short: no equipment, no spellcasting", async () => {
+    await openCodex("enemy-goblin-1");
+    expect(screen.queryByRole("region", { name: "Equipment" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Spellcasting" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Attacks & actions" })).toBeTruthy();
+  });
+});
+
 describe("the palettes", () => {
   it.each(CODEX_PALETTE_IDS)("%s keeps text readable on its panels", (id) => {
     const tokens = CODEX_PALETTES[id].tokens;
