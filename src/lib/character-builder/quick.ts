@@ -75,6 +75,29 @@ export function withLevelUp(build: CharacterBuild, classId?: string): CharacterB
   return { ...build, levels: [...build.levels, { classId: next, choices: {} }] };
 }
 
+/**
+ * What taking a level in a new class needs that the character hasn't got (plan D11, warned about, not enforced): 13 in
+ * the primary ability of the new class and of each class it has ("Wizard needs Intelligence 13 (it has 10)"). Nothing
+ * when the class is one it has already. Scores are the build's as it stands, before the new level.
+ */
+export function multiclassProblems(build: CharacterBuild, classId: string, sources: BuildSources): string[] {
+  if (build.levels.some((entry) => entry.classId === classId)) return [];
+  const scores = buildCharacter(build, sources).fields.abilities;
+  const classes = [classId, ...new Set(build.levels.map((entry) => entry.classId))];
+  const names: Record<Ability, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
+  return classes.flatMap((id) => {
+    const definition = sources.catalog.classes.find((entry) => entry.id === id);
+    if (!definition?.primaryAbilities.length) return [];
+    const short = definition.primaryAbilities.filter((ability) => scores[ability] < 13);
+    const fails = definition.primaryAbilityAny ? short.length === definition.primaryAbilities.length : short.length > 0;
+    if (!fails) return [];
+    const named = definition.primaryAbilityAny ? definition.primaryAbilities : short;
+    const needed = named.map((ability) => `${names[ability]} 13`).join(definition.primaryAbilityAny ? " or " : " and ");
+    const has = named.length === 1 ? String(scores[named[0]!]) : named.map((ability) => `${names[ability]} ${scores[ability]}`).join(", ");
+    return [`${definition.name} needs ${needed} (it has ${has})`];
+  });
+}
+
 /** The build one level lower: the last level and what was chosen at it go. */
 export function withLevelDown(build: CharacterBuild): CharacterBuild {
   if (build.levels.length <= 1) return build;

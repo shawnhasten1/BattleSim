@@ -271,6 +271,13 @@ export interface ClassDefinition {
   edition: Edition;
   hitDie: 6 | 8 | 10 | 12;
   primaryAbilities: Ability[];
+  /**
+   * One primary ability is enough (the Fighter's Strength or Dexterity); otherwise every one is needed (the Monk's
+   * Dexterity and Wisdom). What multiclassing into or out of the class needs: 13 in it (plan D11).
+   */
+  primaryAbilityAny?: boolean;
+  /** What a character gets when this class isn't its first: a skill from the class's list (Bard, Ranger, Rogue). */
+  multiclass?: { skills?: number };
   /** Proficient only when this is the character's first class. */
   saves: Ability[];
   skills: { count: number; from: string[] | "any" };
@@ -542,6 +549,8 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
   edition: editionSchema,
   hitDie: z.union([z.literal(6), z.literal(8), z.literal(10), z.literal(12)]),
   primaryAbilities: z.array(abilitySchema),
+  primaryAbilityAny: z.boolean().optional(),
+  multiclass: z.object({ skills: z.number().int().min(0).optional() }).optional(),
   saves: z.array(abilitySchema),
   skills: z.object({ count: z.number().int().min(0), from: z.union([z.array(z.string()), z.literal("any")]) }),
   weaponProficiency: z.array(z.string()),

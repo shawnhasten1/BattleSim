@@ -192,6 +192,27 @@ describe("leveling up", { timeout: 20000 }, () => {
     expect(store().encounter.combatants.find((combatant) => combatant.id === "hurt")!.currentHp).toBe(5);
   });
 
+  it("levels a second class: the Level up window picks the class, and warns about a prerequisite it can't meet", async () => {
+    const rogue = createRogue(3);
+    useBuilderUiStore.getState().open({ kind: "level-up", definitionId: rogue.id });
+    render(<BuilderHost onCreated={() => undefined} />);
+    const dialog = screen.getByRole("dialog", { name: "Level up" });
+    const pick = within(dialog).getByLabelText("Class to level") as HTMLSelectElement;
+    expect(pick.value).toBe("srd:class:rogue");
+    expect(within(pick).getByRole("option", { name: "Rogue (3 → 4)" })).toBeTruthy();
+
+    // A Wizard needs Intelligence 13, which a quick-built rogue hasn't got: said, not stopped.
+    await userEvent.selectOptions(pick, "srd:class:wizard");
+    expect(within(dialog).getByRole("note").textContent).toMatch(/Wizard needs Intelligence 13/);
+    await userEvent.selectOptions(pick, "srd:class:fighter");
+    expect(within(dialog).queryByRole("note")).toBeNull();
+    expect(dialog.textContent).toMatch(/→ Fighter 1/);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Level up to 4" }));
+    const after = store().encounter.definitions.find((definition) => definition.id === rogue.id)!;
+    expect(readBuild(after)?.levels.map((entry) => entry.classId)).toEqual(["srd:class:rogue", "srd:class:rogue", "srd:class:rogue", "srd:class:fighter"]);
+    expect(after.features?.some((feature) => feature.name === "Second Wind")).toBe(true);
+  });
+
   it("a character whose homebrew class has gone says so, and is left as it is", () => {
     const gunslinger = { ...SRD_BUILD_SOURCES.catalog.classes.find((entry) => entry.id === "srd:class:rogue")!, id: "homebrew:class:gunslinger", name: "Gunslinger", source: { provider: "homebrew" as const } };
     useCatalogStore.getState().setEntries([{ kind: "class", entry: gunslinger }]);

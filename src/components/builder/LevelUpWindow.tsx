@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import {
   buildCharacter,
   buildLabel,
+  entryLabel,
+  multiclassProblems,
   orderedChanges,
   readBuild,
   rebuildActor,
@@ -57,9 +59,19 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
     JSON.stringify(storedChoice(saved, slot.scope, slot.path, slot.spec) ?? null) !== JSON.stringify(storedChoice(draft, slot.scope, slot.path, slot.spec) ?? null);
   const slots = built.choices.filter((slot) => (slot.scope.kind === "level" && slot.scope.index === newIndex) || slot.pending || remade(slot));
   const changes = orderedChanges(preview.changes).filter((change) => !(change.kind === "field" && (change.key === "field:classes" || change.key === "field:level")));
-  const classLevel = draft.levels.filter((entry) => entry.classId === draft.levels[newIndex]!.classId).length;
-  const className = sources.catalog.classes.find((entry) => entry.id === draft.levels[newIndex]!.classId)?.name ?? "";
-  const die = sources.catalog.classes.find((entry) => entry.id === draft.levels[newIndex]!.classId)?.hitDie ?? 8;
+  const classId = draft.levels[newIndex]!.classId;
+  const classLevel = draft.levels.filter((entry) => entry.classId === classId).length;
+  const className = sources.catalog.classes.find((entry) => entry.id === classId)?.name ?? "";
+  const die = sources.catalog.classes.find((entry) => entry.id === classId)?.hitDie ?? 8;
+  // Its classes, then the rest of the catalog: a level in a new one is multiclassing (plan D11).
+  const owned = [...new Set(saved.levels.map((entry) => entry.classId))];
+  const others = sources.catalog.classes.filter((entry) => !owned.includes(entry.id));
+  const prerequisites = multiclassProblems(saved, classId, sources);
+
+  function chooseClass(next: string) {
+    setDraft(withSuggestions(withLevelUp(saved!, next), sources));
+    setUpdate([]);
+  }
 
   return (
     <FloatingWindow title={`Level up · ${definition.name}`} ariaLabel="Level up" onClose={onClose} width={520} storageKey="level-up" initialPosition={BESIDE_SHEET}>
@@ -67,6 +79,27 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
         <p className={styles.lede}>
           {buildLabel(saved, sources)} → <strong>{className} {classLevel}</strong>
         </p>
+
+        <label className={styles.field}>
+          Class to level
+          <select aria-label="Class to level" value={classId} onChange={(event) => chooseClass(event.target.value)}>
+            {owned.map((id) => {
+              const entry = sources.catalog.classes.find((candidate) => candidate.id === id);
+              const levels = saved.levels.filter((level) => level.classId === id).length;
+              return <option key={id} value={id}>{`${entry ? entryLabel(entry) : id} (${levels} → ${levels + 1})`}</option>;
+            })}
+            {others.length ? (
+              <optgroup label="A new class (multiclass)">
+                {others.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+        {prerequisites.length ? (
+          <p className={styles.warning} role="note">
+            Multiclassing needs 13 in each class&apos;s primary ability: {prerequisites.join("; ")}. You can still take it.
+          </p>
+        ) : null}
 
         {draft.hp.method === "rolled" ? (
           <label className={styles.field}>

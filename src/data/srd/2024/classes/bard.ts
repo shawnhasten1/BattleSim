@@ -20,6 +20,8 @@ export const BARD: ClassDefinition = {
   edition: "2024",
   hitDie: 8,
   primaryAbilities: ["cha"],
+  // As a multiclass character: one skill from the class's list.
+  multiclass: { skills: 1 },
   saves: ["dex", "cha"],
   skills: ref.skills as ClassDefinition["skills"],
   weaponProficiency: ["simple"],

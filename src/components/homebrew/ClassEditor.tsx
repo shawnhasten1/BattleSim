@@ -189,6 +189,16 @@ export function ClassEditor({ entry, onChange }: { entry: ClassDefinition; onCha
           <textarea value={entry.description ?? ""} onChange={(event) => set({ description: event.target.value || undefined })} aria-label="Description" />
         </label>
         <AbilityChecks label="Primary abilities" value={entry.primaryAbilities} onChange={(primaryAbilities) => set({ primaryAbilities })} />
+        <div className={styles.row}>
+          <label className={styles.check}>
+            <input type="checkbox" checked={entry.primaryAbilityAny === true} onChange={(event) => set({ primaryAbilityAny: event.target.checked || undefined })} />
+            One of them is enough to multiclass (the Fighter&apos;s Strength or Dexterity)
+          </label>
+          <NumberField
+            label="Skills when taken as a second class" value={entry.multiclass?.skills} min={0} max={4}
+            onChange={(skills) => set({ multiclass: skills ? { skills } : undefined })}
+          />
+        </div>
         <Checks
           label="Feat levels (Ability Score Improvement or another feat; the Epic Boon at 19 is every class's)"
           options={Array.from({ length: 18 }, (_, index) => ({ id: String(index + 2), label: String(index + 2) })).filter((option) => option.id !== "19")}

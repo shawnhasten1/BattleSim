@@ -102,6 +102,8 @@ export const ROGUE: ClassDefinition = {
   edition: "2024",
   hitDie: 8,
   primaryAbilities: ["dex"],
+  // As a multiclass character: one skill from the class's list.
+  multiclass: { skills: 1 },
   saves: ["dex", "int"],
   skills: ref.skills as ClassDefinition["skills"],
   weaponProficiency: ["simple", "martial-finesse-or-light"],

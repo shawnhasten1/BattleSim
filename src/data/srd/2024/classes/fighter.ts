@@ -40,6 +40,7 @@ export const FIGHTER: ClassDefinition = {
   edition: "2024",
   hitDie: 10,
   primaryAbilities: ["str", "dex"],
+  primaryAbilityAny: true,
   saves: ["str", "con"],
   skills: ref.skills as ClassDefinition["skills"],
   weaponProficiency: ["simple", "martial"],

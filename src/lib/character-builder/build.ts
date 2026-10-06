@@ -951,9 +951,12 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
       scope: { kind: "level", index }, owner, ownerName: `${definition.name} ${classLevel}`,
       characterLevel, classLevel, classDefinition: definition, where: `L${characterLevel}`
     };
-    // A character's first level gives its class's skills; the builder asks for them as that level's first choice.
+    // A character's first level gives its class's skills; the builder asks for them as that level's first choice. A
+    // class taken later gives what its multiclass rule says (one skill for a Bard, a Ranger or a Rogue).
     if (index === 0 && definition.skills.count > 0) {
       visitChoice(state, { kind: "skills", id: "class-skills", count: definition.skills.count, from: definition.skills.from }, context);
+    } else if (index > 0 && classLevel === 1 && definition.multiclass?.skills) {
+      visitChoice(state, { kind: "skills", id: "multiclass-skills", count: definition.multiclass.skills, from: definition.skills.from }, context);
     }
     const level = definition.levels.find((candidate) => candidate.level === classLevel);
     for (const grant of level?.grants ?? []) state.grants.push({ grant, owner });
