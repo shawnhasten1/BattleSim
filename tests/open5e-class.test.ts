@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { normalizeOpen5eClass, open5eClassId, type Open5eImportedPayload } from "@/adapters";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { normalizeOpen5eClass, open5eClassId, Open5eClient, type Open5eImportedPayload } from "@/adapters";
 import { entryLabel, entryProblems, mergeCatalog, parseCatalogEntry, quickBuild, type ClassDefinition, type SubclassDefinition } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 
@@ -62,6 +62,27 @@ describe("an Open5e class", () => {
     expect(merged.catalog.classes.filter((entry) => entry.name === "Rogue").map(entryLabel)).toEqual(["Rogue", "Rogue (5e 2024 Rules)"]);
     const build = quickBuild(merged, { classId: imported.entry.id, level: 5 });
     expect(build.levels[0]?.classId).toBe("open5e:class:srd-2024_rogue");
+  });
+});
+
+describe("searching Open5e's classes", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("filters by name here (the endpoint ignores name__icontains), a subclass found by its class's name too", async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: URL) => {
+      fetched.push(String(url));
+      return new Response(JSON.stringify({ count: 3, results: [
+        { key: "a5e_marshal", name: "Marshal", document: { key: "a5e-ag", name: "Adventurer's Guide" } },
+        { key: "a5e_gambling-general", name: "Gambling General", document: { key: "a5e-ag" }, subclass_of: { key: "a5e_marshal", name: "Marshal" } },
+        { key: "toh_ranger", name: "Ranger", document: { key: "toh" } }
+      ] }));
+    }));
+    const found = await new Open5eClient().searchClasses({ query: "MARSH" });
+    expect(found.map((entry) => entry.name)).toEqual(["Marshal", "Gambling General"]);
+    expect(found[1]?.subclassOf).toEqual({ key: "a5e_marshal", name: "Marshal" });
+    expect(fetched[0]).not.toContain("name__icontains");
+    expect((await new Open5eClient().searchClasses({ query: "" })).length).toBe(3);
   });
 });
 

@@ -200,15 +200,20 @@ export class Open5eClient {
     };
   }
 
-  /** Classes and subclasses by name (`/v2/classes/`), lightweight: the full record comes with `importClass`. */
+  /**
+   * Classes and subclasses by name (`/v2/classes/`), lightweight: the full record comes with `importClass`. The endpoint
+   * ignores `name__icontains`, and the list is short (about 150), so it's fetched whole and filtered here.
+   */
   async searchClasses(options: Open5eSearchOptions): Promise<Open5eClassSummary[]> {
     const url = this.v2Url("/classes/");
-    if (options.query) url.searchParams.set("name__icontains", options.query);
     url.searchParams.set("fields", "key,name,document,subclass_of");
-    url.searchParams.set("limit", String(options.limit ?? 50));
+    url.searchParams.set("limit", "500");
     if (options.documentKey) url.searchParams.set("document__key", options.documentKey);
     const data = await this.fetchJson(url);
-    return data.results.map((record) => {
+    const query = options.query.trim().toLowerCase();
+    const matching = data.results.filter((record) => !query || String(record.name ?? "").toLowerCase().includes(query)
+      || String(((record.subclass_of ?? {}) as { name?: unknown }).name ?? "").toLowerCase().includes(query));
+    return matching.slice(0, options.limit ?? 50).map((record) => {
       const parent = record.subclass_of && typeof record.subclass_of === "object" ? record.subclass_of as Record<string, unknown> : undefined;
       return {
         key: String(record.key ?? ""),

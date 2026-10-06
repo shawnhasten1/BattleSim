@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const results = await client.searchClasses({
       query: searchParams.get("query")?.trim() ?? "",
       documentKey: searchParams.get("documentKey") ?? undefined,
-      limit: Number(searchParams.get("limit") ?? 50)
+      limit: Number(searchParams.get("limit") ?? 200)
     });
     return NextResponse.json({ results });
   } catch (error) {
