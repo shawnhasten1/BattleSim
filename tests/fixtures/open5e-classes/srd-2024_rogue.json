@@ -1,0 +1,480 @@
+{
+ "key": "srd-2024_rogue",
+ "features": [
+  {
+   "key": "srd-2024_rogue_ability-score-improvement",
+   "name": "Ability Score Improvement",
+   "desc": "You gain the Ability Score Improvement feat (see \"Feats\") or another feat of your choice for which you qualify. You gain this feature again at Rogue levels 8, 1",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 10,
+     "detail": null
+    },
+    {
+     "level": 12,
+     "detail": null
+    },
+    {
+     "level": 16,
+     "detail": null
+    },
+    {
+     "level": 4,
+     "detail": null
+    },
+    {
+     "level": 8,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_core-traits",
+   "name": "Core Rogue Traits",
+   "desc": "|||\n|---|---|\n|Primary Ability|Dexterity|\n|Hit Point Die|D8 per Rogue level|\n|Saving Throw Proficiencies|Dexterity and Intelligence|\n|Skill Proficiencies|Choose 4: Acrobatics, Athletics, Deception, Insight, Intimidation, Investigation, Perception, Persuasion, Sleight of Hand, or Stealth|\n|Weapon Proficiencies|Simple weapons and Martial weapons that have the Finesse or Light property|\n|Tool Proficiencies|Thieves' Tools|\n|Armor Training|Light armor|\n|Starting Equipment|Choose A or B: (A) Leather Armor, 2 Daggers, Shortsword, Shortbow, 20 Arrows, Quiver, Thieves' Tools, Burglar's Pack, and 8 GP; or (B) 100 GP|",
+   "feature_type": "CORE_TRAITS_TABLE",
+   "gained_at": [],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_cunning-action",
+   "name": "Cunning Action",
+   "desc": "Your quick thinking and agility allow you to move and act quickly. On your turn, you can take one of the following actions as a Bonus Action: Dash, Disengage, o",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_cunning-strike",
+   "name": "Cunning Strike",
+   "desc": "You've developed cunning ways to use your Sneak Attack. When you deal Sneak Attack damage, you can add one of the following Cunning Strike effects. Each effect ",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_devious-strikes",
+   "name": "Devious Strikes",
+   "desc": "You've practiced new ways to use your Sneak Attack deviously. The following effects are now among your Cunning Strike options.\n\n**Daze (Cost: 2d6).** The target",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 14,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_elusive",
+   "name": "Elusive",
+   "desc": "You're so evasive that attackers rarely gain the upper hand against you. No attack roll can have Advantage against you unless you have the Incapacitated conditi",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 18,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_epic-boon",
+   "name": "Epic Boon",
+   "desc": "You gain an Epic Boon feat (see \"Feats\") or another feat of your choice for which you qualify. Boon of the Night Spirit is recommended.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 19,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_evasion",
+   "name": "Evasion",
+   "desc": "You can nimbly dodge out of the way of certain dangers. When you're subjected to an effect that allows you to make a Dexterity saving throw to take only half da",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 7,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_expertise",
+   "name": "Expertise",
+   "desc": "You gain Expertise in two of your skill proficiencies of your choice. Sleight of Hand and Stealth are recommended if you have proficiency in them.\n\nAt Rogue lev",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    },
+    {
+     "level": 6,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_improved-cunning-strike",
+   "name": "Improved Cunning Strike",
+   "desc": "You can use up to two Cunning Strike effects when you deal Sneak Attack damage, paying the die cost for each effect.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 11,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_proficiency-bonus",
+   "name": "Proficiency Bonus",
+   "desc": "[Column data]",
+   "feature_type": "PROFICIENCY_BONUS",
+   "gained_at": [],
+   "data_for_class_table": [
+    {
+     "level": 1,
+     "column_value": "+2"
+    },
+    {
+     "level": 10,
+     "column_value": "+4"
+    },
+    {
+     "level": 11,
+     "column_value": "+4"
+    },
+    {
+     "level": 12,
+     "column_value": "+4"
+    },
+    {
+     "level": 13,
+     "column_value": "+5"
+    },
+    {
+     "level": 14,
+     "column_value": "+5"
+    },
+    {
+     "level": 15,
+     "column_value": "+5"
+    },
+    {
+     "level": 16,
+     "column_value": "+5"
+    },
+    {
+     "level": 17,
+     "column_value": "+6"
+    },
+    {
+     "level": 18,
+     "column_value": "+6"
+    },
+    {
+     "level": 19,
+     "column_value": "+6"
+    },
+    {
+     "level": 2,
+     "column_value": "+2"
+    },
+    {
+     "level": 20,
+     "column_value": "+6"
+    },
+    {
+     "level": 3,
+     "column_value": "+2"
+    },
+    {
+     "level": 4,
+     "column_value": "+2"
+    },
+    {
+     "level": 5,
+     "column_value": "+3"
+    },
+    {
+     "level": 6,
+     "column_value": "+3"
+    },
+    {
+     "level": 7,
+     "column_value": "+3"
+    },
+    {
+     "level": 8,
+     "column_value": "+3"
+    },
+    {
+     "level": 9,
+     "column_value": "+4"
+    }
+   ]
+  },
+  {
+   "key": "srd-2024_rogue_reliable-talent",
+   "name": "Reliable Talent",
+   "desc": "Whenever you make an ability check that uses one of your skill or tool proficiencies, you can treat a d20 roll of 9 or lower as a 10.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 7,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_rogue-subclass",
+   "name": "Rogue Subclass",
+   "desc": "You gain a Rogue subclass of your choice. The Thief subclass is detailed after this class's description. A subclass is a specialization that grants you features",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 3,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_slippery-mind",
+   "name": "Slippery Mind",
+   "desc": "Your cunning mind is exceptionally difficult to control. You gain proficiency in Wisdom and Charisma saving throws.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 15,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_sneak-attack",
+   "name": "Sneak Attack",
+   "desc": "You know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if yo",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_sneak-attack-column-data",
+   "name": "Sneak Attack",
+   "desc": "[Column data]",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [],
+   "data_for_class_table": [
+    {
+     "level": 1,
+     "column_value": "1d6"
+    },
+    {
+     "level": 10,
+     "column_value": "5d6"
+    },
+    {
+     "level": 11,
+     "column_value": "6d6"
+    },
+    {
+     "level": 12,
+     "column_value": "6d6"
+    },
+    {
+     "level": 13,
+     "column_value": "7d6"
+    },
+    {
+     "level": 14,
+     "column_value": "7d6"
+    },
+    {
+     "level": 15,
+     "column_value": "8d6"
+    },
+    {
+     "level": 16,
+     "column_value": "8d6"
+    },
+    {
+     "level": 17,
+     "column_value": "9d6"
+    },
+    {
+     "level": 18,
+     "column_value": "9d6"
+    },
+    {
+     "level": 19,
+     "column_value": "10d6"
+    },
+    {
+     "level": 2,
+     "column_value": "1d6"
+    },
+    {
+     "level": 20,
+     "column_value": "10d6"
+    },
+    {
+     "level": 3,
+     "column_value": "2d6"
+    },
+    {
+     "level": 4,
+     "column_value": "2d6"
+    },
+    {
+     "level": 5,
+     "column_value": "3d6"
+    },
+    {
+     "level": 6,
+     "column_value": "3d6"
+    },
+    {
+     "level": 7,
+     "column_value": "4d6"
+    },
+    {
+     "level": 8,
+     "column_value": "4d6"
+    },
+    {
+     "level": 9,
+     "column_value": "5d6"
+    }
+   ]
+  },
+  {
+   "key": "srd-2024_rogue_steady-aim",
+   "name": "Steady Aim",
+   "desc": "As a Bonus Action, you give yourself Advantage on your next attack roll on the current turn. You can use this feature only if you haven't moved during this turn",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 3,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_stroke-of-luck",
+   "name": "Stroke of Luck",
+   "desc": "You have a marvelous knack for succeeding when you need to. If you fail a D20 Test, you can turn the roll into a 20.\n\nOnce you use this feature, you can't use i",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 20,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_thieves-cant",
+   "name": "Thieves' Cant",
+   "desc": "You picked up various languages in the communities where you plied your roguish talents. You know Thieves' Cant and one other language of your choice, which you",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_uncanny-dodge",
+   "name": "Uncanny Dodge",
+   "desc": "When an attacker that you can see hits you with an attack roll, you can take a Reaction to halve the attack's damage against you (round down).",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "srd-2024_rogue_weapon-mastery",
+   "name": "Weapon Mastery",
+   "desc": "Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Daggers and ",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  }
+ ],
+ "hit_points": {
+  "hit_dice": "D8",
+  "hit_dice_name": "1D8 per Rogue level",
+  "hit_points_at_1st_level": "8 + your Constitution modifier",
+  "hit_points_at_higher_levels": "1D8 (or 5) + your Constitution modifier per rogue level after 1st"
+ },
+ "document": {
+  "name": "System Reference Document 5.2",
+  "key": "srd-2024",
+  "type": "SOURCE",
+  "display_name": "5e 2024 Rules",
+  "publisher": {
+   "name": "Wizards of the Coast",
+   "key": "wizards-of-the-coast"
+  },
+  "gamesystem": {
+   "name": "5th Edition 2024",
+   "key": "5e-2024"
+  },
+  "permalink": "https://dnd.wizards.com/resources/systems-reference-document"
+ },
+ "saving_throws": [
+  {
+   "name": "Dexterity"
+  },
+  {
+   "name": "Intelligence"
+  }
+ ],
+ "subclass_of": null,
+ "name": "Rogue",
+ "desc": "",
+ "hit_dice": "D8",
+ "caster_type": "NONE",
+ "primary_abilities": []
+}

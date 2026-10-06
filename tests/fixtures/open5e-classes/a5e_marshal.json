@@ -1,0 +1,945 @@
+{
+ "key": "a5e_marshal",
+ "features": [
+  {
+   "key": "a5e_marshal_proficiency-bonus",
+   "name": "Proficiency Bonus",
+   "desc": "",
+   "feature_type": "PROFICIENCY_BONUS",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 1,
+     "column_value": "+2"
+    },
+    {
+     "level": 10,
+     "column_value": "+4"
+    },
+    {
+     "level": 11,
+     "column_value": "+4"
+    },
+    {
+     "level": 12,
+     "column_value": "+4"
+    },
+    {
+     "level": 13,
+     "column_value": "+5"
+    },
+    {
+     "level": 14,
+     "column_value": "+5"
+    },
+    {
+     "level": 15,
+     "column_value": "+5"
+    },
+    {
+     "level": 16,
+     "column_value": "+5"
+    },
+    {
+     "level": 17,
+     "column_value": "+6"
+    },
+    {
+     "level": 18,
+     "column_value": "+6"
+    },
+    {
+     "level": 19,
+     "column_value": "+6"
+    },
+    {
+     "level": 2,
+     "column_value": "+2"
+    },
+    {
+     "level": 20,
+     "column_value": "+6"
+    },
+    {
+     "level": 3,
+     "column_value": "+2"
+    },
+    {
+     "level": 4,
+     "column_value": "+2"
+    },
+    {
+     "level": 5,
+     "column_value": "+3"
+    },
+    {
+     "level": 6,
+     "column_value": "+3"
+    },
+    {
+     "level": 7,
+     "column_value": "+3"
+    },
+    {
+     "level": 8,
+     "column_value": "+3"
+    },
+    {
+     "level": 9,
+     "column_value": "+4"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_commanding-presence-range",
+   "name": "Commanding Presence",
+   "desc": "",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 1,
+     "column_value": "10 feet"
+    },
+    {
+     "level": 10,
+     "column_value": "30 feet"
+    },
+    {
+     "level": 11,
+     "column_value": "30 feet"
+    },
+    {
+     "level": 12,
+     "column_value": "30 feet"
+    },
+    {
+     "level": 13,
+     "column_value": "30 feet"
+    },
+    {
+     "level": 14,
+     "column_value": "10 feet"
+    },
+    {
+     "level": 15,
+     "column_value": "45 feet"
+    },
+    {
+     "level": 16,
+     "column_value": "45 feet"
+    },
+    {
+     "level": 17,
+     "column_value": "45 feet"
+    },
+    {
+     "level": 18,
+     "column_value": "45 feet"
+    },
+    {
+     "level": 19,
+     "column_value": "45 feet"
+    },
+    {
+     "level": 2,
+     "column_value": "10 feet"
+    },
+    {
+     "level": 20,
+     "column_value": "60 feet"
+    },
+    {
+     "level": 3,
+     "column_value": "10 feet"
+    },
+    {
+     "level": 4,
+     "column_value": "10 feet"
+    },
+    {
+     "level": 5,
+     "column_value": "20 feet"
+    },
+    {
+     "level": 6,
+     "column_value": "20 feet"
+    },
+    {
+     "level": 7,
+     "column_value": "20 feet"
+    },
+    {
+     "level": 8,
+     "column_value": "20 feet"
+    },
+    {
+     "level": 9,
+     "column_value": "20 feet"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_follower-count",
+   "name": "Followers",
+   "desc": "",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 10,
+     "column_value": "2"
+    },
+    {
+     "level": 11,
+     "column_value": "2"
+    },
+    {
+     "level": 12,
+     "column_value": "2"
+    },
+    {
+     "level": 13,
+     "column_value": "2"
+    },
+    {
+     "level": 14,
+     "column_value": "2"
+    },
+    {
+     "level": 15,
+     "column_value": "3"
+    },
+    {
+     "level": 16,
+     "column_value": "3"
+    },
+    {
+     "level": 17,
+     "column_value": "3"
+    },
+    {
+     "level": 18,
+     "column_value": "3"
+    },
+    {
+     "level": 19,
+     "column_value": "3"
+    },
+    {
+     "level": 20,
+     "column_value": "4"
+    },
+    {
+     "level": 5,
+     "column_value": "1"
+    },
+    {
+     "level": 6,
+     "column_value": "1"
+    },
+    {
+     "level": 7,
+     "column_value": "1"
+    },
+    {
+     "level": 8,
+     "column_value": "1"
+    },
+    {
+     "level": 9,
+     "column_value": "1"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_maneuvers-known",
+   "name": "Maneuvers Known",
+   "desc": "",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 10,
+     "column_value": "6"
+    },
+    {
+     "level": 11,
+     "column_value": "7"
+    },
+    {
+     "level": 12,
+     "column_value": "7"
+    },
+    {
+     "level": 13,
+     "column_value": "8"
+    },
+    {
+     "level": 14,
+     "column_value": "8"
+    },
+    {
+     "level": 15,
+     "column_value": "9"
+    },
+    {
+     "level": 16,
+     "column_value": "9"
+    },
+    {
+     "level": 17,
+     "column_value": "10"
+    },
+    {
+     "level": 18,
+     "column_value": "10"
+    },
+    {
+     "level": 19,
+     "column_value": "11"
+    },
+    {
+     "level": 2,
+     "column_value": "2"
+    },
+    {
+     "level": 20,
+     "column_value": "11"
+    },
+    {
+     "level": 3,
+     "column_value": "3"
+    },
+    {
+     "level": 4,
+     "column_value": "3"
+    },
+    {
+     "level": 5,
+     "column_value": "4"
+    },
+    {
+     "level": 6,
+     "column_value": "4"
+    },
+    {
+     "level": 7,
+     "column_value": "5"
+    },
+    {
+     "level": 8,
+     "column_value": "5"
+    },
+    {
+     "level": 9,
+     "column_value": "6"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_maneuver-degree",
+   "name": "Maneuver Degree",
+   "desc": "",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 10,
+     "column_value": "3rd"
+    },
+    {
+     "level": 11,
+     "column_value": "3rd"
+    },
+    {
+     "level": 12,
+     "column_value": "4th"
+    },
+    {
+     "level": 13,
+     "column_value": "4th"
+    },
+    {
+     "level": 14,
+     "column_value": "4th"
+    },
+    {
+     "level": 15,
+     "column_value": "4th"
+    },
+    {
+     "level": 16,
+     "column_value": "5th"
+    },
+    {
+     "level": 17,
+     "column_value": "5th"
+    },
+    {
+     "level": 18,
+     "column_value": "5th"
+    },
+    {
+     "level": 19,
+     "column_value": "5th"
+    },
+    {
+     "level": 2,
+     "column_value": "1st"
+    },
+    {
+     "level": 20,
+     "column_value": "5th"
+    },
+    {
+     "level": 3,
+     "column_value": "1st"
+    },
+    {
+     "level": 4,
+     "column_value": "2nd"
+    },
+    {
+     "level": 5,
+     "column_value": "2nd"
+    },
+    {
+     "level": 6,
+     "column_value": "2nd"
+    },
+    {
+     "level": 7,
+     "column_value": "2nd"
+    },
+    {
+     "level": 8,
+     "column_value": "3rd"
+    },
+    {
+     "level": 9,
+     "column_value": "3rd"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_lessons-known",
+   "name": "Lessons Known",
+   "desc": "",
+   "feature_type": "CLASS_TABLE_DATA",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": [
+    {
+     "level": 10,
+     "column_value": "3"
+    },
+    {
+     "level": 11,
+     "column_value": "3"
+    },
+    {
+     "level": 12,
+     "column_value": "3"
+    },
+    {
+     "level": 13,
+     "column_value": "3"
+    },
+    {
+     "level": 14,
+     "column_value": "4"
+    },
+    {
+     "level": 15,
+     "column_value": "4"
+    },
+    {
+     "level": 16,
+     "column_value": "4"
+    },
+    {
+     "level": 17,
+     "column_value": "4"
+    },
+    {
+     "level": 18,
+     "column_value": "5"
+    },
+    {
+     "level": 19,
+     "column_value": "5"
+    },
+    {
+     "level": 2,
+     "column_value": "1"
+    },
+    {
+     "level": 20,
+     "column_value": "5"
+    },
+    {
+     "level": 3,
+     "column_value": "1"
+    },
+    {
+     "level": 4,
+     "column_value": "1"
+    },
+    {
+     "level": 5,
+     "column_value": "1"
+    },
+    {
+     "level": 6,
+     "column_value": "2"
+    },
+    {
+     "level": 7,
+     "column_value": "2"
+    },
+    {
+     "level": 8,
+     "column_value": "2"
+    },
+    {
+     "level": 9,
+     "column_value": "2"
+    }
+   ]
+  },
+  {
+   "key": "a5e_marshal_ability-score-improvement",
+   "name": "Ability Score Improvement",
+   "desc": "At 4th, 8th, 12th, 16th, and 19th level, you can increase one ability score by 2 or two ability scores by 1, to a maximum of 20.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 12,
+     "detail": null
+    },
+    {
+     "level": 16,
+     "detail": null
+    },
+    {
+     "level": 4,
+     "detail": null
+    },
+    {
+     "level": 8,
+     "detail": null
+    },
+    {
+     "level": 19,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_proficiencies",
+   "name": "Proficiencies",
+   "desc": "**Armor:** Light armor, medium armor, heavy armor, shields\n**Weapons:** Simple weapons, martial weapons\n**Tools:** None\n**Saving Throws:** Wisdom, Charisma\n**Skills:** Choose two from Athletics, History, Insight, Intimidation, Medicine, Perception, and Persuasion",
+   "feature_type": "PROFICIENCIES",
+   "gained_at": [],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_starting-equipment",
+   "name": "Equipment",
+   "desc": "You begin the game with 200 gp. You can select your own gear or choose one of the following equipment packages. Also consult the Suggested Equipment section of ",
+   "feature_type": "STARTING_EQUIPMENT",
+   "gained_at": [],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_commanding-presence",
+   "name": "Commanding Presence",
+   "desc": "Starting at 1st level, you have a Commanding Presence that extends from you in a 10-foot radius.\n\nWhen you take the Attack action, you can forgo making one atta",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_rallying-surge",
+   "name": "Rallying Surge",
+   "desc": "Also starting at 1st level, you can use a bonus action to choose a creature within 30 feet of you. If the target can hear or see you, it regains hit points equa",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 1,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_combat-maneuvers",
+   "name": "Combat Maneuvers",
+   "desc": "At 2nd level, you gain the ability to use combat maneuvers. You gain proficiency in two combat traditions from the following list: Biting Zephyr, Mirror's Glint",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_lessons-of-war",
+   "name": "Lessons of War",
+   "desc": "Also at 2nd level, you learn a lesson of war of your choice. Your lessons are detailed at the end of the class description. The Lessons Known column of the Mars",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 2,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_marshal-archetype",
+   "name": "Marshal Archetype",
+   "desc": "At 3rd level, you choose an archetype that focuses on the military stratagems you devise. Your choice grants you features at 3rd level and again at 7th, 11th, 1",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 3,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_mark-foe",
+   "name": "Mark Foe",
+   "desc": "Also at 3rd level, you can use a bonus action to choose a creature you can see within 30 feet. Until the start of your next turn, creatures able to hear or see ",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 3,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_combat-directives",
+   "name": "Combat Directives",
+   "desc": "Starting at 5th level, you learn one combat maneuver from the Sanguine Knot tradition. The degree of this maneuver can't be higher than the highest-degree maneu",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_extra-attack",
+   "name": "Extra Attack",
+   "desc": "Starting at 5th level, when you take the Attack action on your turn, you can attack twice instead of once. At 11th level, you can attack three times instead of ",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": "two attacks"
+    },
+    {
+     "level": 11,
+     "detail": "three attacks"
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_followers",
+   "name": "Followers",
+   "desc": "At 5th level, you gain one inexperienced follower. At 10th, 15th, and 20th level, you gain an additional follower, or one of your followers becomes more experie",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 5,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_call-to-arms",
+   "name": "Call to Arms",
+   "desc": "Beginning at 6th level, when you roll initiative, you and each creature you choose within your Commanding Presence gains anexpertise die to their initiative rol",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 6,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_marshal-renown",
+   "name": "Marshal Renown",
+   "desc": "At 6th level, you add half your proficiency bonus to your Prestige rating.\n\nIn addition, your reputation strongly affects how you are perceived, and when it bec",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 6,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_versatile-exploration",
+   "name": "Versatile Exploration",
+   "desc": "Also at 6th level, whenever you learn a new lesson of war or replace an existing one, you can instead choose from fighter soldiering knacks.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 6,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_spur-ally",
+   "name": "Spur Ally",
+   "desc": "Beginning at 9th level, once per long rest, when a creature you can see that can hear or see you fails an ability check or saving throw, you can use your reacti",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 9,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_expanded-directives",
+   "name": "Expanded Directives",
+   "desc": "Starting at 10th level, your capacity to direct your companions broadens. Choose one tradition that you know combat maneuvers from. You are able to use Combat D",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 10,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_rouse-the-troops",
+   "name": "Rouse the Troops",
+   "desc": "Also starting at 10th level, you can spend 1 minute speaking words of encouragement and support to reinvigorate your companions. Each creature of your choice th",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 10,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_commanding-demeanor",
+   "name": "Commanding Demeanor",
+   "desc": "Starting at 12th level, the lessons you've learned on the battlefield become useful tools beyond the realm of combat. Choose one of the following:\n\n## Calm\nWhen",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 12,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_dauntless",
+   "name": "Dauntless",
+   "desc": "Starting at 13th level, you and creatures you choose have advantage on saving throws against the charmed or frightened conditions while within your Commanding P",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 13,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_stronghold",
+   "name": "Stronghold",
+   "desc": "Also at 13th level, you gain an average, grade 4 stronghold (castle, house, or training hall). Unlike normal strongholds, you can't sell this stronghold",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 13,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_advantageous-action",
+   "name": "Advantageous Action",
+   "desc": "Starting at 14th level, you can use the Help action as a bonus action. In addition, when you take the Help action, choose one of the following effects:\n\n- One f",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 14,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_greater-stronghold",
+   "name": "Greater Stronghold",
+   "desc": "At 16th level, your stronghold is upgraded to grade 5.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 16,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_critical-weakness",
+   "name": "Critical Weakness",
+   "desc": "Beginning at 17th level, you can focus your mind to identify any enemy's weaknesses. Once per rest, you can use a bonus action to choose one creature you can se",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 17,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_impresive-reputation",
+   "name": "Impressive Reputation",
+   "desc": "Starting at 18th level, you choose one of the following:\n\n## Hero\nNobles and royalty treat you as an equal, granting you free food, lodging, and a place in thei",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 18,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_legendary-commander",
+   "name": "Legendary Commander",
+   "desc": "At 20th level, creatures within your Commanding Presence add your Charisma modifier (minimum 1) to saving throws. Additionally, choose one of the following:\n\n##",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 20,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_supreme-stronghold",
+   "name": "Supreme Stronghold",
+   "desc": "Also at 20th level, your stronghold is upgraded to grade 6.",
+   "feature_type": "CLASS_LEVEL_FEATURE",
+   "gained_at": [
+    {
+     "level": 20,
+     "detail": null
+    }
+   ],
+   "data_for_class_table": []
+  },
+  {
+   "key": "a5e_marshal_lessons-of-war-list",
+   "name": "Lessons of War",
+   "desc": "When you gain access to a new lesson of war, choose one of the following.\n\n### Exacting\nYou gain proficiency with navigator's tools, or if you're already profic",
+   "feature_type": "CLASS_FEATURE_OPTION_LIST",
+   "gained_at": [],
+   "data_for_class_table": []
+  }
+ ],
+ "hit_points": {
+  "hit_dice": "D10",
+  "hit_dice_name": "1D10 per Marshal level",
+  "hit_points_at_1st_level": "10 + your Constitution modifier",
+  "hit_points_at_higher_levels": "1D10 (or 6) + your Constitution modifier per marshal level after 1st"
+ },
+ "document": {
+  "name": "Adventurer's Guide",
+  "key": "a5e-ag",
+  "type": "SOURCE",
+  "display_name": "Adventurer's Guide",
+  "publisher": {
+   "name": "EN Publishing",
+   "key": "en-publishing"
+  },
+  "gamesystem": {
+   "name": "Advanced 5th Edition",
+   "key": "a5e"
+  },
+  "permalink": "https://a5esrd.com/a5esrd"
+ },
+ "saving_throws": [
+  {
+   "name": "Constitution"
+  },
+  {
+   "name": "Wisdom"
+  }
+ ],
+ "subclass_of": null,
+ "name": "Marshal",
+ "desc": "",
+ "hit_dice": "D10",
+ "caster_type": "NONE",
+ "primary_abilities": []
+}

@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { normalizeOpen5eClass } from "@/adapters";
 import { HomebrewWindow } from "@/components/homebrew/HomebrewWindow";
 import { CreateTokenModal } from "@/components/modals/CreateTokenModal";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -27,6 +29,18 @@ beforeEach(() => {
       return new Response(JSON.stringify({ entries: body.entries, problems: [] }), { status: 201 });
     }
     if (url.startsWith("/api/catalog/") && init?.method === "DELETE") return new Response(JSON.stringify({ ok: true }));
+    if (url.startsWith("/api/open5e/classes?")) {
+      return new Response(JSON.stringify({ results: [
+        { key: "a5e_marshal", name: "Marshal", documentKey: "a5e-ag", documentTitle: "Adventurer's Guide" },
+        { key: "srd-2024_fighter", name: "Fighter", documentKey: "srd-2024", documentTitle: "5e 2024 Rules" },
+        { key: "a5e_gambling-general", name: "Gambling General", documentKey: "a5e-ag", documentTitle: "Adventurer's Guide", subclassOf: { key: "a5e_marshal", name: "Marshal" } }
+      ] }));
+    }
+    if (url === "/api/open5e/classes/a5e_marshal") {
+      const raw = JSON.parse(readFileSync("tests/fixtures/open5e-classes/a5e_marshal.json", "utf-8")) as Record<string, unknown>;
+      const entry = normalizeOpen5eClass({ provider: "open5e", resource: "class", slug: "a5e_marshal", key: "a5e_marshal", documentKey: "a5e-ag", importedAt: "2026-10-06T00:00:00.000Z", payloadVersion: "v2", raw });
+      return new Response(JSON.stringify({ entry }));
+    }
     return new Response("{}", { status: 404 });
   }));
   try { localStorage.clear(); } catch { /* private mode */ }
@@ -218,5 +232,34 @@ describe("the Homebrew window's other editors (Phase 8c)", { timeout: 30000 }, (
     const names = (wren.features ?? []).map((feature) => feature.name);
     expect(names).toEqual(expect.arrayContaining(["Charm", "Long Stride"]));
     expect(wren.speed).toBe(35);
+  });
+});
+
+describe("importing from Open5e (Phase 8d)", { timeout: 30000 }, () => {
+  it("searches, leaves out the bundled SRD 5.2 classes, imports a class as a skeleton, and opens it after", async () => {
+    render(<HomebrewWindow onClose={() => undefined} />);
+    const window = screen.getByRole("dialog", { name: "Homebrew" });
+    await userEvent.click(within(window).getByRole("button", { name: /Import from Open5e/ }));
+    await userEvent.type(within(window).getByLabelText("Open5e class name"), "mar");
+    await userEvent.click(within(window).getByRole("button", { name: "Search" }));
+    const list = await within(window).findByRole("list", { name: "Open5e classes" });
+    expect(list.textContent).toContain("Marshal");
+    expect(list.textContent).toContain("Marshal subclass · Adventurer's Guide");
+    expect(list.textContent).not.toContain("Fighter");
+
+    await userEvent.click(within(list).getByRole("button", { name: "Import Marshal" }));
+    await within(window).findByText(/Imported Marshal \(Adventurer's Guide\)/);
+    expect((within(window).getByLabelText("Name") as HTMLInputElement).value).toBe("Marshal");
+    expect(posted[0]).toMatchObject({ kind: "class", entry: { id: "open5e:class:a5e_marshal", source: { provider: "open5e", documentKey: "a5e-ag" } } });
+    expect(within(window).getByRole("button", { name: "Level 1" }).textContent).toContain("Commanding Presence");
+
+    // Searching again: it's yours now, and opens rather than importing over your edits.
+    await userEvent.click(within(window).getByRole("button", { name: /Import from Open5e/ }));
+    await userEvent.click(within(window).getByRole("button", { name: "Search" }));
+    const again = await within(window).findByRole("list", { name: "Open5e classes" });
+    expect(within(again).queryByRole("button", { name: "Import Marshal" })).toBeNull();
+    await userEvent.click(within(again).getByRole("button", { name: "Open your Marshal" }));
+    expect((within(window).getByLabelText("Name") as HTMLInputElement).value).toBe("Marshal");
+    expect(posted).toHaveLength(1);
   });
 });

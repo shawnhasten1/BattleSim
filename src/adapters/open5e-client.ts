@@ -52,9 +52,19 @@ export interface Open5eCompendiumSummary {
   raw: Record<string, unknown>;
 }
 
+/** A class or subclass in Open5e's `/v2/classes/` list. */
+export interface Open5eClassSummary {
+  key: string;
+  name: string;
+  documentKey?: string;
+  documentTitle?: string;
+  /** A subclass's class. */
+  subclassOf?: { key: string; name: string };
+}
+
 export interface Open5eImportedPayload {
   provider: "open5e";
-  resource: "creature" | "spell" | "item" | "weapon" | "feature" | "condition" | "rule";
+  resource: "creature" | "spell" | "item" | "weapon" | "feature" | "condition" | "rule" | "class";
   slug: string;
   key?: string;
   documentKey?: string;
@@ -183,6 +193,40 @@ export class Open5eClient {
       resource: "spell",
       slug,
       key: stringField(raw, "key") ?? slug,
+      documentKey: readNestedString(raw, ["document", "key"]),
+      importedAt: new Date().toISOString(),
+      payloadVersion: "v2",
+      raw
+    };
+  }
+
+  /** Classes and subclasses by name (`/v2/classes/`), lightweight: the full record comes with `importClass`. */
+  async searchClasses(options: Open5eSearchOptions): Promise<Open5eClassSummary[]> {
+    const url = this.v2Url("/classes/");
+    if (options.query) url.searchParams.set("name__icontains", options.query);
+    url.searchParams.set("fields", "key,name,document,subclass_of");
+    url.searchParams.set("limit", String(options.limit ?? 50));
+    if (options.documentKey) url.searchParams.set("document__key", options.documentKey);
+    const data = await this.fetchJson(url);
+    return data.results.map((record) => {
+      const parent = record.subclass_of && typeof record.subclass_of === "object" ? record.subclass_of as Record<string, unknown> : undefined;
+      return {
+        key: String(record.key ?? ""),
+        name: String(record.name ?? "Unknown class"),
+        documentKey: readNestedString(record, ["document", "key"]),
+        documentTitle: documentTitle(record),
+        ...(parent && typeof parent.key === "string" ? { subclassOf: { key: parent.key, name: String(parent.name ?? parent.key) } } : {})
+      };
+    });
+  }
+
+  async importClass(key: string): Promise<Open5eImportedPayload> {
+    const raw = await this.fetchRecord(this.v2Url(`/classes/${encodeURIComponent(key)}/`));
+    return {
+      provider: "open5e",
+      resource: "class",
+      slug: key,
+      key: stringField(raw, "key") ?? key,
       documentKey: readNestedString(raw, ["document", "key"]),
       importedAt: new Date().toISOString(),
       payloadVersion: "v2",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Copy, Download, Save, Trash2, Upload } from "lucide-react";
+import { Copy, Download, Globe, Save, Trash2, Upload } from "lucide-react";
 import type { FeatureDefinition } from "@/engine";
 import {
   blankEntry,
@@ -28,6 +28,7 @@ import { AbilityEditor } from "@/components/sheet/ability-editor/AbilityEditor";
 import { useCatalogStore } from "@/store/catalog-store";
 import { ClassEditor } from "./ClassEditor";
 import { HomebrewContext, type HomebrewContextValue } from "./controls";
+import { Open5eImport } from "./Open5eImport";
 import { BackgroundEditor, FeatEditor, SpeciesEditor, SubclassEditor } from "./OtherEditors";
 import styles from "./homebrew.module.css";
 
@@ -64,6 +65,8 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
   const [problems, setProblems] = useState<string[] | null>(null);
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // The Open5e import panel, in place of an entry's editor.
+  const [searching, setSearching] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dirty = draft !== null && !deepEqual(draft, stored);
 
@@ -83,6 +86,7 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
   function openEntry(item: CatalogEntry | null, saved: CatalogEntry | null) {
     setDraft(item ? structuredClone(item) : null);
     setStored(saved);
+    setSearching(false);
     setProblems(null);
     setDeleting(false);
     setLeaving(null);
@@ -124,6 +128,20 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
       error: saved.length === 0,
       text: saved.length ? `Imported ${saved.map((item) => item.entry.name).join(", ")}.` : `Nothing in ${file.name} was imported.`,
       details: [...read.problems, ...refused, ...notes]
+    });
+  }
+
+  async function importFromOpen5e(item: CatalogEntry) {
+    const { saved, problems: refused } = await saveEntries([item]);
+    if (!saved.length) {
+      setMessage({ error: true, text: `${item.entry.name} wasn't imported.`, details: refused });
+      return;
+    }
+    const merged = mergeCatalog(SRD_BUILD_SOURCES, useCatalogStore.getState().entries);
+    openEntry(saved[0]!, saved[0]!);
+    setMessage({
+      text: `Imported ${entryLabel(saved[0]!.entry)}. Its features are reference text: open one to make it runnable.`,
+      details: missingFor(saved[0]!, merged.catalog).map((note) => `${saved[0]!.entry.name}: ${note}`)
     });
   }
 
@@ -218,6 +236,9 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
               </button>
               <input ref={fileRef} type="file" accept="application/json,.json" className={styles.hidden} onChange={importFile} aria-label="Import a catalog file" />
             </div>
+            <button type="button" className={styles.btn} onClick={() => leave(() => { openEntry(null, null); setSearching(true); })}>
+              <Globe size={12} /> Import from Open5e…
+            </button>
 
             {status === "loading" ? <p className={styles.dim}>Loading…</p> : null}
             {status === "failed" ? (
@@ -284,6 +305,18 @@ export function HomebrewWindow({ onClose }: { onClose: () => void }) {
                   <EntryEditor item={draft} catalog={sources.catalog} onChange={setDraft} />
                 </div>
               </>
+            ) : searching ? (
+              <div className={styles.body}>
+                <Notices message={message} problems={null} onDismiss={() => setMessage(null)} />
+                <Open5eImport
+                  owned={new Set(entries.map((item) => item.entry.id))}
+                  onImported={importFromOpen5e}
+                  onOpen={(id) => {
+                    const item = entries.find((candidate) => candidate.entry.id === id);
+                    if (item) openEntry(item, item);
+                  }}
+                />
+              </div>
             ) : (
               <div className={styles.body}>
                 <Notices message={message} problems={null} onDismiss={() => setMessage(null)} />
