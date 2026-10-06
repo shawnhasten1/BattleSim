@@ -201,7 +201,7 @@ function mismatchedDamage(record: AbilityRecord, definition: CreatureDefinition)
 const OFFENSE_KINDS = new Set<FeatureEffect["kind"]>(["damage-bonus", "attack-bonus", "attack-advantage"]);
 const DEFENSE_KINDS = new Set<FeatureEffect["kind"]>(["damage-adjustment", "armor-class-bonus", "save-bonus", "save-advantage"]);
 /** The effects a "helps" aura passes on to creatures near it. */
-const SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus"]);
+const SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus", "condition-immunity"]);
 
 type Activation = Extract<ActionDefinition, { kind: "activate-feature" }>;
 

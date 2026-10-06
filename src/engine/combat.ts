@@ -3119,6 +3119,8 @@ export function resolveActivateFeatureAction(
   }
 
   const conditionId = applyFeatureActivationCondition(state, actor, action);
+  // Mindless Rage: raging ends being charmed or frightened.
+  shedImmuneConditions(state, actor);
   return { conditionId };
 }
 
@@ -3271,9 +3273,74 @@ export function fallCombatant(state: EngineState, combatant: CombatantState, fee
   }
 }
 
+/**
+ * Immunity a creature's features give it right now, or an ally's aura (Mindless Rage while raging, Aura of Courage):
+ * whether it covers this condition.
+ */
+export function featureImmuneToCondition(state: EngineState, target: CombatantState, name: ConditionName | string): boolean {
+  const label = String(name).toLowerCase();
+  const covers = (effect: FeatureEffect, bearer: CombatantState) => effect.kind === "condition-immunity"
+    && (effect.conditions as string[]).includes(label)
+    && (!effect.whileCondition || (bearer.conditions ?? []).some((condition) => condition.id === effect.whileCondition));
+  const definition = getDefinition(state.snapshot, target);
+  if (featureSources(definition, target).some((feature) => (feature.effects ?? []).some((effect) => covers(effect, target)))) return true;
+  return auraSources(state, target).some(({ feature }) => (feature.effects ?? []).some((effect) => effect.kind === "condition-immunity" && (effect.conditions as string[]).includes(label)));
+}
+
+/** Conditions a creature has become immune to end (entering a rage while frightened, starting a turn in Aura of Courage). */
+export function shedImmuneConditions(state: EngineState, combatant: CombatantState): void {
+  const before = combatant.conditions ?? [];
+  const kept = before.filter((condition) => condition.name === "custom" || !featureImmuneToCondition(state, combatant, condition.name));
+  if (kept.length === before.length) return;
+  for (const condition of before.filter((candidate) => !kept.includes(candidate))) {
+    state.log.push(event(state, "ConditionExpired", `${combatant.displayName} is no longer ${condition.name}: it's immune now`, {
+      combatantId: combatant.id, condition, reason: "immune"
+    }));
+  }
+  combatant.conditions = kept;
+}
+
+/** A creature that took damage loses the conditions that end on it, but not one the same action just gave (Sear Undead's damage). */
+function endConditionsOnDamage(state: EngineState, target: CombatantState, actionId: Id | undefined): void {
+  const before = target.conditions ?? [];
+  const ended = before.filter((condition) => condition.endsOnDamage && (!actionId || condition.sourceId !== actionId));
+  if (!ended.length) return;
+  target.conditions = before.filter((condition) => !ended.includes(condition));
+  for (const condition of ended) {
+    state.log.push(event(state, "ConditionExpired", `${target.displayName} lost ${condition.name}: it took damage`, {
+      combatantId: target.id, condition, reason: "damaged"
+    }));
+  }
+}
+
+/**
+ * Dark One's Blessing: a creature that drops `target`, or stands within reach of it when someone else does, gains its
+ * temporary hit points.
+ */
+function grantOnKill(state: EngineState, target: CombatantState, killerId: Id | undefined): void {
+  for (const combatant of state.snapshot.combatants) {
+    if (combatant.state !== "active" || combatant.id === target.id || effectiveFaction(state.snapshot, combatant) === effectiveFaction(state.snapshot, target)) continue;
+    const definition = getDefinition(state.snapshot, combatant);
+    for (const feature of featureSources(definition, combatant)) {
+      for (const effect of feature.effects ?? []) {
+        if (effect.kind !== "on-kill") continue;
+        const counts = combatant.id === killerId || (effect.nearbyFt !== undefined && spatialDistance(state.snapshot, combatant, target) <= effect.nearbyFt);
+        if (!counts) continue;
+        const amount = Math.max(1, resolveNumericFormula(effect.tempHp, definition));
+        if (amount <= combatant.tempHp) continue;
+        combatant.tempHp = amount;
+        state.log.push(event(state, "FeatureEffectApplied", `${combatant.displayName} gains ${amount} temporary hit points (${feature.name})`, {
+          combatantId: combatant.id, featureId: feature.id, featureName: feature.name, effectKind: effect.kind, amount, tempHp: combatant.tempHp
+        }));
+      }
+    }
+  }
+}
+
 export function applyCondition(state: EngineState, targetId: Id, condition: ConditionInstance, options: { force?: boolean } = {}): boolean {
   const target = findCombatant(state.snapshot, targetId);
-  if (!options.force && isImmuneToCondition(getDefinition(state.snapshot, target), condition.name)) {
+  if (!options.force && (isImmuneToCondition(getDefinition(state.snapshot, target), condition.name)
+    || (condition.name !== "custom" && featureImmuneToCondition(state, target, condition.name)))) {
     logConditionResisted(state, target, condition.name);
     return false;
   }
@@ -4055,6 +4122,8 @@ export function runTurnStart(state: EngineState, actor: CombatantState): void {
   runHoldsAtTurnStart(state, actor);
   runContainmentAtTurnStart(state, actor);
   expireConditions(state, "start");
+  // Aura of Courage, Mindless Rage: a condition it's immune to now ends.
+  shedImmuneConditions(state, actor);
   standUpFromProne(state, actor);
   applyTimedFeatureEffects(state, actor.id, "turn-start");
   applyEmanations(state, actor);
@@ -4637,7 +4706,7 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string } = {},
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id } = {},
   sourceId?: Id
 ): number {
   return applyDamageEntries(
@@ -4651,7 +4720,8 @@ function applyDamageComponents(
       extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined
     })),
     source,
-    sourceId
+    sourceId,
+    { actionId: options.actionId }
   );
 }
 
@@ -4661,7 +4731,7 @@ function applyDamageEntries(
   entries: DamageApplicationEntry[],
   source: CreatureDefinition,
   sourceId?: Id,
-  options: { byAttack?: boolean } = {}
+  options: { byAttack?: boolean; actionId?: Id } = {}
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   const hpBefore = target.currentHp + target.tempHp;
@@ -4725,6 +4795,7 @@ function applyDamageEntries(
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
     checkRegurgitation(state, target, sourceId, totalApplied);
+    endConditionsOnDamage(state, target, options.actionId);
   }
   // Split cares about being subjected to the damage, not about it getting through: a pudding is immune to slashing.
   checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
@@ -4916,6 +4987,7 @@ function applyRolledAreaDamage(
   const areaHitDamageTypes = components.filter((c) => c.finalAmount > 0).map((c) => c.damageType);
   if (totalApplied > 0) {
     resolveConcentration(state, target, totalApplied);
+    endConditionsOnDamage(state, target, undefined);
   }
   checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, areaHitDamageTypes, false));
@@ -4942,6 +5014,16 @@ export function updateDefeatState(state: EngineState, target: CombatantState, ki
   if (target.currentHp > 0) {
     return;
   }
+  const wasUp = target.state === "active";
+  try {
+    dropAtZero(state, target, killerId, hit);
+  } finally {
+    // Dark One's Blessing: whoever dropped it, or stands near it.
+    if (wasUp && target.state !== "active") grantOnKill(state, target, killerId);
+  }
+}
+
+function dropAtZero(state: EngineState, target: CombatantState, killerId?: Id, hit?: HitInfo): void {
   const definition = getDefinition(state.snapshot, target);
   // 5e massive damage: what's left after reaching 0 HP, if it's at least the creature's maximum, kills outright.
   if (hit && state.snapshot.rules.massiveDamage && hit.overkill >= definition.maxHp && target.state !== "defeated") {
@@ -6571,6 +6653,7 @@ function applyConditionRider(
     effects: rider.effects,
     ...(rider.conditionKey ? { sourceName: rider.conditionKey } : {}),
     ...(rider.nextAttack ? { nextAttack: { ...rider.nextAttack, ...(rider.nextAttack.role === "against" ? { by: source.id } : {}) } } : {}),
+    ...(rider.endsOnDamage ? { endsOnDamage: true } : {}),
     repeatSave: expiry.repeatTiming && repeatAbility
       ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming }
       : undefined,
@@ -6677,7 +6760,7 @@ function applyActionRiders(
 
     if (rider.kind === "damage") {
       outcome.extraDamage += applyDamageComponents(state, target, rider.components, sourceDefinition, ctx.critical === true, {
-        casterLevel: casterLevelOf(sourceDefinition)
+        casterLevel: casterLevelOf(sourceDefinition), actionId: ctx.actionId
       }, source.id);
     } else if (rider.kind === "healing") {
       const recipient = rider.target === "self" ? source : target;

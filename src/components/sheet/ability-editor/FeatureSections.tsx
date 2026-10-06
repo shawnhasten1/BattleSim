@@ -336,7 +336,7 @@ export function ActivationWhileActive({ activation, onChange, definition, newPoo
 /* ─── aura ───────────────────────────────────────────────────────────────── */
 
 /** The effects an aura passes on: the simulator shares only these with nearby creatures. */
-const SHARED_KINDS = new Set(["save-bonus", "save-advantage", "armor-class-bonus"]);
+const SHARED_KINDS = new Set(["save-bonus", "save-advantage", "armor-class-bonus", "condition-immunity"]);
 
 function FeatureAura({ feature, onChange, definition }: { feature: FeatureDefinition; onChange: (next: FeatureDefinition) => void; definition: CreatureDefinition }) {
   const aura = feature.aura;

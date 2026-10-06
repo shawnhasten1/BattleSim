@@ -107,6 +107,14 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "fire" } })
   },
   {
+    kind: "condition-immunity", label: "Immune to a condition", hint: "Mindless Rage while raging; on an aura, its allies too (Aura of Courage)", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "condition-immunity", conditions: ["frightened"] })
+  },
+  {
+    kind: "on-kill", label: "Temporary hit points on a kill", hint: "Dark One's Blessing: when it drops an enemy, or one drops near it", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "on-kill", tempHp: { base: 1 } })
+  },
+  {
     kind: "no-advantage-against", label: "No advantage against it", hint: "Elusive: attack rolls against it can't have advantage while it can act", theme: "defense", when: false, scope: false,
     blank: () => ({ kind: "no-advantage-against" })
   },

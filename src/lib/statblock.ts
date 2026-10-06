@@ -335,10 +335,12 @@ function riderSentence(rider: ActionRider, definition: CreatureDefinition, fallb
           ? `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or be unable to take reactions${lasts}${qualifiers}.`
           : `${S} can't take reactions${lasts}${qualifiers}.`;
       }
+      // Turn Undead: taking damage ends it.
+      const ends = rider.endsOnDamage ? ` It ends early if ${who.subject} takes damage.` : "";
       if (rider.save && rollsOwnSave) {
-        return `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or ${beCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}`;
+        return `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or ${beCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
       }
-      return `${S} ${isCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}`;
+      return `${S} ${isCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
     }
     case "damage":
       return `${S} takes an extra ${damageText(rider.components, definition)}${qualifiers}.`;
@@ -660,6 +662,10 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
     }
     case "no-advantage-against":
       return `Attack rolls against ${who.object} can't have advantage while ${who.subject} isn't incapacitated.`;
+    case "condition-immunity":
+      return `${S} can't be ${joinList(effect.conditions, "or")}${effect.whileCondition === "rage-active" ? " while it rages" : effect.whileCondition ? ` while it's ${effect.whileCondition.replace(/-/g, " ")}` : ""}.`;
+    case "on-kill":
+      return `When ${who.subject} reduces an enemy to 0 hit points${effect.nearbyFt ? `, or someone else does within ${effect.nearbyFt} feet of ${who.object}` : ""}, ${who.subject} gains ${formulaText(effect.tempHp, definition).replace(/^\+/, "")} temporary hit points (at least 1).`;
     case "save-floor":
       return `When ${who.subject} makes a ${ABILITY_NAME[effect.ability]} saving throw totalling less than ${who.possessive} ${ABILITY_NAME[effect.ability]} score, ${who.subject} uses the score instead.`;
     case "death-saves":
@@ -779,6 +785,8 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "hp-regen": return `regains ${effect.amount} HP a turn${effect.suppressedByDamageTypes?.length ? ` (not after ${joinList(effect.suppressedByDamageTypes, "or")})` : ""}`;
     case "survive-lethal": return `drops to ${effect.hpTo && effect.hpTo > 1 ? effect.hpTo : 1} HP instead of 0`;
     case "no-advantage-against": return "no advantage against it";
+    case "condition-immunity": return `can't be ${joinList(effect.conditions, "or")}${effect.whileCondition ? " (while active)" : ""}`;
+    case "on-kill": return `temp HP when an enemy drops${effect.nearbyFt ? ` within ${effect.nearbyFt} ft` : ""}`;
     case "save-floor": return `${effect.ability.toUpperCase()} saves at least its score`;
     case "death-saves": return [effect.advantage ? "advantage on death saves" : "", effect.twentyFrom && effect.twentyFrom < 20 ? `${effect.twentyFrom}–20 counts as 20` : ""].filter(Boolean).join(", ") || "death saves";
     case "auto-succeed-save": return "can turn a failed save into a success";
@@ -1587,7 +1595,7 @@ function activationLead(action: ActivateAction): string {
 }
 
 /** The effects an aura passes on to creatures near it (`auraSources` reads only these). */
-const AURA_SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus"]);
+const AURA_SHARED_KINDS = new Set<FeatureEffect["kind"]>(["save-bonus", "save-advantage", "armor-class-bonus", "condition-immunity"]);
 
 export function featureStatblock(feature: FeatureDefinition, definition: CreatureDefinition): StatblockEntry {
   const granted = feature.grantedActions ?? [];

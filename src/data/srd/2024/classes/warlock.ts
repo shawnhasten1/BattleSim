@@ -245,7 +245,9 @@ export const FIEND_PATRON: SubclassDefinition = {
     {
       level: 3,
       grants: [
-        grant("dark-ones-blessing", reference("warlock_fiend-patron_dark-ones-blessing")),
+        grant("dark-ones-blessing", runs("warlock_fiend-patron_dark-ones-blessing", {
+          effects: [{ kind: "on-kill", tempHp: { ability: "cha", base: 3 }, nearbyFt: 10 }]
+        }), { scale: [{ path: "effects.0.tempHp.base", value: "{level}" }] }),
         grant("fiend-spells", runs("warlock_fiend-patron_fiend-spells"), { spells: ["burning-hands", "command", "scorching-ray", "suggestion"].map(spell) })
       ]
     },

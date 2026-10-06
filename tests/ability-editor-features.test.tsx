@@ -232,6 +232,22 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Studied").effects?.[0]).toMatchObject({ kind: "apply-condition-on-hit", onMiss: true, appliedCondition: { nextAttack: { role: "against", mode: "advantage" } } });
   });
 
+  it("Immune to a condition, and temporary hit points on a kill", async () => {
+    await blankFeature("Fearless Reaper");
+    const immune = await addEffect(/^Immune to a condition/, "Immune to a condition");
+    await chip(immune, "Immune to", "charmed");
+    await done(immune);
+    const kill = await addEffect(/^Temporary hit points on a kill/, "Temporary hit points on a kill");
+    await userEvent.click(kill.getByRole("checkbox", { name: "Also when one drops near it" }));
+    await retype(kill.getByLabelText("Within (ft)"), "15");
+    await done(kill);
+    await addToSheet();
+    expect(named("Fearless Reaper").effects).toEqual([
+      { kind: "condition-immunity", conditions: ["frightened", "charmed"] },
+      { kind: "on-kill", tempHp: { base: 1 }, nearbyFt: 15 }
+    ]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

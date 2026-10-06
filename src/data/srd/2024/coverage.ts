@@ -36,21 +36,19 @@ export const GAPS = {
   "dice-trade": "Trading damage dice for an effect (Cunning Strike, Brutal Strike)",
   "follow-up-attack": "An extra attack against a second creature near the first (Horde Breaker, Cleave)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
+  flee: "A creature that must spend its turns moving away from its source (Turn Undead)",
   "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
   "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
-  "on-kill": "Something that happens when an enemy drops (Dark One's Blessing)",
   metamagic: "Spending sorcery points to change a spell as it's cast",
   "slot-conversion": "Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
   "size-change": "Changing size (Large Form)",
   "gain-speed": "Gaining a speed for a while (Dragon Wings, Draconic Flight)",
   "rage-limits": "What raging forbids (spells, concentration), and its states (raging and reckless at once)",
-  "conditional-immunity": "Immunity to a condition only while something holds (raging, standing in an aura)",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "reaction-attack": "A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect)",
   "oa-defense": "Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense)",
-  "ends-on-damage": "A condition that ends when the creature takes damage (Turn Undead, Abjure Foes)",
   "action-limits": "A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes)",
   "condition-removal": "Ending a condition with a feature (Self-Restoration, Restoring Touch)",
   "summon-stat-blocks": "Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon)",
@@ -113,7 +111,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Path of the Berserker */
   "path-of-the-berserker_frenzy": partial(["rage-limits"], "The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack."),
-  "path-of-the-berserker_mindless-rage": manual(["conditional-immunity"]),
+  "path-of-the-berserker_mindless-rage": full("Immune to Charmed and Frightened while raging; raging ends them."),
   "path-of-the-berserker_retaliation": manual(["reaction-attack"]),
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),
 
@@ -141,10 +139,10 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Cleric */
   "cleric_divine-order": builder("Protector: martial weapons and heavy armor. Thaumaturge: a cantrip (its check bonus is outside a fight)."),
   cleric_spellcasting: builder(),
-  "cleric_channel-divinity": partial(["ends-on-damage"], "Divine Spark (heal or damage) runs. Turn Undead's Frightened and Incapacitated don't end when the undead takes damage, and it doesn't flee."),
+  "cleric_channel-divinity": partial(["flee"], "Divine Spark (heal or damage), and Turn Undead's Frightened and Incapacitated, which end when the undead takes damage; a turned undead doesn't run from you."),
   "cleric_cleric-subclasses": SUBCLASS,
   "cleric_ability-score-improvement": FEAT_CHOICE,
-  "cleric_sear-undead": partial(["ends-on-damage"], "The radiant damage runs with Turn Undead; see Channel Divinity."),
+  "cleric_sear-undead": full("The radiant damage with Turn Undead, which doesn't end the turning."),
   "cleric_blessed-strikes": full("Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip."),
   "cleric_divine-intervention": manual(["free-cast-any"]),
   "cleric_improved-blessed-strikes": partial(["damage-vitality"], "Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't."),
@@ -249,8 +247,8 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "paladin_extra-attack": full(),
   "paladin_faithful-steed": manual(["summon-stat-blocks"]),
   "paladin_aura-of-protection": full("Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied."),
-  "paladin_abjure-foes": partial(["ends-on-damage", "action-limits"], "Frightened on a failed Wisdom save, for every enemy within 60 ft (not Charisma-modifier many); it doesn't end on damage, and the one-thing-per-turn limit doesn't run."),
-  "paladin_aura-of-courage": manual(["conditional-immunity"]),
+  "paladin_abjure-foes": partial(["action-limits"], "Frightened on a failed Wisdom save until it takes damage, for every enemy within 60 ft (not Charisma-modifier many); the one-thing-per-turn limit doesn't run."),
+  "paladin_aura-of-courage": full("Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there)."),
   "paladin_radiant-strikes": full(),
   "paladin_restoring-touch": manual(["condition-removal"]),
   "paladin_aura-expansion": builder("The auras' range becomes 30 ft."),
@@ -260,7 +258,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Oath of Devotion */
   "paladin_oath-of-devotion_spells": PREPARED("Oath of Devotion spells"),
   "paladin_oath-of-devotion_sacred-weapon": full("Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity, taken by the AI before melee attacks; its radiant damage and light aren't."),
-  "paladin_oath-of-devotion_aura-of-devotion": manual(["conditional-immunity"]),
+  "paladin_oath-of-devotion_aura-of-devotion": full("Immunity to Charmed for the paladin and allies in its aura; an ally already charmed is freed at the start of its turn there."),
   "paladin_oath-of-devotion_smite-of-protection": manual(["smite"]),
   "paladin_oath-of-devotion_holy-nimbus": manual(["activated-aura"]),
 
@@ -353,7 +351,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "warlock_warlock-spell-list": SPELL_LIST,
 
   /* Fiend Patron */
-  "warlock_fiend-patron_dark-ones-blessing": manual(["on-kill"]),
+  "warlock_fiend-patron_dark-ones-blessing": full("Charisma + warlock level temporary hit points (at least 1) when it drops an enemy, or someone else does within 10 ft of it."),
   "warlock_fiend-patron_fiend-spells": PREPARED("Fiend spells"),
   "warlock_fiend-patron_dark-ones-own-luck": full("1d10 on a failed save; ability checks are outside a fight."),
   "warlock_fiend-patron_fiendish-resilience": full("Resistance to the chosen damage type."),

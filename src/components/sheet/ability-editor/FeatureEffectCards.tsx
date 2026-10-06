@@ -849,6 +849,24 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
     case "no-advantage-against":
       return <p className={styles.hint}>Nothing to set: attack rolls against it can&apos;t have advantage while it isn&apos;t incapacitated.</p>;
+    case "condition-immunity":
+      return (
+        <div className={styles.typeChips} role="group" aria-label="Immune to">
+          {CONDITIONS.map((condition) => {
+            const on = (effect.conditions as string[]).includes(condition);
+            const next = on ? effect.conditions.filter((entry) => entry !== condition) : [...effect.conditions, condition];
+            return <button key={condition} type="button" aria-pressed={on} onClick={() => next.length && set({ ...effect, conditions: next as ConditionName[] })}>{condition}</button>;
+          })}
+        </div>
+      );
+    case "on-kill":
+      return (
+        <>
+          <FormulaField label="Temporary hit points" value={effect.tempHp} restricted={restricted} definition={definition} onChange={(tempHp) => set({ ...effect, tempHp })} />
+          <Check label="Also when one drops near it" checked={effect.nearbyFt !== undefined} onChange={(on) => set(opt(effect, "nearbyFt", on ? 10 : undefined))} />
+          {effect.nearbyFt !== undefined ? <NumberField label="Within (ft)" value={effect.nearbyFt} min={5} max={60} step={5} onChange={(n) => n !== undefined && set({ ...effect, nearbyFt: n })} /> : null}
+        </>
+      );
     case "save-floor":
       return (
         <span className={styles.inline}>

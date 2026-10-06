@@ -1009,7 +1009,8 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
       ...(isRecord(input.nextAttack) && (input.nextAttack.role === "made" || input.nextAttack.role === "against")
         && (input.nextAttack.mode === "advantage" || input.nextAttack.mode === "disadvantage")
         ? { nextAttack: { role: input.nextAttack.role, mode: input.nextAttack.mode } }
-        : {})
+        : {}),
+      ...(input.endsOnDamage === true ? { endsOnDamage: true } : {})
     };
   }
   return null;

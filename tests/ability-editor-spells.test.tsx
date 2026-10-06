@@ -104,6 +104,24 @@ describe("spells built from a blank one", { timeout: 20000 }, () => {
     expect(fighter().spells!.at(-1)!.upcast).toEqual({ perSlotAboveBase: { targets: 1 } });
   });
 
+  it("a condition that ends when the creature takes damage (Turn Undead)", async () => {
+    await blank("Special action");
+    await retype("Name", "Dread Glare");
+    await radio("How it works", "Saving throw");
+    await radio("Saving throw", "WIS");
+    await radio("A success", "Avoids it");
+    await userEvent.click(screen.getByRole("button", { name: "Remove damage" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add effect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /^Condition/ }));
+    const card = screen.getByRole("group", { name: "Condition effect" });
+    await userEvent.selectOptions(within(card).getByLabelText("Condition"), "frightened");
+    await userEvent.click(within(card).getByRole("checkbox", { name: "Ends early if it takes damage" }));
+    await userEvent.click(within(card).getByRole("button", { name: "Done" }));
+    await addToSheet();
+    const saved = fighter().actions.find((action) => action.name === "Dread Glare")!;
+    expect(saved.kind === "save" ? saved.riders?.[0] : undefined).toMatchObject({ kind: "condition", condition: "frightened", endsOnDamage: true });
+  });
+
   it("Cure Wounds: no roll, heals one creature it touches", async () => {
     await blank("Spell");
     await retype("Name", "Cure Wounds");

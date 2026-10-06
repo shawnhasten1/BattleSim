@@ -656,6 +656,24 @@ export type FeatureEffect =
     kind: "no-advantage-against";
   }
   | {
+    /**
+     * Immunity to these conditions (Mindless Rage while raging: `whileCondition`; on an aura, its allies' too: Aura of
+     * Courage). One it already has ends when the immunity starts, or at the start of its turn.
+     */
+    kind: "condition-immunity";
+    conditions: ConditionName[];
+    whileCondition?: string;
+  }
+  | {
+    /**
+     * When it drops a hostile creature to 0 hit points, or someone else does within `nearbyFt` of it, it gains `tempHp`
+     * temporary hit points (at least 1: Dark One's Blessing).
+     */
+    kind: "on-kill";
+    tempHp: NumericFormula;
+    nearbyFt?: number;
+  }
+  | {
     /** A saving throw of `ability` totalling less than that score uses the score (Indomitable Might). */
     kind: "save-floor";
     ability: Ability;
@@ -999,6 +1017,8 @@ export type ActionRider =
       conditionKey?: string;
       /** It changes, and is used up by, the next attack roll: see `ConditionInstance.nextAttack`. */
       nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
+      /** It ends when its bearer takes damage, other than the same action's (Turn Undead, Abjure Foes). */
+      endsOnDamage?: boolean;
     })
   | (TriggeredRider & {
       kind: "push";
@@ -2203,6 +2223,8 @@ export interface ConditionInstance {
    * attacker's advantage).
    */
   nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage"; by?: Id };
+  /** It ends when its bearer takes damage, other than from the action that gave it (`sourceId`): Turn Undead. */
+  endsOnDamage?: boolean;
   effects?: FeatureEffect[];
   /**
    * The bearer re-rolls this save at the given timing on its own turn; a success

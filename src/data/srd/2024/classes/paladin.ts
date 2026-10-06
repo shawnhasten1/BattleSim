@@ -86,13 +86,19 @@ export const PALADIN: ClassDefinition = {
           saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true },
           area: { type: "circle", size: 60 }, targeting: { origin: "self", range: 0 },
           damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile",
-          riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 } }],
+          riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, endsOnDamage: true }],
           resourceCost: { resourceId: CHANNEL, amount: 1 }, automationSupport: "full"
         }],
-        notSimulated: "it reaches every enemy within 60 feet rather than Charisma-modifier many; the fear doesn't end on damage, and the one-thing-a-turn limit doesn't run."
+        notSimulated: "it reaches every enemy within 60 feet rather than Charisma-modifier many, and the one-thing-a-turn limit doesn't run."
       }))]
     },
-    { level: 10, grants: [grant("aura-of-courage", reference("paladin_aura-of-courage"))] },
+    {
+      level: 10,
+      grants: [grant("aura-of-courage", runs("paladin_aura-of-courage", {
+        aura: { range: 10, affects: "allies", requiresConscious: true },
+        effects: [{ kind: "condition-immunity", conditions: ["frightened"] }]
+      }), { scale: [{ path: "aura.range", value: "{col:aura-range}" }] })]
+    },
     {
       level: 11,
       grants: [grant("radiant-strikes", runs("paladin_radiant-strikes", {
@@ -149,7 +155,13 @@ export const OATH_OF_DEVOTION: SubclassDefinition = {
       ]
     },
     { level: 5, grants: [{ key: "oath-spells-5", spells: ["aid", "zone-of-truth"].map(spell) }] },
-    { level: 7, grants: [grant("aura-of-devotion", reference("paladin_oath-of-devotion_aura-of-devotion"))] },
+    {
+      level: 7,
+      grants: [grant("aura-of-devotion", runs("paladin_oath-of-devotion_aura-of-devotion", {
+        aura: { range: 10, affects: "allies", requiresConscious: true },
+        effects: [{ kind: "condition-immunity", conditions: ["charmed"] }]
+      }), { scale: [{ path: "aura.range", value: "{col:aura-range}" }] })]
+    },
     { level: 9, grants: [{ key: "oath-spells-9", spells: ["beacon-of-hope", "dispel-magic"].map(spell) }] },
     { level: 13, grants: [{ key: "oath-spells-13", spells: ["freedom-of-movement", "guardian-of-faith"].map(spell) }] },
     { level: 15, grants: [grant("smite-of-protection", reference("paladin_oath-of-devotion_smite-of-protection"))] },

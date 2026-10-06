@@ -148,7 +148,12 @@ export const BERSERKER: SubclassDefinition = {
         }), { scale: [{ path: "effects.0.damage.0.dice", value: "{col:rage-damage}d6" }] })
       ]
     },
-    { level: 6, grants: [grant("mindless-rage", reference("path-of-the-berserker_mindless-rage"))] },
+    {
+      level: 6,
+      grants: [grant("mindless-rage", runs("path-of-the-berserker_mindless-rage", {
+        effects: [{ kind: "condition-immunity", conditions: ["charmed", "frightened"], whileCondition: RAGE_ACTIVE }]
+      }))]
+    },
     { level: 10, grants: [grant("retaliation", reference("path-of-the-berserker_retaliation"))] },
     {
       level: 14,

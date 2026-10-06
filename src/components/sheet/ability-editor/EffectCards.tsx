@@ -498,6 +498,8 @@ function ConditionFields({ rider, onChange, definition, context }: {
         </div>
       ) : null}
       <DurationField rider={rider} onChange={onChange} />
+      <Check label="Ends early if it takes damage" checked={rider.endsOnDamage === true}
+        onChange={(on) => { const next = { ...rider }; delete next.endsOnDamage; onChange(on ? { ...next, endsOnDamage: true } : next); }} />
     </>
   );
 }

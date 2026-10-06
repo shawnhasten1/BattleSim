@@ -15,17 +15,17 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 10 | 2 | 5 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 11 | 2 | 4 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 5 | 3 | 1 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 6 | 2 | 6 | 8 | 1 |
+| Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 8 | 0 | 5 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
-| Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
+| Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
 | Feats | 17 | 6 | 2 | 5 | 4 | 0 |
 | Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
@@ -45,10 +45,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
-| `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
-| `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
@@ -60,10 +58,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
+| `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
-| `on-kill` | Something that happens when an enemy drops (Dark One's Blessing) | Warlock | 3 | Dark One's Blessing (Fiend Patron) |
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `counterspell-save` | The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent | Spells | 5 | Counterspell (spell) |
@@ -110,7 +108,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Frenzy | partial | `rage-limits` | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack. |
-| 6 | Mindless Rage | manual | `conditional-immunity` |  |
+| 6 | Mindless Rage | full |  | Immune to Charmed and Frightened while raging; raging ends them. |
 | 10 | Retaliation | manual | `reaction-attack` |  |
 | 14 | Intimidating Presence | full |  | A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered. |
 
@@ -147,10 +145,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Divine Order | builder |  | Protector: martial weapons and heavy armor. Thaumaturge: a cantrip (its check bonus is outside a fight). |
 | 1 | Spellcasting | builder |  |  |
-| 2 | Channel Divinity | partial | `ends-on-damage` | Divine Spark (heal or damage) runs. Turn Undead's Frightened and Incapacitated don't end when the undead takes damage, and it doesn't flee. |
+| 2 | Channel Divinity | partial | `flee` | Divine Spark (heal or damage), and Turn Undead's Frightened and Incapacitated, which end when the undead takes damage; a turned undead doesn't run from you. |
 | 3 | Cleric Subclasses | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
-| 5 | Sear Undead | partial | `ends-on-damage` | The radiant damage runs with Turn Undead; see Channel Divinity. |
+| 5 | Sear Undead | full |  | The radiant damage with Turn Undead, which doesn't end the turning. |
 | 7 | Blessed Strikes | full |  | Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip. |
 | 10 | Divine Intervention | manual | `free-cast-any` |  |
 | 14 | Improved Blessed Strikes | partial | `damage-vitality` | Divine Strike's 2d8 runs; Potent Spellcasting's temporary hit points don't. |
@@ -279,8 +277,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Faithful Steed | manual | `summon-stat-blocks` |  |
 | 6 | Aura of Protection | full |  | Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied. |
-| 9 | Abjure Foes | partial | `ends-on-damage`, `action-limits` | Frightened on a failed Wisdom save, for every enemy within 60 ft (not Charisma-modifier many); it doesn't end on damage, and the one-thing-per-turn limit doesn't run. |
-| 10 | Aura of Courage | manual | `conditional-immunity` |  |
+| 9 | Abjure Foes | partial | `action-limits` | Frightened on a failed Wisdom save until it takes damage, for every enemy within 60 ft (not Charisma-modifier many); the one-thing-per-turn limit doesn't run. |
+| 10 | Aura of Courage | full |  | Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there). |
 | 11 | Radiant Strikes | full |  |  |
 | 14 | Restoring Touch | manual | `condition-removal` |  |
 | 18 | Aura Expansion | builder |  | The auras' range becomes 30 ft. |
@@ -293,7 +291,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Oath of Devotion Spells | builder |  | Oath of Devotion spells are always prepared. |
 | 3 | Sacred Weapon | full |  | Charisma to melee weapon attacks for 100 rounds, for a Channel Divinity, taken by the AI before melee attacks; its radiant damage and light aren't. |
-| 7 | Aura of Devotion | manual | `conditional-immunity` |  |
+| 7 | Aura of Devotion | full |  | Immunity to Charmed for the paladin and allies in its aura; an ally already charmed is freed at the start of its turn there. |
 | 15 | Smite of Protection | manual | `smite` |  |
 | 20 | Holy Nimbus | manual | `activated-aura` |  |
 
@@ -410,7 +408,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Dark One's Blessing | manual | `on-kill` |  |
+| 3 | Dark One's Blessing | full |  | Charisma + warlock level temporary hit points (at least 1) when it drops an enemy, or someone else does within 10 ft of it. |
 | 3 | Fiend Spells | builder |  | Fiend spells are always prepared. |
 | 6 | Dark One's Own Luck | full |  | 1d10 on a failed save; ability checks are outside a fight. |
 | 10 | Fiendish Resilience | full |  | Resistance to the chosen damage type. |

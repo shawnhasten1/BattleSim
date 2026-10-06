@@ -31,13 +31,13 @@ const channelDivinity = runs("cleric_channel-divinity", {
       saveAbility: "wis", dcFormula: WIS_DC, area: { type: "circle", size: 30 }, targeting: { origin: "self", range: 0 },
       damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile",
       riders: [
-        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"] },
-        { kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"] }
+        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true },
+        { kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true }
       ],
       resourceCost: { resourceId: "channel-divinity", amount: 1 }, automationSupport: "full"
     }
   ],
-  notSimulated: "Turn Undead's conditions don't end when the undead takes damage, and it doesn't run from you."
+  notSimulated: "a turned undead doesn't run from you."
 });
 
 export const CLERIC_SPELLS = [
@@ -98,7 +98,7 @@ export const CLERIC: ClassDefinition = {
     { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "cleric_cleric-subclasses")] },
     {
       level: 5,
-      grants: [grant("sear-undead", runs("cleric_sear-undead", { notSimulated: "see Channel Divinity: Turn Undead's conditions don't end on damage." }), {
+      grants: [grant("sear-undead", runs("cleric_sear-undead"), {
         onHitOf: {
           grant: "channel-divinity", action: TURN_UNDEAD,
           riders: [{
