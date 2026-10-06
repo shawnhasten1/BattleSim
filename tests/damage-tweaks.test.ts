@@ -108,7 +108,7 @@ describe("Overchannel", () => {
     // Not a cantrip, a free cast or a 6th-level slot.
     for (const copy of copies) {
       expect("spellLevel" in copy && copy.spellLevel).toBeGreaterThan(0);
-      expect(copy.resourceCost?.resourceId).toMatch(/^slot-[1-5]$/);
+      expect("resourceCost" in copy ? copy.resourceCost?.resourceId : undefined).toMatch(/^slot-[1-5]$/);
     }
   });
 

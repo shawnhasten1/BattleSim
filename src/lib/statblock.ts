@@ -511,6 +511,7 @@ function modifierSentences(modifiers: ConditionModifiers | undefined, who: Who):
   if (modifiers.speedPenaltyFt) sentences.push(`${capitalize(who.possessive)} speed is reduced by ${modifiers.speedPenaltyFt} feet.`);
   if (modifiers.deniesOpportunityAttacks) sentences.push(`${S} can't make opportunity attacks.`);
   if (modifiers.oneThingPerTurn) sentences.push(`On ${who.possessive} turns, ${who.subject} can only move, take an action or take a bonus action.`);
+  if (modifiers.noSpellcasting) sentences.push(`${S} can't cast spells or concentrate on them.`);
   return sentences;
 }
 
@@ -734,6 +735,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "condition-persists":
+      return `${P} ${activationNamed(definition, effect.conditionId)} needs nothing to keep it going, and ends early only if ${who.subject} falls unconscious${effect.durationRounds ? `; it lasts ${roundsText(effect.durationRounds)}` : ""}.`;
     case "ignore-resistance":
       return `${P} ${joinList(effect.damageTypes)} damage ignores resistance.`;
     case "max-damage":
@@ -885,6 +888,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
+    case "condition-persists": return `${activationNamed(definition, effect.conditionId)} needs no upkeep${effect.durationRounds ? `, ${roundsText(effect.durationRounds)}` : ""}`;
     case "ignore-resistance": return `${joinList(effect.damageTypes)} damage ignores resistance`;
     case "max-damage": return `maximum damage from ${spellScopeText(effect, IT)} cast at level 1–${effect.maxSlot} (${costText(effect.resourceCost, definition)})`;
     case "damage-vitality": return `${Math.max(0, resolveNumericFormula(effect.tempHp, definition))} temp HP within ${effect.withinFt} ft when ${spellScopeText(effect, IT)} deal damage`;
@@ -935,7 +939,8 @@ export function modifierShorts(modifiers: ConditionModifiers | undefined): strin
     ...(modifiers.forcesRandomAction ? ["acts at random"] : []),
     ...(modifiers.speedPenaltyFt ? [`speed −${modifiers.speedPenaltyFt} ft`] : []),
     ...(modifiers.deniesOpportunityAttacks ? ["no opportunity attacks"] : []),
-    ...(modifiers.oneThingPerTurn ? ["only one of moving, an action or a bonus action"] : [])
+    ...(modifiers.oneThingPerTurn ? ["only one of moving, an action or a bonus action"] : []),
+    ...(modifiers.noSpellcasting ? ["no spells"] : [])
   ];
 }
 
@@ -1299,6 +1304,14 @@ function buffBody(action: Extract<ActionDefinition, { kind: "buff" }>, definitio
 }
 
 /** The feature an activation belongs to, wherever it lives. */
+/** What an activation that gives a condition is called ("Rage" for `rage-active`); the id, read out, if none does. */
+function activationNamed(definition: CreatureDefinition, conditionId: string): string {
+  const action = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .flatMap((feature) => feature.grantedActions ?? [])
+    .find((entry) => entry.kind === "activate-feature" && entry.condition?.id === conditionId);
+  return action?.name ?? conditionId.replace(/-active$/, "").replace(/-/g, " ");
+}
+
 function featureById(definition: CreatureDefinition, featureId: string): FeatureDefinition | undefined {
   return [...(definition.features ?? []), ...(definition.traits ?? [])].find((feature) => feature.id === featureId);
 }
@@ -1361,7 +1374,17 @@ function activationText(action: ActivateAction, definition: CreatureDefinition, 
   if (!lasting.length) {
     return { text: nowText || "It activates this.", short: now.length ? joinList(now) : "activates" };
   }
-  const state = lasting.length === 1 ? withDuration(lasting[0]!, lasts) : `It gains these benefits${lasts}: ${afterColon(lasting)}`;
+  // Rage: what keeps it going, and what ends it early.
+  const upkeep = action.condition?.upkeep?.by;
+  const keeps = upkeep?.length ? [
+    `It ends at the end of any of its turns after the first unless that turn it ${joinList([
+      ...(upkeep.includes("attack") ? ["made an attack roll against an enemy"] : []),
+      ...(upkeep.includes("save") ? ["forced an enemy to make a saving throw"] : []),
+      ...(upkeep.includes("bonus-action") ? ["spends a bonus action to keep it"] : [])
+    ], "or")}.`
+  ] : [];
+  const ends = action.condition?.endsOnIncapacitated ? ["It ends early if it is incapacitated."] : [];
+  const state = [lasting.length === 1 ? withDuration(lasting[0]!, lasts) : `It gains these benefits${lasts}: ${afterColon(lasting)}`, ...keeps, ...ends].join(" ");
   const shorts = [...modifierShorts(action.condition?.modifiers), ...effectShorts(action.condition?.effects, definition)];
   return {
     text: [nowText, state].filter(Boolean).join(" "),

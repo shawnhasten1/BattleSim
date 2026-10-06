@@ -442,6 +442,8 @@ export interface FeatureEffectConditions {
    * damage while raging.
    */
   whileCondition?: string;
+  /** Only while it has every one of these condition ids too (Frenzy: raging and Reckless Attack's). */
+  whileConditions?: string[];
   /**
    * Only against a creature bearing a condition with this id that this creature put on it: its own mark (Precise
    * Hunter: advantage against the creature its Hunter's Mark is on).
@@ -837,6 +839,15 @@ export type FeatureEffect =
     kind: "follow-up-attack";
     withinFt: number;
   } & FeatureEffectScope)
+  | {
+    /**
+     * Persistent Rage: its condition with this id (an activation's) needs no upkeep and isn't ended by being
+     * incapacitated, only by falling unconscious; with `durationRounds`, it lasts that long instead.
+     */
+    kind: "condition-persists";
+    conditionId: Id;
+    durationRounds?: number;
+  }
   | {
     /** Boon of Irresistible Offense: its damage of these types ignores resistance (not immunity). */
     kind: "ignore-resistance";
@@ -1777,6 +1788,10 @@ export interface ActivateFeatureActionDefinition {
     effects?: FeatureEffect[];
     /** It changes, and is used up by, the next attack roll (Steady Aim: its own next one, with advantage). */
     nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
+    /** Rage: what keeps it going from turn to turn. */
+    upkeep?: ConditionUpkeep;
+    /** Rage: it ends when the bearer is incapacitated. */
+    endsOnIncapacitated?: boolean;
   };
   /** What a `would-take-damage` reaction does to the damage about to land. */
   damageCut?: DamageCut;
@@ -2447,7 +2462,13 @@ export interface ConditionInstance {
      * does one, the others close (`canAct`, `turnMovementBudget`).
      */
     oneThingPerTurn?: boolean;
+    /** Rage: the bearer can't cast spells, and taking the condition breaks its concentration. */
+    noSpellcasting?: boolean;
   };
+  /** Rage: what keeps it going from one of the bearer's turns to the next (`ConditionUpkeep`). */
+  upkeep?: ConditionUpkeep;
+  /** Rage: it ends when the bearer is incapacitated (stunned, paralyzed, unconscious…). */
+  endsOnIncapacitated?: boolean;
   /**
    * Weapon mastery's Sap and Vex: the condition changes one attack roll and is used up by it. `"made"`: the bearer's own
    * next attack roll (Sap: disadvantage). `"against"`: the next attack roll `by` makes against the bearer (Vex: the
@@ -2476,6 +2497,15 @@ export interface ConditionInstance {
    * caster's concentration ends every condition flagged this way.
    */
   concentration?: boolean;
+}
+
+/**
+ * Rage's upkeep: at the end of each of the bearer's turns after the one it began on, the condition ends unless that turn
+ * the bearer made an attack roll against an enemy (`"attack"`) or forced one to make a saving throw (`"save"`); with
+ * `"bonus-action"`, a bonus action it still has is spent to keep it instead.
+ */
+export interface ConditionUpkeep {
+  by: Array<"attack" | "save" | "bonus-action">;
 }
 
 export interface DeathSaveState {

@@ -13,6 +13,11 @@ const rage = runs("barbarian_rage", {
     resourceCost: { resourceId: "rage", amount: 1 },
     condition: {
       id: RAGE_ACTIVE, name: "custom", durationRounds: 10,
+      // No spells or concentration; it lapses on a turn without an attack, a forced save or a bonus action spent on it,
+      // and ends if the barbarian is incapacitated.
+      modifiers: { noSpellcasting: true },
+      upkeep: { by: ["attack", "save", "bonus-action"] },
+      endsOnIncapacitated: true,
       effects: [
         // Any attack using Strength: a weapon, a thrown weapon or an Unarmed Strike.
         { kind: "damage-bonus", abilities: ["str"], damage: [{ dice: "2", damageType: "same-as-attack" }] },
@@ -23,8 +28,7 @@ const rage = runs("barbarian_rage", {
       ]
     },
     automationSupport: "full"
-  }],
-  notSimulated: "it lasts the fight's first 10 rounds whether or not the barbarian keeps attacking, and raging doesn't stop it casting spells or concentrating."
+  }]
 });
 
 const recklessAttack = runs("barbarian_reckless-attack", {
@@ -160,7 +164,11 @@ export const BARBARIAN: ClassDefinition = {
       level: 13,
       grants: [grant("improved-brutal-strike", runs("barbarian_improved-brutal-strike", { effects: BLOWS.map((blow) => brutalStrike([blow], "1d10")) }), { replaces: "brutal-strike" })]
     },
-    { level: 15, grants: [grant("persistent-rage", informational("barbarian_persistent-rage"))] },
+    {
+      level: 15,
+      // Rage needs no upkeep and lasts 10 minutes; only falling unconscious ends it early.
+      grants: [grant("persistent-rage", runs("barbarian_persistent-rage", { effects: [{ kind: "condition-persists", conditionId: RAGE_ACTIVE, durationRounds: 100 }] }))]
+    },
     // 2d10, and two different blows: one costs no more than two, so every Brutal Strike is a pair.
     {
       level: 17,
@@ -199,10 +207,10 @@ export const BERSERKER: SubclassDefinition = {
       grants: [
         grant("frenzy", runs("path-of-the-berserker_frenzy", {
           effects: [{
-            kind: "damage-bonus", oncePerTurn: true, whileCondition: RAGE_ACTIVE, condition: "attack-has-advantage",
+            // Raging and reckless: the first Strength hit each turn.
+            kind: "damage-bonus", oncePerTurn: true, whileCondition: RAGE_ACTIVE, whileConditions: [RECKLESS_ACTIVE],
             abilities: ["str"], damage: [{ dice: "2d6", damageType: "same-as-attack" }]
-          }],
-          notSimulated: "it's dealt on the first Strength hit each turn with advantage while raging, whether the advantage came from Reckless Attack or not."
+          }]
         }), { scale: [{ path: "effects.0.damage.0.dice", value: "{col:rage-damage}d6" }] })
       ]
     },

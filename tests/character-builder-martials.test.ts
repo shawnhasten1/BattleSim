@@ -84,9 +84,11 @@ describe("the Barbarian", () => {
     expect(twentieth.abilities.con).toBeLessThanOrEqual(25);
   });
 
-  it("Frenzy: the extra d6s only while raging, with advantage, once a turn", () => {
+  it("Frenzy: the extra d6s only while raging and reckless, once a turn", () => {
     const berserker = built("barbarian", 9);
-    expect(feature(berserker, "path-of-the-berserker-frenzy").effects?.[0]).toMatchObject({ whileCondition: "rage-active", damage: [{ dice: "3d6" }] });
+    expect(feature(berserker, "path-of-the-berserker-frenzy").effects?.[0]).toMatchObject({
+      whileCondition: "rage-active", whileConditions: ["reckless-attack-active"], damage: [{ dice: "3d6" }]
+    });
     const greataxe = berserker.weapons!.find((weapon) => weapon.name === "Greataxe")!;
     const state = fightWith(berserker);
     const hp = () => state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.currentHp;
@@ -94,13 +96,21 @@ describe("the Barbarian", () => {
     state.rng = scripted([18, 18, 6, 1]);
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", greataxe.actionId!, { advantage: true });
     const unraged = 40 - hp();
-    // Raging (a bonus action) with advantage: 3d6 more on the first hit.
+    // Raging (a bonus action) with advantage, but not reckless: only Rage's +3.
     state.snapshot.combatants.find((token) => token.id === "pc-fighter")!.actionEconomy = undefined;
-    const rage = getExecutableActions(state.snapshot.definitions.find((entry) => entry.id === "def-fighter")!).find((action) => action.name === "Rage")!;
-    resolveActivateFeatureAction(state, "pc-fighter", rage.id);
-    const before = hp();
-    state.rng = scripted([18, 18, 6, 4, 4, 4]);
+    const actions = getExecutableActions(state.snapshot.definitions.find((entry) => entry.id === "def-fighter")!);
+    resolveActivateFeatureAction(state, "pc-fighter", actions.find((action) => action.name === "Rage")!.id);
+    let before = hp();
+    state.rng = scripted([18, 18, 6]);
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", greataxe.actionId!, { advantage: true });
+    expect(before - hp()).toBe(unraged + 3);
+    // Raging and reckless: 3d6 more on the first hit. (A second swing this turn, as Extra Attack gives.)
+    state.snapshot.combatants.find((token) => token.id === "pc-fighter")!.actionEconomy = { action: true, bonus: false, reaction: true };
+    resolveActivateFeatureAction(state, "pc-fighter", actions.find((action) => action.name === "Reckless Attack")!.id);
+    state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.currentHp = 40;
+    before = hp();
+    state.rng = scripted([18, 18, 6, 4, 4, 4]);
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", greataxe.actionId!);
     expect(before - hp()).toBe(unraged + 3 + 12); // rage damage +3 and 4 + 4 + 4
   });
 

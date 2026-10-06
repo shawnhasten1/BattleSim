@@ -43,7 +43,6 @@ export const GAPS = {
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
   "size-change": "Changing size (Large Form)",
   "gain-speed": "Gaining a speed for a while (Dragon Wings, Draconic Flight)",
-  "rage-limits": "What raging forbids (spells, concentration), and its states (raging and reckless at once)",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "reaction-attack": "A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage)",
   "oa-defense": "Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense)",
@@ -82,7 +81,7 @@ const PREPARED = (what: string) => builder(`${what} are always prepared.`);
 /** Class and subclass features, by Open5e key without its `srd-2024_` prefix. */
 export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Barbarian */
-  barbarian_rage: partial(["rage-limits"], "Resistance, the damage bonus and advantage on Strength saves run, for 10 rounds. It isn't ended by not attacking, and raging doesn't stop spells or concentration."),
+  barbarian_rage: full("Resistance, the damage bonus and advantage on Strength saves, for 10 rounds; no spells, and raging breaks concentration. It ends at the end of a turn without an attack roll against an enemy or a forced save, unless a bonus action left is spent to keep it, and when the barbarian is incapacitated."),
   "barbarian_unarmored-defense": full(),
   "barbarian_weapon-mastery": MASTERY,
   "barbarian_danger-sense": full("Advantage on Dexterity saves; the Incapacitated exception isn't checked."),
@@ -97,14 +96,14 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_brutal-strike": full("Hamstring and Forceful Blows, each a variant of the Strength attacks, once a turn with Reckless Attack on: the roll gives up its advantage (none with disadvantage), and a hit adds 1d10 of the weapon's type. Forceful Blow's move toward the target isn't held to a straight line. The AI takes it when the die is worth more than the advantage."),
   "barbarian_relentless-rage": full("While raging: a DC 10 Constitution save, 5 higher each time after the first this fight, for twice the barbarian level in hit points."),
   "barbarian_improved-brutal-strike": full("Staggering Blow (disadvantage on its next save, no opportunity attacks until the barbarian's next turn) and Sundering Blow (+5 to the next attack roll against it by another creature), among all four."),
-  "barbarian_persistent-rage": info("A fight starts with full pools, and the simulated rage already lasts the fight."),
+  "barbarian_persistent-rage": full("Rage needs no upkeep, lasts 10 minutes, and only falling unconscious ends it early. A fight starts with full pools, so regaining Rage on Initiative has nothing to do."),
   "barbarian_improved-brutal-strike-enhanced": full("2d10, and two different blows: every Brutal Strike is one of the six pairs."),
   "barbarian_indomitable-might": full("A Strength save totalling less than the Strength score uses the score; checks are outside a fight."),
   "barbarian_epic-boon": EPIC_BOON,
   "barbarian_primal-champion": builder("+4 Strength and Constitution, to a maximum of 25."),
 
   /* Path of the Berserker */
-  "path-of-the-berserker_frenzy": partial(["rage-limits"], "The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack."),
+  "path-of-the-berserker_frenzy": full("The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging and reckless."),
   "path-of-the-berserker_mindless-rage": full("Immune to Charmed and Frightened while raging; raging ends them."),
   "path-of-the-berserker_retaliation": partial(["reaction-attack"], "A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it."),
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),

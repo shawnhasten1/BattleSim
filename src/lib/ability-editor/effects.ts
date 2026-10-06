@@ -82,6 +82,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "slot-recall", maxLevel: 4, die: 4 })
   },
   {
+    kind: "condition-persists", label: "An activation that keeps going on its own", hint: "Persistent Rage: Rage needs no attacks to keep it up, and only falling unconscious ends it early", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "condition-persists", conditionId: "rage-active", durationRounds: 100 })
+  },
+  {
     kind: "max-damage", label: "Spells at their maximum damage", hint: "Overchannel: a Wizard spell of level 1-5 that deals damage, at its dice's highest, once", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
@@ -402,7 +406,7 @@ export interface ModifierCardView {
 const ALL_ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 const READ_ONLY_MODIFIERS = [
   "movementMultiplier", "speedPenaltyFt", "deniesActions", "deniesBonusActions", "deniesReactions", "deniesOpportunityAttacks", "oneThingPerTurn",
-  "forcesRandomAction"
+  "forcesRandomAction", "noSpellcasting"
 ] as const;
 
 export function modifierCards(modifiers: ConditionModifiers | undefined): ModifierCardView[] {

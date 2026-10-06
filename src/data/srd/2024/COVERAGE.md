@@ -15,7 +15,7 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 14 | 3 | 0 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 7 | 1 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
@@ -42,7 +42,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
 | `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
@@ -76,7 +75,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Rage | partial | `rage-limits` | Resistance, the damage bonus and advantage on Strength saves run, for 10 rounds. It isn't ended by not attacking, and raging doesn't stop spells or concentration. |
+| 1 | Rage | full |  | Resistance, the damage bonus and advantage on Strength saves, for 10 rounds; no spells, and raging breaks concentration. It ends at the end of a turn without an attack roll against an enemy or a forced save, unless a bonus action left is spent to keep it, and when the barbarian is incapacitated. |
 | 1 | Unarmored Defense | full |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Danger Sense | full |  | Advantage on Dexterity saves; the Incapacitated exception isn't checked. |
@@ -91,7 +90,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 9 | Brutal Strike | full |  | Hamstring and Forceful Blows, each a variant of the Strength attacks, once a turn with Reckless Attack on: the roll gives up its advantage (none with disadvantage), and a hit adds 1d10 of the weapon's type. Forceful Blow's move toward the target isn't held to a straight line. The AI takes it when the die is worth more than the advantage. |
 | 11 | Relentless Rage | full |  | While raging: a DC 10 Constitution save, 5 higher each time after the first this fight, for twice the barbarian level in hit points. |
 | 13 | Improved Brutal Strike | full |  | Staggering Blow (disadvantage on its next save, no opportunity attacks until the barbarian's next turn) and Sundering Blow (+5 to the next attack roll against it by another creature), among all four. |
-| 15 | Persistent Rage | info |  | A fight starts with full pools, and the simulated rage already lasts the fight. |
+| 15 | Persistent Rage | full |  | Rage needs no upkeep, lasts 10 minutes, and only falling unconscious ends it early. A fight starts with full pools, so regaining Rage on Initiative has nothing to do. |
 | 17 | Improved Brutal Strike (Enhanced) | full |  | 2d10, and two different blows: every Brutal Strike is one of the six pairs. |
 | 18 | Indomitable Might | full |  | A Strength save totalling less than the Strength score uses the score; checks are outside a fight. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
@@ -101,7 +100,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Frenzy | partial | `rage-limits` | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack. |
+| 3 | Frenzy | full |  | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging and reckless. |
 | 6 | Mindless Rage | full |  | Immune to Charmed and Frightened while raging; raging ends them. |
 | 10 | Retaliation | partial | `reaction-attack` | A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it. |
 | 14 | Intimidating Presence | full |  | A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered. |

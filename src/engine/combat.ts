@@ -659,6 +659,10 @@ export function onlyWhenEmptyProblem(combatant: CombatantState, action: ActionDe
  * Why `action` can't be cast now under it, or undefined.
  */
 export function spellTurnProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  // Rage: no spells while it lasts.
+  const silenced = "spellLevel" in action && action.spellLevel != null
+    ? (combatant.conditions ?? []).find((condition) => condition.modifiers?.noSpellcasting) : undefined;
+  if (silenced) return `No spells while ${silenced.sourceName ?? silenced.id} lasts`;
   const flags = combatant.turnFlags;
   if (action.metamagic?.option === "quickened" && flags?.leveledSpellCast) return "Quickened Spell can't follow a level 1+ spell this turn";
   if ((castLevelOf(action) ?? 0) >= 1 && flags?.quickenedSpell) return "No level 1+ spell after Quickened Spell this turn";
@@ -3830,6 +3834,9 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
     targetId,
     condition
   }));
+  // Rage: no spells, so no concentration either.
+  if (condition.modifiers?.noSpellcasting) breakConcentration(state, target.id);
+  if (INCAPACITATING_CONDITIONS.has(condition.name)) endOnIncapacitation(state, target, condition.name);
   // A flier that can no longer move (or is knocked prone) drops, unless it can hover.
   if ((target.altitude ?? 0) > 0 && GROUNDING_CONDITIONS.has(condition.name) && !movementProfileOf(getDefinition(state.snapshot, target)).hover) {
     fallCombatant(state, target, target.altitude ?? 0, `it is ${condition.name}`);
@@ -4620,6 +4627,7 @@ export function runTurnEnd(state: EngineState, actorId: Id): void {
   runRepeatedSaves(state, actorId, "turn-end");
   applyZoneTriggers(state, actorId, "turn-end");
   applyTerrainHazardTriggers(state, actorId, "turn-end");
+  upkeepConditions(state, actorId);
   expireConditions(state, "end");
 }
 
@@ -6611,8 +6619,9 @@ function applyFeatureActivationCondition(
     return undefined;
   }
   const conditionId = action.condition.id ?? `${actor.id}-${action.featureId}`;
-  const durationRounds = action.condition.durationRounds;
   const actorDefinition = getDefinition(state.snapshot, actor);
+  // Persistent Rage: it lasts longer.
+  const durationRounds = conditionPersistence(actorDefinition, actor, conditionId)?.durationRounds ?? action.condition.durationRounds;
   const feature = featureSources(actorDefinition, actor).find((candidate) => candidate.id === action.featureId);
   applyCondition(state, actor.id, {
     id: conditionId,
@@ -6631,9 +6640,73 @@ function applyFeatureActivationCondition(
       : undefined,
     modifiers: action.condition.modifiers,
     effects: action.condition.effects,
-    ...(action.condition.nextAttack ? { nextAttack: action.condition.nextAttack } : {})
+    ...(action.condition.nextAttack ? { nextAttack: action.condition.nextAttack } : {}),
+    ...(action.condition.upkeep ? { upkeep: action.condition.upkeep } : {}),
+    ...(action.condition.endsOnIncapacitated ? { endsOnIncapacitated: true } : {})
   });
   return conditionId;
+}
+
+/** Persistent Rage: the `condition-persists` effect a creature has for one of its conditions, if any. */
+function conditionPersistence(definition: CreatureDefinition, combatant: CombatantState, conditionId: Id): Extract<FeatureEffect, { kind: "condition-persists" }> | undefined {
+  for (const feature of featureSources(definition, combatant)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind === "condition-persists" && effect.conditionId === conditionId) return effect;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Rage's upkeep, at the end of its bearer's turn: a condition with `upkeep` that didn't begin this round ends unless the
+ * bearer attacked an enemy or forced one to make a save this turn, or spends a bonus action it still has to keep it (when
+ * the upkeep allows). Persistent Rage needs none.
+ */
+function upkeepConditions(state: EngineState, actorId: Id): void {
+  const actor = findCombatant(state.snapshot, actorId);
+  const definition = getDefinition(state.snapshot, actor);
+  const due = (actor.conditions ?? []).filter((condition) => condition.upkeep && condition.startedRound < state.snapshot.round
+    && !conditionPersistence(definition, actor, condition.id));
+  if (!due.length) return;
+  const { round, turnIndex } = state.snapshot;
+  const faction = effectiveFaction(state.snapshot, actor);
+  const enemy = (id: unknown) => {
+    const other = state.snapshot.combatants.find((combatant) => combatant.id === id);
+    return other !== undefined && effectiveFaction(state.snapshot, other) !== faction;
+  };
+  const thisTurn = state.log.filter((entry) => entry.round === round && entry.turnIndex === turnIndex && entry.data?.attackerId === actor.id);
+  const attacked = thisTurn.some((entry) => entry.type === "AttackRolled" && enemy(entry.data?.targetId));
+  const forcedSave = thisTurn.some((entry) => entry.type === "SaveRolled" && enemy(entry.data?.targetId));
+  for (const condition of due) {
+    const by = condition.upkeep!.by;
+    if ((by.includes("attack") && attacked) || (by.includes("save") && forcedSave)) continue;
+    const name = condition.sourceName ?? condition.id;
+    if (by.includes("bonus-action") && actor.state === "active" && actor.actionEconomy?.bonus !== false && canAct(actor, "bonus")) {
+      actor.actionEconomy = { ...(actor.actionEconomy ?? { action: true, bonus: true, reaction: true }), bonus: false };
+      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName} keeps up its ${name} with its bonus action`, {
+        combatantId: actor.id, conditionId: condition.id, featureName: name, effectKind: "upkeep"
+      }));
+      continue;
+    }
+    actor.conditions = (actor.conditions ?? []).filter((entry) => entry !== condition);
+    state.log.push(event(state, "ConditionExpired", `${actor.displayName}'s ${name} ends: it didn't attack or force a save this turn`, {
+      combatantId: actor.id, conditionId: condition.id, condition, reason: "upkeep"
+    }));
+  }
+}
+
+/** Rage ends when its bearer is incapacitated; with Persistent Rage, only when it falls unconscious. */
+function endOnIncapacitation(state: EngineState, target: CombatantState, cause: ConditionName): void {
+  const definition = getDefinition(state.snapshot, target);
+  const ending = (target.conditions ?? []).filter((condition) => condition.endsOnIncapacitated
+    && (cause === "unconscious" || !conditionPersistence(definition, target, condition.id)));
+  if (!ending.length) return;
+  target.conditions = (target.conditions ?? []).filter((condition) => !ending.includes(condition));
+  for (const condition of ending) {
+    state.log.push(event(state, "ConditionExpired", `${target.displayName}'s ${condition.sourceName ?? condition.id} ends: it is ${cause}`, {
+      combatantId: target.id, conditionId: condition.id, condition, reason: "incapacitated"
+    }));
+  }
 }
 
 export function featureSources(definition: CreatureDefinition, combatant?: CombatantState): FeatureDefinitionSource[] {
@@ -8286,7 +8359,9 @@ function targetMarkedBy(bearer: CombatantState, target: CombatantState, effect: 
 /** An effect that works only while its bearer holds a condition (Frenzy while raging): whether it does now. */
 function whileConditionHeld(bearer: CombatantState, effect: FeatureEffect): boolean {
   const required = "whileCondition" in effect ? effect.whileCondition : undefined;
-  return !required || (bearer.conditions ?? []).some((condition) => condition.id === required);
+  const alsoRequired = "whileConditions" in effect ? effect.whileConditions ?? [] : [];
+  const held = (id: string) => (bearer.conditions ?? []).some((condition) => condition.id === id);
+  return (!required || held(required)) && alsoRequired.every(held);
 }
 
 function featureConditionsMetForConditionTarget(

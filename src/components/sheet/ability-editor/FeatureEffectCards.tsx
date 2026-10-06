@@ -275,7 +275,8 @@ export function FeatureEffectCards({ groups, onAdd, definition, newPools, activa
 
 const READ_ONLY_LABELS: Partial<Record<keyof ConditionModifiers, string>> = {
   movementMultiplier: "Speed", speedPenaltyFt: "Slower", deniesActions: "Can't act", deniesBonusActions: "No bonus actions", deniesReactions: "No reactions",
-  deniesOpportunityAttacks: "No opportunity attacks", oneThingPerTurn: "One thing a turn", forcesRandomAction: "Acts at random"
+  deniesOpportunityAttacks: "No opportunity attacks", oneThingPerTurn: "One thing a turn", forcesRandomAction: "Acts at random",
+  noSpellcasting: "No spells"
 };
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -959,6 +960,21 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           <SpellScope effect={effect} set={set} />
         </>
       );
+    case "condition-persists": {
+      const givers = getExecutableActions(definition).flatMap((action) => (action.kind === "activate-feature" && action.condition?.id
+        ? [{ id: action.condition.id, name: action.name }] : []));
+      return (
+        <span className={styles.inline}>
+          <select aria-label="Which activation" value={effect.conditionId} onChange={(e) => set({ ...effect, conditionId: e.target.value })}>
+            {givers.map((giver) => <option key={giver.id} value={giver.id}>{giver.name}</option>)}
+            {!givers.some((giver) => giver.id === effect.conditionId) ? <option value={effect.conditionId}>{`${effect.conditionId} (not found)`}</option> : null}
+          </select>
+          <span>keeps going on its own, for</span>
+          <NumberField label="Rounds it lasts" optional value={effect.durationRounds} min={1} max={6000} onChange={(n) => set(opt(effect, "durationRounds", n))} />
+          <span>rounds</span>
+        </span>
+      );
+    }
     case "ignore-resistance":
       return <TypeChips label="Its damage ignores resistance to" value={effect.damageTypes} onChange={(damageTypes) => damageTypes.length && set({ ...effect, damageTypes })} />;
     case "damage-vitality":
