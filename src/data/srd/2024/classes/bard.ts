@@ -108,13 +108,18 @@ export const BARD: ClassDefinition = {
 };
 
 /** Cutting Words' cost to the attacker's roll: the Bardic Inspiration die's average, rounded up (d6 4 … d12 7). */
-// Its reaction: a foe's hit within 60 ft loses a Bardic Inspiration die, rolled, maybe missing.
+// Its reaction: a foe's hit within 60 ft loses a Bardic Inspiration die, rolled, maybe missing; or a foe's damage roll
+// within 60 ft does, against the bard or an ally.
 const cuttingWords = runs("college-of-lore_cutting-words", {
   effects: [{
     kind: "d20-change", rolls: ["attack"], change: "subtract", dice: "1d6", reaction: true, againstFoes: { withinFt: 60 },
     resourceCost: { resourceId: "bardic-inspiration", amount: 1 }
   }],
-  notSimulated: "taking the die off a damage roll or an ability check."
+  grantedActions: [{
+    kind: "activate-feature", id: "cutting-words-damage", name: "Cutting Words (damage)", actionType: "reaction", featureId: "",
+    reaction: { trigger: { kind: "would-take-damage", forAllies: { withinFt: 60 } }, target: "self", priority: "worthwhile" },
+    damageCut: { kind: "reduce", dice: "1d6" }, resourceCost: { resourceId: "bardic-inspiration", amount: 1 }, automationSupport: "full"
+  }]
 });
 
 export const COLLEGE_OF_LORE: SubclassDefinition = {
@@ -126,7 +131,9 @@ export const COLLEGE_OF_LORE: SubclassDefinition = {
   levels: [
     {
       level: 3,
-      grants: [grant("cutting-words", cuttingWords, { scale: [{ path: "effects.0.dice", value: "1{col:bardic-die}" }] })],
+      grants: [grant("cutting-words", cuttingWords, {
+        scale: [{ path: "effects.0.dice", value: "1{col:bardic-die}" }, { path: "grantedActions.0.damageCut.dice", value: "1{col:bardic-die}" }]
+      })],
       choices: [choice({ kind: "skills", id: "bonus-proficiencies", count: 3, from: "any" }, "college-of-lore_bonus-proficiencies")]
     },
     {

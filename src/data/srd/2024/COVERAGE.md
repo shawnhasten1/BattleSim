@@ -16,7 +16,7 @@ its gaps, never dropped and never approximated without saying so.
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 18 | 0 | 0 | 6 | 0 |
-| Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
+| Bard (College of Lore) | 17 | 5 | 1 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
@@ -43,7 +43,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
-| `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
@@ -112,7 +111,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Bonus Proficiencies | builder |  |  |
-| 3 | Cutting Words | partial | `ally-die` | Its reaction: a foe's hit within 60 ft loses a rolled Bardic Inspiration die, missing if that takes it below the AC (the AI uses it when it more likely than not does). Not on damage rolls; checks aren't simulated. |
+| 3 | Cutting Words | full |  | Its reaction, a Bardic Inspiration die: off a foe's hit within 60 ft, missing if that takes it below the AC (the AI uses it when it more likely than not does), or off a foe's damage roll within 60 ft against the bard or an ally (the AI uses it for a cut of 5 or one that keeps the creature standing). Checks aren't simulated. |
 | 6 | Magical Discoveries | builder |  |  |
 | 14 | Peerless Skill | full |  | A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight. |
 

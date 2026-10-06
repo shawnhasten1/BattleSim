@@ -104,3 +104,21 @@ describe("Boon of Fate's penalty", () => {
     expect(find("pc-fighter").resources?.["boon-of-fate"]).toBe(0);
   });
 });
+
+describe("Cutting Words on a damage roll (7az)", () => {
+  it("the bard's die off a goblin's damage that would drop the archer", () => {
+    const bard = actor(quickBuild(sources, { classId: "srd:class:bard", level: 5 }));
+    expect(getExecutableActions(bard).find((action) => action.name === "Cutting Words (damage)")).toMatchObject({ damageCut: { kind: "reduce", dice: "1d8" } });
+    const { state, find, goblinAttack } = scene(bard);
+    find("pc-archer").currentHp = 5;
+    const before = find("pc-fighter").resources?.["bardic-inspiration"] ?? 0;
+    // A sure hit (too far over the AC for the die to undo), at its highest damage.
+    state.rng = d20s(19);
+    resolveAttack(state, "enemy-goblin-1", "pc-archer", goblinAttack.id);
+    const damage = state.log.find((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-archer");
+    expect(damage?.data?.cutBy).toBe("Cutting Words (damage)");
+    expect(find("pc-archer").currentHp).toBe(5);
+    expect(find("pc-fighter").resources?.["bardic-inspiration"]).toBe(before - 1);
+    expect(find("pc-fighter").actionEconomy?.reaction).toBe(false);
+  });
+});

@@ -5856,6 +5856,18 @@ function hasDamageReaction(target: CombatantState, targetDefinition: CreatureDef
     && getExecutableActions(targetDefinition).some((action) => action.actionType === "reaction" && reactionMetaFor(action)?.trigger.kind === "would-take-damage");
 }
 
+/** Cutting Words: whether one of `target`'s side could cut the damage a creature (`sourceId`) is about to deal it. */
+function alliesCutDamage(state: EngineState, target: CombatantState, sourceId: Id | undefined): boolean {
+  const source = sourceId ? state.snapshot.combatants.find((combatant) => combatant.id === sourceId) : undefined;
+  if (!source) return false;
+  const faction = effectiveFaction(state.snapshot, target);
+  return state.snapshot.combatants.some((reactor) => reactor.state === "active" && canAct(reactor, "reaction") && effectiveFaction(state.snapshot, reactor) === faction
+    && getExecutableActions(getDefinition(state.snapshot, reactor)).some((action) => {
+      const trigger = action.actionType === "reaction" ? reactionMetaFor(action)?.trigger : undefined;
+      return trigger?.kind === "would-take-damage" && trigger.forAllies !== undefined && spatialDistance(state.snapshot, reactor, source) <= trigger.forAllies.withinFt;
+    }));
+}
+
 /**
  * The damage about to land on `target`, part by part: after its defenses, and after a reaction of its own that cuts
  * the total (Uncanny Dodge halves it, Deflect Attacks and Stone's Endurance take off a roll, the cut coming off the
@@ -5872,7 +5884,7 @@ function damageAfterReaction(
 ): { amounts: Array<{ adjusted: number; finalAmount: number; absorbed: number }>; cutBy?: string; cut?: number } {
   let amounts = resolvePendingDamage(target, targetDefinition, pending);
   const total = amounts.reduce((sum, part) => sum + part.finalAmount, 0);
-  if (total <= 0 || !hasDamageReaction(target, targetDefinition)) return { amounts };
+  if (total <= 0 || !(hasDamageReaction(target, targetDefinition) || alliesCutDamage(state, target, sourceId))) return { amounts };
   const damageTypes = [...new Set(pending.filter((_, index) => amounts[index]!.finalAmount > 0).map((part) => part.damageType))];
   const { damageCut } = runReactionWindow(state, {
     kind: "would-take-damage", sourceId: sourceId ?? target.id, targetId: target.id, damageTaken: total, damageTypes, byAttack,
@@ -9334,8 +9346,16 @@ function reactionTriggerPasses(
         && (trigger.withinFt === undefined || (source !== undefined && spatialDistance(state.snapshot, reactor, source) <= trigger.withinFt))
         && (!trigger.damaged || (event.damageTaken ?? 0) > 0);
     }
-    case "would-take-damage":
-      return reactor.id === event.targetId
+    case "would-take-damage": {
+      // Cutting Words: an ally's (or its own) damage, from a creature within its reach.
+      const damager = trigger.forAllies ? state.snapshot.combatants.find((combatant) => combatant.id === event.sourceId) : undefined;
+      const damaged = trigger.forAllies ? state.snapshot.combatants.find((combatant) => combatant.id === event.targetId) : undefined;
+      const whose = trigger.forAllies
+        ? damaged !== undefined && damager !== undefined && damager.id !== damaged.id
+          && effectiveFaction(state.snapshot, damaged) === effectiveFaction(state.snapshot, reactor)
+          && spatialDistance(state.snapshot, reactor, damager) <= trigger.forAllies.withinFt
+        : reactor.id === event.targetId;
+      return whose
         && action.kind === "activate-feature" && Boolean(action.damageCut)
         // Deflect Attacks' redirect: offered with the point to pay for it, spent only if the damage drops to 0.
         && (!(action.damageCut!.kind === "reduce" && action.damageCut!.redirect)
@@ -9343,6 +9363,7 @@ function reactionTriggerPasses(
         && (event.damageTaken ?? 0) > 0
         && (!trigger.attackOnly || event.byAttack === true)
         && (!trigger.damageTypes?.length || (event.damageTypes ?? []).some((type) => trigger.damageTypes!.includes(type)));
+    }
     case "would-be-hit": {
       // Only when it would turn this hit into a miss: what it gives must lift the AC past the roll.
       const gain = reactionArmorClassGain(action);
@@ -9424,7 +9445,9 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
     const incoming = event.damageTaken ?? 0;
     const definition = getDefinition(state.snapshot, reaction.reactor);
     const cut = expectedDamageCut(action, definition, incoming);
-    const standing = reaction.reactor.currentHp + reaction.reactor.tempHp;
+    // Cutting Words: whether it keeps the creature taking the damage standing (an ally's, or its own).
+    const damaged = state.snapshot.combatants.find((combatant) => combatant.id === event.targetId) ?? reaction.reactor;
+    const standing = damaged.currentHp + damaged.tempHp;
     // Deflect Attacks' redirect: only when it's likely to stop all of it and send back a fair hit (otherwise the plain
     // copy does the same cut).
     const redirect = action.kind === "activate-feature" && action.damageCut?.kind === "reduce" ? action.damageCut.redirect : undefined;

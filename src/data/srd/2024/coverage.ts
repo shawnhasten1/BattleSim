@@ -32,7 +32,6 @@ export const GAPS = {
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
-  "ally-die": "A rolled die taken off an enemy's damage roll (Cutting Words)",
   metamagic: "Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis)",
   "extra-turn": "Two turns in the first round (Thief's Reflexes)",
   "gain-speed": "Dragon Wings again for sorcery points",
@@ -109,7 +108,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* College of Lore */
   "college-of-lore_bonus-proficiencies": builder(),
-  "college-of-lore_cutting-words": partial(["ally-die"], "Its reaction: a foe's hit within 60 ft loses a rolled Bardic Inspiration die, missing if that takes it below the AC (the AI uses it when it more likely than not does). Not on damage rolls; checks aren't simulated."),
+  "college-of-lore_cutting-words": full("Its reaction, a Bardic Inspiration die: off a foe's hit within 60 ft, missing if that takes it below the AC (the AI uses it when it more likely than not does), or off a foe's damage roll within 60 ft against the bard or an ally (the AI uses it for a cut of 5 or one that keeps the creature standing). Checks aren't simulated."),
   "college-of-lore_magical-discoveries": builder(),
   "college-of-lore_peerless-skill": full("A Bardic Inspiration die on a missed attack roll, the use kept if it still misses; checks are outside a fight."),
 

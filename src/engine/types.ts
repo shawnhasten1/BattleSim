@@ -1303,7 +1303,14 @@ export type ReactionTrigger =
    * `attackOnly`: only an attack roll's hit; `damageTypes`: only damage that includes one of these (Deflect Attacks:
    * bludgeoning, piercing, slashing).
    */
-  | { kind: "would-take-damage"; attackOnly?: boolean; damageTypes?: DamageType[] }
+  | {
+    kind: "would-take-damage"; attackOnly?: boolean; damageTypes?: DamageType[];
+    /**
+     * Its own side's damage too, from a creature within `withinFt` of the reactor: the reactor or any ally about to take
+     * it (Cutting Words: a foe's damage roll within 60 ft, the bard's die off it).
+     */
+    forAllies?: { withinFt: number };
+  }
   /** An ally within `withinFt` is targeted by an attack (Protection fighting style). */
   | { kind: "ally-targeted-by-attack"; withinFt: number }
   /**
