@@ -75,3 +75,21 @@
   min-height: 0;
   overflow-y: auto;
 }
+
+/* The corner grip of a resizable window: two short diagonal strokes. */
+.grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 0 55%, var(--ui-text-dim) 55% 61%, transparent 61% 72%, var(--ui-text-dim) 72% 78%, transparent 78%);
+  opacity: 0.55;
+}
+
+.grip:hover {
+  opacity: 1;
+}

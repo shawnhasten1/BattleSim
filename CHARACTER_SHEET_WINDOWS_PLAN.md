@@ -455,3 +455,15 @@ Chromium-only):
   edit". The ability editor's creature-switch test now switches by making the token its own creature. Full suite:
   248 files, 2767 tests. Browser (Playwright, Chromium): 15 checks, among them double-click, the row menu, cascade,
   focus order, switching tokens, per-token HP, and the notice with Undo.
+
+### Phase 2 (2026-10-06)
+
+- **`useWindowResize`** (in `useFloatingWindow.ts`) and `clampSize`. A corner grip resizes within min/max limits and
+  the room left to the viewport's edge. The size is remembered per storage key (`winsize:<key>`), and only once the
+  window has been resized. Until then a window is its starting width and as tall as its content, as before.
+- **`FloatingWindow`** takes `resizable: { minWidth, minHeight, maxWidth?, maxHeight? }`. A resized window keeps its
+  height (`max-height` lifted). Minimized, it's still only its title bar.
+- **The sheet** is resizable from 680 × its content, down to 560 × 320, up to 1400 wide. The size is remembered per
+  style (`winsize:sheet-standard`).
+- **Tests:** 4 more in `tests/useFloatingWindow.test.tsx`. Browser: 6 checks (grip, resize, the body scrolls, clamped
+  at the minimum, minimized, remembered after a reload).

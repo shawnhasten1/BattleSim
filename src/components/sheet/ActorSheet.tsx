@@ -22,6 +22,9 @@ import { ActionsTab } from "./sheet-tabs/ActionsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
 import abilityStyles from "./abilities/abilities.module.css";
 
+/** How small (and how wide) a sheet window can be made. */
+const SHEET_LIMITS = { minWidth: 560, minHeight: 320, maxWidth: 1400 };
+
 /**
  * One sheet window (CHARACTER_SHEET_WINDOWS_PLAN.md): a creature, edited for every token of it, with one of its tokens
  * shown for the values that are that token's own (D2). Floating and draggable; several can be open at once, each in
@@ -173,6 +176,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
       title={title}
       ariaLabel={`${definition.name} sheet`}
       width={680}
+      resizable={SHEET_LIMITS}
       initialPosition={sheet.origin}
       storageKey={`sheet-${sheet.style}`}
       restorePosition={false}

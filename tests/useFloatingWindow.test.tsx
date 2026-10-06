@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { useFloatingWindow } from "../src/hooks/useFloatingWindow";
+import { clampSize, useFloatingWindow, useWindowResize } from "../src/hooks/useFloatingWindow";
 
 /** Minimal stand-in for a React PointerEvent on the title bar. */
 function pointerEvent(overrides: Partial<Record<string, unknown>> = {}) {
@@ -55,5 +55,60 @@ describe("useFloatingWindow", () => {
     act(() => result.current.titleBarProps.onPointerUp(pointerEvent()));
     act(() => result.current.titleBarProps.onPointerMove(pointerEvent({ clientX: 500, clientY: 500 })));
     expect(result.current.position).toEqual({ x: 200, y: 120 });
+  });
+});
+
+describe("useWindowResize", () => {
+  const limits = { minWidth: 300, minHeight: 200, maxWidth: 900 };
+
+  /** A grip whose window (its parent) is `width` × `height`. */
+  function gripEvent(overrides: Partial<Record<string, unknown>>, width = 400, height = 300) {
+    const parentElement = { getBoundingClientRect: () => ({ width, height }) };
+    const currentTarget = {
+      parentElement,
+      ownerDocument: document,
+      setPointerCapture: () => {},
+      releasePointerCapture: () => {},
+      hasPointerCapture: () => true
+    };
+    return { button: 0, pointerId: 1, clientX: 0, clientY: 0, currentTarget, preventDefault: () => {}, ...overrides } as never;
+  }
+
+  it("starts at the given width, as tall as its content", () => {
+    const { result } = renderHook(() => useWindowResize(680, limits, { x: 50, y: 50 }));
+    expect(result.current.size).toEqual({ width: 680 });
+  });
+
+  it("resizes by the pointer's movement, within its limits and the viewport", () => {
+    const { result } = renderHook(() => useWindowResize(400, limits, { x: 50, y: 50 }));
+    act(() => result.current.gripProps.onPointerDown(gripEvent({ clientX: 450, clientY: 350 })));
+    act(() => result.current.gripProps.onPointerMove(gripEvent({ clientX: 550, clientY: 450 })));
+    expect(result.current.size).toEqual({ width: 500, height: 400 });
+    act(() => result.current.gripProps.onPointerMove(gripEvent({ clientX: 0, clientY: 0 })));
+    expect(result.current.size).toEqual({ width: 300, height: 200 });
+    act(() => result.current.gripProps.onPointerMove(gripEvent({ clientX: 99999, clientY: 99999 })));
+    expect(result.current.size.width).toBe(Math.min(900, window.innerWidth - 50 - 8));
+    expect(result.current.size.height).toBe(window.innerHeight - 50 - 8);
+  });
+
+  it("remembers a size per storage key, once resized", () => {
+    window.localStorage.clear();
+    const first = renderHook(() => useWindowResize(400, limits, { x: 50, y: 50 }, "test-window"));
+    expect(window.localStorage.getItem("winsize:test-window")).toBeNull();
+    act(() => first.result.current.gripProps.onPointerDown(gripEvent({ clientX: 0, clientY: 0 })));
+    act(() => first.result.current.gripProps.onPointerMove(gripEvent({ clientX: 120, clientY: 60 })));
+    act(() => first.result.current.gripProps.onPointerUp(gripEvent({})));
+    first.unmount();
+    const second = renderHook(() => useWindowResize(400, limits, { x: 50, y: 50 }, "test-window"));
+    expect(second.result.current.size).toEqual({ width: 520, height: 360 });
+    const other = renderHook(() => useWindowResize(400, limits, { x: 50, y: 50 }, "another-window"));
+    expect(other.result.current.size).toEqual({ width: 400 });
+  });
+});
+
+describe("clampSize", () => {
+  it("never goes below the minimum, even with no room left", () => {
+    expect(clampSize({ width: 100, height: 100 }, { minWidth: 300, minHeight: 200 }, { x: 900, y: 700 }, { width: 1000, height: 800 }))
+      .toEqual({ width: 300, height: 200 });
   });
 });

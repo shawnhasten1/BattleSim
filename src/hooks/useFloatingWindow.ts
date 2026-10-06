@@ -94,3 +94,96 @@ export function useFloatingWindow(initial: Position, storageKey?: string, option
     titleBarProps: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }
   };
 }
+
+export interface WindowSize {
+  width: number;
+  /** Absent until the window is first resized: it's as tall as its content, up to the CSS maximum. */
+  height?: number;
+}
+
+export interface ResizeLimits {
+  minWidth: number;
+  minHeight: number;
+  maxWidth?: number;
+  maxHeight?: number;
+}
+
+interface ResizeState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+}
+
+export interface UseWindowResizeResult {
+  size: WindowSize;
+  /** Spread onto the corner grip. Drags resize the window within its limits and the viewport. */
+  gripProps: {
+    onPointerDown: (event: PointerEvent<HTMLElement>) => void;
+    onPointerMove: (event: PointerEvent<HTMLElement>) => void;
+    onPointerUp: (event: PointerEvent<HTMLElement>) => void;
+    onPointerCancel: (event: PointerEvent<HTMLElement>) => void;
+  };
+}
+
+/** `size` kept within `limits` and the room left between the window's corner (`origin`) and the viewport's edge. */
+export function clampSize(size: { width: number; height: number }, limits: ResizeLimits, origin: Position, viewport: { width: number; height: number }) {
+  const roomX = Math.max(limits.minWidth, viewport.width - origin.x - 8);
+  const roomY = Math.max(limits.minHeight, viewport.height - origin.y - 8);
+  return {
+    width: Math.round(clamp(size.width, limits.minWidth, Math.min(limits.maxWidth ?? Infinity, roomX))),
+    height: Math.round(clamp(size.height, limits.minHeight, Math.min(limits.maxHeight ?? Infinity, roomY)))
+  };
+}
+
+/**
+ * A corner grip that resizes a floating window. The size is remembered per viewer under `storageKey`; until it's first
+ * resized, a window keeps its starting width and is as tall as its content.
+ */
+export function useWindowResize(initialWidth: number, limits: ResizeLimits, position: Position, storageKey?: string): UseWindowResizeResult {
+  const [size, setSize] = useState<WindowSize>(() =>
+    storageKey ? readJson<WindowSize>(`winsize:${storageKey}`, { width: initialWidth }) : { width: initialWidth }
+  );
+  const resizeRef = useRef<ResizeState | null>(null);
+
+  function onPointerDown(event: PointerEvent<HTMLElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const rect = (event.currentTarget.parentElement ?? event.currentTarget).getBoundingClientRect();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: rect.width,
+      startHeight: rect.height
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event: PointerEvent<HTMLElement>) {
+    const resize = resizeRef.current;
+    if (!resize) return;
+    const view = event.currentTarget.ownerDocument.defaultView ?? window;
+    setSize(clampSize(
+      { width: resize.startWidth + event.clientX - resize.startX, height: resize.startHeight + event.clientY - resize.startY },
+      limits,
+      position,
+      { width: view.innerWidth, height: view.innerHeight }
+    ));
+  }
+
+  function onPointerUp(event: PointerEvent<HTMLElement>) {
+    const resize = resizeRef.current;
+    if (resize && event.currentTarget.hasPointerCapture(resize.pointerId)) {
+      event.currentTarget.releasePointerCapture(resize.pointerId);
+    }
+    resizeRef.current = null;
+  }
+
+  useEffect(() => {
+    if (storageKey && size.height !== undefined) writeJson(`winsize:${storageKey}`, size);
+  }, [storageKey, size]);
+
+  return { size, gripProps: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } };
+}
