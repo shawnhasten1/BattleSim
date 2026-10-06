@@ -164,6 +164,29 @@ export function StandardActionOutcome({ action, onChange }: { action: UtilityAct
       </Field>
       {action.mode === "hide" ? <p className={styles.hint}>The simulator doesn&apos;t hide yet: it&apos;s on the sheet for you to use.</p> : null}
       {action.mode === "help" ? <p className={styles.hint}>Help is only partly simulated.</p> : null}
+      {action.mode === "dash" || action.mode === "disengage" || action.mode === "dodge" ? (
+        <>
+          {/* Patient Defense for a Focus Point: Disengage and Dodge in one. */}
+          <span className={styles.typeChips} role="group" aria-label="And also takes">
+            {(["dash", "disengage", "dodge"] as const).filter((mode) => mode !== action.mode).map((mode) => {
+              const also = action.also ?? [];
+              const on = also.includes(mode);
+              const next = on ? also.filter((other) => other !== mode) : [...also, mode];
+              return (
+                <button key={mode} type="button" aria-pressed={on} onClick={() => { const copy = { ...action }; delete copy.also; onChange(next.length ? { ...copy, also: next } : copy); }}>
+                  {STANDARD_ACTIONS.find((entry) => entry.value === mode)!.label}
+                </button>
+              );
+            })}
+          </span>
+          <Check label="Gives temporary hit points" checked={Boolean(action.tempHp?.length)}
+            onChange={(on) => { const copy = { ...action }; delete copy.tempHp; onChange(on ? { ...copy, tempHp: [{ dice: "1d6" }] } : copy); }} />
+          {action.tempHp?.length ? (
+            <input aria-label="Temporary hit points" className={styles.expression} value={action.tempHp[0]!.dice} placeholder="1d6"
+              onChange={(e) => onChange({ ...action, tempHp: [{ ...action.tempHp![0]!, dice: e.target.value.replace(/\s+/g, "") }] })} />
+          ) : null}
+        </>
+      ) : null}
     </>
   );
 }

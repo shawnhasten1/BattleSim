@@ -72,13 +72,18 @@ const monksFocus = runs("monk_monks-focus", {
       resourceCost: { resourceId: "focus-points", amount: 1 }, automationSupport: "full"
     },
     { kind: "utility", id: "patient-defense", name: "Patient Defense: Disengage", actionType: "bonus", mode: "disengage", automationSupport: "full" },
+    // For a Focus Point: Disengage and Dodge in one bonus action (Heightened Focus adds temporary hit points).
     {
-      kind: "utility", id: "patient-defense-dodge", name: "Patient Defense: Dodge", actionType: "bonus", mode: "dodge",
+      kind: "utility", id: "patient-defense-dodge", name: "Patient Defense: Disengage and Dodge", actionType: "bonus", mode: "disengage", also: ["dodge"],
       resourceCost: { resourceId: "focus-points", amount: 1 }, automationSupport: "full"
     },
-    { kind: "utility", id: "step-of-the-wind", name: "Step of the Wind: Dash", actionType: "bonus", mode: "dash", automationSupport: "full" }
-  ],
-  notSimulated: "spending a point gives the Dodge alone (not Disengage too) for Patient Defense; Step of the Wind's spent point isn't offered."
+    { kind: "utility", id: "step-of-the-wind", name: "Step of the Wind: Dash", actionType: "bonus", mode: "dash", automationSupport: "full" },
+    // For a Focus Point: Dash and Disengage (its doubled jump is outside the grid).
+    {
+      kind: "utility", id: "step-of-the-wind-disengage", name: "Step of the Wind: Dash and Disengage", actionType: "bonus", mode: "dash", also: ["disengage"],
+      resourceCost: { resourceId: "focus-points", amount: 1 }, automationSupport: "full"
+    }
+  ]
 });
 
 const attacks = (key: string, count: number) => runs(key, {
@@ -173,7 +178,10 @@ export const MONK: ClassDefinition = {
     {
       level: 10,
       grants: [
-        grant("heightened-focus", runs("monk_heightened-focus", { notSimulated: "Patient Defense's temporary hit points and Step of the Wind carrying an ally." })),
+        // Two Martial Arts dice of temporary hit points with Patient Defense's spent point.
+        grant("heightened-focus", runs("monk_heightened-focus", { notSimulated: "Step of the Wind carrying an ally." }), {
+          actionPatch: { grant: "monks-focus", action: 2, patch: { tempHp: [{ dice: "{col:martial-arts}+{col:martial-arts}" }] } }
+        }),
         grant("self-restoration", reference("monk_self-restoration"))
       ]
     },

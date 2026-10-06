@@ -823,8 +823,10 @@ function utilityActionId(
   mode: "dash" | "disengage" | "dodge",
   slot: "action" | "bonus"
 ): string | undefined {
-  return getExecutableActions(getDefinition(snapshot, actor))
-    .find((candidate) => candidate.kind === "utility" && candidate.mode === mode && candidate.actionType === slot)?.id;
+  // One it can pay for, a free one first (Patient Defense's plain Disengage before the one that spends a point).
+  const options = getExecutableActions(getDefinition(snapshot, actor))
+    .filter((candidate) => candidate.kind === "utility" && candidate.mode === mode && candidate.actionType === slot && canPayResource(actor, candidate));
+  return (options.find((candidate) => !("resourceCost" in candidate && candidate.resourceCost)) ?? options[0])?.id;
 }
 
 /** A dashed move that would bring `target` into `range` this turn, or `undefined`. Never mutates `actor`. */

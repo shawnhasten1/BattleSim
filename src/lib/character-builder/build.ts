@@ -1181,6 +1181,24 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       const id = `${owner.idPrefix}-${grant.key}`;
       weapons.push({ key: `${owner.key}:${grant.key}`, weapon: { ...weapon, id, actionId: id }, scaled });
     }
+    if (grant.actionPatch) {
+      const { grant: earlier, action: index, patch } = grant.actionPatch;
+      const target = features.find((entry) => entry.key.endsWith(`:${earlier}`));
+      const action = target?.feature.grantedActions?.[index];
+      if (!target || !action) {
+        state.warnings.push(`${label}: no action ${index} from ${earlier} to change`);
+      } else {
+        // Its templates ("{col:martial-arts}") read this grant's owner.
+        const evaluated = (value: unknown): unknown => {
+          if (typeof value === "string" && value.includes("{")) return evaluate(`${label} change`, () => evaluateTemplate(value, scope)) ?? value;
+          if (Array.isArray(value)) return value.map(evaluated);
+          if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, evaluated(inner)]));
+          return value;
+        };
+        const changed = { ...action, ...(evaluated(patch) as Record<string, unknown>) } as typeof action;
+        target.feature = { ...target.feature, grantedActions: target.feature.grantedActions!.map((candidate, at) => (at === index ? changed : candidate)) };
+      }
+    }
     if (grant.onHitOf) {
       const onHitOf = grant.onHitOf;
       // A rider's dice can be a template ("{mod:wis|min:1}d8").

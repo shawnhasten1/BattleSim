@@ -1859,6 +1859,24 @@ export function resolveMultiattackAction(
  * Dodge applies a self-condition that shifts incoming attacks and DEX saves
  * until the actor's next turn. Hide / Help are logged but not modelled.
  */
+/** What Dash, Disengage or Dodge does for the rest of the turn (Dodge: until the start of its next one). */
+function applyUtilityMode(state: EngineState, actor: CombatantState, mode: "dash" | "disengage" | "dodge"): void {
+  actor.turnFlags ??= {};
+  if (mode === "dash") {
+    actor.turnFlags.dashed = true;
+  } else if (mode === "disengage") {
+    actor.turnFlags.disengaged = true;
+  } else {
+    const bearerIdx = state.snapshot.combatants.findIndex((c) => c.id === actor.id);
+    const { expiresAt } = riderDurationToExpiry(state, { kind: "until-start-of-next-turn" }, bearerIdx >= 0 ? bearerIdx : undefined);
+    applyCondition(state, actor.id, {
+      id: `${actor.id}:dodge`, name: "custom", sourceName: "Dodge", sourceCombatantId: actor.id, startedRound: state.snapshot.round, expiresAt,
+      // -4 ≈ disadvantage for the sim; the proper "attacker rolls with disadvantage" model is a later pass.
+      modifiers: { incomingAttackRoll: -4, savingThrows: { dex: 2 } }
+    });
+  }
+}
+
 export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: Id): void {
   const actor = findCombatant(state.snapshot, actorId);
   const definition = getDefinition(state.snapshot, actor);
@@ -1870,28 +1888,22 @@ export function resolveUtilityAction(state: EngineState, actorId: Id, actionId: 
   declareAction(state, actor, action);
 
   actor.turnFlags ??= {};
-  if (action.mode === "dash") {
-    actor.turnFlags.dashed = true;
-  } else if (action.mode === "disengage") {
-    actor.turnFlags.disengaged = true;
-  } else if (action.mode === "dodge") {
-    const bearerIdx = state.snapshot.combatants.findIndex((c) => c.id === actorId);
-    const { expiresAt } = riderDurationToExpiry(
-      state,
-      { kind: "until-start-of-next-turn" },
-      bearerIdx >= 0 ? bearerIdx : undefined
-    );
-    applyCondition(state, actorId, {
-      id: `${actorId}:dodge`,
-      name: "custom",
-      sourceName: "Dodge",
-      sourceCombatantId: actorId,
-      startedRound: state.snapshot.round,
-      expiresAt,
-      // -4 ≈ disadvantage for the sim; the proper "attacker rolls with
-      // disadvantage" model is a later condition-interaction pass.
-      modifiers: { incomingAttackRoll: -4, savingThrows: { dex: 2 } }
-    });
+  // Patient Defense, Step of the Wind for a Focus Point: two of them in one.
+  for (const also of action.also ?? []) {
+    if (also !== action.mode) applyUtilityMode(state, actor, also);
+  }
+  // Adrenaline Rush, Heightened Focus: temporary hit points with it (they don't stack: the larger stays).
+  if (action.tempHp?.length) {
+    const amount = action.tempHp.reduce((sum, component) => sum + rollDice(withBonus(component.dice, component.abilityModifier ? abilityModifier(definition.abilities[component.abilityModifier]) : 0), state.rng).total, 0);
+    if (amount > 0) {
+      actor.tempHp = Math.max(actor.tempHp, amount);
+      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName} gains ${amount} temporary hit points`, {
+        targetId: actor.id, actionId, amount, tempHp: actor.tempHp
+      }));
+    }
+  }
+  if (action.mode === "dash" || action.mode === "disengage" || action.mode === "dodge") {
+    applyUtilityMode(state, actor, action.mode);
   } else if (action.mode === "escape") {
     attemptEscape(state, actor);
   } else {

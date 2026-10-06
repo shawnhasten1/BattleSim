@@ -321,13 +321,14 @@ const ORC: SpeciesDefinition = {
       {
         key: "adrenaline-rush",
         feature: runs(trait("orc", "Adrenaline Rush"), {
+          // Dash, with as many temporary hit points as the proficiency bonus.
           grantedActions: [{
             kind: "utility", id: "adrenaline-rush", name: "Adrenaline Rush", actionType: "bonus", mode: "dash",
-            resourceCost: { resourceId: "adrenaline-rush", amount: 1 }, automationSupport: "full"
-          }],
-          notSimulated: "the temporary hit points (your proficiency bonus) that come with it."
+            tempHp: [{ dice: "2" }], resourceCost: { resourceId: "adrenaline-rush", amount: 1 }, automationSupport: "full"
+          }]
         }),
-        pool: { id: "adrenaline-rush", size: "{pb}" }
+        pool: { id: "adrenaline-rush", size: "{pb}" },
+        scale: [{ path: "grantedActions.0.tempHp.0.dice", value: "{pb}" }]
       },
       { key: "darkvision", feature: informational(trait("orc", "Darkvision")) },
       {

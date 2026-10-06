@@ -1593,8 +1593,14 @@ function actionBody(action: ActionDefinition, definition: CreatureDefinition, in
       return { text: `${who} up to ${action.range} feet to an unoccupied space${action.requiresLineOfEffect ? " it can see" : ""}.`, short: `teleport ${action.range} ft`, notSimulated: [] };
     }
     case "utility": {
-      const verb = action.mode === "escape" ? "tries to escape a grapple" : `takes the ${capitalize(action.mode)} action`;
-      return { text: `It ${verb}.`, short: action.mode, notSimulated: action.automationSupport === "partial" ? [`${capitalize(action.mode)} is only partly simulated.`] : [] };
+      // Patient Defense for a point: Disengage and Dodge together; Adrenaline Rush's temporary hit points.
+      const modes = [action.mode, ...(action.also ?? []).filter((mode) => mode !== action.mode)];
+      const verb = action.mode === "escape" ? "tries to escape a grapple" : `takes the ${joinList(modes.map(capitalize))} action${modes.length > 1 ? "s" : ""}`;
+      const temp = action.tempHp?.length ? ` and gains ${healingText(action.tempHp, definition)} temporary hit points` : "";
+      return {
+        text: `It ${verb}${temp}.`, short: [modes.join(" + "), ...(temp ? [`${healingText(action.tempHp!, definition)} temp HP`] : [])].join(", "),
+        notSimulated: action.automationSupport === "partial" ? [`${capitalize(action.mode)} is only partly simulated.`] : []
+      };
     }
     case "summon": {
       const options = action.options.map((option) => `${typeof option.count === "number" ? countWord(option.count) : option.count.dice} ${option.label}`);

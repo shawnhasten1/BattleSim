@@ -1755,6 +1755,10 @@ export interface UtilityActionDefinition {
   description?: string;
   actionType: "action" | "bonus";
   mode: "dash" | "disengage" | "dodge" | "hide" | "help" | "escape";
+  /** More of these taken with it, in the same slot (Patient Defense for a Focus Point: Disengage and Dodge). */
+  also?: Array<"dash" | "disengage" | "dodge">;
+  /** Temporary hit points it gives (Adrenaline Rush: the proficiency bonus; Heightened Focus: two Martial Arts dice). */
+  tempHp?: HealingComponent[];
   resourceCost?: ResourceCost;
   automationSupport: "full" | "partial";
 }

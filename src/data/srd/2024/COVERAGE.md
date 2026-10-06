@@ -20,7 +20,7 @@ its gaps, never dropped and never approximated without saying so.
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 10 | 4 | 3 | 5 | 4 |
+| Monk (Warrior of the Open Hand) | 26 | 11 | 3 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
@@ -28,7 +28,7 @@ its gaps, never dropped and never approximated without saying so.
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 0 | 1 | 9 | 3 |
 | Feats | 17 | 7 | 2 | 4 | 4 | 0 |
-| Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
+| Species traits | 33 | 10 | 1 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
 
@@ -39,7 +39,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `condition-removal` | Ending a condition with a feature (Self-Restoration, Restoring Touch) | Monk, Paladin | 1 | Self-Restoration (Monk); Lay On Hands (Paladin); Restoring Touch (Paladin) |
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
@@ -65,6 +64,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
+| `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
@@ -230,7 +230,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action. Monk weapons keep their own die, and armor isn't checked. |
 | 1 | Unarmored Defense | full |  |  |
-| 2 | Monk's Focus | partial | `combined-utility` | Flurry of Blows runs, and so do Disengage and Dash as bonus actions; spending a point for two actions in one gives the Dodge or the Dash alone. |
+| 2 | Monk's Focus | full |  | Flurry of Blows, and Disengage and Dash as bonus actions; for a Focus Point, Patient Defense's Disengage and Dodge, or Step of the Wind's Dash and Disengage, in one bonus action (the doubled jump is outside the grid). The AI takes the free ones. |
 | 2 | Unarmored Movement | builder |  | Speed by level; armor isn't checked. |
 | 2 | Uncanny Metabolism | info |  | A fight starts with full pools and hit points. |
 | 3 | Deflect Attacks | full |  | 1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources. |
@@ -242,7 +242,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 6 | Empowered Strikes | full |  | Its Unarmed Strike deals force damage from 6th level. |
 | 7 | Evasion | full |  |  |
 | 9 | Acrobatic Movement | info |  | Walls and water. |
-| 10 | Heightened Focus | partial | `combined-utility` | Three Flurry strikes run; Patient Defense's temporary hit points and carrying an ally don't. |
+| 10 | Heightened Focus | partial | `combined-utility` | Three Flurry strikes, and two Martial Arts dice of temporary hit points with Patient Defense's spent point; Step of the Wind carrying an ally doesn't run. |
 | 10 | Self-Restoration | manual | `condition-removal` |  |
 | 13 | Deflect Energy | full |  | Deflect Attacks against an attack roll of any other damage type. |
 | 14 | Disciplined Survivor | full |  | Proficiency in every save, and a Focus Point to reroll a failed one. |
@@ -491,7 +491,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Human | Resourceful | full |  | Heroic Inspiration, spent rerolling a failed save or a missed attack roll (the die that matters in a fight). |
 | Human | Skillful | builder |  | A skill. |
 | Human | Versatile | builder |  | An Origin feat. |
-| Orc | Adrenaline Rush | partial | `combined-utility` | Dash as a bonus action, proficiency-bonus times; the temporary hit points with it don't run. |
+| Orc | Adrenaline Rush | full |  | Dash as a bonus action, with as many temporary hit points as the proficiency bonus, proficiency-bonus times. |
 | Orc | Darkvision | info |  | There's no vision in the simulator. |
 | Orc | Relentless Endurance | full |  | Drops to 1 hit point instead of 0, once. |
 | Tiefling | Darkvision | info |  | There's no vision in the simulator. |

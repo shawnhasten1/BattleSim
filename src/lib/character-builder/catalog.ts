@@ -98,6 +98,11 @@ export interface FeatureGrant {
    * damage on Turn Undead). A rider's dice can be a template.
    */
   onHitOf?: { grant: string; action?: number; riders: ActionRider[] };
+  /**
+   * Fields this grant sets on an earlier grant's feature's granted action (by that grant's key and the action's index):
+   * Heightened Focus's temporary hit points on Patient Defense. A string with a template in it is evaluated.
+   */
+  actionPatch?: { grant: string; action: number; patch: Record<string, unknown> };
   /** Only from this class level on: a grant inside a choice made at an earlier level (a land's 5th-level spells). */
   atLevel?: number;
   /** The key of an earlier grant this one takes the place of (Superior Critical replaces Improved Critical). */
@@ -397,6 +402,7 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   feature: z.union([z.string().min(1), featureSchema]).optional(),
   weapon: z.object({ id: z.string(), name: z.string().min(1) }).passthrough().optional(),
   onHitOf: z.object({ grant: z.string().min(1), action: z.number().int().min(0).optional(), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
+  actionPatch: z.object({ grant: z.string().min(1), action: z.number().int().min(0), patch: z.record(z.string(), z.unknown()) }).optional(),
   atLevel: z.number().int().min(1).max(20).optional(),
   replaces: z.string().optional(),
   scale: z.array(z.object({ path: z.string().min(1), value: z.string() })).optional(),

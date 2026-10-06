@@ -166,6 +166,22 @@ describe("summons, shapechanges and standard actions", { timeout: 30000 }, () =>
     await addToSheet();
     expect(fighter().bonusActions?.find((action) => action.kind === "utility")).toMatchObject({ mode: "disengage", actionType: "bonus", automationSupport: "full" });
   });
+
+  it("takes two standard actions in one, with temporary hit points (Patient Defense, Adrenaline Rush)", async () => {
+    render(<LiveTab />);
+    await startFromScratch("Attack");
+    await radio("How it works", "Automatic");
+    await radio("It", "Takes a standard action");
+    await radio("Takes the", "Disengage");
+    await userEvent.click(within(screen.getByRole("group", { name: "And also takes" })).getByRole("button", { name: "Dodge" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Gives temporary hit points" }));
+    const temp = screen.getByLabelText("Temporary hit points");
+    await userEvent.clear(temp);
+    await userEvent.type(temp, "2d8");
+    await radio("Takes", "Bonus action");
+    await addToSheet();
+    expect(fighter().bonusActions?.find((action) => action.kind === "utility")).toMatchObject({ mode: "disengage", also: ["dodge"], tempHp: [{ dice: "2d8" }] });
+  });
 });
 
 describe("a focus or a wand", { timeout: 30000 }, () => {
