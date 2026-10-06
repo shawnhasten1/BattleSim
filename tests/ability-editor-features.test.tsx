@@ -359,6 +359,15 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Jeer").effects).toEqual([{ kind: "d20-change", rolls: ["attack"], change: "subtract", dice: "1d8", againstFoes: { withinFt: 30 }, reaction: true }]);
   });
 
+  it("Disadvantage on some attacks against it: which (Defensive Tactics)", async () => {
+    await blankFeature("Wary");
+    const card = await addEffect(/^Disadvantage on some attacks against it/, "Disadvantage on some attacks against it");
+    await radio(card, "Attacks at disadvantage", "Further attacks by one that hit it, this turn");
+    await done(card);
+    await addToSheet();
+    expect(named("Wary").effects).toEqual([{ kind: "attack-defense", against: "after-hit" }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;

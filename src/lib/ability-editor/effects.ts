@@ -90,6 +90,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
   {
+    kind: "attack-defense", label: "Disadvantage on some attacks against it", hint: "Escape the Horde: opportunity attacks; Multiattack Defense: further attacks this turn by one that hit it", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "attack-defense", against: "opportunity" })
+  },
+  {
     kind: "natural-twenty-damage", label: "Extra damage on a 20", hint: "Overwhelming Strike: the attack's ability score in extra damage when the d20 shows 20", theme: "attacks", when: false, scope: true,
     blank: () => ({ kind: "natural-twenty-damage" })
   },

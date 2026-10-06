@@ -975,6 +975,12 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "attack-defense":
+      return (
+        <Segmented label="Attacks at disadvantage" value={effect.against}
+          options={[{ value: "opportunity", label: "Opportunity attacks" }, { value: "after-hit", label: "Further attacks by one that hit it, this turn" }]}
+          onChange={(against) => set({ ...effect, against })} />
+      );
     case "natural-twenty-damage":
       return <p className={styles.hint}>Nothing to set: when the d20 shows 20, the attack deals extra damage of its type equal to the score of the ability it uses.</p>;
     case "ignore-resistance":

@@ -43,7 +43,6 @@ export const GAPS = {
   "gain-speed": "Gaining a speed for a while (Dragon Wings, Draconic Flight)",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "reaction-attack": "A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage)",
-  "oa-defense": "Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense)",
   "summon-stat-blocks": "Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon)",
   "wild-shape": "Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
@@ -271,7 +270,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Hunter */
   "ranger_hunter_hunters-lore": info(),
   "ranger_hunter_hunters-prey": full("Colossus Slayer (1d8 more once a turn on a creature missing hit points), or Horde Breaker (once a turn, after a weapon attack, another with the same weapon at a creature within 5 ft of the target that it hasn't attacked this turn, the one likeliest to drop)."),
-  "ranger_hunter_defensive-tactics": manual(["oa-defense"]),
+  "ranger_hunter_defensive-tactics": full("Escape the Horde (opportunity attacks against it have disadvantage) or Multiattack Defense (a creature that hits it has disadvantage on its other attack rolls against it this turn); changing the choice on a rest is the builder's."),
   "ranger_hunter_superior-hunters-prey": full("The second creature is the one likeliest to drop: the fewest hit points left."),
   "ranger_hunter_superior-hunters-defense": full("Resistance to the damage's types until the end of the turn, taken by the AI for a cut of 5 or more or one that keeps it standing."),
 

@@ -22,7 +22,7 @@ its gaps, never dropped and never approximated without saying so.
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
-| Ranger (Hunter) | 23 | 10 | 0 | 2 | 9 | 2 |
+| Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
@@ -51,7 +51,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
-| `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
@@ -310,7 +309,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Hunter's Lore | info |  |  |
 | 3 | Hunter's Prey | full |  | Colossus Slayer (1d8 more once a turn on a creature missing hit points), or Horde Breaker (once a turn, after a weapon attack, another with the same weapon at a creature within 5 ft of the target that it hasn't attacked this turn, the one likeliest to drop). |
-| 7 | Defensive Tactics | manual | `oa-defense` |  |
+| 7 | Defensive Tactics | full |  | Escape the Horde (opportunity attacks against it have disadvantage) or Multiattack Defense (a creature that hits it has disadvantage on its other attack rolls against it this turn); changing the choice on a rest is the builder's. |
 | 11 | Superior Hunter's Prey | full |  | The second creature is the one likeliest to drop: the fewest hit points left. |
 | 15 | Superior Hunter's Defense | full |  | Resistance to the damage's types until the end of the turn, taken by the AI for a cut of 5 or more or one that keeps it standing. |
 

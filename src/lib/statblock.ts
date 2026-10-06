@@ -748,6 +748,10 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
     case "condition-persists":
       return `${P} ${activationNamed(definition, effect.conditionId)} needs nothing to keep it going, and ends early only if ${who.subject} falls unconscious${effect.durationRounds ? `; it lasts ${roundsText(effect.durationRounds)}` : ""}.`;
+    case "attack-defense":
+      return effect.against === "opportunity"
+        ? `Opportunity attacks against ${who.object} have disadvantage.`
+        : `When a creature hits ${who.object} with an attack roll, that creature has disadvantage on its other attack rolls against ${who.object} this turn.`;
     case "natural-twenty-damage":
       return `When ${who.subject} rolls a 20 on the d20 for an attack roll, the attack deals extra damage of its type equal to the score of the ability it uses.`;
     case "ignore-resistance":
@@ -905,6 +909,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
     case "condition-persists": return `${activationNamed(definition, effect.conditionId)} needs no upkeep${effect.durationRounds ? `, ${roundsText(effect.durationRounds)}` : ""}`;
+    case "attack-defense": return effect.against === "opportunity" ? "disadvantage on opportunity attacks against it" : "disadvantage on further attacks this turn by one that hit it";
     case "natural-twenty-damage": return "its ability score in extra damage on a 20";
     case "ignore-resistance": return `${joinList(effect.damageTypes)} damage ignores resistance`;
     case "max-damage": return `maximum damage from ${spellScopeText(effect, IT)} cast at level 1–${effect.maxSlot} (${costText(effect.resourceCost, definition)})`;

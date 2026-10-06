@@ -854,6 +854,14 @@ export type FeatureEffect =
     conditionId: Id;
     durationRounds?: number;
   }
+  | {
+    /**
+     * Hunter's Defensive Tactics: attack rolls against it at disadvantage: opportunity attacks (`"opportunity"`, Escape
+     * the Horde), or the other attack rolls this turn of a creature that hit it (`"after-hit"`, Multiattack Defense).
+     */
+    kind: "attack-defense";
+    against: "opportunity" | "after-hit";
+  }
   | ({
     /**
      * Overwhelming Strike: on an attack roll of 20, extra damage of the attack's type equal to the score of the ability

@@ -138,7 +138,29 @@ export const HUNTER: SubclassDefinition = {
         ]
       }, "ranger_hunter_hunters-prey")]
     },
-    { level: 7, grants: [grant("defensive-tactics", reference("ranger_hunter_defensive-tactics"))] },
+    {
+      level: 7,
+      grants: [],
+      choices: [choice({
+        kind: "pick", id: "defensive-tactics", label: "Defensive Tactics", count: 1,
+        options: [
+          {
+            id: "escape-the-horde", name: "Escape the Horde", description: "Opportunity attacks against it have disadvantage",
+            grants: [{
+              key: "defensive-tactics",
+              feature: runs("ranger_hunter_defensive-tactics", { name: "Defensive Tactics: Escape the Horde", effects: [{ kind: "attack-defense", against: "opportunity" }] })
+            }]
+          },
+          {
+            id: "multiattack-defense", name: "Multiattack Defense", description: "One that hits it has disadvantage on its other attacks against it this turn",
+            grants: [{
+              key: "defensive-tactics",
+              feature: runs("ranger_hunter_defensive-tactics", { name: "Defensive Tactics: Multiattack Defense", effects: [{ kind: "attack-defense", against: "after-hit" }] })
+            }]
+          }
+        ]
+      }, "ranger_hunter_defensive-tactics")]
+    },
     {
       level: 11,
       grants: [grant("superior-hunters-prey", runs("ranger_hunter_superior-hunters-prey"), {

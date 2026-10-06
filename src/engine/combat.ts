@@ -2368,7 +2368,10 @@ export function attackRollInputs(
   const deniesAdvantage = !(target.conditions ?? []).some((condition) => INCAPACITATING_CONDITIONS.has(condition.name))
     && featureSources(targetDefinition, target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "no-advantage-against"));
   const advantage = !deniesAdvantage && Boolean(options.advantage || featureAdvantage.advantage || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "advantage"));
-  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage
+  // Escape the Horde, Multiattack Defense.
+  const defendedBy = attackDefenseAgainst(state, attacker, target, targetDefinition, action);
+  if (defendedBy) featureAdvantage.sources.push(defendedBy);
+  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage || defendedBy
     || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "disadvantage"));
   const rollMode = attackRollMode({ advantage, disadvantage });
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
@@ -2380,6 +2383,24 @@ export function attackRollInputs(
   const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
   const criticalRange = featureCriticalRange(state, attacker, target, action, attackerDefinition);
   return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover, criticalRange };
+}
+
+/**
+ * Hunter's Defensive Tactics: the target's feature that puts this attack roll at disadvantage, if one does: an
+ * opportunity attack (Escape the Horde), or another attack this turn by a creature that has hit it (Multiattack Defense).
+ */
+function attackDefenseAgainst(state: EngineState, attacker: CombatantState, target: CombatantState, targetDefinition: CreatureDefinition, action: AttackActionDefinition): string | undefined {
+  for (const feature of featureSources(targetDefinition, target)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "attack-defense") continue;
+      if (effect.against === "opportunity" && action.actionType === "reaction" && action.reaction?.trigger.kind === "enemy-leaves-reach") return feature.name;
+      if (effect.against === "after-hit" && state.log.some((entry) => entry.type === "AttackRolled" && entry.round === state.snapshot.round
+        && entry.turnIndex === state.snapshot.turnIndex && entry.data?.attackerId === attacker.id && entry.data?.targetId === target.id && entry.data?.hit === true)) {
+        return feature.name;
+      }
+    }
+  }
+  return undefined;
 }
 
 /** The lowest natural roll that's a critical hit for this attack: 20, or less with Improved Critical, and what lowered it. */
@@ -9439,9 +9460,10 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
           }
         }
         const reactorDefinition = getDefinition(state.snapshot, reactor);
+        // An "any melee attack" one says what it is too (Escape the Horde reads it).
         const reactionAction: AttackActionDefinition = action.actionType === "reaction"
           ? action
-          : { ...action, actionType: "reaction" };
+          : { ...action, actionType: "reaction", reaction: { trigger: { kind: "enemy-leaves-reach" }, target: "trigger-source", priority: "always" } };
         logReactionTriggered(state, reactor, action.id, "enemy-leaves-reach", ev);
         state.log.push(event(state, "OpportunityAttackTriggered", `${reactor.displayName} makes an opportunity attack against ${source.displayName}`, {
           reactorId: reactor.id, moverId: source.id, actionId: action.id, from: ev.from, to: ev.to
