@@ -505,6 +505,8 @@ export type FeatureEffect =
     usedUp?: boolean;
     /** Its resource comes back when the roll still fails (Peerless Skill). */
     refundOnFailure?: boolean;
+    /** Only a spell's attack roll (Seeking Spell). */
+    spellAttacksOnly?: boolean;
   }
   | {
     /**
@@ -817,6 +819,15 @@ export type FeatureEffect =
   }
   | {
     /**
+     * A Metamagic option it knows: each spell it can change gets a copy cast with it ("Fireball (Quickened)"), paying
+     * `resourceCost` (sorcery points) beside the spell's own (`extraCost`).
+     */
+    kind: "metamagic";
+    option: MetamagicOption;
+    resourceCost: ResourceCost;
+  }
+  | {
+    /**
      * A reaction attack when hit (Retaliation): each of its attacks of these types (default melee) gets a reaction copy,
      * made against the attacker when `trigger` passes.
      */
@@ -867,6 +878,14 @@ export interface OnHitOption {
   /** Only attacks that use one of these abilities (Brutal Strike: Strength). */
   abilities?: Ability[];
 }
+
+/**
+ * Metamagic (SRD 5.2). `quickened`: an action's spell cast with a bonus action, with no other level 1+ spell that turn.
+ * `distant`: double range (touch: 30 ft). `twinned`: one more target for a spell that gains them by slot. `transmuted`:
+ * acid, cold, fire, lightning, poison or thunder damage as the best of those. `subtle`: it can't be countered.
+ * `heightened`, `careful`, `empowered`, `extended`: see `metamagicVariant`.
+ */
+export type MetamagicOption = "careful" | "distant" | "empowered" | "extended" | "heightened" | "quickened" | "subtle" | "transmuted" | "twinned";
 
 /** Cunning Strike's cost: this many dice of the feature's `damage-bonus` (Sneak Attack's d6s). */
 export interface OnHitDiceTrade {
@@ -1848,6 +1867,10 @@ export interface CompiledActionMeta {
   upcastFrom?: number;
   /** On an item's use: the item it comes from. The AI, the hotbar, the log and the report read it. */
   item?: ItemUseMeta;
+  /** On a spell cast with Metamagic (`<id>:meta-<option>`): the option, and what it's called ("Quickened Spell"). */
+  metamagic?: { option: MetamagicOption; name: string };
+  /** A second cost paid along with `resourceCost`: Metamagic's sorcery points beside the spell's slot. */
+  extraCost?: ResourceCost;
 }
 
 /** Which item a compiled action uses, and how. Stamped by `getExecutableActions` on every item use. */
@@ -2387,6 +2410,10 @@ export interface TurnFlags {
    * or `"move"`. A person's choice is read from what they've used.
    */
   limitedTo?: "act" | "move";
+  /** A level 1+ spell was cast this turn: Quickened Spell can't be used after it. */
+  leveledSpellCast?: boolean;
+  /** A spell was cast with Quickened Spell this turn: no level 1+ spell after it. */
+  quickenedSpell?: boolean;
 }
 
 export interface CombatantState {

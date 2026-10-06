@@ -44,6 +44,7 @@ import type {
   ItemUseMeta,
   MultiattackActionDefinition,
   DamageRedirect,
+  MetamagicOption,
   NextAttackChange,
   OnHitDiceTrade,
   OnHitMove,
@@ -267,7 +268,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -512,6 +513,85 @@ export function damageBonusExpected(
   if (effect.kind === "damage-bonus" && effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) return false;
   const inputs = attackRollInputs(state, attacker, target, action);
   return featureConditionsMet(state, attacker, target, effect, { rollMode: inputs.rollMode, critical: false });
+}
+
+/** What each Metamagic option is called: "Quickened Spell", and on a spell's copy "Fireball (Quickened)". */
+export const METAMAGIC_NAMES: Record<MetamagicOption, string> = {
+  careful: "Careful", distant: "Distant", empowered: "Empowered", extended: "Extended", heightened: "Heightened",
+  quickened: "Quickened", subtle: "Subtle", transmuted: "Transmuted", twinned: "Twinned"
+};
+
+/** Transmuted Spell's damage types: any of them can become any other. */
+const TRANSMUTABLE: DamageType[] = ["acid", "cold", "fire", "lightning", "poison", "thunder"];
+
+/**
+ * Metamagic: a copy of each spell an option it knows can change ("Fireball (Quickened)", `<id>:meta-<option>`), paying
+ * the option's sorcery points beside the spell's slot (`extraCost`). Only the spell's own level: a copy at a higher slot
+ * isn't changed too.
+ */
+function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinition[]): ActionDefinition[] {
+  const effects = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only")
+    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic" }> => effect.kind === "metamagic"));
+  if (!effects.length) return [];
+  const spells = listed.filter((action) => "spellLevel" in action && action.spellLevel != null && !action.upcastFrom && !action.item
+    && action.automationSupport === "full" && action.actionType !== "reaction");
+  const out: ActionDefinition[] = [];
+  for (const effect of effects) {
+    for (const spell of spells) {
+      const changed = metamagicVariant(effect.option, spell);
+      if (!changed) continue;
+      const name = METAMAGIC_NAMES[effect.option];
+      out.push({
+        ...changed, id: `${spell.id}:meta-${effect.option}`, name: `${spell.name} (${name})`,
+        metamagic: { option: effect.option, name: `${name} Spell` }, extraCost: effect.resourceCost
+      } as ActionDefinition);
+    }
+  }
+  return out;
+}
+
+/** A spell as one Metamagic option changes it, or undefined when the option doesn't apply to it. */
+function metamagicVariant(option: MetamagicOption, spell: ActionDefinition): ActionDefinition | undefined {
+  switch (option) {
+    case "quickened":
+      return spell.actionType === "action" ? { ...spell, actionType: "bonus" } : undefined;
+    case "distant": {
+      // A range of at least 5 ft doubles; touch (5 ft) becomes 30 ft. Not a spell from itself.
+      const longer = (range: number) => (range <= 5 ? 30 : range * 2);
+      if (spell.kind === "area-save") {
+        const aim = spell.targeting;
+        return aim && aim.origin === "point" && aim.range > 0 ? { ...spell, targeting: { ...aim, range: longer(aim.range) } } : undefined;
+      }
+      return "range" in spell && typeof spell.range === "number" && spell.range > 0 && !("targeting" in spell && spell.targeting?.target === "self")
+        ? { ...spell, range: longer(spell.range) } as ActionDefinition : undefined;
+    }
+    case "twinned":
+      return spell.kind === "save" && spell.upcast?.perSlotAboveBase?.targets ? spell : undefined;
+    case "transmuted": {
+      if (spell.kind !== "attack" && spell.kind !== "save" && spell.kind !== "area-save") return undefined;
+      if (!spell.damage.some((component) => TRANSMUTABLE.includes(component.damageType as DamageType))) return undefined;
+      return {
+        ...spell,
+        damage: spell.damage.map((component) => (TRANSMUTABLE.includes(component.damageType as DamageType) ? { ...component, damageTypeOptions: TRANSMUTABLE } : component))
+      } as ActionDefinition;
+    }
+    case "subtle":
+      return "spellLevel" in spell && (spell.spellLevel ?? 0) >= 1 ? spell : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Quickened Spell's rule: it can't be used after a level 1+ spell this turn, and no level 1+ spell can be cast after it.
+ * Why `action` can't be cast now under it, or undefined.
+ */
+export function spellTurnProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  const flags = combatant.turnFlags;
+  if (action.metamagic?.option === "quickened" && flags?.leveledSpellCast) return "Quickened Spell can't follow a level 1+ spell this turn";
+  if ((castLevelOf(action) ?? 0) >= 1 && flags?.quickenedSpell) return "No level 1+ spell after Quickened Spell this turn";
+  return undefined;
 }
 
 /**
@@ -2278,7 +2358,8 @@ function resolveAttackCore(
   if (!hit && !overridden) {
     const criticalAt = inputs.criticalRange.minimum;
     const changed = changeFailedD20(state, attacker, {
-      roll: "attack", natural, modifier: inputs.totalBonus, against: targetAc, mode: rollMode, label: action.name, criticalAt
+      roll: "attack", natural, modifier: inputs.totalBonus, against: targetAc, mode: rollMode, label: action.name, criticalAt,
+      ...(action.attackType === "spell" || action.spellLevel != null ? { spellAttack: true } : {})
     }, (n, t) => n >= criticalAt || (n !== 1 && t >= targetAc));
     if (changed) {
       natural = changed.natural;
@@ -2586,7 +2667,7 @@ export function resolveAreaSaveAction(
   // 5e: roll the blast's damage once — every creature takes the same numbers,
   // differing only by resistance / vulnerability and whether they saved.
   const blastRoll = action.damage.length
-    ? rollAreaDamage(state, action.damage, attackerDefinition, {
+    ? rollAreaDamage(state, areaDamageTypesChosen(state, attacker, action.damage, affected), attackerDefinition, {
       casterLevel: scaling.casterLevel,
       extraDiceOnFirst: scaling.upcastDamageDice
     })
@@ -5147,6 +5228,26 @@ interface RolledDamageComponent {
  * target so each creature only differs by its own resistances and whether it
  * saved — not by a fresh dice roll.
  */
+/**
+ * An area's damage with a choice of types (Transmuted Spell): one type for the whole blast, the one that does the most
+ * to the caster's foes in it (each counted alike).
+ */
+function areaDamageTypesChosen(state: EngineState, caster: CombatantState, damage: DamageComponent[], caught: CombatantState[]): DamageComponent[] {
+  if (!damage.some((component) => component.damageTypeOptions?.length)) return damage;
+  const faction = effectiveFaction(state.snapshot, caster);
+  const foes = caught.filter((target) => effectiveFaction(state.snapshot, target) !== faction);
+  return damage.map((component) => {
+    const options = component.damageTypeOptions;
+    if (!options?.length) return component;
+    const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
+    const worth = (type: DamageType) => foes.reduce((sum, foe) => sum + adjustDamage(1000, type, damageAdjustmentsFor(getDefinition(state.snapshot, foe), foe), origin), 0);
+    const best = options.reduce((top, type) => (worth(type) > worth(top) ? type : top), options.includes(component.damageType as DamageType) ? component.damageType as DamageType : options[0]!);
+    const chosen = { ...component, damageType: best };
+    delete chosen.damageTypeOptions;
+    return chosen;
+  });
+}
+
 function rollAreaDamage(
   state: EngineState,
   damage: DamageComponent[],
@@ -5791,6 +5892,12 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
       throw new Error(`${combatant.displayName} cannot take a ${slot} right now`);
     }
   }
+  const turnProblem = spellTurnProblem(combatant, action);
+  if (turnProblem) throw new Error(`${combatant.displayName}: ${turnProblem}`);
+  // Metamagic's sorcery points, beside the slot.
+  if (action.extraCost && (combatant.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) {
+    throw new Error(`${combatant.displayName} lacks ${action.extraCost.resourceId}`);
+  }
   if ("resourceCost" in action && action.resourceCost) {
     const available = combatant.resources?.[action.resourceCost.resourceId] ?? 0;
     if (available < action.resourceCost.amount) {
@@ -5804,6 +5911,12 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
       };
     }
   }
+  if (action.extraCost) {
+    const { resourceId, amount } = action.extraCost;
+    combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) - amount };
+  }
+  if (action.metamagic?.option === "quickened") combatant.turnFlags = { ...(combatant.turnFlags ?? {}), quickenedSpell: true };
+  if ((castLevelOf(action) ?? 0) >= 1) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), leveledSpellCast: true };
   if (slot !== "free") {
     combatant.actionEconomy[slot] = false;
   }
@@ -7353,6 +7466,8 @@ function wantsLegendaryResistance(target: CombatantState, ctx: SaveContext): boo
 /** A failed d20 roll as its roller saw it: the die, what's added to it, what it had to reach, and how it was rolled. */
 interface FailedD20 {
   roll: "attack" | "save";
+  /** A spell's attack roll (Seeking Spell changes only these). */
+  spellAttack?: boolean;
   natural: number;
   modifier: number;
   against: number;
@@ -7379,6 +7494,7 @@ function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: Fa
     for (const [index, effect] of (feature.effects ?? []).entries()) {
       if (effect.kind !== "d20-change" || !effect.rolls.includes(d20.roll) || (effect.change === "hit" && d20.roll !== "attack")) continue;
       if (effect.onNatural1 && d20.natural !== 1) continue;
+      if (effect.spellAttacksOnly && !d20.spellAttack) continue;
       const key = `${feature.id}:${index}`;
       if (used.has(key) || (effect.oncePerTurn && combatant.turnFlags?.d20ChangesUsed?.includes(key))) continue;
       if (effect.resourceCost && (combatant.resources?.[effect.resourceCost.resourceId] ?? 0) < effect.resourceCost.amount) continue;
@@ -8799,7 +8915,8 @@ function counterCheck(state: EngineState, reactor: CombatantState, check: Counte
  */
 function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition, declared: DeclaredCast): boolean {
   const spellLevel = castLevelOf(action);
-  if (spellLevel == null) {
+  // Subtle Spell: cast without components, nothing to counter.
+  if (spellLevel == null || action.metamagic?.option === "subtle") {
     return false;
   }
   const { countered, refundSlot } = runReactionWindow(state, {
@@ -8851,6 +8968,9 @@ function occupiedCells(snapshot: EncounterSnapshot, movingCombatantId: Id): Poin
 }
 
 function canSpendResource(combatant: CombatantState, action: ActionDefinition): boolean {
+  if (action.extraCost && (combatant.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) {
+    return false;
+  }
   if (!("resourceCost" in action) || !action.resourceCost) {
     return true;
   }

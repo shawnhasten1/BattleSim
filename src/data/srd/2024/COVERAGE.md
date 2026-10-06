@@ -24,7 +24,7 @@ its gaps, never dropped and never approximated without saying so.
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 3 | 1 | 5 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
 | Feats | 17 | 6 | 2 | 5 | 4 | 0 |
@@ -54,7 +54,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
-| `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
@@ -63,6 +62,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
+| `metamagic` | Careful, Empowered, Extended and Heightened Spell, and two options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
@@ -367,14 +367,14 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Innate Sorcery | full |  | +1 to its Sorcerer spells' save DC and advantage on their attack rolls for 10 rounds, twice. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Font of Magic | manual | `slot-conversion` | The builder sizes the sorcery point pool. |
-| 2, 10, 17 | Metamagic | manual | `metamagic` |  |
+| 2, 10, 17 | Metamagic | builder |  | Two Metamagic options at 2nd level, and two more at 10th and 17th (see Metamagic Options). |
 | 3 | Sorcerer Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sorcerous Restoration | info |  | A short rest. |
 | 7 | Sorcery Incarnate | manual | `metamagic` |  |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Arcane Apotheosis | manual | `metamagic` |  |
-| — | Metamagic Options | manual | `metamagic` |  |
+| — | Metamagic Options | partial | `metamagic` | Distant, Quickened (no other level 1+ spell that turn), Seeking, Subtle (it can't be countered), Transmuted (the best of the six types against each target) and Twinned run: each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot. Careful, Empowered, Extended and Heightened don't yet. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts it subtly when a foe within 60 ft could counter it. |
 | — | Sorcerer Spell List | builder |  | Read from each spell's own class list. |
 
 ### Draconic Sorcery (Sorcerer subclass)

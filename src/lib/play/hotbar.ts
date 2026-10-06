@@ -124,7 +124,7 @@ export interface HotbarModel {
  * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
  * potion, a wand's spell for more charges.
  */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+)$/;
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -275,7 +275,10 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
     return action.id === base.id || !option ? action.name : option;
   }
   const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined);
-  if (slot !== undefined && (slotFamily || ("spellLevel" in action && action.spellLevel != null))) return slotLabel(action, slot);
+  // Metamagic: the slot, and the option ("3rd · Quickened").
+  const meta = action.metamagic ? ` · ${action.metamagic.name.replace(/ Spell$/, "")}` : "";
+  if (slot !== undefined && (slotFamily || ("spellLevel" in action && action.spellLevel != null))) return `${slotLabel(action, slot)}${meta}`;
+  if (meta) return meta.slice(3);
   const parts: string[] = [];
   if (/:power(?::|$)/.test(action.id)) parts.push("Power Attack");
   if (/:charged(?:-\d+)?$/.test(action.id)) parts.push("Spend a charge");

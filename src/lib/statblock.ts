@@ -9,6 +9,7 @@ import {
   isArmorItem,
   formulaAbility,
   getExecutableActions,
+  METAMAGIC_NAMES,
   fullHealing,
   healsMoreInFull,
   isDrinkUse,
@@ -43,6 +44,7 @@ import {
   type MultiattackStep,
   type NumericFormula,
   type NextAttackChange,
+  type MetamagicOption,
   type OnHitOption,
   type ReactionTrigger,
   type ResourceCost,
@@ -728,6 +730,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
         : `${S} can use the mastery properties of ${joinList(effect.weapons.map((kind) => kind.replace(/-/g, " ")))}.`;
     case "on-hit-option":
       return onHitOptionSentence(effect.option, definition, who);
+    case "metamagic":
+      return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
     case "reaction-attack": {
       const from = effect.trigger.withinFt !== undefined ? ` by a creature within ${effect.trigger.withinFt} feet of ${who.object}` : "";
       const types = joinList(effect.attackTypes ?? ["melee"], "or");
@@ -735,6 +739,19 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
     }
   }
 }
+
+/** What each Metamagic option does to a spell, as its sentence ends: "…to cast a spell that takes an action with a bonus action". */
+const METAMAGIC_PHRASES: Record<MetamagicOption, string> = {
+  careful: "let some creatures in a spell's area succeed on their saves against it, taking no damage on a success",
+  distant: "double a spell's range (a touch spell's becomes 30 feet)",
+  empowered: "reroll some of a spell's damage dice",
+  extended: "double a spell's duration, with advantage on its Concentration saves",
+  heightened: "give one target of a spell disadvantage on its saves against it",
+  quickened: "cast a spell that takes an action with a bonus action instead, casting no other level 1+ spell that turn",
+  subtle: "cast a spell without components, so it can't be countered",
+  transmuted: "change a spell's acid, cold, fire, lightning, poison or thunder damage to another of those types",
+  twinned: "cast a spell that gains targets by slot one level higher"
+};
 
 /** "When it hits with a melee weapon attack, it can spend a level 1 spell slot (and its bonus action) to deal an extra 2d8 radiant damage." */
 export function onHitOptionSentence(option: OnHitOption, definition: CreatureDefinition, who: Who = IT): string {
@@ -847,6 +864,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "weapon-mastery": return effect.weapons === "all" ? "masters every weapon" : `masters ${effect.weapons.map((kind) => kind.replace(/-/g, " ")).join(", ")}`;
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
+    case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
   }
 }
 

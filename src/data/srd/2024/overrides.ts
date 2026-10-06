@@ -9,6 +9,8 @@ export interface FeatureOverride {
   name?: string;
   levels?: number[];
   text?: string;
+  /** Pieces of the source's text replaced, each found exactly once (a heading's lost markup). */
+  replace?: Array<[string, string]>;
 }
 
 export interface ColumnOverride {
@@ -43,6 +45,10 @@ export const FEATURE_OVERRIDES: Record<string, FeatureOverride> = {
   "srd-2024_sorcerer_metamagic": {
     reason: "Listed at levels 2 and 10 in the source; the Sorcerer Features table in the SRD 5.2 PDF has Metamagic at 2, 10 and 17.",
     levels: [2, 10, 17]
+  },
+  "srd-2024_sorcerer_metamagic-options": {
+    reason: "Subtle Spell's heading has lost its \"###\" in the source, so it reads as part of Seeking Spell; the SRD 5.2 PDF has it as an option of its own.",
+    replace: [["\n Subtle Spell\n", "\n### Subtle Spell\n"]]
   },
   "srd-2024_sorcerer_draconic-sorcery_dragon-companion": {
     reason: "Listed at level 19 in the source; the SRD 5.2 PDF has \"Level 18: Dragon Companion\".",

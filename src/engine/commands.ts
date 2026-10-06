@@ -9,6 +9,7 @@ import {
   limitedToOneThing,
   markMoveProblem,
   onHitTermsProblem,
+  spellTurnProblem,
   moveCombatant,
   placeByDm,
   repositionZone,
@@ -217,7 +218,10 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
     return `${actor.displayName} can do only one of moving, an action and a bonus action this turn`;
   }
   if (!canAct(actor, slot)) return slot === "free" ? `${actor.displayName} can't act right now` : `${actor.displayName} can't take a ${SLOT_NAME[slot]} right now`;
-  if (!canPayFor(actor, action as { resourceCost?: { resourceId: string; amount: number } })) return costProblem(action);
+  if (!canPayFor(actor, action as { resourceCost?: { resourceId: string; amount: number } })) return costProblem(actor, action);
+  // Quickened Spell and level 1+ spells in one turn.
+  const spellTurn = spellTurnProblem(actor, action);
+  if (spellTurn) return spellTurn;
   if (action.kind === "utility" && action.mode === "escape" && !(actor.conditions ?? []).some((condition) => condition.hold)) {
     return `${actor.displayName} isn't grappled`;
   }
@@ -232,7 +236,10 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
 const ORDINALS = ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];
 
 /** Why an ability can't be paid for: no slot of its level left, recharging, no uses left, or not enough of a pool. */
-function costProblem(action: ActionDefinition): string {
+function costProblem(actor: CombatantState, action: ActionDefinition): string {
+  // Metamagic's sorcery points, when it's those that are short.
+  const extra = action.extraCost;
+  if (extra && (actor.resources?.[extra.resourceId] ?? 0) < extra.amount) return `Not enough ${extra.resourceId.replace(/[-_]+/g, " ")} left`;
   const cost = "resourceCost" in action ? action.resourceCost : undefined;
   if (!cost) return `Not enough left to use ${action.name}`;
   if (action.item) return action.item.consumes ? `No ${action.item.name} left` : `${action.item.name} hasn't the charges left`;

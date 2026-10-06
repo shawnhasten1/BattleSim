@@ -1,4 +1,4 @@
-import type { DamageType } from "@/engine";
+import type { DamageType, FeatureEffect } from "@/engine";
 import type { ClassDefinition, PickOption, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, spell, srdReferenceOptions, srdSpellcasting } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -21,7 +21,30 @@ const innateSorcery = runs("sorcerer_innate-sorcery", {
   }]
 });
 
-const METAMAGIC = srdReferenceOptions("sorcerer_metamagic-options", "Metamagic");
+const SORCERY_POINTS = (amount: number) => ({ resourceId: "sorcery-points", amount });
+
+/** What each Metamagic option does in a fight, for the ones the engine runs (the rest stay the SRD's text). */
+const METAMAGIC_EFFECTS: Record<string, FeatureEffect> = {
+  "distant-spell": { kind: "metamagic", option: "distant", resourceCost: SORCERY_POINTS(1) },
+  "quickened-spell": { kind: "metamagic", option: "quickened", resourceCost: SORCERY_POINTS(2) },
+  // A missed spell attack rolled again.
+  "seeking-spell": { kind: "d20-change", rolls: ["attack"], change: "reroll", resourceCost: SORCERY_POINTS(1), spellAttacksOnly: true },
+  "subtle-spell": { kind: "metamagic", option: "subtle", resourceCost: SORCERY_POINTS(1) },
+  "transmuted-spell": { kind: "metamagic", option: "transmuted", resourceCost: SORCERY_POINTS(1) },
+  "twinned-spell": { kind: "metamagic", option: "twinned", resourceCost: SORCERY_POINTS(1) }
+};
+
+const METAMAGIC: PickOption[] = srdReferenceOptions("sorcerer_metamagic-options", "Metamagic").map((option) => {
+  const effect = METAMAGIC_EFFECTS[option.id];
+  return effect
+    ? {
+      ...option,
+      grants: option.grants.map((given) => (typeof given.feature === "object"
+        ? { ...given, feature: { ...given.feature, effects: [effect], automationSupport: "full" as const } }
+        : given))
+    }
+    : option;
+});
 const metamagic = (count: number) => ({ kind: "pick" as const, id: "metamagic-options", label: "Metamagic options", count, options: METAMAGIC });
 
 export const SORCERER: ClassDefinition = {

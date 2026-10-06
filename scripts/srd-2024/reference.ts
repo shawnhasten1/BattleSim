@@ -130,7 +130,11 @@ function featureOf(feature: Raw): ReferenceFeature {
     ? "options"
     : / Spell List$/.test(name) ? "spell-list" : "feature";
   // A class's spell list is better read from each spell's own class list (Phase 5a); its tables here are incomplete.
-  const text = kind === "spell-list" ? "" : override?.text ?? str(feature.desc);
+  let text = kind === "spell-list" ? "" : override?.text ?? str(feature.desc);
+  for (const [from, to] of override?.replace ?? []) {
+    if (text.split(from).length !== 2) throw new Error(`override ${key}: "${from.trim()}" isn't in its text exactly once`);
+    text = text.replace(from, to);
+  }
   return { key, name, levels, kind, text };
 }
 

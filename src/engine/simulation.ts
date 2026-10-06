@@ -4,6 +4,7 @@ import {
   canAct,
   damageBonusExpected,
   diceTradeCost,
+  spellTurnProblem,
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
@@ -3019,6 +3020,8 @@ function selectOffensivePlan(
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
       const tradeValue = diceTradeValue(snapshot, actor, definition, action, target, targetDefinition, tactics);
+      // Subtle Spell: worth its point only when a foe near enough could counter the spell.
+      const subtleValue = action.metamagic?.option === "subtle" ? (counterThreatNear(snapshot, actor) ? 4 * Math.max(1, castLevelOf(action) ?? 1) : -2) : 0;
       const chargeValue = expectedChargeValue(snapshot, actor, definition, action, target, range, canMoveIntoRange);
       const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
@@ -3063,11 +3066,13 @@ function selectOffensivePlan(
         reasons.push(tradeValue > -1 ? `${action.onHitTerms.name} for ${action.onHitTerms.tradesDice.dice} damage ${action.onHitTerms.tradesDice.dice === 1 ? "die" : "dice"}` : `no ${action.onHitTerms.name} without the bonus it spends`);
       }
       if (chargeValue > 0) reasons.push("charges in");
+      if (subtleValue > 0) reasons.push("can't be countered");
       if (tagPressure > 0) reasons.push("tagged high-priority");
       if (tagPressure < 0) reasons.push("tagged low-priority");
       let score = expectedDamage * 2
         + controlValue
         + tradeValue
+        + subtleValue
         + chargeValue * 2
         + preferredBonus
         + killPressure
@@ -3701,6 +3706,9 @@ function canPayResource(actor: CombatantState, action: ActionDefinition, executa
   if ("resourceCost" in action && action.resourceCost && (actor.resources?.[action.resourceCost.resourceId] ?? 0) < action.resourceCost.amount) {
     return false;
   }
+  // Metamagic's sorcery points, and Quickened Spell's rule about level 1+ spells this turn.
+  if (action.extraCost && (actor.resources?.[action.extraCost.resourceId] ?? 0) < action.extraCost.amount) return false;
+  if (spellTurnProblem(actor, action)) return false;
   // Lay on Hands: anything left in its pool.
   if (action.kind === "healing" && action.fromPool && (actor.resources?.[action.fromPool.resourceId] ?? 0) <= 0) {
     return false;
@@ -3736,9 +3744,15 @@ function multiattackPayable(actor: CombatantState, action: Extract<ActionDefinit
  * charges) keep the flat amount-based weight.
  */
 function resourceCostWeight(action: ActionDefinition): number {
+  // Metamagic: a sorcery point is weighed like a point of any pool, on top of the slot.
+  const extra = action.extraCost?.amount ?? 0;
   if (!("resourceCost" in action) || !action.resourceCost) {
-    return 0;
+    return extra;
   }
+  return extra + baseCostWeight(action as ActionDefinition & { resourceCost: NonNullable<ActionDefinition["extraCost"]> });
+}
+
+function baseCostWeight(action: ActionDefinition & { resourceCost: NonNullable<ActionDefinition["extraCost"]> }): number {
   // Legendary points are use-it-or-lose-it each round, so a point is worth little — just enough to prefer
   // three 1-point attacks over one 3-point option that does no more.
   if (action.resourceCost.resourceId === LEGENDARY_POINTS) return action.resourceCost.amount * 0.2;
@@ -4044,6 +4058,15 @@ function expectedRiderControl(
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
 
+/** Whether a foe within 60 ft could counter a spell `actor` casts now: a counter it can pay for, with its reaction. */
+function counterThreatNear(snapshot: EncounterSnapshot, actor: CombatantState): boolean {
+  const faction = effectiveFaction(snapshot, actor);
+  return snapshot.combatants.some((foe) => effectiveFaction(snapshot, foe) !== faction && canAct(foe, "reaction")
+    && spatialDistance(snapshot, actor, foe) <= 60
+    && getExecutableActions(getDefinition(snapshot, foe)).some((action) => action.actionType === "reaction"
+      && "reaction" in action && action.reaction?.trigger.kind === "enemy-casts-spell" && canPayResource(foe, action)));
+}
+
 /**
  * An on-hit option paid in dice of a damage bonus (Cunning Strike), weighed against the plain attack. Unless that
  * bonus looks set to land, its riders and move won't come: what they'd add is taken back, and a little more so the
@@ -4157,7 +4180,9 @@ export function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { ki
   }
   const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
   const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
-  return slotsAboveBase * perSlotTargets;
+  // Twinned Spell: an effective level higher.
+  const twinned = action.metamagic?.option === "twinned" ? 1 : 0;
+  return (slotsAboveBase + twinned) * perSlotTargets;
 }
 
 /** Expected value of an action's upcast damage-dice bonus at whatever slot tier its own `resourceCost` implies (0 for a base cast, or an action with no `upcast`). */

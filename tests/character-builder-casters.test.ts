@@ -147,7 +147,8 @@ describe("the Sorcerer (Draconic Sorcery)", () => {
     const options = sorcerer.features!.filter((entry) => entry.name.startsWith("Metamagic: "));
     expect(options).toHaveLength(6);
     expect(new Set(options.map((entry) => entry.name)).size).toBe(6);
-    expect(options.every((entry) => entry.automationSupport === "manual-only")).toBe(true);
+    // Phase 7v: six of them run; Careful, Empowered, Extended and Heightened are still the SRD's text.
+    for (const option of options) expect(option.automationSupport, option.name).toBe(/Careful|Empowered|Extended|Heightened/.test(option.name) ? "manual-only" : "full");
   });
 
   it("Draconic Resilience: AC 10 + Dex + Cha unarmored, and a hit point per sorcerer level", () => {
