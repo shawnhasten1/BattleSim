@@ -293,8 +293,8 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     category: "feature",
     automationSupport: "full",
     description:
-      "Difficult terrain doesn't slow you, and you don't provoke opportunity attacks from a creature you attack in melee. (Approximated: never provokes opportunity attacks.)",
-    effects: [{ kind: "avoids-opportunity-attacks", condition: "always" }]
+      "Your speed increases by 10 feet. When you Dash, difficult terrain doesn't cost you extra movement, and you don't provoke opportunity attacks from a creature you attack in melee. (Approximated: never provokes opportunity attacks; difficult terrain costs as usual.)",
+    effects: [{ kind: "speed", bonusFt: 10 }, { kind: "avoids-opportunity-attacks", condition: "always" }]
   },
 
   /* ── Reference (toggle lives elsewhere) ───────────────────────────────────── */

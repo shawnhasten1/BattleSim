@@ -142,7 +142,7 @@ export const BARBARIAN: ClassDefinition = {
       level: 5,
       grants: [
         grant("extra-attack", attacks("barbarian_extra-attack", 2)),
-        grant("fast-movement", informational("barbarian_fast-movement"), { adjust: { speed: 10 } })
+        grant("fast-movement", runs("barbarian_fast-movement", { effects: [{ kind: "speed", bonusFt: 10, armor: "not-heavy" }] }))
       ]
     },
     {

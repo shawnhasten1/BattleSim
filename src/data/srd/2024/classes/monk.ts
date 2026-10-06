@@ -140,7 +140,9 @@ export const MONK: ClassDefinition = {
           scale: [{ path: "grantedActions.0.attacks.0.count", value: "{col:flurry-strikes}" }],
           pool: { id: "focus-points", size: "{col:focus-points}" }
         }),
-        grant("unarmored-movement", informational("monk_unarmored-movement"), { adjust: { speed: "{col:unarmored-movement}" } }),
+        grant("unarmored-movement", runs("monk_unarmored-movement", { effects: [{ kind: "speed", bonusFt: 10, armor: "none", shield: false }] }), {
+          scale: [{ path: "effects.0.bonusFt", value: "{col:unarmored-movement}" }]
+        }),
         grant("uncanny-metabolism", informational("monk_uncanny-metabolism"))
       ]
     },

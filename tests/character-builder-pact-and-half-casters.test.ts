@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getExecutableActions, sampleEncounter, type ActionDefinition, type CreatureDefinition } from "@/engine";
+import { effectiveDefinition, getExecutableActions, sampleEncounter, type ActionDefinition, type CreatureDefinition } from "@/engine";
 import { runAutomatedEncounter } from "@/engine/turns";
 import { SRD_2024_REFERENCE } from "@/data/srd/2024/reference";
 import {
@@ -148,8 +148,9 @@ describe("the Ranger (Hunter)", () => {
   });
 
   it("Roving, Tireless, Feral Senses and Colossus Slayer", () => {
-    expect(built("ranger", 5).speed).toBe(30);
-    const sixth = built("ranger", 6);
+    expect(effectiveDefinition(built("ranger", 5)).speed).toBe(30);
+    // Roving is an effect now (EFFECTS_PLAN.md D6): +10 ft without heavy armor, and climb and swim at its speed.
+    const sixth = effectiveDefinition(built("ranger", 6));
     expect(sixth.speed).toBe(40);
     expect(sixth.movement).toMatchObject({ walk: 40, climb: 40, swim: 40 });
     const tenth = built("ranger", 10);

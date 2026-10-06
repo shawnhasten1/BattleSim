@@ -32,7 +32,7 @@ A phase is done when its codes reach 0.
 | `MOVE_TRAIT` | 5 | A movement trait (Spider Climb, Incorporeal Movement, Amorphous…) is reference-only. |
 | `HOLD_GRAPPLE` | 14 | A grapple that is not a plain grapple-on-hit (attaching, a save-based grapple, a grapple-gated attack) is reference-only. |
 | `HOLD_SWALLOW` | 3 | Engulfing (a gelatinous cube, a shambling mound) is reference-only; swallows are automated. |
-| `SPELLS` | 23 | A combat spell this creature casts isn't in the spell library yet, so it is reference text. |
+| `SPELLS` | 22 | A combat spell this creature casts isn't in the spell library yet, so it is reference text. |
 | `SPELL_UTILITY` | 33 | Utility spells (senses, travel, illusions, communication) are reference text — nothing for a fight to simulate. |
 | `SPAWN` | 6 | Summoning that isn't automated: Create Specter (needs a corpse), Children of the Night, and summon options naming creatures outside the SRD (the balor's goristro). Split and the demon / mephit Summon variants are automated. |
 | `TRANSFORM` | 17 | Shapechanging is reference-only (open-ended Change Shape, Doppelganger, Mimic; the fixed-shape lycanthropes and the vampire are automated). |
@@ -148,7 +148,7 @@ A phase is done when its codes reach 0.
 | Chuul | 4 | partial | HOLD_GRAPPLE, MULTIATTACK_STEP |
 | Clay Golem | 9 | partial | RIDER_TEXT, SAVE_UNPARSED, TRAIT_UNMODELED |
 | Cloaker | 8 | partial | HOLD_GRAPPLE, SAVE_UNPARSED, TRAIT_UNMODELED |
-| Cloud Giant | 9 | partial | SPELLS, SPELL_UTILITY |
+| Cloud Giant | 9 | partial | SPELL_UTILITY |
 | Cockatrice | 0.5 | full |  |
 | Commoner | 0 | full |  |
 | Constrictor Snake | 0.25 | full |  |
@@ -472,7 +472,7 @@ A phase is done when its codes reach 0.
 - `HOLD_GRAPPLE` — Acid Spray
 
 ### Archmage
-- `SPELLS` — Spellcasting: fly, fire shield
+- `SPELLS` — Spellcasting: fire shield
 - `SPELL_UTILITY` — Spellcasting: light, mage hand, prestidigitation, detect magic, identify, detect thoughts, scrying, wall of force, globe of invulnerability, teleport, mind blank, time stop, disguise self, invisibility
 - `DEFENSE_TEXT` — resistance: "damage from spells"
 
@@ -528,7 +528,6 @@ A phase is done when its codes reach 0.
 - `SAVE_UNPARSED` — Phantasms
 
 ### Cloud Giant
-- `SPELLS` — Innate Spellcasting: fly
 - `SPELL_UTILITY` — Innate Spellcasting: detect magic, fog cloud, light, feather fall, telekinesis, control weather, gaseous form
 
 ### Copper Dragon Wyrmling
@@ -581,7 +580,7 @@ A phase is done when its codes reach 0.
 - `SPELL_UTILITY` — Innate Spellcasting: dancing lights
 
 ### Druid
-- `SPELL_UTILITY` — Spellcasting: druidcraft, shillelagh, longstrider, speak with animals, animal messenger, barkskin
+- `SPELL_UTILITY` — Spellcasting: druidcraft, shillelagh, speak with animals, animal messenger, barkskin
 - `RIDER_TEXT` — Quarterstaff: or 6 (1d8 + 2) bludgeoning damage with shillelagh or if wielded with two hands.
 
 ### Dryad
@@ -645,7 +644,7 @@ A phase is done when its codes reach 0.
 - `TRAIT_UNMODELED` — Gibbering
 
 ### Glabrezu
-- `SPELLS` — Innate Spellcasting: darkness, fly
+- `SPELLS` — Innate Spellcasting: darkness
 - `SPELL_UTILITY` — Innate Spellcasting: detect magic, dispel magic
 - `MULTIATTACK_STEP` — Multiattack: Alternatively, it makes two attacks with its pincers and casts one spell.
 
@@ -710,7 +709,7 @@ A phase is done when its codes reach 0.
 - `MULTIATTACK_STEP` — Multiattack: Each attack uses a different weapon.
 
 ### Mage
-- `SPELLS` — Spellcasting: suggestion, fly
+- `SPELLS` — Spellcasting: suggestion
 - `SPELL_UTILITY` — Spellcasting: light, mage hand, prestidigitation, detect magic
 
 ### Magmin
@@ -793,7 +792,7 @@ A phase is done when its codes reach 0.
 - `SPECIAL_ACTION` — Invisibility
 
 ### Rakshasa
-- `SPELLS` — Innate Spellcasting: suggestion, fly
+- `SPELLS` — Innate Spellcasting: suggestion
 - `SPELL_UTILITY` — Innate Spellcasting: detect thoughts, disguise self, mage hand, minor illusion, detect magic, invisibility, major image, plane shift, true seeing
 - `TRAIT_UNMODELED` — Limited Magic Immunity
 - `RIDER_TEXT` — Claw: and the target is cursed if it is a creature. The magical curse takes effect whe

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   armorClassOf,
   createEngineState,
+  effectiveDefinition,
   getExecutableActions,
   resolveActivateFeatureAction,
   resolveAttack,
@@ -76,8 +77,12 @@ describe("the Barbarian", () => {
     const first = built("barbarian", 1);
     const mod = (score: number) => Math.floor((score - 10) / 2);
     expect(armorClassOf(first).total).toBe(10 + mod(first.abilities.dex) + mod(first.abilities.con));
-    expect(built("barbarian", 4).speed).toBe(30);
-    expect(built("barbarian", 5).speed).toBe(40);
+    // Fast Movement is an effect now (EFFECTS_PLAN.md D6): the base stays 30, the barbarian moves 40, not in heavy armor.
+    expect(effectiveDefinition(built("barbarian", 4)).speed).toBe(30);
+    expect(built("barbarian", 5).speed).toBe(30);
+    expect(effectiveDefinition(built("barbarian", 5)).speed).toBe(40);
+    const plate = { id: "plate", name: "Plate", type: "armor" as const, armor: { category: "heavy" as const, ac: 18, strength: 15 }, automationSupport: "full" as const };
+    expect(effectiveDefinition({ ...built("barbarian", 5), items: [plate] }).speed).toBe(30);
     const twentieth = built("barbarian", 20);
     expect(twentieth.abilities.str).toBeGreaterThan(20);
     expect(twentieth.abilities.str).toBeLessThanOrEqual(25);
@@ -146,9 +151,14 @@ describe("the Monk", () => {
     const flurry = (level: number) => getExecutableActions(built("monk", level)).find((action) => action.name === "Flurry of Blows");
     expect(flurry(2)).toMatchObject({ kind: "multiattack", actionType: "bonus", attacks: [{ actionId: "monk-martial-arts:bonus", count: 2 }], resourceCost: { resourceId: "focus-points", amount: 1 } });
     expect(flurry(10)).toMatchObject({ attacks: [{ count: 3 }] });
-    expect(built("monk", 1).speed).toBe(30);
-    expect(built("monk", 2).speed).toBe(40);
-    expect(built("monk", 18).speed).toBe(60);
+    // Unarmored Movement is an effect now, scaled by the table: none in armor or with a shield.
+    expect(effectiveDefinition(built("monk", 1)).speed).toBe(30);
+    expect(built("monk", 2).speed).toBe(30);
+    expect(effectiveDefinition(built("monk", 2)).speed).toBe(40);
+    expect(effectiveDefinition(built("monk", 6)).speed).toBe(45);
+    expect(effectiveDefinition(built("monk", 18)).speed).toBe(60);
+    const shield = { id: "shield", name: "Shield", type: "shield" as const, armor: { category: "shield" as const, ac: 2 }, automationSupport: "full" as const };
+    expect(effectiveDefinition({ ...built("monk", 6), items: [shield] }).speed).toBe(30);
   });
 
   it("Stunning Strike from 5th level: an optional upgrade of the Unarmed Strike that spends a focus point", () => {

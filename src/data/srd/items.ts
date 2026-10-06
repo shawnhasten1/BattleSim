@@ -178,6 +178,12 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
       appliedCondition: { name: "custom", durationRounds: 600, effects: [{ kind: "ability-score", ability: "str", setTo: 21 }] },
       automationSupport: "full"
     }),
+  buffPotion("potion-of-flying", "Potion of Flying",
+    "A very rare potion. When you drink it, you gain a flying speed equal to your walking speed for 1 hour and can hover. If you're in the air when it wears off, you fall unless you have some other means of staying aloft.",
+    {
+      appliedCondition: { name: "custom", durationRounds: 600, effects: [{ kind: "speed", modes: { fly: "walk" }, hover: true }] },
+      automationSupport: "full"
+    }),
   buffPotion("potion-of-invulnerability", "Potion of Invulnerability",
     "A rare potion. For 1 minute after you drink it, you have resistance to all damage. Its syrupy liquid looks like liquefied iron.",
     {
@@ -258,6 +264,34 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
     "An uncommon brooch (requires attunement). While wearing it, you have resistance to force damage, and immunity to damage from the magic missile spell.",
     [{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "force" } }],
     "the immunity to magic missile"),
+  {
+    ...worn("boots-of-speed", "Boots of Speed",
+      "Rare boots (requires attunement). While you wear them, you can use a bonus action to click their heels together: they double your walking speed, and any creature that makes an opportunity attack against you has disadvantage on the attack roll. Clicking them again ends it. Once used for 10 minutes in all, they stop working until you finish a long rest.",
+      []),
+    grantedActions: [{
+      kind: "buff", id: "click-heels", name: "Boots of Speed", actionType: "bonus", range: 0, targeting: { target: "self" },
+      appliedCondition: {
+        name: "custom", durationRounds: 100,
+        effects: [{ kind: "speed", multiplier: 2 }, { kind: "attack-defense", against: "opportunity" }]
+      },
+      automationSupport: "full"
+    }]
+  },
+  worn("boots-of-striding-and-springing", "Boots of Striding and Springing",
+    "Uncommon boots (requires attunement). While you wear them, your walking speed becomes 30 feet, unless it's higher, and your speed isn't reduced if you're encumbered or wearing heavy armor. You can also jump three times the normal distance.",
+    [{ kind: "speed", minimumFt: 30, noArmorSlowdown: true }],
+    "the longer jumps"),
+  worn("winged-boots", "Winged Boots",
+    "Uncommon boots (requires attunement). While you wear them, you have a flying speed equal to your walking speed. They work for up to 4 hours a day, in shorter flights, and regain 2 hours of flying for every 12 hours they aren't used.",
+    [{ kind: "speed", modes: { fly: "walk" } }],
+    "the 4 hours a day"),
+  { ...worn("ring-of-swimming", "Ring of Swimming",
+    "An uncommon ring. You have a swimming speed of 40 feet while wearing it.",
+    [{ kind: "speed", modes: { swim: 40 } }]), attunement: undefined },
+  worn("ring-of-free-action", "Ring of Free Action",
+    "A rare ring (requires attunement). While you wear it, difficult terrain doesn't cost you extra movement, and magic can neither reduce your speed nor cause you to be paralyzed or restrained.",
+    [{ kind: "ignore-difficult-terrain" }, { kind: "condition-immunity", conditions: ["paralyzed", "restrained"] }],
+    "that only magic is stopped: it can't be paralyzed or restrained by anything, and a spell can still slow it"),
   worn("gauntlets-of-ogre-power", "Gauntlets of Ogre Power",
     "Uncommon gauntlets (requires attunement). Your Strength score is 19 while you wear them. They have no effect if your Strength is already 19 or higher.",
     [{ kind: "ability-score", ability: "str", setTo: 19 }]),
@@ -378,9 +412,6 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
   reference("healers-kit", "Healer's Kit", "gear",
     "A leather pouch of bandages, salves and splints, with ten uses. As an action, you can expend one use to stabilize a creature that has 0 hit points, without a Wisdom (Medicine) check. Not simulated yet: stabilize by hand.",
     { supply: supply(10) }),
-  reference("potion-of-flying", "Potion of Flying", "potion",
-    "A very rare potion. When you drink it, you gain a flying speed equal to your walking speed for 1 hour and can hover. If you're in the air when it wears off, you fall unless you have some other means of staying aloft. Not simulated yet: give the creature a flying speed by hand.",
-    { magical: true, supply: supply(1) }),
   reference("elixir-of-health", "Elixir of Health", "potion",
     "A rare potion. When you drink it, it cures any disease afflicting you, and it removes the blinded, deafened, paralyzed and poisoned conditions. Not simulated yet: remove them by hand.",
     { magical: true, supply: supply(1) })

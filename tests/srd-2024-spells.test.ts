@@ -55,7 +55,9 @@ const ON_PURPOSE: Record<string, Partial<ReturnType<typeof expected>>> = {
   // Cast on the caster only.
   "greater-invisibility": { range: "Self" },
   // No save at all (damage for moving through it); an area action has to name one, which is never rolled.
-  "spike-growth": { save: "dex" }
+  "spike-growth": { save: "dex" },
+  // No save: the index's Dexterity is the advantage on Dexterity saves it gives.
+  haste: { save: null }
 };
 
 describe("the SRD 5.2 spell index", () => {

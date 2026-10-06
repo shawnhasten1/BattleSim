@@ -43,6 +43,7 @@ export const SAME_AS_2014: Readonly<Record<string, string>> = {
   "hellish-rebuke": "srd:spell:hellish-rebuke",
   shield: "srd:spell:shield",
   "charm-person": "srd:spell:charm-person",
+  longstrider: "srd:spell:longstrider",
   // Level 2
   aid: "srd:spell:aid",
   "scorching-ray": "srd:spell:scorching-ray",
@@ -68,6 +69,8 @@ export const SAME_AS_2014: Readonly<Record<string, string>> = {
   "call-lightning": "srd:spell:call-lightning",
   slow: "srd:spell:slow",
   "stinking-cloud": "srd:spell:stinking-cloud",
+  fly: "srd:spell:fly",
+  haste: "srd:spell:haste",
   // Level 4
   "dominate-beast": "srd:spell:dominate-beast",
   confusion: "srd:spell:confusion",

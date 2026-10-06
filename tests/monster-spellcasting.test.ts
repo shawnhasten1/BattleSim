@@ -17,9 +17,9 @@ describe("parsing a spellcasting trait", () => {
   it("reads level, slots, and separates modelled, utility and missing spells", () => {
     expect(mage.level).toBe(9);
     expect(mage.resources).toEqual({ "slot-1": 4, "slot-3": 3 });
-    expect(mage.modelled).toEqual(["fire bolt", "magic missile", "shield", "counterspell", "fireball"]);
+    expect(mage.modelled).toEqual(["fire bolt", "magic missile", "shield", "counterspell", "fireball", "fly"]);
     expect(mage.utility).toEqual(["light", "mage hand", "detect magic"]);
-    expect(mage.missing).toEqual(["fly"]);
+    expect(mage.missing).toEqual([]);
   });
 
   it("uses the statblock's DC and attack bonus, not the formula", () => {

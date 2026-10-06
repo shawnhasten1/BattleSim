@@ -596,5 +596,30 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     label: "Evasion",
     hint: "A DEX save for half damage: none on a success, half on a failure",
     record: () => ({ id: "", name: "Evasion", category: "feature", automationSupport: "full", effects: [{ kind: "evasion" }] })
+  },
+  {
+    label: "More hit points per level",
+    hint: "A feat like Tough: its hit point maximum grows by 2 for each level",
+    record: () => ({ id: "", name: "Tough", category: "feature", automationSupport: "full", effects: [{ kind: "hit-point-maximum", bonus: { perLevel: 2 } }] })
+  },
+  {
+    label: "Faster without heavy armor",
+    hint: "Like Fast Movement: 10 ft more speed while it wears no heavy armor",
+    record: () => ({ id: "", name: "Fast Movement", category: "feature", automationSupport: "full", effects: [{ kind: "speed", bonusFt: 10, armor: "not-heavy" }] })
+  },
+  {
+    label: "Faster without armor or a shield",
+    hint: "Like Unarmored Movement: 10 ft more speed while it wears no armor and holds no shield",
+    record: () => ({ id: "", name: "Unarmored Movement", category: "feature", automationSupport: "full", effects: [{ kind: "speed", bonusFt: 10, armor: "none", shield: false }] })
+  },
+  {
+    label: "Proficiency in a save",
+    hint: "A feat like Resilient: its proficiency bonus on one ability's saves (Constitution: change it on the card)",
+    record: () => ({ id: "", name: "Resilient", category: "feature", automationSupport: "full", effects: [{ kind: "save-bonus", ability: "con", bonus: { proficiency: true } }] })
+  },
+  {
+    label: "A bonus while wearing armor",
+    hint: "Like the Defense fighting style: +1 AC while it wears armor",
+    record: () => ({ id: "", name: "Defense", category: "feature", automationSupport: "full", effects: [{ kind: "armor-class-bonus", bonus: { base: 1 }, armor: "worn" }] })
   }
 ];

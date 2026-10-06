@@ -15,14 +15,14 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 18 | 0 | 0 | 6 | 0 |
+| Barbarian (Path of the Berserker) | 24 | 19 | 0 | 0 | 5 | 0 |
 | Bard (College of Lore) | 17 | 5 | 1 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 14 | 1 | 2 | 5 | 4 |
+| Monk (Warrior of the Open Hand) | 26 | 15 | 1 | 2 | 4 | 4 |
 | Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
-| Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
+| Ranger (Hunter) | 23 | 12 | 0 | 1 | 8 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
@@ -64,7 +64,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Primal Knowledge | builder |  | A skill; using Strength for checks while raging is outside a fight. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Fast Movement | builder |  | +10 ft of speed; heavy armor isn't checked. |
+| 5 | Fast Movement | full |  | +10 ft of speed while it wears no heavy armor. |
 | 7 | Feral Instinct | full |  | Advantage on Initiative rolls. |
 | 7 | Instinctive Pounce | full |  | Half its speed more movement the turn it rages. |
 | 9 | Brutal Strike | full |  | Hamstring and Forceful Blows, each a variant of the Strength attacks, once a turn with Reckless Attack on: the roll gives up its advantage (none with disadvantage), and a hit adds 1d10 of the weapon's type. Forceful Blow's move toward the target isn't held to a straight line. The AI takes it when the die is worth more than the advantage. |
@@ -206,7 +206,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Martial Arts | full |  | An Unarmed Strike with the Martial Arts die and the better of Strength and Dexterity, also as a bonus action; Monk weapons attack the same way (and carry Stunning Strike) while it wears no armor and holds no shield. |
 | 1 | Unarmored Defense | full |  |  |
 | 2 | Monk's Focus | full |  | Flurry of Blows, and Disengage and Dash as bonus actions; for a Focus Point, Patient Defense's Disengage and Dodge, or Step of the Wind's Dash and Disengage, in one bonus action (the doubled jump is outside the grid). The AI takes the free ones. |
-| 2 | Unarmored Movement | builder |  | Speed by level; armor isn't checked. |
+| 2 | Unarmored Movement | full |  | Speed by level, while it wears no armor and holds no shield. |
 | 2 | Uncanny Metabolism | info |  | A fight starts with full pools and hit points. |
 | 3 | Deflect Attacks | full |  | 1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources. |
 | 3 | Monk Subclass | builder |  | The subclass choice. |
@@ -280,7 +280,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Ranger Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
-| 6 | Roving | builder |  | +10 ft of speed and climb and swim speeds; heavy armor isn't checked. |
+| 6 | Roving | full |  | +10 ft of speed while it wears no heavy armor, and climb and swim speeds equal to its speed. |
 | 9 | Expertise | builder |  |  |
 | 10 | Tireless | full |  | Temporary hit points as an action, Wisdom-modifier times; exhaustion is outside a fight. |
 | 13 | Relentless Hunter | full |  |  |
@@ -475,21 +475,21 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 95 of which run in the simulator. 65 are copied from the 2014 library
+339 SRD 5.2 spells, 98 of which run in the simulator. 68 are copied from the 2014 library
 (their rules didn't change in a way the simulator models) and 31 are written for 2024: 15 that changed,
 16 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
 | Class | Spells | Run | Cantrip | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Bard | 130 | 29 | 3/10 | 7/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
+| Bard | 130 | 30 | 3/10 | 8/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
 | Cleric | 109 | 23 | 1/7 | 7/15 | 4/17 | 2/19 | 1/9 | 3/13 | 3/11 | 1/8 | 1/5 | 0/5 |
-| Druid | 124 | 28 | 4/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
+| Druid | 124 | 29 | 4/11 | 6/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
 | Paladin | 38 | 9 | — | 5/13 | 3/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
-| Ranger | 48 | 9 | — | 4/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
-| Sorcerer | 140 | 56 | 8/16 | 8/21 | 9/27 | 7/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
-| Warlock | 72 | 23 | 4/7 | 5/12 | 3/10 | 3/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
-| Wizard | 218 | 56 | 7/15 | 9/30 | 10/36 | 7/29 | 8/26 | 5/24 | 5/19 | 1/15 | 3/12 | 1/12 |
+| Ranger | 48 | 10 | — | 5/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
+| Sorcerer | 140 | 58 | 8/16 | 8/21 | 9/27 | 9/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
+| Warlock | 72 | 24 | 4/7 | 5/12 | 3/10 | 4/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
+| Wizard | 218 | 59 | 7/15 | 10/30 | 10/36 | 9/29 | 8/26 | 5/24 | 5/19 | 1/15 | 3/12 | 1/12 |
 
 ### Spells with a simulation
 
@@ -528,6 +528,7 @@ spell on a class's list and suggests the ones that run first.
 | Hideous Laughter | 1st | bard, warlock, wizard | 2014 copy | full |  |
 | Hunter's Mark | 1st | ranger | new | full |  |
 | Inflict Wounds | 1st | cleric | changed in 2024 | full |  |
+| Longstrider | 1st | bard, druid, ranger, wizard | 2014 copy | full |  |
 | Mage Armor | 1st | sorcerer, wizard | 2014 copy | full |  |
 | Magic Missile | 1st | sorcerer, wizard | 2014 copy | full |  |
 | Searing Smite | 1st | paladin | new | partial | Not simulated: the 1d6 fire at the start of each of the target's turns until it makes a Constitution save. |
@@ -555,6 +556,8 @@ spell on a class's list and suggests the ones that run first.
 | Counterspell | 3rd | sorcerer, warlock, wizard | changed in 2024 | full |  |
 | Fear | 3rd | bard, sorcerer, warlock, wizard | 2014 copy | full |  |
 | Fireball | 3rd | sorcerer, wizard | 2014 copy | full |  |
+| Fly | 3rd | sorcerer, warlock, wizard | 2014 copy | full |  |
+| Haste | 3rd | sorcerer, wizard | 2014 copy | full |  |
 | Hypnotic Pattern | 3rd | bard, sorcerer, warlock, wizard | 2014 copy | full |  |
 | Lightning Bolt | 3rd | sorcerer, wizard | 2014 copy | full |  |
 | Mass Healing Word | 3rd | bard, cleric | new | full |  |

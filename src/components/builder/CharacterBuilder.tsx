@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type SizeCategory } from "@/engine";
+import { abilityModifier, armorClassOf, effectiveDefinition, type Ability, type CreatureDefinition, type SizeCategory } from "@/engine";
 import {
   ABILITIES,
   blankCharacter,
@@ -425,11 +425,13 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
 /** HP, AC, speed and the features, as the actor would have them. */
 export function Summary({ definition }: { definition: CreatureDefinition }) {
   const features = [...(definition.features ?? []), ...(definition.traits ?? [])];
+  // As it would fight: Fast Movement, Unarmored Movement and Tough are effects on the stored creature.
+  const actual = effectiveDefinition(definition);
   return (
     <div className={styles.summary}>
-      <span className={styles.stat}>HP <strong>{definition.maxHp}</strong></span>
+      <span className={styles.stat}>HP <strong>{actual.maxHp}</strong></span>
       <span className={styles.stat}>AC <strong>{armorClassOf(definition).total}</strong></span>
-      <span className={styles.stat}>Speed <strong>{definition.speed} ft</strong></span>
+      <span className={styles.stat}>Speed <strong>{actual.speed} ft</strong></span>
       <span className={styles.stat}>Proficiency <strong>{formatBonus(definition.proficiencyBonus ?? 2)}</strong></span>
       <p className={styles.featureList}>
         {features.map((feature) => (

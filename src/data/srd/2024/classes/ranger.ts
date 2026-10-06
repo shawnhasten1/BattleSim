@@ -57,7 +57,9 @@ export const RANGER: ClassDefinition = {
     },
     { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "ranger_ranger-subclass")] },
     { level: 5, grants: [grant("extra-attack", attacks("ranger_extra-attack", 2))] },
-    { level: 6, grants: [grant("roving", informational("ranger_roving"), { adjust: { speed: 10, movementEqualToSpeed: ["climb", "swim"] } })] },
+    { level: 6, grants: [grant("roving", runs("ranger_roving", {
+      effects: [{ kind: "speed", bonusFt: 10, armor: "not-heavy" }, { kind: "speed", modes: { climb: "walk", swim: "walk" } }]
+    }))] },
     { level: 9, grants: [], choices: [choice({ kind: "expertise", id: "expertise", count: 2 }, "ranger_expertise")] },
     {
       level: 10,

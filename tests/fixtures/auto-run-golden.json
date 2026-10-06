@@ -151,8 +151,8 @@
   },
   {
    "seed": "golden:casters:1",
-   "hash": "98d6561847c2599203c6d2c4270df6303128a367",
-   "events": 215,
+   "hash": "d6ab3ddadb9013d2b8d350a5b21cacb4a98d0bcc",
+   "events": 217,
    "winner": "enemy",
    "rounds": 7
   },
@@ -172,8 +172,8 @@
   },
   {
    "seed": "golden:casters:4",
-   "hash": "09830f621e5c981a6b43122119f07a27956b93f9",
-   "events": 201,
+   "hash": "65c28920716913f6df36dd751eb496d9771df1a3",
+   "events": 203,
    "winner": "enemy",
    "rounds": 9
   }

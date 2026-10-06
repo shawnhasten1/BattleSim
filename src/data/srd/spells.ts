@@ -362,6 +362,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       prepOnly: true,
       // Its hit point maximum and current hit points rise by 5 (EFFECTS_PLAN.md D7), 5 more per slot level above 2nd.
       appliedCondition: { name: "custom", durationRounds: 100, effects: [{ kind: "hit-point-maximum", bonus: { base: 5 } }] },
+      resourceCost: { resourceId: "slot-2", amount: 1 },
       automationSupport: "full"
     }
   },
@@ -1457,6 +1458,44 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       appliedCondition: { name: "custom", durationRounds: 10, modifiers: { incomingAttackRoll: -4 } },
       concentration: true,
       resourceCost: { resourceId: "slot-4", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:longstrider", name: "Longstrider", level: 1, school: "transmutation", castingTime: "action", range: "touch",
+    resourceCost: { resourceId: "slot-1", amount: 1 }, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    description: "Its speed increases by 10 feet for an hour: cast before the fight.",
+    action: {
+      kind: "buff", id: "srd:spell:longstrider:action", name: "Longstrider", actionType: "action", range: 5,
+      targeting: { target: "chosen", count: 1 }, prepOnly: true,
+      appliedCondition: { name: "custom", durationRounds: 600, effects: [{ kind: "speed", bonusFt: 10 }] },
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:fly", name: "Fly", level: 3, school: "transmutation", castingTime: "action", range: "touch",
+    resourceCost: { resourceId: "slot-3", amount: 1 }, concentration: true, upcast: { perSlotAboveBase: { targets: 1 } }, automationSupport: "full",
+    description: "A flying speed of 60 feet for 10 minutes.",
+    action: {
+      kind: "buff", id: "srd:spell:fly:action", name: "Fly", actionType: "action", range: 5,
+      targeting: { target: "chosen", count: 1 },
+      appliedCondition: { name: "custom", durationRounds: 100, effects: [{ kind: "speed", modes: { fly: 60 } }] },
+      concentration: true,
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    }
+  },
+  {
+    id: "srd:spell:haste", name: "Haste", level: 3, school: "transmutation", castingTime: "action", range: 30,
+    resourceCost: { resourceId: "slot-3", amount: 1 }, concentration: true, automationSupport: "full",
+    description: "Its speed doubled, +2 AC and advantage on Dexterity saves for a minute. Not simulated: the extra action (one Attack, Dash, Disengage, Hide or Use an Object) and the turn it loses when the spell ends.",
+    action: {
+      kind: "buff", id: "srd:spell:haste:action", name: "Haste", actionType: "action", range: 30,
+      targeting: { target: "single" },
+      appliedCondition: {
+        name: "custom", durationRounds: 10, modifiers: { armorClass: 2 },
+        effects: [{ kind: "speed", multiplier: 2, allModes: true }, { kind: "save-advantage", ability: "dex" }]
+      },
+      concentration: true,
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
     }
   },
   {
