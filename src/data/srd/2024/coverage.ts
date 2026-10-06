@@ -30,7 +30,6 @@ export interface CoverageEntry {
 export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
-  "nat20-damage": "Extra damage on an attack roll of 20 (Overwhelming Strike)",
   "d20-reroll": "A penalty on another creature's successful d20 roll (Boon of Fate)",
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
@@ -377,7 +376,7 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   "boon-of-combat-prowess": full("The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn."),
   "boon-of-dimensional-travel": manual(["free-move"], "The builder adds the +1 to a score; the teleport after an attack doesn't run."),
   "boon-of-fate": partial(["d20-reroll"], "2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1."),
-  "boon-of-irresistible-offense": partial(["nat20-damage"], "Its bludgeoning, piercing and slashing damage ignores resistance; the builder adds the +1 to a score. Overwhelming Strike's extra damage on a 20 doesn't run."),
+  "boon-of-irresistible-offense": full("Its bludgeoning, piercing and slashing damage ignores resistance; on a 20, extra damage equal to the score of the ability the attack uses (the one a player raises with the boon's +1)."),
   "boon-of-spell-recall": full("A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score."),
   "boon-of-the-night-spirit": manual(["stealth"], "The builder adds the +1 to a score; invisibility and resistance in darkness don't run."),
   "boon-of-truesight": builder("+1 to a score; truesight is a sense the simulator doesn't use."),

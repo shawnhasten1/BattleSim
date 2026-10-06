@@ -975,6 +975,8 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "natural-twenty-damage":
+      return <p className={styles.hint}>Nothing to set: when the d20 shows 20, the attack deals extra damage of its type equal to the score of the ability it uses.</p>;
     case "ignore-resistance":
       return <TypeChips label="Its damage ignores resistance to" value={effect.damageTypes} onChange={(damageTypes) => damageTypes.length && set({ ...effect, damageTypes })} />;
     case "damage-vitality":

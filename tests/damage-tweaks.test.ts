@@ -69,7 +69,7 @@ describe("Boon of Irresistible Offense", () => {
   it("its weapon damage ignores resistance to it; immunity still counts", () => {
     const fighter = withBoon();
     const boon = fighter.features!.find((entry) => entry.name === "Boon of Irresistible Offense")!;
-    expect(boon.automationSupport).toBe("partial");
+    expect(boon.automationSupport).toBe("full");
     expect(featureStatblock(boon, fighter).text).toContain("bludgeoning, piercing, and slashing damage ignores resistance");
     const plain: CreatureDefinition = { ...fighter, features: fighter.features!.filter((entry) => entry !== boon) };
     const swing = (definition: CreatureDefinition) => {
@@ -86,6 +86,21 @@ describe("Boon of Irresistible Offense", () => {
     expect(resolveDamageAdjustment(10, "slashing", resists, { ignoresResistance: ["slashing"] }).amount).toBe(10);
     expect(resolveDamageAdjustment(10, "slashing", [{ type: "immunity", damageType: "slashing" }], { ignoresResistance: ["slashing"] }).amount).toBe(0);
     expect(resolveDamageAdjustment(10, "fire", [{ type: "resistance", damageType: "fire" }], { ignoresResistance: ["slashing"] }).amount).toBe(5);
+  });
+
+  it("Overwhelming Strike: a 20 adds the attack's ability score (7ah)", () => {
+    const fighter = withBoon();
+    const attack = getExecutableActions(fighter).find((entry) => entry.kind === "attack" && entry.actionType === "action")!;
+    const score = fighter.abilities[(attack as { ability: "str" | "dex" }).ability];
+    const swing = (roll: number) => {
+      const { state, dealt } = scene(fighter);
+      state.rng = d20s([roll]);
+      resolveAttack(state, "pc-fighter", "enemy-goblin-1", attack.id);
+      const sources = state.log.filter((entry) => entry.type === "DamageApplied").flatMap((entry) => entry.data?.components as Array<{ sourceFeatureName?: string; finalAmount: number }>);
+      return { total: dealt("enemy-goblin-1"), overwhelming: sources.filter((part) => part.sourceFeatureName === "Boon of Irresistible Offense").reduce((sum, part) => sum + part.finalAmount, 0) };
+    };
+    expect(swing(20).overwhelming).toBe(score);
+    expect(swing(19).overwhelming).toBe(0);
   });
 
   it("the AI counts it", () => {

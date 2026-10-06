@@ -737,6 +737,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
     case "condition-persists":
       return `${P} ${activationNamed(definition, effect.conditionId)} needs nothing to keep it going, and ends early only if ${who.subject} falls unconscious${effect.durationRounds ? `; it lasts ${roundsText(effect.durationRounds)}` : ""}.`;
+    case "natural-twenty-damage":
+      return `When ${who.subject} rolls a 20 on the d20 for an attack roll, the attack deals extra damage of its type equal to the score of the ability it uses.`;
     case "ignore-resistance":
       return `${P} ${joinList(effect.damageTypes)} damage ignores resistance.`;
     case "max-damage":
@@ -889,6 +891,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
     case "condition-persists": return `${activationNamed(definition, effect.conditionId)} needs no upkeep${effect.durationRounds ? `, ${roundsText(effect.durationRounds)}` : ""}`;
+    case "natural-twenty-damage": return "its ability score in extra damage on a 20";
     case "ignore-resistance": return `${joinList(effect.damageTypes)} damage ignores resistance`;
     case "max-damage": return `maximum damage from ${spellScopeText(effect, IT)} cast at level 1–${effect.maxSlot} (${costText(effect.resourceCost, definition)})`;
     case "damage-vitality": return `${Math.max(0, resolveNumericFormula(effect.tempHp, definition))} temp HP within ${effect.withinFt} ft when ${spellScopeText(effect, IT)} deal damage`;

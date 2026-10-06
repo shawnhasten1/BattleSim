@@ -848,6 +848,13 @@ export type FeatureEffect =
     conditionId: Id;
     durationRounds?: number;
   }
+  | ({
+    /**
+     * Overwhelming Strike: on an attack roll of 20, extra damage of the attack's type equal to the score of the ability
+     * the attack uses (the one the boon raised). Not doubled by the critical hit.
+     */
+    kind: "natural-twenty-damage";
+  } & FeatureEffectScope)
   | {
     /** Boon of Irresistible Offense: its damage of these types ignores resistance (not immunity). */
     kind: "ignore-resistance";

@@ -336,6 +336,15 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Unending").effects).toEqual([{ kind: "condition-persists", conditionId: "rage-active", durationRounds: 50 }]);
   });
 
+  it("Extra damage on a 20: nothing to set (Overwhelming Strike)", async () => {
+    await blankFeature("Crushing Blow");
+    const card = await addEffect(/^Extra damage on a 20/, "Extra damage on a 20");
+    expect(card.getByText(/Nothing to set/)).toBeTruthy();
+    await done(card);
+    await addToSheet();
+    expect(named("Crushing Blow").effects).toEqual([{ kind: "natural-twenty-damage" }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;

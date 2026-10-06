@@ -156,8 +156,8 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
   }), { grants: [{ key: "boon-of-fate-use", pool: { id: "boon-of-fate", size: 1 } }] }),
   // Its bludgeoning, piercing and slashing damage ignores resistance.
   epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", runs({ feat: "boon-of-irresistible-offense" }, {
-    effects: [{ kind: "ignore-resistance", damageTypes: ["bludgeoning", "piercing", "slashing"] }],
-    notSimulated: "Overwhelming Strike's extra damage on a 20."
+    // Overwhelming Strike: the score the attack uses, the one the boon would have raised.
+    effects: [{ kind: "ignore-resistance", damageTypes: ["bludgeoning", "piercing", "slashing"] }, { kind: "natural-twenty-damage" }]
   })),
   epicBoon("boon-of-spell-recall", "Boon of Spell Recall", runs({ feat: "boon-of-spell-recall" }, {
     effects: [{ kind: "slot-recall", maxLevel: 4, die: 4 }]

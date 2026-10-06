@@ -27,7 +27,7 @@ its gaps, never dropped and never approximated without saying so.
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
-| Feats | 17 | 7 | 4 | 2 | 4 | 0 |
+| Feats | 17 | 8 | 3 | 2 | 4 | 0 |
 | Species traits | 33 | 11 | 0 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
-| `nat20-damage` | Extra damage on an attack roll of 20 (Overwhelming Strike) | Feats | 1 | Boon of Irresistible Offense (feat) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
@@ -441,7 +440,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Boon of Combat Prowess | epic-boon | full |  | The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
 | Boon of Fate | epic-boon | partial | `d20-reroll` | 2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1. |
-| Boon of Irresistible Offense | epic-boon | partial | `nat20-damage` | Its bludgeoning, piercing and slashing damage ignores resistance; the builder adds the +1 to a score. Overwhelming Strike's extra damage on a 20 doesn't run. |
+| Boon of Irresistible Offense | epic-boon | full |  | Its bludgeoning, piercing and slashing damage ignores resistance; on a 20, extra damage equal to the score of the ability the attack uses (the one a player raises with the boon's +1). |
 | Boon of Spell Recall | epic-boon | full |  | A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score. |
 | Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |
 | Boon of Truesight | epic-boon | builder |  | +1 to a score; truesight is a sense the simulator doesn't use. |

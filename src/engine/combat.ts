@@ -173,6 +173,8 @@ type AttackRollMode = "normal" | "advantage" | "disadvantage";
 interface AttackFeatureContext {
   rollMode: AttackRollMode;
   critical: boolean;
+  /** The attack roll's d20 (Overwhelming Strike's 20). */
+  natural?: number;
 }
 
 interface DamageApplicationEntry {
@@ -2676,7 +2678,7 @@ function resolveAttackCore(
     }
   }
   const featureDamage: FeatureDamageResolution = hit
-    ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical }, terms?.tradesDice)
+    ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical, natural }, terms?.tradesDice)
     : { entries: [], sources: [] };
   // An on-hit option's terms (Cunning Strike: Sneak Attack's dice, given up): unmet, its riders and move don't come.
   const termsMet = hit && Boolean(terms) && (!terms!.tradesDice || featureDamage.traded !== undefined) && (!terms!.forgoesAdvantage || forgoes);
@@ -7038,6 +7040,18 @@ function featureDamageEntries(
           sourceFeatureName: feature.name,
           sourceEffectKind: effect.kind
         })));
+        sources.push(feature.name);
+      }
+      // Overwhelming Strike: a 20 adds the attack's ability score.
+      if (effect.kind === "natural-twenty-damage" && context.natural === 20) {
+        entries.push({
+          component: { dice: String(definition.abilities[action.ability] ?? 10), damageType: "same-as-attack" },
+          critical: false,
+          triggerDamageType: firstActionDamageType(action),
+          sourceFeatureId: feature.id,
+          sourceFeatureName: feature.name,
+          sourceEffectKind: effect.kind
+        });
         sources.push(feature.name);
       }
       if (effect.kind === "swarm-damage") {
