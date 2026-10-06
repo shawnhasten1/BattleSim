@@ -300,6 +300,12 @@ const SECTIONS: Section[] = [
           it, makes it its own creature, or deletes it.
         </p>
         <p>
+          A player character can be built from the 2024 rules instead of by hand: <strong>Create Token → Character</strong>{" "}
+          makes one (or a whole party) at any level, and its sheet levels it up, into a second class too. Your own classes,
+          subclasses, feats, backgrounds and species go in the <strong>Homebrew</strong> window beside the SRD&apos;s. The{" "}
+          <a href="/docs/guides/build-a-character">character builder guide</a> walks through all of it.
+        </p>
+        <p>
           The tabs are grouped by what they change. <strong>Stats</strong> and <strong>Abilities</strong> change the
           creature, which every token of it in the scene shares (the caption above them says how many);{" "}
           <strong>Token</strong> changes this token only. To give one token different stats (a goblin boss among
