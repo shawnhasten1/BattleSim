@@ -521,7 +521,9 @@ function gateText(effect: FeatureEffect): string {
 
 /** "melee ", "melee or ranged ", "spell ", "Tail Stinger " for an effect on named actions, "" for any attack. */
 function attackScope(effect: FeatureEffect, definition: CreatureDefinition): string {
-  const scope = effect as { attackTypes?: string[]; spellsOnly?: boolean; actionIds?: string[] };
+  const scope = effect as { attackTypes?: string[]; spellsOnly?: boolean; actionIds?: string[]; weaponProperties?: string[]; twoHanded?: boolean };
+  if (scope.weaponProperties?.length) return `${joinList(scope.weaponProperties, "or")} weapon `;
+  if (scope.twoHanded) return `two-handed ${scope.attackTypes?.length ? `${joinList(scope.attackTypes, "or")} ` : ""}weapon `;
   if (scope.actionIds?.length) {
     const names = new Map(getExecutableActions(definition).map((action) => [action.id, action.name]));
     return `${joinList(scope.actionIds.map((id) => names.get(id) ?? id), "or")} `;
@@ -572,6 +574,11 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
     case "d20-change":
       return d20ChangeSentence(effect, definition, who);
+    case "damage-dice":
+      return `When ${who.subject} hits with ${article(attackScope(effect, definition) || "weapon ")}${attackScope(effect, definition) || "weapon "}attack${gateText(effect)}, ${[
+        effect.minimumDie ? `any damage die below ${effect.minimumDie} counts as ${effect.minimumDie}` : "",
+        effect.rollTwice ? `${who.subject} can roll the weapon's damage dice twice and use either roll${effect.oncePerTurn ? " (once per turn)" : ""}` : ""
+      ].filter(Boolean).join(", and ") || "its damage dice roll as usual"}.`;
     case "healing-bonus":
       return [
         effect.slotBonus ? `A healing spell ${who.subject} casts with a spell slot restores 2 + the slot's level more hit points to each creature it heals.` : "",
@@ -733,6 +740,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
     case "spell-half-on-miss": return `half damage on a miss or a save: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
+    case "damage-dice": return [effect.minimumDie ? `${scope}damage dice min ${effect.minimumDie}` : "", effect.rollTwice ? `${scope}damage rolled twice${effect.oncePerTurn ? " once a turn" : ""}` : ""].filter(Boolean).join(", ") || "damage dice";
     case "healing-bonus": return [effect.slotBonus ? "+2 + slot level healing" : "", effect.selfOnOthers ? "heals itself when it heals others" : "", effect.maximize ? "healing dice maximized" : ""].filter(Boolean).join(", ") || "healing";
     case "free-move": return `${effect.feet ? `${effect.feet} ft` : "half speed"} move ${effect.on === "critical-hit" ? "after a critical hit" : `with ${poolName(effect.on.spends, 1, definition)}`}${effect.noOpportunityAttacks ? ", no opportunity attacks" : ""}`;
     case "d20-change": {

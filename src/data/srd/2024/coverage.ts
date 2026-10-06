@@ -29,7 +29,6 @@ export interface CoverageEntry {
 /** What the engine lacks, grouped so one engine change closes a family (plan Phase 7). */
 export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
-  "damage-dice": "Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting)",
   "max-damage": "Maximum damage instead of a roll (Overchannel)",
   "d20-reroll": "Changing another creature's d20 roll (Countercharm, Boon of Fate)",
   "roll-floor": "A roll that can't come out below a number (Indomitable Might)",
@@ -75,7 +74,6 @@ export const GAPS = {
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
-  "weapon-property-scope": "Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting)",
   "counterspell-save": "The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent",
   "weapon-cantrip": "A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
@@ -302,7 +300,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Rogue */
   rogue_expertise: builder(),
-  "rogue_sneak-attack": partial(["weapon-property-scope"], "Its dice by level; any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage."),
+  "rogue_sneak-attack": full("Its dice by level, on a finesse or ranged weapon's hit with advantage, or with an ally next to the target and no disadvantage (the ally being incapacitated isn't checked)."),
   "rogue_thieves-cant": info("Languages."),
   "rogue_weapon-mastery": MASTERY,
   "rogue_cunning-action": full("Dash and Disengage run; Hide is reference."),
@@ -403,9 +401,9 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   "boon-of-truesight": builder("+1 to a score; truesight is a sense the simulator doesn't use."),
   defense: full("+1 AC; whether armor is worn isn't checked."),
   grappler: partial(["grapple-strike"], "+1 Strength or Dexterity and advantage against a creature it grapples; damaging and grappling with one strike doesn't run."),
-  "great-weapon-fighting": manual(["damage-dice", "weapon-property-scope"]),
+  "great-weapon-fighting": full("A 1 or 2 on a two-handed melee weapon's damage dice counts as 3 (the weapon's own dice, not a smite's)."),
   "magic-initiate": builder("Two cantrips and a 1st-level spell, cast once without a slot."),
-  "savage-attacker": manual(["damage-dice"]),
+  "savage-attacker": full("Once a turn, a weapon hit's damage dice rolled twice, the higher kept."),
   skilled: builder("Three skills."),
   "two-weapon-fighting": full("The ability modifier on the light weapon's extra attack.")
 };

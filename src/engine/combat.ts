@@ -180,6 +180,10 @@ interface DamageApplicationEntry {
   casterLevel?: number;
   /** Extra dice appended before crit-doubling (per-slot upcast bonus). */
   extraDice?: string;
+  /** Great Weapon Fighting: no die below this. */
+  minimumDie?: number;
+  /** Savage Attacker: rolled twice, the higher kept. */
+  rollTwice?: boolean;
 }
 
 interface FeatureDamageResolution {
@@ -2150,11 +2154,13 @@ function resolveAttackCore(
     : { entries: [], sources: [] };
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const targetWasUp = target.state === "active";
+  const diceRules = hit ? weaponDiceRules(state, attacker, target, action, attackerDefinition, { rollMode, critical }) : {};
   const damageApplied = hit
     ? applyDamageEntries(state, target, [
       ...(action.bloodiedDamage && attacker.currentHp <= Math.floor(attackerDefinition.maxHp / 2) ? action.bloodiedDamage : action.damage).map((component, index) => ({
         component, critical, triggerDamageType: firstActionDamageType(action), casterLevel: scaling.casterLevel,
-        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined
+        extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined,
+        ...diceRules
       })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
@@ -4656,7 +4662,15 @@ function applyDamageEntries(
     const abilityBonus = component.abilityModifier ? abilityModifier(damageSource.abilities[component.abilityModifier]) : 0;
     // `component.dice` is canonical and already carries any flat "+K" (mirrored by `flatBonus`), so it is not added again here.
     const formulaBonus = resolveNumericFormula(component.bonusFormula, damageSource);
-    const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
+    const rollOnce = () => {
+      const rolled = rollDice(withBonus(dice, abilityBonus), state.rng);
+      return entry.minimumDie ? withMinimumDie(rolled, entry.minimumDie) : rolled;
+    };
+    let roll = rollOnce();
+    if (entry.rollTwice) {
+      const again = rollOnce();
+      if (again.total > roll.total) roll = again;
+    }
     const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
     const damageType = component.damageTypeOptions?.length
       ? bestDamageTypeOption(component.damageTypeOptions, damageAdjustmentsFor(targetDefinition, target), origin)
@@ -4702,6 +4716,40 @@ function applyDamageEntries(
   checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, hitDamageTypes, entries.some((entry) => entry.critical)));
   return totalApplied;
+}
+
+/** A roll with every die below `minimum` counted as `minimum` (Great Weapon Fighting's 1s and 2s as 3s). */
+function withMinimumDie(roll: DiceRollResult, minimum: number): DiceRollResult {
+  const rolls = roll.rolls.map((die) => (die.sign > 0 && die.value < minimum && die.sides >= minimum ? { ...die, value: minimum } : die));
+  return { ...roll, rolls, total: rolls.reduce((sum, die) => sum + die.sign * die.value, 0) + roll.modifier };
+}
+
+/**
+ * What the attacker's features do to its weapon's damage dice on this hit: a minimum die (Great Weapon Fighting), or
+ * rolling them twice (Savage Attacker, once a turn: used up here).
+ */
+function weaponDiceRules(
+  state: EngineState,
+  attacker: CombatantState,
+  target: CombatantState,
+  action: AttackActionDefinition,
+  definition: CreatureDefinition,
+  context: AttackFeatureContext
+): { minimumDie?: number; rollTwice?: boolean } {
+  const rules: { minimumDie?: number; rollTwice?: boolean } = {};
+  if (!action.weaponProperties) return rules;
+  for (const feature of featureSources(definition, attacker)) {
+    for (const [effectIndex, effect] of (feature.effects ?? []).entries()) {
+      if (effect.kind !== "damage-dice" || !featureAppliesToAction(effect, action) || !featureConditionsMet(state, attacker, target, effect, context)) continue;
+      if (effect.minimumDie) rules.minimumDie = Math.max(rules.minimumDie ?? 0, effect.minimumDie);
+      if (effect.rollTwice && !rules.rollTwice) {
+        if (effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) continue;
+        if (effect.oncePerTurn) markFeatureEffectApplied(state, attacker, target, action, feature, effect, effectIndex);
+        rules.rollTwice = true;
+      }
+    }
+  }
+  return rules;
 }
 
 /** One part of the damage about to land: its type and amount before the target's defenses, halved for a made save. */
@@ -5430,7 +5478,8 @@ type WeaponInput = NonNullable<CreatureDefinition["weapons"]>[number];
  * weapon it can use as a bonus action (a drawn off-hand weapon).
  */
 function wieldsTwoHanded(definition: CreatureDefinition, weapon: WeaponInput): boolean {
-  if (weapon.grip === "two-handed") {
+  // A weapon with no grip of its own (the character builder's) says so in its properties.
+  if (weapon.grip === "two-handed" || (weapon.grip === undefined && (weapon.properties ?? []).some((property) => property.toLowerCase() === "two-handed"))) {
     return true;
   }
   if (weapon.grip !== "versatile") {
@@ -5504,6 +5553,7 @@ function weaponToAction(definition: CreatureDefinition, weapon: WeaponInput): At
     range: weapon.range,
     longRange: weapon.longRange,
     reach: weapon.reach,
+    weaponProperties: [...new Set([...(weapon.ability === "finesse" ? ["finesse"] : []), ...(weapon.properties ?? []).map((property) => property.toLowerCase().replace(/\s*\(.*\)$/, ""))])],
     damage: damageSource.map((component, index) => ({
       ...component,
       // A finesse weapon's damage adds the ability its attack roll uses; the library leaves that to be resolved here.
@@ -7298,6 +7348,13 @@ function featureAppliesToAction(effect: FeatureEffect, action: AttackActionDefin
     return false;
   }
   if (!spellScopeCovers(effect, action)) {
+    return false;
+  }
+  if ("weaponProperties" in effect && effect.weaponProperties?.length) {
+    const properties = action.weaponProperties;
+    if (!properties || !effect.weaponProperties.some((property) => properties.includes(property) || (property === "ranged" && action.attackType === "ranged"))) return false;
+  }
+  if ("twoHanded" in effect && effect.twoHanded && action.grip !== "two-handed") {
     return false;
   }
   if ("damageTypes" in effect && effect.damageTypes

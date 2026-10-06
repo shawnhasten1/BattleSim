@@ -422,6 +422,13 @@ export interface FeatureEffectScope {
   spellClasses?: string[];
   /** Only cantrips (Potent Spellcasting, Potent Cantrip). */
   cantripsOnly?: boolean;
+  /**
+   * Only attacks with a weapon having one of these properties (`AttackActionDefinition.weaponProperties`); `"ranged"`
+   * takes a ranged weapon's attack too (Sneak Attack: `["finesse", "ranged"]`).
+   */
+  weaponProperties?: string[];
+  /** Only attacks with a weapon held in two hands (Great Weapon Fighting). */
+  twoHanded?: boolean;
 }
 
 export interface FeatureEffectConditions {
@@ -517,6 +524,16 @@ export type FeatureEffect =
     selfOnOthers?: boolean;
     maximize?: boolean;
   }
+  | ({
+    /**
+     * Its weapon's damage dice (on a hit, as scoped): none lower than `minimumDie` (Great Weapon Fighting: a 1 or 2 counts
+     * as 3), or rolled twice and the higher kept (`rollTwice`: Savage Attacker, once a turn with `oncePerTurn`).
+     */
+    kind: "damage-dice";
+    minimumDie?: number;
+    rollTwice?: boolean;
+    oncePerTurn?: boolean;
+  } & FeatureEffectScope & FeatureEffectConditions)
   | {
     /** Its initiative rolls: advantage (Feral Instinct, Remarkable Athlete), and a bonus added (Alert: the proficiency bonus). */
     kind: "initiative";
@@ -1060,6 +1077,8 @@ export interface AttackActionDefinition {
   requiresHeld?: boolean;
   /** Half its damage on a miss, and nothing else (Potent Cantrip's cantrips). */
   halfDamageOnMiss?: boolean;
+  /** The properties of the weapon it's made with (finesse, light, two-handed, versatile…). Absent for anything but a weapon. */
+  weaponProperties?: string[];
   /**
    * Only usable after something this turn: `"charge-hit"` against a creature its charge / pounce already hit (Pounce,
    * Trampling Charge); `"dropped-creature"` once it has dropped a creature to 0 HP with a melee attack (Rampage).

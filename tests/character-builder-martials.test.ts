@@ -89,8 +89,8 @@ describe("the Barbarian", () => {
     const greataxe = berserker.weapons!.find((weapon) => weapon.name === "Greataxe")!;
     const state = fightWith(berserker);
     const hp = () => state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.currentHp;
-    // Not raging, with advantage: no Frenzy.
-    state.rng = scripted([18, 18, 6]);
+    // Not raging, with advantage: no Frenzy. (The Soldier's Savage Attacker rolls the axe again on the turn's first hit: a 1.)
+    state.rng = scripted([18, 18, 6, 1]);
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", greataxe.actionId!, { advantage: true });
     const unraged = 40 - hp();
     // Raging (a bonus action) with advantage: 3d6 more on the first hit.

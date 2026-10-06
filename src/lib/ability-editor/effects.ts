@@ -74,6 +74,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "spell-range", bonus: 300, minRange: 10, cantripsOnly: true })
   },
   {
+    kind: "damage-dice", label: "Better damage dice", hint: "Great Weapon Fighting's 1s and 2s as 3s, Savage Attacker's second roll", theme: "attacks", when: "attack", scope: true,
+    blank: () => ({ kind: "damage-dice", condition: "always", minimumDie: 3 })
+  },
+  {
     kind: "damage-bonus", label: "Extra damage on its hits", hint: "Sneak Attack, Rage's +2, Divine Fury", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-bonus", condition: "always", damage: [{ dice: "1d6", damageType: "same-as-attack" }] })
   },

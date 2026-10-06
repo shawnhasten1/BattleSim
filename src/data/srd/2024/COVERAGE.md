@@ -23,11 +23,11 @@ its gaps, never dropped and never approximated without saying so.
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 2 | 6 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 5 | 2 | 6 | 6 | 4 |
+| Rogue (Thief) | 23 | 6 | 1 | 6 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
-| Feats | 17 | 4 | 2 | 7 | 4 | 0 |
+| Feats | 17 | 6 | 2 | 5 | 4 | 0 |
 | Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -46,13 +46,11 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
-| `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
 | `ends-on-damage` | A condition that ends when the creature takes damage (Turn Undead, Abjure Foes) | Cleric, Paladin | 2 | Channel Divinity (Cleric); Sear Undead (Cleric); Abjure Foes (Paladin) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
 | `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
 | `conditional-immunity` | Immunity to a condition only while something holds (raging, standing in an aura) | Barbarian, Paladin | 6 | Mindless Rage (Path of the Berserker); Aura of Courage (Paladin); Aura of Devotion (Oath of Devotion) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `damage-dice` | Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting) | Feats | 1 | Great Weapon Fighting (feat); Savage Attacker (feat) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
@@ -344,7 +342,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 1, 6 | Expertise | builder |  |  |
-| 1 | Sneak Attack | partial | `weapon-property-scope` | Its dice by level; any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage. |
+| 1 | Sneak Attack | full |  | Its dice by level, on a finesse or ranged weapon's hit with advantage, or with an ally next to the target and no disadvantage (the ally being incapacitated isn't checked). |
 | 1 | Thieves' Cant | info |  | Languages. |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Cunning Action | full |  | Dash and Disengage run; Hide is reference. |
@@ -467,9 +465,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Boon of Truesight | epic-boon | builder |  | +1 to a score; truesight is a sense the simulator doesn't use. |
 | Defense | fighting-style | full |  | +1 AC; whether armor is worn isn't checked. |
 | Grappler | general | partial | `grapple-strike` | +1 Strength or Dexterity and advantage against a creature it grapples; damaging and grappling with one strike doesn't run. |
-| Great Weapon Fighting | fighting-style | manual | `damage-dice`, `weapon-property-scope` |  |
+| Great Weapon Fighting | fighting-style | full |  | A 1 or 2 on a two-handed melee weapon's damage dice counts as 3 (the weapon's own dice, not a smite's). |
 | Magic Initiate | origin | builder |  | Two cantrips and a 1st-level spell, cast once without a slot. |
-| Savage Attacker | origin | manual | `damage-dice` |  |
+| Savage Attacker | origin | full |  | Once a turn, a weapon hit's damage dice rolled twice, the higher kept. |
 | Skilled | origin | builder |  | Three skills. |
 | Two-Weapon Fighting | fighting-style | full |  | The ability modifier on the light weapon's extra attack. |
 

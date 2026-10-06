@@ -384,7 +384,13 @@ function WhenField({ effect, kind, onChange }: { effect: FeatureEffect; kind: "a
   );
 }
 
-type Scoped = { attackTypes?: Array<"melee" | "ranged" | "spell">; abilities?: Ability[]; actionIds?: string[]; spellsOnly?: boolean; damageTypes?: Array<DamageType | "same-as-attack"> };
+type Scoped = {
+  attackTypes?: Array<"melee" | "ranged" | "spell">; abilities?: Ability[]; actionIds?: string[]; spellsOnly?: boolean; damageTypes?: Array<DamageType | "same-as-attack">;
+  weaponProperties?: string[]; twoHanded?: boolean;
+};
+
+/** The weapon properties an effect can be limited to; "ranged" takes any ranged weapon too. */
+const WEAPON_PROPERTIES = ["finesse", "light", "heavy", "reach", "thrown", "two-handed", "versatile", "ranged"];
 
 /** "Which attacks": melee, ranged or spell, and the ability they use. Specific attacks and spells only sit in More. */
 function ScopeField({ effect, onChange }: { effect: FeatureEffect; onChange: (next: FeatureEffect) => void }) {
@@ -432,7 +438,8 @@ function effectMore(
     const known = new Set(attacks.map((attack) => attack.id));
     const choices = [...attacks, ...ids.filter((id) => !known.has(id)).map((id) => ({ id, name: `${id} (not found)` }))];
     const already = scoped.damageTypes ?? [];
-    count += (ids.length ? 1 : 0) + (scoped.spellsOnly ? 1 : 0) + (already.length ? 1 : 0);
+    const properties = scoped.weaponProperties ?? [];
+    count += (ids.length ? 1 : 0) + (scoped.spellsOnly ? 1 : 0) + (already.length ? 1 : 0) + (properties.length ? 1 : 0) + (scoped.twoHanded ? 1 : 0);
     parts.push(
       <Field key="ids" copy="effectAttacks">
         <div className={styles.typeChips} role="group" aria-label="Only these attacks">
@@ -445,6 +452,14 @@ function effectMore(
         </div>
       </Field>,
       <Check key="spells" copy="effectSpellsOnly" checked={scoped.spellsOnly === true} onChange={(on) => set(opt(scoped, "spellsOnly", on ? true : undefined))} />,
+      <div key="properties" className={styles.typeChips} role="group" aria-label="Only weapons that are">
+        {WEAPON_PROPERTIES.map((property) => (
+          <button key={property} type="button" aria-pressed={properties.includes(property)} onClick={() => set(withList(scoped, "weaponProperties", properties.includes(property) ? properties.filter((p) => p !== property) : [...properties, property]))}>
+            {property}
+          </button>
+        ))}
+      </div>,
+      <Check key="two-handed" label="Only a weapon held in two hands" checked={scoped.twoHanded === true} onChange={(on) => set(opt(scoped, "twoHanded", on ? true : undefined))} />,
       <Field key="already" copy="effectAlreadyDeals">
         <div className={styles.typeChips} role="group" aria-label="Only if it already deals">
           {DAMAGE_TYPES.map((type) => (
@@ -832,6 +847,15 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "damage-dice":
+      return (
+        <>
+          <Check label="No damage die below a number" checked={effect.minimumDie !== undefined} onChange={(on) => set(opt(effect, "minimumDie", on ? 3 : undefined))} />
+          {effect.minimumDie !== undefined ? <NumberField label="Lowest a damage die counts" value={effect.minimumDie} min={2} max={12} onChange={(n) => n !== undefined && set({ ...effect, minimumDie: n })} /> : null}
+          <Check label="Roll the weapon's damage dice twice, keep the higher" checked={effect.rollTwice === true} onChange={(on) => set(opt(effect, "rollTwice", on ? true : undefined))} />
+          {effect.rollTwice ? <Check label="Once per turn" checked={effect.oncePerTurn === true} onChange={(on) => set(opt(effect, "oncePerTurn", on ? true : undefined))} /> : null}
+        </>
+      );
     case "healing-bonus":
       return (
         <>

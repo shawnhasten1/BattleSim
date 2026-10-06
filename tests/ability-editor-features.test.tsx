@@ -185,6 +185,20 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Life's Gift").effects).toEqual([{ kind: "healing-bonus", selfOnOthers: true, maximize: true }]);
   });
 
+  it("Better damage dice: a minimum die, a second roll, and weapons that are two-handed or finesse", async () => {
+    await blankFeature("Heavy Hands");
+    const card = await addEffect(/^Better damage dice/, "Better damage dice");
+    await retype(card.getByLabelText("Lowest a damage die counts"), "2");
+    await userEvent.click(card.getByRole("checkbox", { name: "Roll the weapon's damage dice twice, keep the higher" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Once per turn" }));
+    await userEvent.click(card.getByRole("button", { name: /^More options/ }));
+    await chip(card, "Only weapons that are", "finesse");
+    await userEvent.click(card.getByRole("checkbox", { name: "Only a weapon held in two hands" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Heavy Hands").effects).toEqual([{ kind: "damage-dice", condition: "always", minimumDie: 2, rollTwice: true, oncePerTurn: true, weaponProperties: ["finesse"], twoHanded: true }]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

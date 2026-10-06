@@ -8,12 +8,13 @@ const sneakAttack = runs("rogue_sneak-attack", {
   effects: [{
     kind: "damage-bonus",
     oncePerTurn: true,
-    condition: "always",
+    // Advantage, or an ally next to the target and no disadvantage.
+    condition: "attack-has-no-disadvantage",
     anyConditions: ["attack-has-advantage", "ally-adjacent-to-target"],
     attackTypes: ["melee", "ranged"],
+    weaponProperties: ["finesse", "ranged"],
     damage: [{ dice: "1d6", damageType: "same-as-attack" }]
-  }],
-  notSimulated: "any weapon attack can deal it, not only a finesse or ranged one, and an ally's help still counts with disadvantage."
+  }]
 });
 
 const cunningAction = runs("rogue_cunning-action", {

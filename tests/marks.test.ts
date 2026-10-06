@@ -94,13 +94,14 @@ describe("Hunter's Mark", () => {
     expect(goblin().conditions?.some((condition) => condition.id === "hunters-mark")).toBe(true);
     expect(me().resources?.["hunters-mark-free-casts"]).toBe(free - 1);
 
-    const hit = (attack: () => unknown) => {
+    const hit = (attack: () => unknown, dice = [19, 1, 6]) => {
       const before = goblin().currentHp;
-      state.rng = scripted([19, 1, 6]); // a hit, the lowest weapon roll, then the mark's die at its highest
+      state.rng = scripted(dice); // a hit, the lowest weapon roll, then the mark's die at its highest
       attack();
       return before - goblin().currentHp;
     };
-    const marked = hit(() => swing("enemy-goblin-1"));
+    // The Soldier's Savage Attacker rolls the weapon twice on the turn's first hit: a 1 again.
+    const marked = hit(() => swing("enemy-goblin-1"), [19, 1, 1, 6]);
     const archer = state.snapshot.definitions.find((entry) => entry.id === "def-archer")!;
     hit(() => resolveAttack(state, "pc-archer", "enemy-goblin-1", getExecutableActions(archer).find((entry) => entry.kind === "attack")!.id));
     const log = state.log.filter((entry) => entry.type === "AttackRolled").map((entry) => entry.data?.appliedDamageEffects);

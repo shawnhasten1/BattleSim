@@ -96,7 +96,7 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     source: source("savage-attacker"),
     edition: "2024",
     category: "origin",
-    grants: [{ key: "feat", feature: reference({ feat: "savage-attacker" }) }]
+    grants: [{ key: "feat", feature: runs({ feat: "savage-attacker" }, { effects: [{ kind: "damage-dice", rollTwice: true, oncePerTurn: true }] }) }]
   },
   {
     id: "srd:feat:skilled",
@@ -133,7 +133,7 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     edition: "2024",
     category: "fighting-style",
     prerequisite: { feature: "Fighting Style" },
-    grants: [{ key: "feat", feature: reference({ feat: "great-weapon-fighting" }) }]
+    grants: [{ key: "feat", feature: runs({ feat: "great-weapon-fighting" }, { effects: [{ kind: "damage-dice", minimumDie: 3, attackTypes: ["melee"], twoHanded: true }] }) }]
   },
   {
     id: "srd:feat:two-weapon-fighting",
