@@ -154,6 +154,31 @@ describe("spells built from a blank one", { timeout: 20000 }, () => {
     expect(built).toBe(library);
   });
 
+  it("Hunter's Mark: a mark on a foe, a bonus action, its caster's hits deal 1d6 force more", async () => {
+    await blank("Spell");
+    await retype("Name", "Hunter's Mark");
+    await radio("Casting time", "Bonus action");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Needs concentration" }));
+    await radio("How it works", "Automatic");
+    await radio("It", "Grants a benefit");
+    await radio("Reaches", "One creature");
+    await retype("Range (ft)", "90");
+    const mark = () => userEvent.click(screen.getByRole("checkbox", { name: "A mark on a foe" }));
+    await mark();
+    expect(preview()).toContain("It marks one creature within 90 feet");
+    // Unticked, it's a buff again; ticked again, a mark with the damage it had.
+    await mark();
+    expect(preview()).not.toContain("marks one creature");
+    await mark();
+    await addToSheet();
+
+    const action = fighter().spells!.at(-1)!.action;
+    expect(action).toMatchObject({
+      kind: "buff", actionType: "bonus", range: 90, mark: {},
+      appliedCondition: { effects: [{ kind: "incoming-hit-damage", onlyFromSource: true, consumeCondition: false, damage: [{ dice: "1d6", damageType: "force" }] }] }
+    });
+  });
+
   it("Magic Missile: three darts that hit automatically, a dart more per slot", async () => {
     await blank("Spell");
     await retype("Name", "Magic Missile");

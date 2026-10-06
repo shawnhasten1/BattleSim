@@ -125,13 +125,16 @@ export interface FreeCast {
 
 /**
  * A change a feature makes to a spell the character has, on every copy the builder puts on the actor: an ability
- * modifier on its first damage roll (Agonizing Blast), a longer range (Eldritch Spear), more riders (Repelling Blast).
+ * modifier on its first damage roll (Agonizing Blast), a longer range (Eldritch Spear), more riders (Repelling Blast),
+ * a mark's (Hunter's Mark's) bigger die, its damage spilling onto a second creature, concentration that damage can't
+ * break.
  */
 export interface SpellChange {
   spell: string;
   damageAbility?: Ability;
   range?: number;
   riders?: ActionRider[];
+  mark?: { dice?: string; spillWithinFt?: number; keepsConcentrationOnDamage?: boolean };
 }
 
 export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon";
@@ -404,7 +407,12 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
     spell: z.string().min(1),
     damageAbility: abilitySchema.optional(),
     range: z.number().optional(),
-    riders: z.array(z.object({ kind: z.string() }).passthrough()).optional()
+    riders: z.array(z.object({ kind: z.string() }).passthrough()).optional(),
+    mark: z.object({
+      dice: z.string().min(1).optional(),
+      spillWithinFt: z.number().positive().optional(),
+      keepsConcentrationOnDamage: z.boolean().optional()
+    }).optional()
   })).optional(),
   adjust: z.object({
     speed: templateOrNumber.optional(),

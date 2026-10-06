@@ -29,6 +29,8 @@ import {
   resolveBuffAction,
   resolveSummonAction,
   isTargetable,
+  markConditionId,
+  markMoveProblem,
   resolveHealingAction,
   resolveHealingBurstAction,
   resolveActivateFeatureAction,
@@ -101,6 +103,14 @@ interface RepositionPlan {
 }
 
 /** Singular-target buff plan (self or one ally) — the shape `BonusPick`/`bonusPickTargetRange` need. */
+/** A mark (Hunter's Mark, Hex) cast on, or moved to, a foe with the bonus action. Always in range now. */
+interface MarkPlan {
+  action: BuffAction;
+  target: CombatantState;
+  score: number;
+  reasons: string[];
+}
+
 interface BuffPlan {
   action: BuffAction;
   target: CombatantState;
@@ -542,7 +552,8 @@ function bestSwingAttack(
   let best: { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined;
   for (const attack of candidates) {
     const hitChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), armorClassOf(target).total);
-    const damage = (averageDamage(attack, source, adjustments) + averageAttackFeatureDamage(attack, source, sourceCombatant, target, new Set(usedOncePerTurnEffects))) * hitChance
+    const damage = (averageDamage(attack, source, adjustments) + averageAttackFeatureDamage(attack, source, sourceCombatant, target, new Set(usedOncePerTurnEffects))
+      + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments)) * hitChance
       + expectedRiderDamage(attack, source, target, { landChance: hitChance });
     // In damage terms, half the plan-level penalty a single attack that spends the same would carry.
     const cost = resourceCostWeight(attack) * 2 * resourceStanceMultiplier(sourceCombatant.resourceStance) * optionalRiderCostDiscount(attack, source, target);
@@ -819,6 +830,7 @@ function resolveDodgeIfThreatened(state: EngineState, actor: CombatantState): bo
 type BonusPick =
   | { kind: "heal"; plan: HealingPlan }
   | { kind: "buff"; plan: BuffPlan }
+  | { kind: "mark"; plan: MarkPlan }
   | { kind: "offense"; plan: OffensivePlan };
 
 /** Target/range a `BonusPick` needs in reach, regardless of whether it's a heal, a buff, or an attack. */
@@ -843,16 +855,20 @@ function selectBonusCandidate(
   snapshot: EncounterSnapshot,
   actor: CombatantState,
   tactics: TacticsSettings,
-  options: { relaxReachability?: boolean; noDrink?: boolean } = {}
+  options: { relaxReachability?: boolean; noDrink?: boolean; focus?: CombatantState } = {}
 ): BonusPick | undefined {
   const heal = betterHeal(selectHealingAction(snapshot, actor, "bonus"), options.noDrink ? undefined : selectItemDrink(snapshot, actor, "bonus"));
   const buff = selectBuffAction(snapshot, actor, "bonus");
+  const mark = selectMarkAction(snapshot, actor, options.focus);
   const offense = selectOffensivePlan(snapshot, actor, tactics, "bonus", options);
-  if (heal && (!buff || heal.score >= buff.score) && (!offense || heal.score >= offense.score)) {
+  if (heal && [buff, mark, offense].every((rival) => !rival || heal.score >= rival.score)) {
     return { kind: "heal", plan: heal };
   }
-  if (buff && (!offense || buff.score >= offense.score)) {
+  if (buff && [mark, offense].every((rival) => !rival || buff.score >= rival.score)) {
     return { kind: "buff", plan: buff };
+  }
+  if (mark && (!offense || mark.score >= offense.score)) {
+    return { kind: "mark", plan: mark };
   }
   return offense ? { kind: "offense", plan: offense } : undefined;
 }
@@ -887,6 +903,17 @@ function resolveBonusPick(state: EngineState, actor: CombatantState, pick: Bonus
     }));
     try {
       resolveBuffAction(state, actor.id, buff.action.id, [buff.target.id]);
+    } catch { /* map state moved on */ }
+    return true;
+  }
+  if (pick.kind === "mark") {
+    const mark = pick.plan;
+    if (mark.target.state !== "active") return false;
+    state.log.push(event(state, "AiDecision", `${actor.displayName} used a bonus action (${mark.action.name})`, {
+      combatantId: actor.id, actionId: mark.action.id, targetId: mark.target.id, slot: "bonus", score: mark.score, reasons: mark.reasons
+    }));
+    try {
+      resolveBuffAction(state, actor.id, mark.action.id, [mark.target.id]);
     } catch { /* map state moved on */ }
     return true;
   }
@@ -1069,7 +1096,7 @@ function selectJointTurnPlan(
   if (!canAct(actor, "bonus")) {
     return undefined;
   }
-  const bonusPick = selectBonusCandidate(snapshot, actor, tactics, { relaxReachability: true });
+  const bonusPick = selectBonusCandidate(snapshot, actor, tactics, { relaxReachability: true, focus: mainPlan.target });
   if (!bonusPick) {
     return undefined;
   }
@@ -1437,6 +1464,10 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
   if (freeActivations.length) plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
 
+  // A target already in sight is marked before anything else spends the bonus action; one the move brings into sight,
+  // after the move.
+  if (markBeforeAttacking(state, actor, plan, tactics)) plan = selectOffensivePlan(state.snapshot, actor, tactics) ?? plan;
+
   // Before committing to "move fully toward the main action, then see what's left
   // for the bonus action," check whether the main and bonus actions are better
   // planned together — same shared movement budget, but weighing which is worth
@@ -1671,6 +1702,10 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     maybeSpendBonusAction(state, actor, tactics);
     return undefined;
   }
+  if (markBeforeAttacking(state, actor, plan, tactics)) {
+    const marked = selectOffensivePlan(state.snapshot, actor, tactics, "action", { mustReachNow: true });
+    if (marked && isValidTarget(state.snapshot, actor, marked.target, marked.range)) plan = marked;
+  }
 
   state.log.push(event(state, "AiDecision", `${actor.displayName} chose ${plan.action.name}`, {
     combatantId: actor.id,
@@ -1723,6 +1758,18 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   maybeTakeSafeAltitude(state, actor, tactics);
   maybeSpendBonusAction(state, actor, tactics);
   return undefined;
+}
+
+/**
+ * A mark (Hunter's Mark, Hex) adds to every hit on its creature, this turn's included: when the bonus action is best
+ * spent on one, it goes on the turn's target before the attacks. Only before attack rolls: a turn that casts Fireball
+ * isn't one to change for a mark. Whether it did (the caller re-picks its plan).
+ */
+function markBeforeAttacking(state: EngineState, actor: CombatantState, plan: OffensivePlan, tactics: TacticsSettings): boolean {
+  if (actor.state !== "active" || !canAct(actor, "bonus") || (plan.action.kind !== "attack" && plan.action.kind !== "multiattack")
+    || !hasMarkAction(getDefinition(state.snapshot, actor))) return false;
+  const first = selectBonusCandidate(state.snapshot, actor, tactics, { focus: plan.target });
+  return first?.kind === "mark" && resolveBonusPick(state, actor, first);
 }
 
 /**
@@ -2344,6 +2391,8 @@ function selectBuffAction(
       && (action.targeting?.target ?? "single") !== "chosen"
       // A conscious ally can drink its own potion: the AI drinks its buff potions and gives none.
       && action.item?.use !== "give"
+      // A mark goes on a foe: `selectMarkAction`.
+      && !action.mark
       // Prep-only buffs (Aid, Mage Armor) are DM-toggled before combat, not
       // an in-combat option — never a candidate here.
       && !action.prepOnly
@@ -2383,6 +2432,93 @@ function selectBuffAction(
     : undefined;
 }
 
+/** How many rounds a mark is reckoned to pay off for: it moves on when its creature drops, so most of a fight. */
+const MARK_ROUNDS = 3;
+
+function hasMarkAction(definition: CreatureDefinition): boolean {
+  return getExecutableActions(definition).some((action) => action.kind === "buff" && Boolean(action.mark));
+}
+
+/**
+ * A mark (Hunter's Mark, Hex) worth the bonus action: cast on `focus` (the creature the turn attacks; without one, the
+ * foe in range it pays most against), or moved there for free once the last marked creature dropped. Scored as a
+ * bonus-action attack would be (twice its damage, and what an attack in reach gets) for its extra damage on the hits
+ * the actor can expect over the next few rounds, less what a cast spends. Never cast while another concentration effect
+ * (a mark on a living creature among them) is still working.
+ */
+function selectMarkAction(snapshot: EncounterSnapshot, actor: CombatantState, focus?: CombatantState): MarkPlan | undefined {
+  const definition = getDefinition(snapshot, actor);
+  const marks = getExecutableActions(definition).filter((action): action is BuffAction => action.kind === "buff"
+    && Boolean(action.mark)
+    && action.actionType === "bonus"
+    && action.automationSupport === "full"
+    && canPayResource(actor, action));
+  if (!marks.length) return undefined;
+  const working = hasWorkingConcentrationEffect(snapshot, actor);
+  const foes = (focus ? [focus] : snapshot.combatants)
+    .filter((combatant) => combatant.state === "active" && effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor) && isTargetable(combatant));
+  let best: MarkPlan | undefined;
+  for (const action of marks) {
+    if (action.mark?.moving ? markMoveProblem(snapshot, actor, action) : working) continue;
+    const conditionId = markConditionId(action);
+    const penalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance);
+    for (const target of foes) {
+      if (!isValidTarget(snapshot, actor, target, action.range)
+        || (target.conditions ?? []).some((condition) => condition.id === conditionId && condition.sourceCombatantId === actor.id)) {
+        continue;
+      }
+      const perRound = expectedMarkDamagePerRound(snapshot, definition, action, target);
+      if (perRound <= 0) continue;
+      const score = perRound * MARK_ROUNDS * 2 + 10 - penalty;
+      if (score > 0 && (!best || score > best.score + 1e-9)) {
+        best = { action, target, score, reasons: [`about ${perRound.toFixed(1)} more damage a round on ${target.displayName}`] };
+      }
+    }
+  }
+  return best;
+}
+
+/** A mark's extra damage a round against `target`: its damage on each hit times the hits the actor's attacks can expect. */
+function expectedMarkDamagePerRound(snapshot: EncounterSnapshot, source: CreatureDefinition, action: BuffAction, target: CombatantState): number {
+  const targetDefinition = getDefinition(snapshot, target);
+  const adjustments = damageAdjustmentsFor(targetDefinition, target);
+  const perHit = (action.appliedCondition.effects ?? []).reduce((sum, effect) => sum + (effect.kind === "incoming-hit-damage" && effect.onlyFromSource
+    ? effect.damage.reduce((total, component) => total + averageDamageComponent(component, source) * defenseMultiplier(component, adjustments), 0)
+    : 0), 0);
+  if (perHit <= 0) return 0;
+  const executables = getExecutableActions(source);
+  const attacks = executables.filter((candidate): candidate is AttackAction => candidate.kind === "attack"
+    && candidate.actionType === "action" && candidate.automationSupport === "full");
+  if (!attacks.length) return 0;
+  const casterLevel = source.character?.level ?? 1;
+  const rolls = Math.max(1, ...executables.map((candidate) => {
+    if (candidate.automationSupport !== "full" || candidate.actionType !== "action") return 0;
+    if (candidate.kind === "multiattack") return swingsOf(candidate.attacks).filter((swing) => !stepAbility(swing.step, executables)).length;
+    if (candidate.kind === "attack" && candidate.attackDelivery === "beams") return resolveBeamCount(candidate, casterLevel, spellSlotLevel(candidate.resourceCost?.resourceId));
+    return 0;
+  }));
+  const bestBonus = Math.max(...attacks.map((attack) => resolveAttackBonus(attack, source)));
+  return perHit * rolls * chanceToHit(bestBonus, armorClassOf(targetDefinition).total);
+}
+
+/** The bearer's own marks on `targetCombatant`: what each of its hits there adds (Hunter's Mark's 1d6 force). */
+function averageMarkDamage(
+  source: CreatureDefinition,
+  sourceCombatant: CombatantState,
+  targetCombatant: CombatantState | undefined,
+  adjustments: CreatureDefinition["damageAdjustments"]
+): number {
+  let total = 0;
+  for (const condition of targetCombatant?.conditions ?? []) {
+    if (condition.sourceCombatantId !== sourceCombatant.id) continue;
+    for (const effect of condition.effects ?? []) {
+      if (effect.kind !== "incoming-hit-damage" || !effect.onlyFromSource) continue;
+      total += effect.damage.reduce((sum, component) => sum + averageDamageComponent(component, source) * defenseMultiplier(component, adjustments), 0);
+    }
+  }
+  return total;
+}
+
 /**
  * `"chosen"`-mode buff (Bless: "up to three creatures within range of you").
  * Real 5e casting time for every such spell in this library is `"action"`,
@@ -2397,6 +2533,7 @@ function selectBuffBurstAction(snapshot: EncounterSnapshot, actor: CombatantStat
     .filter((action): action is BuffAction => action.kind === "buff"
       && action.actionType === "action"
       && action.targeting?.target === "chosen"
+      && !action.mark
       && !action.prepOnly
       && action.automationSupport === "full"
       && canPayResource(actor, action)
@@ -3620,7 +3757,8 @@ function expectedDamageAgainst(
   // features when we have the combatant (a raging Barbarian resists), else just its definition.
   const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
   if (action.kind === "attack") {
-    const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set());
+    const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set())
+      + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments);
     const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total);
     return perHit * hitChance * beams + expectedRiderDamage(action, source, target, { landChance: hitChance, beams });
@@ -4007,7 +4145,7 @@ function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {
     ...("allConditions" in effect && effect.allConditions ? effect.allConditions : [])
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
-  return required.every((condition) => condition === "always") && alternatives.length === 0;
+  return required.every((condition) => condition === "always") && alternatives.length === 0 && !("targetMarked" in effect && effect.targetMarked);
 }
 
 /**

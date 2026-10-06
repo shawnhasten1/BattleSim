@@ -117,6 +117,7 @@ export const COPY = {
 
   // Outcomes
   healing: { label: "Healing" },
+  buffMark: { label: "A mark on a foe", hint: "Hunter's Mark, Hex: it goes on an enemy, and only your own hits on it deal the extra damage (the card below). When that creature drops, a bonus action moves the mark to another." },
   buffLasts: { label: "Lasts" },
   buffAc: { label: "AC" },
   buffAttack: { label: "Attack rolls" },

@@ -1039,6 +1039,22 @@ function placedSpell(spell: SpellDefinition, id: string): SpellDefinition {
   return { ...spell, id, action: placed };
 }
 
+/** A mark with a feature's change: its die (Foe Slayer), its spill (Superior Hunter's Prey), its concentration (Relentless Hunter). */
+function changedMark(action: Extract<ActionDefinition, { kind: "buff" }>, change: NonNullable<SpellChange["mark"]>): ActionDefinition {
+  const effects = (action.appliedCondition.effects ?? []).map((effect) => (effect.kind === "incoming-hit-damage" && effect.onlyFromSource
+    ? {
+      ...effect,
+      ...(change.dice ? { damage: effect.damage.map((component, index) => (index === 0 ? { ...component, dice: change.dice! } : component)) } : {}),
+      ...(change.spillWithinFt ? { spillWithinFt: change.spillWithinFt } : {})
+    }
+    : effect));
+  return {
+    ...action,
+    appliedCondition: { ...action.appliedCondition, effects },
+    mark: { ...action.mark, ...(change.keepsConcentrationOnDamage ? { keepsConcentrationOnDamage: true } : {}) }
+  };
+}
+
 /** A placed spell with a feature's change: an ability on its first damage roll, a longer range, more riders. */
 function changedSpell(spell: SpellDefinition, change: SpellChange): SpellDefinition {
   const action = spell.action;
@@ -1048,6 +1064,7 @@ function changedSpell(spell: SpellDefinition, change: SpellChange): SpellDefinit
     next = { ...next, damage: next.damage.map((component, index) => (index === 0 ? { ...component, abilityModifier: change.damageAbility } : component)) } as ActionDefinition;
   }
   if (change.range !== undefined && "range" in next) next = { ...next, range: change.range } as ActionDefinition;
+  if (change.mark && next.kind === "buff" && next.mark) next = changedMark(next, change.mark);
   if (change.riders?.length && "riders" in next) {
     const existing = next.riders ?? [];
     next = { ...next, riders: [...existing, ...change.riders.map((rider, index) => ({ ...rider, id: `${action.id}-rider-${existing.length + index + 1}` }))] } as ActionDefinition;

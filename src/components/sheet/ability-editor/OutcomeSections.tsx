@@ -9,6 +9,7 @@ import type {
   CreatureDefinition,
   DamageAdjustment,
   DamageType,
+  FeatureEffect,
   FeatureEffectConditionApplication,
   HealingComponent
 } from "@/engine";
@@ -126,6 +127,26 @@ function splitModifiers(modifiers: Modifiers): { fields: Modifiers; rest: Modifi
  * (advantage, extra damage on hits) is an effect card, and so is a modifier the fields don't edit (a speed change, an
  * immunity).
  */
+/**
+ * A buff made a mark on a foe (Hunter's Mark, Hex), or back: a mark's extra damage on hits counts only its caster's, and
+ * stays after the first; a new mark starts with Hunter's Mark's 1d6 force.
+ */
+function withMark(action: BuffAction, on: boolean): BuffAction {
+  const condition = action.appliedCondition;
+  const others = (condition.effects ?? []).filter((effect) => effect.kind !== "incoming-hit-damage");
+  const hits = (condition.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "incoming-hit-damage" }> => effect.kind === "incoming-hit-damage");
+  if (!on) {
+    const next = { ...action };
+    delete next.mark;
+    const effects = [...others, ...hits.map(({ onlyFromSource: _only, ...effect }) => effect)];
+    return { ...next, appliedCondition: { ...condition, ...(effects.length ? { effects } : {}) } };
+  }
+  const marked = hits.length
+    ? hits.map((effect) => ({ ...effect, onlyFromSource: true, consumeCondition: false }))
+    : [{ kind: "incoming-hit-damage" as const, condition: "always" as const, onlyFromSource: true, consumeCondition: false, critical: true, damage: [{ dice: "1d6", damageType: "force" as const }] }];
+  return { ...action, mark: {}, appliedCondition: { ...condition, effects: [...others, ...marked] } };
+}
+
 export function BuffOutcome({ action, onChange, definition, newPools }: {
   action: BuffAction;
   onChange: (next: ActionDefinition) => void;
@@ -176,6 +197,7 @@ export function BuffOutcome({ action, onChange, definition, newPools }: {
 
   return (
     <>
+      <Check copy="buffMark" checked={Boolean(action.mark)} onChange={(on) => onChange(withMark(action, on))} />
       <Field copy="buffLasts" id={lastsId}>
         <DurationSelect
           id={lastsId}

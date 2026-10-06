@@ -154,7 +154,7 @@ const arcanum = (level: number, spellLevel: number) => ({
 });
 
 export const WARLOCK_SPELLS = [
-  "hellish-rebuke", "charm-person", "hideous-laughter", "bane",
+  "hex", "hellish-rebuke", "charm-person", "hideous-laughter", "bane",
   "hold-person", "misty-step", "mirror-image", "shatter",
   "hypnotic-pattern", "fear", "counterspell",
   "banishment", "blight", "dimension-door",

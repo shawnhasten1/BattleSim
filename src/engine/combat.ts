@@ -185,6 +185,8 @@ interface FeatureDamageResolution {
   entries: DamageApplicationEntry[];
   sources: string[];
   consumedConditionIds?: Id[];
+  /** Marks whose damage spills onto a second creature (Superior Hunter's Prey). */
+  spills?: Array<{ condition: ConditionInstance; damage: DamageComponent[]; withinFt: number }>;
 }
 
 export function createEngineState(snapshot: EncounterSnapshot): EngineState {
@@ -254,7 +256,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -264,6 +266,52 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...legendaryVariants(definition, declared),
     ...lairVariants(definition)
   ]).map(withEffectiveAutomationSupport);
+}
+
+/**
+ * Each mark the creature can put on a foe (Hunter's Mark, Hex), as the action that moves it once the marked creature
+ * drops: `<id>:move-mark`, with no cost, not a spell (nothing to counter), one per mark however many copies cast it (a
+ * slot's, a free cast's).
+ */
+function markMoves(listed: ActionDefinition[]): BuffActionDefinition[] {
+  const moves = new Map<Id, BuffActionDefinition>();
+  for (const action of listed) {
+    if (action.kind !== "buff" || !action.mark || action.mark.moving || moves.has(markConditionId(action))) continue;
+    const { resourceCost: _cost, spellLevel: _level, upcast: _upcast, upcastFrom: _from, concentration: _concentration, ...rest } = action;
+    moves.set(markConditionId(action), {
+      ...rest,
+      id: `${upcastBaseId(action.id)}:move-mark`,
+      name: `Move ${action.name.replace(/ \([^()]*\)$/, "")}`,
+      actionType: action.mark.moveWith ?? "bonus",
+      mark: { ...action.mark, moving: true }
+    });
+  }
+  return [...moves.values()];
+}
+
+/** The id of the condition a buff (or a mark) puts on its target. */
+export function markConditionId(action: BuffActionDefinition): Id {
+  return action.appliedCondition.id ?? upcastBaseId(action.id);
+}
+
+/**
+ * Why `actor` can't move its mark with `action` now: it isn't concentrating on it, or the creature that bears it hasn't
+ * dropped. Undefined when it can.
+ */
+export function markMoveProblem(snapshot: EncounterSnapshot, actor: CombatantState, action: BuffActionDefinition): string | undefined {
+  const conditionId = markConditionId(action);
+  const name = action.name.replace(/^Move /, "");
+  if (actor.concentration?.sourceConditionId !== conditionId) return `${actor.displayName} isn't concentrating on ${name}`;
+  const bearers = markBearers(snapshot, actor.id, conditionId);
+  const standing = bearers.find((bearer) => bearer.currentHp > 0);
+  if (standing) return `${standing.displayName} hasn't dropped yet`;
+  return bearers.length ? undefined : `${name} isn't on anyone`;
+}
+
+/** Every creature bearing `actorId`'s mark (`conditionId`), up or not. */
+function markBearers(snapshot: EncounterSnapshot, actorId: Id, conditionId: Id): CombatantState[] {
+  return snapshot.combatants.filter((combatant) =>
+    (combatant.conditions ?? []).some((condition) => condition.id === conditionId && condition.sourceCombatantId === actorId));
 }
 
 /** A spell slot's level from its pool id (`slot-3` → 3). */
@@ -1876,6 +1924,39 @@ function cleaveAfterHit(state: EngineState, attacker: CombatantState, first: Com
   resolveAttackCore(state, attacker, second, attackerDefinition, cleaveAction, { suppressDeclare: true }, false);
 }
 
+/**
+ * Superior Hunter's Prey: once on each of the marker's turns, a mark's damage dealt again to another of its foes within
+ * reach of the creature hit, one the marker has a clear line to: the one likeliest to drop (the fewest hit points left).
+ */
+function spillMarkDamage(
+  state: EngineState,
+  attacker: CombatantState,
+  first: CombatantState,
+  attackerDefinition: CreatureDefinition,
+  spills: NonNullable<FeatureDamageResolution["spills"]>
+): void {
+  if (state.snapshot.combatants[state.snapshot.turnIndex]?.id !== attacker.id) return;
+  const attackerFaction = effectiveFaction(state.snapshot, attacker);
+  for (const { condition, damage, withinFt } of spills) {
+    const useKey = `${condition.id}:spill`;
+    if (wasRiderUsedThisTurn(state, attacker.id, useKey)) continue;
+    const second = state.snapshot.combatants
+      .filter((candidate) => candidate.id !== first.id && candidate.id !== attacker.id && candidate.state === "active"
+        && effectiveFaction(state.snapshot, candidate) !== attackerFaction
+        && spatialDistance(state.snapshot, first, candidate) <= withinFt
+        && (!state.snapshot.rules.requireLineOfEffect || lineOfEffect(state.snapshot.map, attacker.position, candidate.position)))
+      .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id))[0];
+    if (!second) continue;
+    const name = condition.sourceName ?? condition.id;
+    state.log.push(event(state, "RiderApplied", `${attacker.displayName}'s ${name} also strikes ${second.displayName}`, {
+      sourceId: attacker.id, targetId: second.id, riderKind: "mark-spill", riderUseKey: useKey, conditionId: condition.id
+    }));
+    applyDamageEntries(state, second, damage.map((component) => ({
+      component, critical: false, sourceFeatureId: condition.sourceId, sourceFeatureName: name, sourceEffectKind: "incoming-hit-damage" as const
+    })), attackerDefinition, attacker.id);
+  }
+}
+
 /** The result a spell resolver returns when the spell was countered before it could take effect. */
 function emptyAttackResult(): AttackResult {
   return {
@@ -2040,6 +2121,7 @@ function resolveAttackCore(
     attacker.turnFlags = { ...(attacker.turnFlags ?? {}), droppedCreature: true, bonusMovement: (attacker.turnFlags?.bonusMovement ?? 0) + extraSquares };
   }
   if (hit) applyMeleeRetaliation(state, attacker, target, action);
+  if (hit && attacker.state === "active") spillMarkDamage(state, attacker, target, attackerDefinition, targetHitDamage.spills ?? []);
   if (hit && action.cleave && action.attackType === "melee" && attacker.state === "active") {
     cleaveAfterHit(state, attacker, target, attackerDefinition, action);
   }
@@ -2545,6 +2627,9 @@ export function resolveBuffAction(
       throw new Error(notSelfProblem(actor, action));
     }
   }
+  if (action.mark?.moving) {
+    return moveMark(state, actor, action, targets[0]!);
+  }
 
   validateAndSpendAction(actor, action);
   if (action.concentration) {
@@ -2587,7 +2672,10 @@ export function resolveBuffAction(
     // every combatant's conditions by `sourceCombatantId` + `concentration`,
     // so one link on the caster tears down the condition on every target.
     if (instance.concentration) {
-      actor.concentration = { sourceConditionId: actor.concentration?.sourceConditionId ?? conditionId };
+      actor.concentration = {
+        sourceConditionId: actor.concentration?.sourceConditionId ?? conditionId,
+        ...(action.mark?.keepsConcentrationOnDamage || actor.concentration?.keptOnDamage ? { keptOnDamage: true } : {})
+      };
     }
     if (tempHpAmount > 0) {
       target.tempHp = Math.max(target.tempHp, tempHpAmount);
@@ -2598,6 +2686,31 @@ export function resolveBuffAction(
   }
 
   return { targetIds: targets.map((target) => target.id), tempHpApplied: tempHpAmount || undefined };
+}
+
+/**
+ * A mark moved off a creature that dropped onto `target` (Hunter's Mark, Hex): the same condition, lasting as long as it
+ * had left, still held by the caster's concentration.
+ */
+function moveMark(state: EngineState, actor: CombatantState, action: BuffActionDefinition, target: CombatantState): BuffResult {
+  const problem = markMoveProblem(state.snapshot, actor, action);
+  if (problem) throw new Error(problem);
+  const conditionId = markConditionId(action);
+  validateAndSpendAction(actor, action);
+  declareAction(state, actor, action, { target });
+  let moved: ConditionInstance | undefined;
+  for (const bearer of markBearers(state.snapshot, actor.id, conditionId)) {
+    for (const condition of (bearer.conditions ?? []).filter((candidate) => candidate.id === conditionId && candidate.sourceCombatantId === actor.id)) {
+      moved ??= condition;
+      state.log.push(event(state, "ConditionExpired", `${bearer.displayName} lost ${condition.sourceName ?? condition.name}`, {
+        combatantId: bearer.id, condition, reason: "moved"
+      }));
+    }
+    bearer.conditions = (bearer.conditions ?? []).filter((candidate) => !(candidate.id === conditionId && candidate.sourceCombatantId === actor.id));
+  }
+  if (!moved) return { targetIds: [] };
+  const instance: ConditionInstance = { ...moved, startedRound: state.snapshot.round };
+  return applyCondition(state, target.id, instance) ? { targetIds: [target.id] } : { targetIds: [] };
 }
 
 export function validateBuffTargeting(
@@ -5631,9 +5744,11 @@ function targetIncomingHitDamageEntries(
   const entries: DamageApplicationEntry[] = [];
   const sources: string[] = [];
   const consumedConditionIds: Id[] = [];
+  const spills: NonNullable<FeatureDamageResolution["spills"]> = [];
   for (const condition of target.conditions ?? []) {
     for (const effect of condition.effects ?? []) {
-      if (effect.kind !== "incoming-hit-damage" || !featureConditionsMetForConditionTarget(state, target, effect)) {
+      if (effect.kind !== "incoming-hit-damage" || !featureConditionsMetForConditionTarget(state, target, effect)
+        || (effect.onlyFromSource && condition.sourceCombatantId !== attacker.id)) {
         continue;
       }
       entries.push(...effect.damage.map((component) => ({
@@ -5661,9 +5776,10 @@ function targetIncomingHitDamageEntries(
       if (effect.consumeCondition ?? true) {
         consumedConditionIds.push(condition.id);
       }
+      if (effect.onlyFromSource && effect.spillWithinFt) spills.push({ condition, damage: effect.damage, withinFt: effect.spillWithinFt });
     }
   }
-  return { entries, sources, consumedConditionIds };
+  return { entries, sources, consumedConditionIds, spills };
 }
 
 function consumeTriggeredConditions(state: EngineState, target: CombatantState, conditionIds: Id[]): void {
@@ -6697,7 +6813,7 @@ function featureConditionsMet(
   ];
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
   const chargeFeet = "chargeFeet" in effect ? effect.chargeFeet : undefined;
-  if (!whileConditionHeld(attacker, effect)) return false;
+  if (!whileConditionHeld(attacker, effect) || !targetMarkedBy(attacker, target, effect)) return false;
   return required.every((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet))
     && (alternatives.length === 0 || alternatives.some((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet)));
 }
@@ -6741,6 +6857,12 @@ function featureConditionsMetForSelf(
   if (!whileConditionHeld(combatant, effect)) return false;
   return required.every((condition) => selfFeatureConditionMet(definition, combatant, condition))
     && (alternatives.length === 0 || alternatives.some((condition) => selfFeatureConditionMet(definition, combatant, condition)));
+}
+
+/** An effect against its bearer's own mark only (Precise Hunter): whether `target` bears it. */
+function targetMarkedBy(bearer: CombatantState, target: CombatantState, effect: FeatureEffect): boolean {
+  const mark = "targetMarked" in effect ? effect.targetMarked : undefined;
+  return !mark || (target.conditions ?? []).some((condition) => condition.id === mark && condition.sourceCombatantId === bearer.id);
 }
 
 /** An effect that works only while its bearer holds a condition (Frenzy while raging): whether it does now. */
@@ -6810,7 +6932,8 @@ export function proficiencyForChallengeRating(cr: number): number {
 }
 
 function resolveConcentration(state: EngineState, combatant: CombatantState, damageTaken: number): void {
-  if (!combatant.concentration) {
+  // Relentless Hunter: taking damage doesn't threaten its Hunter's Mark.
+  if (!combatant.concentration || combatant.concentration.keptOnDamage) {
     return;
   }
   const definition = getDefinition(state.snapshot, combatant);

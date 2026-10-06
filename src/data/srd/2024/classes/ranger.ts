@@ -30,8 +30,7 @@ export const RANGER: ClassDefinition = {
     {
       level: 1,
       grants: [
-        // Hunter's Mark is reference until the engine marks targets (plan Phase 7); its free casts are counted.
-        grant("favored-enemy", runs("ranger_favored-enemy", { notSimulated: "Hunter's Mark itself: marking a target is plan Phase 7." }), {
+        grant("favored-enemy", runs("ranger_favored-enemy"), {
           spells: [HUNTERS_MARK], freeCasts: [{ spell: HUNTERS_MARK, uses: "{col:favored-enemy}" }]
         }),
         grant("spellcasting", runs("ranger_spellcasting")),
@@ -69,11 +68,19 @@ export const RANGER: ClassDefinition = {
         }]
       }), { pool: { id: "tireless", size: "{mod:wis|min:1}" } })]
     },
-    { level: 13, grants: [grant("relentless-hunter", reference("ranger_relentless-hunter"))] },
+    {
+      level: 13,
+      grants: [grant("relentless-hunter", runs("ranger_relentless-hunter"), { spellChanges: [{ spell: HUNTERS_MARK, mark: { keepsConcentrationOnDamage: true } }] })]
+    },
     { level: 14, grants: [grant("natures-veil", reference("ranger_natures-veil"), { pool: { id: "natures-veil", size: "{mod:wis|min:1}" } })] },
-    { level: 17, grants: [grant("precise-hunter", reference("ranger_precise-hunter"))] },
+    {
+      level: 17,
+      grants: [grant("precise-hunter", runs("ranger_precise-hunter", {
+        effects: [{ kind: "attack-advantage", condition: "always", targetMarked: "hunters-mark" }]
+      }))]
+    },
     { level: 18, grants: [grant("feral-senses", informational("ranger_feral-senses"), { adjust: { senses: { blindsight: 30 } } })] },
-    { level: 20, grants: [grant("foe-slayer", reference("ranger_foe-slayer"))] }
+    { level: 20, grants: [grant("foe-slayer", runs("ranger_foe-slayer"), { spellChanges: [{ spell: HUNTERS_MARK, mark: { dice: "1d10" } }] })] }
   ],
   startingEquipment: [
     {
@@ -129,7 +136,12 @@ export const HUNTER: SubclassDefinition = {
       }, "ranger_hunter_hunters-prey")]
     },
     { level: 7, grants: [grant("defensive-tactics", reference("ranger_hunter_defensive-tactics"))] },
-    { level: 11, grants: [grant("superior-hunters-prey", reference("ranger_hunter_superior-hunters-prey"))] },
+    {
+      level: 11,
+      grants: [grant("superior-hunters-prey", runs("ranger_hunter_superior-hunters-prey"), {
+        spellChanges: [{ spell: HUNTERS_MARK, mark: { spillWithinFt: 30 } }]
+      })]
+    },
     { level: 15, grants: [grant("superior-hunters-defense", reference("ranger_hunter_superior-hunters-defense"))] }
   ]
 };

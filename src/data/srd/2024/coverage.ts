@@ -36,7 +36,6 @@ export const GAPS = {
   "roll-floor": "A roll that can't come out below a number (Indomitable Might)",
   initiative: "Bonuses or advantage on initiative",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
-  mark: "Marking a target for extra damage and other benefits (Hunter's Mark, Hex)",
   "damage-reaction": "A reaction that cuts or resists the damage just taken (Uncanny Dodge, Deflect Attacks, Stone's Endurance)",
   "dice-trade": "Trading damage dice for an effect (Cunning Strike, Brutal Strike)",
   "next-attack": "Advantage on the next attack roll against a creature, or on the next one this turn",
@@ -279,7 +278,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "paladin_oath-of-devotion_holy-nimbus": manual(["activated-aura"]),
 
   /* Ranger */
-  "ranger_favored-enemy": partial(["mark"], "Hunter's Mark is always prepared, with its free casts as a pool; the mark's damage needs Phase 7."),
+  "ranger_favored-enemy": full("Hunter's Mark always prepared, with its free casts as a pool; the AI marks the creature it attacks with the bonus action and moves the mark when it drops."),
   ranger_spellcasting: builder(),
   "ranger_weapon-mastery": MASTERY,
   "ranger_deft-explorer": builder("Expertise; languages are outside a fight."),
@@ -290,19 +289,19 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   ranger_roving: builder("+10 ft of speed and climb and swim speeds; heavy armor isn't checked."),
   ranger_expertise: builder(),
   ranger_tireless: full("Temporary hit points as an action, Wisdom-modifier times; exhaustion is outside a fight."),
-  "ranger_relentless-hunter": manual(["mark"]),
+  "ranger_relentless-hunter": full(),
   "ranger_natures-veil": manual(["stealth"]),
-  "ranger_precise-hunter": manual(["mark"]),
+  "ranger_precise-hunter": full(),
   "ranger_feral-senses": info("Blindsight: there's no vision in the simulator."),
   "ranger_epic-boon": EPIC_BOON,
-  "ranger_foe-slayer": manual(["mark"]),
+  "ranger_foe-slayer": full(),
   "ranger_spell-list": SPELL_LIST,
 
   /* Hunter */
   "ranger_hunter_hunters-lore": info(),
   "ranger_hunter_hunters-prey": partial(["follow-up-attack"], "Colossus Slayer runs; Horde Breaker doesn't."),
   "ranger_hunter_defensive-tactics": manual(["oa-defense"]),
-  "ranger_hunter_superior-hunters-prey": manual(["mark"]),
+  "ranger_hunter_superior-hunters-prey": full("The second creature is the one likeliest to drop: the fewest hit points left."),
   "ranger_hunter_superior-hunters-defense": manual(["damage-reaction"]),
 
   /* Rogue */

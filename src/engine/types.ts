@@ -429,6 +429,11 @@ export interface FeatureEffectConditions {
    * damage while raging.
    */
   whileCondition?: string;
+  /**
+   * Only against a creature bearing a condition with this id that this creature put on it: its own mark (Precise
+   * Hunter: advantage against the creature its Hunter's Mark is on).
+   */
+  targetMarked?: string;
 }
 
 /** What kind of save a `save-advantage` effect applies to. See `FeatureEffect` "save-advantage". */
@@ -499,6 +504,13 @@ export type FeatureEffect =
     critical?: boolean;
     consumeCondition?: boolean;
     damageSource?: "triggering-attacker" | "condition-source";
+    /** Only the hits of the creature that put the condition on it: a mark's (Hunter's Mark, Hex). */
+    onlyFromSource?: boolean;
+    /**
+     * Once on each of the marker's turns, the same damage to another of its foes within this many feet of the creature
+     * hit (Superior Hunter's Prey: 30). Read with `onlyFromSource`.
+     */
+    spillWithinFt?: number;
   } & FeatureEffectConditions)
   | ({
     kind: "damage-adjustment";
@@ -1337,7 +1349,21 @@ export interface BuffActionDefinition {
    * until toggled off or the encounter restarts.
    */
   prepOnly?: boolean;
+  /**
+   * A mark (Hunter's Mark, Hex): the condition goes on a foe, its `incoming-hit-damage` (`onlyFromSource`) adding to the
+   * caster's hits on it. When the marked creature drops, a compiled `<id>:move-mark` action (a bonus action unless
+   * `moveWith` says otherwise) moves the mark to another creature, without a slot, for as long as concentration lasts.
+   */
+  mark?: MarkSpec;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
+}
+
+export interface MarkSpec {
+  moveWith?: "action" | "bonus";
+  /** Taking damage doesn't break the caster's concentration on it (Relentless Hunter). */
+  keepsConcentrationOnDamage?: boolean;
+  /** Set on the compiled `:move-mark` action only: it moves a dropped creature's mark rather than casting a new one. */
+  moving?: boolean;
 }
 
 export interface UnsupportedActionDefinition {
@@ -2083,6 +2109,8 @@ export interface CombatantState {
   actionEconomy?: ActionEconomyState;
   concentration?: {
     sourceConditionId?: Id;
+    /** Taking damage doesn't make it check (Relentless Hunter, concentrating on Hunter's Mark). */
+    keptOnDamage?: boolean;
   };
   initiative?: number;
   turnFlags?: TurnFlags;

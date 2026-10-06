@@ -333,6 +333,32 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
     }
   },
 
+  /* ── marks: a foe the caster's hits deal more to, moved with a bonus action when it drops ──────────────────── */
+  "hunters-mark": {
+    castingTime: "bonus", range: 90, concentration: true, automationSupport: "full",
+    description: "A higher slot only lets it last longer. Advantage on checks to find the target is outside a fight.",
+    action: {
+      kind: "buff", actionType: "bonus", range: 90, targeting: { target: "single", notSelf: true },
+      appliedCondition: {
+        id: "hunters-mark", name: "custom", durationRounds: 600,
+        effects: [{ kind: "incoming-hit-damage", condition: "always", onlyFromSource: true, consumeCondition: false, critical: true, damage: [{ dice: "1d6", damageType: "force", magical: true }] }]
+      },
+      mark: {}, concentration: true, automationSupport: "full"
+    }
+  },
+  hex: {
+    castingTime: "bonus", range: 90, concentration: true, automationSupport: "partial",
+    description: "Not simulated: the target's disadvantage on ability checks with the ability you choose. A higher slot only lets it last longer.",
+    action: {
+      kind: "buff", actionType: "bonus", range: 90, targeting: { target: "single", notSelf: true },
+      appliedCondition: {
+        id: "hex", name: "custom", durationRounds: 600,
+        effects: [{ kind: "incoming-hit-damage", condition: "always", onlyFromSource: true, consumeCondition: false, critical: true, damage: [{ dice: "1d6", damageType: "necrotic", magical: true }] }]
+      },
+      mark: {}, concentration: true, automationSupport: "full"
+    }
+  },
+
   /* ── new in the 2024 library ────────────────────────────────────────────────────────────────────────────────── */
   "sorcerous-burst": {
     castingTime: "action", range: 120, automationSupport: "partial",
@@ -386,8 +412,6 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
  */
 export const SPELL_GAPS: Readonly<Record<string, { gaps: GapCode[]; note: string }>> = {
   counterspell: { gaps: ["counterspell-save"], note: "The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent." },
-  "hunters-mark": { gaps: ["mark"], note: "Extra damage against the marked target, moved when it drops." },
-  hex: { gaps: ["mark"], note: "Extra damage against the marked target, moved when it drops." },
   "true-strike": { gaps: ["weapon-cantrip"], note: "A weapon attack made with the spellcasting ability." },
   shillelagh: { gaps: ["weapon-cantrip"], note: "A club or quarterstaff that uses the spellcasting ability." }
 };

@@ -22,7 +22,7 @@ its gaps, never dropped and never approximated without saying so.
 | Fighter (Champion) | 21 | 6 | 0 | 9 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 7 | 5 | 5 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
-| Ranger (Hunter) | 23 | 3 | 2 | 7 | 9 | 2 |
+| Ranger (Hunter) | 23 | 8 | 1 | 3 | 9 | 2 |
 | Rogue (Thief) | 23 | 3 | 2 | 8 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
-| `mark` | Marking a target for extra damage and other benefits (Hunter's Mark, Hex) | Ranger, Spells | 1 | Favored Enemy (Ranger); Relentless Hunter (Ranger); Precise Hunter (Ranger); Foe Slayer (Ranger); Superior Hunter's Prey (Hunter); Hunter's Mark (spell); Hex (spell) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
@@ -315,7 +314,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Favored Enemy | partial | `mark` | Hunter's Mark is always prepared, with its free casts as a pool; the mark's damage needs Phase 7. |
+| 1 | Favored Enemy | full |  | Hunter's Mark always prepared, with its free casts as a pool; the AI marks the creature it attacks with the bonus action and moves the mark when it drops. |
 | 1 | Spellcasting | builder |  |  |
 | 1 | Weapon Mastery | full |  | The chosen kinds of weapon: each one's mastery property runs on its attacks. Nick is an extra swing in the Attack action; Cleave's second target is the one with the fewest hit points left. |
 | 2 | Deft Explorer | builder |  | Expertise; languages are outside a fight. |
@@ -326,12 +325,12 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 6 | Roving | builder |  | +10 ft of speed and climb and swim speeds; heavy armor isn't checked. |
 | 9 | Expertise | builder |  |  |
 | 10 | Tireless | full |  | Temporary hit points as an action, Wisdom-modifier times; exhaustion is outside a fight. |
-| 13 | Relentless Hunter | manual | `mark` |  |
+| 13 | Relentless Hunter | full |  |  |
 | 14 | Nature's Veil | manual | `stealth` |  |
-| 17 | Precise Hunter | manual | `mark` |  |
+| 17 | Precise Hunter | full |  |  |
 | 18 | Feral Senses | info |  | Blindsight: there's no vision in the simulator. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
-| 20 | Foe Slayer | manual | `mark` |  |
+| 20 | Foe Slayer | full |  |  |
 | — | Ranger Spell List | builder |  | Read from each spell's own class list. |
 
 ### Hunter (Ranger subclass)
@@ -341,7 +340,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Hunter's Lore | info |  |  |
 | 3 | Hunter's Prey | partial | `follow-up-attack` | Colossus Slayer runs; Horde Breaker doesn't. |
 | 7 | Defensive Tactics | manual | `oa-defense` |  |
-| 11 | Superior Hunter's Prey | manual | `mark` |  |
+| 11 | Superior Hunter's Prey | full |  | The second creature is the one likeliest to drop: the fewest hit points left. |
 | 15 | Superior Hunter's Defense | manual | `damage-reaction` |  |
 
 ## Rogue
@@ -518,9 +517,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 88 of which run in the simulator. 65 are copied from the 2014 library
-(their rules didn't change in a way the simulator models) and 24 are written for 2024: 14 that changed,
-10 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
+339 SRD 5.2 spells, 90 of which run in the simulator. 65 are copied from the 2014 library
+(their rules didn't change in a way the simulator models) and 26 are written for 2024: 14 that changed,
+12 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
 | Class | Spells | Run | Cantrip | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th |
@@ -529,9 +528,9 @@ spell on a class's list and suggests the ones that run first.
 | Cleric | 109 | 23 | 1/7 | 7/15 | 4/17 | 2/19 | 1/9 | 3/13 | 3/11 | 1/8 | 1/5 | 0/5 |
 | Druid | 124 | 27 | 3/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
 | Paladin | 38 | 8 | — | 5/13 | 2/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
-| Ranger | 48 | 8 | — | 3/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
+| Ranger | 48 | 9 | — | 4/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
 | Sorcerer | 140 | 54 | 7/16 | 8/21 | 9/27 | 6/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
-| Warlock | 72 | 20 | 3/7 | 4/12 | 3/10 | 2/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
+| Warlock | 72 | 21 | 3/7 | 5/12 | 3/10 | 2/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
 | Wizard | 218 | 53 | 6/15 | 9/30 | 10/36 | 6/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
 
 ### Spells with a simulation
@@ -565,7 +564,9 @@ spell on a class's list and suggests the ones that run first.
 | Guiding Bolt | 1st | cleric | 2014 copy | full |  |
 | Healing Word | 1st | bard, cleric, druid | changed in 2024 | full |  |
 | Hellish Rebuke | 1st | warlock | 2014 copy | full |  |
+| Hex | 1st | warlock | new | partial | Not simulated: the target's disadvantage on ability checks with the ability you choose. A higher slot only lets it last longer. |
 | Hideous Laughter | 1st | bard, warlock, wizard | 2014 copy | full |  |
+| Hunter's Mark | 1st | ranger | new | full |  |
 | Inflict Wounds | 1st | cleric | changed in 2024 | full |  |
 | Mage Armor | 1st | sorcerer, wizard | 2014 copy | full |  |
 | Magic Missile | 1st | sorcerer, wizard | 2014 copy | full |  |
@@ -633,8 +634,6 @@ spell on a class's list and suggests the ones that run first.
 | Spell | Level | Classes | Gaps | Note |
 |---|---|---|---|---|
 | Counterspell | 3rd | sorcerer, warlock, wizard | `counterspell-save` | The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent. |
-| Hunter's Mark | 1st | ranger | `mark` | Extra damage against the marked target, moved when it drops. |
-| Hex | 1st | warlock | `mark` | Extra damage against the marked target, moved when it drops. |
 | True Strike | Cantrip | bard, sorcerer, warlock, wizard | `weapon-cantrip` | A weapon attack made with the spellcasting ability. |
 | Shillelagh | Cantrip | druid | `weapon-cantrip` | A club or quarterstaff that uses the spellcasting ability. |
 

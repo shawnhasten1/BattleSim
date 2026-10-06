@@ -572,7 +572,7 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
     case "incoming-hit-damage":
       // Read from a condition on the creature that's hit: the hit itself deals more (a hunter's mark), and by default
       // the first such hit ends the condition.
-      return `Hits against ${who.object} deal an extra ${damageText(effect.damage, definition)}${gate}.${(effect.consumeCondition ?? true) ? " The first such hit ends this." : ""}`;
+      return `${effect.onlyFromSource ? "The marker's hits" : "Hits"} against ${who.object} deal an extra ${damageText(effect.damage, definition)}${gate}.${(effect.consumeCondition ?? true) ? " The first such hit ends this." : ""}`;
     case "damage-adjustment":
       return adjustmentSentences([effect.adjustment], who, gate)[0]!;
     case "save-advantage": {
@@ -687,7 +687,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
       const name = applied.name && applied.name !== "custom" ? applied.name : applied.effects?.length || applied.modifiers ? "marked" : "a condition";
       return `hits: ${effect.save ? `DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} or ` : ""}${name}${gate}`;
     }
-    case "incoming-hit-damage": return `hitting it: ${damageShort(effect.damage, definition)}`;
+    case "incoming-hit-damage": return `${effect.onlyFromSource ? "the marker " : ""}hitting it: ${damageShort(effect.damage, definition)}`;
     case "damage-adjustment":
       return `${adjustmentShorts([effect.adjustment])[0]}${effect.adjustment.nonMagicalOnly ? " (nonmagical)" : ""}${gate}`;
     case "save-advantage": return `advantage on ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves${effect.against?.source ? ` vs ${effect.against.source === "spell" ? "spells" : "magic"}` : effect.against?.conditions?.length ? ` vs ${joinList(effect.against.conditions, "or")}` : ""}${gate}`;
@@ -1034,7 +1034,24 @@ function healingBody(action: Extract<ActionDefinition, { kind: "healing" }>, def
   return { text, short: `heals ${amount} · ${who}`, notSimulated: notesOf(action.riders) };
 }
 
+/** A mark (Hunter's Mark, Hex), or the action that moves one. */
+function markBody(action: Extract<ActionDefinition, { kind: "buff" }>, definition: CreatureDefinition, inSpell: boolean): Body {
+  const mark = action.mark!;
+  if (mark.moving) {
+    return { text: `It moves its mark from a creature that has dropped to another within ${action.range} feet.`, short: `move the mark · ${action.range} ft`, notSimulated: [] };
+  }
+  const damage = (action.appliedCondition.effects ?? []).flatMap((effect) => (effect.kind === "incoming-hit-damage" ? effect.damage : []));
+  const lasts = action.appliedCondition.durationRounds ? ` for ${roundsText(action.appliedCondition.durationRounds)}` : "";
+  const text = `It marks one creature within ${action.range} feet${lasts}${damage.length ? `: its hits on that creature deal an extra ${damageText(damage, definition)}` : ""}.`
+    + ` If the creature drops, ${mark.moveWith === "action" ? "an action" : "a bonus action"} moves the mark to another.`
+    + (action.concentration && !inSpell ? " Concentration." : "")
+    + (mark.keepsConcentrationOnDamage ? " Taking damage doesn't break concentration on it." : "");
+  const short = [damage.length ? `+${damageShort(damage, definition)} on its hits` : "mark", `${action.range} ft`].join(" · ");
+  return { text, short, notSimulated: [] };
+}
+
 function buffBody(action: Extract<ActionDefinition, { kind: "buff" }>, definition: CreatureDefinition, inSpell: boolean): Body {
+  if (action.mark) return markBody(action, definition, inSpell);
   const condition = action.appliedCondition;
   const mode = action.targeting?.target ?? "single";
   const chosen = mode === "chosen";

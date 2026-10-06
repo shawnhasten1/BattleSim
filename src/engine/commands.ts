@@ -6,6 +6,7 @@ import {
   findCombatant,
   getDefinition,
   conditionByDm,
+  markMoveProblem,
   moveCombatant,
   placeByDm,
   repositionZone,
@@ -215,6 +216,7 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   if (action.kind === "utility" && action.mode === "escape" && !(actor.conditions ?? []).some((condition) => condition.hold)) {
     return `${actor.displayName} isn't grappled`;
   }
+  if (action.kind === "buff" && action.mark?.moving) return markMoveProblem(snapshot, actor, action);
   return undefined;
 }
 
