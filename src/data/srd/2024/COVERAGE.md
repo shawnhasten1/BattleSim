@@ -64,7 +64,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `rider-choice` | Choosing one of several effects each time an attack hits (Open Hand Technique) | Monk | 3 | Open Hand Technique (Warrior of the Open Hand) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
-| `counterspell-save` | The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent | Spells | 5 | Counterspell (spell) |
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin | 9 | Abjure Foes (Paladin) |
@@ -502,8 +501,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 90 of which run in the simulator. 65 are copied from the 2014 library
-(their rules didn't change in a way the simulator models) and 26 are written for 2024: 14 that changed,
+339 SRD 5.2 spells, 91 of which run in the simulator. 65 are copied from the 2014 library
+(their rules didn't change in a way the simulator models) and 27 are written for 2024: 15 that changed,
 12 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
@@ -514,9 +513,9 @@ spell on a class's list and suggests the ones that run first.
 | Druid | 124 | 27 | 3/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
 | Paladin | 38 | 8 | — | 5/13 | 2/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
 | Ranger | 48 | 9 | — | 4/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
-| Sorcerer | 140 | 54 | 7/16 | 8/21 | 9/27 | 6/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
-| Warlock | 72 | 21 | 3/7 | 5/12 | 3/10 | 2/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
-| Wizard | 218 | 53 | 6/15 | 9/30 | 10/36 | 6/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
+| Sorcerer | 140 | 55 | 7/16 | 8/21 | 9/27 | 7/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
+| Warlock | 72 | 22 | 3/7 | 5/12 | 3/10 | 3/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
+| Wizard | 218 | 54 | 6/15 | 9/30 | 10/36 | 7/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
 
 ### Spells with a simulation
 
@@ -576,6 +575,7 @@ spell on a class's list and suggests the ones that run first.
 | Spiritual Weapon | 2nd | cleric | changed in 2024 | partial | Simulated as one attack each time it's cast: moving the force and attacking again on later turns isn't. |
 | Web | 2nd | sorcerer, wizard | 2014 copy | full |  |
 | Call Lightning | 3rd | druid | 2014 copy | full |  |
+| Counterspell | 3rd | sorcerer, warlock, wizard | changed in 2024 | full |  |
 | Fear | 3rd | bard, sorcerer, warlock, wizard | 2014 copy | full |  |
 | Fireball | 3rd | sorcerer, wizard | 2014 copy | full |  |
 | Hypnotic Pattern | 3rd | bard, sorcerer, warlock, wizard | 2014 copy | full |  |
@@ -618,7 +618,6 @@ spell on a class's list and suggests the ones that run first.
 
 | Spell | Level | Classes | Gaps | Note |
 |---|---|---|---|---|
-| Counterspell | 3rd | sorcerer, warlock, wizard | `counterspell-save` | The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent. |
 | True Strike | Cantrip | bard, sorcerer, warlock, wizard | `weapon-cantrip` | A weapon attack made with the spellcasting ability. |
 | Shillelagh | Cantrip | druid | `weapon-cantrip` | A club or quarterstaff that uses the spellcasting ability. |
 
@@ -639,7 +638,7 @@ spell on a class's list and suggests the ones that run first.
 - Mass Cure Wounds: re-authored: 5d8 plus the spellcasting modifier.
 - Flame Strike: re-authored: 5d6 fire and 5d6 radiant.
 - Circle of Death: re-authored: 8d8, and 2d8 more per slot level.
-- Counterspell: reference only: the 2024 spell is a Constitution save by the caster (gap counterspell-save).
+- Counterspell: re-authored: in 2024 the caster makes a Constitution save, and a countered spell's slot isn't spent.
 - Planar Binding: reference only: an hour to cast in 2024.
 
 ## Backgrounds

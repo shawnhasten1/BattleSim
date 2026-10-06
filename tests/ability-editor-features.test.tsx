@@ -481,6 +481,22 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).not.toHaveProperty("damageCut");
   });
 
+  it("a counter by the 2024 rules: the caster's save, no check above the slot", async () => {
+    store().insertAbilityRecord("def-fighter", "reactions", {
+      kind: "activate-feature", id: "", name: "Hush", actionType: "reaction", featureId: "hush",
+      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60, checkAbove: { dcBase: 10 } }, priority: "worthwhile" },
+      resourceCost: { resourceId: "slot-3", amount: 1 }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Hush" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    const use = inSection("use");
+    await userEvent.click(use.getByRole("checkbox", { name: /The caster makes a Constitution save/ }));
+    expect(use.queryByRole("checkbox", { name: /Above its slot's level/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().reactions ?? []).find((action) => action.name === "Hush")).toMatchObject({ reaction: { trigger: { casterSave: "con" } } });
+  });
+
   it("an activation only before it moves, giving its next attack advantage (Steady Aim)", async () => {
     store().insertAbilityRecord("def-fighter", "bonusActions", {
       kind: "activate-feature", id: "", name: "Take Aim", actionType: "bonus", featureId: "take-aim",

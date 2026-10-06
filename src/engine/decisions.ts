@@ -36,6 +36,8 @@ export interface CounterOdds {
   /** With the spell's level known: its chance of stopping it (1 when certain), and the DC when it needs the check. */
   chance?: number;
   dc?: number;
+  /** The 2024 Counterspell: the caster's save, against this DC, decides it. */
+  casterSave?: { ability: Ability; dc: number };
 }
 
 /**

@@ -1083,7 +1083,8 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
         kind: "enemy-casts-spell",
         withinFt: numberField(input, "withinFt") ?? 60,
         maxSpellLevel: numberField(input, "maxSpellLevel"),
-        checkAbove: normalizeCounterCheck(input.checkAbove)
+        checkAbove: normalizeCounterCheck(input.checkAbove),
+        ...(normalizeAbility(input.casterSave) ? { casterSave: normalizeAbility(input.casterSave)! } : {})
       };
     case "manual":
       return { kind: "manual", note: stringField(input, "note") ?? "" };

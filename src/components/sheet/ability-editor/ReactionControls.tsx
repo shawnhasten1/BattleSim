@@ -86,7 +86,11 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
           ) : null}
         </span>
       ) : null}
-      {value.kind === "enemy-casts-spell" ? <CounterCheckControls value={value} onChange={onChange} /> : null}
+      {value.kind === "enemy-casts-spell" ? (
+        <Check label="The caster makes a Constitution save against its spell save DC (the 2024 rules)" checked={value.casterSave !== undefined}
+          onChange={(on) => { const next = { ...value }; delete next.casterSave; onChange(on ? { ...next, casterSave: "con" } : next); }} />
+      ) : null}
+      {value.kind === "enemy-casts-spell" && !value.casterSave ? <CounterCheckControls value={value} onChange={onChange} /> : null}
       {value.kind === "manual" ? (
         <input aria-label="Describe the trigger" placeholder="A creature it can see misses it with a melee attack" value={value.note} onChange={(e) => onChange({ ...value, note: e.target.value })} />
       ) : null}

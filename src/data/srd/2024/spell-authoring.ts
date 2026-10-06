@@ -145,7 +145,7 @@ export const NOT_COPIED: Readonly<Record<string, string>> = {
   "srd:spell:mass-cure-wounds": "re-authored: 5d8 plus the spellcasting modifier",
   "srd:spell:flame-strike": "re-authored: 5d6 fire and 5d6 radiant",
   "srd:spell:circle-of-death": "re-authored: 8d8, and 2d8 more per slot level",
-  "srd:spell:counterspell": "reference only: the 2024 spell is a Constitution save by the caster (gap counterspell-save)",
+  "srd:spell:counterspell": "re-authored: in 2024 the caster makes a Constitution save, and a countered spell's slot isn't spent",
   "srd:spell:planar-binding": "reference only: an hour to cast in 2024"
 };
 
@@ -333,6 +333,16 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
     }
   },
 
+  counterspell: {
+    castingTime: "reaction", range: 60, automationSupport: "full",
+    description: "A creature within 60 feet that casts a spell makes a Constitution save against your spell save DC: on a failure the spell has no effect, and a slot it was cast with isn't spent. A higher slot does nothing more.",
+    action: {
+      kind: "activate-feature", actionType: "reaction", featureId: "srd:spell:counterspell-2024",
+      reaction: { trigger: { kind: "enemy-casts-spell", withinFt: 60, casterSave: "con" }, priority: "worthwhile" },
+      automationSupport: "full"
+    }
+  },
+
   /* ── marks: a foe the caster's hits deal more to, moved with a bonus action when it drops ──────────────────── */
   "hunters-mark": {
     castingTime: "bonus", range: 90, concentration: true, automationSupport: "full",
@@ -411,7 +421,6 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
  * Listed in the coverage audit; spells without an entry are reference only because nobody has authored them yet.
  */
 export const SPELL_GAPS: Readonly<Record<string, { gaps: GapCode[]; note: string }>> = {
-  counterspell: { gaps: ["counterspell-save"], note: "The 2024 spell has the caster make a Constitution save, and a countered spell's slot isn't spent." },
   "true-strike": { gaps: ["weapon-cantrip"], note: "A weapon attack made with the spellcasting ability." },
   shillelagh: { gaps: ["weapon-cantrip"], note: "A club or quarterstaff that uses the spellcasting ability." }
 };

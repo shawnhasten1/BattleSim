@@ -187,6 +187,7 @@ function counterOdds(option: ReactionOption): string {
   if (odds.chance === undefined) {
     return `certain up to ${ordinal(odds.slot)} level${odds.check ? ", a check above" : ", not above"}`;
   }
+  if (odds.casterSave) return `${odds.casterSave.ability.toUpperCase()} save DC ${odds.casterSave.dc}: ${percent(odds.chance)} it fails`;
   if (odds.chance >= 1) return "certain";
   return odds.dc !== undefined ? `check DC ${odds.dc} (${percent(odds.chance)})` : percent(odds.chance);
 }

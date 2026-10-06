@@ -24,7 +24,9 @@ function facts(record: SpellDefinition) {
     castingTime: record.castingTime,
     concentration: Boolean(record.concentration),
     range,
-    save: action.kind === "save" || action.kind === "area-save" ? action.saveAbility : null
+    // Counterspell's save is the caster's, made against it.
+    save: action.kind === "save" || action.kind === "area-save" ? action.saveAbility
+      : action.kind === "activate-feature" && action.reaction?.trigger.kind === "enemy-casts-spell" ? action.reaction.trigger.casterSave ?? null : null
   };
 }
 
@@ -151,12 +153,9 @@ describe("the 2024 spell library", () => {
   });
 
   it("keeps the rest as reference only, with their SRD text", () => {
-    const counterspell = spell("counterspell");
-    expect(counterspell.action).toBeUndefined();
-    expect(counterspell.automationSupport).toBe("manual-only");
-    expect(counterspell.description).toMatch(/Constitution saving throw/);
-    expect(counterspell.castingTime).toBe("reaction");
     const prayer = spell("prayer-of-healing");
+    expect(prayer.action).toBeUndefined();
+    expect(prayer.automationSupport).toBe("manual-only");
     expect(prayer.description).toMatch(/^Casting time: 10 minutes\./);
     for (const slug of Object.keys(SPELL_GAPS)) expect(spellBasisOf(slug), slug).toBe("reference");
   });

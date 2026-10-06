@@ -7867,6 +7867,8 @@ export interface ReactionWindowResult {
   endsAfterAttack?: Array<{ combatantId: Id; conditionId: Id }>;
   /** A reaction's cut to the damage about to land (`would-take-damage`), and the reaction's name. */
   damageCut?: { halve?: boolean; reduce?: number; resisted?: boolean; by: string };
+  /** The 2024 Counterspell: the countered spell's slot isn't spent. */
+  refundSlot?: boolean;
 }
 
 /** The reaction `reactor` will spend on `event`, plus the resolved reaction target, or `undefined`. */
@@ -7940,6 +7942,8 @@ function reactionTriggerPasses(
         return false;
       }
       const withinRange = spatialDistanceToPoint(state.snapshot, reactor, event.origin) <= trigger.withinFt;
+      // The 2024 Counterspell: the caster's save decides, whatever the levels.
+      if (trigger.casterSave) return withinRange;
       // A spell no higher than the counter's slot is stopped outright; one above it takes the check, if it has one.
       const counterSlot = "resourceCost" in action ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
       return withinRange && counterSlot != null && (counterSlot >= event.spellLevel || Boolean(trigger.checkAbove));
@@ -8153,6 +8157,18 @@ function counterOutlook(state: EngineState, reactor: CombatantState, options: El
   const adviceOptions: CounterAdvice["options"] = [];
   for (const option of options) {
     const slot = spellSlotLevel("resourceCost" in option.action ? option.action.resourceCost?.resourceId : undefined) ?? 0;
+    // The 2024 Counterspell: the chance the caster fails its save, whatever the levels.
+    const casterSave = option.meta.trigger.kind === "enemy-casts-spell" ? option.meta.trigger.casterSave : undefined;
+    if (casterSave) {
+      const dc = spellSaveDcOf(reactorDefinition);
+      const inputs = saveRollInputs(state, caster, { ability: casterSave, dc, kind: "feature", sourceAction: { spellLevel: 3 } });
+      const fails = Math.min(1, Math.max(0, (dc - 1 - inputs.bonus) / 20));
+      // Magic Resistance: advantage against a spell.
+      const chance = inputs.featureAdvantage.applied ? fails * fails : fails;
+      odds.set(option.action.id, { slot, casterSave: { ability: casterSave, dc }, chance });
+      adviceOptions.push({ actionId: option.action.id, slot, chance, priority: option.meta.priority });
+      continue;
+    }
     const check = counterCheckOf(option.meta);
     const modifier = check ? counterCheckModifier(reactorDefinition, check) : 0;
     odds.set(option.action.id, {
@@ -8307,6 +8323,9 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
       if (outcome.countered) {
         result.countered = true;
       }
+      if (outcome.refundSlot) {
+        result.refundSlot = true;
+      }
       if (outcome.imposedDisadvantage) {
         result.imposedDisadvantage = true;
       }
@@ -8349,6 +8368,7 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
     if (meta.trigger.kind === "enemy-casts-spell") {
       // Counterspell: spend the reaction (+ its slot). A spell no higher than the slot is stopped; above it, the check.
       resolveActivateFeatureAction(state, reactor.id, action.id);
+      if (meta.trigger.casterSave) return counterBySave(state, reactor, meta.trigger.casterSave, ev);
       const slot = spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) ?? 0;
       const level = ev.spellLevel ?? 0;
       const check = counterCheckOf(meta);
@@ -8436,6 +8456,22 @@ function cutDamage(
   return { resisted: true, by: action.name };
 }
 
+/** A creature's spell save DC: 8 + its proficiency bonus + its spellcasting ability's modifier. */
+export function spellSaveDcOf(definition: CreatureDefinition): number {
+  return 8 + (definition.proficiencyBonus ?? proficiencyFromDefinition(definition)) + abilityModifier(definition.abilities[spellcastingAbility(definition)]);
+}
+
+/** The 2024 Counterspell: the caster saves against the counterer's spell save DC; a failure stops the spell, its slot kept. */
+function counterBySave(state: EngineState, reactor: CombatantState, ability: Ability, ev: ReactionEvent): ReactionWindowResult {
+  const caster = findCombatant(state.snapshot, ev.sourceId);
+  const dc = spellSaveDcOf(getDefinition(state.snapshot, reactor));
+  const save = rollSavingThrow(state, caster, { ability, dc, kind: "feature", sourceAction: { spellLevel: 3 }, label: "Counterspell" });
+  state.log.push(event(state, "SaveRolled", `${caster.displayName} rolled a ${ability.toUpperCase()} save against ${reactor.displayName}'s Counterspell`, {
+    targetId: caster.id, attackerId: reactor.id, saveRoll: save.roll, total: save.roll.total, dc, success: save.success, counterspell: true
+  }));
+  return save.success ? {} : { countered: true, refundSlot: true };
+}
+
 /**
  * A counter cast with a slot below the spell's level: a check with the reactor's spellcasting ability against
  * `dcBase` + the spell's level. A DM may overrule it in Play. Whether it stopped the spell.
@@ -8466,7 +8502,7 @@ function counterspellWindow(state: EngineState, caster: CombatantState, action: 
   if (spellLevel == null) {
     return false;
   }
-  const { countered } = runReactionWindow(state, {
+  const { countered, refundSlot } = runReactionWindow(state, {
     kind: "enemy-casts-spell",
     sourceId: caster.id,
     origin: caster.position,
@@ -8479,6 +8515,11 @@ function counterspellWindow(state: EngineState, caster: CombatantState, action: 
     state.log.push(event(state, "SpellCountered", `${caster.displayName}'s ${action.name} was countered`, {
       casterId: caster.id, actionId: action.id, spellLevel
     }));
+    // The 2024 Counterspell: the slot isn't spent.
+    const cost = "resourceCost" in action ? action.resourceCost : undefined;
+    if (refundSlot && cost && spellSlotLevel(cost.resourceId) !== undefined) {
+      caster.resources = { ...(caster.resources ?? {}), [cost.resourceId]: (caster.resources?.[cost.resourceId] ?? 0) + cost.amount };
+    }
   }
   return countered === true;
 }

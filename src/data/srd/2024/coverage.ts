@@ -65,7 +65,6 @@ export const GAPS = {
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
   "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "rider-choice": "Choosing one of several effects each time an attack hits (Open Hand Technique)",
-  "counterspell-save": "The 2024 Counterspell: the caster makes a Constitution save, and a countered spell's slot isn't spent",
   "weapon-cantrip": "A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
 } as const;

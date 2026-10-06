@@ -1095,7 +1095,14 @@ export type ReactionTrigger =
    * `checkAbove.dcBase` + the spell's level (Counterspell: 10). `false`: it can't counter above its slot at all. A saved
    * counter without it is given Counterspell's (`migrateDefinition`).
    */
-  | { kind: "enemy-casts-spell"; withinFt: number; maxSpellLevel?: number; checkAbove?: CounterCheck | false }
+  | {
+    kind: "enemy-casts-spell"; withinFt: number; maxSpellLevel?: number; checkAbove?: CounterCheck | false;
+    /**
+     * The 2024 Counterspell: the caster makes this saving throw against the counterer's spell save DC instead, a failure
+     * stopping the spell whatever its level (and its slot isn't spent); the counter's own slot level doesn't matter.
+     */
+    casterSave?: Ability;
+  }
   /** Author-described — reference only, never auto-fires. */
   | { kind: "manual"; note: string };
 
@@ -2647,7 +2654,8 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
   z.object({
     kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional(),
-    checkAbove: z.union([z.literal(false), z.object({ dcBase: z.number().int(), bonus: z.number().int().optional() })]).optional()
+    checkAbove: z.union([z.literal(false), z.object({ dcBase: z.number().int(), bonus: z.number().int().optional() })]).optional(),
+    casterSave: abilitySchema.optional()
   }),
   z.object({ kind: z.literal("manual"), note: z.string() })
 ]) as z.ZodType<ReactionTrigger>;
