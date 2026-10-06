@@ -1293,8 +1293,11 @@ export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState
 }
 
 /** A creature's initiative roll: d20 + Dexterity, and what its features add (Alert's bonus, Feral Instinct's advantage). */
-function rollInitiativeOf(state: EngineState, combatant: CombatantState): { roll: DiceRollResult; features: string[] } {
-  const definition = getDefinition(state.snapshot, combatant);
+/**
+ * What a creature adds to its initiative roll: its DEX modifier and any feature's initiative effect (Alert), whether it
+ * rolls with advantage, and the features that changed it. The sheet shows it; the roll uses it.
+ */
+export function initiativeOf(definition: CreatureDefinition, combatant?: CombatantState): { bonus: number; advantage: boolean; features: string[] } {
   let bonus = abilityModifier(definition.abilities.dex);
   let advantage = false;
   const features: string[] = [];
@@ -1306,6 +1309,11 @@ function rollInitiativeOf(state: EngineState, combatant: CombatantState): { roll
       features.push(feature.name);
     }
   }
+  return { bonus, advantage, features };
+}
+
+function rollInitiativeOf(state: EngineState, combatant: CombatantState): { roll: DiceRollResult; features: string[] } {
+  const { bonus, advantage, features } = initiativeOf(getDefinition(state.snapshot, combatant), combatant);
   return { roll: rollD20WithBonus(state.rng, bonus, { advantage }), features };
 }
 

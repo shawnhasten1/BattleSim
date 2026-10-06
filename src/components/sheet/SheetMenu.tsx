@@ -28,7 +28,7 @@ const SAVE_LABELS: Record<LibraryStatus, string> = {
  * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself, and Make it its own
  * creature. Every item waits on `guard`, which asks first when an ability being edited has unsaved changes.
  */
-export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature, onShowToken }: {
+export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature, onShowToken, extraItems }: {
   combatant: CombatantState;
   definition: CreatureDefinition;
   status: LibraryStatus;
@@ -38,6 +38,8 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   onOwnCreature: () => void;
   /** Show another token of this creature in the window (the copy Duplicate token just made). */
   onShowToken?: (combatantId: string) => void;
+  /** More items at the end, after a separator (the Codex's palettes). */
+  extraItems?: ContextMenuItem[];
 }) {
   const saveDefinition = useEncounterStore((s) => s.saveDefinition);
   const copyLibraryDefinition = useEncounterStore((s) => s.copyLibraryDefinition);
@@ -126,7 +128,8 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
       hint: block ?? `A copy of ${definition.name} for this token alone, named ${combatant.displayName}.`,
       onSelect: () => guard(ownCreature)
     },
-    { label: "Delete token", danger: true, onSelect: () => guard(remove) }
+    { label: "Delete token", danger: true, onSelect: () => guard(remove) },
+    ...(extraItems?.length ? [{ separator: true } as ContextMenuItem, ...extraItems] : [])
   ];
 
   return (

@@ -29,6 +29,8 @@ interface FloatingWindowProps {
    * it's first resized, it's `width` wide and as tall as its content.
    */
   resizable?: ResizeLimits;
+  /** A resizable window's starting height, until it's resized (without one, it's as tall as its content). */
+  initialHeight?: number;
   /** Shows a Pop out control in the title bar (a sheet moving to a browser window of its own). */
   onPopOut?: () => void;
   /**
@@ -69,6 +71,7 @@ export function FloatingWindow({
   zIndex,
   onFocus,
   resizable,
+  initialHeight,
   onPopOut,
   scrollBody = true,
   headerExtra,
@@ -80,7 +83,7 @@ export function FloatingWindow({
   children
 }: FloatingWindowProps) {
   const { position, minimized, toggleMinimize, titleBarProps } = useFloatingWindow(initialPosition, storageKey, { restore: restorePosition, onMove });
-  const { size, gripProps } = useWindowResize(width ?? 340, resizable ?? NO_LIMITS, position, resizable ? storageKey : undefined);
+  const { size, gripProps } = useWindowResize(width ?? 340, resizable ?? NO_LIMITS, position, resizable ? storageKey : undefined, resizable ? initialHeight : undefined);
   const windowRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;

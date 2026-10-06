@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type CreatureType, type MovementProfile, type SizeCategory } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
-import { proficiencyOf, saveKind } from "@/lib/actor-sheet/edits";
+import { proficiencyOf, saveKind, withSave } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -66,9 +66,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
   }
 
   function setSave(ability: Ability, bonus: number | undefined) {
-    const { [ability]: _dropped, ...rest } = definition.saves ?? {};
-    const saves = bonus === undefined ? rest : { ...rest, [ability]: bonus };
-    update(definition.id, { saves: Object.keys(saves).length ? saves : undefined });
+    update(definition.id, withSave(definition, ability, bonus));
   }
 
   return (

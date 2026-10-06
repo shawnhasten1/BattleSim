@@ -13,7 +13,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url))
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // next/font is a Next compiler transform; outside Next it's an empty module.
+      "next/font/google": fileURLToPath(new URL("./tests/stubs/next-font-google.ts", import.meta.url))
     }
   }
 });

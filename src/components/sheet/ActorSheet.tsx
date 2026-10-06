@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { getDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
@@ -16,7 +16,9 @@ import { OwnerDocumentContext } from "@/hooks/useOwnerDocument";
 import { readJson, writeJson } from "@/lib/persist";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useEncounterStore } from "@/store/encounter-store";
-import { shownDefinitionId, useSheetWindowsStore, type SheetWindow } from "@/store/sheet-windows-store";
+import { shownDefinitionId, useSheetWindowsStore, type SheetKind, type SheetStyle, type SheetWindow } from "@/store/sheet-windows-store";
+import { CODEX_PALETTE_IDS, CODEX_PALETTES } from "@/lib/actor-sheet/codex";
+import type { ContextMenuItem } from "@/components/ui/ContextMenu";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { SheetGuardContext, type EditorGuard } from "./SheetGuard";
 import { UnsavedPrompt } from "./UnsavedPrompt";
@@ -26,11 +28,13 @@ import { ScopedTabs, type SheetTabId } from "./ScopedTabs";
 import { StatsTab } from "./sheet-tabs/StatsTab";
 import { ActionsTab } from "./sheet-tabs/ActionsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
+import { StyleSwitch } from "./StyleSwitch";
+import { SHEET_STYLES } from "./styles/registry";
 import abilityStyles from "./abilities/abilities.module.css";
 import styles from "./sheet.module.css";
 
-/** How small (and how wide) a sheet window can be made. */
-const SHEET_LIMITS = { minWidth: 560, minHeight: 320, maxWidth: 1400 };
+// The Codex's code, styles and font load the first time one opens (plan D11).
+const CodexSheet = lazy(() => import("./codex/CodexSheet").then((module) => ({ default: module.CodexSheet })));
 /** A popped-out sheet's first size, until one has been popped out and sized (then that's remembered, per style). */
 const POPUP_SIZE: PopupBounds = { width: 760, height: 900 };
 
@@ -66,6 +70,9 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const setDirty = useSheetWindowsStore((s) => s.setDirty);
   const notePosition = useSheetWindowsStore((s) => s.notePosition);
   const popOutWindow = useSheetWindowsStore((s) => s.popOut);
+  const setWindowStyle = useSheetWindowsStore((s) => s.setStyle);
+  const palette = useSheetWindowsStore((s) => s.palette);
+  const setPalette = useSheetWindowsStore((s) => s.setPalette);
   const dockWindow = useSheetWindowsStore((s) => s.dock);
   const undo = useEncounterStore((s) => s.undo);
   const redo = useEncounterStore((s) => s.redo);
@@ -137,6 +144,8 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const tokens = tokensOf(encounter, definition.id);
   const status = libraryStatus(definition, definitionsLibrary, templateDefinitionIds);
   const scope = creatureScope(encounter, definition, status);
+  const kind: SheetKind = definition.character || combatant.faction === "party" ? "pc" : "other";
+  const style = SHEET_STYLES[sheet.style];
 
   /** Run `action` now, or once the DM has answered "Save your changes?". */
   function attempt(action: () => void) {
@@ -146,6 +155,11 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   function setTab(next: SheetTabId) {
     setWindowTab(sheet.id, next);
+  }
+
+  /** Standard or the Codex, remembered for this kind of actor (D5). Asks first if an ability has unsaved changes. */
+  function switchStyle(next: SheetStyle) {
+    attempt(() => setWindowStyle(sheet.id, next, kind));
   }
 
   /** Show `id`'s own values, and select it on the map. */
@@ -219,69 +233,100 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     else closeWindow(sheet.id);
   }
 
+  const paletteItems: ContextMenuItem[] = sheet.style === "codex"
+    ? [
+        { heading: "Codex colours" },
+        ...CODEX_PALETTE_IDS.map((id): ContextMenuItem => ({
+          label: CODEX_PALETTES[id].label,
+          checked: id === palette,
+          onSelect: () => setPalette(id)
+        }))
+      ]
+    : [];
+
   const controls = (
     <>
+      <StyleSwitch style={sheet.style} onChange={switchStyle} />
       <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
       <SheetMenu
         combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
         onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
         onShowToken={switchToken}
+        extraItems={paletteItems}
       />
       <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
     </>
   );
 
+  const prompt = pending ? (
+    <UnsavedPrompt
+      message={`Save your changes to ${editorLabel || "this ability"} first?`}
+      onSave={() => {
+        const run = pending;
+        setPending(null);
+        if (guardRef.current?.save() !== false) run();
+      }}
+      onDiscard={() => {
+        const run = pending;
+        setPending(null);
+        guardRef.current?.discard();
+        run();
+      }}
+      onKeep={() => setPending(null)}
+    />
+  ) : null;
+
+  const toastView = toast ? (
+    // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.
+    <div className={abilityStyles.toast} role="status">
+      <span>{toast.message}</span>
+      {toast.undo ? (
+        <button type="button" onClick={() => { toast.undo!(); setToast(null); }}>Undo</button>
+      ) : null}
+    </div>
+  ) : null;
+
   const body = holder ? createPortal(
     // Menus and tooltips inside open in the sheet's own document: the popup's while it's popped out.
     <OwnerDocumentContext.Provider value={popup ? popup.document : inheritedDocument}>
-      <div className={styles.frameHead}>
-        <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
-        <ScopedTabs
-          tab={tab} onSelect={(next) => attempt(() => setTab(next))}
-          creature={definition.name} creatureCaption={scope.caption} creatureHelp={scope.help} token={combatant.displayName}
-        />
-        {pending ? (
-          <UnsavedPrompt
-            message={`Save your changes to ${editorLabel || "this ability"} first?`}
-            onSave={() => {
-              const run = pending;
-              setPending(null);
-              if (guardRef.current?.save() !== false) run();
-            }}
-            onDiscard={() => {
-              const run = pending;
-              setPending(null);
-              guardRef.current?.discard();
-              run();
-            }}
-            onKeep={() => setPending(null)}
-          />
-        ) : null}
-      </div>
-      <div className={styles.frameScroll}>
-        <SheetGuardContext.Provider value={registry}>
-          {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
-          {/* Keyed by creature: an ability being edited must not carry over to another creature (made its own, or a new form). */}
-          {tab === "abilities" ? (
-            <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
-          ) : null}
-          {tab === "token" ? (
-            <TokenTab
-              combatant={combatant} definition={definition}
-              onOpenAbility={(ref) => attempt(() => { setOpenFirst(ref); setTab("abilities"); })}
-            />
-          ) : null}
-        </SheetGuardContext.Provider>
-        {toast ? (
-          // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.
-          <div className={abilityStyles.toast} role="status">
-            <span>{toast.message}</span>
-            {toast.undo ? (
-              <button type="button" onClick={() => { toast.undo!(); setToast(null); }}>Undo</button>
-            ) : null}
+      {sheet.style === "codex" ? (
+        <>
+          {prompt ? <div className={styles.frameHead}>{prompt}</div> : null}
+          <div className={styles.frameScroll}>
+            <Suspense fallback={<p className={styles.loading}>Opening the Codex…</p>}>
+              <CodexSheet combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} palette={palette} />
+            </Suspense>
+            {toastView}
           </div>
-        ) : null}
-      </div>
+        </>
+      ) : (
+        <>
+          <div className={styles.frameHead}>
+            <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
+            <ScopedTabs
+              tab={tab} onSelect={(next) => attempt(() => setTab(next))}
+              creature={definition.name} creatureCaption={scope.caption} creatureHelp={scope.help} token={combatant.displayName}
+            />
+            {prompt}
+          </div>
+          <div className={styles.frameScroll}>
+            <SheetGuardContext.Provider value={registry}>
+              {tab === "stats" ? <StatsTab combatant={combatant} definition={definition} focusName={focusName} /> : null}
+              {/* Keyed by creature: an ability being edited must not carry over to another creature (made its own, or a new form). */}
+              {tab === "abilities" ? (
+                <ActionsTab key={definition.id} combatant={combatant} definition={definition} compendium={compendium} openFirst={openFirst ?? undefined} />
+              ) : null}
+              {tab === "token" ? (
+                <TokenTab
+                  combatant={combatant} definition={definition}
+                  onOpenAbility={(ref) => attempt(() => { setOpenFirst(ref); setTab("abilities"); })}
+                />
+              ) : null}
+            </SheetGuardContext.Provider>
+            {toastView}
+          </div>
+        </>
+      )}
     </OwnerDocumentContext.Provider>,
     holder
   ) : null;
@@ -306,12 +351,15 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   return (
     <>
       {body}
+      {/* Keyed by style: each style is its own size, remembered apart (the body is relocatable, so nothing inside is lost). */}
       <FloatingWindow
+        key={sheet.style}
         title={title}
         ariaLabel={`${definition.name} sheet`}
-        width={680}
-        resizable={SHEET_LIMITS}
-        initialPosition={sheet.origin}
+        width={style.width}
+        resizable={style.limits}
+        initialHeight={style.height}
+        initialPosition={useSheetWindowsStore.getState().positions[sheet.id] ?? sheet.origin}
         storageKey={`sheet-${sheet.style}`}
         restorePosition={false}
         onMove={(position) => notePosition(sheet.id, position)}

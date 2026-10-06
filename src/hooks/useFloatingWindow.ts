@@ -144,10 +144,13 @@ export function clampSize(size: { width: number; height: number }, limits: Resiz
  * A corner grip that resizes a floating window. The size is remembered per viewer under `storageKey`; until it's first
  * resized, a window keeps its starting width and is as tall as its content.
  */
-export function useWindowResize(initialWidth: number, limits: ResizeLimits, position: Position, storageKey?: string): UseWindowResizeResult {
-  const [size, setSize] = useState<WindowSize>(() =>
-    storageKey ? readJson<WindowSize>(`winsize:${storageKey}`, { width: initialWidth }) : { width: initialWidth }
-  );
+export function useWindowResize(initialWidth: number, limits: ResizeLimits, position: Position, storageKey?: string, initialHeight?: number): UseWindowResizeResult {
+  const [size, setSize] = useState<WindowSize>(() => {
+    const start: WindowSize = storageKey ? readJson<WindowSize>(`winsize:${storageKey}`, { width: initialWidth, height: initialHeight }) : { width: initialWidth, height: initialHeight };
+    if (start.height === undefined || typeof window === "undefined") return start;
+    // A remembered (or starting) size that no longer fits the viewport is brought within it.
+    return clampSize({ width: start.width, height: start.height }, limits, position, { width: window.innerWidth, height: window.innerHeight });
+  });
   const resizeRef = useRef<ResizeState | null>(null);
 
   function onPointerDown(event: PointerEvent<HTMLElement>) {

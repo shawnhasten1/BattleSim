@@ -84,6 +84,36 @@ export function saveKind(definition: CreatureDefinition, ability: Ability): Prof
   return value === abilityModifier(definition.abilities[ability]) + proficiencyOf(definition) ? "proficient" : "custom";
 }
 
+/** The change that sets a save's whole bonus, or (undefined) takes it back to its modifier: both sheet styles use it. */
+export function withSave(definition: CreatureDefinition, ability: Ability, bonus: number | undefined): Pick<CreatureDefinition, "saves"> {
+  const { [ability]: _dropped, ...rest } = definition.saves ?? {};
+  const saves = bonus === undefined ? rest : { ...rest, [ability]: bonus };
+  return { saves: Object.keys(saves).length ? saves : undefined };
+}
+
+/** The bonus a save takes when its proficiency is switched: proficient from none, back to none otherwise. */
+export function toggledSave(definition: CreatureDefinition, ability: Ability): number | undefined {
+  return saveKind(definition, ability) === "none" ? abilityModifier(definition.abilities[ability]) + proficiencyOf(definition) : undefined;
+}
+
+/**
+ * A skill's bonus at the next step of none → proficient → expertise → none (the Codex's orb). A number of its own counts
+ * as proficient, so it steps to expertise. Undefined takes the skill off.
+ */
+export function cycledSkill(definition: CreatureDefinition, id: string): number | undefined {
+  const kind = skillKind(definition, id);
+  if (kind === "none") return skillBonus(definition, id);
+  if (kind === "expertise") return undefined;
+  return skillBonus(definition, id, true);
+}
+
+/** The change that sets a skill's bonus, or (undefined) takes it off. */
+export function withSkill(definition: CreatureDefinition, id: string, bonus: number | undefined): Pick<CreatureDefinition, "skills"> {
+  const { [id]: _dropped, ...rest } = definition.skills ?? {};
+  const skills = bonus === undefined ? rest : { ...rest, [id]: bonus };
+  return { skills: Object.keys(skills).length ? skills : undefined };
+}
+
 export function skillKind(definition: CreatureDefinition, id: string): ProficiencyKind {
   const value = definition.skills?.[id];
   if (value === undefined) return "none";

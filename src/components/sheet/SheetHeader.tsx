@@ -29,9 +29,50 @@ export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }:
   tokens?: CombatantState[];
   onShowToken?: (combatantId: string) => void;
 }) {
-  const encounter = useEncounterStore((s) => s.encounter);
   const updateHp = useEncounterStore((s) => s.updateHp);
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
+
+  return (
+    <div className={styles.vitals} role="group" aria-label="Vitals">
+      <ActorThumbnail definition={definition} combatant={combatant} />
+      <div className={styles.vitalsBody}>
+        {tokens.length > 1 && onShowToken ? (
+          <div className={styles.vitalsRow}>
+            <span className={styles.vitalsLabel}>Token</span>
+            <select
+              className={styles.tokenSwitch} aria-label="Token shown" value={combatant.id}
+              onChange={(event) => onShowToken(event.target.value)}
+            >
+              {tokens.map((token) => (
+                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{definition.maxHp} HP</option>
+              ))}
+            </select>
+            <span className={styles.vitalsDim}>{tokens.findIndex((token) => token.id === combatant.id) + 1} of {tokens.length}</span>
+          </div>
+        ) : null}
+        <div className={styles.vitalsRow}>
+          <span className={styles.vitalsLabel}>HP</span>
+          <SheetNumber label="Hit points" className={styles.vitalsBox} value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
+          <span className={styles.vitalsDim}>/ {definition.maxHp}</span>
+          <HpBar current={combatant.currentHp} max={definition.maxHp} width={96} />
+          <span className={styles.vitalsLabel}>Temp</span>
+          <SheetNumber label="Temporary hit points" className={styles.vitalsBox} value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
+          <span className={styles.vitalsFacts} title={`AC ${armorClassOf(definition, combatant).total} · speed ${speedLine(definition)} · ${FACTIONS[combatant.faction]}`}>
+            AC {armorClassOf(definition, combatant).total} · {speedLine(definition)} · <span className={styles.faction} data-faction={combatant.faction}>{FACTIONS[combatant.faction]}</span>
+          </span>
+        </div>
+        <ConditionsRow combatant={combatant} definition={definition} className={styles.vitalsRow} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A token's status, its conditions (each with what it does, and × to take it off), what it concentrates on, and
+ * + Condition: the vitals strip's second row, and the Codex's (CHARACTER_SHEET_WINDOWS_PLAN.md Part 3).
+ */
+export function ConditionsRow({ combatant, definition, className }: { combatant: CombatantState; definition: CreatureDefinition; className?: string }) {
+  const encounter = useEncounterStore((s) => s.encounter);
   const applyConditionToCombatant = useEncounterStore((s) => s.applyConditionToCombatant);
   const removeCondition = useEncounterStore((s) => s.removeCondition);
   const mergeEdits = useEncounterStore((s) => s.mergeEdits);
@@ -69,55 +110,26 @@ export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }:
   ];
 
   return (
-    <div className={styles.vitals} role="group" aria-label="Vitals">
-      <ActorThumbnail definition={definition} combatant={combatant} />
-      <div className={styles.vitalsBody}>
-        {tokens.length > 1 && onShowToken ? (
-          <div className={styles.vitalsRow}>
-            <span className={styles.vitalsLabel}>Token</span>
-            <select
-              className={styles.tokenSwitch} aria-label="Token shown" value={combatant.id}
-              onChange={(event) => onShowToken(event.target.value)}
-            >
-              {tokens.map((token) => (
-                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{definition.maxHp} HP</option>
-              ))}
-            </select>
-            <span className={styles.vitalsDim}>{tokens.findIndex((token) => token.id === combatant.id) + 1} of {tokens.length}</span>
-          </div>
-        ) : null}
-        <div className={styles.vitalsRow}>
-          <span className={styles.vitalsLabel}>HP</span>
-          <SheetNumber label="Hit points" className={styles.vitalsBox} value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
-          <span className={styles.vitalsDim}>/ {definition.maxHp}</span>
-          <HpBar current={combatant.currentHp} max={definition.maxHp} width={96} />
-          <span className={styles.vitalsLabel}>Temp</span>
-          <SheetNumber label="Temporary hit points" className={styles.vitalsBox} value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
-          <span className={styles.vitalsFacts} title={`AC ${armorClassOf(definition, combatant).total} · speed ${speedLine(definition)} · ${FACTIONS[combatant.faction]}`}>
-            AC {armorClassOf(definition, combatant).total} · {speedLine(definition)} · <span className={styles.faction} data-faction={combatant.faction}>{FACTIONS[combatant.faction]}</span>
-          </span>
-        </div>
-        <div className={styles.vitalsRow}>
-          {status ? <span className={styles.statusChip}>{status}</span> : null}
-          {conditions.map((condition) => (
-            <ConditionChip key={condition.id} condition={condition} combatant={combatant} encounter={encounter} onRemove={() => removeCondition(combatant.id, condition.id)} />
-          ))}
-          {concentrating ? <span className={styles.statusChip}>Concentrating on {concentrating}</span> : null}
-          <button
-            type="button" className={styles.addCondition} aria-haspopup="menu" aria-expanded={picker !== null}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              setPicker(picker ? null : { x: rect.left, y: rect.bottom + 4 });
-            }}
-          >
-            + Condition
-          </button>
-        </div>
-      </div>
+    <div className={className}>
+      {status ? <span className={styles.statusChip}>{status}</span> : null}
+      {conditions.map((condition) => (
+        <ConditionChip key={condition.id} condition={condition} combatant={combatant} encounter={encounter} onRemove={() => removeCondition(combatant.id, condition.id)} />
+      ))}
+      {concentrating ? <span className={styles.statusChip}>Concentrating on {concentrating}</span> : null}
+      <button
+        type="button" className={styles.addCondition} aria-haspopup="menu" aria-expanded={picker !== null}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setPicker(picker ? null : { x: rect.left, y: rect.bottom + 4 });
+        }}
+      >
+        + Condition
+      </button>
       {picker ? <ContextMenu x={picker.x} y={picker.y} items={pickerItems} onClose={() => setPicker(null)} /> : null}
     </div>
   );
 }
+
 
 /** One condition: its name shows what it does, where it came from and what ends it; × takes it off. */
 function ConditionChip({ condition, combatant, encounter, onRemove }: {

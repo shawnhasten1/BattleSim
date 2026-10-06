@@ -125,12 +125,14 @@ export function SheetNumber(props: SheetNumberProps) {
 }
 
 /** A text box on the sheet: committed as it's typed, one undo step per edit. */
-export function SheetText({ value, onCommit, label, placeholder, style, autoSelect }: {
+export function SheetText({ value, onCommit, label, placeholder, style, className, autoSelect }: {
   value: string;
   onCommit: (next: string) => void;
   label?: string;
   placeholder?: string;
   style?: CSSProperties;
+  /** For a box outside a tab's own styles (the Codex). */
+  className?: string;
   /** Focus the box with its text selected, ready to type over, when this turns true (a creature just made). */
   autoSelect?: boolean;
 }) {
@@ -148,6 +150,7 @@ export function SheetText({ value, onCommit, label, placeholder, style, autoSele
       aria-label={label}
       placeholder={placeholder}
       style={style}
+      className={className}
       onFocus={session.begin}
       onBlur={session.end}
       onChange={(event) => {

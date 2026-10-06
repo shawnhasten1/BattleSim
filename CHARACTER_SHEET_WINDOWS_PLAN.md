@@ -513,3 +513,41 @@ Chromium-only):
   popped out at once and titled, an HP edit in a popup reaching the map's health bar and Undo there taking it back,
   menus and conditions in the popup, an unsaved edit through Dock and a second pop out, closing with unsaved changes
   docking, the next popup opening at the last one's size, and a reload closing the popups.
+
+### Phase 5 (2026-10-06)
+
+- **The style registry** (`src/components/sheet/styles/registry.ts`): each style's label, starting size and limits.
+  Standard is 680 wide, as tall as its content, minimum 560 × 320. The Codex is 960 × 760, minimum 640 × 360.
+- **The style switch** (`StyleSwitch`, Standard | Codex) is in the title bar of both frames. It asks first when an
+  ability has unsaved changes. It's remembered per kind of actor (D5): a PC is a creature with `character`, or a token
+  on the party's side. The in-page frame is keyed by style, so each style has its own size, remembered apart
+  (`winsize:sheet-standard`, `winsize:sheet-codex`). The relocatable body keeps everything inside through the switch.
+  `useWindowResize` and `FloatingWindow` gained a starting height, clamped to the viewport.
+- **The Codex** (`src/components/sheet/codex/`): `CodexSheet` with the hero, ability crests, vitals (AC, initiative,
+  speed, proficiency, HP with −/+, the vial, temp HP, conditions, death saves, hit dice), saving throws, Passive
+  Perception, languages and skills. It also has `ornaments.tsx` (portrait ring, crest, filigree), `codex.module.css`
+  (container queries: three columns at 1000px and up, two from 700, one below), and `fonts.ts` (Cormorant Garamond
+  through `next/font`, `preload: false`). It's loaded with `React.lazy`, so its code, CSS and font arrive the first
+  time a Codex opens.
+- **Palettes** are TypeScript (`src/lib/actor-sheet/codex.ts`, `CODEX_PALETTES`) set as custom properties on the
+  Codex root, so one source feeds both the CSS and the contrast test. Inside the root the app's `--ui-*` tokens are
+  remapped to the palette, so shared pieces (the conditions row, the switcher) take its colours. The palette is per
+  browser, in the windows store (`codex-palette`), and picked from ⋯ › Codex colours.
+- **Shared with Standard, not copied:** the engine's initiative bonus is now `initiativeOf` (the roll uses it too).
+  `withSave`, `toggledSave`, `cycledSkill` and `withSkill` are in `lib/actor-sheet/edits.ts` (Stats' save setter uses
+  `withSave`). `ConditionsRow` came out of the vitals strip. `SheetText` takes a `className`.
+- **Where the build differs:**
+  - **Faerie** is the original's dark set only. The app has no light mode; Parchment is the light palette.
+  - **"Proficiencies & languages" is Languages only.** Armor, weapon and tool proficiencies aren't on a creature.
+  - **A monster's sentence** reads "A Small humanoid of challenge 1/4, _ at heart."
+  - **The hero shows "Level up…" and "Open in the builder…"** for a built character, and the token switcher
+    ("Showing Goblin 1 · 7/7 HP of 2 tokens").
+- **Tests:** `tests/codex-sheet.test.tsx` (19): numbers, initiative with a feature, scores (one undo step each, and the
+  steppers), the save and skill orbs, name and alignment, HP and temp for the token shown, a condition, a built
+  fighter (sentence, hit dice, read-only class and level, Level up, worn armor's AC as an output, death saves), no
+  death saves for a monster, the style switch remembered per kind, the unsaved-changes prompt, the palette menu, and
+  each palette's contrast (text 4.5:1, accent and gild 3:1, on both panel colours). `next/font/google` is aliased to a
+  stub under vitest. Full suite: 251 files, 2810 tests. Browser (Chromium and Firefox, 8 checks each): a Standard
+  sheet popped out and switched to the Codex in the popup gets the Codex's late-loaded CSS and font there. Edits there
+  reach the store and the map. Docked it's the Codex at 960 wide, and Standard is back at 680 with the edit. A
+  goblin's Codex edits the token it shows.
