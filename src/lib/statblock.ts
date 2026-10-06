@@ -797,6 +797,8 @@ export function triggerText(trigger: ReactionTrigger): string {
     case "targeted-by-attack": return `it is targeted by ${trigger.meleeOnly ? "a melee" : "an"} attack`;
     case "would-be-hit": return `${trigger.meleeOnly ? "a melee" : "an"} attack would hit it`;
     case "hit-by-attack": return `it is hit by ${trigger.meleeOnly ? "a melee" : "an"} attack`;
+    case "would-take-damage":
+      return `it would take ${trigger.damageTypes?.length ? `${joinList(trigger.damageTypes, "or")} ` : ""}damage${trigger.attackOnly ? " from an attack roll" : ""}`;
     case "ally-targeted-by-attack": return `an ally within ${trigger.withinFt} feet is targeted by an attack`;
     case "enemy-casts-spell": return `an enemy within ${trigger.withinFt} feet casts a spell${trigger.maxSpellLevel ? ` of ${ordinal(trigger.maxSpellLevel)} level or lower` : ""}`;
     case "manual": return trigger.note ? uncapitalize(trigger.note.replace(/\.$/, "")) : "something described happens";
@@ -1109,8 +1111,19 @@ function onActivatePhrases(feature: FeatureDefinition | undefined, definition: C
   });
 }
 
+/** What a damage-cutting reaction does to the damage (Uncanny Dodge, Deflect Attacks, Superior Hunter's Defense). */
+function damageCutText(cut: NonNullable<ActivateAction["damageCut"]>): { text: string; short: string } {
+  if (cut.kind === "halve") return { text: "It halves the damage.", short: "halves the damage" };
+  if (cut.kind === "resist") {
+    return { text: "It has resistance to that damage, and any other of its type, until the end of the turn.", short: "resists it this turn" };
+  }
+  const roll = [cut.dice, ...(cut.abilityModifier ? [`its ${ABILITY_NAME[cut.abilityModifier]} modifier`] : []), ...(cut.bonus ? [String(cut.bonus)] : [])].join(" + ");
+  return { text: `It reduces the damage by ${roll}.`, short: `−${[cut.dice, ...(cut.abilityModifier ? [cut.abilityModifier.toUpperCase()] : []), ...(cut.bonus ? [String(cut.bonus)] : [])].join("+")} damage` };
+}
+
 /** What an activation does: its immediate effect and the state it puts the creature in. */
 function activationText(action: ActivateAction, definition: CreatureDefinition, feature = featureById(definition, action.featureId)): { text: string; short: string } {
+  if (action.damageCut) return damageCutText(action.damageCut);
   const now = onActivatePhrases(feature, definition);
   const lasting = [...modifierSentences(action.condition?.modifiers, IT), ...effectSentences(action.condition?.effects, definition, IT)];
   // A reaction's own "lasts for" (a Parry's one attack, Shield's until its next turn) wins over the condition's rounds.

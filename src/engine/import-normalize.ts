@@ -1069,6 +1069,12 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
       return { kind: "would-be-hit", meleeOnly: input.meleeOnly === true ? true : undefined };
     case "hit-by-attack":
       return { kind: "hit-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
+    case "would-take-damage":
+      return {
+        kind: "would-take-damage",
+        attackOnly: input.attackOnly === true ? true : undefined,
+        damageTypes: Array.isArray(input.damageTypes) ? (input.damageTypes.filter((type) => typeof type === "string") as DamageType[]) : undefined
+      };
     case "ally-targeted-by-attack":
       return { kind: "ally-targeted-by-attack", withinFt: numberField(input, "withinFt") ?? 5 };
     case "enemy-casts-spell":

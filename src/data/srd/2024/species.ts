@@ -237,7 +237,15 @@ const GIANT_ANCESTRIES: PickOption[] = [
     effects: [{ kind: "on-hit-option", option: { name: "Hill's Tumble", resourceCost: GIANT_USE, riders: [{ kind: "condition", when: "on-hit", condition: "prone", duration: { kind: "permanent" } }] } }],
     notSimulated: "the target must be Large or smaller."
   })),
-  giant("stone", "Stone's Endurance (Stone Giant)", reference(trait("goliath", "Giant Ancestry"), { name: "Giant Ancestry: Stone's Endurance" })),
+  giant("stone", "Stone's Endurance (Stone Giant)", runs(trait("goliath", "Giant Ancestry"), {
+    name: "Giant Ancestry: Stone's Endurance",
+    grantedActions: [{
+      kind: "activate-feature", id: "stones-endurance", name: "Stone's Endurance", actionType: "reaction", featureId: "",
+      reaction: { trigger: { kind: "would-take-damage" }, target: "self", priority: "worthwhile" },
+      damageCut: { kind: "reduce", dice: "1d12", abilityModifier: "con" },
+      resourceCost: GIANT_USE, automationSupport: "full"
+    }]
+  })),
   giant("storm", "Storm's Thunder (Storm Giant)", runs(trait("goliath", "Giant Ancestry"), {
     name: "Giant Ancestry: Storm's Thunder",
     grantedActions: [{

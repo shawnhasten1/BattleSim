@@ -916,6 +916,13 @@ export type ReactionTrigger =
   | { kind: "would-be-hit"; meleeOnly?: boolean }
   /** The reactor was hit by an attack (Hellish Rebuke). */
   | { kind: "hit-by-attack"; meleeOnly?: boolean }
+  /**
+   * The reactor is about to take damage: rolled, its resistances counted, not yet landed. An activation's `damageCut`
+   * cuts it (Uncanny Dodge, Deflect Attacks, Stone's Endurance) or resists it (Superior Hunter's Defense).
+   * `attackOnly`: only an attack roll's hit; `damageTypes`: only damage that includes one of these (Deflect Attacks:
+   * bludgeoning, piercing, slashing).
+   */
+  | { kind: "would-take-damage"; attackOnly?: boolean; damageTypes?: DamageType[] }
   /** An ally within `withinFt` is targeted by an attack (Protection fighting style). */
   | { kind: "ally-targeted-by-attack"; withinFt: number }
   /**
@@ -1393,8 +1400,20 @@ export interface ActivateFeatureActionDefinition {
     modifiers?: ConditionInstance["modifiers"];
     effects?: FeatureEffect[];
   };
+  /** What a `would-take-damage` reaction does to the damage about to land. */
+  damageCut?: DamageCut;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
+
+/**
+ * A reaction's cut to the damage about to be taken: `"halve"` it, rounding down (Uncanny Dodge); `"reduce"` it by a roll,
+ * `dice` plus an ability modifier plus `bonus` (Deflect Attacks: 1d10 + Dexterity + monk level; Stone's Endurance:
+ * 1d12 + Constitution); `"resist"` its damage types until the end of the turn (Superior Hunter's Defense).
+ */
+export type DamageCut =
+  | { kind: "halve" }
+  | { kind: "reduce"; dice: string; abilityModifier?: Ability; bonus?: number }
+  | { kind: "resist" };
 
 /**
  * A standard non-attack action — Dash / Disengage / Dodge (and reference-only
@@ -2426,6 +2445,7 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
   z.object({ kind: z.literal("enemy-leaves-reach") }),
   z.object({ kind: z.literal("targeted-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("would-be-hit"), meleeOnly: z.boolean().optional() }),
+  z.object({ kind: z.literal("would-take-damage"), attackOnly: z.boolean().optional(), damageTypes: z.array(z.string().min(1)).optional() }),
   z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
   z.object({

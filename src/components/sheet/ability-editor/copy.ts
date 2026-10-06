@@ -10,6 +10,7 @@ export const COPY = {
   reactionTrigger: { label: "When" },
   reactionActsOn: { label: "It acts on" },
   reactionLasts: { label: "What it gives lasts", hint: "Parry's +2 is for that attack; Shield's +5 lasts until the start of its next turn." },
+  damageCut: { label: "It", hint: "What it does to the damage about to land: Uncanny Dodge halves it, Deflect Attacks takes off 1d10 + Dexterity + monk level, Superior Hunter's Defense resists its type for the rest of the turn." },
   reactionEagerness: { label: "The AI uses it", hint: "“Never on its own” keeps it for you to trigger by hand." },
   limit: { label: "Limit" },
   uses: { label: "Uses per encounter", hint: "The simulator gives it back at the start of every fight." },

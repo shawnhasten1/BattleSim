@@ -1,4 +1,4 @@
-import type { WeaponDefinition } from "@/engine";
+import type { ActionDefinition, DamageType, WeaponDefinition } from "@/engine";
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, fromLevels, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -22,6 +22,14 @@ const UNARMED: WeaponDefinition = {
 };
 const UNARMED_BONUS = "monk-martial-arts:bonus";
 const FOCUS_DC = { base: 8, ability: "wis" as const, proficiency: true };
+
+/** Deflect Attacks (or Energy): a reaction to an attack's hit of these types, 1d10 + Dexterity + monk level (scaled) off it. */
+const deflect = (id: string, name: string, damageTypes: DamageType[]): ActionDefinition => ({
+  kind: "activate-feature", id, name, actionType: "reaction", featureId: "",
+  reaction: { trigger: { kind: "would-take-damage", attackOnly: true, damageTypes }, target: "self", priority: "worthwhile" },
+  damageCut: { kind: "reduce", dice: "1d10", abilityModifier: "dex", bonus: 1 },
+  automationSupport: "full"
+});
 
 const martialArts = runs("monk_martial-arts", {
   automationSupport: "full",
@@ -99,7 +107,10 @@ export const MONK: ClassDefinition = {
     },
     {
       level: 3,
-      grants: [grant("deflect-attacks", reference("monk_deflect-attacks"))],
+      grants: [grant("deflect-attacks", runs("monk_deflect-attacks", {
+        grantedActions: [deflect("deflect-attacks", "Deflect Attacks", ["bludgeoning", "piercing", "slashing"])],
+        notSimulated: "spending a Focus Point to redirect the attack when the damage drops to 0."
+      }), { scale: [{ path: "grantedActions.0.damageCut.bonus", value: "{level}" }] })],
       choices: [choice({ kind: "subclass", id: "subclass" }, "monk_monk-subclass")]
     },
     { level: 4, grants: [grant("slow-fall", informational("monk_slow-fall"))] },
@@ -132,7 +143,13 @@ export const MONK: ClassDefinition = {
         grant("self-restoration", reference("monk_self-restoration"))
       ]
     },
-    { level: 13, grants: [grant("deflect-energy", reference("monk_deflect-energy"))] },
+    {
+      level: 13,
+      // Deflect Attacks against any other damage: a reaction of its own for the other types, so each hit offers one.
+      grants: [grant("deflect-energy", runs("monk_deflect-energy", {
+        grantedActions: [deflect("deflect-energy", "Deflect Energy", ["acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder"])]
+      }), { scale: [{ path: "grantedActions.0.damageCut.bonus", value: "{level}" }] })]
+    },
     {
       level: 14,
       grants: [grant("disciplined-survivor", runs("monk_disciplined-survivor", { notSimulated: "spending a point to reroll a failed save." }), { adjust: { saves: "all" } })]

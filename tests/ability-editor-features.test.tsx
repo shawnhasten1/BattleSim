@@ -262,6 +262,45 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     expect(parry).toMatchObject({ reaction: { trigger: { kind: "would-be-hit", meleeOnly: true }, lastsFor: "until-start-of-next-turn" } });
   });
 
+  it("a reaction to damage about to land: each part of the trigger, and what it does to the damage", async () => {
+    store().insertAbilityRecord("def-fighter", "reactions", {
+      kind: "activate-feature", id: "", name: "Brace", actionType: "reaction", featureId: "brace",
+      reaction: { trigger: { kind: "targeted-by-attack" }, target: "self", priority: "worthwhile" }, automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Brace" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    const use = inSection("use");
+    await userEvent.selectOptions(use.getByRole("combobox", { name: "When" }), "would-take-damage");
+    // Halving it to start with.
+    expect(within(use.getByRole("radiogroup", { name: "What it does to the damage" })).getByRole("radio", { name: "Halves it" }).getAttribute("aria-checked")).toBe("true");
+    expect(use.getByText(/Offered once the damage is rolled/)).toBeTruthy();
+    await userEvent.click(use.getByRole("checkbox", { name: "From an attack roll only" }));
+    await chip(use, "Only damage of these types", "fire");
+    await radio(use, "What it does to the damage", "Takes off a roll");
+    await retype(use.getByLabelText("Dice it takes off"), "1d12");
+    await userEvent.selectOptions(use.getByLabelText("Ability it adds"), "con");
+    await retype(use.getByLabelText("Flat amount it adds"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).toMatchObject({
+      reaction: { trigger: { kind: "would-take-damage", attackOnly: true, damageTypes: ["fire"] } },
+      damageCut: { kind: "reduce", dice: "1d12", abilityModifier: "con", bonus: 2 }
+    });
+
+    // Resisting instead; then another trigger, and it cuts nothing.
+    await userEvent.click(screen.getByRole("button", { name: "Edit Brace" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    await radio(inSection("use"), "What it does to the damage", "Resists its type this turn");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).toMatchObject({ damageCut: { kind: "resist" } });
+    await userEvent.click(screen.getByRole("button", { name: "Edit Brace" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    await userEvent.selectOptions(inSection("use").getByRole("combobox", { name: "When" }), "hit-by-attack");
+    expect(inSection("use").queryByRole("radiogroup", { name: "What it does to the damage" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).not.toHaveProperty("damageCut");
+  });
+
   it("gives a buff's other effects as cards: advantage on attacks while it lasts", async () => {
     render(<LiveTab />);
     await startFromScratch("Spell");

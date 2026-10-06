@@ -1,4 +1,5 @@
 import {
+  expectedDamageCut,
   findActionDefinition,
   getDefinition,
   OPPORTUNITY_ATTACKS,
@@ -143,6 +144,11 @@ function optionDetail(request: ReactionRequest, board: EncounterSnapshot, option
     parts.push(`AC ${ac}: ${attack.total < ac ? "the attack misses" : "it still hits"}`);
   }
   if (request.trigger === "enemy-casts-spell") parts.push(counterOdds(option));
+  if (request.trigger === "would-take-damage" && action?.kind === "activate-feature" && action.damageCut) {
+    const incoming = request.context.damageTaken ?? 0;
+    const cut = Math.round(expectedDamageCut(action, getDefinition(board, reactor), incoming));
+    parts.push(action.damageCut.kind === "reduce" ? `about ${cut} less (${incoming - cut} taken)` : `${incoming - cut} taken instead of ${incoming}`);
+  }
   if (request.trigger === "ally-targeted-by-attack") parts.push("the attack has disadvantage");
   const cost = option.resourceCost;
   if (cost) {
@@ -243,6 +249,11 @@ function describeReaction(request: ReactionRequest, board: EncounterSnapshot): P
       return text(`${source} attacks ${reactor}${attack ? ` with ${attack.actionName}` : ""}.`, "React before the roll?");
     case "hit-by-attack":
       return text(`${source} hit ${reactor}${request.context.damageTaken !== undefined ? ` for ${request.context.damageTaken}` : ""}.`, `${request.options.length === 1 ? `${request.options[0]!.name} ${source}` : "React"}?`);
+    case "would-take-damage":
+      return text(
+        `${reactor} is about to take ${request.context.damageTaken ?? "some"} damage${request.sourceId !== request.reactorId ? ` from ${source}` : ""}.`,
+        "Cut it before it lands?"
+      );
     case "ally-targeted-by-attack": {
       const away = distance(request.targetId);
       return text(`${source} attacks ${nameOf(board, request.targetId)}${away !== undefined ? `, ${away} ft. from ${reactor}` : ""}.`, "Give the attack disadvantage?");

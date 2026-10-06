@@ -49,7 +49,7 @@ import { DamageLines } from "./DamageLines";
 import { FeatureEffectCards } from "./FeatureEffectCards";
 import { LimitPicker, type NewPools } from "./LimitPicker";
 import { DurationSelect } from "./OutcomeSections";
-import { ACTIVATION_TRIGGERS, ReactionControls } from "./ReactionControls";
+import { ACTIVATION_TRIGGERS, DamageCutControls, ReactionControls } from "./ReactionControls";
 import styles from "./ability-editor.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -143,7 +143,18 @@ export function TriggerNote({ trigger }: { trigger: ReactionTrigger }) {
   }
   if (trigger.kind === "ally-targeted-by-attack") return <p className={styles.hint}>The attack on the ally has disadvantage. Nothing else it holds is used.</p>;
   if (trigger.kind === "would-be-hit") return <p className={styles.hint}>Offered only when the AC it gives makes the attack miss; never against a critical hit.</p>;
+  if (trigger.kind === "would-take-damage") return <p className={styles.hint}>Offered once the damage is rolled, before it lands. The AI takes it for a cut of 5 or more, or one that keeps it standing.</p>;
   return null;
+}
+
+/** A reaction to damage about to land cuts it (halving it to start with); any other activation cuts nothing. */
+function withDamageCutFor(activation: Activation): Activation {
+  const cuts = activation.actionType === "reaction" && activation.reaction?.trigger.kind === "would-take-damage";
+  if (cuts) return activation.damageCut ? activation : { ...activation, damageCut: { kind: "halve" } };
+  if (!activation.damageCut) return activation;
+  const next = { ...activation };
+  delete next.damageCut;
+  return next;
 }
 
 /** What switching something on takes: its slot, a reaction's trigger, and its limit (Rage's pool, Shield's slot). */
@@ -176,8 +187,11 @@ export function ActivationUse({ activation, onChange, definition, newPools, park
       </Field>
       {activation.actionType === "reaction" && activation.reaction ? (
         <>
-          <ReactionControls reaction={activation.reaction} onChange={(reaction) => onChange({ ...activation, reaction })} kinds={ACTIVATION_TRIGGERS} actsOn={false} />
+          <ReactionControls reaction={activation.reaction} onChange={(reaction) => onChange(withDamageCutFor({ ...activation, reaction }))} kinds={ACTIVATION_TRIGGERS} actsOn={false} />
           <TriggerNote trigger={activation.reaction.trigger} />
+          {activation.reaction.trigger.kind === "would-take-damage" && activation.damageCut ? (
+            <DamageCutControls value={activation.damageCut} onChange={(damageCut) => onChange({ ...activation, damageCut })} />
+          ) : null}
         </>
       ) : null}
       <LimitPicker action={activation} onChange={(next) => onChange(next as Activation)} definition={definition} newPools={newPools} />

@@ -77,7 +77,13 @@ export const ROGUE: ClassDefinition = {
       level: 5,
       grants: [
         grant("cunning-strike", reference("rogue_cunning-strike")),
-        grant("uncanny-dodge", reference("rogue_uncanny-dodge"))
+        grant("uncanny-dodge", runs("rogue_uncanny-dodge", {
+          grantedActions: [{
+            kind: "activate-feature", id: "uncanny-dodge", name: "Uncanny Dodge", actionType: "reaction", featureId: "",
+            reaction: { trigger: { kind: "would-take-damage", attackOnly: true }, target: "self", priority: "worthwhile" },
+            damageCut: { kind: "halve" }, automationSupport: "full"
+          }]
+        }))
       ]
     },
     { level: 6, grants: [], choices: [choice({ kind: "expertise", id: "expertise", count: 2 }, "rogue_expertise")] },

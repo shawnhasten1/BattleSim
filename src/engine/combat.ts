@@ -2058,7 +2058,7 @@ function resolveAttackCore(
       })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
-    ], attackerDefinition, attacker.id)
+    ], attackerDefinition, attacker.id, { byAttack: true })
     : 0;
   let appliedConditionEffects: string[] = [];
   if (hit) {
@@ -4386,13 +4386,14 @@ function applyDamageEntries(
   target: CombatantState,
   entries: DamageApplicationEntry[],
   source: CreatureDefinition,
-  sourceId?: Id
+  sourceId?: Id,
+  options: { byAttack?: boolean } = {}
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   const hpBefore = target.currentHp + target.tempHp;
   let totalApplied = 0;
   let totalAbsorbed = 0;
-  const components = entries.map((entry) => {
+  const rolled = entries.map((entry): PendingDamage & { roll: DiceRollResult } => {
     const component = entry.component;
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: entry.casterLevel });
     const withExtra = entry.extraDice ? `${scaledBase}+${entry.extraDice}` : scaledBase;
@@ -4402,15 +4403,16 @@ function applyDamageEntries(
     // `component.dice` is canonical and already carries any flat "+K" (mirrored by `flatBonus`), so it is not added again here.
     const formulaBonus = resolveNumericFormula(component.bonusFormula, damageSource);
     const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
-    const targetAdjustments = damageAdjustmentsFor(targetDefinition, target);
     const origin: DamageOrigin = { magical: component.magical === true, material: component.material };
     const damageType = component.damageTypeOptions?.length
-      ? bestDamageTypeOption(component.damageTypeOptions, targetAdjustments, origin)
+      ? bestDamageTypeOption(component.damageTypeOptions, damageAdjustmentsFor(targetDefinition, target), origin)
       : resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
-    const resolved = resolveDamageAdjustment(roll.total + formulaBonus, damageType, targetAdjustments, origin);
-    const adjusted = resolved.amount;
-    const finalAmount = entry.halve ? Math.floor(adjusted / 2) : adjusted;
-    const absorbed = entry.halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed;
+    return { damageType, base: roll.total + formulaBonus, origin, halve: entry.halve === true, roll };
+  });
+  const landing = damageAfterReaction(state, target, targetDefinition, rolled, sourceId, options.byAttack === true);
+  const components = rolled.map(({ damageType, roll }, index) => {
+    const entry = entries[index]!;
+    const { adjusted, finalAmount, absorbed } = landing.amounts[index]!;
     totalApplied += applyHpDamage(target, finalAmount);
     totalAbsorbed += absorbed;
     return {
@@ -4427,11 +4429,12 @@ function applyDamageEntries(
   // Absorption (a Flesh Golem hit by lightning) heals instead. Done before the event so it records the new HP.
   const healedByAbsorption = absorbHealing(target, targetDefinition, totalAbsorbed);
 
-  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
+  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${landing.cutBy ? ` (${landing.cutBy})` : ""}${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
     targetId: target.id,
     sourceId,
     components,
     totalApplied,
+    ...(landing.cutBy ? { cutBy: landing.cutBy, cut: landing.cut } : {}),
     ...(healedByAbsorption > 0 ? { absorbed: healedByAbsorption } : {}),
     currentHp: target.currentHp,
     tempHp: target.tempHp
@@ -4445,6 +4448,65 @@ function applyDamageEntries(
   checkSplit(state, target, components.filter((c) => c.roll.total > 0).map((c) => c.damageType));
   updateDefeatState(state, target, sourceId, recordHit(target, hpBefore, totalApplied, hitDamageTypes, entries.some((entry) => entry.critical)));
   return totalApplied;
+}
+
+/** One part of the damage about to land: its type and amount before the target's defenses, halved for a made save. */
+interface PendingDamage {
+  damageType: DamageType;
+  base: number;
+  origin: DamageOrigin;
+  halve: boolean;
+}
+
+/** Each part after the target's resistances, immunities, vulnerabilities and absorption, then halved for a made save. */
+function resolvePendingDamage(target: CombatantState, targetDefinition: CreatureDefinition, pending: PendingDamage[]): Array<{ adjusted: number; finalAmount: number; absorbed: number }> {
+  const adjustments = damageAdjustmentsFor(targetDefinition, target);
+  return pending.map((part) => {
+    const resolved = resolveDamageAdjustment(part.base, part.damageType, adjustments, part.origin);
+    return {
+      adjusted: resolved.amount,
+      finalAmount: part.halve ? Math.floor(resolved.amount / 2) : resolved.amount,
+      absorbed: part.halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed
+    };
+  });
+}
+
+/** Whether `target` has a reaction it could take against damage about to land (Uncanny Dodge), and its reaction left. */
+function hasDamageReaction(target: CombatantState, targetDefinition: CreatureDefinition): boolean {
+  return target.state === "active" && canAct(target, "reaction")
+    && getExecutableActions(targetDefinition).some((action) => action.actionType === "reaction" && reactionMetaFor(action)?.trigger.kind === "would-take-damage");
+}
+
+/**
+ * The damage about to land on `target`, part by part: after its defenses, and after a reaction of its own that cuts
+ * the total (Uncanny Dodge halves it, Deflect Attacks and Stone's Endurance take off a roll, the cut coming off the
+ * parts in order) or resists its types (Superior Hunter's Defense, counted before the parts are reckoned again).
+ */
+function damageAfterReaction(
+  state: EngineState,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition,
+  pending: PendingDamage[],
+  sourceId: Id | undefined,
+  byAttack: boolean
+): { amounts: Array<{ adjusted: number; finalAmount: number; absorbed: number }>; cutBy?: string; cut?: number } {
+  let amounts = resolvePendingDamage(target, targetDefinition, pending);
+  const total = amounts.reduce((sum, part) => sum + part.finalAmount, 0);
+  if (total <= 0 || !hasDamageReaction(target, targetDefinition)) return { amounts };
+  const damageTypes = [...new Set(pending.filter((_, index) => amounts[index]!.finalAmount > 0).map((part) => part.damageType))];
+  const { damageCut } = runReactionWindow(state, {
+    kind: "would-take-damage", sourceId: sourceId ?? target.id, targetId: target.id, damageTaken: total, damageTypes, byAttack
+  });
+  if (!damageCut) return { amounts };
+  if (damageCut.resisted) amounts = resolvePendingDamage(target, targetDefinition, pending);
+  const after = amounts.reduce((sum, part) => sum + part.finalAmount, 0);
+  let cut = damageCut.halve ? after - Math.floor(after / 2) : Math.min(after, damageCut.reduce ?? 0);
+  for (const part of amounts) {
+    const taken = Math.min(part.finalAmount, cut);
+    part.finalAmount -= taken;
+    cut -= taken;
+  }
+  return { amounts, cutBy: damageCut.by, cut: total - amounts.reduce((sum, part) => sum + part.finalAmount, 0) };
 }
 
 /** What one instance of damage did, for the rules that care about more than the HP total. */
@@ -4513,24 +4575,21 @@ function applyRolledAreaDamage(
   const hpBefore = target.currentHp + target.tempHp;
   let totalApplied = 0;
   let totalAbsorbed = 0;
-  const components = rolled.map((entry) => {
-    const resolved = resolveDamageAdjustment(
-      entry.base,
-      entry.damageType,
-      damageAdjustmentsFor(targetDefinition, target),
-      { magical: entry.magical, material: entry.material }
-    );
-    const adjusted = resolved.amount;
-    const finalAmount = halve ? Math.floor(adjusted / 2) : adjusted;
-    const absorbed = halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed;
+  const pending = rolled.map((entry): PendingDamage => ({
+    damageType: entry.damageType, base: entry.base, origin: { magical: entry.magical, material: entry.material }, halve
+  }));
+  const landing = damageAfterReaction(state, target, targetDefinition, pending, sourceId, false);
+  const components = rolled.map((entry, index) => {
+    const { adjusted, finalAmount, absorbed } = landing.amounts[index]!;
     totalApplied += applyHpDamage(target, finalAmount);
     totalAbsorbed += absorbed;
     return { damageType: entry.damageType, roll: entry.roll, adjusted, finalAmount, ...(absorbed > 0 ? { absorbed } : {}) };
   });
   const healedByAbsorption = absorbHealing(target, targetDefinition, totalAbsorbed);
 
-  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
+  state.log.push(event(state, "DamageApplied", `${target.displayName} took ${totalApplied} damage${landing.cutBy ? ` (${landing.cutBy})` : ""}${healedByAbsorption > 0 ? ` and absorbed ${healedByAbsorption}` : ""}`, {
     ...(healedByAbsorption > 0 ? { absorbed: healedByAbsorption } : {}),
+    ...(landing.cutBy ? { cutBy: landing.cutBy, cut: landing.cut } : {}),
     targetId: target.id,
     sourceId,
     components,
@@ -7166,8 +7225,12 @@ export interface ReactionEvent {
   attackTotal?: number;
   attackNatural?: number;
   targetAc?: number;
-  /** Damage the triggering hit dealt (`hit-by-attack`). */
+  /** Damage the triggering hit dealt (`hit-by-attack`), or is about to deal (`would-take-damage`). */
   damageTaken?: number;
+  /** The types of the damage about to land (`would-take-damage`). */
+  damageTypes?: DamageType[];
+  /** Whether that damage is an attack roll's hit (`would-take-damage`). */
+  byAttack?: boolean;
 }
 
 export interface ReactionWindowResult {
@@ -7177,6 +7240,8 @@ export interface ReactionWindowResult {
   imposedDisadvantage?: boolean;
   /** Conditions a reaction gave that last for the triggering attack only (Parry): removed once it's resolved. */
   endsAfterAttack?: Array<{ combatantId: Id; conditionId: Id }>;
+  /** A reaction's cut to the damage about to land (`would-take-damage`), and the reaction's name. */
+  damageCut?: { halve?: boolean; reduce?: number; resisted?: boolean; by: string };
 }
 
 /** The reaction `reactor` will spend on `event`, plus the resolved reaction target, or `undefined`. */
@@ -7216,6 +7281,12 @@ function reactionTriggerPasses(
     case "hit-by-attack":
       return reactor.id === event.targetId
         && (!trigger.meleeOnly || event.attackType === "melee");
+    case "would-take-damage":
+      return reactor.id === event.targetId
+        && action.kind === "activate-feature" && Boolean(action.damageCut)
+        && (event.damageTaken ?? 0) > 0
+        && (!trigger.attackOnly || event.byAttack === true)
+        && (!trigger.damageTypes?.length || (event.damageTypes ?? []).some((type) => trigger.damageTypes!.includes(type)));
     case "would-be-hit": {
       // Only when it would turn this hit into a miss: what it gives must lift the AC past the roll.
       const gain = reactionArmorClassGain(action);
@@ -7267,6 +7338,17 @@ function roughAverageDamage(components: ReadonlyArray<{ dice: string }> | undefi
   return total;
 }
 
+/** What a damage-cutting reaction is expected to take off `incoming` damage (resisting it halves it). */
+export function expectedDamageCut(action: ActionDefinition, definition: CreatureDefinition, incoming: number): number {
+  const cut = action.kind === "activate-feature" ? action.damageCut : undefined;
+  if (!cut) return 0;
+  if (cut.kind === "reduce") {
+    const bonus = (cut.abilityModifier ? abilityModifier(definition.abilities[cut.abilityModifier]) : 0) + (cut.bonus ?? 0);
+    return Math.min(incoming, roughAverageDamage([{ dice: cut.dice || "0" }]) + bonus);
+  }
+  return incoming - Math.floor(incoming / 2);
+}
+
 /** How much a reaction raises its reactor's AC while it lasts (Shield's +5, a Parry's +2). */
 function reactionArmorClassGain(action: ActionDefinition): number {
   return action.kind === "activate-feature" ? action.condition?.modifiers?.armorClass ?? 0 : 0;
@@ -7278,6 +7360,13 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
   if (meta.trigger.kind === "would-be-hit") {
     // It's only offered when it turns a hit into a miss: always worth it.
     return true;
+  }
+  if (meta.trigger.kind === "would-take-damage") {
+    // Worth it for a cut of 5 or more, or one that keeps the creature standing.
+    const incoming = event.damageTaken ?? 0;
+    const cut = expectedDamageCut(action, getDefinition(state.snapshot, reaction.reactor), incoming);
+    const standing = reaction.reactor.currentHp + reaction.reactor.tempHp;
+    return cut >= 5 || (incoming >= standing && incoming - cut < standing);
   }
   if (meta.trigger.kind === "enemy-casts-spell") {
     // Counters are weighed together, slot by slot (`counterOutlook`); this is only the fallback's bar.
@@ -7599,6 +7688,9 @@ export function runReactionWindow(state: EngineState, ev: ReactionEvent): Reacti
       if (outcome.endsAfterAttack) {
         result.endsAfterAttack = [...(result.endsAfterAttack ?? []), ...outcome.endsAfterAttack];
       }
+      if (outcome.damageCut) {
+        result.damageCut = outcome.damageCut;
+      }
       if (ev.kind === "enemy-casts-spell" && result.countered) {
         break;
       }
@@ -7662,6 +7754,7 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
         return {};
       case "activate-feature": {
         const { conditionId } = resolveActivateFeatureAction(state, reactor.id, action.id);
+        if (action.damageCut && meta.trigger.kind === "would-take-damage") return { damageCut: cutDamage(state, reactor, reactorDefinition, action, ev) };
         if (!conditionId || !meta.lastsFor) return {};
         if (meta.lastsFor === "triggering-attack") return { endsAfterAttack: [{ combatantId: reactor.id, conditionId }] };
         const condition = reactor.conditions?.find((candidate) => candidate.id === conditionId);
@@ -7680,6 +7773,42 @@ function fireReaction(state: EngineState, reaction: EligibleReaction, ev: Reacti
     }));
     return {};
   }
+}
+
+/**
+ * What a damage-cutting reaction does, once taken: halves the damage, rolls what it takes off (logged), or gives the
+ * reactor resistance to the damage's types until the end of the turn.
+ */
+function cutDamage(
+  state: EngineState,
+  reactor: CombatantState,
+  definition: CreatureDefinition,
+  action: ActivateFeatureActionDefinition,
+  ev: ReactionEvent
+): NonNullable<ReactionWindowResult["damageCut"]> {
+  const cut = action.damageCut!;
+  if (cut.kind === "halve") return { halve: true, by: action.name };
+  if (cut.kind === "reduce") {
+    const bonus = (cut.abilityModifier ? abilityModifier(definition.abilities[cut.abilityModifier]) : 0) + (cut.bonus ?? 0);
+    const roll = rollDice(withBonus(cut.dice || "0", bonus), state.rng);
+    const reduce = Math.max(0, roll.total);
+    state.log.push(event(state, "FeatureEffectApplied", `${reactor.displayName}'s ${action.name} takes ${reduce} off the damage`, {
+      combatantId: reactor.id, actionId: action.id, featureId: action.featureId, roll, amount: reduce, effectKind: "damage-cut"
+    }));
+    return { reduce, by: action.name };
+  }
+  const types = ev.damageTypes ?? [];
+  applyCondition(state, reactor.id, {
+    id: `${upcastBaseId(action.id)}:resist`,
+    name: "custom",
+    sourceId: action.id,
+    sourceName: action.name,
+    sourceCombatantId: reactor.id,
+    startedRound: state.snapshot.round,
+    expiresAt: { round: state.snapshot.round, turnIndex: state.snapshot.turnIndex, timing: "end" },
+    modifiers: { damageAdjustments: types.map((damageType) => ({ type: "resistance" as const, damageType })) }
+  });
+  return { resisted: true, by: action.name };
 }
 
 /**

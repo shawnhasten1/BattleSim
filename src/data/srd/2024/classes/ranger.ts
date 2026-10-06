@@ -142,6 +142,15 @@ export const HUNTER: SubclassDefinition = {
         spellChanges: [{ spell: HUNTERS_MARK, mark: { spillWithinFt: 30 } }]
       })]
     },
-    { level: 15, grants: [grant("superior-hunters-defense", reference("ranger_hunter_superior-hunters-defense"))] }
+    {
+      level: 15,
+      grants: [grant("superior-hunters-defense", runs("ranger_hunter_superior-hunters-defense", {
+        grantedActions: [{
+          kind: "activate-feature", id: "superior-hunters-defense", name: "Superior Hunter's Defense", actionType: "reaction", featureId: "",
+          reaction: { trigger: { kind: "would-take-damage" }, target: "self", priority: "worthwhile" },
+          damageCut: { kind: "resist" }, automationSupport: "full"
+        }]
+      }))]
+    }
   ]
 };
