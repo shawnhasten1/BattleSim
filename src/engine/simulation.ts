@@ -1292,6 +1292,13 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
     }
   }
 
+  // Turn Undead: a turned creature moves as far from whoever turned it as it can, and does nothing else.
+  const fleeingFrom = fleeSource(state.snapshot, actor);
+  if (fleeingFrom) {
+    fleeTurn(state, actor, fleeingFrom);
+    return undefined;
+  }
+
   // Incapacitated / stunned / paralysed (or a `deniesActions` effect): no action
   // and no bonus action — the creature loses its turn rather than acting at a
   // penalty.
@@ -3681,6 +3688,38 @@ function distanceBandScore(distance: number, tactics: TacticsSettings): number {
     return -(distance - tactics.preferredMaxDistance) / 4;
   }
   return 8;
+}
+
+/** Turn Undead: the creature a turned one runs from (its condition's source, while it's still in the fight), if any. */
+function fleeSource(snapshot: EncounterSnapshot, actor: CombatantState): CombatantState | undefined {
+  const condition = (actor.conditions ?? []).find((entry) => entry.modifiers?.fleesFromSource && entry.sourceCombatantId);
+  const source = condition ? snapshot.combatants.find((combatant) => combatant.id === condition.sourceCombatantId) : undefined;
+  return source && (source.state === "active" || source.state === "downed") ? source : undefined;
+}
+
+/** A turned creature's turn: to the cell it can reach farthest from `from` (the nearest such on a tie), and no more. */
+function fleeTurn(state: EngineState, actor: CombatantState, from: CombatantState): void {
+  const snapshot = state.snapshot;
+  const definition = getDefinition(snapshot, actor);
+  const footprint = sizeFootprint(definition.size);
+  const here = spatialDistance(snapshot, actor, from);
+  const best = findReachableCells(hazardPathingOverlay(zoneTerrainOverlay(snapshot.map, snapshot.activeZones)), actor.position, footprint,
+    remainingMovementBudget(snapshot, actor), occupiedCellsFor(snapshot, actor.id), movementOptionsFor(definition))
+    .map((reachable) => ({ reachable, distance: spatialDistance(snapshot, actor, from, { a: reachable.cell }) }))
+    .filter(({ distance }) => distance > here)
+    .sort((a, b) => b.distance - a.distance || a.reachable.cost - b.reachable.cost || a.reachable.cell.y - b.reachable.cell.y || a.reachable.cell.x - b.reachable.cell.x)[0];
+  if (best) {
+    try {
+      moveCombatant(state, actor.id, best.reachable.cell);
+      state.log.push(event(state, "AiDecision", `${actor.displayName} flees from ${from.displayName}`, {
+        combatantId: actor.id, sourceId: from.id, destination: best.reachable.cell, reason: "flee"
+      }));
+      return;
+    } catch { /* the board moved on */ }
+  }
+  state.log.push(event(state, "AiDecision", `${actor.displayName} can't get any farther from ${from.displayName}`, {
+    combatantId: actor.id, sourceId: from.id, reason: "flee-cornered"
+  }));
 }
 
 function occupiedCellsFor(snapshot: EncounterSnapshot, movingCombatantId: string): Point[] {

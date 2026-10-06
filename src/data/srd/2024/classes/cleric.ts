@@ -31,13 +31,14 @@ const channelDivinity = runs("cleric_channel-divinity", {
       saveAbility: "wis", dcFormula: WIS_DC, area: { type: "circle", size: 30 }, targeting: { origin: "self", range: 0 },
       damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile",
       riders: [
-        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true },
+        // It runs from the cleric on its turns.
+        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true, modifiers: { fleesFromSource: true } },
         { kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true }
       ],
       resourceCost: { resourceId: "channel-divinity", amount: 1 }, automationSupport: "full"
     }
   ],
-  notSimulated: "a turned undead doesn't run from you."
+  notSimulated: "the turning ending when the cleric is incapacitated or dies."
 });
 
 export const CLERIC_SPELLS = [

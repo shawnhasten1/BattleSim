@@ -512,6 +512,7 @@ function modifierSentences(modifiers: ConditionModifiers | undefined, who: Who):
   if (modifiers.deniesOpportunityAttacks) sentences.push(`${S} can't make opportunity attacks.`);
   if (modifiers.oneThingPerTurn) sentences.push(`On ${who.possessive} turns, ${who.subject} can only move, take an action or take a bonus action.`);
   if (modifiers.noSpellcasting) sentences.push(`${S} can't cast spells or concentrate on them.`);
+  if (modifiers.fleesFromSource) sentences.push(`On ${who.possessive} turns, ${who.subject} moves as far from the source as ${who.subject} can.`);
   return sentences;
 }
 
@@ -943,7 +944,8 @@ export function modifierShorts(modifiers: ConditionModifiers | undefined): strin
     ...(modifiers.speedPenaltyFt ? [`speed −${modifiers.speedPenaltyFt} ft`] : []),
     ...(modifiers.deniesOpportunityAttacks ? ["no opportunity attacks"] : []),
     ...(modifiers.oneThingPerTurn ? ["only one of moving, an action or a bonus action"] : []),
-    ...(modifiers.noSpellcasting ? ["no spells"] : [])
+    ...(modifiers.noSpellcasting ? ["no spells"] : []),
+    ...(modifiers.fleesFromSource ? ["flees"] : [])
   ];
 }
 

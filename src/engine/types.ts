@@ -2523,6 +2523,8 @@ export interface ConditionInstance {
     oneThingPerTurn?: boolean;
     /** Rage: the bearer can't cast spells, and taking the condition breaks its concentration. */
     noSpellcasting?: boolean;
+    /** Turn Undead: on its turns the bearer moves as far as it can from the creature that gave it the condition. */
+    fleesFromSource?: boolean;
   };
   /** Rage: what keeps it going from one of the bearer's turns to the next (`ConditionUpkeep`). */
   upkeep?: ConditionUpkeep;
