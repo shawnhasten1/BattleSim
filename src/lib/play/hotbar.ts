@@ -124,7 +124,7 @@ export interface HotbarModel {
  * Copies of an ability that change one thing about it: a power attack, spending a charge, a higher slot, giving a
  * potion, a wand's spell for more charges.
  */
-const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+|overchannel|imbued|with-[a-z0-9-]+)$/;
+const VARIANT_SUFFIX = /:(?:power|charged(?:-\d+)?|upcast-\d+|give|full|charges-\d+|meta-[a-z]+|overchannel|imbued|with-[a-z0-9-]+|mastery-[a-z]+)$/;
 
 /** The plain ability a variant is a copy of: `longsword:power:charged` → `longsword`, `claws:option-2` → `claws`. */
 export function familyKey(id: Id): Id {
@@ -286,8 +286,9 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
   const parts: string[] = [];
   if (/:power(?::|$)/.test(action.id)) parts.push("Power Attack");
   if (/:charged(?:-\d+)?$/.test(action.id)) parts.push("Spend a charge");
-  // Shillelagh: the weapon while the spell is on.
+  // Shillelagh: the weapon while the spell is on. Tactical Master: the mastery used instead.
   if (action.whileCondition) parts.push(action.whileCondition.name);
+  if (action.swappedMastery) parts.push(`${action.swappedMastery.to.charAt(0).toUpperCase()}${action.swappedMastery.to.slice(1)}`);
   return parts.length ? parts.join(" + ") : "Normal";
 }
 

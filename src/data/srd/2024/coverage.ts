@@ -28,7 +28,6 @@ export interface CoverageEntry {
 
 /** What the engine lacks, grouped so one engine change closes a family (plan Phase 7). */
 export const GAPS = {
-  "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
   initiative: "Swapping initiative with an ally (Alert)",
   "monk-weapons": "A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike)",
@@ -176,7 +175,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_extra-attack": full(),
   "fighter_tactical-shift": full("Half its speed more movement with Second Wind, and no opportunity attacks for the rest of that turn (the rules say for that move)."),
   fighter_indomitable: full("Rerolls a failed save with the fighter level added."),
-  "fighter_tactical-master": manual(["weapon-mastery"]),
+  "fighter_tactical-master": full("A copy of each mastered weapon's attack with Push, Sap or Slow in place of its own mastery; the AI takes one when it's worth more than the weapon's own (Sap against a big threat)."),
   "fighter_two-extra-attacks": full(),
   "fighter_studied-attacks": full("A miss gives advantage on its next attack roll against that creature, until the end of its next turn."),
   "fighter_epic-boon": EPIC_BOON,

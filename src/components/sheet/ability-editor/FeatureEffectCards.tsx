@@ -975,6 +975,16 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "mastery-swap":
+      return (
+        <div className={styles.typeChips} role="group" aria-label="Masteries it can use instead">
+          {(["cleave", "graze", "nick", "push", "sap", "slow", "topple", "vex"] as const).map((mastery) => {
+            const on = effect.masteries.includes(mastery);
+            const next = on ? effect.masteries.filter((entry) => entry !== mastery) : [...effect.masteries, mastery];
+            return <button key={mastery} type="button" aria-pressed={on} onClick={() => next.length && set({ ...effect, masteries: next })}>{mastery}</button>;
+          })}
+        </div>
+      );
     case "attack-defense":
       return (
         <Segmented label="Attacks at disadvantage" value={effect.against}

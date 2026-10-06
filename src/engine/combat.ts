@@ -286,7 +286,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...withCantrips.map((action) => (replacements.routineOnly.has(action.id) ? { ...action, routineOnly: true } : action)),
     ...replacements.copies
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...masterySwapVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -717,6 +717,38 @@ function maxDamageVariants(definition: CreatureDefinition, listed: ActionDefinit
     const effect = effects.find((entry) => slot !== undefined && slot >= 1 && slot <= entry.maxSlot && spellScopeCovers(entry, spell));
     if (!effect) continue;
     out.push({ ...spell, id: `${spell.id}:overchannel`, name: `${spell.name} (Overchannel)`, maximizeDamage: true, extraCost: effect.resourceCost } as ActionDefinition);
+  }
+  return out;
+}
+
+/**
+ * Tactical Master: a copy of each weapon attack with a mastery it uses, for each mastery it can use instead ("Longsword
+ * (Push)", `<id>:mastery-push`): the weapon's own mastery's riders swapped for the other's.
+ */
+function masterySwapVariants(definition: CreatureDefinition, listed: ActionDefinition[]): ActionDefinition[] {
+  const swaps = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only")
+    .flatMap((feature) => (feature.effects ?? []).flatMap((effect) => (effect.kind === "mastery-swap" ? effect.masteries : [])));
+  if (!swaps.length) return [];
+  const out: ActionDefinition[] = [];
+  for (const attack of listed) {
+    if (attack.kind !== "attack" || !attack.mastery || attack.actionType === "reaction" || isAttackVariant(attack) || attack.item) continue;
+    const own = attack.mastery;
+    const damageType = attack.damage[0]?.damageType;
+    for (const to of [...new Set(swaps)]) {
+      if (to === own) continue;
+      const kept = (attack.riders ?? []).filter((rider) => !rider.id?.startsWith("mastery-"));
+      const swapped: AttackActionDefinition & CompiledActionMeta = {
+        ...attack,
+        id: `${attack.id}:mastery-${to}`,
+        name: `${attack.name} (${to.charAt(0).toUpperCase()}${to.slice(1)})`,
+        mastery: to,
+        riders: [...kept, ...masteryRiders(to, attack.ability, damageType === "same-as-attack" ? undefined : damageType)],
+        swappedMastery: { from: own, to }
+      };
+      if (to !== "cleave") delete swapped.cleave;
+      out.push(swapped);
+    }
   }
   return out;
 }

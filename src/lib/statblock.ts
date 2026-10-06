@@ -748,6 +748,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
     case "condition-persists":
       return `${P} ${activationNamed(definition, effect.conditionId)} needs nothing to keep it going, and ends early only if ${who.subject} falls unconscious${effect.durationRounds ? `; it lasts ${roundsText(effect.durationRounds)}` : ""}.`;
+    case "mastery-swap":
+      return `When ${who.subject} attacks with a weapon whose mastery property ${who.subject} can use, ${who.subject} can replace that property with ${joinList(effect.masteries.map((mastery) => mastery.charAt(0).toUpperCase() + mastery.slice(1)), "or")} for that attack.`;
     case "attack-defense":
       return effect.against === "opportunity"
         ? `Opportunity attacks against ${who.object} have disadvantage.`
@@ -909,6 +911,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
     case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
     case "condition-persists": return `${activationNamed(definition, effect.conditionId)} needs no upkeep${effect.durationRounds ? `, ${roundsText(effect.durationRounds)}` : ""}`;
+    case "mastery-swap": return `can use ${joinList(effect.masteries, "or")} instead of a weapon's mastery`;
     case "attack-defense": return effect.against === "opportunity" ? "disadvantage on opportunity attacks against it" : "disadvantage on further attacks this turn by one that hit it";
     case "natural-twenty-damage": return "its ability score in extra damage on a 20";
     case "ignore-resistance": return `${joinList(effect.damageTypes)} damage ignores resistance`;

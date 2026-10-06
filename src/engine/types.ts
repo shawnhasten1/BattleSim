@@ -832,6 +832,14 @@ export type FeatureEffect =
     weapons: string[] | "all";
   }
   | {
+    /**
+     * Tactical Master: an attack with a weapon whose mastery it uses can use one of these masteries instead: a compiled
+     * copy of the attack for each (`<id>:mastery-<property>`).
+     */
+    kind: "mastery-swap";
+    masteries: WeaponMastery[];
+  }
+  | {
     /** Something its hits can be upgraded with for a cost paid only when it lands (Eldritch Smite, Fire's Burn). */
     kind: "on-hit-option";
     option: OnHitOption;
@@ -2062,6 +2070,8 @@ export interface CompiledActionMeta {
   withReplacement?: { id: Id; name: string; resourceCost?: ResourceCost };
   /** Only as a step of a routine: an ability that replaces one of the Attack action's attacks (Breath Weapon). */
   routineOnly?: boolean;
+  /** Tactical Master's copies (`<id>:mastery-<property>`): the weapon's own mastery, and the one used instead. */
+  swappedMastery?: { from: WeaponMastery; to: WeaponMastery };
   /** True Strike's copies (`<spell>:with-<weapon>`): the weapon it's made with. */
   viaWeapon?: { id: Id; name: string };
   /** Shillelagh's copies (`<weapon attack>:imbued`): usable only while the attacker has this condition (the spell's). */

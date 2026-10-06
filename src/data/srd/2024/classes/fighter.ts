@@ -89,7 +89,8 @@ export const FIGHTER: ClassDefinition = {
         grant("indomitable", runs("fighter_indomitable", {
           effects: [{ kind: "d20-change", rolls: ["save"], change: "reroll", bonus: { base: 9 }, resourceCost: { resourceId: "indomitable", amount: 1 } }]
         }), { pool: { id: "indomitable", size: "{col:indomitable}" }, scale: [{ path: "effects.0.bonus.base", value: "{level}" }] }),
-        grant("tactical-master", reference("fighter_tactical-master"))
+        // Push, Sap or Slow in place of a weapon's own mastery, attack by attack.
+        grant("tactical-master", runs("fighter_tactical-master", { effects: [{ kind: "mastery-swap", masteries: ["push", "sap", "slow"] }] }))
       ]
     },
     { level: 11, grants: [grant("two-extra-attacks", attacks("fighter_two-extra-attacks", 3), { replaces: "extra-attack" })] },

@@ -19,7 +19,7 @@ its gaps, never dropped and never approximated without saying so.
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 4 | 1 | 4 | 8 | 2 |
-| Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
+| Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
@@ -51,7 +51,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
-| `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
@@ -194,7 +193,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Tactical Shift | full |  | Half its speed more movement with Second Wind, and no opportunity attacks for the rest of that turn (the rules say for that move). |
 | 9, 13, 17 | Indomitable | full |  | Rerolls a failed save with the fighter level added. |
-| 9 | Tactical Master | manual | `weapon-mastery` |  |
+| 9 | Tactical Master | full |  | A copy of each mastered weapon's attack with Push, Sap or Slow in place of its own mastery; the AI takes one when it's worth more than the weapon's own (Sap against a big threat). |
 | 11 | Two Extra Attacks | full |  |  |
 | 13 | Studied Attacks | full |  | A miss gives advantage on its next attack roll against that creature, until the end of its next turn. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |

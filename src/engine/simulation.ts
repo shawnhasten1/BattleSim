@@ -87,7 +87,7 @@ import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
 import { footprintGroundHeight, movementProfileOf, movementReference, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile, WeaponMastery } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -592,7 +592,11 @@ function bestSwingAttack(
     const control = weigh && grouped.length && !terms?.tradesDice ? expectedRiderControl({ ...attack, riders: grouped }, source, target, weigh.tactics) / 2 : 0;
     // Stunning Strike: a paid upgrade that takes the target's turn is worth that turn.
     const denial = turnDenialValue(attack, source, target, targetCombatant);
-    const value = damage - cost + trade + control + denial;
+    // Tactical Master: what the mastery used instead adds over the weapon's own.
+    const swap = attack.swappedMastery
+      ? (masteryWorth(attack.swappedMastery.to, attack, source, target, hitChance) - masteryWorth(attack.swappedMastery.from, attack, source, target, hitChance))
+      : 0;
+    const value = damage - cost + trade + control + denial + swap;
     if (!best || value > best.value + 1e-9) best = { attack, value, damage, hitChance };
   }
   return best;
@@ -4166,6 +4170,25 @@ function expectedRiderControl(
 }
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
+
+/**
+ * Roughly what a weapon's mastery adds to a hit, on the damage scale: Sap a fifth of the target's threat, Topple a
+ * prone target's worth when its save fails, Vex an easier next swing; Push and Slow a little; the rest nothing here
+ * (Graze's damage, Cleave's and Nick's extra attacks are counted where they happen).
+ */
+function masteryWorth(mastery: WeaponMastery, attack: AttackAction, source: CreatureDefinition, target: CreatureDefinition, hitChance: number): number {
+  switch (mastery) {
+    case "sap": return hitChance * threatPerRound(target) * 0.2;
+    case "topple": {
+      const dc = 8 + abilityModifier(source.abilities[attack.ability]) + (source.proficiencyBonus ?? 2);
+      return hitChance * chanceToFailSave(dc, target.saves?.con ?? abilityModifier(target.abilities.con)) * 2.5;
+    }
+    case "vex": return hitChance * 1.5;
+    case "push":
+    case "slow": return hitChance * 0.5;
+    default: return 0;
+  }
+}
 
 /** Conditions that take a creature's turn from it. */
 const TURN_TAKING: ReadonlySet<ConditionName> = new Set<ConditionName>(["stunned", "paralyzed", "incapacitated", "unconscious", "petrified"]);

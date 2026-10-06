@@ -90,6 +90,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
   {
+    kind: "mastery-swap", label: "Another mastery for an attack", hint: "Tactical Master: Push, Sap or Slow in place of a weapon's own mastery", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "mastery-swap", masteries: ["push", "sap", "slow"] })
+  },
+  {
     kind: "attack-defense", label: "Disadvantage on some attacks against it", hint: "Escape the Horde: opportunity attacks; Multiattack Defense: further attacks this turn by one that hit it", theme: "defense", when: false, scope: false,
     blank: () => ({ kind: "attack-defense", against: "opportunity" })
   },

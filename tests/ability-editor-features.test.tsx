@@ -368,6 +368,16 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Wary").effects).toEqual([{ kind: "attack-defense", against: "after-hit" }]);
   });
 
+  it("Another mastery for an attack: which (Tactical Master)", async () => {
+    await blankFeature("Adaptable");
+    const card = await addEffect(/^Another mastery for an attack/, "Another mastery for an attack");
+    await chip(card, "Masteries it can use instead", "slow");
+    await chip(card, "Masteries it can use instead", "topple");
+    await done(card);
+    await addToSheet();
+    expect(named("Adaptable").effects).toEqual([{ kind: "mastery-swap", masteries: ["push", "sap", "topple"] }]);
+  });
+
   it("Rage's no-spells card on the sheet (7ae)", async () => {
     const barbarian = rebuildActor(blankCharacter("def-b", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:barbarian", level: 5 }), SRD_BUILD_SOURCES).definition;
     const rage = barbarian.features!.find((feature) => feature.name === "Rage")!;

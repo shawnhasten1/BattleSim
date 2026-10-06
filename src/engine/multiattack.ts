@@ -74,7 +74,7 @@ export function swingsOf(attacks: MultiattackStep[]): MultiattackSwing[] {
  * Variant ids compiled beside a plain attack: a weapon's power attack or attack that spends a charge, a spell attack
  * cast with a higher slot.
  */
-const VARIANT_ID = /:(?:power|charged(?:-\d+)?|upcast-\d+|imbued|with-[a-z0-9-]+)(?::|$)/;
+const VARIANT_ID = /:(?:power|charged(?:-\d+)?|upcast-\d+|imbued|with-[a-z0-9-]+|mastery-[a-z]+)(?::|$)/;
 
 /** Whether an attack is a variant of another (`…:power`, `…:charged-2`, `…:upcast-3`), not a plain attack of its own. */
 export function isAttackVariant(action: ActionDefinition): boolean {
