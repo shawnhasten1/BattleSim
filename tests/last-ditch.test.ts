@@ -95,6 +95,8 @@ describe("Relentless Rage", () => {
     resolveActivateFeatureAction(state, "pc-fighter", getExecutableActions(definition).find((entry) => entry.name === "Rage")!.id);
     me().currentHp = 30;
     goblinTurn();
+    // No Retaliation (a Berserker's): its reaction is spent.
+    me().actionEconomy = { action: true, bonus: true, reaction: false };
     state.rng = scripted([15, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 20]);
     resolveAttack(state, "enemy-goblin-1", "pc-fighter", scimitar.id);
     expect(me()).toMatchObject({ state: "active", currentHp: 22 });

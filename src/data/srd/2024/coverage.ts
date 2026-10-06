@@ -47,7 +47,7 @@ export const GAPS = {
   "gain-speed": "Gaining a speed for a while (Dragon Wings, Draconic Flight)",
   "rage-limits": "What raging forbids (spells, concentration), and its states (raging and reckless at once)",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
-  "reaction-attack": "A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect)",
+  "reaction-attack": "A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage)",
   "oa-defense": "Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense)",
   "target-count": "A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many)",
   "condition-removal": "Ending a condition with a feature (Self-Restoration, Restoring Touch)",
@@ -111,7 +111,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Path of the Berserker */
   "path-of-the-berserker_frenzy": partial(["rage-limits"], "The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack."),
   "path-of-the-berserker_mindless-rage": full("Immune to Charmed and Frightened while raging; raging ends them."),
-  "path-of-the-berserker_retaliation": manual(["reaction-attack"]),
+  "path-of-the-berserker_retaliation": partial(["reaction-attack"], "A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it."),
   "path-of-the-berserker_intimidating-presence": full("A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered."),
 
   /* Bard */
@@ -210,7 +210,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "monk_monks-focus": partial(["combined-utility"], "Flurry of Blows runs, and so do Disengage and Dash as bonus actions; spending a point for two actions in one gives the Dodge or the Dash alone."),
   "monk_unarmored-movement": builder("Speed by level; armor isn't checked."),
   "monk_uncanny-metabolism": info("A fight starts with full pools and hit points."),
-  "monk_deflect-attacks": partial(["reaction-attack"], "1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing; the Focus Point redirect when the damage drops to 0 doesn't run."),
+  "monk_deflect-attacks": full("1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources."),
   "monk_monk-subclass": SUBCLASS,
   "monk_stunning-strike": partial(["ai-control-value"], "Stunned on a failed save, on the Unarmed Strike; on a success, speed halved and advantage on the monk's next attack against it (anyone's, by the rules) until its next turn. The AI spends focus on it only under Controller tactics."),
   "monk_ability-score-improvement": FEAT_CHOICE,

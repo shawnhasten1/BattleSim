@@ -728,6 +728,11 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
         : `${S} can use the mastery properties of ${joinList(effect.weapons.map((kind) => kind.replace(/-/g, " ")))}.`;
     case "on-hit-option":
       return onHitOptionSentence(effect.option, definition, who);
+    case "reaction-attack": {
+      const from = effect.trigger.withinFt !== undefined ? ` by a creature within ${effect.trigger.withinFt} feet of ${who.object}` : "";
+      const types = joinList(effect.attackTypes ?? ["melee"], "or");
+      return `When ${who.subject} ${effect.trigger.damaged ? "takes damage from" : "is hit by"} an attack${from}${effect.trigger.meleeOnly ? " (a melee one)" : ""}, ${who.subject} can use ${who.possessive} reaction to make one ${types} attack against the attacker.`;
+    }
   }
 }
 
@@ -841,6 +846,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "no-critical-hits": return "no critical hits against it";
     case "weapon-mastery": return effect.weapons === "all" ? "masters every weapon" : `masters ${effect.weapons.map((kind) => kind.replace(/-/g, " ")).join(", ")}`;
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
+    case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
   }
 }
 
@@ -1265,18 +1271,26 @@ function onActivatePhrases(feature: FeatureDefinition | undefined, definition: C
 }
 
 /** What a damage-cutting reaction does to the damage (Uncanny Dodge, Deflect Attacks, Superior Hunter's Defense). */
-function damageCutText(cut: NonNullable<ActivateAction["damageCut"]>): { text: string; short: string } {
+function damageCutText(cut: NonNullable<ActivateAction["damageCut"]>, definition: CreatureDefinition): { text: string; short: string } {
   if (cut.kind === "halve") return { text: "It halves the damage.", short: "halves the damage" };
   if (cut.kind === "resist") {
     return { text: "It has resistance to that damage, and any other of its type, until the end of the turn.", short: "resists it this turn" };
   }
   const roll = [cut.dice, ...(cut.abilityModifier ? [`its ${ABILITY_NAME[cut.abilityModifier]} modifier`] : []), ...(cut.bonus ? [String(cut.bonus)] : [])].join(" + ");
-  return { text: `It reduces the damage by ${roll}.`, short: `−${[cut.dice, ...(cut.abilityModifier ? [cut.abilityModifier.toUpperCase()] : []), ...(cut.bonus ? [String(cut.bonus)] : [])].join("+")} damage` };
+  const short = `−${[cut.dice, ...(cut.abilityModifier ? [cut.abilityModifier.toUpperCase()] : []), ...(cut.bonus ? [String(cut.bonus)] : [])].join("+")} damage`;
+  // Deflect Attacks: some of it sent back when none of it gets through.
+  const back = cut.redirect;
+  if (!back) return { text: `It reduces the damage by ${roll}.`, short };
+  const dc = resolveNumericFormula(back.save.dcFormula, definition);
+  return {
+    text: `It reduces the damage by ${roll}. If that reduces it to 0, it can spend ${costText(back.resourceCost, definition)} to redirect it: a creature within ${back.meleeFt} feet (after a melee attack) or ${back.rangedFt} feet (after a ranged one) must succeed on a DC ${dc} ${ABILITY_NAME[back.save.ability]} saving throw or take ${damageText(back.damage, definition)} of the attack's type.`,
+    short: `${short}, redirected at 0`
+  };
 }
 
 /** What an activation does: its immediate effect and the state it puts the creature in. */
 function activationText(action: ActivateAction, definition: CreatureDefinition, feature = featureById(definition, action.featureId)): { text: string; short: string } {
-  if (action.damageCut) return damageCutText(action.damageCut);
+  if (action.damageCut) return damageCutText(action.damageCut, definition);
   const now = onActivatePhrases(feature, definition);
   const next = action.condition?.nextAttack;
   const lasting = [

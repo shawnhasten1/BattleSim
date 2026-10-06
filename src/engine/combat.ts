@@ -43,6 +43,7 @@ import type {
   Id,
   ItemUseMeta,
   MultiattackActionDefinition,
+  DamageRedirect,
   NextAttackChange,
   OnHitDiceTrade,
   OnHitMove,
@@ -266,7 +267,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...weaponGrantedActions,
     ...itemUses
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -511,6 +512,33 @@ export function damageBonusExpected(
   if (effect.kind === "damage-bonus" && effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) return false;
   const inputs = attackRollInputs(state, attacker, target, action);
   return featureConditionsMet(state, attacker, target, effect, { rollMode: inputs.rollMode, critical: false });
+}
+
+/**
+ * Retaliation: a reaction copy of each of its plain attacks of the effect's types ("Greataxe (Retaliation)"), made
+ * against the attacker when the trigger passes; the most damaging first, so the AI's pick (the first) is the best.
+ */
+function reactionAttackVariants(definition: CreatureDefinition, listed: ActionDefinition[]): AttackActionDefinition[] {
+  const features = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only");
+  const out: AttackActionDefinition[] = [];
+  for (const feature of features) {
+    (feature.effects ?? []).forEach((effect, index) => {
+      if (effect.kind !== "reaction-attack") return;
+      const types = effect.attackTypes ?? ["melee"];
+      const attacks = listed
+        .filter((action): action is AttackActionDefinition => action.kind === "attack" && action.actionType === "action" && !isAttackVariant(action)
+          && !action.item && !action.resourceCost && !action.onlyAfter && action.automationSupport === "full" && types.includes(action.attackType))
+        .sort((a, b) => roughAverageDamage(b.damage) - roughAverageDamage(a.damage));
+      for (const attack of attacks) {
+        out.push({
+          ...attack, id: `${attack.id}:reaction-${feature.id}-${index}`, name: `${attack.name} (${feature.name})`, actionType: "reaction",
+          reaction: { trigger: effect.trigger, target: "trigger-source", priority: "always" }
+        });
+      }
+    });
+  }
+  return out;
 }
 
 /** The damage bonus an on-hit option spends dice of (Sneak Attack's), when the creature has it with enough dice. */
@@ -2305,7 +2333,7 @@ function resolveAttackCore(
       })),
       ...featureDamage.entries,
       ...targetHitDamage.entries
-    ], attackerDefinition, attacker.id, { byAttack: true })
+    ], attackerDefinition, attacker.id, { byAttack: true, attackType: action.attackType })
     // Potent Cantrip: a miss still deals half the damage, and nothing else.
     : action.halfDamageOnMiss
       ? applyDamageEntries(state, target, action.damage.map((component, index) => ({
@@ -4881,7 +4909,7 @@ function applyDamageEntries(
   entries: DamageApplicationEntry[],
   source: CreatureDefinition,
   sourceId?: Id,
-  options: { byAttack?: boolean; actionId?: Id } = {}
+  options: { byAttack?: boolean; attackType?: AttackActionDefinition["attackType"]; actionId?: Id } = {}
 ): number {
   const targetDefinition = getDefinition(state.snapshot, target);
   const hpBefore = target.currentHp + target.tempHp;
@@ -4911,7 +4939,7 @@ function applyDamageEntries(
       : resolveDamageTypeReference(component.damageType, entry.triggerDamageType);
     return { damageType, base: roll.total + formulaBonus, origin, halve: entry.halve === true, roll };
   });
-  const landing = damageAfterReaction(state, target, targetDefinition, rolled, sourceId, options.byAttack === true);
+  const landing = damageAfterReaction(state, target, targetDefinition, rolled, sourceId, options.byAttack === true, options.attackType);
   const components = rolled.map(({ damageType, roll }, index) => {
     const entry = entries[index]!;
     const { adjusted, finalAmount, absorbed } = landing.amounts[index]!;
@@ -5025,14 +5053,16 @@ function damageAfterReaction(
   targetDefinition: CreatureDefinition,
   pending: PendingDamage[],
   sourceId: Id | undefined,
-  byAttack: boolean
+  byAttack: boolean,
+  attackType?: AttackActionDefinition["attackType"]
 ): { amounts: Array<{ adjusted: number; finalAmount: number; absorbed: number }>; cutBy?: string; cut?: number } {
   let amounts = resolvePendingDamage(target, targetDefinition, pending);
   const total = amounts.reduce((sum, part) => sum + part.finalAmount, 0);
   if (total <= 0 || !hasDamageReaction(target, targetDefinition)) return { amounts };
   const damageTypes = [...new Set(pending.filter((_, index) => amounts[index]!.finalAmount > 0).map((part) => part.damageType))];
   const { damageCut } = runReactionWindow(state, {
-    kind: "would-take-damage", sourceId: sourceId ?? target.id, targetId: target.id, damageTaken: total, damageTypes, byAttack
+    kind: "would-take-damage", sourceId: sourceId ?? target.id, targetId: target.id, damageTaken: total, damageTypes, byAttack,
+    ...(attackType ? { attackType } : {})
   });
   if (!damageCut) return { amounts };
   if (damageCut.resisted) amounts = resolvePendingDamage(target, targetDefinition, pending);
@@ -5043,7 +5073,45 @@ function damageAfterReaction(
     part.finalAmount -= taken;
     cut -= taken;
   }
-  return { amounts, cutBy: damageCut.by, cut: total - amounts.reduce((sum, part) => sum + part.finalAmount, 0) };
+  const left = amounts.reduce((sum, part) => sum + part.finalAmount, 0);
+  // Deflect Attacks: none of it got through, so some of it goes back.
+  if (damageCut.redirect && left === 0) redirectDamage(state, target, damageCut.redirect, damageCut.by, sourceId, attackType, damageTypes[0]);
+  return { amounts, cutBy: damageCut.by, cut: total - left };
+}
+
+/**
+ * Deflect Attacks' redirect: the reactor pays for it and picks a creature in range (the attacker if it's there, else the
+ * likeliest to drop), which makes the save or takes the damage, of the attack's type.
+ */
+function redirectDamage(
+  state: EngineState,
+  reactor: CombatantState,
+  redirect: DamageRedirect,
+  name: string,
+  sourceId: Id | undefined,
+  attackType: AttackActionDefinition["attackType"] | undefined,
+  damageType: DamageType | undefined
+): void {
+  if (reactor.state !== "active" || (reactor.resources?.[redirect.resourceCost.resourceId] ?? 0) < redirect.resourceCost.amount) return;
+  const range = attackType === "melee" ? redirect.meleeFt : redirect.rangedFt;
+  const faction = effectiveFaction(state.snapshot, reactor);
+  const inRange = state.snapshot.combatants.filter((combatant) => combatant.state === "active" && effectiveFaction(state.snapshot, combatant) !== faction
+    && spatialDistance(state.snapshot, reactor, combatant) <= range
+    && (!state.snapshot.rules.requireLineOfEffect || lineOfEffect(state.snapshot.map, reactor.position, combatant.position)));
+  const target = inRange.find((combatant) => combatant.id === sourceId) ?? [...inRange].sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id))[0];
+  if (!target) return;
+  const { resourceId, amount } = redirect.resourceCost;
+  reactor.resources = { ...(reactor.resources ?? {}), [resourceId]: (reactor.resources?.[resourceId] ?? 0) - amount };
+  const definition = getDefinition(state.snapshot, reactor);
+  const dc = resolveNumericFormula(redirect.save.dcFormula, definition);
+  state.log.push(event(state, "FeatureEffectApplied", `${reactor.displayName}'s ${name} sends the attack at ${target.displayName}`, {
+    combatantId: reactor.id, targetId: target.id, featureName: name, effectKind: "damage-redirect", resourceId, spent: amount
+  }));
+  const save = rollSavingThrow(state, target, { ability: redirect.save.ability, dc, kind: "feature", label: name });
+  state.log.push(event(state, "SaveRolled", `${target.displayName} rolled a ${redirect.save.ability.toUpperCase()} save against ${reactor.displayName}'s ${name}`, {
+    targetId: target.id, attackerId: reactor.id, saveRoll: save.roll, total: save.roll.total, dc, success: save.success
+  }));
+  if (!save.success) applyDamageComponents(state, target, redirect.damage, definition, false, damageType ? { triggerDamageType: damageType } : {}, reactor.id);
 }
 
 /** What one instance of damage did, for the rules that care about more than the HP total. */
@@ -8080,7 +8148,7 @@ export interface ReactionWindowResult {
   /** Conditions a reaction gave that last for the triggering attack only (Parry): removed once it's resolved. */
   endsAfterAttack?: Array<{ combatantId: Id; conditionId: Id }>;
   /** A reaction's cut to the damage about to land (`would-take-damage`), and the reaction's name. */
-  damageCut?: { halve?: boolean; reduce?: number; resisted?: boolean; by: string };
+  damageCut?: { halve?: boolean; reduce?: number; resisted?: boolean; by: string; redirect?: DamageRedirect };
   /** The 2024 Counterspell: the countered spell's slot isn't spent. */
   refundSlot?: boolean;
 }
@@ -8119,12 +8187,22 @@ function reactionTriggerPasses(
       // Handled by `findLeaveReachReaction` — this window builds its list there.
       return true;
     case "targeted-by-attack":
-    case "hit-by-attack":
       return reactor.id === event.targetId
         && (!trigger.meleeOnly || event.attackType === "melee");
+    case "hit-by-attack": {
+      // Retaliation: an attacker within reach of it, and the hit hurt.
+      const source = trigger.withinFt !== undefined ? state.snapshot.combatants.find((combatant) => combatant.id === event.sourceId) : undefined;
+      return reactor.id === event.targetId
+        && (!trigger.meleeOnly || event.attackType === "melee")
+        && (trigger.withinFt === undefined || (source !== undefined && spatialDistance(state.snapshot, reactor, source) <= trigger.withinFt))
+        && (!trigger.damaged || (event.damageTaken ?? 0) > 0);
+    }
     case "would-take-damage":
       return reactor.id === event.targetId
         && action.kind === "activate-feature" && Boolean(action.damageCut)
+        // Deflect Attacks' redirect: offered with the point to pay for it, spent only if the damage drops to 0.
+        && (!(action.damageCut!.kind === "reduce" && action.damageCut!.redirect)
+          || (reactor.resources?.[action.damageCut!.redirect!.resourceCost.resourceId] ?? 0) >= action.damageCut!.redirect!.resourceCost.amount)
         && (event.damageTaken ?? 0) > 0
         && (!trigger.attackOnly || event.byAttack === true)
         && (!trigger.damageTypes?.length || (event.damageTypes ?? []).some((type) => trigger.damageTypes!.includes(type)));
@@ -8207,8 +8285,13 @@ function reactionClearsValueBar(state: EngineState, reaction: EligibleReaction, 
   if (meta.trigger.kind === "would-take-damage") {
     // Worth it for a cut of 5 or more, or one that keeps the creature standing.
     const incoming = event.damageTaken ?? 0;
-    const cut = expectedDamageCut(action, getDefinition(state.snapshot, reaction.reactor), incoming);
+    const definition = getDefinition(state.snapshot, reaction.reactor);
+    const cut = expectedDamageCut(action, definition, incoming);
     const standing = reaction.reactor.currentHp + reaction.reactor.tempHp;
+    // Deflect Attacks' redirect: only when it's likely to stop all of it and send back a fair hit (otherwise the plain
+    // copy does the same cut).
+    const redirect = action.kind === "activate-feature" && action.damageCut?.kind === "reduce" ? action.damageCut.redirect : undefined;
+    if (redirect) return expectedDamageCut(action, definition, Number.POSITIVE_INFINITY) >= incoming && roughAverageDamage(redirect.damage) >= 4;
     return cut >= 5 || (incoming >= standing && incoming - cut < standing);
   }
   if (meta.trigger.kind === "enemy-casts-spell") {
@@ -8261,7 +8344,10 @@ function reactionOptionsFor(
 /** The reaction the AI takes: the first that isn't left to a human (`"manual"`) and, if only `"worthwhile"`, is worth it. */
 function aiReactionPick(state: EngineState, options: EligibleReaction[], event: ReactionEvent): EligibleReaction | undefined {
   return options.find((reaction) => reaction.meta.priority !== "manual"
-    && !(reaction.meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event)));
+    && !(reaction.meta.priority === "worthwhile" && !reactionClearsValueBar(state, reaction, event))
+    // Deflect Attacks' redirect spends a point: a conservative creature keeps it.
+    && !(reaction.reactor.resourceStance === "conservative" && reaction.action.kind === "activate-feature"
+      && reaction.action.damageCut?.kind === "reduce" && reaction.action.damageCut.redirect));
 }
 
 /* ─── Counters: which slot, or none ───────────────────────────────────────────
@@ -8654,7 +8740,7 @@ function cutDamage(
     state.log.push(event(state, "FeatureEffectApplied", `${reactor.displayName}'s ${action.name} takes ${reduce} off the damage`, {
       combatantId: reactor.id, actionId: action.id, featureId: action.featureId, roll, amount: reduce, effectKind: "damage-cut"
     }));
-    return { reduce, by: action.name };
+    return { reduce, by: action.name, ...(cut.redirect ? { redirect: cut.redirect } : {}) };
   }
   const types = ev.damageTypes ?? [];
   applyCondition(state, reactor.id, {

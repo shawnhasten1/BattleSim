@@ -212,7 +212,13 @@ export const BERSERKER: SubclassDefinition = {
         effects: [{ kind: "condition-immunity", conditions: ["charmed", "frightened"], whileCondition: RAGE_ACTIVE }]
       }))]
     },
-    { level: 10, grants: [grant("retaliation", reference("path-of-the-berserker_retaliation"))] },
+    {
+      level: 10,
+      grants: [grant("retaliation", runs("path-of-the-berserker_retaliation", {
+        effects: [{ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 5, damaged: true }, attackTypes: ["melee"] }],
+        notSimulated: "damage from within 5 feet that isn't an attack's hit (a spell's save, an aura) doesn't offer it."
+      }))]
+    },
     {
       level: 14,
       grants: [grant("intimidating-presence", runs("path-of-the-berserker_intimidating-presence", {

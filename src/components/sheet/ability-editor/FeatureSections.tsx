@@ -190,7 +190,7 @@ export function ActivationUse({ activation, onChange, definition, newPools, park
           <ReactionControls reaction={activation.reaction} onChange={(reaction) => onChange(withDamageCutFor({ ...activation, reaction }))} kinds={ACTIVATION_TRIGGERS} actsOn={false} />
           <TriggerNote trigger={activation.reaction.trigger} />
           {activation.reaction.trigger.kind === "would-take-damage" && activation.damageCut ? (
-            <DamageCutControls value={activation.damageCut} onChange={(damageCut) => onChange({ ...activation, damageCut })} />
+            <DamageCutControls value={activation.damageCut} onChange={(damageCut) => onChange({ ...activation, damageCut })} definition={definition} newPools={newPools} />
           ) : null}
         </>
       ) : null}

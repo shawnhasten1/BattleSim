@@ -814,6 +814,15 @@ export type FeatureEffect =
     /** Something its hits can be upgraded with for a cost paid only when it lands (Eldritch Smite, Fire's Burn). */
     kind: "on-hit-option";
     option: OnHitOption;
+  }
+  | {
+    /**
+     * A reaction attack when hit (Retaliation): each of its attacks of these types (default melee) gets a reaction copy,
+     * made against the attacker when `trigger` passes.
+     */
+    kind: "reaction-attack";
+    trigger: Extract<ReactionTrigger, { kind: "hit-by-attack" }>;
+    attackTypes?: Array<"melee" | "ranged" | "spell">;
   };
 
 /**
@@ -1125,7 +1134,13 @@ export type ReactionTrigger =
    */
   | { kind: "would-be-hit"; meleeOnly?: boolean }
   /** The reactor was hit by an attack (Hellish Rebuke). */
-  | { kind: "hit-by-attack"; meleeOnly?: boolean }
+  | {
+    kind: "hit-by-attack"; meleeOnly?: boolean;
+    /** Only an attacker within this many feet (Retaliation: 5). */
+    withinFt?: number;
+    /** Only when the hit dealt the reactor damage (Retaliation: "when you take damage"). */
+    damaged?: boolean;
+  }
   /**
    * The reactor is about to take damage: rolled, its resistances counted, not yet landed. An activation's `damageCut`
    * cuts it (Uncanny Dodge, Deflect Attacks, Stone's Endurance) or resists it (Superior Hunter's Defense).
@@ -1664,8 +1679,21 @@ export interface ActivateFeatureActionDefinition {
  */
 export type DamageCut =
   | { kind: "halve" }
-  | { kind: "reduce"; dice: string; abilityModifier?: Ability; bonus?: number }
+  | { kind: "reduce"; dice: string; abilityModifier?: Ability; bonus?: number; redirect?: DamageRedirect }
   | { kind: "resist" };
+
+/**
+ * Deflect Attacks: when the cut leaves no damage, it can pay `resourceCost` to send some back. A creature within
+ * `meleeFt` (a melee attack's) or `rangedFt` (a ranged one's), the attacker if it's there, makes the save or takes
+ * `damage`, of the attack's type ("same-as-attack").
+ */
+export interface DamageRedirect {
+  resourceCost: ResourceCost;
+  damage: DamageComponent[];
+  save: { ability: Ability; dcFormula: NumericFormula };
+  meleeFt: number;
+  rangedFt: number;
+}
 
 /**
  * A standard non-attack action — Dash / Disengage / Dodge (and reference-only
@@ -2732,7 +2760,7 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
   z.object({ kind: z.literal("targeted-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("would-be-hit"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("would-take-damage"), attackOnly: z.boolean().optional(), damageTypes: z.array(z.string().min(1)).optional() }),
-  z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional() }),
+  z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional(), withinFt: z.number().min(0).optional(), damaged: z.boolean().optional() }),
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
   z.object({
     kind: z.literal("enemy-casts-spell"), withinFt: z.number().min(0), maxSpellLevel: z.number().int().min(0).optional(),

@@ -118,7 +118,8 @@ describe("Deflect Attacks and Deflect Energy", () => {
     expect(struckBy(actor(quick("monk", 12)), "2d10", "fire").swing([15, 10, 10, 1])).toBe(20);
     const { state, swing } = struckBy(actor(quick("monk", 13)), "2d10", "fire");
     expect(swing([15, 10, 10, 1])).toBeLessThan(20);
-    expect(damageEvents(state)[0]?.data?.cutBy).toBe("Deflect Energy");
+    // Likely to stop all 20 at 13th level, the AI takes the copy that redirects it when it does (7u).
+    expect(damageEvents(state)[0]?.data?.cutBy).toMatch(/^Deflect Energy/);
   });
 });
 

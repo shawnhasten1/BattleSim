@@ -15,12 +15,12 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 14 | 2 | 1 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 14 | 3 | 0 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
+| Monk (Warrior of the Open Hand) | 26 | 10 | 4 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
@@ -45,7 +45,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
-| `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
@@ -68,6 +67,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
+| `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
 | `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
 | `max-damage` | Maximum damage instead of a roll (Overchannel) | Wizard | 14 | Overchannel (Evoker) |
@@ -108,7 +108,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Frenzy | partial | `rage-limits` | The extra d6s (as many as Rage's damage bonus) on the first Strength hit each turn while raging with advantage, whether or not the advantage came from Reckless Attack. |
 | 6 | Mindless Rage | full |  | Immune to Charmed and Frightened while raging; raging ends them. |
-| 10 | Retaliation | manual | `reaction-attack` |  |
+| 10 | Retaliation | partial | `reaction-attack` | A melee attack with its reaction when an attack's hit from within 5 ft damages it, the most damaging weapon first; damage that isn't a hit doesn't offer it. |
 | 14 | Intimidating Presence | full |  | A 30-ft Wisdom save or Frightened, repeating the save each turn; restoring it with a rage isn't offered. |
 
 ## Bard
@@ -234,7 +234,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 2 | Monk's Focus | partial | `combined-utility` | Flurry of Blows runs, and so do Disengage and Dash as bonus actions; spending a point for two actions in one gives the Dodge or the Dash alone. |
 | 2 | Unarmored Movement | builder |  | Speed by level; armor isn't checked. |
 | 2 | Uncanny Metabolism | info |  | A fight starts with full pools and hit points. |
-| 3 | Deflect Attacks | partial | `reaction-attack` | 1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing; the Focus Point redirect when the damage drops to 0 doesn't run. |
+| 3 | Deflect Attacks | full |  | 1d10 + Dexterity + monk level off an attack roll's bludgeoning, piercing or slashing damage, taken by the AI for a cut of 5 or more or one that keeps it standing. When that takes it to 0, a Focus Point redirects it: a Dexterity save or two Martial Arts dice + Dexterity of its type, for the attacker within 5 ft (a melee attack) or 60 ft (a ranged one), else the likeliest to drop there. The AI redirects unless it's conservative with its resources. |
 | 3 | Monk Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 4 | Slow Fall | info |  | Falling. |

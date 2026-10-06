@@ -78,6 +78,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "on-hit-option", option: { name: "Upgrade", riders: [] } })
   },
   {
+    kind: "reaction-attack", label: "An attack back when hit", hint: "Retaliation: its reaction, one melee attack against the attacker", theme: "defense", when: false, scope: false,
+    blank: () => ({ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 5, damaged: true }, attackTypes: ["melee"] })
+  },
+  {
     kind: "damage-dice", label: "Better damage dice", hint: "Great Weapon Fighting's 1s and 2s as 3s, Savage Attacker's second roll", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-dice", condition: "always", minimumDie: 3 })
   },

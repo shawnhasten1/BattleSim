@@ -1,8 +1,9 @@
 "use client";
 
 import { useId } from "react";
-import type { Ability, DamageCut, ReactionMeta, ReactionTrigger } from "@/engine";
+import type { Ability, CreatureDefinition, DamageCut, DamageRedirect, ReactionMeta, ReactionTrigger } from "@/engine";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
+import { PoolPicker, type NewPools } from "./LimitPicker";
 import { DAMAGE_TYPES } from "./DamageLines";
 import styles from "./ability-editor.module.css";
 
@@ -54,7 +55,19 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
         {offered.map((trigger) => <option key={trigger.value} value={trigger.value}>{trigger.label}</option>)}
       </select>
       {value.kind === "targeted-by-attack" || value.kind === "would-be-hit" || value.kind === "hit-by-attack" ? (
-        <Check label="Melee attacks only" checked={Boolean(value.meleeOnly)} onChange={(on) => onChange(on ? { ...value, meleeOnly: true } : { kind: value.kind })} />
+        <Check label="Melee attacks only" checked={Boolean(value.meleeOnly)} onChange={(on) => { const next = { ...value }; delete next.meleeOnly; onChange(on ? { ...next, meleeOnly: true } : next); }} />
+      ) : null}
+      {value.kind === "hit-by-attack" ? (
+        <>
+          <span className={styles.inline}>
+            <span>by an attacker within</span>
+            <NumberField label="Attacker within (ft)" value={value.withinFt} optional min={0} max={999} step={5} placeholder="any"
+              onChange={(n) => { const next = { ...value }; delete next.withinFt; onChange(n === undefined ? next : { ...next, withinFt: n }); }} />
+            <span>ft</span>
+          </span>
+          <Check label="Only when the hit damages it" checked={value.damaged === true}
+            onChange={(on) => { const next = { ...value }; delete next.damaged; onChange(on ? { ...next, damaged: true } : next); }} />
+        </>
       ) : null}
       {value.kind === "would-take-damage" ? (
         <>
@@ -101,7 +114,13 @@ export function TriggerPicker({ value, onChange, label = "When", kinds }: {
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 
 /** What a reaction to damage about to land does to it: halves it, takes off a roll, or resists its type this turn. */
-export function DamageCutControls({ value, onChange }: { value: DamageCut; onChange: (next: DamageCut) => void }) {
+export function DamageCutControls({ value, onChange, definition, newPools }: {
+  value: DamageCut;
+  onChange: (next: DamageCut) => void;
+  /** With these, a cut that takes off a roll can redirect what it stopped (Deflect Attacks). */
+  definition?: CreatureDefinition;
+  newPools?: NewPools;
+}) {
   const abilityId = useId();
   return (
     <Field copy="damageCut">
@@ -127,7 +146,68 @@ export function DamageCutControls({ value, onChange }: { value: DamageCut; onCha
           <NumberField label="Flat amount it adds" value={value.bonus} optional min={1} max={99} placeholder="0" onChange={(n) => { const next = { ...value }; delete next.bonus; onChange(n ? { ...next, bonus: n } : next); }} />
         </span>
       ) : null}
+      {value.kind === "reduce" && definition && newPools ? (
+        <>
+          <Check label="When that takes it to 0, it can redirect it (Deflect Attacks)" checked={Boolean(value.redirect)}
+            onChange={(on) => { const next = { ...value }; delete next.redirect; onChange(on ? { ...next, redirect: BLANK_REDIRECT } : next); }} />
+          {value.redirect ? <RedirectControls value={value.redirect} onChange={(redirect) => onChange({ ...value, redirect })} definition={definition} newPools={newPools} /> : null}
+        </>
+      ) : null}
     </Field>
+  );
+}
+
+const BLANK_REDIRECT: DamageRedirect = {
+  resourceCost: { resourceId: "", amount: 1 },
+  damage: [{ dice: "2d6", abilityModifier: "dex", damageType: "same-as-attack" }],
+  save: { ability: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true } },
+  meleeFt: 5,
+  rangedFt: 60
+};
+
+/** Deflect Attacks' redirect: what it spends, what it deals, the save against it (8 + proficiency + an ability), how far. */
+function RedirectControls({ value, onChange, definition, newPools }: {
+  value: DamageRedirect;
+  onChange: (next: DamageRedirect) => void;
+  definition: CreatureDefinition;
+  newPools: NewPools;
+}) {
+  const damage = value.damage[0] ?? { dice: "", damageType: "same-as-attack" as const };
+  const dcAbility = value.save.dcFormula.ability === "spellcasting" ? undefined : value.save.dcFormula.ability;
+  return (
+    <>
+      <PoolPicker definition={definition} newPools={newPools} startCreating={!value.resourceCost.resourceId}
+        value={value.resourceCost.resourceId ? value.resourceCost : undefined} onChange={(resourceCost) => onChange({ ...value, resourceCost })} />
+      <span className={styles.inline}>
+        <span>deals</span>
+        <input aria-label="Damage it sends back" className={styles.expression} value={damage.dice} placeholder="2d6"
+          onChange={(e) => onChange({ ...value, damage: [{ ...damage, dice: e.target.value.replace(/\s+/g, "") }] })} />
+        <span>+</span>
+        <select aria-label="Ability it adds to the damage" value={damage.abilityModifier ?? ""}
+          onChange={(e) => { const next = { ...damage }; delete next.abilityModifier; onChange({ ...value, damage: [e.target.value ? { ...next, abilityModifier: e.target.value as Ability } : next] }); }}>
+          <option value="">no ability</option>
+          {ABILITIES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+        </select>
+        <span>of the attack's type</span>
+      </span>
+      <span className={styles.inline}>
+        <select aria-label="Save against it" value={value.save.ability} onChange={(e) => onChange({ ...value, save: { ...value.save, ability: e.target.value as Ability } })}>
+          {ABILITIES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()} save</option>)}
+        </select>
+        <span>DC 8 + proficiency +</span>
+        <select aria-label="The save DC's ability" value={dcAbility ?? "wis"}
+          onChange={(e) => onChange({ ...value, save: { ...value.save, dcFormula: { base: 8, ability: e.target.value as Ability, proficiency: true } } })}>
+          {ABILITIES.map((ability) => <option key={ability} value={ability}>{ability.toUpperCase()}</option>)}
+        </select>
+      </span>
+      <span className={styles.inline}>
+        <span>at a creature within</span>
+        <NumberField label="After a melee attack (ft)" value={value.meleeFt} min={0} max={120} step={5} onChange={(n) => n !== undefined && onChange({ ...value, meleeFt: n })} />
+        <span>ft (melee) or</span>
+        <NumberField label="After a ranged attack (ft)" value={value.rangedFt} min={0} max={600} step={5} onChange={(n) => n !== undefined && onChange({ ...value, rangedFt: n })} />
+        <span>ft (ranged)</span>
+      </span>
+    </>
   );
 }
 

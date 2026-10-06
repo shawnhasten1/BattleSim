@@ -2,7 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ActionDefinition, CreatureDefinition, FeatureDefinition } from "@/engine";
+import { getExecutableActions, type ActionDefinition, type CreatureDefinition, type FeatureDefinition } from "@/engine";
 import { SRD_FEATURES, findSrdFeature } from "@/data/srd";
 import { loadSrdMonster } from "@/data/srd/monsters";
 import { ActorSheet } from "@/components/sheet/ActorSheet";
@@ -212,6 +212,20 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     const effect = named("Wild Swing").effects?.[0];
     expect(effect).toMatchObject({ kind: "on-hit-option", option: { abilities: ["str"], oncePerTurn: true } });
     expect(effect?.kind === "on-hit-option" && effect.option.forgoesAdvantage).toBeTruthy();
+  });
+
+  it("An attack back when hit: melee or ranged, how near, and only when it hurts (Retaliation)", async () => {
+    await blankFeature("Riposte");
+    const card = await addEffect(/^An attack back when hit/, "An attack back when hit");
+    await chip(card, "It attacks back with", "ranged");
+    await retype(card.getByLabelText("Attacker within (ft)"), "10");
+    await userEvent.click(card.getByRole("checkbox", { name: "Only when the hit damages it" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Melee hits only" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Riposte").effects).toEqual([{ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 10, meleeOnly: true }, attackTypes: ["melee", "ranged"] }]);
+    // Its swings are on the sheet as reactions.
+    expect(getExecutableActions(fighter()).some((action) => action.actionType === "reaction" && action.name.endsWith("(Riposte)"))).toBe(true);
   });
 
   it("Bigger healing: each of its three parts", async () => {
@@ -519,6 +533,45 @@ describe("activations of their own, buffs, and the sheet around a nested editor"
     expect(inSection("use").queryByRole("radiogroup", { name: "What it does to the damage" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect((fighter().reactions ?? []).find((action) => action.name === "Brace")).not.toHaveProperty("damageCut");
+  });
+
+  it("a damage cut that redirects what it stops (Deflect Attacks): the save, the damage, how far", async () => {
+    store().insertAbilityRecord("def-fighter", "reactions", {
+      kind: "activate-feature", id: "", name: "Turn Aside", actionType: "reaction", featureId: "turn-aside",
+      reaction: { trigger: { kind: "would-take-damage", attackOnly: true }, target: "self", priority: "worthwhile" },
+      damageCut: {
+        kind: "reduce", dice: "1d10",
+        redirect: { resourceCost: { resourceId: "second-wind", amount: 1 }, damage: [{ dice: "2d6", damageType: "same-as-attack" }], save: { ability: "dex", dcFormula: { base: 8, ability: "wis", proficiency: true } }, meleeFt: 5, rangedFt: 60 }
+      },
+      automationSupport: "full"
+    } as ActionDefinition);
+    render(<LiveTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Turn Aside" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    const use = inSection("use");
+    expect((use.getByRole("checkbox", { name: /^When that takes it to 0, it can redirect it/ }) as HTMLInputElement).checked).toBe(true);
+    await retype(use.getByLabelText("Damage it sends back"), "3d6");
+    await userEvent.selectOptions(use.getByLabelText("Ability it adds to the damage"), "dex");
+    await userEvent.selectOptions(use.getByLabelText("Save against it"), "con");
+    await userEvent.selectOptions(use.getByLabelText("The save DC's ability"), "dex");
+    await retype(use.getByLabelText("After a ranged attack (ft)"), "30");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((fighter().reactions ?? []).find((action) => action.name === "Turn Aside")).toMatchObject({
+      damageCut: {
+        kind: "reduce",
+        redirect: {
+          resourceCost: { resourceId: "second-wind" }, damage: [{ dice: "3d6", abilityModifier: "dex", damageType: "same-as-attack" }],
+          save: { ability: "con", dcFormula: { base: 8, ability: "dex", proficiency: true } }, meleeFt: 5, rangedFt: 30
+        }
+      }
+    });
+    // Switched off, it's gone.
+    await userEvent.click(screen.getByRole("button", { name: "Edit Turn Aside" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Use & cost/ }));
+    await userEvent.click(inSection("use").getByRole("checkbox", { name: /^When that takes it to 0, it can redirect it/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    const turned = (fighter().reactions ?? []).find((action) => action.name === "Turn Aside");
+    expect(turned?.kind === "activate-feature" && turned.damageCut).not.toHaveProperty("redirect");
   });
 
   it("a counter by the 2024 rules: the caster's save, no check above the slot", async () => {

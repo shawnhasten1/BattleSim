@@ -1092,6 +1092,32 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
     }
     case "on-hit-option":
       return <OnHitOptionFields option={effect.option} onChange={(option) => set({ ...effect, option })} context={context} />;
+    case "reaction-attack": {
+      const types = effect.attackTypes ?? ["melee"];
+      const toggle = (type: "melee" | "ranged") => {
+        const next = types.includes(type) ? types.filter((candidate) => candidate !== type) : [...types, type];
+        if (next.length) set({ ...effect, attackTypes: next });
+      };
+      return (
+        <>
+          <span className={styles.typeChips} role="group" aria-label="It attacks back with">
+            {(["melee", "ranged"] as const).map((type) => (
+              <button key={type} type="button" aria-pressed={types.includes(type)} onClick={() => toggle(type)}>{type}</button>
+            ))}
+          </span>
+          <span className={styles.inline}>
+            <span>against an attacker within</span>
+            <NumberField label="Attacker within (ft)" value={effect.trigger.withinFt} optional min={0} max={999} step={5} placeholder="any"
+              onChange={(n) => set({ ...effect, trigger: opt(effect.trigger, "withinFt", n) })} />
+            <span>ft</span>
+          </span>
+          <Check label="Only when the hit damages it" checked={effect.trigger.damaged === true}
+            onChange={(on) => set({ ...effect, trigger: opt(effect.trigger, "damaged", on ? true : undefined) })} />
+          <Check label="Melee hits only" checked={effect.trigger.meleeOnly === true}
+            onChange={(on) => set({ ...effect, trigger: opt(effect.trigger, "meleeOnly", on ? true : undefined) })} />
+        </>
+      );
+    }
     case "d20-change": {
       const rolls = effect.rolls;
       const toggleRoll = (roll: "attack" | "save") => {

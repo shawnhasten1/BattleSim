@@ -23,13 +23,41 @@ const UNARMED: WeaponDefinition = {
 const UNARMED_BONUS = "monk-martial-arts:bonus";
 const FOCUS_DC = { base: 8, ability: "wis" as const, proficiency: true };
 
-/** Deflect Attacks (or Energy): a reaction to an attack's hit of these types, 1d10 + Dexterity + monk level (scaled) off it. */
-const deflect = (id: string, name: string, damageTypes: DamageType[]): ActionDefinition => ({
-  kind: "activate-feature", id, name, actionType: "reaction", featureId: "",
-  reaction: { trigger: { kind: "would-take-damage", attackOnly: true, damageTypes }, target: "self", priority: "worthwhile" },
-  damageCut: { kind: "reduce", dice: "1d10", abilityModifier: "dex", bonus: 1 },
-  automationSupport: "full"
-});
+/**
+ * Deflect Attacks (or Energy): a reaction to an attack's hit of these types, 1d10 + Dexterity + monk level (scaled) off
+ * it. The first copy also redirects when it takes the damage to 0: a Focus Point, and a Dexterity save or two rolls of
+ * the Martial Arts die (scaled) + Dexterity of the attack's type, for a creature within 5 ft (a melee attack's) or 60 ft.
+ * Its point is spent only then; the plain copy keeps the points.
+ */
+const deflect = (id: string, name: string, damageTypes: DamageType[]): ActionDefinition[] => {
+  const plain: ActionDefinition = {
+    kind: "activate-feature", id, name, actionType: "reaction", featureId: "",
+    reaction: { trigger: { kind: "would-take-damage", attackOnly: true, damageTypes }, target: "self", priority: "worthwhile" },
+    damageCut: { kind: "reduce", dice: "1d10", abilityModifier: "dex", bonus: 1 },
+    automationSupport: "full"
+  };
+  return [
+    {
+      ...plain, id: `${id}-redirect`, name: `${name} (redirect)`,
+      damageCut: {
+        kind: "reduce", dice: "1d10", abilityModifier: "dex", bonus: 1,
+        redirect: {
+          resourceCost: { resourceId: "focus-points", amount: 1 },
+          damage: [{ dice: "1d6+1d6", abilityModifier: "dex", damageType: "same-as-attack" }],
+          save: { ability: "dex", dcFormula: FOCUS_DC }, meleeFt: 5, rangedFt: 60
+        }
+      }
+    } as ActionDefinition,
+    plain
+  ];
+};
+
+/** The scaling both copies of a Deflect need: the monk level on the cut, and the Martial Arts die on the redirect. */
+const DEFLECT_SCALE = [
+  { path: "grantedActions.0.damageCut.bonus", value: "{level}" },
+  { path: "grantedActions.0.damageCut.redirect.damage.0.dice", value: "{col:martial-arts}+{col:martial-arts}" },
+  { path: "grantedActions.1.damageCut.bonus", value: "{level}" }
+];
 
 const martialArts = runs("monk_martial-arts", {
   automationSupport: "full",
@@ -108,9 +136,8 @@ export const MONK: ClassDefinition = {
     {
       level: 3,
       grants: [grant("deflect-attacks", runs("monk_deflect-attacks", {
-        grantedActions: [deflect("deflect-attacks", "Deflect Attacks", ["bludgeoning", "piercing", "slashing"])],
-        notSimulated: "spending a Focus Point to redirect the attack when the damage drops to 0."
-      }), { scale: [{ path: "grantedActions.0.damageCut.bonus", value: "{level}" }] })],
+        grantedActions: deflect("deflect-attacks", "Deflect Attacks", ["bludgeoning", "piercing", "slashing"])
+      }), { scale: DEFLECT_SCALE })],
       choices: [choice({ kind: "subclass", id: "subclass" }, "monk_monk-subclass")]
     },
     { level: 4, grants: [grant("slow-fall", informational("monk_slow-fall"))] },
@@ -154,8 +181,8 @@ export const MONK: ClassDefinition = {
       level: 13,
       // Deflect Attacks against any other damage: a reaction of its own for the other types, so each hit offers one.
       grants: [grant("deflect-energy", runs("monk_deflect-energy", {
-        grantedActions: [deflect("deflect-energy", "Deflect Energy", ["acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder"])]
-      }), { scale: [{ path: "grantedActions.0.damageCut.bonus", value: "{level}" }] })]
+        grantedActions: deflect("deflect-energy", "Deflect Energy", ["acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder"])
+      }), { scale: DEFLECT_SCALE })]
     },
     {
       level: 14,

@@ -1090,7 +1090,11 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
     case "would-be-hit":
       return { kind: "would-be-hit", meleeOnly: input.meleeOnly === true ? true : undefined };
     case "hit-by-attack":
-      return { kind: "hit-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined };
+      return {
+        kind: "hit-by-attack", meleeOnly: input.meleeOnly === true ? true : undefined,
+        ...(numberField(input, "withinFt") !== undefined ? { withinFt: numberField(input, "withinFt") } : {}),
+        ...(input.damaged === true ? { damaged: true } : {})
+      };
     case "would-take-damage":
       return {
         kind: "would-take-damage",
