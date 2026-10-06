@@ -46,6 +46,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "attack-bonus", condition: "always", bonus: { base: 1 } })
   },
   {
+    kind: "initiative", label: "Initiative", hint: "Advantage on the roll (Feral Instinct) or a bonus to it (Alert)", theme: "turn", when: false, scope: false,
+    blank: () => ({ kind: "initiative", advantage: true })
+  },
+  {
     kind: "critical-range", label: "Critical hits on a lower roll", hint: "Improved Critical: a 19 or 20; Superior Critical: 18 to 20", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "critical-range", condition: "always", minimum: 19 })
   },

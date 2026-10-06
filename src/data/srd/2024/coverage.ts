@@ -33,7 +33,7 @@ export const GAPS = {
   "max-damage": "Maximum damage instead of a roll (Overchannel)",
   "d20-reroll": "Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate)",
   "roll-floor": "A roll that can't come out below a number (Indomitable Might)",
-  initiative: "Bonuses or advantage on initiative",
+  initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Trading damage dice for an effect (Cunning Strike, Brutal Strike)",
   "next-attack": "Advantage on the next attack roll against a creature, or on the next one this turn",
@@ -111,7 +111,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "barbarian_ability-score-improvement": FEAT_CHOICE,
   "barbarian_extra-attack": full(),
   "barbarian_fast-movement": builder("+10 ft of speed; heavy armor isn't checked."),
-  "barbarian_feral-instinct": manual(["initiative"]),
+  "barbarian_feral-instinct": full("Advantage on Initiative rolls."),
   "barbarian_instinctive-pounce": manual(["free-move"]),
   "barbarian_brutal-strike": manual(["dice-trade"]),
   "barbarian_relentless-rage": manual(["relentless"]),
@@ -212,7 +212,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Champion */
   "fighter_champion_improved-critical": full("A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit."),
-  "fighter_champion_remarkable-athlete": manual(["initiative"], "Advantage on Athletics checks is outside a fight."),
+  "fighter_champion_remarkable-athlete": partial(["free-move"], "Advantage on Initiative rolls runs; the half-speed move after a critical hit doesn't, and Athletics checks are outside a fight."),
   "fighter_champion_additional-fighting-style": builder("Another Fighting Style feat."),
   "fighter_champion_heroic-warrior": manual(["d20-reroll"]),
   "fighter_champion_superior-critical": full("18 to 20."),
@@ -394,7 +394,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 /** Feats, by Open5e key without its `srd-2024_` prefix. */
 export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
   "ability-score-improvement": builder("+2 to one score or +1 to two, to a maximum of 20."),
-  alert: manual(["initiative"]),
+  alert: partial(["initiative"], "The proficiency bonus on Initiative rolls runs; swapping initiative with an ally doesn't."),
   archery: full("+2 to ranged weapon attack rolls."),
   "boon-of-combat-prowess": manual(["d20-reroll"], "The builder adds the +1 to a score; turning a miss into a hit doesn't run."),
   "boon-of-dimensional-travel": manual(["free-move"], "The builder adds the +1 to a score; the teleport after an attack doesn't run."),

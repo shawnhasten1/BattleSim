@@ -80,6 +80,19 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(featureStatblock(named("Superior Critical"), fighter()).text).toContain("score a critical hit on a roll of 18–20");
   });
 
+  it("Initiative: advantage, a bonus, or both", async () => {
+    await blankFeature("Quick Start");
+    const card = await addEffect(/^Initiative/, "Initiative");
+    // Advantage to start with; a bonus ticked on starts at the proficiency bonus.
+    expect((card.getByRole("checkbox", { name: "Advantage on Initiative rolls" }) as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(card.getByRole("checkbox", { name: "A bonus to them" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Advantage on Initiative rolls" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Quick Start").effects).toEqual([{ kind: "initiative", bonus: { proficiency: true } }]);
+    expect(featureStatblock(named("Quick Start"), fighter()).text).toMatch(/^It gains a \+\d bonus to Initiative rolls\.$/);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

@@ -772,6 +772,14 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "initiative":
+      return (
+        <>
+          <Check label="Advantage on Initiative rolls" checked={effect.advantage === true} onChange={(on) => set(opt(effect, "advantage", on ? true : undefined))} />
+          <Check label="A bonus to them" checked={Boolean(effect.bonus)} onChange={(on) => set(opt(effect, "bonus", on ? { proficiency: true } : undefined))} />
+          {effect.bonus ? <FormulaField label="Initiative bonus" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} /> : null}
+        </>
+      );
     case "critical-range":
       return (
         <span className={styles.inline}>

@@ -55,7 +55,7 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     source: source("alert"),
     edition: "2024",
     category: "origin",
-    grants: [{ key: "feat", feature: reference({ feat: "alert" }) }]
+    grants: [{ key: "feat", feature: runs({ feat: "alert" }, { effects: [{ kind: "initiative", bonus: { proficiency: true } }], notSimulated: "swapping initiative with a willing ally." }) }]
   },
   {
     id: "srd:feat:magic-initiate",

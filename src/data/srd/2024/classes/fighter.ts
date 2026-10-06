@@ -133,7 +133,10 @@ export const CHAMPION: SubclassDefinition = {
       level: 3,
       grants: [
         grant("improved-critical", critical("fighter_champion_improved-critical", 19)),
-        grant("remarkable-athlete", reference("fighter_champion_remarkable-athlete"))
+        grant("remarkable-athlete", runs("fighter_champion_remarkable-athlete", {
+          effects: [{ kind: "initiative", advantage: true }],
+          notSimulated: "moving half its speed without provoking opportunity attacks after a critical hit."
+        }))
       ]
     },
     {

@@ -468,6 +468,12 @@ export type FeatureEffect =
     kind: "attack-bonus";
     bonus: NumericFormula;
   } & FeatureEffectScope & FeatureEffectConditions)
+  | {
+    /** Its initiative rolls: advantage (Feral Instinct, Remarkable Athlete), and a bonus added (Alert: the proficiency bonus). */
+    kind: "initiative";
+    advantage?: boolean;
+    bonus?: NumericFormula;
+  }
   | ({
     /**
      * Its attack rolls score a critical hit (and so hit) on a natural `minimum` or higher: Improved Critical's 19,

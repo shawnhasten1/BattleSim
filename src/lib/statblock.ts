@@ -547,6 +547,13 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} has ${effect.mode ?? "advantage"} on ${attackScope(effect, definition)}attack rolls${usingText(effect)}${gate}.`;
     case "attack-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
+    case "initiative": {
+      const parts = [
+        ...(effect.advantage ? ["has advantage on Initiative rolls"] : []),
+        ...(effect.bonus ? [`gains ${bonusPhrase(formulaText(effect.bonus, definition), effect.advantage ? "them" : "Initiative rolls")}`] : [])
+      ];
+      return `${S} ${parts.length ? joinList(parts) : "rolls Initiative as usual"}.`;
+    }
     case "critical-range":
       return `${P} ${attackScope(effect, definition)}attack rolls${usingText(effect)} score a critical hit on a roll of ${effect.minimum === 20 ? "20" : `${effect.minimum}–20`}${gate}.`;
     case "incoming-attack-modifier":
@@ -684,6 +691,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "attack-advantage": return `${effect.mode ?? "advantage"} on ${scope}attacks${gate}`;
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
     case "critical-range": return `${scope}crits on ${effect.minimum}–20${gate}`;
+    case "initiative": return joinList([...(effect.advantage ? ["advantage on Initiative"] : []), ...(effect.bonus ? [`${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to Initiative`] : [])]) || "Initiative";
     case "incoming-attack-modifier": return `${effect.amount >= 5 ? "attackers have advantage" : effect.amount <= -5 ? "attackers have disadvantage" : `attackers ${signed(effect.amount)}`}${gate}`;
     case "damage-bonus": return `+${damageShort(effect.damage, definition)} on ${scope}hits${effect.oncePerTurn ? " once a turn" : ""}${gate}`;
     case "save-gated-damage": return `+${damageShort(effect.damage, definition)} on ${scope}hits${gate}, DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} ${effect.save.halfDamageOnSuccess ? "halves" : "negates"}`;

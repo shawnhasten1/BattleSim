@@ -628,22 +628,38 @@ export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState
     || a.id.localeCompare(b.id);
 }
 
+/** A creature's initiative roll: d20 + Dexterity, and what its features add (Alert's bonus, Feral Instinct's advantage). */
+function rollInitiativeOf(state: EngineState, combatant: CombatantState): { roll: DiceRollResult; features: string[] } {
+  const definition = getDefinition(state.snapshot, combatant);
+  let bonus = abilityModifier(definition.abilities.dex);
+  let advantage = false;
+  const features: string[] = [];
+  for (const feature of featureSources(definition, combatant)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "initiative") continue;
+      if (effect.advantage) advantage = true;
+      if (effect.bonus) bonus += resolveNumericFormula(effect.bonus, definition);
+      features.push(feature.name);
+    }
+  }
+  return { roll: rollD20WithBonus(state.rng, bonus, { advantage }), features };
+}
+
 export function rollInitiative(state: EngineState): void {
   const rolls = state.snapshot.combatants.map((combatant) => {
-    const definition = getDefinition(state.snapshot, combatant);
-    const dex = abilityModifier(definition.abilities.dex);
-    const roll = rollDice(withBonus("1d20", dex), state.rng);
+    const { roll, features } = rollInitiativeOf(state, combatant);
     combatant.initiative = roll.total;
-    return { combatant, definition, roll };
+    return { combatant, roll, features };
   });
 
   state.snapshot.combatants.sort((a, b) => compareInitiative(state.snapshot, a, b));
 
   state.log.push(event(state, "InitiativeRolled", "Initiative order established", {
-    rolls: rolls.map(({ combatant, roll }) => ({
+    rolls: rolls.map(({ combatant, roll, features }) => ({
       combatantId: combatant.id,
       total: roll.total,
-      rolls: roll.rolls
+      rolls: roll.rolls,
+      ...(features.length ? { features } : {})
     })),
     order: state.snapshot.combatants.map((combatant) => combatant.id)
   }));
@@ -3889,8 +3905,7 @@ export function admitReinforcements(state: EngineState): CombatantState[] {
  * knows what to say. Safe to call mid-turn (a caster's own summon action) or between turns.
  */
 export function insertIntoTurnOrder(state: EngineState, newCombatants: CombatantState[]): { initiative: number; insertIndex: number } {
-  const dex = abilityModifier(getDefinition(state.snapshot, newCombatants[0]!).abilities.dex);
-  const roll = rollDice(withBonus("1d20", dex), state.rng);
+  const { roll } = rollInitiativeOf(state, newCombatants[0]!);
   for (const combatant of newCombatants) combatant.initiative = roll.total;
   // Tie-broken among themselves by the shared comparator (falls back to id) so the batch's internal order is
   // deterministic and seed-reproducible.

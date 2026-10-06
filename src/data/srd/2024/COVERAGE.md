@@ -15,11 +15,11 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 6 | 2 | 9 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 7 | 2 | 8 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 8 | 0 | 7 | 5 | 1 |
+| Fighter (Champion) | 21 | 8 | 1 | 6 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 8 | 6 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
@@ -27,7 +27,7 @@ its gaps, never dropped and never approximated without saying so.
 | Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
 | Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
-| Feats | 17 | 3 | 1 | 9 | 4 | 0 |
+| Feats | 17 | 3 | 2 | 8 | 4 | 0 |
 | Species traits | 33 | 7 | 2 | 5 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -39,9 +39,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | `d20-reroll` | Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate) | Bard, Fighter, Monk, Rogue, Warlock, Feats, Species | 1 | Countercharm (Bard); Indomitable (Fighter); Heroic Warrior (Champion); Disciplined Survivor (Monk); Stroke of Luck (Rogue); Dark One's Own Luck (Fiend Patron); Boon of Combat Prowess (feat); Boon of Fate (feat); Luck (Halfling); Resourceful (Human) |
 | `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 1 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Innate Sorcery (Sorcerer); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
-| `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
+| `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Remarkable Athlete (Champion); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
-| `initiative` | Bonuses or advantage on initiative | Barbarian, Fighter, Feats | 1 | Feral Instinct (Barbarian); Remarkable Athlete (Champion); Alert (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
@@ -62,6 +61,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `ignore-resistance` | Damage that ignores resistance (Boon of Irresistible Offense) | Feats | 1 | Boon of Irresistible Offense (feat) |
+| `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
@@ -105,7 +105,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
 | 5 | Fast Movement | builder |  | +10 ft of speed; heavy armor isn't checked. |
-| 7 | Feral Instinct | manual | `initiative` |  |
+| 7 | Feral Instinct | full |  | Advantage on Initiative rolls. |
 | 7 | Instinctive Pounce | manual | `free-move` |  |
 | 9 | Brutal Strike | manual | `dice-trade` |  |
 | 11 | Relentless Rage | manual | `relentless` |  |
@@ -233,7 +233,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Improved Critical | full |  | A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit. |
-| 3 | Remarkable Athlete | manual | `initiative` | Advantage on Athletics checks is outside a fight. |
+| 3 | Remarkable Athlete | partial | `free-move` | Advantage on Initiative rolls runs; the half-speed move after a critical hit doesn't, and Athletics checks are outside a fight. |
 | 7 | Additional Fighting Style | builder |  | Another Fighting Style feat. |
 | 10 | Heroic Warrior | manual | `d20-reroll` |  |
 | 15 | Superior Critical | full |  | 18 to 20. |
@@ -458,7 +458,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Feat | Category | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | Ability Score Improvement | general | builder |  | +2 to one score or +1 to two, to a maximum of 20. |
-| Alert | origin | manual | `initiative` |  |
+| Alert | origin | partial | `initiative` | The proficiency bonus on Initiative rolls runs; swapping initiative with an ally doesn't. |
 | Archery | fighting-style | full |  | +2 to ranged weapon attack rolls. |
 | Boon of Combat Prowess | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; turning a miss into a hit doesn't run. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
