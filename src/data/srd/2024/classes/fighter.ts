@@ -27,7 +27,7 @@ const actionSurge = runs("fighter_action-surge", {
 function attacks(key: string, count: number) {
   return runs(key, {
     grantedActions: [{
-      kind: "multiattack", id: "attack", name: "Attack", actionType: "action",
+      kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attackAction: true,
       attacks: [{ any: "weapon", count }], automationSupport: "full"
     }]
   });

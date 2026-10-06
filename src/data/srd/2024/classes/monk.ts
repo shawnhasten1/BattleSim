@@ -92,7 +92,7 @@ const monksFocus = runs("monk_monks-focus", {
 });
 
 const attacks = (key: string, count: number) => runs(key, {
-  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attacks: [{ any: "weapon", count }], automationSupport: "full" }]
+  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attackAction: true, attacks: [{ any: "weapon", count }], automationSupport: "full" }]
 });
 
 export const MONK: ClassDefinition = {

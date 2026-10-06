@@ -54,7 +54,7 @@ const INVOCATIONS: Record<string, Partial<Pick<PickOption, "repeatable" | "choic
       key: "thirsting-blade",
       feature: {
         ...text, automationSupport: "full",
-        grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack (pact weapon)", actionType: "action", attacks: [{ actionId: PACT_WEAPON_ACTION, count: 2 }], automationSupport: "full" }]
+        grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack (pact weapon)", actionType: "action", attackAction: true, attacks: [{ actionId: PACT_WEAPON_ACTION, count: 2 }], automationSupport: "full" }]
       }
     }]
   },
@@ -63,7 +63,7 @@ const INVOCATIONS: Record<string, Partial<Pick<PickOption, "repeatable" | "choic
       key: "devouring-blade", replaces: "thirsting-blade",
       feature: {
         ...text, automationSupport: "full",
-        grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack (pact weapon)", actionType: "action", attacks: [{ actionId: PACT_WEAPON_ACTION, count: 3 }], automationSupport: "full" }]
+        grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack (pact weapon)", actionType: "action", attackAction: true, attacks: [{ actionId: PACT_WEAPON_ACTION, count: 3 }], automationSupport: "full" }]
       }
     }]
   },

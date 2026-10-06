@@ -270,6 +270,8 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
     const spent = action.item.consumes ? `×${itemCost.amount}` : `${itemCost.amount} ${itemCost.amount === 1 ? "charge" : "charges"}`;
     return `${spent} · ${ordinal(action.spellLevel)}`;
   }
+  // An Attack with Breath Weapon in place of an attack: the breath.
+  if (action.withReplacement) return `With ${action.withReplacement.name}`;
   if (action.kind === "multiattack") {
     const option = /\(([^)]*)\)$/.exec(action.name)?.[1];
     return action.id === base.id || !option ? action.name : option;
@@ -367,6 +369,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
   const grappled = (actor.conditions ?? []).some((condition) => condition.hold);
   for (const action of executables) {
     if (action.actionType === "reaction" || isLegendaryVariant(action) || isLairVariant(action)) continue;
+    // Breath Weapon in place of an attack: a variant of the Attack button, not a button of its own.
+    if (action.routineOnly && action.kind !== "attack") continue;
     // Escaping a grapple is offered only while it's grappled.
     if (action.kind === "utility" && action.mode === "escape" && !grappled) continue;
     // An item's use is one button whatever its variants take: a potion drunk as a bonus action and given as an action.

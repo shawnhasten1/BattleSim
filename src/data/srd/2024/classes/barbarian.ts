@@ -91,7 +91,7 @@ const brutalStrike = (blows: typeof BLOWS, dice: string): FeatureEffect => ({
 const PAIRS = BLOWS.flatMap((first, index) => BLOWS.slice(index + 1).map((second) => [first, second]));
 
 const attacks = (key: string, count: number) => runs(key, {
-  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attacks: [{ any: "weapon", count }], automationSupport: "full" }]
+  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attackAction: true, attacks: [{ any: "weapon", count }], automationSupport: "full" }]
 });
 
 export const BARBARIAN: ClassDefinition = {

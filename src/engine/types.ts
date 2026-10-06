@@ -1407,6 +1407,8 @@ export interface SaveActionDefinition {
   magical?: boolean;
   /** A creature that makes the save is immune to this creature's action afterwards ("…is immune to the dragon's Frightful Presence for the next 24 hours"). */
   immuneAfterSave?: boolean;
+  /** Breath Weapon: it takes the place of one of the Attack action's attacks (`MultiattackActionDefinition.attackAction`). */
+  replacesAttack?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
@@ -1442,6 +1444,8 @@ export interface AreaSaveActionDefinition {
   magical?: boolean;
   /** A creature that makes the save is immune to this creature's action afterwards ("…is immune to the dragon's Frightful Presence for the next 24 hours"). */
   immuneAfterSave?: boolean;
+  /** Breath Weapon: it takes the place of one of the Attack action's attacks (`MultiattackActionDefinition.attackAction`). */
+  replacesAttack?: boolean;
   /** What makes this reaction available (only when `actionType === "reaction"`). */
   reaction?: ReactionMeta;
   saveAbility: Ability;
@@ -1922,6 +1926,11 @@ export interface MultiattackActionDefinition {
   resourceCost?: ResourceCost;
   /** Every swing of one use is made with the same weapon (the DM's choice for Extra Attack). Default: each swing picks. */
   oneWeapon?: boolean;
+  /**
+   * It's the Attack action (Extra Attack's routine): an ability with `replacesAttack` (Breath Weapon) can take the place
+   * of one of its attacks, as a compiled copy (`<id>:with-<ability>`).
+   */
+  attackAction?: boolean;
   /** Statblock sentences the routine doesn't run ("It uses Reel.", a Hydra's heads), shown as not simulated. */
   unsimulated?: string[];
   /** Limited use (recharge / per-encounter). Recorded by the SRD generator; enforced in a later phase. */
@@ -2016,6 +2025,10 @@ export interface CompiledActionMeta {
   rerollDamageDice?: number;
   /** Overchannel (`<id>:overchannel`): its damage dice give their highest. */
   maximizeDamage?: boolean;
+  /** An Attack action with one attack replaced (`<id>:with-<ability>`, Breath Weapon): the ability that replaces it. */
+  withReplacement?: { id: Id; name: string; resourceCost?: ResourceCost };
+  /** Only as a step of a routine: an ability that replaces one of the Attack action's attacks (Breath Weapon). */
+  routineOnly?: boolean;
   /** True Strike's copies (`<spell>:with-<weapon>`): the weapon it's made with. */
   viaWeapon?: { id: Id; name: string };
   /** Shillelagh's copies (`<weapon attack>:imbued`): usable only while the attacker has this condition (the spell's). */

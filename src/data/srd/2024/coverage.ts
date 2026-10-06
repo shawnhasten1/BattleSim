@@ -58,7 +58,6 @@ export const GAPS = {
   "move-through": "Moving through a larger creature's space (Halfling Nimbleness)",
   "delayed-damage": "Damage set up now and triggered later (Quivering Palm)",
   "grapple-strike": "Damaging and grappling with the same Unarmed Strike (Grappler)",
-  "attack-replacement": "Replacing one of the Attack action's attacks with something else (Breath Weapon)",
   "ai-control-value": "How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics",
 } as const;
 
@@ -394,7 +393,7 @@ export const FEAT_COVERAGE: Record<string, CoverageEntry> = {
 /** Species traits, by `<species slug>:<trait slug>`. */
 export const SPECIES_COVERAGE: Record<string, CoverageEntry> = {
   "dragonborn:draconic-ancestry": builder("The ancestry choice."),
-  "dragonborn:breath-weapon": partial(["attack-replacement"], "A cone or line Dexterity save for proficiency-bonus uses, as its own action rather than one of the Attack action's attacks."),
+  "dragonborn:breath-weapon": full("A cone or line Dexterity save, proficiency-bonus uses a fight, in place of one of the Attack action's attacks: with Extra Attack, a copy of the Attack action with the breath first; without it, an action of its own (the same thing)."),
   "dragonborn:damage-resistance": full(),
   "dragonborn:darkvision": info("There's no vision in the simulator."),
   "dragonborn:draconic-flight": manual(["gain-speed"]),

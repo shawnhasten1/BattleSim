@@ -234,7 +234,8 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   if (action.kind === "buff" && action.mark?.moving) return markMoveProblem(snapshot, actor, action);
   if (action.kind === "activate-feature" && action.stillOnly && (actor.turnFlags?.movementUsed ?? 0) > 0) return `${actor.displayName} has already moved this turn`;
   // Open Hand Technique: only as one of Flurry of Blows' strikes.
-  if (action.kind === "attack" && action.routineOnly) return `${action.name} is only one of a routine's strikes`;
+  // Breath Weapon, once it replaces one of the Attack action's attacks: only that way.
+  if (action.routineOnly) return action.kind === "attack" ? `${action.name} is only one of a routine's strikes` : `${action.name} takes the place of one of the Attack action's attacks`;
   // Brutal Strike: only with Reckless Attack on.
   const terms = onHitTermsProblem(snapshot, actor, action);
   if (terms) return terms;

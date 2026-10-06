@@ -3026,7 +3026,7 @@ function selectOffensivePlan(
   const candidates = (options.actions ?? executables)
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action, executables) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
     // Brutal Strike: not without Reckless Attack on. Open Hand Technique's: only in Flurry of Blows.
-    .filter((action) => !onHitTermsProblem(snapshot, actor, action) && !(action.kind === "attack" && action.routineOnly))
+    .filter((action) => !onHitTermsProblem(snapshot, actor, action) && !action.routineOnly)
     // Don't trade a still-working concentration effect for a new one.
     .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
     // A routine of "any weapon attack" swings is planned two ways: close in and swing, or shoot from here.
@@ -3771,8 +3771,9 @@ function multiattackPayable(actor: CombatantState, action: Extract<ActionDefinit
  * charges) keep the flat amount-based weight.
  */
 function resourceCostWeight(action: ActionDefinition): number {
-  // Metamagic: a sorcery point is weighed like a point of any pool, on top of the slot.
-  const extra = action.extraCost?.amount ?? 0;
+  // Metamagic: a sorcery point is weighed like a point of any pool, on top of the slot. Breath Weapon in place of an
+  // attack: the breath's use, which the routine spends.
+  const extra = (action.extraCost?.amount ?? 0) + (action.withReplacement?.resourceCost?.amount ?? 0);
   if (!("resourceCost" in action) || !action.resourceCost) {
     return extra;
   }

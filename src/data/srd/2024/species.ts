@@ -45,7 +45,7 @@ function breathWeapon(type: DamageType): ActionDefinition[] {
     kind: "area-save" as const, actionType: "action" as const, saveAbility: "dex" as const,
     dcFormula: { base: 8, ability: "con" as const, proficiency: true },
     damage: [{ dice: "1d10", damageType: type, magical: true, scaling: byCharacterLevel("d10") }],
-    halfDamageOnSuccess: true, onSuccess: "half" as const, affects: "all" as const,
+    halfDamageOnSuccess: true, onSuccess: "half" as const, affects: "all" as const, replacesAttack: true,
     resourceCost: { resourceId: "breath-weapon", amount: 1 }, automationSupport: "full" as const
   };
   return [
@@ -60,8 +60,8 @@ const ancestor = ([id, name, type]: [string, string, DamageType]): PickOption =>
     {
       key: "breath-weapon",
       feature: runs(trait("dragonborn", "Breath Weapon"), {
-        grantedActions: breathWeapon(type),
-        notSimulated: "it's an action of its own, not one of the Attack action's attacks."
+        // In place of one of the Attack action's attacks: with Extra Attack, a copy of that routine.
+        grantedActions: breathWeapon(type)
       }),
       pool: { id: "breath-weapon", size: "{pb}" }
     },

@@ -61,6 +61,7 @@ import type {
   RiderGate,
   SaveActionDefinition,
   TerrainZone,
+  MultiattackStep,
   UtilityActionDefinition,
   WeaponCantrip,
   ZoneTrigger
@@ -276,7 +277,13 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
   ];
   // True Strike, Shillelagh: the spell's attacks with the creature's weapons, in place of the spell's own action.
   const weaponCantrips = weaponCantripVariants(definition, plain);
-  const listed = [...plain.filter((action) => !weaponCantrips.spent.has(action.id)), ...weaponCantrips.copies];
+  const withCantrips = [...plain.filter((action) => !weaponCantrips.spent.has(action.id)), ...weaponCantrips.copies];
+  // Breath Weapon: in place of one of the Attack action's attacks.
+  const replacements = attackReplacementVariants(withCantrips);
+  const listed = [
+    ...withCantrips.map((action) => (replacements.routineOnly.has(action.id) ? { ...action, routineOnly: true } : action)),
+    ...replacements.copies
+  ];
   const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
@@ -345,6 +352,35 @@ function weaponCantripVariants(definition: CreatureDefinition, listed: ActionDef
     if (spell.kind === "attack" || fits === 0) spent.add(spell.id);
   }
   return { copies, spent };
+}
+
+/**
+ * Breath Weapon: each Attack action routine (`attackAction`) with one of its attacks replaced by an ability that
+ * `replacesAttack` ("Attack with Breath Weapon (cone)", `<id>:with-<ability>`), which is then only used that way
+ * (`routineOnly`). A creature without such a routine keeps the ability as an action of its own: for a single attack,
+ * the same thing.
+ */
+function attackReplacementVariants(listed: ActionDefinition[]): { copies: ActionDefinition[]; routineOnly: Set<Id> } {
+  const routines = listed.filter((action): action is Extract<ActionDefinition, { kind: "multiattack" }> => action.kind === "multiattack" && action.attackAction === true);
+  const abilities = listed.filter((action): action is Extract<ActionDefinition, { kind: "save" | "area-save" }> =>
+    (action.kind === "save" || action.kind === "area-save") && action.replacesAttack === true);
+  if (!routines.length || !abilities.length) return { copies: [], routineOnly: new Set() };
+  const copies = routines.flatMap((routine) => abilities.map((ability): ActionDefinition => ({
+    ...routine,
+    id: `${routine.id}:with-${ability.id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name: `${routine.name} with ${ability.name}`,
+    attacks: [{ actionId: ability.id, count: 1 }, ...oneSwingFewer(routine.attacks)],
+    withReplacement: { id: ability.id, name: ability.name, ...(ability.resourceCost ? { resourceCost: ability.resourceCost } : {}) }
+  })));
+  return { copies, routineOnly: new Set(abilities.map((ability) => ability.id)) };
+}
+
+/** A routine's steps with one swing fewer: the last step that has one gives it up (and goes, at none). */
+function oneSwingFewer(steps: MultiattackStep[]): MultiattackStep[] {
+  const out = steps.map((step) => ({ ...step }));
+  const last = [...out].reverse().find((step) => step.count > 0);
+  if (last) last.count -= 1;
+  return out.filter((step) => step.count > 0);
 }
 
 /** One weapon's attack made as a `WeaponCantrip` says: the spellcasting ability, its die and damage type choice, more damage. */

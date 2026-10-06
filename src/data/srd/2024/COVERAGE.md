@@ -28,7 +28,7 @@ its gaps, never dropped and never approximated without saying so.
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 7 | 4 | 2 | 4 | 0 |
-| Species traits | 33 | 10 | 1 | 3 | 8 | 11 |
+| Species traits | 33 | 11 | 0 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
 
@@ -42,7 +42,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
-| `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
 | `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
@@ -459,7 +458,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Species | Trait | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | Dragonborn | Draconic Ancestry | builder |  | The ancestry choice. |
-| Dragonborn | Breath Weapon | partial | `attack-replacement` | A cone or line Dexterity save for proficiency-bonus uses, as its own action rather than one of the Attack action's attacks. |
+| Dragonborn | Breath Weapon | full |  | A cone or line Dexterity save, proficiency-bonus uses a fight, in place of one of the Attack action's attacks: with Extra Attack, a copy of the Attack action with the breath first; without it, an action of its own (the same thing). |
 | Dragonborn | Damage Resistance | full |  |  |
 | Dragonborn | Darkvision | info |  | There's no vision in the simulator. |
 | Dragonborn | Draconic Flight | manual | `gain-speed` |  |

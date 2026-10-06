@@ -9,7 +9,7 @@ const CHANNEL = "paladin-channel-divinity";
 const AURA_RANGE = Array.from({ length: 20 }, (_, index) => (index + 1 >= 18 ? 30 : index + 1 >= 6 ? 10 : null));
 
 const attacks = (key: string, count: number) => runs(key, {
-  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attacks: [{ any: "weapon", count }], automationSupport: "full" }]
+  grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attackAction: true, attacks: [{ any: "weapon", count }], automationSupport: "full" }]
 });
 
 export const PALADIN: ClassDefinition = {
