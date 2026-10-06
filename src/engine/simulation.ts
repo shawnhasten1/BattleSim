@@ -10,6 +10,7 @@ import {
   whileConditionProblem,
   chosenAreaTargets,
   growthProblem,
+  usesMetamagic,
   resolveTransformAction,
   templateSummonDefinition,
   limitedToOneThing,
@@ -3073,9 +3074,9 @@ function selectOffensivePlan(
       const denialValue = turnDenialValue(action, definition, targetDefinition, target) * 2;
       const tradeValue = diceTradeValue(snapshot, actor, definition, action, target, targetDefinition, tactics);
       // Subtle Spell: worth its point only when a foe near enough could counter the spell.
-      const subtleValue = action.metamagic?.option === "subtle" ? (counterThreatNear(snapshot, actor) ? 4 * Math.max(1, castLevelOf(action) ?? 1) : -2) : 0;
+      const subtleValue = usesMetamagic(action, "subtle") ? (counterThreatNear(snapshot, actor) ? 4 * Math.max(1, castLevelOf(action) ?? 1) : -2) : 0;
       // Extended Spell: a concentration spell of 2nd level or more is likelier to last (advantage on its saves).
-      const extendedValue = action.metamagic?.option === "extended" ? 2 * Math.max(0, (castLevelOf(action) ?? 0) - 1) : 0;
+      const extendedValue = usesMetamagic(action, "extended") ? 2 * Math.max(0, (castLevelOf(action) ?? 0) - 1) : 0;
       const chargeValue = expectedChargeValue(snapshot, actor, definition, action, target, range, canMoveIntoRange);
       const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
@@ -3986,7 +3987,7 @@ function expectedDamageAgainst(
   if (action.kind === "save" || action.kind === "area-save") {
     const average = averageDamage(action, source, adjustments) + empoweredGain(action);
     // Heightened Spell: a single target's save is at disadvantage (an area's chosen one, `options.saveDisadvantage`).
-    const heightened = options.saveDisadvantage === true || (action.kind === "save" && action.metamagic?.option === "heightened");
+    const heightened = options.saveDisadvantage === true || (action.kind === "save" && usesMetamagic(action, "heightened"));
     const failChance = chanceToFailSave(
       resolveSaveDc(action, source),
       target.saves?.[action.saveAbility] ?? abilityModifier(target.abilities[action.saveAbility]),
@@ -4449,7 +4450,7 @@ export function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { ki
   const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
   const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
   // Twinned Spell: an effective level higher.
-  const twinned = action.metamagic?.option === "twinned" ? 1 : 0;
+  const twinned = usesMetamagic(action, "twinned") ? 1 : 0;
   return (slotsAboveBase + twinned) * perSlotTargets;
 }
 

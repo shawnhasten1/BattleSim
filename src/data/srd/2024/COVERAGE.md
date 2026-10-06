@@ -24,7 +24,7 @@ its gaps, never dropped and never approximated without saying so.
 | Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 5 | 3 | 1 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 7 | 2 | 0 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 9 | 2 | 2 | 4 | 0 |
@@ -43,7 +43,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
-| `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
@@ -348,9 +347,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Sorcerer Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sorcerous Restoration | info |  | A short rest. |
-| 7 | Sorcery Incarnate | partial | `metamagic` | Innate Sorcery for 2 sorcery points once its uses are gone; two Metamagic options on one spell don't run. |
+| 7 | Sorcery Incarnate | full |  | Innate Sorcery for 2 sorcery points once its uses are gone; while it lasts, a copy of each spell with two of its Metamagic options, paying both ("Fireball (Quickened + Heightened)"). |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
-| 20 | Arcane Apotheosis | manual | `metamagic` |  |
+| 20 | Arcane Apotheosis | full |  | While Innate Sorcery lasts, one Metamagic option a turn for no sorcery points: a free copy of each Metamagic spell, once on each of its turns. |
 | — | Metamagic Options | full |  | Each a copy of the spells it changes, at the spell's own level, paid in sorcery points beside the slot: Careful (allies in an area, the fewest hit points first, succeed and take no damage), Distant, Empowered (the lowest dice below average rolled again), Extended (advantage on its Concentration saves, a minute or more doubled), Heightened (an area's foe with the most hit points, or the target, at disadvantage on its saves against it, the repeats too), Quickened (no other level 1+ spell that turn), Subtle (it can't be countered), Transmuted (the best of the six types) and Twinned; Seeking Spell rerolls a missed spell attack. The AI quickens a spell only with its bonus action after a cantrip or an attack, and casts subtly when a foe within 60 ft could counter. |
 | — | Sorcerer Spell List | builder |  | Read from each spell's own class list. |
 

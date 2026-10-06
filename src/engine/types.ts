@@ -954,6 +954,17 @@ export type FeatureEffect =
   }
   | {
     /**
+     * Sorcery Incarnate, Arcane Apotheosis: while it has a condition with this id (Innate Sorcery's), two of its Metamagic
+     * options on one spell (`pairs`: a copy for each pair, paying both), or one of them once on each of its turns for no
+     * sorcery points (`freeOncePerTurn`).
+     */
+    kind: "metamagic-boost";
+    whileCondition: Id;
+    pairs?: boolean;
+    freeOncePerTurn?: boolean;
+  }
+  | {
+    /**
      * A reaction attack when hit (Retaliation): each of its attacks of these types (default melee) gets a reaction copy,
      * made against the attacker when `trigger` passes.
      */
@@ -2107,7 +2118,7 @@ export interface CompiledActionMeta {
   /** On an item's use: the item it comes from. The AI, the hotbar, the log and the report read it. */
   item?: ItemUseMeta;
   /** On a spell cast with Metamagic (`<id>:meta-<option>`): the option, and what it's called ("Quickened Spell"). */
-  metamagic?: { option: MetamagicOption; name: string };
+  metamagic?: { option: MetamagicOption; name: string; also?: MetamagicOption; free?: boolean };
   /** A second cost paid along with `resourceCost`: Metamagic's sorcery points beside the spell's slot. */
   extraCost?: ResourceCost;
   /** Empowered Spell: up to this many of its damage dice below average rolled again (the first damage line's). */
@@ -2682,6 +2693,8 @@ export interface TurnFlags {
   movementUsed?: number;
   /** Activations used this turn that are once a turn (Wild Resurgence). */
   activationsUsed?: Id[];
+  /** Arcane Apotheosis: its free Metamagic option was used this turn. */
+  freeMetamagicUsed?: boolean;
   /** Where this turn's movement began — a charge is measured from here. */
   movedFrom?: Point;
   /** Creatures a charge / pounce has hit this turn (unlocks `onlyAfter: "charge-hit"` attacks against them). */

@@ -120,10 +120,10 @@ export const SORCERER: ClassDefinition = {
     {
       level: 7,
       grants: [
-        // Innate Sorcery for 2 sorcery points once its uses are gone.
+        // Innate Sorcery for 2 sorcery points once its uses are gone, and two Metamagic options on a spell while it lasts.
         grant("sorcery-incarnate", runs("sorcerer_sorcery-incarnate", {
           grantedActions: [{ ...INNATE_SORCERY, id: "innate-sorcery-points", name: "Innate Sorcery (2 sorcery points)", resourceCost: SORCERY_POINTS(2), onlyWhenEmpty: "innate-sorcery" } as ActionDefinition],
-          notSimulated: "two Metamagic options on one spell while Innate Sorcery is active."
+          effects: [{ kind: "metamagic-boost", whileCondition: "innate-sorcery-active", pairs: true }]
         })),
         fontOfMagic(7, "font-of-magic-5")
       ]
@@ -131,7 +131,8 @@ export const SORCERER: ClassDefinition = {
     { level: 9, grants: [fontOfMagic(9, "font-of-magic-7")] },
     { level: 10, grants: [], choices: [metamagic(2)] },
     { level: 17, grants: [], choices: [metamagic(2)] },
-    { level: 20, grants: [grant("arcane-apotheosis", reference("sorcerer_arcane-apotheosis"))] }
+    // One Metamagic option a turn for no sorcery points while Innate Sorcery lasts.
+    { level: 20, grants: [grant("arcane-apotheosis", runs("sorcerer_arcane-apotheosis", { effects: [{ kind: "metamagic-boost", whileCondition: "innate-sorcery-active", freeOncePerTurn: true }] }))] }
   ],
   startingEquipment: [
     { id: "A", label: "A spear, two daggers, an arcane focus (crystal), a dungeoneer's pack and 28 GP", items: [{ ref: "srd:weapon:spear" }, { ref: "srd:weapon:dagger", count: 2 }], gold: 28 },

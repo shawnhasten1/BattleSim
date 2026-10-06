@@ -769,6 +769,11 @@ export const METAMAGIC_NAMES: Record<MetamagicOption, string> = {
   quickened: "Quickened", subtle: "Subtle", transmuted: "Transmuted", twinned: "Twinned"
 };
 
+/** Whether a compiled spell copy was cast with this Metamagic option (alone, or as one of a pair: Sorcery Incarnate). */
+export function usesMetamagic(action: ActionDefinition | undefined, option: MetamagicOption): boolean {
+  return action?.metamagic?.option === option || action?.metamagic?.also === option;
+}
+
 /** Transmuted Spell's damage types: any of them can become any other. */
 const TRANSMUTABLE: DamageType[] = ["acid", "cold", "fire", "lightning", "poison", "thunder"];
 
@@ -778,10 +783,12 @@ const TRANSMUTABLE: DamageType[] = ["acid", "cold", "fire", "lightning", "poison
  * isn't changed too.
  */
 function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinition[]): ActionDefinition[] {
-  const effects = [...(definition.features ?? []), ...(definition.traits ?? [])]
+  const all = [...(definition.features ?? []), ...(definition.traits ?? [])]
     .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only")
-    .flatMap((feature) => (feature.effects ?? []).filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic" }> => effect.kind === "metamagic"));
+    .flatMap((feature) => feature.effects ?? []);
+  const effects = all.filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic" }> => effect.kind === "metamagic");
   if (!effects.length) return [];
+  const boosts = all.filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic-boost" }> => effect.kind === "metamagic-boost");
   const spells = listed.filter((action) => "spellLevel" in action && action.spellLevel != null && !action.upcastFrom && !action.item
     && action.automationSupport === "full" && action.actionType !== "reaction");
   const out: ActionDefinition[] = [];
@@ -794,7 +801,35 @@ function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinit
         ...changed, id: `${spell.id}:meta-${effect.option}`, name: `${spell.name} (${name})`,
         metamagic: { option: effect.option, name: `${name} Spell` }, extraCost: effect.resourceCost
       } as ActionDefinition);
+      // Arcane Apotheosis: once a turn, for no sorcery points, while Innate Sorcery lasts.
+      for (const boost of boosts.filter((entry) => entry.freeOncePerTurn)) {
+        out.push({
+          ...changed, id: `${spell.id}:meta-${effect.option}-free`, name: `${spell.name} (${name}, free)`,
+          metamagic: { option: effect.option, name: `${name} Spell`, free: true }, whileCondition: { id: boost.whileCondition, name: "Innate Sorcery" }
+        } as ActionDefinition);
+      }
     }
+  }
+  // Sorcery Incarnate: two options on one spell while Innate Sorcery lasts, paying both.
+  for (const boost of boosts.filter((entry) => entry.pairs)) {
+    effects.forEach((first, index) => {
+      for (const second of effects.slice(index + 1)) {
+        if (first.option === second.option) continue;
+        for (const spell of spells) {
+          const once = metamagicVariant(first.option, spell, definition);
+          const twice = once ? metamagicVariant(second.option, once, definition) : undefined;
+          if (!twice) continue;
+          const names = `${METAMAGIC_NAMES[first.option]} + ${METAMAGIC_NAMES[second.option]}`;
+          const sameCost = first.resourceCost.resourceId === second.resourceCost.resourceId;
+          out.push({
+            ...twice, id: `${spell.id}:meta-${first.option}+${second.option}`, name: `${spell.name} (${names})`,
+            metamagic: { option: first.option, also: second.option, name: `${names} Spell` },
+            extraCost: sameCost ? { resourceId: first.resourceCost.resourceId, amount: first.resourceCost.amount + second.resourceCost.amount } : first.resourceCost,
+            whileCondition: { id: boost.whileCondition, name: "Innate Sorcery" }
+          } as ActionDefinition);
+        }
+      }
+    });
   }
   return out;
 }
@@ -923,7 +958,9 @@ export function spellTurnProblem(combatant: CombatantState, action: ActionDefini
     ? (combatant.conditions ?? []).find((condition) => condition.modifiers?.noSpellcasting) : undefined;
   if (silenced) return `No spells while ${silenced.sourceName ?? silenced.id} lasts`;
   const flags = combatant.turnFlags;
-  if (action.metamagic?.option === "quickened" && flags?.leveledSpellCast) return "Quickened Spell can't follow a level 1+ spell this turn";
+  if (usesMetamagic(action, "quickened") && flags?.leveledSpellCast) return "Quickened Spell can't follow a level 1+ spell this turn";
+  // Arcane Apotheosis: one free option a turn.
+  if (action.metamagic?.free && flags?.freeMetamagicUsed) return "Its free Metamagic option was used this turn";
   if ((castLevelOf(action) ?? 0) >= 1 && flags?.quickenedSpell) return "No level 1+ spell after Quickened Spell this turn";
   return undefined;
 }
@@ -3021,7 +3058,7 @@ export function resolveSaveAction(
   const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
   const dc = resolveSaveDc(action, attackerDefinition, attacker);
   // Heightened Spell: the spell's own target saves at disadvantage.
-  const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId, action.metamagic?.option === "heightened");
+  const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId, usesMetamagic(action, "heightened"));
 
   // Upcast-granted bonus targets (Hold Person-style): same save/DC/riders, no extra resource spend.
   for (const bonusId of options.bonusTargetIds ?? []) {
@@ -3253,7 +3290,7 @@ export function areaSaveChoices(state: { snapshot: EncounterSnapshot }, caster: 
   const faction = effectiveFaction(state.snapshot, caster);
   const foes = caught.filter((target) => effectiveFaction(state.snapshot, target) !== faction);
   const allies = caught.filter((target) => effectiveFaction(state.snapshot, target) === faction);
-  const heightenedId = action.metamagic?.option === "heightened"
+  const heightenedId = usesMetamagic(action, "heightened")
     ? [...foes].sort((a, b) => b.currentHp - a.currentHp || a.id.localeCompare(b.id))[0]?.id : undefined;
   const spared = new Set([...allies].sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id)).slice(0, action.spares?.count ?? 0).map((target) => target.id));
   return { heightenedId, spared };
@@ -6684,7 +6721,8 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
     const { resourceId, amount } = action.extraCost;
     combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) - amount };
   }
-  if (action.metamagic?.option === "quickened") combatant.turnFlags = { ...(combatant.turnFlags ?? {}), quickenedSpell: true };
+  if (usesMetamagic(action, "quickened")) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), quickenedSpell: true };
+  if (action.metamagic?.free) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), freeMetamagicUsed: true };
   if ((castLevelOf(action) ?? 0) >= 1) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), leveledSpellCast: true };
   if (slot !== "free") {
     combatant.actionEconomy[slot] = false;
@@ -9035,7 +9073,7 @@ export function proficiencyForChallengeRating(cr: number): number {
 /** Extended Spell: what `caster` concentrates on (a condition it keeps up, or a zone) was cast with it. */
 function concentratingOnExtended(state: EngineState, caster: CombatantState): boolean {
   const definition = getDefinition(state.snapshot, caster);
-  const extended = (actionId: Id | undefined) => Boolean(actionId) && findActionDefinition(definition, actionId!)?.metamagic?.option === "extended";
+  const extended = (actionId: Id | undefined) => Boolean(actionId) && usesMetamagic(findActionDefinition(definition, actionId!), "extended");
   return state.snapshot.combatants.some((combatant) => (combatant.conditions ?? [])
     .some((condition) => condition.concentration && condition.sourceCombatantId === caster.id && extended(condition.sourceId)))
     || (state.snapshot.activeZones ?? []).some((zone) => zone.sourceCombatantId === caster.id && extended(zone.sourceActionId));
@@ -9961,7 +9999,7 @@ function counterCheck(state: EngineState, reactor: CombatantState, check: Counte
 function counterspellWindow(state: EngineState, caster: CombatantState, action: ActionDefinition, declared: DeclaredCast): boolean {
   const spellLevel = castLevelOf(action);
   // Subtle Spell: cast without components, nothing to counter.
-  if (spellLevel == null || action.metamagic?.option === "subtle") {
+  if (spellLevel == null || usesMetamagic(action, "subtle")) {
     return false;
   }
   const { countered, refundSlot } = runReactionWindow(state, {

@@ -3,6 +3,7 @@ import {
   actionProblem,
   createEngineState,
   getExecutableActions,
+  resolveActivateFeatureAction,
   resolveAreaSaveAction,
   resolveAttack,
   resolveSaveAction,
@@ -298,5 +299,44 @@ describe("Empowered and Extended Spell", () => {
     const check = state.log.find((entry) => entry.type === "ConcentrationChecked");
     expect((check?.data?.roll as { rolls: unknown[] })?.rolls).toHaveLength(2);
     expect(me.concentration).toBeDefined();
+  });
+});
+
+describe("More Metamagic while Innate Sorcery lasts (7ba)", () => {
+  const built = (level: number) => {
+    const build = withSuggestions(withChoice(quickBuild(sources, { classId: "srd:class:sorcerer", level }), { kind: "level", index: 1 }, ["metamagic-options"], ["quickened-spell", "heightened-spell"]), sources);
+    const definition = actor(build);
+    const fireball = structuredClone(findSrd2024Spell("srd:spell:fireball-2024")!) as SpellDefinition;
+    return { ...definition, spells: [...(definition.spells ?? []).filter((known) => known.id !== fireball.id), fireball] };
+  };
+
+  it("Sorcery Incarnate: two options on one spell, paying both, only while Innate Sorcery lasts", () => {
+    const definition = built(7);
+    const both = getExecutableActions(definition).find((action) => action.name === "Fireball (Quickened + Heightened)")!;
+    expect(both).toMatchObject({ actionType: "bonus", extraCost: { resourceId: "sorcery-points", amount: 4 }, metamagic: { option: "quickened", also: "heightened" } });
+    const state = createEngineState(scene(definition));
+    expect(actionProblem(state.snapshot, "pc-fighter", both.id)).toBe("Only while Innate Sorcery lasts");
+    const innate = getExecutableActions(definition).find((action) => action.name === "Innate Sorcery")!;
+    resolveActivateFeatureAction(state, "pc-fighter", innate.id);
+    const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    me.actionEconomy = { action: true, bonus: true, reaction: true };
+    expect(actionProblem(state.snapshot, "pc-fighter", both.id)).toBeUndefined();
+  });
+
+  it("Arcane Apotheosis: one option a turn for no sorcery points", () => {
+    const definition = built(20);
+    const free = getExecutableActions(definition).find((action) => action.name === "Fireball (Heightened, free)")!;
+    expect(free.extraCost).toBeUndefined();
+    const state = createEngineState(scene(definition));
+    const innate = getExecutableActions(definition).find((action) => action.name === "Innate Sorcery")!;
+    resolveActivateFeatureAction(state, "pc-fighter", innate.id);
+    const me = state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    me.actionEconomy = { action: true, bonus: true, reaction: true };
+    const points = me.resources?.["sorcery-points"];
+    state.rng = d20s(1, 1);
+    resolveAreaSaveAction(state, "pc-fighter", { x: 9, y: 3 }, free.id);
+    expect(me.resources?.["sorcery-points"]).toBe(points);
+    me.actionEconomy = { action: true, bonus: true, reaction: true };
+    expect(actionProblem(state.snapshot, "pc-fighter", free.id)).toBe("Its free Metamagic option was used this turn");
   });
 });

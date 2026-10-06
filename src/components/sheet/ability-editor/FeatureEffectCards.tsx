@@ -975,6 +975,23 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </span>
       );
     }
+    case "metamagic-boost": {
+      const givers = getExecutableActions(definition).flatMap((action) => (action.kind === "activate-feature" && action.condition?.id
+        ? [{ id: action.condition.id, name: action.name }] : []));
+      return (
+        <>
+          <span className={styles.inline}>
+            <span>While</span>
+            <select aria-label="While it has" value={effect.whileCondition} onChange={(e) => set({ ...effect, whileCondition: e.target.value })}>
+              {givers.map((giver) => <option key={giver.id} value={giver.id}>{`${giver.name} is on`}</option>)}
+              {!givers.some((giver) => giver.id === effect.whileCondition) ? <option value={effect.whileCondition}>{`${effect.whileCondition} (not found)`}</option> : null}
+            </select>
+          </span>
+          <Check label="Two options on one spell" checked={effect.pairs === true} onChange={(on) => set(opt(effect, "pairs", on ? true : undefined))} />
+          <Check label="One option a turn for no sorcery points" checked={effect.freeOncePerTurn === true} onChange={(on) => set(opt(effect, "freeOncePerTurn", on ? true : undefined))} />
+        </>
+      );
+    }
     case "martial-arts-weapons":
       return (
         <span className={styles.inline}>

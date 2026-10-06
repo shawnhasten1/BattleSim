@@ -90,6 +90,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "max-damage", maxSlot: 5, resourceCost: { resourceId: "overchannel", amount: 1 }, spellClasses: ["wizard"] })
   },
   {
+    kind: "metamagic-boost", label: "More Metamagic while a condition lasts", hint: "Sorcery Incarnate: two options on a spell; Arcane Apotheosis: one free option a turn, while Innate Sorcery is active", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "metamagic-boost", whileCondition: "innate-sorcery-active", pairs: true })
+  },
+  {
     kind: "martial-arts-weapons", label: "Monk weapons as its Unarmed Strike", hint: "Martial Arts: Dexterity, the Martial Arts die and Stunning Strike on its Monk weapons too", theme: "attacks", when: false, scope: false,
     blank: () => ({ kind: "martial-arts-weapons", weaponId: "" })
   },
