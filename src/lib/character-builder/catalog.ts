@@ -129,6 +129,15 @@ export interface FeatureGrant {
 export interface FreeCast {
   spell: string;
   uses: Template | number | "at-will";
+  /**
+   * The pool it spends, shared with every free cast naming it (Divine Intervention: one use, whichever spell); its size
+   * is `uses`. Absent: a pool of its own, named after the spell.
+   */
+  pool?: string;
+  /** What the copy is called after the spell's name ("Flame Strike (Divine Intervention)"). Default "free". */
+  label?: string;
+  /** Cast with an action whatever the spell's own casting time (Divine Intervention is a Magic action). */
+  asAction?: boolean;
 }
 
 /**

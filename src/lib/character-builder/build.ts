@@ -24,6 +24,7 @@ import type {
   ClassTableColumn,
   FeatDefinition,
   FeatureGrant,
+  FreeCast,
   PickOption,
   SpeciesDefinition,
   SpellcastingProgression,
@@ -287,6 +288,8 @@ interface SpellPick {
   via: "cantrip" | "prepared" | "always" | "free";
   /** Casts without a slot, from a pool of its own. */
   freeCasts?: Template | number | "at-will";
+  /** A free cast's shared pool, name and action (`FreeCast`). */
+  freeCast?: Pick<FreeCast, "pool" | "label" | "asAction">;
   /** The one class list it was chosen from (Magic Initiate's Cleric list): whose spell it counts as, with no class of its own. */
   list?: string;
 }
@@ -1273,7 +1276,12 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   for (const { grant, owner } of live) {
     const ability = grantAbility(state, owner);
     for (const spell of grant.spells ?? []) picks.push({ spell, owner, ...(ability ? { ability } : {}), via: "always" });
-    for (const free of grant.freeCasts ?? []) picks.push({ spell: free.spell, owner, ...(ability ? { ability } : {}), via: "free", freeCasts: free.uses });
+    for (const free of grant.freeCasts ?? []) {
+      picks.push({
+        spell: free.spell, owner, ...(ability ? { ability } : {}), via: "free", freeCasts: free.uses,
+        ...(free.pool || free.label || free.asAction ? { freeCast: { pool: free.pool, label: free.label, asAction: free.asAction } } : {})
+      });
+    }
   }
   // A character whose only spells are a feat's casts with that feat's ability.
   spellcasting ??= picks.find((pick) => pick.ability)?.ability ? { ability: picks.find((pick) => pick.ability)!.ability! } : undefined;
@@ -1316,11 +1324,13 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       let freeId = `${pick.owner.idPrefix}-${slug}-${atWill ? "at-will" : "free"}`;
       while (takenIds.has(freeId)) freeId = `${freeId}-2`;
       takenIds.add(freeId);
-      // Its own pool, named after the spell so the sheet reads "Magic missile free casts".
-      let poolId = `${slug}-free-casts`;
-      while (!atWill && resources[poolId] !== undefined) poolId = `${poolId}-2`;
+      // Its own pool, named after the spell so the sheet reads "Magic missile free casts"; or a shared one (Divine
+      // Intervention's), made once.
+      const shared = pick.freeCast?.pool;
+      let poolId = shared ?? `${slug}-free-casts`;
+      while (!atWill && !shared && resources[poolId] !== undefined) poolId = `${poolId}-2`;
       const cost = atWill ? undefined : { resourceId: poolId, amount: 1 };
-      const name = `${cast.name} (${atWill ? "at will" : "free"})`;
+      const name = `${cast.name} (${atWill ? "at will" : pick.freeCast?.label ?? "free"})`;
       const { upcast: _upcast, resourceCost: _cost, ...rest } = cast;
       const strip = <A extends object>(action: A): A => {
         const { resourceCost: _actionCost, ...actionRest } = action as A & { resourceCost?: unknown };
@@ -1330,12 +1340,15 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         ...rest,
         name,
         ...(cost ? { resourceCost: cost } : {}),
-        ...(cast.action ? { action: { ...strip(cast.action), name, ...(cost ? { resourceCost: cost } : {}) } as SpellDefinition["action"] } : {})
+        ...(cast.action ? {
+          action: { ...strip(cast.action), name, ...(cost ? { resourceCost: cost } : {}), ...(pick.freeCast?.asAction ? { actionType: "action" } : {}) } as SpellDefinition["action"]
+        } : {}),
+        ...(pick.freeCast?.asAction ? { castingTime: "action" as const } : {})
       };
       spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId), from: pick.spell });
-      if (cost) {
+      if (cost && !(shared && resources[poolId] !== undefined)) {
         resources[poolId] = uses;
-        poolLabels[poolId] = `${cast.name} without a slot`;
+        poolLabels[poolId] = shared ? (pick.freeCast?.label ?? poolId) : `${cast.name} without a slot`;
       }
     }
   }

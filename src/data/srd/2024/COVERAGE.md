@@ -17,7 +17,7 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 9 | 0 | 0 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 14 | 1 | 2 | 5 | 4 |
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
-| `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
 | `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
@@ -129,7 +128,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sear Undead | full |  | The radiant damage with Turn Undead, which doesn't end the turning. |
 | 7 | Blessed Strikes | full |  | Divine Strike, or Potent Spellcasting: Wisdom on one damage roll of each Cleric cantrip. |
-| 10 | Divine Intervention | manual | `free-cast-any` |  |
+| 10 | Divine Intervention | full |  | Every Cleric spell of levels 1-5 the simulator runs (not a reaction) as an action without a slot, sharing one use ("Flame Strike (Divine Intervention)"); the AI casts the best of them. Spells kept for reference only aren't among them. |
 | 14 | Improved Blessed Strikes | full |  | Divine Strike's 2d8; or with Potent Spellcasting, twice its Wisdom modifier in temporary hit points, to itself or the most hurt ally within 60 ft, when a Cleric cantrip deals damage. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Greater Divine Intervention | info |  | Wish. |

@@ -89,3 +89,15 @@ describe("Self-Restoration", () => {
     expect(find("pc-fighter").conditions ?? []).toEqual([]);
   });
 });
+
+describe("Divine Intervention (7ax)", () => {
+  it("any running Cleric spell of levels 1-5 as an action without a slot, sharing one use", () => {
+    const cleric = rebuildActor(blankCharacter("def-fighter", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:cleric", level: 10 }), SRD_BUILD_SOURCES).definition;
+    const casts = getExecutableActions(cleric).filter((action) => action.name.endsWith("(Divine Intervention)"));
+    expect(casts.map((action) => action.name)).toEqual(expect.arrayContaining(["Flame Strike (Divine Intervention)", "Healing Word (Divine Intervention)"]));
+    for (const cast of casts) expect(cast).toMatchObject({ actionType: "action", resourceCost: { resourceId: "divine-intervention", amount: 1 } });
+    expect(cleric.resources?.["divine-intervention"]).toBe(1);
+    expect(getExecutableActions(rebuildActor(blankCharacter("def-fighter", "PC"), quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:cleric", level: 9 }), SRD_BUILD_SOURCES).definition)
+      .some((action) => action.name.endsWith("(Divine Intervention)"))).toBe(false);
+  });
+});

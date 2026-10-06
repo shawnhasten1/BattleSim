@@ -1,6 +1,9 @@
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, spell, srdSpellcasting } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
+import spellIndexFile from "../generated/spells.json";
+import { AUTHORED_2024, SAME_AS_2014 } from "../spell-authoring";
+import type { Srd2024SpellIndex } from "../reference-types";
 
 const ref = srdClass("cleric");
 const WIS_DC = { base: 8, ability: "wis" as const, proficiency: true };
@@ -39,6 +42,12 @@ const channelDivinity = runs("cleric_channel-divinity", {
     }
   ],
 });
+
+/** Divine Intervention's choice: every Cleric spell of levels 1-5 that runs and isn't cast as a reaction. */
+const DIVINE_INTERVENTION = (spellIndexFile as unknown as Srd2024SpellIndex).spells
+  .filter((entry) => entry.level >= 1 && entry.level <= 5 && entry.classes.includes("cleric") && entry.castingTime !== "reaction"
+    && (AUTHORED_2024[entry.slug] !== undefined || SAME_AS_2014[entry.slug] !== undefined))
+  .map((entry) => spell(entry.slug));
 
 export const CLERIC_SPELLS = [
   "healing-word", "guiding-bolt", "bless", "cure-wounds", "shield-of-faith", "inflict-wounds", "bane",
@@ -149,7 +158,13 @@ export const CLERIC: ClassDefinition = {
         ]
       }, "cleric_blessed-strikes")]
     },
-    { level: 10, grants: [grant("divine-intervention", reference("cleric_divine-intervention"))] },
+    // Any Cleric spell of level 5 or lower (that runs, and isn't a reaction), cast with an action and no slot, once.
+    {
+      level: 10,
+      grants: [grant("divine-intervention", runs("cleric_divine-intervention"), {
+        freeCasts: DIVINE_INTERVENTION.map((id) => ({ spell: id, uses: 1, pool: "divine-intervention", label: "Divine Intervention", asAction: true }))
+      })]
+    },
     // Divine Strike's 2d8 is its column; Potent Spellcasting's temporary hit points come with that choice.
     { level: 14, grants: [grant("improved-blessed-strikes", runs("cleric_improved-blessed-strikes"))] },
     { level: 20, grants: [grant("greater-divine-intervention", informational("cleric_greater-divine-intervention"))] }
