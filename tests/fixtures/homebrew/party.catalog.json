@@ -1,0 +1,1756 @@
+{
+  "kind": "battlesim-catalog",
+  "schemaVersion": 1,
+  "exportedAt": "2026-10-06T00:00:00.000Z",
+  "entries": [
+    {
+      "kind": "class",
+      "entry": {
+        "id": "homebrew:class:spiritbound-marksman",
+        "name": "Spiritbound Marksman",
+        "source": {
+          "provider": "homebrew",
+          "url": "https://dnd.spudfurd.dev/spiritbound_marksman"
+        },
+        "edition": "2024",
+        "hitDie": 8,
+        "primaryAbilities": [
+          "wis",
+          "dex"
+        ],
+        "saves": [
+          "con",
+          "wis"
+        ],
+        "skills": {
+          "count": 2,
+          "from": [
+            "arcana",
+            "history",
+            "insight",
+            "investigation",
+            "nature",
+            "perception",
+            "sleight_of_hand"
+          ]
+        },
+        "weaponProficiency": [
+          "simple"
+        ],
+        "armorTraining": [
+          "light",
+          "medium",
+          "shield"
+        ],
+        "spellcasting": {
+          "ability": "wis",
+          "kind": "half",
+          "list": "spiritbound-marksman",
+          "spells": [
+            "srd:spell:fire-bolt-2024",
+            "srd:spell:ray-of-frost-2024",
+            "srd:spell:mage-hand-2024",
+            "srd:spell:mending-2024",
+            "srd:spell:light-2024",
+            "srd:spell:guidance-2024",
+            "srd:spell:acid-splash-2024",
+            "srd:spell:poison-spray-2024",
+            "srd:spell:shocking-grasp-2024",
+            "srd:spell:spare-the-dying-2024",
+            "srd:spell:resistance-2024",
+            "srd:spell:dancing-lights-2024",
+            "srd:spell:message-2024",
+            "srd:spell:prestidigitation-2024",
+            "srd:spell:cure-wounds-2024",
+            "srd:spell:faerie-fire-2024",
+            "srd:spell:grease-2024",
+            "srd:spell:detect-magic-2024",
+            "srd:spell:disguise-self-2024",
+            "srd:spell:expeditious-retreat-2024",
+            "srd:spell:false-life-2024",
+            "srd:spell:feather-fall-2024",
+            "srd:spell:identify-2024",
+            "srd:spell:jump-2024",
+            "srd:spell:longstrider-2024",
+            "srd:spell:sanctuary-2024",
+            "srd:spell:alarm-2024",
+            "srd:spell:scorching-ray-2024",
+            "srd:spell:web-2024",
+            "srd:spell:blur-2024",
+            "srd:spell:aid-2024",
+            "srd:spell:darkvision-2024",
+            "srd:spell:enhance-ability-2024",
+            "srd:spell:heat-metal-2024",
+            "srd:spell:invisibility-2024",
+            "srd:spell:lesser-restoration-2024",
+            "srd:spell:levitate-2024",
+            "srd:spell:magic-weapon-2024",
+            "srd:spell:spider-climb-2024",
+            "srd:spell:rope-trick-2024",
+            "srd:spell:arcane-lock-2024",
+            "srd:spell:see-invisibility-2024",
+            "srd:spell:dispel-magic-2024",
+            "srd:spell:fly-2024",
+            "srd:spell:haste-2024",
+            "srd:spell:protection-from-energy-2024",
+            "srd:spell:revivify-2024",
+            "srd:spell:glyph-of-warding-2024",
+            "srd:spell:blink-2024",
+            "srd:spell:freedom-of-movement-2024",
+            "srd:spell:stoneskin-2024",
+            "srd:spell:fabricate-2024",
+            "srd:spell:arcane-eye-2024",
+            "srd:spell:greater-restoration-2024",
+            "srd:spell:wall-of-stone-2024",
+            "srd:spell:animate-objects-2024",
+            "srd:spell:creation-2024"
+          ],
+          "cantrips": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "prepared": [
+            3,
+            4,
+            4,
+            6,
+            6,
+            7,
+            7,
+            9,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            13,
+            13,
+            14,
+            14,
+            15
+          ]
+        },
+        "subclassLevel": 3,
+        "subclassLabel": "Spirit Path",
+        "featLevels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "table": [
+          {
+            "id": "shots",
+            "label": "Spiritfire Shots",
+            "values": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              4,
+              4,
+              4,
+              4
+            ]
+          }
+        ],
+        "levels": [
+          {
+            "level": 1,
+            "grants": [
+              {
+                "key": "spellcasting",
+                "feature": {
+                  "id": "spellcasting",
+                  "name": "Spellcasting",
+                  "category": "feature",
+                  "description": "Spells channeled through objects, cast with Wisdom; prepares Wisdom modifier + half its level.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              },
+              {
+                "key": "spiritfire-gun",
+                "feature": {
+                  "id": "spiritfire-gun",
+                  "name": "Spiritfire Gun",
+                  "category": "feature",
+                  "description": "A spirit-imbued firearm: a ranged spell attack with Wisdom, 1d10 force a shot; 2 shots at 5th level, 3 at 11th, 4 at 17th.",
+                  "automationSupport": "full",
+                  "grantedActions": [
+                    {
+                      "kind": "attack",
+                      "id": "spiritfire-gun",
+                      "name": "Spiritfire Gun",
+                      "actionType": "action",
+                      "attackType": "spell",
+                      "ability": "wis",
+                      "attackBonusFormula": {
+                        "ability": "wis",
+                        "proficiency": true
+                      },
+                      "range": 120,
+                      "damage": [
+                        {
+                          "dice": "1d10",
+                          "damageType": "force",
+                          "magical": true
+                        }
+                      ],
+                      "automationSupport": "full"
+                    },
+                    {
+                      "kind": "multiattack",
+                      "id": "spiritfire-volley",
+                      "name": "Spiritfire Volley",
+                      "actionType": "action",
+                      "attacks": [
+                        {
+                          "actionId": "spiritbound-marksman-spiritfire-gun-granted-1",
+                          "count": 1
+                        }
+                      ],
+                      "automationSupport": "full"
+                    }
+                  ]
+                },
+                "scale": [
+                  {
+                    "path": "grantedActions.1.attacks.0.count",
+                    "value": "{col:shots}"
+                  }
+                ]
+              },
+              {
+                "key": "tools-of-the-trade",
+                "feature": {
+                  "id": "tools-of-the-trade",
+                  "name": "Tools of the Trade",
+                  "category": "feature",
+                  "description": "Gunsmith's tools and one artisan's tool.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 2,
+            "grants": [
+              {
+                "key": "lesser-echo-marks",
+                "feature": {
+                  "id": "lesser-echo-marks",
+                  "name": "Lesser Echo Marks",
+                  "category": "feature",
+                  "description": "Once a turn, before firing, one mark: Agonizing Echo (Wisdom modifier on each shot), Binding Shot or Grasping Shot.\n\nNot simulated: Binding Shot (speed −10 ft) and Grasping Shot (pulled 10 ft on a failed Strength save): Agonizing Echo is always the one used.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "damage-bonus",
+                      "actionIds": [
+                        "spiritbound-marksman-spiritfire-gun-granted-1"
+                      ],
+                      "damage": [
+                        {
+                          "dice": "0",
+                          "damageType": "same-as-attack",
+                          "bonusFormula": {
+                            "ability": "wis"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "grants": [
+              {
+                "key": "harmonized-echo",
+                "feature": {
+                  "id": "harmonized-echo",
+                  "name": "Harmonized Echo",
+                  "category": "feature",
+                  "description": "Enhances non-magical objects for an hour: light, a compass to a creature it hit, silence, a reroll.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 8,
+            "grants": [
+              {
+                "key": "greater-echo-marks",
+                "feature": {
+                  "id": "greater-echo-marks",
+                  "name": "Greater Echo Marks",
+                  "category": "feature",
+                  "description": "More marks: Warding Ember (+2 AC on a hit until its next turn), Spiritbrand Shot (tracking), Recoil Step (10 ft without opportunity attacks after firing).",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 9,
+            "grants": [
+              {
+                "key": "echo-forged-arsenal",
+                "feature": {
+                  "id": "echo-forged-arsenal",
+                  "name": "Echo-Forged Arsenal",
+                  "category": "feature",
+                  "description": "A second gun of another path, swapped on a rest.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "grants": [
+              {
+                "key": "spiritual-circuitry",
+                "feature": {
+                  "id": "spiritual-circuitry",
+                  "name": "Spiritual Circuitry",
+                  "category": "feature",
+                  "description": "One Lesser Echo Mark is always active, beside the turn's chosen mark.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 13,
+            "grants": [
+              {
+                "key": "echoforge-imprint",
+                "feature": {
+                  "id": "echoforge-imprint",
+                  "name": "Echoforge Imprint",
+                  "category": "feature",
+                  "description": "An hour's ritual binds a trap or ward to an object or place.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [
+              {
+                "key": "arsenal-upgrade",
+                "feature": {
+                  "id": "arsenal-upgrade",
+                  "name": "Echo-Forged Arsenal Upgrade",
+                  "category": "feature",
+                  "description": "A third gun.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 18,
+            "grants": [
+              {
+                "key": "avatar-of-the-forgotten",
+                "feature": {
+                  "id": "avatar-of-the-forgotten",
+                  "name": "Avatar of the Forgotten",
+                  "category": "feature",
+                  "description": "Once a long rest, a minute in Spiritform: resistance to all damage but force and psychic, and 1d10 more force damage a shot.\n\nNot simulated: ignoring difficult terrain and moving through others' spaces.",
+                  "automationSupport": "partial",
+                  "grantedActions": [
+                    {
+                      "kind": "activate-feature",
+                      "id": "avatar-of-the-forgotten",
+                      "name": "Avatar of the Forgotten",
+                      "actionType": "bonus",
+                      "featureId": "",
+                      "resourceCost": {
+                        "resourceId": "avatar-of-the-forgotten",
+                        "amount": 1
+                      },
+                      "condition": {
+                        "id": "spiritform",
+                        "name": "custom",
+                        "durationRounds": 10,
+                        "effects": [
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "acid"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "bludgeoning"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "cold"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "fire"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "lightning"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "necrotic"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "piercing"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "poison"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "radiant"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "slashing"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "thunder"
+                            }
+                          },
+                          {
+                            "kind": "damage-bonus",
+                            "actionIds": [
+                              "spiritbound-marksman-spiritfire-gun-granted-1"
+                            ],
+                            "damage": [
+                              {
+                                "dice": "1d10",
+                                "damageType": "force"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "automationSupport": "full"
+                    }
+                  ]
+                },
+                "pool": {
+                  "id": "avatar-of-the-forgotten",
+                  "size": 1
+                }
+              }
+            ]
+          },
+          {
+            "level": 20,
+            "grants": [
+              {
+                "key": "echoforged-apex",
+                "feature": {
+                  "id": "echoforged-apex",
+                  "name": "Echoforged Apex",
+                  "category": "feature",
+                  "description": "Gun shots crit on a 19 or 20; two Echo Marks at once; two guns at hand.\n\nNot simulated: the second mark and the second gun.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "critical-range",
+                      "minimum": 19,
+                      "actionIds": [
+                        "spiritbound-marksman-spiritfire-gun-granted-1"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "startingEquipment": [
+          {
+            "id": "A",
+            "label": "A light crossbow, a dagger and studded leather",
+            "items": [
+              {
+                "ref": "srd:weapon:light-crossbow"
+              },
+              {
+                "ref": "srd:weapon:dagger"
+              },
+              {
+                "ref": "srd:item:studded-leather-armor"
+              }
+            ]
+          },
+          {
+            "id": "B",
+            "label": "Gold to spend",
+            "items": [],
+            "gold": 125
+          }
+        ],
+        "suggested": {
+          "abilities": [
+            "wis",
+            "dex",
+            "con",
+            "int",
+            "cha",
+            "str"
+          ],
+          "tactics": "basic-ranged",
+          "skills": [
+            "perception",
+            "insight"
+          ],
+          "equipment": "A",
+          "cantrips": [
+            "srd:spell:fire-bolt-2024",
+            "srd:spell:ray-of-frost-2024",
+            "srd:spell:shocking-grasp-2024"
+          ],
+          "spells": [
+            "srd:spell:faerie-fire-2024",
+            "srd:spell:cure-wounds-2024",
+            "srd:spell:web-2024",
+            "srd:spell:scorching-ray-2024",
+            "srd:spell:haste-2024",
+            "srd:spell:fly-2024",
+            "srd:spell:stoneskin-2024",
+            "srd:spell:wall-of-stone-2024"
+          ]
+        },
+        "description": "A gunslinger bound to spirits: a Wisdom spell-gun that fires more shots as it grows, echo marks, and a path that shapes the gun."
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:path-of-the-deadeye",
+        "name": "Path of the Deadeye",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2024",
+        "classId": "homebrew:class:spiritbound-marksman",
+        "description": "A six-shooter for precise, controlled fire, and brands that make a target easier for everyone to kill.",
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "six-shooter",
+                "feature": {
+                  "id": "six-shooter",
+                  "name": "Six-Shooter",
+                  "category": "feature",
+                  "description": "The gun is a six-shooter: range 60/120 ft.",
+                  "automationSupport": "full"
+                },
+                "actionPatch": {
+                  "grant": "spiritfire-gun",
+                  "action": 0,
+                  "patch": {
+                    "range": 60,
+                    "longRange": 120
+                  }
+                }
+              },
+              {
+                "key": "deaths-brand",
+                "feature": {
+                  "id": "deaths-brand",
+                  "name": "Death's Brand",
+                  "category": "feature",
+                  "description": "Once a turn, a shot that hits brands the target: the next creature to hit it before the marksman's next turn deals 1d6 more necrotic damage.",
+                  "automationSupport": "full",
+                  "effects": [
+                    {
+                      "kind": "apply-condition-on-hit",
+                      "actionIds": [
+                        "spiritbound-marksman-spiritfire-gun-granted-1"
+                      ],
+                      "target": "target",
+                      "oncePerTurn": true,
+                      "appliedCondition": {
+                        "id": "deaths-brand",
+                        "name": "custom",
+                        "durationRounds": 1,
+                        "effects": [
+                          {
+                            "kind": "incoming-hit-damage",
+                            "damage": [
+                              {
+                                "dice": "1d6",
+                                "damageType": "necrotic"
+                              }
+                            ],
+                            "consumeCondition": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "grants": [
+              {
+                "key": "mark-of-the-last-breath",
+                "replaces": "deaths-brand",
+                "feature": {
+                  "id": "mark-of-the-last-breath",
+                  "name": "Mark of the Last Breath",
+                  "category": "feature",
+                  "description": "Death's Brand lasts until the end of the marksman's next turn and deals 2d6 necrotic.\n\nNot simulated: branding a second creature once a long rest.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "apply-condition-on-hit",
+                      "actionIds": [
+                        "spiritbound-marksman-spiritfire-gun-granted-1"
+                      ],
+                      "target": "target",
+                      "oncePerTurn": true,
+                      "appliedCondition": {
+                        "id": "deaths-brand",
+                        "name": "custom",
+                        "durationRounds": 2,
+                        "effects": [
+                          {
+                            "kind": "incoming-hit-damage",
+                            "damage": [
+                              {
+                                "dice": "2d6",
+                                "damageType": "necrotic"
+                              }
+                            ],
+                            "consumeCondition": true
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [
+              {
+                "key": "bullet-beyond-death",
+                "feature": {
+                  "id": "bullet-beyond-death",
+                  "name": "Bullet Beyond Death",
+                  "category": "feature",
+                  "description": "Once a long rest, a missed shot is rolled again with advantage.\n\nNot simulated: moving the brand to another creature within 60 ft when the branded one dies.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "d20-change",
+                      "rolls": [
+                        "attack"
+                      ],
+                      "change": "reroll",
+                      "advantage": true,
+                      "resourceCost": {
+                        "resourceId": "bullet-beyond-death",
+                        "amount": 1
+                      }
+                    }
+                  ]
+                },
+                "pool": {
+                  "id": "bullet-beyond-death",
+                  "size": 1
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:path-of-the-silent-veil",
+        "name": "Path of the Silent Veil",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2024",
+        "classId": "homebrew:class:spiritbound-marksman",
+        "description": "A long spirit rifle for stealth and assassination.",
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "spirit-rifle",
+                "feature": {
+                  "id": "spirit-rifle",
+                  "name": "Spirit Rifle",
+                  "category": "feature",
+                  "description": "The gun is a spirit rifle: range 120/300 ft.",
+                  "automationSupport": "full"
+                },
+                "actionPatch": {
+                  "grant": "spiritfire-gun",
+                  "action": 0,
+                  "patch": {
+                    "range": 120,
+                    "longRange": 300
+                  }
+                }
+              },
+              {
+                "key": "silent-requiem",
+                "feature": {
+                  "id": "silent-requiem",
+                  "name": "Silent Requiem",
+                  "category": "feature",
+                  "description": "Shots make no sound or flash, so firing from hiding needn't give the marksman away.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "grants": [
+              {
+                "key": "whisper-in-the-fog",
+                "feature": {
+                  "id": "whisper-in-the-fog",
+                  "name": "Whisper in the Fog",
+                  "category": "feature",
+                  "description": "Wisdom on Stealth while hidden, harder to spot after firing from beyond 60 ft, and Invisibility on itself once a short rest.\n\nNot simulated: the Stealth and Perception parts.",
+                  "automationSupport": "partial"
+                },
+                "freeCasts": [
+                  {
+                    "spell": "srd:spell:invisibility-2024",
+                    "uses": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [
+              {
+                "key": "fade-into-the-mists",
+                "feature": {
+                  "id": "fade-into-the-mists",
+                  "name": "Fade into the Mists",
+                  "category": "feature",
+                  "description": "A reaction when a creature ends its turn within 15 ft: teleport 30 ft and be heavily obscured until its next turn (Wisdom modifier times a long rest).",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:path-of-the-bayou-blight",
+        "name": "Path of the Bayou Blight",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2024",
+        "classId": "homebrew:class:spiritbound-marksman",
+        "description": "A scattergun for close-range blasts that leave foes open to force.",
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "scattergun",
+                "feature": {
+                  "id": "scattergun",
+                  "name": "Scattergun",
+                  "category": "feature",
+                  "description": "The gun is a scattergun: range 30/90 ft.",
+                  "automationSupport": "full"
+                },
+                "actionPatch": {
+                  "grant": "spiritfire-gun",
+                  "action": 0,
+                  "patch": {
+                    "range": 30,
+                    "longRange": 90
+                  }
+                }
+              },
+              {
+                "key": "shatterpulse-round",
+                "feature": {
+                  "id": "shatterpulse-round",
+                  "name": "Shatterpulse Round",
+                  "category": "feature",
+                  "description": "On a hit, creatures within 5 ft of the target make a Dexterity save or take 1d6 force; all of the attack's shots go at one target.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "grants": [
+              {
+                "key": "swampburst-shards",
+                "feature": {
+                  "id": "swampburst-shards",
+                  "name": "Swampburst Shards",
+                  "category": "feature",
+                  "description": "Once a turn, a hit makes the creature save (Constitution) or be vulnerable to force damage until the end of the marksman's next turn.\n\nNot simulated: that the creature must be within 10 ft.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "apply-condition-on-hit",
+                      "actionIds": [
+                        "spiritbound-marksman-spiritfire-gun-granted-1"
+                      ],
+                      "target": "target",
+                      "oncePerTurn": true,
+                      "save": {
+                        "ability": "con",
+                        "dcFormula": {
+                          "base": 8,
+                          "ability": "wis",
+                          "proficiency": true
+                        }
+                      },
+                      "appliedCondition": {
+                        "id": "swampburst",
+                        "name": "custom",
+                        "durationRounds": 2,
+                        "effects": [
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "vulnerability",
+                              "damageType": "force"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [
+              {
+                "key": "spiritual-backblast",
+                "feature": {
+                  "id": "spiritual-backblast",
+                  "name": "Spiritual Backblast",
+                  "category": "feature",
+                  "description": "Shatterpulse Round can push everyone it hits 10 ft, or give the marksman 10 temporary hit points and a free 10 ft move.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:arcane-trickster",
+        "name": "Arcane Trickster",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2024",
+        "classId": "srd:class:rogue",
+        "description": "A rogue who adds wizard spells to sneaking and stabbing. Third caster: Intelligence, the wizard's list.",
+        "spellcasting": {
+          "ability": "int",
+          "kind": "third",
+          "list": "wizard",
+          "cantrips": [
+            0,
+            0,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3
+          ],
+          "prepared": [
+            0,
+            0,
+            3,
+            4,
+            4,
+            4,
+            5,
+            6,
+            6,
+            7,
+            8,
+            8,
+            9,
+            10,
+            10,
+            11,
+            11,
+            11,
+            12,
+            13
+          ]
+        },
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "spellcasting",
+                "feature": {
+                  "id": "spellcasting",
+                  "name": "Spellcasting",
+                  "category": "feature",
+                  "description": "Wizard spells cast with Intelligence, slots as a third caster; Mage Hand always known.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                },
+                "spells": [
+                  "srd:spell:mage-hand-2024"
+                ]
+              },
+              {
+                "key": "mage-hand-legerdemain",
+                "feature": {
+                  "id": "mage-hand-legerdemain",
+                  "name": "Mage Hand Legerdemain",
+                  "category": "feature",
+                  "description": "The spectral hand is invisible and can pick pockets, stow objects and work locks and traps.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 9,
+            "grants": [
+              {
+                "key": "magical-ambush",
+                "feature": {
+                  "id": "magical-ambush",
+                  "name": "Magical Ambush",
+                  "category": "feature",
+                  "description": "While invisible, a creature saving against the trickster's spell does so with disadvantage that turn.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 13,
+            "grants": [
+              {
+                "key": "versatile-trickster",
+                "feature": {
+                  "id": "versatile-trickster",
+                  "name": "Versatile Trickster",
+                  "category": "feature",
+                  "description": "A Trip from Cunning Strike can also topple a creature beside the spectral hand.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          },
+          {
+            "level": 17,
+            "grants": [
+              {
+                "key": "spell-thief",
+                "feature": {
+                  "id": "spell-thief",
+                  "name": "Spell Thief",
+                  "category": "feature",
+                  "description": "As a reaction to a spell aimed at it, the trickster can try to steal the spell, negating it and keeping it for 8 hours.",
+                  "automationSupport": "manual-only"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:path-of-the-zealot",
+        "name": "Path of the Zealot",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2024",
+        "classId": "srd:class:barbarian",
+        "description": "A barbarian whose rage is a god's fury: radiant damage, divine healing, and allies made bold.",
+        "table": [
+          {
+            "id": "warrior-of-the-gods",
+            "label": "Warrior of the Gods dice",
+            "values": [
+              null,
+              null,
+              4,
+              4,
+              4,
+              5,
+              5,
+              5,
+              5,
+              5,
+              5,
+              6,
+              6,
+              6,
+              6,
+              6,
+              7,
+              7,
+              7,
+              7
+            ]
+          }
+        ],
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "divine-fury",
+                "feature": {
+                  "id": "divine-fury",
+                  "name": "Divine Fury",
+                  "category": "feature",
+                  "description": "While raging, the first creature it hits each turn with a weapon or an Unarmed Strike takes 1d6 + half its Barbarian level more radiant damage.",
+                  "automationSupport": "full",
+                  "effects": [
+                    {
+                      "kind": "damage-bonus",
+                      "oncePerTurn": true,
+                      "whileCondition": "rage-active",
+                      "attackTypes": [
+                        "melee",
+                        "ranged"
+                      ],
+                      "damage": [
+                        {
+                          "dice": "1d6+1",
+                          "damageType": "radiant"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "scale": [
+                  {
+                    "path": "effects.0.damage.0.dice",
+                    "value": "1d6+{level/2}"
+                  }
+                ]
+              },
+              {
+                "key": "warrior-of-the-gods",
+                "feature": {
+                  "id": "warrior-of-the-gods",
+                  "name": "Warrior of the Gods",
+                  "category": "feature",
+                  "description": "A pool of d12s (4, growing to 7): as a bonus action, spend dice and heal the total rolled.\n\nNot simulated: spending more than two dice at once.",
+                  "automationSupport": "partial",
+                  "grantedActions": [
+                    {
+                      "kind": "healing",
+                      "id": "warrior-of-the-gods-1",
+                      "name": "Warrior of the Gods (1 die)",
+                      "actionType": "bonus",
+                      "range": 0,
+                      "healing": [
+                        {
+                          "dice": "1d12"
+                        }
+                      ],
+                      "targeting": {
+                        "target": "self"
+                      },
+                      "resourceCost": {
+                        "resourceId": "warrior-of-the-gods",
+                        "amount": 1
+                      },
+                      "automationSupport": "full"
+                    },
+                    {
+                      "kind": "healing",
+                      "id": "warrior-of-the-gods-2",
+                      "name": "Warrior of the Gods (2 dice)",
+                      "actionType": "bonus",
+                      "range": 0,
+                      "healing": [
+                        {
+                          "dice": "2d12"
+                        }
+                      ],
+                      "targeting": {
+                        "target": "self"
+                      },
+                      "resourceCost": {
+                        "resourceId": "warrior-of-the-gods",
+                        "amount": 2
+                      },
+                      "automationSupport": "full"
+                    }
+                  ]
+                },
+                "pool": {
+                  "id": "warrior-of-the-gods",
+                  "size": "{col:warrior-of-the-gods}"
+                }
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "grants": [
+              {
+                "key": "fanatical-focus",
+                "feature": {
+                  "id": "fanatical-focus",
+                  "name": "Fanatical Focus",
+                  "category": "feature",
+                  "description": "Once per rage, a failed save can be rerolled, adding its Rage Damage bonus.\n\nNot simulated: it's once a fight, raging or not.",
+                  "automationSupport": "partial",
+                  "effects": [
+                    {
+                      "kind": "d20-change",
+                      "rolls": [
+                        "save"
+                      ],
+                      "change": "reroll",
+                      "bonus": {
+                        "base": 2
+                      },
+                      "resourceCost": {
+                        "resourceId": "fanatical-focus",
+                        "amount": 1
+                      }
+                    }
+                  ]
+                },
+                "scale": [
+                  {
+                    "path": "effects.0.bonus.base",
+                    "value": "{col:rage-damage}"
+                  }
+                ],
+                "pool": {
+                  "id": "fanatical-focus",
+                  "size": 1
+                }
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "grants": [
+              {
+                "key": "zealous-presence",
+                "feature": {
+                  "id": "zealous-presence",
+                  "name": "Zealous Presence",
+                  "category": "feature",
+                  "description": "A bonus action battle cry: up to ten other creatures within 60 ft have advantage on attack rolls and saves until its next turn. Once a long rest.\n\nNot simulated: getting it back by spending a Rage use.",
+                  "automationSupport": "partial",
+                  "grantedActions": [
+                    {
+                      "kind": "buff",
+                      "id": "zealous-presence",
+                      "name": "Zealous Presence",
+                      "actionType": "bonus",
+                      "range": 60,
+                      "targeting": {
+                        "target": "chosen",
+                        "count": 10,
+                        "notSelf": true
+                      },
+                      "appliedCondition": {
+                        "id": "zealous-presence",
+                        "name": "custom",
+                        "durationRounds": 1,
+                        "effects": [
+                          {
+                            "kind": "attack-advantage",
+                            "condition": "always"
+                          },
+                          {
+                            "kind": "save-advantage"
+                          }
+                        ]
+                      },
+                      "resourceCost": {
+                        "resourceId": "zealous-presence",
+                        "amount": 1
+                      },
+                      "automationSupport": "full"
+                    }
+                  ]
+                },
+                "pool": {
+                  "id": "zealous-presence",
+                  "size": 1
+                }
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [
+              {
+                "key": "rage-of-the-gods",
+                "feature": {
+                  "id": "rage-of-the-gods",
+                  "name": "Rage of the Gods",
+                  "category": "feature",
+                  "description": "Raging, it can take a divine warrior's form for a minute: a fly speed, and resistance to necrotic, psychic and radiant damage.\n\nNot simulated: Revivification (a reaction spending a Rage use to keep a creature within 30 ft above 0 hit points).",
+                  "automationSupport": "partial",
+                  "grantedActions": [
+                    {
+                      "kind": "activate-feature",
+                      "id": "rage-of-the-gods",
+                      "name": "Rage (Rage of the Gods)",
+                      "actionType": "bonus",
+                      "featureId": "",
+                      "resourceCost": {
+                        "resourceId": "rage-of-the-gods",
+                        "amount": 1
+                      },
+                      "condition": {
+                        "id": "rage-active",
+                        "name": "custom",
+                        "durationRounds": 10,
+                        "modifiers": {
+                          "noSpellcasting": true,
+                          "flySpeed": 40
+                        },
+                        "upkeep": {
+                          "by": [
+                            "attack",
+                            "save",
+                            "bonus-action"
+                          ]
+                        },
+                        "endsOnIncapacitated": true,
+                        "effects": [
+                          {
+                            "kind": "damage-bonus",
+                            "abilities": [
+                              "str"
+                            ],
+                            "damage": [
+                              {
+                                "dice": "2",
+                                "damageType": "same-as-attack"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "bludgeoning"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "piercing"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "slashing"
+                            }
+                          },
+                          {
+                            "kind": "save-advantage",
+                            "ability": "str"
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "necrotic"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "psychic"
+                            }
+                          },
+                          {
+                            "kind": "damage-adjustment",
+                            "adjustment": {
+                              "type": "resistance",
+                              "damageType": "radiant"
+                            }
+                          }
+                        ]
+                      },
+                      "automationSupport": "full",
+                      "extraCost": {
+                        "resourceId": "rage",
+                        "amount": 1
+                      }
+                    }
+                  ]
+                },
+                "scale": [
+                  {
+                    "path": "grantedActions.0.condition.effects.0.damage.0.dice",
+                    "value": "{col:rage-damage}"
+                  }
+                ],
+                "pool": {
+                  "id": "rage-of-the-gods",
+                  "size": 1
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "subclass",
+      "entry": {
+        "id": "homebrew:subclass:path-of-the-totem-warrior",
+        "name": "Path of the Totem Warrior",
+        "source": {
+          "provider": "homebrew"
+        },
+        "edition": "2014",
+        "classId": "srd:class:barbarian",
+        "description": "A barbarian guided by an animal spirit: the bear's toughness, the eagle's sight, the wolf's pack.",
+        "levels": [
+          {
+            "level": 3,
+            "grants": [
+              {
+                "key": "spirit-seeker",
+                "feature": {
+                  "id": "spirit-seeker",
+                  "name": "Spirit Seeker",
+                  "category": "feature",
+                  "description": "Beast Sense and Speak with Animals as rituals.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ],
+            "choices": [
+              {
+                "kind": "pick",
+                "id": "totem-spirit",
+                "label": "Totem Spirit",
+                "count": 1,
+                "options": [
+                  {
+                    "id": "bear",
+                    "name": "Bear",
+                    "description": "Resistance to all damage but psychic while raging.",
+                    "grants": [
+                      {
+                        "key": "totem-bear",
+                        "feature": {
+                          "id": "totem-bear",
+                          "name": "Totem Spirit: Bear",
+                          "category": "feature",
+                          "description": "While raging, resistance to every damage type but psychic.",
+                          "automationSupport": "full",
+                          "effects": [
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "acid"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "cold"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "fire"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "force"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "lightning"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "necrotic"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "poison"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "radiant"
+                              },
+                              "whileCondition": "rage-active"
+                            },
+                            {
+                              "kind": "damage-adjustment",
+                              "adjustment": {
+                                "type": "resistance",
+                                "damageType": "thunder"
+                              },
+                              "whileCondition": "rage-active"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "eagle",
+                    "name": "Eagle",
+                    "description": "Hard to pin down while raging.",
+                    "grants": [
+                      {
+                        "key": "totem-eagle",
+                        "feature": {
+                          "id": "totem-eagle",
+                          "name": "Totem Spirit: Eagle",
+                          "category": "feature",
+                          "description": "While raging, others have disadvantage on opportunity attacks against it, and it can Dash as a bonus action.",
+                          "automationSupport": "manual-only"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "wolf",
+                    "name": "Wolf",
+                    "description": "Allies strike true beside it while it rages.",
+                    "grants": [
+                      {
+                        "key": "totem-wolf",
+                        "feature": {
+                          "id": "totem-wolf",
+                          "name": "Totem Spirit: Wolf",
+                          "category": "feature",
+                          "description": "While raging, its allies have advantage on melee attacks against hostile creatures within 5 ft of it.",
+                          "automationSupport": "manual-only"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "grants": [],
+            "choices": [
+              {
+                "kind": "pick",
+                "id": "aspect-of-the-beast",
+                "label": "Aspect of the Beast",
+                "count": 1,
+                "options": [
+                  {
+                    "id": "bear",
+                    "name": "Bear",
+                    "description": "Strength of the bear.",
+                    "grants": [
+                      {
+                        "key": "aspect-bear",
+                        "feature": {
+                          "id": "aspect-bear",
+                          "name": "Aspect of the Bear",
+                          "category": "feature",
+                          "description": "Twice the carrying capacity, and advantage on Strength checks to push, pull, lift or break.",
+                          "automationSupport": "manual-only",
+                          "informational": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "eagle",
+                    "name": "Eagle",
+                    "description": "The eagle's eyesight.",
+                    "grants": [
+                      {
+                        "key": "aspect-eagle",
+                        "feature": {
+                          "id": "aspect-eagle",
+                          "name": "Aspect of the Eagle",
+                          "category": "feature",
+                          "description": "Sees far without trouble, and dim light doesn't hinder its Perception.",
+                          "automationSupport": "manual-only",
+                          "informational": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "wolf",
+                    "name": "Wolf",
+                    "description": "The wolf's hunting sense.",
+                    "grants": [
+                      {
+                        "key": "aspect-wolf",
+                        "feature": {
+                          "id": "aspect-wolf",
+                          "name": "Aspect of the Wolf",
+                          "category": "feature",
+                          "description": "Tracks at a fast pace, and moves stealthily at a normal pace.",
+                          "automationSupport": "manual-only",
+                          "informational": true
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "grants": [
+              {
+                "key": "spirit-walker",
+                "feature": {
+                  "id": "spirit-walker",
+                  "name": "Spirit Walker",
+                  "category": "feature",
+                  "description": "Commune with Nature as a ritual.",
+                  "automationSupport": "manual-only",
+                  "informational": true
+                }
+              }
+            ]
+          },
+          {
+            "level": 14,
+            "grants": [],
+            "choices": [
+              {
+                "kind": "pick",
+                "id": "totemic-attunement",
+                "label": "Totemic Attunement",
+                "count": 1,
+                "options": [
+                  {
+                    "id": "bear",
+                    "name": "Bear",
+                    "description": "Draws foes' attacks.",
+                    "grants": [
+                      {
+                        "key": "attunement-bear",
+                        "feature": {
+                          "id": "attunement-bear",
+                          "name": "Totemic Attunement: Bear",
+                          "category": "feature",
+                          "description": "While raging, hostile creatures within 5 ft have disadvantage on attacks against anyone else.",
+                          "automationSupport": "manual-only"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "eagle",
+                    "name": "Eagle",
+                    "description": "Flight while raging.",
+                    "grants": [
+                      {
+                        "key": "attunement-eagle",
+                        "feature": {
+                          "id": "attunement-eagle",
+                          "name": "Totemic Attunement: Eagle",
+                          "category": "feature",
+                          "description": "While raging, it flies at its walking speed (falling if it ends a turn in the air).",
+                          "automationSupport": "manual-only"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "wolf",
+                    "name": "Wolf",
+                    "description": "Knocks foes down.",
+                    "grants": [
+                      {
+                        "key": "attunement-wolf",
+                        "feature": {
+                          "id": "attunement-wolf",
+                          "name": "Totemic Attunement: Wolf",
+                          "category": "feature",
+                          "description": "While raging, a bonus action knocks a Large or smaller creature it hit with a melee attack prone.",
+                          "automationSupport": "manual-only"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
