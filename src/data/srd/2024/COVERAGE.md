@@ -17,7 +17,7 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 8 | 2 | 7 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 2 | 3 | 4 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 5 | 3 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
 | Fighter (Champion) | 21 | 12 | 0 | 3 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
@@ -63,7 +63,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
-| `healing-bonus` | Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing) | Cleric | 3 | Disciple of Life (Life Domain); Blessed Healer (Life Domain); Supreme Healing (Life Domain) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
@@ -172,11 +171,11 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Disciple of Life | manual | `healing-bonus` |  |
+| 3 | Disciple of Life | full |  | 2 + the slot's level more for each creature a slot-cast healing spell heals. |
 | 3 | Life Domain Spells | builder |  | Life Domain spells are always prepared. |
 | 3 | Preserve Life | full |  | Five times the cleric level shared among bloodied creatures within 30 ft, the most hurt first, none past half its maximum; the AI uses it when the shares are worth a heal. |
-| 6 | Blessed Healer | manual | `healing-bonus` |  |
-| 17 | Supreme Healing | manual | `healing-bonus` |  |
+| 6 | Blessed Healer | full |  | 2 + the slot's level for the cleric when a slot-cast healing spell heals someone else. |
+| 17 | Supreme Healing | full |  | Healing dice of its spells and Channel Divinity at their highest. |
 
 ## Druid
 

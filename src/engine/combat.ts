@@ -2559,6 +2559,48 @@ export function resolveAreaTargeting(
   };
 }
 
+/** What a healer's features add to its healing (Disciple of Life, Blessed Healer, Supreme Healing). */
+export function healingBonusOf(definition: CreatureDefinition, combatant?: CombatantState): { slotBonus: boolean; selfOnOthers: boolean; maximize: boolean } {
+  const found = { slotBonus: false, selfOnOthers: false, maximize: false };
+  for (const feature of featureSources(definition, combatant)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "healing-bonus") continue;
+      found.slotBonus ||= effect.slotBonus === true;
+      found.selfOnOthers ||= effect.selfOnOthers === true;
+      found.maximize ||= effect.maximize === true;
+    }
+  }
+  return found;
+}
+
+/** The slot a healing spell is cast with, or undefined for one cast without (a free cast) or anything else. */
+export function healingSlotLevel(action: HealingActionDefinition): number | undefined {
+  return action.spellLevel !== undefined ? spellSlotLevel(action.resourceCost?.resourceId) : undefined;
+}
+
+/** Whether a heal's dice can be maximized (Supreme Healing): a spell's, or Channel Divinity's. */
+export function maximizableHealing(action: HealingActionDefinition): boolean {
+  return action.spellLevel !== undefined || action.resourceCost?.resourceId === "channel-divinity";
+}
+
+/** A dice expression at its highest, as a roll (Supreme Healing). */
+function maximizedRoll(expression: string): DiceRollResult {
+  const parsed = parseDiceExpression(expression);
+  const rolls = parsed.terms.flatMap((term) => Array.from({ length: term.count }, () => ({ sides: term.sides, value: term.sides, sign: term.sign as 1 | -1 })));
+  return { expression: `${expression} (maximized)`, rolls, modifier: parsed.modifier, total: rolls.reduce((sum, roll) => sum + roll.sign * roll.value, 0) + parsed.modifier };
+}
+
+/** Blessed Healer: healing someone else with a slot heals the healer too. */
+function healHealerToo(state: EngineState, healer: CombatantState, slot: number | undefined, targets: CombatantState[], actionId: Id): void {
+  if (slot === undefined || !targets.some((target) => target.id !== healer.id)) return;
+  if (!healingBonusOf(getDefinition(state.snapshot, healer), healer).selfOnOthers) return;
+  const amount = 2 + slot;
+  healTo(state, healer, amount);
+  state.log.push(event(state, "HealingApplied", `${healer.displayName} regained ${amount} HP`, {
+    healerId: healer.id, targetId: healer.id, actionId, rolls: [], healingApplied: amount, currentHp: healer.currentHp, blessedHealer: true
+  }));
+}
+
 export function resolveHealingAction(
   state: EngineState,
   healerId: Id,
@@ -2595,14 +2637,19 @@ export function resolveHealingAction(
   const upcastDice = slotsAboveBase > 0 && perSlotDice ? repeatDice(perSlotDice, slotsAboveBase) : "";
 
   let healingApplied = 0;
+  const bonus = healingBonusOf(healerDefinition, healer);
+  const maximize = bonus.maximize && maximizableHealing(action);
   // Lay on Hands: what the target is missing, from what's left in the pool.
   const rolls = action.fromPool ? [] : action.healing.map((component, index) => {
     const abilityBonus = component.abilityModifier ? abilityModifier(healerDefinition.abilities[component.abilityModifier]) : 0;
     const dice = index === 0 && upcastDice ? `${component.dice}+${upcastDice}` : component.dice;
-    const roll = rollDice(withBonus(dice, abilityBonus), state.rng);
+    const roll = maximize ? maximizedRoll(withBonus(dice, abilityBonus)) : rollDice(withBonus(dice, abilityBonus), state.rng);
     healingApplied += roll.total;
     return roll;
   });
+  // Disciple of Life: 2 + the slot's level more.
+  const healSlot = healingSlotLevel(action);
+  if (bonus.slotBonus && healSlot !== undefined && !action.fromPool) healingApplied += 2 + healSlot;
   if (action.fromPool) {
     healingApplied = Math.max(0, Math.min(poolLeft, targetDefinition.maxHp - target.currentHp));
     healer.resources = { ...(healer.resources ?? {}), [action.fromPool.resourceId]: poolLeft - healingApplied };
@@ -2628,6 +2675,7 @@ export function resolveHealingAction(
     fallbackDc: 8 + (healerDefinition.proficiencyBonus ?? proficiencyFromDefinition(healerDefinition)),
     origin: healer.position
   });
+  healHealerToo(state, healer, healSlot, [target], actionId);
 
   return { healingApplied };
 }
@@ -2937,12 +2985,17 @@ export function resolveHealingBurstAction(
   // Mass Cure Wounds, and matches `resolveAreaSaveAction`'s own roll-once
   // convention for its blast damage.
   let healingApplied = 0;
+  const bonus = healingBonusOf(healerDefinition, healer);
+  const maximize = bonus.maximize && maximizableHealing(action);
   const rolls = action.healing.map((component) => {
     const abilityBonus = component.abilityModifier ? abilityModifier(healerDefinition.abilities[component.abilityModifier]) : 0;
-    const roll = rollDice(withBonus(component.dice, abilityBonus), state.rng);
+    const roll = maximize ? maximizedRoll(withBonus(component.dice, abilityBonus)) : rollDice(withBonus(component.dice, abilityBonus), state.rng);
     healingApplied += roll.total;
     return roll;
   });
+  // Disciple of Life: each creature healed regains 2 + the slot's level more.
+  const healSlot = healingSlotLevel(action);
+  if (bonus.slotBonus && healSlot !== undefined) healingApplied += 2 + healSlot;
 
   for (const target of targets) {
     const targetDefinition = getDefinition(state.snapshot, target);
@@ -2961,6 +3014,7 @@ export function resolveHealingBurstAction(
       origin: healer.position
     });
   }
+  healHealerToo(state, healer, healSlot, targets, actionId);
 
   return { healingApplied, targetIds: targets.map((target) => target.id) };
 }

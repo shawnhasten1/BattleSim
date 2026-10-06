@@ -5,6 +5,9 @@ import {
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   dividedHealing,
+  healingBonusOf,
+  healingSlotLevel,
+  maximizableHealing,
   effectiveFaction,
   conditionSeverity,
   averageOfDice,
@@ -4004,13 +4007,17 @@ function riderLandChance(
 }
 
 export function averageHealing(action: HealingAction, source: ReturnType<typeof getDefinition>): number {
+  // Supreme Healing gives the dice their highest; Disciple of Life adds 2 + the slot's level.
+  const bonus = healingBonusOf(source);
+  const maximize = bonus.maximize && maximizableHealing(action);
   const base = action.healing.reduce((sum, component) => {
     const parsed = parseDiceExpression(component.dice);
-    const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
+    const diceAverage = parsed.terms.reduce((termSum, term) => termSum + term.sign * term.count * (maximize ? term.sides : (term.sides + 1) / 2), 0) + parsed.modifier;
     const abilityBonus = component.abilityModifier ? abilityModifier(source.abilities[component.abilityModifier]) : 0;
     return sum + diceAverage + abilityBonus;
   }, 0);
-  return base + averageUpcastDiceBonus(action);
+  const slot = healingSlotLevel(action);
+  return base + averageUpcastDiceBonus(action, maximize) + (bonus.slotBonus && slot !== undefined ? 2 + slot : 0);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -4053,7 +4060,7 @@ export function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { ki
 }
 
 /** Expected value of an action's upcast damage-dice bonus at whatever slot tier its own `resourceCost` implies (0 for a base cast, or an action with no `upcast`). */
-function averageUpcastDiceBonus(action: Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" }>): number {
+function averageUpcastDiceBonus(action: Extract<ActionDefinition, { kind: "attack" | "save" | "area-save" | "healing" }>, maximize = false): number {
   const perSlotDice = action.upcast?.perSlotAboveBase?.damageDice;
   if (!perSlotDice || action.spellLevel == null) {
     return 0;
@@ -4064,7 +4071,7 @@ function averageUpcastDiceBonus(action: Extract<ActionDefinition, { kind: "attac
     return 0;
   }
   const parsed = parseDiceExpression(repeatDice(perSlotDice, slotsAboveBase));
-  return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * ((term.sides + 1) / 2), 0) + parsed.modifier;
+  return parsed.terms.reduce((sum, term) => sum + term.sign * term.count * (maximize ? term.sides : (term.sides + 1) / 2), 0) + parsed.modifier;
 }
 
 function averageAttackFeatureDamage(

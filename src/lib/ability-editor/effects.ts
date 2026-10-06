@@ -46,6 +46,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "attack-bonus", condition: "always", bonus: { base: 1 } })
   },
   {
+    kind: "healing-bonus", label: "Bigger healing", hint: "Disciple of Life, Blessed Healer, Supreme Healing", theme: "survival", when: false, scope: false,
+    blank: () => ({ kind: "healing-bonus", slotBonus: true })
+  },
+  {
     kind: "free-move", label: "A move with something else", hint: "Instinctive Pounce with Rage, Tactical Shift with Second Wind, a move after a critical hit", theme: "turn", when: false, scope: false,
     blank: () => ({ kind: "free-move", on: "critical-hit" })
   },

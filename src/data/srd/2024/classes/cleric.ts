@@ -169,7 +169,7 @@ export const LIFE_DOMAIN: SubclassDefinition = {
     {
       level: 3,
       grants: [
-        grant("disciple-of-life", reference("cleric_life-domain_disciple-of-life")),
+        grant("disciple-of-life", runs("cleric_life-domain_disciple-of-life", { effects: [{ kind: "healing-bonus", slotBonus: true }] })),
         grant("life-domain-spells", runs("cleric_life-domain_life-domain-spells"), { spells: ["aid", "bless", "cure-wounds", "lesser-restoration"].map(spell) }),
         grant("preserve-life", runs("cleric_life-domain_preserve-life", {
           grantedActions: [{
@@ -181,10 +181,10 @@ export const LIFE_DOMAIN: SubclassDefinition = {
       ]
     },
     { level: 5, grants: [{ key: "life-domain-spells-5", spells: ["mass-healing-word", "revivify"].map(spell) }] },
-    { level: 6, grants: [grant("blessed-healer", reference("cleric_life-domain_blessed-healer"))] },
+    { level: 6, grants: [grant("blessed-healer", runs("cleric_life-domain_blessed-healer", { effects: [{ kind: "healing-bonus", selfOnOthers: true }] }))] },
     { level: 7, grants: [{ key: "life-domain-spells-7", spells: ["aura-of-life", "death-ward"].map(spell) }] },
     { level: 9, grants: [{ key: "life-domain-spells-9", spells: ["greater-restoration", "mass-cure-wounds"].map(spell) }] },
-    { level: 17, grants: [grant("supreme-healing", reference("cleric_life-domain_supreme-healing"))] }
+    { level: 17, grants: [grant("supreme-healing", runs("cleric_life-domain_supreme-healing", { effects: [{ kind: "healing-bonus", maximize: true }] }))] }
   ]
 };
 

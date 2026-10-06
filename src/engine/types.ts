@@ -507,6 +507,17 @@ export type FeatureEffect =
     noOpportunityAttacks?: boolean;
   }
   | {
+    /**
+     * Its healing grows: a healing spell cast with a slot gives each creature it heals 2 + the slot's level more
+     * (`slotBonus`: Disciple of Life), and heals it too, by as much, when it heals someone else (`selfOnOthers`: Blessed
+     * Healer); healing dice of its spells and Channel Divinity give their highest (`maximize`: Supreme Healing).
+     */
+    kind: "healing-bonus";
+    slotBonus?: boolean;
+    selfOnOthers?: boolean;
+    maximize?: boolean;
+  }
+  | {
     /** Its initiative rolls: advantage (Feral Instinct, Remarkable Athlete), and a bonus added (Alert: the proficiency bonus). */
     kind: "initiative";
     advantage?: boolean;

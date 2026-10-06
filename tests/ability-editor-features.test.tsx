@@ -174,6 +174,17 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Quick Feet").effects).toEqual([{ kind: "free-move", on: { spends: "second-wind" }, feet: 15, noOpportunityAttacks: true }]);
   });
 
+  it("Bigger healing: each of its three parts", async () => {
+    await blankFeature("Life's Gift");
+    const card = await addEffect(/^Bigger healing/, "Bigger healing");
+    await userEvent.click(card.getByRole("checkbox", { name: /^Slot-cast healing spells/ }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Healing someone else with a slot heals it too" }));
+    await userEvent.click(card.getByRole("checkbox", { name: /^Healing dice of spells/ }));
+    await done(card);
+    await addToSheet();
+    expect(named("Life's Gift").effects).toEqual([{ kind: "healing-bonus", selfOnOthers: true, maximize: true }]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

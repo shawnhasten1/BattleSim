@@ -832,6 +832,14 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "healing-bonus":
+      return (
+        <>
+          <Check label="Slot-cast healing spells: 2 + the slot's level more for each creature" checked={effect.slotBonus === true} onChange={(on) => set(opt(effect, "slotBonus", on ? true : undefined))} />
+          <Check label="Healing someone else with a slot heals it too" checked={effect.selfOnOthers === true} onChange={(on) => set(opt(effect, "selfOnOthers", on ? true : undefined))} />
+          <Check label="Healing dice of spells and Channel Divinity at their highest" checked={effect.maximize === true} onChange={(on) => set(opt(effect, "maximize", on ? true : undefined))} />
+        </>
+      );
     case "free-move": {
       const spends = effect.on === "critical-hit" ? undefined : effect.on.spends;
       return (

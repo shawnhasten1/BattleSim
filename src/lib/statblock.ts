@@ -572,6 +572,12 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
     case "d20-change":
       return d20ChangeSentence(effect, definition, who);
+    case "healing-bonus":
+      return [
+        effect.slotBonus ? `A healing spell ${who.subject} casts with a spell slot restores 2 + the slot's level more hit points to each creature it heals.` : "",
+        effect.selfOnOthers ? `When such a spell heals another creature, ${who.subject} regains 2 + the slot's level hit points too.` : "",
+        effect.maximize ? `${capitalize(who.possessive)} healing spells and Channel Divinity heal for the highest number on each die.` : ""
+      ].filter(Boolean).join(" ") || `${S} heals as usual.`;
     case "free-move":
       return `${effect.on === "critical-hit" ? `When ${who.subject} scores a critical hit on its turn` : `When ${who.subject} uses ${poolName(effect.on.spends, 1, definition)}`}, ${who.subject} can move up to ${effect.feet ? `${effect.feet} feet` : "half its speed"}${effect.noOpportunityAttacks ? " without provoking opportunity attacks" : ""}.`;
     case "spell-damage-ability":
@@ -727,6 +733,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
     case "spell-half-on-miss": return `half damage on a miss or a save: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
+    case "healing-bonus": return [effect.slotBonus ? "+2 + slot level healing" : "", effect.selfOnOthers ? "heals itself when it heals others" : "", effect.maximize ? "healing dice maximized" : ""].filter(Boolean).join(", ") || "healing";
     case "free-move": return `${effect.feet ? `${effect.feet} ft` : "half speed"} move ${effect.on === "critical-hit" ? "after a critical hit" : `with ${poolName(effect.on.spends, 1, definition)}`}${effect.noOpportunityAttacks ? ", no opportunity attacks" : ""}`;
     case "d20-change": {
       const failed = effect.onNatural1 ? "a 1" : joinList(effect.rolls.map((roll) => (roll === "save" ? "a failed save" : "a miss")), "or");

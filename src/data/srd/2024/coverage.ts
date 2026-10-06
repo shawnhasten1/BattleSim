@@ -40,7 +40,6 @@ export const GAPS = {
   "follow-up-attack": "An extra attack against a second creature near the first (Horde Breaker, Cleave)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
   "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
-  "healing-bonus": "Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing)",
   "damage-vitality": "Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting)",
   "spare-allies": "Allies chosen to be spared by an area (Sculpt Spells, Careful Spell)",
   "on-kill": "Something that happens when an enemy drops (Dark One's Blessing)",
@@ -163,11 +162,11 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "cleric_cleric-spell-list": SPELL_LIST,
 
   /* Life Domain */
-  "cleric_life-domain_disciple-of-life": manual(["healing-bonus"]),
+  "cleric_life-domain_disciple-of-life": full("2 + the slot's level more for each creature a slot-cast healing spell heals."),
   "cleric_life-domain_life-domain-spells": PREPARED("Life Domain spells"),
   "cleric_life-domain_preserve-life": full("Five times the cleric level shared among bloodied creatures within 30 ft, the most hurt first, none past half its maximum; the AI uses it when the shares are worth a heal."),
-  "cleric_life-domain_blessed-healer": manual(["healing-bonus"]),
-  "cleric_life-domain_supreme-healing": manual(["healing-bonus"]),
+  "cleric_life-domain_blessed-healer": full("2 + the slot's level for the cleric when a slot-cast healing spell heals someone else."),
+  "cleric_life-domain_supreme-healing": full("Healing dice of its spells and Channel Divinity at their highest."),
 
   /* Druid */
   druid_druidic: info("A language; Speak with Animals is always prepared."),
