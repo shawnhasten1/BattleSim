@@ -29,7 +29,7 @@ import styles from "./homebrew.module.css";
 function NameFields({ name, description, onChange }: { name: string; description?: string; onChange: (patch: { name?: string; description?: string }) => void }) {
   return (
     <>
-      <label className={`${styles.field} ${styles.wide}`}>Name<input value={name} onChange={(event) => onChange({ name: event.target.value })} aria-label="Name" /></label>
+      <label className={styles.field}>Name<input value={name} onChange={(event) => onChange({ name: event.target.value })} aria-label="Name" /></label>
       <label className={styles.field}>
         Description
         <textarea value={description ?? ""} onChange={(event) => onChange({ description: event.target.value || undefined })} aria-label="Description" />

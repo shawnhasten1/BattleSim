@@ -10,6 +10,7 @@ import {
   type MovementProfile,
   type ResourceStance,
   type SizeCategory,
+  type SourceMetadata,
   type SpellDefinition,
   type TacticsProfile,
   type WeaponDefinition
@@ -34,6 +35,7 @@ import type {
   Template
 } from "./catalog";
 import type { CharacterBuild, ChoiceValue, FeatChoice } from "./build-record";
+import { sourceLabel } from "./homebrew";
 import { spellSlots } from "./slots";
 import { castAs, maxSpellLevel, spellRuns, spellSlug } from "./spells";
 import { evaluateNumber, evaluateTemplate, type TemplateScope } from "./template";
@@ -104,6 +106,8 @@ export interface ChoiceOption {
   level?: number;
   /** A spell the simulator doesn't cast: it goes on the actor as its text, for the DM. */
   reference?: boolean;
+  /** Where a homebrew or imported subclass or feat is from ("Homebrew"), shown beside its name. Absent for the SRD's. */
+  from?: string;
 }
 
 /** A spell the builder puts on the actor: prepared, always prepared, or the copy a free cast spends its own pool on. */
@@ -343,6 +347,12 @@ function suggestIncreases(spec: Extract<ChoiceSpec, { kind: "abilities" }>, abil
   return increases;
 }
 
+/** A non-SRD option's source, to show beside its name. */
+function fromOf(source: SourceMetadata | undefined): { from?: string } {
+  const from = sourceLabel(source);
+  return from ? { from } : {};
+}
+
 function asStrings(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : undefined;
 }
@@ -391,7 +401,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
     case "subclass": {
       const classId = context.owner.classId;
       const options = state.sources.catalog.subclasses.filter((entry) => entry.classId === classId);
-      slot.options = options.map((entry) => ({ id: entry.id, name: entry.name, detail: entry.source.documentName }));
+      slot.options = options.map((entry) => ({ id: entry.id, name: entry.name, detail: entry.source.documentName, ...fromOf(entry.source) }));
       slot.suggestion = options[0]?.id;
       if (typeof stored === "string") {
         if (options.some((entry) => entry.id === stored)) {
@@ -793,7 +803,7 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
   const suggestedExtra = spec.categories.includes("fighting-style") ? extras.find((option) => option.id === suggested?.fightingStyle)?.id : undefined;
   const suggestedFeat = suggestedExtra ?? pickSuggestion();
   slot.options = [
-    ...eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category })),
+    ...eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category, ...fromOf(feat.source) })),
     ...extras.map((option) => ({ id: option.id, name: option.name, ...(option.description ? { detail: option.description } : {}) }))
   ];
   slot.suggestion = suggestedFeat ? { feat: suggestedFeat } : undefined;

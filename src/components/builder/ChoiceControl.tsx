@@ -92,7 +92,7 @@ export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: 
     body = (
       <select aria-label={title} value={typeof slot.value === "string" ? slot.value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
         <option value="">Choose…</option>
-        {slot.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        {slot.options.map((option) => <option key={option.id} value={option.id}>{option.from ? `${option.name} (${option.from})` : option.name}</option>)}
       </select>
     );
   } else if (spec.kind === "feat") {
@@ -101,7 +101,7 @@ export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: 
     body = (
       <select aria-label={title} value={current} onChange={(event) => onChange(event.target.value ? { feat: event.target.value } : undefined)}>
         <option value="">Choose a feat…</option>
-        {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        {options.map((option) => <option key={option.id} value={option.id}>{"from" in option && option.from ? `${option.name} (${option.from})` : option.name}</option>)}
       </select>
     );
   } else if (spec.kind === "abilities") {

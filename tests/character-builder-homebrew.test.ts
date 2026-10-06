@@ -178,6 +178,11 @@ describe("a homebrew subclass on an SRD class", () => {
     expect((actor.spells ?? []).filter((spell) => spell.level === 0).length).toBeGreaterThanOrEqual(4);
   });
 
+  it("is offered beside the SRD's subclass, marked as homebrew", () => {
+    const slot = buildCharacter(quickBuild(sources, { classId: "srd:class:rogue", level: 3 }), sources).choices.find((entry) => entry.spec.kind === "subclass")!;
+    expect(slot.options.map((option) => [option.name, option.from])).toEqual([["Thief", undefined], ["Shadow Arcanist", "Homebrew"]]);
+  });
+
   it("a homebrew class takes a homebrew subclass", () => {
     const { actor, warnings } = levelUp("homebrew:class:gunslinger", 6, deadeye.id);
     expect(warnings).toEqual([]);
