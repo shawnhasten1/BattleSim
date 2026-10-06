@@ -68,6 +68,18 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect((fighter().traits ?? []).some((trait) => trait.name === "Pack Tactics")).toBe(true);
   });
 
+  it("Superior Critical: a critical hit on 18 to 20 with melee and ranged attacks", async () => {
+    await blankFeature("Superior Critical");
+    const card = await addEffect(/^Critical hits on a lower roll/, "Critical hits on a lower roll");
+    await retype(card.getByLabelText("Lowest critical roll"), "18");
+    await chip(card, "Attacks", "melee");
+    await chip(card, "Attacks", "ranged");
+    await done(card);
+    await addToSheet();
+    expect(named("Superior Critical").effects).toEqual([{ kind: "critical-range", condition: "always", minimum: 18, attackTypes: ["melee", "ranged"] }]);
+    expect(featureStatblock(named("Superior Critical"), fighter()).text).toContain("score a critical hit on a roll of 18–20");
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

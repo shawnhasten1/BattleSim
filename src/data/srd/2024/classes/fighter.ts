@@ -4,6 +4,9 @@ import { srd52Source, srdClass, srdColumns, srdNumbers } from "../reference";
 
 const ref = srdClass("fighter");
 
+/** Improved and Superior Critical: a weapon's or an Unarmed Strike's attack roll is a critical hit from `minimum` up. */
+const critical = (key: string, minimum: number) => runs(key, { effects: [{ kind: "critical-range", condition: "always", minimum, attackTypes: ["melee", "ranged"] }] });
+
 const secondWind = runs("fighter_second-wind", {
   grantedActions: [{
     kind: "healing", id: "second-wind", name: "Second Wind", actionType: "bonus", range: 0,
@@ -129,7 +132,7 @@ export const CHAMPION: SubclassDefinition = {
     {
       level: 3,
       grants: [
-        grant("improved-critical", reference("fighter_champion_improved-critical")),
+        grant("improved-critical", critical("fighter_champion_improved-critical", 19)),
         grant("remarkable-athlete", reference("fighter_champion_remarkable-athlete"))
       ]
     },
@@ -139,7 +142,7 @@ export const CHAMPION: SubclassDefinition = {
       choices: [choice({ kind: "feat", id: "fighting-style", categories: ["fighting-style"], label: "Additional Fighting Style" }, "fighter_champion_additional-fighting-style")]
     },
     { level: 10, grants: [grant("heroic-warrior", reference("fighter_champion_heroic-warrior"))] },
-    { level: 15, grants: [grant("superior-critical", reference("fighter_champion_superior-critical"), { replaces: "improved-critical" })] },
+    { level: 15, grants: [grant("superior-critical", critical("fighter_champion_superior-critical", 18), { replaces: "improved-critical" })] },
     { level: 18, grants: [grant("survivor", reference("fighter_champion_survivor"))] }
   ]
 };

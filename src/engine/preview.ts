@@ -111,8 +111,9 @@ export function previewAttack(snapshot: EncounterSnapshot, attackerId: Id, targe
 function attackPreviewOf(state: EngineState, attacker: CombatantState, target: CombatantState, action: AttackActionDefinition): AttackPreview {
   const snapshot = state.snapshot;
   const inputs = attackRollInputs(state, attacker, target, action);
-  const hitChance = withRollMode(d20HitChance(inputs.totalBonus, inputs.targetAc), inputs.rollMode);
-  const critChance = withRollMode(1 / 20, inputs.rollMode);
+  // A critical hit always hits: Improved Critical's 19 does too.
+  const critChance = withRollMode((21 - inputs.criticalRange.minimum) / 20, inputs.rollMode);
+  const hitChance = Math.max(withRollMode(d20HitChance(inputs.totalBonus, inputs.targetAc), inputs.rollMode), critChance);
   const source = getDefinition(snapshot, attacker);
   const adjustments = getDefinition(snapshot, target).damageAdjustments;
   const damageOnHit = averageDamage(action, source, adjustments);

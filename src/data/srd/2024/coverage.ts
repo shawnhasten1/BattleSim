@@ -29,7 +29,6 @@ export interface CoverageEntry {
 /** What the engine lacks, grouped so one engine change closes a family (plan Phase 7). */
 export const GAPS = {
   "weapon-mastery": "Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3)",
-  "crit-range": "Scoring a critical hit on less than a 20",
   "damage-dice": "Rerolling or raising damage dice (Savage Attacker, Great Weapon Fighting)",
   "max-damage": "Maximum damage instead of a roll (Overchannel)",
   "d20-reroll": "Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate)",
@@ -212,11 +211,11 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "fighter_three-extra-attacks": full(),
 
   /* Champion */
-  "fighter_champion_improved-critical": manual(["crit-range"]),
+  "fighter_champion_improved-critical": full("A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit."),
   "fighter_champion_remarkable-athlete": manual(["initiative"], "Advantage on Athletics checks is outside a fight."),
   "fighter_champion_additional-fighting-style": builder("Another Fighting Style feat."),
   "fighter_champion_heroic-warrior": manual(["d20-reroll"]),
-  "fighter_champion_superior-critical": manual(["crit-range"]),
+  "fighter_champion_superior-critical": full("18 to 20."),
   "fighter_champion_survivor": manual(["death-saves", "gated-regen"]),
 
   /* Monk */

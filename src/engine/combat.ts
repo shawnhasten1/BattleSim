@@ -1832,6 +1832,8 @@ export interface AttackRollInputs {
   /** The target's AC with cover. */
   targetAc: number;
   cover: { level: CoverLevel; acBonus: number; sources: string[] };
+  /** The lowest natural roll that's a critical hit (20 unless a feature lowers it), and the features that do. */
+  criticalRange: { minimum: number; sources: string[] };
 }
 
 /**
@@ -1866,7 +1868,32 @@ export function attackRollInputs(
   const totalBonus = attackBonus + conditionAttackModifier(attacker)
     + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
   const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
-  return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover };
+  const criticalRange = featureCriticalRange(state, attacker, target, action, attackerDefinition);
+  return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover, criticalRange };
+}
+
+/** The lowest natural roll that's a critical hit for this attack: 20, or less with Improved Critical, and what lowered it. */
+function featureCriticalRange(
+  state: EngineState,
+  attacker: CombatantState,
+  target: CombatantState,
+  action: AttackActionDefinition,
+  definition: CreatureDefinition
+): { minimum: number; sources: string[] } {
+  let minimum = 20;
+  const sources: string[] = [];
+  for (const feature of featureSources(definition, attacker)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "critical-range"
+        || !featureAppliesToAction(effect, action)
+        || !featureConditionsMet(state, attacker, target, effect, { rollMode: "normal", critical: false })) {
+        continue;
+      }
+      minimum = Math.min(minimum, Math.max(2, Math.floor(effect.minimum)));
+      sources.push(feature.name);
+    }
+  }
+  return { minimum, sources };
 }
 
 /**
@@ -2012,7 +2039,7 @@ function resolveAttackCore(
   spendNextAttackConditions(state, attacker, target);
   const total = d20.total + inputs.totalBonus;
   const natural = d20.total;
-  let critical = natural === 20;
+  let critical = natural >= inputs.criticalRange.minimum;
   let hit = critical || (natural !== 1 && total >= targetAc);
   // A DM may overrule the roll (Play): a hit, a critical hit or a miss, whatever the die said.
   const overridden = askDecision<RollRequest>(state, {
@@ -2105,6 +2132,7 @@ function resolveAttackCore(
     targetAc,
     hit,
     critical,
+    ...(inputs.criticalRange.minimum < 20 ? { criticalRange: inputs.criticalRange } : {}),
     ...(criticalNegatedBy ? { criticalNegatedBy } : {}),
     damageApplied,
     ...(overridden ? { overridden } : {})

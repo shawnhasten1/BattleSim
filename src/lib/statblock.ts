@@ -509,8 +509,9 @@ function gateOne(condition: FeatureCondition, chargeFeet: number | undefined): s
 
 /** " if an ally is within 5 feet of the target", " when it has advantage on the attack roll or if an ally …". */
 function gateText(effect: FeatureEffect): string {
-  const gates = effect as { condition?: FeatureCondition; allConditions?: FeatureCondition[]; anyConditions?: FeatureCondition[]; chargeFeet?: number };
+  const gates = effect as { condition?: FeatureCondition; allConditions?: FeatureCondition[]; anyConditions?: FeatureCondition[]; chargeFeet?: number; targetMarked?: string };
   const parts: string[] = [];
+  if (gates.targetMarked) parts.push("against the creature it has marked");
   if (gates.condition) parts.push(gateOne(gates.condition, gates.chargeFeet));
   if (gates.allConditions?.length) parts.push(joinList(gates.allConditions.map((c) => gateOne(c, gates.chargeFeet)).filter(Boolean)));
   if (gates.anyConditions?.length) parts.push(joinList(gates.anyConditions.map((c) => gateOne(c, gates.chargeFeet)).filter(Boolean), "or"));
@@ -546,6 +547,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} has ${effect.mode ?? "advantage"} on ${attackScope(effect, definition)}attack rolls${usingText(effect)}${gate}.`;
     case "attack-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
+    case "critical-range":
+      return `${P} ${attackScope(effect, definition)}attack rolls${usingText(effect)} score a critical hit on a roll of ${effect.minimum === 20 ? "20" : `${effect.minimum}–20`}${gate}.`;
     case "incoming-attack-modifier":
       return incomingText(effect.amount, who, gate);
     case "damage-bonus":
@@ -665,6 +668,7 @@ function gateShort(effect: FeatureEffect): string {
   const gates = effect as { condition?: FeatureCondition; allConditions?: FeatureCondition[]; anyConditions?: FeatureCondition[]; chargeFeet?: number };
   const one = (condition: FeatureCondition) => condition === "always" ? "" : condition === "charged" ? `after a ${gates.chargeFeet ?? 20} ft charge` : GATE_SHORT[condition];
   const parts = [
+    "targetMarked" in effect && effect.targetMarked ? "vs its mark" : "",
     gates.condition ? one(gates.condition) : "",
     joinList((gates.allConditions ?? []).map(one).filter(Boolean)),
     joinList((gates.anyConditions ?? []).map(one).filter(Boolean), "or")
@@ -679,6 +683,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
   switch (effect.kind) {
     case "attack-advantage": return `${effect.mode ?? "advantage"} on ${scope}attacks${gate}`;
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
+    case "critical-range": return `${scope}crits on ${effect.minimum}–20${gate}`;
     case "incoming-attack-modifier": return `${effect.amount >= 5 ? "attackers have advantage" : effect.amount <= -5 ? "attackers have disadvantage" : `attackers ${signed(effect.amount)}`}${gate}`;
     case "damage-bonus": return `+${damageShort(effect.damage, definition)} on ${scope}hits${effect.oncePerTurn ? " once a turn" : ""}${gate}`;
     case "save-gated-damage": return `+${damageShort(effect.damage, definition)} on ${scope}hits${gate}, DC${effect.save.dc ? ` ${effect.save.dc}` : ""} ${effect.save.ability.toUpperCase()} ${effect.save.halfDamageOnSuccess ? "halves" : "negates"}`;

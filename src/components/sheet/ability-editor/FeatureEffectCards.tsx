@@ -772,6 +772,14 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "critical-range":
+      return (
+        <span className={styles.inline}>
+          <span>A critical hit on a roll of</span>
+          <NumberField label="Lowest critical roll" value={effect.minimum} min={2} max={20} onChange={(n) => n !== undefined && set({ ...effect, minimum: n })} />
+          <span>or higher</span>
+        </span>
+      );
     case "weapon-mastery":
       return (
         <p className={styles.hint}>

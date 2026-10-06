@@ -470,6 +470,15 @@ export type FeatureEffect =
   } & FeatureEffectScope & FeatureEffectConditions)
   | ({
     /**
+     * Its attack rolls score a critical hit (and so hit) on a natural `minimum` or higher: Improved Critical's 19,
+     * Superior Critical's 18. The lowest of several wins. Scoped like any attack effect (`attackTypes`: melee and ranged,
+     * a weapon's and an Unarmed Strike's).
+     */
+    kind: "critical-range";
+    minimum: number;
+  } & FeatureEffectScope & FeatureEffectConditions)
+  | ({
+    /**
      * Modifier added to attack rolls made *against* the bearer while active.
      * +5 ≈ attackers have advantage; -5 ≈ disadvantage (matches the crude
      * condition proxy). Read on the target in `resolveAttackCore`.

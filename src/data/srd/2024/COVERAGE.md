@@ -19,7 +19,7 @@ its gaps, never dropped and never approximated without saying so.
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 6 | 0 | 9 | 5 | 1 |
+| Fighter (Champion) | 21 | 8 | 0 | 7 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 8 | 6 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
@@ -67,7 +67,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `metamagic` | Spending sorcery points to change a spell as it's cast | Sorcerer | 2 | Metamagic (Sorcerer); Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer); Metamagic Options (Sorcerer) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `healing-bonus` | Healing bigger than the spell rolls (Disciple of Life, Blessed Healer, Supreme Healing) | Cleric | 3 | Disciple of Life (Life Domain); Blessed Healer (Life Domain); Supreme Healing (Life Domain) |
-| `crit-range` | Scoring a critical hit on less than a 20 | Fighter | 3 | Improved Critical (Champion); Superior Critical (Champion) |
 | `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `on-kill` | Something that happens when an enemy drops (Dark One's Blessing) | Warlock | 3 | Dark One's Blessing (Fiend Patron) |
@@ -233,11 +232,11 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Improved Critical | manual | `crit-range` |  |
+| 3 | Improved Critical | full |  | A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit. |
 | 3 | Remarkable Athlete | manual | `initiative` | Advantage on Athletics checks is outside a fight. |
 | 7 | Additional Fighting Style | builder |  | Another Fighting Style feat. |
 | 10 | Heroic Warrior | manual | `d20-reroll` |  |
-| 15 | Superior Critical | manual | `crit-range` |  |
+| 15 | Superior Critical | full |  | 18 to 20. |
 | 18 | Survivor | manual | `death-saves`, `gated-regen` |  |
 
 ## Monk

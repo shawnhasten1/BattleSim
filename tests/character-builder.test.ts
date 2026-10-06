@@ -181,7 +181,7 @@ describe("a Fighter built from 1st to 20th level", () => {
     expect(fighter.resources).toEqual({ "second-wind": 3, "action-surge": 1 });
     expect(feature(fighter, "fighter-second-wind").grantedActions?.[0]).toMatchObject({ healing: [{ dice: "1d10+5" }] });
     expect(feature(fighter, "fighter-extra-attack").grantedActions?.[0]).toMatchObject({ kind: "multiattack", attacks: [{ any: "weapon", count: 2 }] });
-    expect(feature(fighter, "champion-improved-critical").automationSupport).toBe("manual-only");
+    expect(feature(fighter, "champion-improved-critical")).toMatchObject({ automationSupport: "full", effects: [{ kind: "critical-range", minimum: 19 }] });
     const actions = getExecutableActions(fighter).map((action) => action.name);
     expect(actions).toEqual(expect.arrayContaining(["Attack", "Second Wind", "Action Surge", "Greatsword"]));
   });

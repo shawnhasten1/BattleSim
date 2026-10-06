@@ -46,6 +46,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "attack-bonus", condition: "always", bonus: { base: 1 } })
   },
   {
+    kind: "critical-range", label: "Critical hits on a lower roll", hint: "Improved Critical: a 19 or 20; Superior Critical: 18 to 20", theme: "attacks", when: "attack", scope: true,
+    blank: () => ({ kind: "critical-range", condition: "always", minimum: 19 })
+  },
+  {
     kind: "damage-bonus", label: "Extra damage on its hits", hint: "Sneak Attack, Rage's +2, Divine Fury", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-bonus", condition: "always", damage: [{ dice: "1d6", damageType: "same-as-attack" }] })
   },
