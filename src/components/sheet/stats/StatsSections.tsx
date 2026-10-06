@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { proficiencyFromDefinition, type ConditionImmunity, type CreatureDefinition, type CreatureSenses } from "@/engine";
+import { proficiencyFromDefinition, type ConditionImmunity, type CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import {
   CHALLENGE_RATINGS,
@@ -13,7 +13,9 @@ import {
   withChallengeRating,
   withClasses,
   withLevel,
+  withSense,
   CONDITION_IMMUNITIES,
+  SENSES,
   type ClassEntry
 } from "@/lib/actor-sheet/edits";
 import { challengeLine, defensesLine, passivePerception, sensesLine, skillsLine } from "@/lib/actor-sheet/summaries";
@@ -145,16 +147,10 @@ export function DefensesSection({ definition, open, onToggle }: SectionProps) {
   );
 }
 
-const SENSES: Array<keyof CreatureSenses> = ["blindsight", "darkvision", "tremorsense", "truesight"];
-
 /** Its senses and languages, for reference: the simulator doesn't model sight or hearing yet. */
 export function SensesSection({ definition, open, onToggle }: SectionProps) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
-  function setSense(sense: keyof CreatureSenses, feet: number | undefined) {
-    const { [sense]: _dropped, ...rest } = definition.senses ?? {};
-    const senses = feet ? { ...rest, [sense]: feet } : rest;
-    update(definition.id, { senses: Object.keys(senses).length ? senses : undefined });
-  }
+  const setSense = (sense: (typeof SENSES)[number], feet: number | undefined) => update(definition.id, withSense(definition, sense, feet));
   return (
     <SheetSection title="Senses & languages" summary={sensesLine(definition)} open={open} onToggle={onToggle}>
       <div className={styles.coreRow}>

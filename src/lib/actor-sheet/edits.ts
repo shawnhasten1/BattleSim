@@ -5,8 +5,10 @@ import {
   type Ability,
   type ConditionImmunity,
   type CreatureDefinition,
+  type CreatureSenses,
   type DamageAdjustment,
-  type DamageType
+  type DamageType,
+  type MovementProfile
 } from "@/engine";
 
 type Character = NonNullable<CreatureDefinition["character"]>;
@@ -39,6 +41,41 @@ export function withClasses(character: CreatureDefinition["character"], classes:
     return rest;
   }
   return { ...character, classes, level: classes.reduce((sum, entry) => sum + entry.level, 0) };
+}
+
+/* ─── speeds and senses ──────────────────────────────────────────────────── */
+
+/** The speeds a creature can have besides walking, in statblock order. */
+export const MOVEMENT_MODES = ["burrow", "climb", "fly", "swim"] as const;
+export type MovementMode = (typeof MOVEMENT_MODES)[number];
+
+/** Its speeds, walking at its Speed: what the sheets read. */
+export function movementOf(definition: CreatureDefinition): MovementProfile {
+  return definition.movement ?? { walk: definition.speed };
+}
+
+/** A speed set, or, with no feet, taken away (hover goes with fly). */
+export function withMovementMode(definition: CreatureDefinition, mode: MovementMode, feet: number | undefined): Pick<CreatureDefinition, "movement"> {
+  const { [mode]: _dropped, ...rest } = movementOf(definition);
+  const next: MovementProfile = { ...rest, walk: definition.speed, ...(feet ? { [mode]: feet } : {}) };
+  if (mode === "fly" && !feet) delete next.hover;
+  return { movement: next };
+}
+
+/** A flier that hovers, or doesn't: a hovering one doesn't fall when it's knocked prone or can't move. */
+export function withHover(definition: CreatureDefinition, on: boolean): Pick<CreatureDefinition, "movement"> {
+  const { hover: _dropped, ...rest } = movementOf(definition);
+  return { movement: { ...rest, walk: definition.speed, ...(on ? { hover: true } : {}) } };
+}
+
+/** The senses a creature can have, with a range in feet. */
+export const SENSES: Array<keyof CreatureSenses> = ["blindsight", "darkvision", "tremorsense", "truesight"];
+
+/** A sense's range set, or, with no feet, taken away. */
+export function withSense(definition: CreatureDefinition, sense: keyof CreatureSenses, feet: number | undefined): Pick<CreatureDefinition, "senses"> {
+  const { [sense]: _dropped, ...rest } = definition.senses ?? {};
+  const senses = feet ? { ...rest, [sense]: feet } : rest;
+  return { senses: Object.keys(senses).length ? senses : undefined };
 }
 
 /* ─── proficiency ─────────────────────────────────────────────────────────── */

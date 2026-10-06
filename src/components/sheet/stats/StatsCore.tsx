@@ -1,9 +1,9 @@
 "use client";
 
 import { X } from "lucide-react";
-import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type CreatureType, type MovementProfile, type SizeCategory } from "@/engine";
+import { abilityModifier, armorClassOf, type Ability, type CreatureDefinition, type CreatureType, type SizeCategory } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
-import { proficiencyOf, saveKind, withSave } from "@/lib/actor-sheet/edits";
+import { MOVEMENT_MODES, movementOf, proficiencyOf, saveKind, withHover, withMovementMode, withSave, type MovementMode } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -12,8 +12,6 @@ import styles from "../sheet.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 const SIZES: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
-const MODES = ["burrow", "climb", "fly", "swim"] as const;
-type Mode = (typeof MODES)[number];
 
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
@@ -47,22 +45,18 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
   const armored = armorClassOf(definition);
   const workedOut = Boolean(armored.armor || armored.shield || armored.formula);
   const updateAbility = useEncounterStore((s) => s.updateCreatureAbility);
-  const movement: MovementProfile = definition.movement ?? { walk: definition.speed };
-  const modes = MODES.filter((mode) => (movement[mode] ?? 0) > 0);
-  const missing = MODES.filter((mode) => !modes.includes(mode));
+  const movement = movementOf(definition);
+  const modes = MOVEMENT_MODES.filter((mode) => (movement[mode] ?? 0) > 0);
+  const missing = MOVEMENT_MODES.filter((mode) => !modes.includes(mode));
   const proficiency = proficiencyOf(definition);
 
   /** A movement mode set (or, with no feet, taken away; hover goes with fly). */
-  function setMode(mode: Mode, feet: number | undefined) {
-    const { [mode]: _dropped, ...rest } = movement;
-    const next: MovementProfile = { ...rest, walk: definition.speed, ...(feet ? { [mode]: feet } : {}) };
-    if (mode === "fly" && !feet) delete next.hover;
-    update(definition.id, { movement: next });
+  function setMode(mode: MovementMode, feet: number | undefined) {
+    update(definition.id, withMovementMode(definition, mode, feet));
   }
 
   function setHover(on: boolean) {
-    const { hover: _dropped, ...rest } = movement;
-    update(definition.id, { movement: { ...rest, walk: definition.speed, ...(on ? { hover: true } : {}) } });
+    update(definition.id, withHover(definition, on));
   }
 
   function setSave(ability: Ability, bonus: number | undefined) {
@@ -148,7 +142,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
             {missing.length ? (
               <select
                 className={styles.addSmall} aria-label="Add a speed" value=""
-                onChange={(e) => { if (e.target.value) setMode(e.target.value as Mode, definition.speed || 30); }}
+                onChange={(e) => { if (e.target.value) setMode(e.target.value as MovementMode, definition.speed || 30); }}
               >
                 <option value="">+ Speed</option>
                 {missing.map((mode) => <option key={mode} value={mode}>{mode}</option>)}

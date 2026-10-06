@@ -176,3 +176,28 @@ both the Codex popped out and the Codex in the page.
   `UpcastOffers` sits above the spells, and `ItemOffers` sits at the top of Items.
 - Tests: 2 in `tests/actor-sheet-resources.test.ts` and 6 in `tests/codex-sheet.test.tsx`. Browser checks passed 7/7
   in Chromium and in Firefox: popped out, in the page, Light, and at 640 px.
+
+### Phase 3: Details
+
+- Shared helpers in `src/lib/actor-sheet/edits.ts`: `MOVEMENT_MODES`, `movementOf`, `withMovementMode`, `withHover`,
+  `SENSES` and `withSense`. Standard's `StatsCore` and `SensesSection` use them now too, in place of their own copies.
+- The sidebar: max HP is typed, through the same store call as Stats (a token at full stays full). The Proficiency tile
+  takes a typed override, with what its level or CR gives as the placeholder. A built character's tile stays
+  read-only, as on Standard. "AC without armor" shows under the tiles while worn armor works out the AC. A Speeds line
+  has a pill for each other speed (typed, hover with fly, ×) and "+ Speed".
+- The dial: a monster's challenge rating is a dropdown, through `withChallengeRating`, so its proficiency follows as on
+  Stats.
+- Skills and saves: the bonus is typed in place. Blank shows the modifier and clears its own number, as Stats' saves
+  do. The proficiency boxes still cycle.
+- Origin gains the four senses' ranges and the source.
+- Defenses gains "More defenses: qualified, and absorbing…", which opens Standard's `DefensesSection` in place. A new
+  Level panel in Details hosts `LevelSection`: Level & CR for a hand-made creature (CR, proficiency, caster level,
+  classes, Rebuild with the builder), or Class & level for a built one (Level up, Level down, the builder).
+- Hosted sections get the Codex's face for their fold heads. Fields that Standard leaves to the browser get the
+  Codex's field look. The hover colours left in `sheet.module.css` are now `--ui-hover`, with their old values as
+  fallbacks.
+- Plan item 14, "Add a skill": nothing more was needed. Standard's Add a skill only offers the 18 standard skills,
+  which the Codex lists already, and adding one at its proficient bonus is the same as cycling its box.
+- Tests: 9 in `tests/codex-sheet.test.tsx`. Two older ones now read the proficiency box and the CR dropdown, since both
+  became inputs. Browser checks passed 11/11 in Chromium and in Firefox: popped out, in the page, Light, at 640 px. They
+  caught two layout bugs, both fixed: save names squeezed out by the typed box, and clipped sense labels.

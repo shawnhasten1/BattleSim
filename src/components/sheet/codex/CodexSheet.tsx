@@ -5,6 +5,7 @@ import {
   abilityModifier,
   armorClassOf,
   initiativeOf,
+  proficiencyFromDefinition,
   type Ability,
   type CombatantState,
   type ConditionImmunity,
@@ -20,27 +21,37 @@ import { withWorn } from "@/lib/ability-editor/items";
 import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import { recordPool, resourceRows, type ResourceRow } from "@/lib/actor-sheet/resources";
 import {
+  CHALLENGE_RATINGS,
   characterLevel,
   CONDITION_IMMUNITIES,
   cycledSkill,
+  MOVEMENT_MODES,
+  movementOf,
   proficiencyOf,
   saveKind,
+  SENSES,
   skillKind,
   SKILLS,
   skillName,
   toggledSave,
   withAdjustment,
+  withChallengeRating,
   withConditionImmunity,
+  withHover,
   withLevel,
+  withMovementMode,
   withoutAdjustment,
   withSave,
-  withSkill
+  withSense,
+  withSkill,
+  type MovementMode
 } from "@/lib/actor-sheet/edits";
 import { CODEX_PALETTES, hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
 import { readBuild } from "@/lib/character-builder/summary";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { readJson, writeJson } from "@/lib/persist";
-import { formatBonus } from "@/lib/ui-helpers";
+import { formatChallengeRating } from "@/lib/srd-monster-tree";
+import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useBuildSources } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -57,6 +68,7 @@ import { blankTarget, preparedTarget, useAttachFromLibrary } from "../abilities/
 import type { AddFilter } from "@/lib/ability-editor/add";
 import type { Compendium } from "@/hooks/useCompendium";
 import { ConditionsRow } from "../SheetHeader";
+import { DefensesSection, LevelSection } from "../stats/StatsSections";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { Astrolabe, Portrait } from "./ornaments";
 import { codexBody, codexDisplay } from "./fonts";
@@ -362,10 +374,18 @@ function Banner({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetP
                 className={`${styles.bare} ${styles.lvValue}`} label="Level" value={characterLevel(definition)} min={1} max={20}
                 onCommit={(level) => update(definition.id, { character: withLevel(definition.character, level) })}
               />
+            ) : character ? (
+              <output className={styles.lvValue} aria-label="Level">{identity.level}</output>
             ) : (
-              <output className={styles.lvValue} aria-label={character ? "Level" : "Challenge rating"}>
-                {character ? identity.level : identity.challenge ?? "—"}
-              </output>
+              // A monster's challenge rating, picked as on Stats (it sets the proficiency bonus it gives).
+              <select
+                className={`${styles.lvValue} ${styles.lvSelect}`} aria-label="Challenge rating"
+                value={definition.challengeRating === undefined ? "" : String(definition.challengeRating)}
+                onChange={(event) => update(definition.id, withChallengeRating(definition, event.target.value === "" ? undefined : Number(event.target.value)))}
+              >
+                <option value="">—</option>
+                {CHALLENGE_RATINGS.map((cr) => <option key={cr} value={String(cr)}>{formatChallengeRating(cr)}</option>)}
+              </select>
             )}
             <span className={styles.lvLabel} aria-hidden="true">{character ? "Level" : "CR"}</span>
           </div>
@@ -392,7 +412,8 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
   const ratio = max > 0 ? Math.max(0, Math.min(1, hp / max)) : 0;
   const tempRatio = max > 0 ? Math.max(0, Math.min(1 - ratio, temp / max)) : 0;
   const pc = Boolean(definition.character) || combatant.faction === "party";
-  const hitDice = hitDiceOf(readBuild(definition), sources);
+  const build = readBuild(definition);
+  const hitDice = hitDiceOf(build, sources);
   const deathSaves = combatant.deathSaves ?? { successes: 0, failures: 0, stable: false };
 
   return (
@@ -418,11 +439,27 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
             <SheetNumber className={`${styles.bare} ${styles.tileValue}`} label="Speed" value={definition.speed} min={0} max={999} step={5} onCommit={(speed) => update(definition.id, { speed })} />
             <span className={styles.cap}>Speed, ft</span>
           </div>
-          <div className={styles.tile}>
-            <output className={styles.tileValue} aria-label="Proficiency bonus">{formatBonus(proficiencyOf(definition))}</output>
+          <div className={styles.tile} title={build ? "From its level" : "Blank: what its level or challenge rating gives"}>
+            {build ? (
+              <output className={styles.tileValue} aria-label="Proficiency bonus">{formatBonus(proficiencyOf(definition))}</output>
+            ) : (
+              <SheetNumber
+                optional signed className={`${styles.bare} ${styles.tileValue}`} label="Proficiency bonus" value={definition.proficiencyBonus}
+                placeholder={formatBonus(proficiencyFromDefinition(definition))} min={0} max={10}
+                onCommit={(proficiencyBonus) => update(definition.id, { proficiencyBonus })}
+              />
+            )}
             <span className={styles.cap}>Proficiency</span>
           </div>
         </div>
+        {workedOut ? (
+          // Its AC when it wears no armor: worn armor replaces it, a shield adds to it.
+          <div className={styles.lineField}>
+            <span className={styles.cap}>AC without armor</span>
+            <SheetNumber className={styles.lineInput} label="AC without armor" value={definition.armorClass} min={0} max={99} onCommit={(armorClass) => update(definition.id, { armorClass })} />
+          </div>
+        ) : null}
+        <Speeds definition={definition} />
         <div className={styles.hp} role="group" aria-label="Hit points">
           <div className={styles.hpTop}>
             <span className={styles.cap}>Hit points</span>
@@ -434,7 +471,10 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
           <div className={styles.hpNums}>
             <SheetNumber className={`${styles.bare} ${styles.hpCur}`} label="Current hit points" value={hp} min={0} max={max} onCommit={(next) => updateHp(combatant.id, next)} />
             <span className={styles.slash} aria-hidden="true">/</span>
-            <span className={styles.hpMax} aria-label="Maximum hit points" title="Its maximum is set on Standard's Stats">{max}</span>
+            <SheetNumber
+              className={`${styles.bare} ${styles.hpMax}`} label="Maximum hit points" value={max} min={1} max={9999}
+              title="Every token's maximum: tokens at full stay full" onCommit={(maxHp) => update(definition.id, { maxHp })}
+            />
           </div>
           <div className={styles.hpBar} aria-hidden="true">
             <div className={styles.hpFill} data-low={ratio <= 0.3} style={{ width: `${ratio * 100}%` }} />
@@ -459,6 +499,47 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
         ) : null}
       </div>
     </aside>
+  );
+}
+
+/** Its other speeds (fly, swim, climb, burrow, and hover with fly), as pills: typed, taken away, or added. */
+function Speeds({ definition }: { definition: CreatureDefinition }) {
+  const update = useEncounterStore((s) => s.updateCreatureDefinition);
+  const movement = movementOf(definition);
+  const modes = MOVEMENT_MODES.filter((mode) => (movement[mode] ?? 0) > 0);
+  const missing = MOVEMENT_MODES.filter((mode) => !modes.includes(mode));
+  const setMode = (mode: MovementMode, feet: number | undefined) => update(definition.id, withMovementMode(definition, mode, feet));
+  return (
+    <div className={styles.lineField} role="group" aria-label="Other speeds">
+      <span className={styles.cap}>Speeds</span>
+      <span className={styles.speeds}>
+        {modes.map((mode) => (
+          <span key={mode} className={styles.speedPill}>
+            {mode}
+            <SheetNumber className={styles.speedInput} label={`${mode} speed`} value={movement[mode]} min={5} max={999} step={5} onCommit={(feet) => setMode(mode, feet)} />
+            {mode === "fly" ? (
+              <button
+                type="button" className={styles.hoverPill} aria-pressed={Boolean(movement.hover)} aria-label="Hovers"
+                title="A hovering flier doesn't fall when it's knocked prone or can't move"
+                onClick={() => update(definition.id, withHover(definition, !movement.hover))}
+              >
+                hover
+              </button>
+            ) : null}
+            <button type="button" className={styles.speedRemove} aria-label={`Remove ${mode} speed`} onClick={() => setMode(mode, undefined)}>×</button>
+          </span>
+        ))}
+        {missing.length ? (
+          <select
+            className={styles.tagAdd} aria-label="Add a speed" value=""
+            onChange={(event) => { if (event.target.value) setMode(event.target.value as MovementMode, definition.speed || 30); }}
+          >
+            <option value="">+ Speed</option>
+            {missing.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+          </select>
+        ) : null}
+      </span>
+    </div>
   );
 }
 
@@ -503,6 +584,7 @@ function Details({ combatant, definition }: { combatant: CombatantState; definit
         <Saves definition={definition} />
         <Origin definition={definition} />
         <Defenses combatant={combatant} definition={definition} />
+        <LevelPanel definition={definition} />
       </div>
     </div>
   );
@@ -529,7 +611,8 @@ function Skills({ definition }: { definition: CreatureDefinition }) {
       <ul className={styles.sk}>
         {rows.map((row) => {
           const kind = skillKind(definition, row.id);
-          const value = definition.skills?.[row.id] ?? (row.ability ? abilityModifier(definition.abilities[row.ability]) : 0);
+          const modifier = row.ability ? abilityModifier(definition.abilities[row.ability]) : 0;
+          const value = definition.skills?.[row.id] ?? modifier;
           return (
             <li key={row.id} className={kind !== "none" ? styles.proficient : undefined}>
               <button
@@ -539,13 +622,17 @@ function Skills({ definition }: { definition: CreatureDefinition }) {
               />
               <span className={styles.rowName}>{row.name}</span>
               <span className={styles.abbr}>{row.ability ? SHORT[row.ability] : ""}</span>
-              <span className={styles.val}>{formatBonus(value)}</span>
+              {/* Its bonus, typed as a statblock prints it (its own number); blank, its modifier. */}
+              <SheetNumber
+                optional signed className={`${styles.bare} ${styles.val}`} label={`${row.name} bonus`} value={definition.skills?.[row.id]}
+                placeholder={formatBonus(modifier)} min={-10} max={40} onCommit={(bonus) => update(definition.id, withSkill(definition, row.id, bonus))}
+              />
               <span className={styles.passive} title={`Passive ${row.name}`}>{10 + value}</span>
             </li>
           );
         })}
       </ul>
-      <p className={styles.hint}>Click a box to mark proficiency, again for expertise, and once more to clear it.</p>
+      <p className={styles.hint}>Click a box to mark proficiency, again for expertise, and once more to clear it. Or type a bonus as a statblock prints it.</p>
     </section>
   );
 }
@@ -558,7 +645,7 @@ function Saves({ definition }: { definition: CreatureDefinition }) {
       <ul className={styles.sv}>
         {ABILITIES.map(([ability, name]) => {
           const kind = saveKind(definition, ability);
-          const value = definition.saves?.[ability] ?? abilityModifier(definition.abilities[ability]);
+          const modifier = abilityModifier(definition.abilities[ability]);
           return (
             <li key={ability} className={kind !== "none" ? styles.proficient : undefined}>
               <button
@@ -568,7 +655,10 @@ function Saves({ definition }: { definition: CreatureDefinition }) {
                 onClick={() => update(definition.id, withSave(definition, ability, toggledSave(definition, ability)))}
               />
               <span className={styles.rowName}>{name}</span>
-              <span className={styles.val}>{formatBonus(value)}</span>
+              <SheetNumber
+                optional signed className={`${styles.bare} ${styles.val}`} label={`${name} save bonus`} value={definition.saves?.[ability]}
+                placeholder={formatBonus(modifier)} min={-10} max={30} onCommit={(bonus) => update(definition.id, withSave(definition, ability, bonus))}
+              />
             </li>
           );
         })}
@@ -577,7 +667,10 @@ function Saves({ definition }: { definition: CreatureDefinition }) {
   );
 }
 
-/** What it is and where it comes from: its type and size (set here), species and background (from its build), languages. */
+/**
+ * What it is and where it comes from: its type and size (set here), species and background (from its build), languages,
+ * senses, and the source it came from.
+ */
 function Origin({ definition }: { definition: CreatureDefinition }) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const sources = useBuildSources();
@@ -609,6 +702,22 @@ function Origin({ definition }: { definition: CreatureDefinition }) {
           <span className={styles.cap}>Languages</span>
           <SheetText className={styles.field} label="Languages" placeholder="None" value={definition.languages ?? ""} onCommit={(languages) => update(definition.id, { languages: languages || undefined })} />
         </label>
+        <div className={styles.og}>
+          <span className={styles.cap}>Senses</span>
+          <div className={styles.senses} role="group" aria-label="Senses">
+            {SENSES.map((sense) => (
+              <label key={sense} className={styles.sense}>
+                <span>{capitalize(sense)}</span>
+                <SheetNumber
+                  optional className={styles.field} label={`${sense} range`} placeholder="—" value={definition.senses?.[sense]} min={0} max={9999} step={5}
+                  onCommit={(feet) => update(definition.id, withSense(definition, sense, feet))}
+                />
+                <span aria-hidden="true">ft</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className={styles.og}><span className={styles.cap}>Source</span><span className={styles.ogValue}>{sourceLabel(definition.source)}</span></div>
       </div>
     </section>
   );
@@ -626,6 +735,8 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
   const adjustments = definition.damageAdjustments ?? [];
   const conditionImmunities = definition.conditionImmunities ?? [];
   const absorbs = adjustments.filter((adjustment) => adjustment.type === "absorb");
+  // Standard's Defenses, for what the tags don't do: a qualifier (nonmagical, except silvered…), and absorbing.
+  const [more, setMore] = useState(false);
   const label = (adjustment: DamageAdjustment) => `${adjustment.damageType}${adjustment.nonMagicalOnly ? " (nonmagical)" : ""}`;
 
   function add(type: DamageAdjustment["type"], value: string) {
@@ -686,11 +797,31 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
           </div>
         </div>
       ) : null}
+      {more ? (
+        <div className={styles.hosted}>
+          <DefensesSection definition={definition} open onToggle={() => setMore(false)} />
+        </div>
+      ) : (
+        <button type="button" className={styles.more2} aria-expanded={false} onClick={() => setMore(true)}>More defenses: qualified, and absorbing…</button>
+      )}
       <div className={styles.def} role="group" aria-label="Conditions">
         <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>Conditions · {combatant.displayName}</h3>
         <ConditionsRow combatant={combatant} definition={definition} className={styles.conditions} />
       </div>
     </section>
+  );
+}
+
+/**
+ * Standard's Level & CR (or, for a built character, Class & level), in a Codex panel: challenge rating, proficiency,
+ * a hand-made character's classes, a monster's caster level, Rebuild with the builder; or Level down and the builder.
+ */
+function LevelPanel({ definition }: { definition: CreatureDefinition }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`${styles.panel} ${styles.hosted}`}>
+      <LevelSection definition={definition} open={open} onToggle={() => setOpen(!open)} />
+    </div>
   );
 }
 

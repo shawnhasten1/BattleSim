@@ -874,7 +874,7 @@ span.pip {
 
 .sv li {
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px minmax(0, 1fr) 2.3rem;
   align-items: center;
   gap: 4px;
   padding: 6px 0;
@@ -1437,6 +1437,206 @@ select.statSelect {
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink);
+}
+
+/* Details' typed numbers: a skill's or a save's bonus (blank shows its modifier), a speed, a sense. */
+input.val {
+  width: 100%;
+  min-width: 0;
+}
+
+input.val::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.lineInput,
+.speedInput {
+  width: 3.4em;
+  padding: 1px 6px;
+  border: 1px solid var(--field-edge);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+}
+
+.lineInput:focus,
+.speedInput:focus {
+  outline: none;
+  border-color: var(--cu);
+}
+
+input.hpMax {
+  width: 3.4ch;
+}
+
+@supports (field-sizing: content) {
+  input.hpMax {
+    field-sizing: content;
+    width: auto;
+  }
+}
+
+/* A monster's challenge rating, picked in the dial. */
+select.lvSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 76%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+}
+
+select.lvSelect:focus {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: var(--cu-hi);
+}
+
+select.lvSelect option {
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 14px;
+}
+
+.speeds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.speeds .tagAdd {
+  width: auto;
+}
+
+.speedPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.speedInput {
+  width: 3em;
+  padding: 0 3px;
+  font-size: 12px;
+}
+
+.hoverPill,
+.speedRemove {
+  padding: 0 6px;
+  border: 1px dashed var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hoverPill[aria-pressed="true"] {
+  border-style: solid;
+  border-color: var(--cu);
+  color: var(--cu);
+}
+
+.speedRemove {
+  border: 0;
+  font-size: 13px;
+}
+
+.speedRemove:hover {
+  color: var(--verm);
+}
+
+.senses {
+  display: grid;
+  gap: 5px;
+}
+
+.sense {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.2rem auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+}
+
+.sense .field {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+/* Standard's Stats sections, hosted (Defenses, Level & CR): their fold head in the Codex's face. */
+.hosted {
+  margin-top: 12px;
+}
+
+.panel.hosted {
+  padding-block: 8px;
+}
+
+.hosted > section > button[aria-expanded] > span:first-of-type {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
+/* A hosted section's own fields that Standard leaves to the browser: the Codex's fields. */
+.hosted select:not([class]),
+.hosted input:not([class]):not([type="checkbox"]) {
+  padding: 3px 8px;
+  border: 1px solid var(--field-edge);
+  border-radius: 6px;
+  background-color: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hosted select:not([class]):focus,
+.hosted input:not([class]):focus {
+  outline: none;
+  border-color: var(--cu);
+}
+
+.hosted select:not([class]) option {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.more2 {
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cu);
+  font: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.more2:hover {
+  text-decoration: underline;
 }
 
 /* ── narrower windows ── */

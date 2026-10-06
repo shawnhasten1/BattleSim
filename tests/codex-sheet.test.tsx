@@ -13,6 +13,8 @@ import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSheetWindowsStore } from "@/store/sheet-windows-store";
+import { readBuild } from "@/lib/character-builder/summary";
+import { sourceLabel } from "@/lib/ui-helpers";
 import { renderSheet, resetSheetWindows, sheetWindows } from "./helpers/sheet";
 
 const pristine = useEncounterStore.getState();
@@ -61,7 +63,9 @@ describe("the Codex's numbers", () => {
     expect((screen.getByLabelText("Strength score") as HTMLInputElement).value).toBe("16");
     expect(screen.getByLabelText("Strength modifier").textContent).toBe("+3");
     expect(screen.getByLabelText("Initiative").textContent).toBe("+1");
-    expect(screen.getByLabelText("Proficiency bonus").textContent).toBe("+2");
+    // Typed over (an override), or blank with what its level gives.
+    const proficiency = screen.getByLabelText("Proficiency bonus") as HTMLInputElement;
+    expect(proficiency.value || proficiency.placeholder).toBe("+2");
     expect(screen.getByTitle("Passive Perception").textContent).toBe("10");
   });
 
@@ -246,7 +250,7 @@ describe("a monster on the Codex", () => {
       encounter: { ...state.encounter, definitions: state.encounter.definitions.map((definition) => definition.id === "def-goblin" ? { ...definition, challengeRating: 0.25 } : definition) }
     }));
     await openCodex("enemy-goblin-1");
-    expect(screen.getByLabelText("Challenge rating").textContent).toBe("1/4");
+    expect((screen.getByLabelText("Challenge rating") as HTMLSelectElement).selectedOptions[0]!.textContent).toBe("1/4");
     expect(screen.queryByRole("group", { name: "Death saves" })).toBeNull();
     expect(within(screen.getByRole("tablist", { name: "Codex sections" })).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Details", "Abilities"]);
   });
@@ -584,6 +588,107 @@ describe("uses and resources in the Codex", () => {
     await userEvent.click(codexTab("Items"));
     await userEvent.click(screen.getByRole("button", { name: "Use the SRD's simulated item for Potion of Healing (SRD 2014)" }));
     expect(creature("def-fighter").items!.find((item) => item.name === "Potion of Healing")?.automationSupport).toBe("full");
+  });
+});
+
+describe("Details in the Codex: what Standard's Stats edits", () => {
+  /** Types `text` into the box labelled `label`, then Enter: one commit, as a DM makes it. */
+  async function typeInto(label: string, text: string) {
+    const box = screen.getByLabelText(label) as HTMLInputElement;
+    await userEvent.clear(box);
+    await userEvent.type(box, `${text}{Enter}`);
+  }
+  const depth = () => store().undoStack.length;
+
+  it("types the maximum HP, and a token at full stays full, in one undo step", async () => {
+    await openCodex("pc-fighter");
+    const before = depth();
+    await typeInto("Maximum hit points", "40");
+    expect(creature("def-fighter").maxHp).toBe(40);
+    expect(token("pc-fighter").currentHp).toBe(40);
+    expect(depth()).toBe(before + 1);
+  });
+
+  it("types the proficiency bonus over what its level gives", async () => {
+    await openCodex("pc-fighter");
+    await typeInto("Proficiency bonus", "4");
+    expect(creature("def-fighter").proficiencyBonus).toBe(4);
+  });
+
+  it("types AC without armor while worn armor works the AC out", async () => {
+    const fighter = build("srd:class:fighter", "Mira");
+    await openCodex(fighter.id);
+    expect(screen.getByLabelText("Armor class").tagName).toBe("OUTPUT");
+    await typeInto("AC without armor", "12");
+    expect(creature(fighter.definitionId).armorClass).toBe(12);
+  });
+
+  it("adds a speed, hovers, and takes it away", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Add a speed" }), "fly");
+    expect(creature("def-fighter").movement).toMatchObject({ walk: 30, fly: 30 });
+    await typeInto("fly speed", "60");
+    await userEvent.click(screen.getByRole("button", { name: "Hovers" }));
+    expect(creature("def-fighter").movement).toMatchObject({ fly: 60, hover: true });
+    await userEvent.click(screen.getByRole("button", { name: "Remove fly speed" }));
+    expect(creature("def-fighter").movement?.fly).toBeUndefined();
+    expect(creature("def-fighter").movement?.hover).toBeUndefined();
+  });
+
+  it("types a save's and a skill's own number, and blank clears it", async () => {
+    await openCodex("pc-fighter");
+    const before = depth();
+    await typeInto("Strength save bonus", "+7");
+    expect(creature("def-fighter").saves?.str).toBe(7);
+    expect(depth()).toBe(before + 1);
+    expect(screen.getByRole("button", { name: "Strength saving throw, its own number" })).toBeTruthy();
+    await typeInto("Stealth bonus", "6");
+    expect(creature("def-fighter").skills?.stealth).toBe(6);
+    expect(screen.getByTitle("Passive Stealth").textContent).toBe("16");
+    await userEvent.clear(screen.getByLabelText("Stealth bonus"));
+    await userEvent.tab();
+    expect(creature("def-fighter").skills?.stealth).toBeUndefined();
+  });
+
+  it("types senses, and shows where it came from", async () => {
+    await openCodex("enemy-goblin-1");
+    await typeInto("darkvision range", "60");
+    expect(creature("def-goblin").senses?.darkvision).toBe(60);
+    const origin = within(screen.getByRole("region", { name: "Origin" }));
+    expect(origin.getByText(sourceLabel(creature("def-goblin").source))).toBeTruthy();
+  });
+
+  it("opens Standard's Defenses for a qualified defense", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(screen.getByRole("button", { name: /More defenses/ }));
+    const defenses = within(screen.getByRole("region", { name: "Defenses" }));
+    expect(screen.getByRole("region", { name: "Defenses" }).closest("[data-palette]")).not.toBeNull();
+    await userEvent.click(defenses.getByRole("button", { name: "+ Add damage defense" }));
+    expect(creature("def-fighter").damageAdjustments).toEqual([{ type: "resistance", damageType: "fire" }]);
+  });
+
+  it("picks a monster's challenge rating in the dial, and its proficiency follows", async () => {
+    await openCodex("enemy-goblin-1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Challenge rating" }), "5");
+    expect(creature("def-goblin").challengeRating).toBe(5);
+    expect(creature("def-goblin").proficiencyBonus).toBe(3);
+  });
+
+  it("hosts Level & CR for a hand-made creature, and Level down for a built one", async () => {
+    await openCodex("pc-fighter");
+    const level = screen.getByRole("region", { name: "Level & CR" });
+    await userEvent.click(within(level).getByRole("button", { name: /Level & CR/ }));
+    await userEvent.click(within(level).getByRole("button", { name: "+ Add a class" }));
+    expect(creature("def-fighter").character?.classes).toHaveLength(1);
+
+    cleanup();
+    resetSheetWindows();
+    const fighter = build("srd:class:fighter", "Mira", 3);
+    await openCodex(fighter.id);
+    const built = screen.getByRole("region", { name: "Class & level" });
+    await userEvent.click(within(built).getByRole("button", { name: /Class & level/ }));
+    await userEvent.click(within(built).getByRole("button", { name: "Level down" }));
+    expect(readBuild(creature(fighter.definitionId))!.levels).toHaveLength(2);
   });
 });
 
