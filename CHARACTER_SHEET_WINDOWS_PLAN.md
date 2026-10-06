@@ -83,6 +83,7 @@ the builder) opens Standard's editor in the same window.
 | D11 | Fonts | *Superseded by D12: Fraunces and Figtree.* **Cormorant Garamond** for headings and numbers, through `next/font` and loaded only with the Codex. Body text uses the app's Signika. Pinyon Script (the script initial) is dropped, because the token's portrait takes its place. |
 | D12 | The Codex's design | **Character Codex.html, replacing the Faerie-based one** (user, 2026-10-06): a teal banner with an astrolabe and a level dial, a sidebar with the portrait in an octagonal copper frame and the vitals, ability dials, and Details, Items, Abilities and Spells tabs. Its own Dark and Light colours replace Ember, Parchment and Faerie, and its faces are Fraunces and Figtree. The fields it has that the app doesn't store (XP, Inspiration, coins, carry weight, the Biography tab) stay out, as D7 says (user, 2026-10-06). |
 | D13 | Editing an ability from the Codex | **In the Codex** (user, 2026-10-06), superseding D8's trip to Standard. Edit opens the ability editor, Standard's own component, in a Codex panel in place of the dials and tabs, with the banner and sidebar still in view. Inside the Codex root the app's `--ui-*` tokens are the palette's, so the editor takes the Codex's colours and font. Its unsaved changes are guarded as on Standard. |
+| D14 | Adding abilities from the Codex | **In the Codex** (user, 2026-10-06): Standard's Add ability, opened in the Codex's work area from a dashed Add button on Abilities (all), Spells (spells) and Items (items). |
 
 ## Part 1: several sheets at once
 
@@ -695,3 +696,31 @@ to Standard (D13).
   (Figtree, the panel-coloured head), popped out with the editor still open, Escape asking first, the Add effect menu
   opening and closing in the popup, the back link, Light while editing, and Save returning to Spells with Fire Bolt's
   row focused.
+
+### Phase 10 (2026-10-06): Add ability in the Codex
+
+The user asked for "Add Ability" on the Codex too (D14).
+
+- **`AddAbility`**, the same component as on Standard's Abilities tab, opens in the Codex's work area: in place of
+  the dials and tabs, like the editor, under an "Add ability" heading with Close. It's opened from Character Codex's
+  dashed buttons:
+  - **Add ability** at the bottom of Abilities, on All.
+  - **Add spell** on Spells, on Spells.
+  - **Add item** on Items, on Items. `AddAbility` takes `initialFilter`.
+- **What it does is shared, not copied.** `src/components/sheet/abilities/add-targets.ts` has `preparedTarget`,
+  `blankTarget` (the "Start from scratch" kinds) and `useAttachFromLibrary` (a library row's +). `ActionsTab` now uses
+  them in place of its own copies.
+- **In the Codex:**
+  - A recipe, a library or monster row, or a blank opens in the ability editor there.
+  - Add to sheet switches to the tab it belongs on (a spell to Spells, an item to Items, anything else to Abilities)
+    and scrolls its row into view, its Edit focused.
+  - Cancel returns to the tab, where the Codex was.
+  - A library row's + adds it at once, and the panel stays open.
+- **Tests:** 4 more in `tests/codex-sheet.test.tsx` (33):
+  - A library + from Abilities, then Close.
+  - A blank Trait or feature, named and added, shown focused on Abilities.
+  - Add spell on the Spells filter, a library spell opened, added and shown on Spells.
+  - Add item on the Items filter.
+- **Full suite** passes. **Browser** (Chromium and Firefox, 5 checks each, popped out): Add ability opens with its search
+  focused, a Dagger's + adds it, a blank feature saved shows on Abilities in focus, Add spell opens on Spells, and
+  Escape in an empty search closes it.

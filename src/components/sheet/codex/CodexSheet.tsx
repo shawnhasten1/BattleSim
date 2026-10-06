@@ -46,6 +46,10 @@ import { useEncounterStore } from "@/store/encounter-store";
 import { DAMAGE_TYPES } from "../ability-editor/DamageLines";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
 import { refRowId } from "../abilities/AbilitiesList";
+import { AddAbility } from "../abilities/AddAbility";
+import { blankTarget, preparedTarget, useAttachFromLibrary } from "../abilities/add-targets";
+import type { AddFilter } from "@/lib/ability-editor/add";
+import type { Compendium } from "@/hooks/useCompendium";
 import { ConditionsRow } from "../SheetHeader";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { Astrolabe, Portrait } from "./ornaments";
@@ -71,6 +75,8 @@ export interface CodexSheetProps {
   tokens: CombatantState[];
   onShowToken: (combatantId: string) => void;
   palette: CodexPaletteId;
+  /** Add ability's Open5e search. */
+  compendium?: Compendium;
 }
 
 /** The nearest ancestor that scrolls: the window's body, in the page or popped out. */
@@ -90,7 +96,7 @@ function scrollParent(node: HTMLElement | null): HTMLElement | null {
  * ability, item or spell in the ability editor, Standard's own, opened here in a Codex panel (plan D13). Creature values
  * reach every token of the creature, and token values the token the switcher shows.
  */
-export function CodexSheet({ combatant, definition, tokens, onShowToken, palette }: CodexSheetProps) {
+export function CodexSheet({ combatant, definition, tokens, onShowToken, palette, compendium }: CodexSheetProps) {
   const theme = CODEX_PALETTES[palette];
   // The Abilities list's own groups and rows, so the Codex says what Standard says about each.
   const groups = abilityList(definition, combatant);
@@ -104,36 +110,64 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
     writeJson(TAB_KEY, next);
   };
 
-  // The ability editor, open in place of the dials and tabs; where the Codex was scrolled to, and the row to come back to.
+  // The work area, in place of the dials and tabs: Add ability (on a filter), or the ability editor. `left` is where the
+  // Codex was scrolled to, and the row to come back to (or, for something new, to show).
   const rootRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const workRef = useRef<HTMLDivElement>(null);
+  const [adding, setAdding] = useState<AddFilter | null>(null);
   const [editing, setEditing] = useState<SheetEditorTarget | null>(null);
-  const left = useRef<{ scrollTop: number; rowId: string } | null>(null);
+  const left = useRef<{ scrollTop: number; rowId: string | null; reveal: boolean } | null>(null);
+  const attachFromLibrary = useAttachFromLibrary(definition.id);
+
+  function leave(rowId: string | null) {
+    left.current ??= { scrollTop: scrollParent(rootRef.current)?.scrollTop ?? 0, rowId, reveal: false };
+  }
 
   function openEditor(ref: AbilityRef) {
     if (ref.list === "granted") return;
-    left.current = { scrollTop: scrollParent(rootRef.current)?.scrollTop ?? 0, rowId: refRowId(ref) };
+    leave(refRowId(ref));
+    setAdding(null);
     setEditing({ mode: "edit", ref });
   }
 
+  function openAdd(filter: AddFilter) {
+    leave(null);
+    setAdding(filter);
+  }
+
+  /** From Add ability: a ready copy or a blank, in the editor; nothing is added until Save. */
+  function editNew(target: SheetEditorTarget) {
+    setAdding(null);
+    setEditing(target);
+  }
+
   function closeEditor(savedRef: AbilityRef | undefined) {
-    if (left.current && savedRef && savedRef.list !== "granted") left.current = { ...left.current, rowId: refRowId(savedRef) };
+    const wasNew = editing?.mode === "new";
+    if (left.current && savedRef && savedRef.list !== "granted") {
+      left.current = { ...left.current, rowId: refRowId(savedRef), reveal: wasNew };
+      // Something new: to the tab it's on.
+      if (wasNew) choose(savedRef.list === "spells" ? "spells" : savedRef.list === "items" ? "items" : "abilities");
+    }
     setEditing(null);
   }
 
-  // Open: the editor at the top of the view. Closed: back where the Codex was, its row's Edit focused.
+  // Working: the work area at the top of the view. Done: back where the Codex was, the row's Edit focused (and, for
+  // something new, scrolled into view).
   useLayoutEffect(() => {
     const scroller = scrollParent(rootRef.current);
-    if (editing) {
-      if (scroller && editorRef.current) scroller.scrollTop = Math.max(0, editorRef.current.offsetTop - 8);
+    if (editing || adding !== null) {
+      if (scroller && workRef.current) scroller.scrollTop = Math.max(0, workRef.current.offsetTop - 8);
       return;
     }
     const back = left.current;
     if (!back) return;
     left.current = null;
     if (scroller) scroller.scrollTop = back.scrollTop;
-    rootRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(back.rowId)}"] button[aria-label^="Edit "]`)?.focus({ preventScroll: true });
-  }, [editing]);
+    if (!back.rowId) return;
+    const edit = rootRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(back.rowId)}"] button[aria-label^="Edit "]`);
+    if (back.reveal) edit?.scrollIntoView({ block: "center" });
+    edit?.focus({ preventScroll: true });
+  }, [editing, adding]);
 
   return (
     <div
@@ -149,13 +183,30 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
           <Side combatant={combatant} definition={definition} />
           {editing ? (
             // The ability editor, exactly as on Standard, in the Codex's colours: its Save and Cancel bring the tabs back.
-            <div ref={editorRef} className={`${styles.panel} ${styles.editorPanel}`}>
+            <div ref={workRef} className={`${styles.panel} ${styles.editorPanel}`}>
               <AbilityEditor
                 key={editing.mode === "edit" ? refKey(editing.ref) : "new"}
                 definition={definition}
                 target={editing}
                 onClose={({ savedRef }) => closeEditor(savedRef)}
                 backLabel={TAB_LABELS[tab]}
+              />
+            </div>
+          ) : adding !== null ? (
+            // Add ability, exactly as on Standard's Abilities tab: a row opens in the editor, a library row's + adds it.
+            <div ref={workRef} className={styles.panel}>
+              <div className={styles.workHead}>
+                <Heading id="codex-add" icon="star">Add ability</Heading>
+                <button type="button" className={styles.edit} aria-label="Close Add ability" onClick={() => setAdding(null)}>Close</button>
+              </div>
+              <AddAbility
+                definition={definition}
+                compendium={compendium}
+                initialFilter={adding}
+                onPrepared={(prepared) => editNew(preparedTarget(prepared))}
+                onBlank={(kind) => editNew(blankTarget(kind, definition))}
+                onAttach={attachFromLibrary}
+                onClose={() => setAdding(null)}
               />
             </div>
           ) : (
@@ -170,9 +221,11 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                   ))}
                 </div>
                 {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
-                {tab === "items" ? <Items definition={definition} groups={groups} onEdit={openEditor} /> : null}
-                {tab === "abilities" ? <Abilities groups={groups} onEdit={openEditor} /> : null}
-                {tab === "spells" && spellcasting ? <Spells group={spellcasting} combatant={combatant} definition={definition} onEdit={openEditor} /> : null}
+                {tab === "items" ? <Items definition={definition} groups={groups} onEdit={openEditor} onAdd={() => openAdd("items")} /> : null}
+                {tab === "abilities" ? <Abilities groups={groups} onEdit={openEditor} onAdd={() => openAdd("all")} /> : null}
+                {tab === "spells" && spellcasting ? (
+                  <Spells group={spellcasting} combatant={combatant} definition={definition} onEdit={openEditor} onAdd={() => openAdd("spells")} />
+                ) : null}
               </div>
             </div>
           )}
@@ -622,7 +675,7 @@ const ITEM_GROUPS: Array<{ id: string; title: string; types?: ItemDefinition["ty
 ];
 
 /** Weapons, armor, consumables and gear: the list's own rows, with a box to wear armor or a shield. */
-function Items({ definition, groups, onEdit }: { definition: CreatureDefinition; groups: ListGroup[]; onEdit: (ref: AbilityRef) => void }) {
+function Items({ definition, groups, onEdit, onAdd }: { definition: CreatureDefinition; groups: ListGroup[]; onEdit: (ref: AbilityRef) => void; onAdd: () => void }) {
   const replaceAbilityRecord = useEncounterStore((s) => s.replaceAbilityRecord);
   const rows = groups.flatMap((group) => group.rows);
   const itemsGroup = groups.find((group) => group.id === "items");
@@ -656,6 +709,7 @@ function Items({ definition, groups, onEdit }: { definition: CreatureDefinition;
         );
       })}
       <p className={styles.hint}>A filled box is worn armor or a worn shield. Open a row with the arrow for what it does.</p>
+      <button type="button" className={styles.btnDash} onClick={onAdd}>Add item</button>
     </section>
   );
 }
@@ -668,7 +722,7 @@ const ACTIVATION: Partial<Record<ListGroup["id"], string>> = {
  * Its attacks (its weapons, each with its statblock line in view), then its actions, bonus actions, reactions and
  * features. Items are on Items, spells on Spells.
  */
-function Abilities({ groups, onEdit }: { groups: ListGroup[]; onEdit: (ref: AbilityRef) => void }) {
+function Abilities({ groups, onEdit, onAdd }: { groups: ListGroup[]; onEdit: (ref: AbilityRef) => void; onAdd: () => void }) {
   const attacks = groups.flatMap((group) => group.rows).filter((row) => row.ref.list === "weapons");
   const shown = groups
     .filter((group) => group.id !== "items" && group.id !== "spellcasting")
@@ -698,8 +752,9 @@ function Abilities({ groups, onEdit }: { groups: ListGroup[]; onEdit: (ref: Abil
             </div>
             {group.rows.map((row) => <Row key={row.key} row={row} activation={ACTIVATION[group.id]} onEdit={onEdit} />)}
           </div>
-        )) : <p className={styles.empty}>No other abilities yet: add them on Standard&apos;s Abilities tab.</p>}
+        )) : <p className={styles.empty}>No other abilities yet.</p>}
         <p className={styles.hint}>Open a row with the arrow for what it does. Edit opens it in the ability editor, here.</p>
+        <button type="button" className={styles.btnDash} onClick={onAdd}>Add ability</button>
       </section>
     </div>
   );
@@ -711,7 +766,13 @@ const LEVEL_NAMES = ["Cantrip", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th",
  * How it casts (ability, DC, attack bonus), its slots as boxes on the token shown (filled: still there; a filled box
  * spends one, an empty one gives one back), and its spells by level.
  */
-function Spells({ group, combatant, definition, onEdit }: { group: ListGroup; combatant: CombatantState; definition: CreatureDefinition; onEdit: (ref: AbilityRef) => void }) {
+function Spells({ group, combatant, definition, onEdit, onAdd }: {
+  group: ListGroup;
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  onEdit: (ref: AbilityRef) => void;
+  onAdd: () => void;
+}) {
   const updateResource = useEncounterStore((s) => s.updateResource);
   const facts = group.spellcasting;
   const slotted = (group.levels ?? []).filter((level) => level.level > 0 && definition.resources?.[`slot-${level.level}`] !== undefined);
@@ -772,6 +833,7 @@ function Spells({ group, combatant, definition, onEdit }: { group: ListGroup; co
           {level.rows.map((row) => <Row key={row.key} row={row} onEdit={onEdit} />)}
         </div>
       ))}
+      <button type="button" className={styles.btnDash} onClick={onAdd}>Add spell</button>
     </section>
   );
 }

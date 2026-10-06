@@ -2,34 +2,20 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { spellcastingAbility, type ActionDefinition, type CombatantState, type CreatureDefinition } from "@/engine";
-import type { SrdEntryKind } from "@/data/srd";
+import type { ActionDefinition, CombatantState, CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { actionStatblock } from "@/lib/statblock";
 import { legendaryLosses, multiattackLosses, withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
 import type { Prepared } from "@/lib/ability-editor/add";
-import { blankLegendaryAction } from "@/lib/ability-editor/legendary";
 import { abilityList, duplicateOf, type ListRow, type MoveTarget } from "@/lib/ability-editor/list";
-import { blankMultiattack, stepChoices } from "@/lib/ability-editor/sequence";
+import { stepChoices } from "@/lib/ability-editor/sequence";
 import { withActionType } from "@/lib/ability-editor/spells";
 import { withWorn } from "@/lib/ability-editor/items";
-import {
-  blankAttack,
-  blankDeathEffect,
-  blankFeature,
-  blankItem,
-  blankLairAction,
-  blankReaction,
-  blankSpecialAction,
-  blankSpell,
-  blankSummon,
-  blankTransform,
-  blankWeapon
-} from "@/lib/ability-editor/templates";
 import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
 import { AbilitiesList, refRowId, rowId } from "../abilities/AbilitiesList";
 import { AddAbility, type BlankKind } from "../abilities/AddAbility";
+import { blankTarget, preparedTarget, useAttachFromLibrary } from "../abilities/add-targets";
 import { ResourceList } from "../abilities/ResourceList";
 import { SpellcastingHeading } from "../abilities/SpellcastingHeading";
 import { ItemOffers } from "../abilities/ItemOffers";
@@ -63,10 +49,6 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
   const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
   const replaceAbilityRecord = useEncounterStore((s) => s.replaceAbilityRecord);
   const undo = useEncounterStore((s) => s.undo);
-  const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
-  const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
-  const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
-  const attachSrdItem = useEncounterStore((s) => s.attachSrdItem);
 
   const [addOpen, setAddOpen] = useState(false);
   // A delete waiting on "Delete Claws?" because a multiattack or a legendary action uses it, and what they'd use instead.
@@ -136,34 +118,15 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
     setToast(null);
   }
 
-  function attachFromLibrary(kind: SrdEntryKind, id: string) {
-    if (kind === "weapon") attachSrdWeapon(definition.id, id);
-    else if (kind === "spell") attachSrdSpell(definition.id, id);
-    else if (kind === "item") attachSrdItem(definition.id, id);
-    else attachSrdFeature(definition.id, id);
-  }
+  const attachFromLibrary = useAttachFromLibrary(definition.id);
 
   function openPrepared(prepared: Prepared) {
-    openAbilityEditor({ mode: "new", list: prepared.list, record: prepared.record, focus: prepared.focus, pools: prepared.pools });
+    openAbilityEditor(preparedTarget(prepared));
   }
 
   /** Start from scratch: every kind opens in the ability editor on a blank record. */
   function startBlank(kind: BlankKind) {
-    switch (kind) {
-      case "weapon": openAbilityEditor({ mode: "new", list: "weapons", record: blankWeapon() }); break;
-      case "attack": openAbilityEditor({ mode: "new", list: "actions", record: blankAttack() }); break;
-      case "special": openAbilityEditor({ mode: "new", list: "actions", record: blankSpecialAction() }); break;
-      case "multiattack": openAbilityEditor({ mode: "new", list: "actions", record: blankMultiattack(definition) }); break;
-      case "spell": openAbilityEditor({ mode: "new", list: "spells", record: blankSpell(spellcastingAbility(definition)) }); break;
-      case "feature": openAbilityEditor({ mode: "new", list: "features", record: blankFeature() }); break;
-      case "item": openAbilityEditor({ mode: "new", list: "items", record: blankItem() }); break;
-      case "reaction": openAbilityEditor({ mode: "new", list: "reactions", record: blankReaction() }); break;
-      case "legendary": openAbilityEditor({ mode: "new", list: "legendary", record: blankLegendaryAction(definition) }); break;
-      case "lair": openAbilityEditor({ mode: "new", list: "lairActions", record: blankLairAction() }); break;
-      case "death": openAbilityEditor({ mode: "new", list: "deathEffects", record: blankDeathEffect() }); break;
-      case "summon": openAbilityEditor({ mode: "new", list: "actions", record: blankSummon() }); break;
-      case "transform": openAbilityEditor({ mode: "new", list: "actions", record: blankTransform() }); break;
-    }
+    openAbilityEditor(blankTarget(kind, definition));
   }
 
   /**

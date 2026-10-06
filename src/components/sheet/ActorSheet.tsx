@@ -296,7 +296,10 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
             {/* The Codex opens abilities in the ability editor itself: its unsaved changes are guarded as on Standard. */}
             <SheetGuardContext.Provider value={registry}>
               <Suspense fallback={<p className={styles.loading}>Opening the Codex…</p>}>
-                <CodexSheet combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} palette={palette} />
+                <CodexSheet
+                  combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} palette={palette}
+                  compendium={compendium}
+                />
               </Suspense>
             </SheetGuardContext.Provider>
             {toastView}

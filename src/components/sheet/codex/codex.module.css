@@ -1255,6 +1255,39 @@ span.pip {
   border-radius: 10px;
 }
 
+/* Add ability's head, with Close; and Character Codex's dashed Add buttons under a tab's lists. */
+.workHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workHead .ph {
+  flex: 1;
+}
+
+.btnDash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  border: 1px dashed var(--edge);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btnDash:hover {
+  border-color: var(--cu);
+  color: var(--cu);
+}
+
 /* ── narrower windows ── */
 
 @container codex (max-width: 1000px) {

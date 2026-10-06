@@ -65,16 +65,18 @@ function onSheet(definition: CreatureDefinition): Set<string> {
  * to start from scratch. A row opens the editor on a ready copy, and nothing is added until Save; a library row's "+"
  * adds it at once and leaves the panel open for the next one, and it can be dragged onto the sheet.
  */
-export function AddAbility({ definition, compendium, onPrepared, onAttach, onBlank, onClose }: {
+export function AddAbility({ definition, compendium, onPrepared, onAttach, onBlank, onClose, initialFilter = "all" }: {
   definition: CreatureDefinition;
   compendium?: Compendium;
   onPrepared: (prepared: Prepared) => void;
   onAttach: (kind: SrdEntryKind, id: string) => void;
   onBlank: (kind: BlankKind) => void;
   onClose: () => void;
+  /** What it shows first: All, or (the Codex's Spells and Items tabs) Spells or Items. */
+  initialFilter?: AddFilter;
 }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<AddFilter>("all");
+  const [filter, setFilter] = useState<AddFilter>(initialFilter);
   const [abilities, setAbilities] = useState<readonly SrdMonsterAbilityEntry[] | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
   const [open5e, setOpen5e] = useState(false);

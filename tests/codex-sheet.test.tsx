@@ -355,6 +355,66 @@ describe("the Codex's tabs", () => {
   });
 });
 
+describe("Add ability in the Codex", () => {
+  it("opens in the Codex, and a library row's + adds it at once", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await userEvent.click(screen.getByRole("button", { name: "Add ability" }));
+    const add = screen.getByRole("region", { name: "Add ability" });
+    expect(add.closest("[data-palette]")).not.toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Codex sections" })).toBeNull();
+    await userEvent.type(within(add).getByRole("searchbox", { name: "Search abilities" }), "dagger");
+    await userEvent.click(within(add).getByRole("button", { name: "Add Dagger" }));
+    expect(creature("def-fighter").weapons?.map((weapon) => weapon.name)).toContain("Dagger");
+    expect(within(add).getByRole("status").textContent).toContain("Added Dagger.");
+    await userEvent.click(screen.getByRole("button", { name: "Close Add ability" }));
+    expect(codexTab("Abilities").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("starts something from scratch in the editor, and shows it on its tab once saved", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await userEvent.click(screen.getByRole("button", { name: "Add ability" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "Start from scratch" })).getByRole("button", { name: "Trait or feature" }));
+    const editor = screen.getByRole("region", { name: /^Edit / });
+    expect(editor.closest("[data-palette]")).not.toBeNull();
+    const name = within(editor).getByLabelText("Name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Keen Senses");
+    await userEvent.click(within(editor).getByRole("button", { name: "Add to sheet" }));
+    expect([...(creature("def-fighter").features ?? []), ...(creature("def-fighter").traits ?? [])].map((feature) => feature.name)).toContain("Keen Senses");
+    expect(screen.queryByRole("region", { name: /^Edit / })).toBeNull();
+    expect(codexTab("Abilities").getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Edit Keen Senses");
+  });
+
+  it("opens on Spells from the Spells tab, and a spell added there lands on it", async () => {
+    const wizard = build("srd:class:wizard", "Ilse");
+    await openCodex(wizard.id);
+    await userEvent.click(codexTab("Spells"));
+    await userEvent.click(screen.getByRole("button", { name: "Add spell" }));
+    const add = screen.getByRole("region", { name: "Add ability" });
+    expect(within(add).getByRole("button", { name: "Spells" }).getAttribute("aria-pressed")).toBe("true");
+    await userEvent.type(within(add).getByRole("searchbox", { name: "Search abilities" }), "light");
+    const library = within(within(add).getByRole("region", { name: "Library" }));
+    const first = library.getAllByRole("button", { name: /^Add / })[0]!;
+    const spell = first.getAttribute("aria-label")!.replace(/^Add /, "");
+    await userEvent.click(library.getByText(spell));
+    const editor = screen.getByRole("region", { name: `Edit ${spell}` });
+    await userEvent.click(within(editor).getByRole("button", { name: "Add to sheet" }));
+    expect(codexTab("Spells").getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(`Edit ${spell}`);
+  });
+
+  it("opens on Items from the Items tab", async () => {
+    const fighter = build("srd:class:fighter", "Mira");
+    await openCodex(fighter.id);
+    await userEvent.click(codexTab("Items"));
+    await userEvent.click(screen.getByRole("button", { name: "Add item" }));
+    expect(within(screen.getByRole("region", { name: "Add ability" })).getByRole("button", { name: "Items" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
 describe("choosing a style", () => {
   it("switches a window to the Codex and back, remembered for that kind of actor", async () => {
     renderSheet(compendium, "pc-fighter");

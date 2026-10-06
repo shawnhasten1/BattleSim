@@ -71,6 +71,10 @@ Below the dials are the tabs.
 
 ![Editing a spell in the Codex](img/sheet-windows/07-edit-in-codex.png)
 
+**Add ability**, at the bottom of the Abilities tab (and **Add spell** on Spells, **Add item** on Items, which open on those kinds), is Standard's Add ability, in the Codex. Search the library, the SRD monsters' abilities, recipes and Open5e, or start from scratch. A library row's **+** adds it as it is. Clicking a row, a recipe or a kind under "Start from scratch" opens it in the ability editor, and nothing is added until **Add to sheet**. Once added, the Codex shows it on its tab, in focus.
+
+![Add ability in the Codex](img/sheet-windows/07-add-ability.png)
+
 A monster's Codex leaves out what it hasn't got: a goblin has no Items or Spells tab. With several tokens, the switcher is in the banner, and the HP, conditions and slots are that token's.
 
 ![Three goblins in one Codex](img/sheet-windows/09-goblins.png)
