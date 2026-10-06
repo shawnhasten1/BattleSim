@@ -167,6 +167,7 @@ export const COPY = {
 
   // While active (a feature's or an item's effects)
   effectWhenGate: { label: "When", hint: "Nothing picked: always. With several picked, it can need any one of them or all of them." },
+  effectWhileGate: { label: "While", hint: "Only while it wears this armor (or none), holds a shield or not, or has one of its activations on (Rage). Nothing picked: always." },
   effectScope: { label: "Which attacks", hint: "Nothing picked: all of them. Pick melee, ranged or spell attacks, and the ability they use." },
   effectAttacks: { label: "Only these attacks", hint: "None picked: any attack that fits “Which attacks”." },
   effectSpellsOnly: { label: "Only its spells", hint: "Spells it casts, whatever they do, and not its other attacks." },

@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import { getDefinition } from "@/engine";
+import { baseDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
 import type { CompendiumDragPayload } from "@/lib/compendium";
 import { creatureScope, libraryStatus, tokensOf } from "@/lib/actor-sheet/scope";
@@ -140,7 +140,8 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const combatant = encounter.combatants.find((candidate) => candidate.id === sheet.combatantId)
     ?? encounter.combatants.find((candidate) => shownDefinitionId(candidate) === sheet.definitionId);
   if (!combatant) return null;
-  const definition = getDefinition(encounter, combatant);
+  // The stored creature, which the sheet edits; what its effects make it is read beside the fields (speed, hit points).
+  const definition = baseDefinition(encounter, combatant);
   const tokens = tokensOf(encounter, definition.id);
   const status = libraryStatus(definition, definitionsLibrary, templateDefinitionIds);
   const scope = creatureScope(encounter, definition, status);

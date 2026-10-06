@@ -49,6 +49,7 @@ import {
   type MovementMode
 } from "@/lib/actor-sheet/edits";
 import { CODEX_PALETTES, hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
+import { speedReadout } from "@/lib/actor-sheet/summaries";
 import { readBuild } from "@/lib/character-builder/summary";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { readJson, writeJson } from "@/lib/persist";
@@ -424,6 +425,7 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
   const build = readBuild(definition);
   const hitDice = hitDiceOf(build, sources);
   const deathSaves = combatant.deathSaves ?? { successes: 0, failures: 0, stable: false };
+  const speedNow = speedReadout(definition, combatant);
 
   return (
     <aside className={styles.side} aria-label="Portrait and vitals">
@@ -461,6 +463,13 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
             <span className={styles.cap}>Proficiency</span>
           </div>
         </div>
+        {speedNow ? (
+          // What its items and features make its speed: the tile edits the base.
+          <div className={styles.lineField}>
+            <span className={styles.cap}>Speed with its effects</span>
+            <output aria-label="Speed with its effects">{speedNow}</output>
+          </div>
+        ) : null}
         {workedOut ? (
           // Its AC when it wears no armor: worn armor replaces it, a shield adds to it.
           <div className={styles.lineField}>

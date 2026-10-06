@@ -101,7 +101,7 @@ export function EffectPicker({ offered, owner, onPick, onClose, anchorRef }: Eff
     <div ref={rootRef} className={styles.picker} role="dialog" aria-label="Add effect" onKeyDown={onKeyDown}>
       <input
         ref={searchRef} type="search" className={styles.pickerSearch} aria-label="Search effects" value={query}
-        placeholder="Search: resistance, advantage, regenerates, initiative…" onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search: speed, resistance, advantage, regenerates…" onChange={(event) => setQuery(event.target.value)}
       />
       {searching ? (
         results.length ? (

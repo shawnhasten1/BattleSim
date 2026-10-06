@@ -7,6 +7,7 @@ import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight
 import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { armoredAc, isArmorItem, isWorn, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
+import { effectiveDefinition } from "./stats";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
@@ -223,50 +224,26 @@ export function createEngineState(snapshot: EncounterSnapshot): EngineState {
   };
 }
 
+/**
+ * The creature as it fights: its stored definition (`baseDefinition`) with what its effects and conditions change (speed,
+ * size: stats.ts), one object per base definition and change, so everything keyed on the definition (its compiled
+ * actions) works as it does for the base. Never edit, save or copy it: that's `baseDefinition`'s.
+ */
 export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantState): CreatureDefinition {
-  // A shapechanger in another form resolves to that form's definition, so AC / speed / actions / traits swap
-  // everywhere at once. HP, position and conditions live on the combatant and are untouched.
+  return effectiveDefinition(baseDefinition(snapshot, combatant), combatant);
+}
+
+/**
+ * The stored definition a combatant uses, before its effects: what the sheet edits and an export or a copy takes. A
+ * shapechanger in another form resolves to that form's, so AC / speed / actions / traits swap everywhere at once. HP,
+ * position and conditions live on the combatant and are untouched.
+ */
+export function baseDefinition(snapshot: Pick<EncounterSnapshot, "definitions">, combatant: CombatantState): CreatureDefinition {
   const definition = snapshot.definitions.find((candidate) => candidate.id === (combatant.activeForm?.definitionId ?? combatant.definitionId));
   if (!definition) {
     throw new Error(`Missing creature definition for combatant ${combatant.id}`);
   }
-  return withConditionForm(definition, combatant);
-}
-
-/** The definitions conditions change (`withConditionForm`), kept per base definition and change, so each is one object. */
-const conditionForms = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>();
-
-/**
- * Draconic Flight, Dragon Wings, Large Form: a creature's definition as its conditions change it for a while (a fly
- * speed, its size, more speed), as `getDefinition` returns it: one object per base definition and change, so everything
- * keyed on the definition (its compiled actions) works as it does for the base. Unchanged without such a condition.
- */
-function withConditionForm(definition: CreatureDefinition, combatant: CombatantState): CreatureDefinition {
-  if (!combatant.conditions?.length) return definition;
-  const changes = combatant.conditions.flatMap((condition) => {
-    const modifiers = condition.modifiers;
-    return modifiers && (modifiers.flySpeed !== undefined || modifiers.sizeTo || modifiers.speedBonusFt) ? [modifiers] : [];
-  });
-  if (!changes.length) return definition;
-  const key = JSON.stringify(changes.map((modifiers) => [modifiers.flySpeed ?? null, modifiers.sizeTo ?? null, modifiers.speedBonusFt ?? 0]));
-  let forms = conditionForms.get(definition);
-  if (!forms) {
-    forms = new Map();
-    conditionForms.set(definition, forms);
-  }
-  const known = forms.get(key);
-  if (known) return known;
-  const speed = definition.speed + changes.reduce((sum, modifiers) => sum + (modifiers.speedBonusFt ?? 0), 0);
-  const fly = Math.max(0, ...changes.map((modifiers) => (modifiers.flySpeed === "walk" ? speed : modifiers.flySpeed ?? 0)));
-  const size = [...changes].reverse().find((modifiers) => modifiers.sizeTo)?.sizeTo;
-  const form: CreatureDefinition = {
-    ...definition,
-    speed,
-    ...(size ? { size } : {}),
-    ...(fly > (definition.movement?.fly ?? 0) ? { movement: { ...(definition.movement ?? { walk: speed }), fly } } : {})
-  };
-  forms.set(key, form);
-  return form;
+  return definition;
 }
 
 /** Large Form: why an activation that makes its creature bigger can't be used here (no room for it), or undefined. */

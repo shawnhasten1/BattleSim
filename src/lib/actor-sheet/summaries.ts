@@ -1,4 +1,4 @@
-import { abilityModifier, movementProfileOf, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
+import { abilityModifier, effectiveDefinition, movementProfileOf, speedParts, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { formatChallengeRating } from "@/lib/srd-monster-tree";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
@@ -13,6 +13,26 @@ export function speedLine(definition: Pick<CreatureDefinition, "speed" | "moveme
     .filter((mode) => (profile[mode] ?? 0) > 0)
     .map((mode) => `${mode} ${profile[mode]} ft${mode === "fly" && profile.hover ? " (hover)" : ""}`);
   return [`${profile.walk} ft`, ...modes].join(", ");
+}
+
+/**
+ * What its effects make its speed, for the sheet beside the base it edits (EFFECTS_PLAN.md): "40 ft: 30 base, Fast
+ * Movement +10; fly 40 ft". Undefined when nothing changes it. An effect that needs an activation (Rage) counts once
+ * it's used, so it isn't here.
+ */
+export function speedReadout(definition: CreatureDefinition, combatant?: CombatantState): string | undefined {
+  const parts = speedParts(definition, combatant);
+  if (!parts.length) return undefined;
+  const actual = movementProfileOf(effectiveDefinition(definition, combatant));
+  const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value)}`;
+  const walk = parts.length > 1 || parts[0]!.value !== actual.walk
+    ? [`${actual.walk} ft: ${parts.map((part, index) => (index === 0 ? `${part.value} ${part.label}` : `${part.label} ${signed(part.value)}`)).join(", ")}`]
+    : [];
+  const modes = (["burrow", "climb", "fly", "swim"] as const)
+    .filter((mode) => (actual[mode] ?? 0) > (definition.movement?.[mode] ?? 0))
+    .map((mode) => `${mode} ${actual[mode]} ft${mode === "fly" && actual.hover && !definition.movement?.hover ? " (hover)" : ""}`);
+  const text = [...walk, ...modes].join("; ");
+  return text || undefined;
 }
 
 function joinList(items: string[], conjunction = "and"): string {

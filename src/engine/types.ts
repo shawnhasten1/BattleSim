@@ -451,6 +451,19 @@ export interface FeatureEffectConditions {
   targetMarked?: string;
 }
 
+/**
+ * "While": what an effect checked on the creature alone needs of it (EFFECTS_PLAN.md): armor worn or not, a shield or
+ * not, an activation's condition. Read by `selfGateHolds` (stats.ts). All given must hold.
+ */
+export interface SelfGate {
+  /** `"worn"`: a suit of armor on (Defense); `"none"`: no suit (Unarmored Movement); `"not-heavy"`: no heavy suit (Fast Movement). */
+  armor?: "worn" | "none" | "not-heavy";
+  /** `true`: only holding a shield; `false`: only without one. */
+  shield?: boolean;
+  /** Only while it has a condition with this id: an activation's (Rage: `"rage-active"`). */
+  whileCondition?: string;
+}
+
 /** What kind of save a `save-advantage` effect applies to. See `FeatureEffect` "save-advantage". */
 export interface SaveScope {
   source?: "spell" | "magical";
@@ -747,6 +760,23 @@ export type FeatureEffect =
     abilities: Ability[];
     noShield?: boolean;
   }
+  | ({
+    /**
+     * Its speed while this works (stats.ts, `speedWith`): `bonusFt` feet more, or less (Fast Movement, Longstrider: 10);
+     * `multiplier` times it (Boots of Speed, Haste: 2; the largest counts); at least `minimumFt` (Boots of Striding and
+     * Springing: 30); movement `modes` it gains, a number of feet or its walking speed (Winged Boots: fly "walk"; Ring of
+     * Swimming: swim 40), with `hover`. `allModes`: the bonus and multiplier change its other speeds too (Haste).
+     * `noArmorSlowdown`: heavy armor too heavy for it doesn't slow it.
+     */
+    kind: "speed";
+    bonusFt?: number;
+    multiplier?: number;
+    minimumFt?: number;
+    modes?: Partial<Record<"fly" | "swim" | "climb" | "burrow", number | "walk">>;
+    hover?: boolean;
+    allModes?: boolean;
+    noArmorSlowdown?: boolean;
+  } & SelfGate)
   | {
     kind: "save-bonus";
     ability?: Ability;
@@ -2498,6 +2528,11 @@ export interface CreatureDefinition {
   armorClass: number;
   maxHp: number;
   speed: number;
+  /**
+   * Set only on the definition `getDefinition` derives (stats.ts): its `speed` already takes off heavy armor's 10 ft, so
+   * `movementProfileOf` doesn't again. Never saved.
+   */
+  speedIncludesArmor?: boolean;
   /** All movement modes. `speed` mirrors `movement.walk`. */
   movement?: MovementProfile;
   proficiencyBonus?: number;

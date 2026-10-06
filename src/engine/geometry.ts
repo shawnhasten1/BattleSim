@@ -25,9 +25,10 @@ export interface OccupancyMovementOptions {
 }
 
 /** A creature's movement modes; its `speed` is the walk speed (the sheet edits that, so it wins over a stale copy). */
-export function movementProfileOf(definition: Pick<CreatureDefinition, "speed" | "movement"> & Partial<Pick<CreatureDefinition, "abilities" | "items">>): MovementProfile {
-  // Heavy armor its wearer isn't strong enough for: 10 ft slower on foot.
-  return { ...definition.movement, walk: Math.max(0, definition.speed - (slowedByArmor(definition) ? 10 : 0)) };
+export function movementProfileOf(definition: Pick<CreatureDefinition, "speed" | "movement"> & Partial<Pick<CreatureDefinition, "abilities" | "items" | "speedIncludesArmor">>): MovementProfile {
+  // Heavy armor its wearer isn't strong enough for: 10 ft slower on foot (unless its effects have worked that out).
+  const slowed = !definition.speedIncludesArmor && slowedByArmor(definition);
+  return { ...definition.movement, walk: Math.max(0, definition.speed - (slowed ? 10 : 0)) };
 }
 
 /** The speed a turn's movement budget is measured in: the fastest mode it has. */

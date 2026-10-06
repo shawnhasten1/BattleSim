@@ -10,6 +10,7 @@ import {
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   footprintCells,
+  baseDefinition,
   getDefinition,
   groundHeightAt,
   LEGENDARY_POINTS,
@@ -3411,7 +3412,8 @@ export const useEncounterStore = create<EncounterStore>()(
         const encounter = get().encounter;
         const combatant = encounter.combatants.find((candidate) => candidate.id === combatantId);
         if (!combatant) return undefined;
-        const definition = getDefinition(encounter, combatant);
+        // The stored creature: a copy of the derived one would bake its effects in.
+        const definition = baseDefinition(encounter, combatant);
         if (ownCreatureBlock(encounter, combatant, definition)) return undefined;
         // Its source stays (it's still that document's creature, changed); where it was filed in the library doesn't.
         const { folderId: _folder, ...rest } = structuredClone(definition);

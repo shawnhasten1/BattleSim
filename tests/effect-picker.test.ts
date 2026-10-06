@@ -107,6 +107,12 @@ describe("searching for an effect", () => {
     expect(searchEffects("mark", noMarks).map((result) => result.spec.kind)).not.toContain("incoming-hit-damage");
   });
 
+  it("finds speed by the words a DM uses for it", () => {
+    for (const query of ["speed", "boots", "fast", "fly", "swim", "longstrider"]) expect(top(query)?.kind, query).toBe("speed");
+    expect(top("boots of speed")).toEqual({ kind: "speed", example: "Doubled, like Boots of Speed" });
+    expect(top("fast movement")).toEqual({ kind: "speed", example: "+10 ft without heavy armor, like Fast Movement" });
+  });
+
   it("finds nothing for what isn't an effect yet", () => {
     expect(searchEffects("xylophone")).toEqual([]);
   });

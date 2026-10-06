@@ -24,7 +24,7 @@ describe("the Add effect picker", () => {
     expect(document.activeElement).toBe(search);
     const common = within(picker.getByRole("group", { name: "Common on an item" }));
     expect(common.getAllByRole("button").map((button) => button.textContent)).toEqual(
-      ["AC bonus", "Bonus to saves", "Resistance", "Bonus to hit", "Extra damage", "Advantage on saves", "Save DC bonus"]
+      ["AC bonus", "Bonus to saves", "Speed", "Resistance", "Bonus to hit", "Extra damage", "Advantage on saves", "Save DC bonus"]
     );
     const folds = picker.getAllByRole("button", { expanded: false });
     expect(folds.map((fold) => fold.textContent?.replace(/\d+$/, ""))).toEqual(

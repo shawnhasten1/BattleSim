@@ -35,6 +35,7 @@ import {
   type DamageComponent,
   type DeathEffectDefinition,
   type FeatureCondition,
+  type SelfGate,
   type FeatureDefinition,
   type FeatureEffect,
   type HealingComponent,
@@ -552,6 +553,45 @@ function gateText(effect: FeatureEffect): string {
   return text ? ` ${text}` : "";
 }
 
+/**
+ * An effect's "While" (`SelfGate`) as words after it: " while it wears no heavy armor", " while it wears no armor and holds
+ * no shield", " while it rages".
+ */
+export function selfGateText(effect: FeatureEffect, who: Who = IT): string {
+  const gate = effect as SelfGate;
+  const wears = gate.armor === "worn" ? "wears armor" : gate.armor === "none" ? "wears no armor" : gate.armor === "not-heavy" ? "wears no heavy armor" : "";
+  const holds = gate.shield === true ? "holds a shield" : gate.shield === false ? "holds no shield" : "";
+  const active = gate.whileCondition === "rage-active" ? "rages" : gate.whileCondition ? `has ${gate.whileCondition.replace(/-/g, " ")}` : "";
+  const parts = [wears, holds, active].filter(Boolean);
+  return parts.length ? ` while ${who.subject} ${joinList(parts)}` : "";
+}
+
+const MODE_WORDS = { fly: "flying", swim: "swimming", climb: "climbing", burrow: "burrowing" } as const;
+
+/** A speed effect's change, said plainly: "+10 ft", "doubled", "at least 30 ft", "a flying speed equal to its walking speed". */
+function speedChanges(effect: Extract<FeatureEffect, { kind: "speed" }>, who: Who, short: boolean): string[] {
+  const which = effect.allModes ? (short ? "speeds" : `${who.possessive} speeds`) : short ? "speed" : `${who.possessive} walking speed`;
+  const parts: string[] = [];
+  if (effect.bonusFt) {
+    const feet = Math.abs(effect.bonusFt);
+    parts.push(short ? `${which} ${effect.bonusFt > 0 ? "+" : "−"}${feet} ft` : `${which} ${effect.bonusFt > 0 ? "increases" : "decreases"} by ${feet} ft`);
+  }
+  if ((effect.multiplier ?? 1) !== 1) {
+    const times = effect.multiplier === 2 ? "doubled" : effect.multiplier === 0.5 ? "halved" : `×${effect.multiplier}`;
+    parts.push(short ? `${which} ${times}` : `${which} is ${times}`);
+  }
+  if (effect.minimumFt !== undefined) parts.push(short ? `speed at least ${effect.minimumFt} ft` : `${who.possessive} walking speed is at least ${effect.minimumFt} ft`);
+  for (const mode of ["fly", "swim", "climb", "burrow"] as const) {
+    const feet = effect.modes?.[mode];
+    if (feet === undefined) continue;
+    if (short) parts.push(`${mode} ${feet === "walk" ? "= walking" : `${feet} ft`}`);
+    else parts.push(`${who.subject} has a ${MODE_WORDS[mode]} speed ${feet === "walk" ? `equal to ${who.possessive} walking speed` : `of ${feet} ft`}`);
+  }
+  if (effect.hover) parts.push(short ? "hovers" : `${who.subject} can hover`);
+  if (effect.noArmorSlowdown) parts.push(short ? "heavy armor doesn't slow it" : `heavy armor doesn't slow ${who.object}`);
+  return parts;
+}
+
 /** "melee ", "melee or ranged ", "spell ", "Tail Stinger " for an effect on named actions, "" for any attack. */
 function attackScope(effect: FeatureEffect, definition: CreatureDefinition): string {
   const scope = effect as { attackTypes?: string[]; spellsOnly?: boolean; actionIds?: string[]; weaponProperties?: string[]; twoHanded?: boolean };
@@ -722,6 +762,10 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), "AC")}${effect.unarmoredOnly ? " while it wears no armor and no shield" : ""}.`;
     case "unarmored-ac":
       return `While ${who.subject} wears no armor${effect.noShield ? " and no shield" : ""}, ${who.possessive} AC is ${unarmoredFormulaText(effect)}.`;
+    case "speed": {
+      const changes = speedChanges(effect, who, false);
+      return changes.length ? `${capitalize(joinList(changes))}${selfGateText(effect, who)}.` : `${P} speed doesn't change.`;
+    }
     case "save-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${effect.ability ? `${ABILITY_NAME[effect.ability]} ` : ""}saving throws`)}.`;
     case "save-dc-bonus":
@@ -910,6 +954,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "swarm-damage": return "less damage when bloodied";
     case "armor-class-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} AC${effect.unarmoredOnly ? " (no armor or shield)" : ""}`;
     case "unarmored-ac": return `AC ${unarmoredFormulaText(effect, true)} without armor${effect.noShield ? " or shield" : ""}`;
+    case "speed": return `${joinList(speedChanges(effect, IT, true)) || "speed"}${selfGateText(effect).replace(/^ while it /, ", while it ")}`;
     case "save-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves`;
     case "save-dc-bonus": return `${signed(resolveNumericFormula(effect.bonus, definition))} save DCs`;
     case "resource-regain": return `regains ${poolName(effect.resourceId)}`;

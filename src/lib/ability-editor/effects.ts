@@ -60,6 +60,8 @@ export interface EffectKindSpec {
   when: false | "attack" | "self";
   /** It takes "Which attacks": melee, ranged or spell, an ability, specific attacks. */
   scope: boolean;
+  /** It takes "While": armor worn or not, a shield, an activation (`SelfGate`). */
+  selfGate?: boolean;
   /** The engine reads it only from a condition (an activation), never from a trait that's always on. */
   conditionOnly?: boolean;
   blank: () => FeatureEffect;
@@ -72,6 +74,27 @@ const RESIST_BPS = (nonMagicalOnly?: boolean): FeatureEffect[] => (["bludgeoning
 /** Every kind, grouped as the picker shows them, the usual ones first in each group. */
 export const EFFECT_KINDS: EffectKindSpec[] = [
   // Movement
+  {
+    kind: "speed", label: "Speed", hint: "Faster or slower, doubled, at least so fast, or a fly, swim or climb speed", group: "movement", when: false, scope: false, selfGate: true, short: "Speed",
+    keywords: [
+      "speed", "movement", "move", "faster", "slower", "walking", "fly", "flying", "swim", "swimming", "climb", "climbing", "burrow", "hover", "boots",
+      "longstrider", "haste", "mobile", "feet"
+    ],
+    examples: [
+      { label: "+10 ft, like Longstrider or Mobile", effects: () => [{ kind: "speed", bonusFt: 10 }] },
+      { label: "+10 ft without heavy armor, like Fast Movement", keywords: ["barbarian"], effects: () => [{ kind: "speed", bonusFt: 10, armor: "not-heavy" }] },
+      { label: "+10 ft without armor or a shield, like Unarmored Movement", keywords: ["monk"], effects: () => [{ kind: "speed", bonusFt: 10, armor: "none", shield: false }] },
+      { label: "Doubled, like Boots of Speed", effects: () => [{ kind: "speed", multiplier: 2 }] },
+      {
+        label: "At least 30 ft, like Boots of Striding and Springing", hint: "and heavy armor doesn't slow it",
+        effects: () => [{ kind: "speed", minimumFt: 30, noArmorSlowdown: true }]
+      },
+      { label: "Flies at its walking speed, like Winged Boots", keywords: ["flight", "wings"], effects: () => [{ kind: "speed", modes: { fly: "walk" } }] },
+      { label: "Swims 40 ft, like a Ring of Swimming", effects: () => [{ kind: "speed", modes: { swim: 40 } }] },
+      { label: "Climbs at its walking speed, like Spider Climb", keywords: ["spider"], effects: () => [{ kind: "speed", modes: { climb: "walk" } }] }
+    ],
+    blank: () => ({ kind: "speed", bonusFt: 10 })
+  },
   {
     kind: "avoids-opportunity-attacks", label: "Never provokes opportunity attacks", hint: "Mobile, a creature that moves freely", group: "movement", when: "self", scope: false,
     keywords: ["opportunity attack", "disengage", "mobile", "moves freely", "slippery", "flyby", "movement"],
@@ -473,9 +496,9 @@ export const EFFECT_SPECS = Object.fromEntries(EFFECT_KINDS.map((spec) => [spec.
 
 /** The usual effects for what they belong to, in the picker's Common row. Each has a `short` name. */
 export const COMMON: Record<EffectOwner, EffectKind[]> = {
-  item: ["armor-class-bonus", "save-bonus", "damage-adjustment", "attack-bonus", "damage-bonus", "save-advantage", "save-dc-bonus"],
-  buff: ["attack-bonus", "attack-advantage", "armor-class-bonus", "save-bonus", "damage-adjustment", "damage-bonus", "incoming-attack-modifier"],
-  feature: ["damage-adjustment", "save-advantage", "damage-bonus", "attack-advantage", "armor-class-bonus", "condition-immunity", "hp-regen"]
+  item: ["armor-class-bonus", "save-bonus", "speed", "damage-adjustment", "attack-bonus", "damage-bonus", "save-advantage", "save-dc-bonus"],
+  buff: ["attack-bonus", "attack-advantage", "armor-class-bonus", "save-bonus", "speed", "damage-adjustment", "damage-bonus", "incoming-attack-modifier"],
+  feature: ["damage-adjustment", "save-advantage", "damage-bonus", "attack-advantage", "armor-class-bonus", "speed", "condition-immunity", "hp-regen"]
 };
 
 /* ─── finding an effect ──────────────────────────────────────────────────── */
@@ -523,6 +546,8 @@ function phraseBonus(query: string, fields: SearchField[]): number {
     for (const phrase of phrases) {
       if (phrase === query) best = Math.max(best, 10);
       else if (query.length >= 3 && phrase.startsWith(query)) best = Math.max(best, 4);
+      // A feature named inside an example's label ("…, like Fast Movement").
+      else if (query.includes(" ") && phrase.includes(query)) best = Math.max(best, 8);
     }
   }
   return best;
@@ -746,7 +771,7 @@ export interface ModifierCardView {
 const ALL_ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 const READ_ONLY_MODIFIERS = [
   "movementMultiplier", "speedPenaltyFt", "deniesActions", "deniesBonusActions", "deniesReactions", "deniesOpportunityAttacks", "oneThingPerTurn",
-  "forcesRandomAction", "noSpellcasting", "fleesFromSource", "flySpeed", "sizeTo", "speedBonusFt"
+  "forcesRandomAction", "noSpellcasting", "fleesFromSource", "sizeTo"
 ] as const;
 
 export function modifierCards(modifiers: ConditionModifiers | undefined): ModifierCardView[] {
@@ -766,6 +791,9 @@ export function modifierCards(modifiers: ConditionModifiers | undefined): Modifi
   }
   const adjustments = (modifiers.damageAdjustments ?? []).map((adjustment) => ({ kind: "damage-adjustment" as const, condition: "always" as const, adjustment }));
   for (const card of effectCards(adjustments)) cards.push({ key: "damageAdjustments", effect: card.effect, damageTypes: card.damageTypes });
+  // Large Form's speed and Draconic Flight's fly speed read as Speed cards (EFFECTS_PLAN.md D9).
+  if (modifiers.speedBonusFt) cards.push({ key: "speedBonusFt", effect: { kind: "speed", bonusFt: modifiers.speedBonusFt } });
+  if (modifiers.flySpeed !== undefined) cards.push({ key: "flySpeed", effect: { kind: "speed", modes: { fly: modifiers.flySpeed } } });
   for (const key of READ_ONLY_MODIFIERS) {
     const value = modifiers[key];
     if (key === "movementMultiplier" ? value !== undefined && value !== 1 : Boolean(value)) cards.push({ key });
@@ -808,6 +836,18 @@ export function withModifierCard(
       if (value !== undefined) for (const ability of next?.abilities?.length ? next.abilities : ALL_ABILITIES) saves[ability] = value;
       delete out.savingThrows;
       if (Object.keys(saves).length) out.savingThrows = saves;
+      break;
+    }
+    case "speedBonusFt": {
+      const feet = next?.effect.kind === "speed" ? next.effect.bonusFt : undefined;
+      delete out.speedBonusFt;
+      if (feet) out.speedBonusFt = feet;
+      break;
+    }
+    case "flySpeed": {
+      const fly = next?.effect.kind === "speed" ? next.effect.modes?.fly : undefined;
+      delete out.flySpeed;
+      if (fly !== undefined) out.flySpeed = fly;
       break;
     }
     case "damageAdjustments": {
