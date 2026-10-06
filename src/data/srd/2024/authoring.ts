@@ -105,6 +105,14 @@ export function fromLevels(steps: Array<[number, number]>): Array<number | null>
 /** A 2024 library spell's id: `spell("fireball")` → `srd:spell:fireball-2024`. */
 export const spell = (slug: string) => `srd:spell:${slug}-2024`;
 
+/**
+ * Heroic Inspiration (2024 rules), spent to reroll a die just rolled: here a failed save or a missed attack roll. Its
+ * pool is `heroic-inspiration`, one at most.
+ */
+export const HEROIC_INSPIRATION: FeatureEffect = {
+  kind: "d20-change", rolls: ["attack", "save"], change: "reroll", resourceCost: { resourceId: "heroic-inspiration", amount: 1 }
+};
+
 /** A class's spellcasting from its SRD table: its cantrips and prepared spells by level, its own list. */
 export function srdSpellcasting(classKey: string, ability: Ability, kind: SpellcastingProgression["kind"], extra: Partial<SpellcastingProgression> = {}): SpellcastingProgression {
   const hasCantrips = srdClass(classKey).columns.some((column) => column.id === "cantrips");

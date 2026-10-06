@@ -837,6 +837,50 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </>
       );
     }
+    case "d20-change": {
+      const rolls = effect.rolls;
+      const toggleRoll = (roll: "attack" | "save") => {
+        const next = rolls.includes(roll) ? rolls.filter((candidate) => candidate !== roll) : [...rolls, roll];
+        if (!next.length) return;
+        // Only an attack can be turned into a hit.
+        set({ ...effect, rolls: next, ...(effect.change === "hit" && !next.includes("attack") ? { change: "reroll" as const } : {}) });
+      };
+      return (
+        <>
+          <span className={styles.typeChips} role="group" aria-label="Rolls it changes">
+            <button type="button" aria-pressed={rolls.includes("save")} onClick={() => toggleRoll("save")}>a failed save</button>
+            <button type="button" aria-pressed={rolls.includes("attack")} onClick={() => toggleRoll("attack")}>a missed attack</button>
+          </span>
+          <Segmented label="It can" value={effect.change}
+            options={[
+              { value: "reroll", label: "Reroll" }, { value: "add", label: "Add a die" }, { value: "twenty", label: "Make it a 20" },
+              ...(rolls.includes("attack") ? [{ value: "hit" as const, label: "Hit instead" }] : [])
+            ]}
+            onChange={(change) => {
+              const next = { ...effect, change };
+              delete next.bonus;
+              delete next.dice;
+              set(change === "add" ? { ...next, dice: "1d10" } : next);
+            }} />
+          {effect.change === "reroll" ? (
+            <>
+              <Check label="Adding a bonus to the new roll" checked={Boolean(effect.bonus)} onChange={(on) => set(opt(effect, "bonus", on ? { base: 1 } : undefined))} />
+              {effect.bonus ? <FormulaField label="Bonus to the new roll" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} /> : null}
+            </>
+          ) : null}
+          {effect.change === "add" ? (
+            <input aria-label="Die it adds" className={styles.expression} value={effect.dice ?? ""} placeholder="1d10" onChange={(e) => set({ ...effect, dice: e.target.value.replace(/\s+/g, "") })} />
+          ) : null}
+          <Check label="Only on a natural 1" checked={effect.onNatural1 === true} onChange={(on) => set(opt(effect, "onNatural1", on ? true : undefined))} />
+          <Check label="Once until the start of its next turn" checked={effect.oncePerTurn === true} onChange={(on) => set(opt(effect, "oncePerTurn", on ? true : undefined))} />
+          <Check label="Spends a use" checked={Boolean(effect.resourceCost)} onChange={(on) => set(opt(effect, "resourceCost", on ? effect.resourceCost ?? { resourceId: "", amount: 1 } : undefined))} />
+          {effect.resourceCost ? (
+            <PoolPicker definition={definition} weapon={weapon} newPools={newPools} startCreating={!effect.resourceCost.resourceId}
+              value={effect.resourceCost.resourceId ? effect.resourceCost : undefined} onChange={(resourceCost) => set({ ...effect, resourceCost })} />
+          ) : null}
+        </>
+      );
+    }
     case "auto-succeed-save": {
       const source = effect.against?.source ?? "any";
       return (

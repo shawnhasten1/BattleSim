@@ -537,6 +537,19 @@ function usingText(effect: FeatureEffect): string {
     + (scope.damageTypes?.length ? ` that deal ${joinList(scope.damageTypes, "or")} damage` : "");
 }
 
+/** "When it fails a saving throw, it can reroll the d20 and use the new roll, adding 9, by spending 1 Indomitable." */
+function d20ChangeSentence(effect: Extract<FeatureEffect, { kind: "d20-change" }>, definition: CreatureDefinition, who: Who): string {
+  const when = effect.onNatural1
+    ? `rolls a 1 on the d20 of ${joinList(effect.rolls.map((roll) => (roll === "save" ? "a saving throw" : "an attack roll")), "or")}`
+    : joinList(effect.rolls.map((roll) => (roll === "save" ? "fails a saving throw" : "misses with an attack roll")), "or");
+  const does = effect.change === "reroll" ? `reroll the d20 and use the new roll${effect.bonus ? `, adding ${formulaText(effect.bonus, definition).replace(/^\+/, "")}` : ""}`
+    : effect.change === "add" ? `add ${effect.dice ?? "1d4"} to the roll`
+      : effect.change === "twenty" ? "treat the d20 as a 20"
+        : "hit instead";
+  const cost = effect.resourceCost ? `, spending ${costText(effect.resourceCost, definition)}` : "";
+  return `When ${who.subject} ${when}, ${who.subject} can ${does}${cost}${effect.oncePerTurn ? " (once until the start of its next turn)" : ""}.`;
+}
+
 /** One feature effect as a sentence about `who` (the creature that has it, unless an aura or a buff says otherwise). */
 export function effectSentence(effect: FeatureEffect, definition: CreatureDefinition, who: Who = IT): string {
   const gate = gateText(effect);
@@ -547,6 +560,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} has ${effect.mode ?? "advantage"} on ${attackScope(effect, definition)}attack rolls${usingText(effect)}${gate}.`;
     case "attack-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
+    case "d20-change":
+      return d20ChangeSentence(effect, definition, who);
     case "initiative": {
       const parts = [
         ...(effect.advantage ? ["has advantage on Initiative rolls"] : []),
@@ -691,6 +706,12 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "attack-advantage": return `${effect.mode ?? "advantage"} on ${scope}attacks${gate}`;
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
     case "critical-range": return `${scope}crits on ${effect.minimum}–20${gate}`;
+    case "d20-change": {
+      const failed = effect.onNatural1 ? "a 1" : joinList(effect.rolls.map((roll) => (roll === "save" ? "a failed save" : "a miss")), "or");
+      const does = effect.change === "reroll" ? `reroll${effect.bonus ? ` +${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "").replace(/^\+/, "")}` : ""}`
+        : effect.change === "add" ? `+${effect.dice ?? "1d4"}` : effect.change === "twenty" ? "a 20" : "a hit";
+      return `${does} on ${failed}${effect.resourceCost ? ` (${costText(effect.resourceCost, definition)})` : ""}${effect.oncePerTurn ? ", once a turn" : ""}`;
+    }
     case "initiative": return joinList([...(effect.advantage ? ["advantage on Initiative"] : []), ...(effect.bonus ? [`${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to Initiative`] : [])]) || "Initiative";
     case "incoming-attack-modifier": return `${effect.amount >= 5 ? "attackers have advantage" : effect.amount <= -5 ? "attackers have disadvantage" : `attackers ${signed(effect.amount)}`}${gate}`;
     case "damage-bonus": return `+${damageShort(effect.damage, definition)} on ${scope}hits${effect.oncePerTurn ? " once a turn" : ""}${gate}`;

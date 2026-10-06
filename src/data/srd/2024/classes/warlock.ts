@@ -246,7 +246,9 @@ export const FIEND_PATRON: SubclassDefinition = {
     { level: 5, grants: [{ key: "fiend-spells-5", spells: ["fireball", "stinking-cloud"].map(spell) }] },
     {
       level: 6,
-      grants: [grant("dark-ones-own-luck", reference("warlock_fiend-patron_dark-ones-own-luck"), { pool: { id: "dark-ones-own-luck", size: "{mod:cha|min:1}" } })]
+      grants: [grant("dark-ones-own-luck", runs("warlock_fiend-patron_dark-ones-own-luck", {
+        effects: [{ kind: "d20-change", rolls: ["save"], change: "add", dice: "1d10", resourceCost: { resourceId: "dark-ones-own-luck", amount: 1 } }]
+      }), { pool: { id: "dark-ones-own-luck", size: "{mod:cha|min:1}" } })]
     },
     { level: 7, grants: [{ key: "fiend-spells-7", spells: ["fire-shield", "wall-of-fire"].map(spell) }] },
     { level: 9, grants: [{ key: "fiend-spells-9", spells: ["geas", "insect-plague"].map(spell) }] },

@@ -1,6 +1,6 @@
 import type { ActionDefinition, DamageComponent, DamageType } from "@/engine";
 import type { ChoiceSpec, FeatureGrant, PickOption, SpeciesDefinition } from "@/lib/character-builder/catalog";
-import { informational, reference, runs, spell } from "./authoring";
+import { HEROIC_INSPIRATION, informational, reference, runs, spell } from "./authoring";
 import { srd52Source } from "./reference";
 
 /**
@@ -282,7 +282,12 @@ const HALFLING: SpeciesDefinition = {
     grants: [
       { key: "brave", feature: runs(trait("halfling", "Brave"), { effects: [{ kind: "save-advantage", against: { conditions: ["frightened"] } }] }) },
       { key: "halfling-nimbleness", feature: reference(trait("halfling", "Halfling Nimbleness")) },
-      { key: "luck", feature: reference(trait("halfling", "Luck")) },
+      {
+        key: "luck",
+        feature: runs(trait("halfling", "Luck"), {
+          effects: [{ kind: "d20-change", rolls: ["attack", "save"], change: "reroll", onNatural1: true }]
+        })
+      },
       { key: "naturally-stealthy", feature: informational(trait("halfling", "Naturally Stealthy")) }
     ]
   }],
@@ -294,7 +299,11 @@ const HUMAN: SpeciesDefinition = {
   sizes: ["medium", "small"], speed: 30, type: "humanoid",
   levels: [{
     level: 1,
-    grants: [{ key: "resourceful", feature: reference(trait("human", "Resourceful")) }],
+    grants: [{
+      key: "resourceful",
+      feature: runs(trait("human", "Resourceful"), { effects: [HEROIC_INSPIRATION] }),
+      pool: { id: "heroic-inspiration", size: 1 }
+    }],
     choices: [
       { kind: "skills", id: "skillful", count: 1, from: "any" },
       { kind: "feat", id: "versatile", categories: ["origin"], label: "Versatile: an origin feat" }

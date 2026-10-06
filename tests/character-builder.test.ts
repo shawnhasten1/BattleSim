@@ -190,7 +190,7 @@ describe("a Fighter built from 1st to 20th level", () => {
     const fighter = at(11);
     expect(feature(fighter, "fighter-two-extra-attacks").grantedActions?.[0]).toMatchObject({ attacks: [{ any: "weapon", count: 3 }] });
     expect(fighter.features?.some((entry) => entry.id === "fighter-extra-attack")).toBe(false);
-    expect(fighter.resources).toEqual({ "second-wind": 4, "action-surge": 1, indomitable: 1 });
+    expect(fighter.resources).toEqual({ "second-wind": 4, "action-surge": 1, indomitable: 1, "heroic-inspiration": 1 });
   });
 
   it("20th level: four attacks, Action Surge twice, Indomitable three times, Superior Critical", () => {
@@ -198,7 +198,7 @@ describe("a Fighter built from 1st to 20th level", () => {
     expect(fighter.proficiencyBonus).toBe(6);
     expect(fighter.maxHp).toBe(10 + 19 * 6 + 20 * 5);
     expect(feature(fighter, "fighter-three-extra-attacks").grantedActions?.[0]).toMatchObject({ attacks: [{ any: "weapon", count: 4 }] });
-    expect(fighter.resources).toEqual({ "second-wind": 4, "action-surge": 2, indomitable: 3 });
+    expect(fighter.resources).toEqual({ "second-wind": 4, "action-surge": 2, indomitable: 3, "heroic-inspiration": 1 });
     expect(fighter.features?.some((entry) => entry.id === "champion-improved-critical")).toBe(false);
     expect(feature(fighter, "champion-superior-critical")).toBeTruthy();
     expect(fighter.features?.filter((entry) => entry.name.startsWith("Ability Score Improvement"))).toHaveLength(6);

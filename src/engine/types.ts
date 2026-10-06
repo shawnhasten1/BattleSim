@@ -469,6 +469,23 @@ export type FeatureEffect =
     bonus: NumericFormula;
   } & FeatureEffectScope & FeatureEffectConditions)
   | {
+    /**
+     * Changing one of its own d20 rolls once it's seen: a failed save or a missed attack roll, or with `onNatural1`
+     * only a natural 1 (Luck). `change`: `"reroll"` and use the new roll, `bonus` added (Indomitable: the fighter
+     * level); `"add"` `dice` to it (Dark One's Own Luck: 1d10); `"twenty"`, the d20 becomes a 20 (Stroke of Luck);
+     * `"hit"`, the attack hits (Boon of Combat Prowess). `resourceCost` is spent each time (Heroic Inspiration, a
+     * pool); `oncePerTurn` allows it once until the start of the creature's next turn. Each one once a roll.
+     */
+    kind: "d20-change";
+    rolls: Array<"attack" | "save">;
+    change: "reroll" | "add" | "twenty" | "hit";
+    bonus?: NumericFormula;
+    dice?: string;
+    onNatural1?: boolean;
+    resourceCost?: ResourceCost;
+    oncePerTurn?: boolean;
+  }
+  | {
     /** Its initiative rolls: advantage (Feral Instinct, Remarkable Athlete), and a bonus added (Alert: the proficiency bonus). */
     kind: "initiative";
     advantage?: boolean;
@@ -2096,6 +2113,8 @@ export interface TurnFlags {
   droppedCreature?: boolean;
   /** Extra movement granted this turn (Rampage), in grid squares. */
   bonusMovement?: number;
+  /** `d20-change` effects used since the start of its turn (`<feature id>:<effect index>`), for `oncePerTurn`. */
+  d20ChangesUsed?: string[];
 }
 
 export interface CombatantState {
@@ -2248,6 +2267,7 @@ export interface CombatLogEvent {
     | "Swallowed"
     | "Regurgitated"
     | "LegendaryResistanceUsed"
+    | "RollChanged"
     | "Regenerated"
     | "LegendaryActionUsed"
     | "SurvivedLethal"

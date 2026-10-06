@@ -112,6 +112,30 @@ export interface LegendaryResistanceRequest extends RequestBase {
   aiChoice: boolean;
 }
 
+/** One way to change a failed d20 roll: its feature, what it does, and what it costs (with what's left). */
+export interface D20ChangeOption {
+  id: string;
+  name: string;
+  does: string;
+  cost?: { resourceId: string; amount: number; left: number };
+}
+
+export interface D20ChangeRequest extends RequestBase {
+  kind: "d20-change";
+  combatantId: Id;
+  /** The roll that failed: a save, or an attack roll that missed. */
+  roll: "attack" | "save";
+  natural: number;
+  total: number;
+  /** The DC or AC it had to reach. */
+  against: number;
+  /** What it was for ("Fireball", "Longsword"). */
+  label?: string;
+  options: D20ChangeOption[];
+  /** What the AI would use (null: keep the roll). */
+  aiChoice: string | null;
+}
+
 /** A legendary or lair action to take, and what at. */
 export interface TurnPick {
   actionId: Id;
@@ -175,15 +199,16 @@ export interface RollRequest extends RequestBase {
   label?: string;
 }
 
-export type DecisionRequest = ReactionRequest | LegendaryResistanceRequest | TurnOptionRequest | SwingRequest | RollRequest;
+export type DecisionRequest = ReactionRequest | LegendaryResistanceRequest | TurnOptionRequest | SwingRequest | RollRequest | D20ChangeRequest;
 
 export type ReactionAnswer = { kind: "reaction"; actionId: Id | null };
 export type LegendaryResistanceAnswer = { kind: "legendary-resistance"; use: boolean };
 export type TurnOptionAnswer = { kind: "legendary-action" | "lair-action"; pick: TurnPick | null };
 export type SwingAnswer = { kind: "multiattack-swing"; skip?: boolean; targetId?: Id; actionId?: Id; moveTo?: Point; altitude?: number };
 export type RollAnswer = { kind: "roll"; outcome: RollOutcome };
+export type D20ChangeAnswer = { kind: "d20-change"; optionId: string | null };
 
-export type DecisionAnswer = ReactionAnswer | LegendaryResistanceAnswer | TurnOptionAnswer | SwingAnswer | RollAnswer;
+export type DecisionAnswer = ReactionAnswer | LegendaryResistanceAnswer | TurnOptionAnswer | SwingAnswer | RollAnswer | D20ChangeAnswer;
 
 type AnswerFor<R extends DecisionRequest> =
   R extends ReactionRequest ? ReactionAnswer
@@ -191,7 +216,8 @@ type AnswerFor<R extends DecisionRequest> =
       : R extends TurnOptionRequest ? TurnOptionAnswer
         : R extends SwingRequest ? SwingAnswer
           : R extends RollRequest ? RollAnswer
-            : never;
+            : R extends D20ChangeRequest ? D20ChangeAnswer
+              : never;
 
 /** Answers a decision, or returns `undefined` to leave it to the AI (or keep the roll). */
 export type Decider = (request: DecisionRequest) => DecisionAnswer | undefined;
@@ -226,5 +252,6 @@ export function decisionSubject(request: DecisionRequest): Id {
     case "lair-action": return request.combatantId;
     case "multiattack-swing": return request.attackerId;
     case "roll": return request.rollerId;
+    case "d20-change": return request.combatantId;
   }
 }

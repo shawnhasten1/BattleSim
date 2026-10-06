@@ -1,5 +1,5 @@
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
-import { choice, fromLevels, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
+import { choice, fromLevels, grant, HEROIC_INSPIRATION, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns, srdNumbers } from "../reference";
 
 const ref = srdClass("fighter");
@@ -86,7 +86,9 @@ export const FIGHTER: ClassDefinition = {
     {
       level: 9,
       grants: [
-        grant("indomitable", reference("fighter_indomitable"), { pool: { id: "indomitable", size: "{col:indomitable}" } }),
+        grant("indomitable", runs("fighter_indomitable", {
+          effects: [{ kind: "d20-change", rolls: ["save"], change: "reroll", bonus: { base: 9 }, resourceCost: { resourceId: "indomitable", amount: 1 } }]
+        }), { pool: { id: "indomitable", size: "{col:indomitable}" }, scale: [{ path: "effects.0.bonus.base", value: "{level}" }] }),
         grant("tactical-master", reference("fighter_tactical-master"))
       ]
     },
@@ -144,7 +146,12 @@ export const CHAMPION: SubclassDefinition = {
       grants: [],
       choices: [choice({ kind: "feat", id: "fighting-style", categories: ["fighting-style"], label: "Additional Fighting Style" }, "fighter_champion_additional-fighting-style")]
     },
-    { level: 10, grants: [grant("heroic-warrior", reference("fighter_champion_heroic-warrior"))] },
+    {
+      level: 10,
+      grants: [grant("heroic-warrior", runs("fighter_champion_heroic-warrior", {
+        effects: [HEROIC_INSPIRATION, { kind: "resource-regain", timing: "turn-start", resourceId: "heroic-inspiration", amount: { base: 1 }, max: 1 }]
+      }), { pool: { id: "heroic-inspiration", size: 1 } })]
+    },
     { level: 15, grants: [grant("superior-critical", critical("fighter_champion_superior-critical", 18), { replaces: "improved-critical" })] },
     { level: 18, grants: [grant("survivor", reference("fighter_champion_survivor"))] }
   ]

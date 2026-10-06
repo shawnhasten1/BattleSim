@@ -19,16 +19,16 @@ its gaps, never dropped and never approximated without saying so.
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 0 | 4 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 1 | 3 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 8 | 1 | 6 | 5 | 1 |
-| Monk (Warrior of the Open Hand) | 26 | 8 | 6 | 3 | 5 | 4 |
+| Fighter (Champion) | 21 | 10 | 1 | 4 | 5 | 1 |
+| Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 4 | 2 | 7 | 6 | 4 |
+| Rogue (Thief) | 23 | 5 | 2 | 6 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 1 | 2 | 7 | 6 | 1 |
-| Warlock (Fiend Patron) | 16 | 1 | 1 | 3 | 8 | 3 |
+| Warlock (Fiend Patron) | 16 | 2 | 1 | 2 | 8 | 3 |
 | Wizard (Evoker) | 16 | 0 | 0 | 4 | 9 | 3 |
-| Feats | 17 | 3 | 2 | 8 | 4 | 0 |
-| Species traits | 33 | 7 | 2 | 5 | 8 | 11 |
+| Feats | 17 | 4 | 2 | 7 | 4 | 0 |
+| Species traits | 33 | 9 | 2 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
 
@@ -37,7 +37,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
-| `d20-reroll` | Rerolling or changing a d20 after it's rolled (Heroic Inspiration, Luck, Indomitable, Boon of Fate) | Bard, Fighter, Monk, Rogue, Warlock, Feats, Species | 1 | Countercharm (Bard); Indomitable (Fighter); Heroic Warrior (Champion); Disciplined Survivor (Monk); Stroke of Luck (Rogue); Dark One's Own Luck (Fiend Patron); Boon of Combat Prowess (feat); Boon of Fate (feat); Luck (Halfling); Resourceful (Human) |
 | `spell-scope` | Bonuses to one school's or one class's spells, and cantrip damage on a miss or a save | Cleric, Druid, Sorcerer, Wizard | 1 | Blessed Strikes (Cleric); Improved Blessed Strikes (Cleric); Elemental Fury (Druid); Improved Elemental Fury (Druid); Innate Sorcery (Sorcerer); Elemental Affinity (Draconic Sorcery); Potent Cantrip (Evoker); Empowered Evocation (Evoker) |
 | `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Remarkable Athlete (Champion); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
@@ -45,6 +44,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
+| `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
 | `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
@@ -221,7 +221,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 4, 6, 8, 12, 14, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
 | 5 | Tactical Shift | manual | `free-move` |  |
-| 9, 13, 17 | Indomitable | manual | `d20-reroll` |  |
+| 9, 13, 17 | Indomitable | full |  | Rerolls a failed save with the fighter level added. |
 | 9 | Tactical Master | manual | `weapon-mastery` |  |
 | 11 | Two Extra Attacks | full |  |  |
 | 13 | Studied Attacks | manual | `next-attack` |  |
@@ -235,7 +235,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Improved Critical | full |  | A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit. |
 | 3 | Remarkable Athlete | partial | `free-move` | Advantage on Initiative rolls runs; the half-speed move after a critical hit doesn't, and Athletics checks are outside a fight. |
 | 7 | Additional Fighting Style | builder |  | Another Fighting Style feat. |
-| 10 | Heroic Warrior | manual | `d20-reroll` |  |
+| 10 | Heroic Warrior | full |  | Heroic Inspiration back at the start of each turn without it; spent rerolling a failed save or a missed attack roll. |
 | 15 | Superior Critical | full |  | 18 to 20. |
 | 18 | Survivor | manual | `death-saves`, `gated-regen` |  |
 
@@ -260,7 +260,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 10 | Heightened Focus | partial | `combined-utility` | Three Flurry strikes run; Patient Defense's temporary hit points and carrying an ally don't. |
 | 10 | Self-Restoration | manual | `condition-removal` |  |
 | 13 | Deflect Energy | full |  | Deflect Attacks against an attack roll of any other damage type. |
-| 14 | Disciplined Survivor | partial | `d20-reroll` | Proficiency in every save; rerolling a failed one doesn't run. |
+| 14 | Disciplined Survivor | full |  | Proficiency in every save, and a Focus Point to reroll a failed one. |
 | 15 | Perfect Focus | info |  | A fight starts with full pools. |
 | 18 | Superior Defense | full |  | 3 focus points: resistance to everything but force for 10 rounds. The AI takes it once it's below half its hit points with an enemy close. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
@@ -362,7 +362,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 15 | Slippery Mind | builder |  | Wisdom and Charisma save proficiency. |
 | 18 | Elusive | manual | `deny-advantage` |  |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
-| 20 | Stroke of Luck | manual | `d20-reroll` |  |
+| 20 | Stroke of Luck | full |  | A failed save or a missed attack roll becomes a 20; ability checks are outside a fight. |
 
 ### Thief (Rogue subclass)
 
@@ -423,7 +423,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 3 | Dark One's Blessing | manual | `on-kill` |  |
 | 3 | Fiend Spells | builder |  | Fiend spells are always prepared. |
-| 6 | Dark One's Own Luck | manual | `d20-reroll` |  |
+| 6 | Dark One's Own Luck | full |  | 1d10 on a failed save; ability checks are outside a fight. |
 | 10 | Fiendish Resilience | full |  | Resistance to the chosen damage type. |
 | 14 | Hurl Through Hell | manual | `smite` |  |
 
@@ -460,7 +460,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Ability Score Improvement | general | builder |  | +2 to one score or +1 to two, to a maximum of 20. |
 | Alert | origin | partial | `initiative` | The proficiency bonus on Initiative rolls runs; swapping initiative with an ally doesn't. |
 | Archery | fighting-style | full |  | +2 to ranged weapon attack rolls. |
-| Boon of Combat Prowess | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; turning a miss into a hit doesn't run. |
+| Boon of Combat Prowess | epic-boon | full |  | The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
 | Boon of Fate | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; changing a d20 Test doesn't run. |
 | Boon of Irresistible Offense | epic-boon | manual | `ignore-resistance` | The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
@@ -501,9 +501,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Goliath | Powerful Build | info |  | Escaping grapples and carrying. |
 | Halfling | Brave | full |  | Advantage on saves against Frightened. |
 | Halfling | Halfling Nimbleness | manual | `move-through` |  |
-| Halfling | Luck | manual | `d20-reroll` |  |
+| Halfling | Luck | full |  | A 1 on a failed save or a missed attack roll is rerolled; ability checks are outside a fight. |
 | Halfling | Naturally Stealthy | info |  | Hiding. |
-| Human | Resourceful | manual | `d20-reroll` |  |
+| Human | Resourceful | full |  | Heroic Inspiration, spent rerolling a failed save or a missed attack roll (the die that matters in a fight). |
 | Human | Skillful | builder |  | A skill. |
 | Human | Versatile | builder |  | An Origin feat. |
 | Orc | Adrenaline Rush | partial | `combined-utility` | Dash as a bonus action, proficiency-bonus times; the temporary hit points with it don't run. |

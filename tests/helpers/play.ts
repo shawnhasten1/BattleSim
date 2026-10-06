@@ -39,6 +39,7 @@ export function aiAnswer(request: DecisionRequest): DecisionAnswer {
     case "lair-action": return { kind: request.kind, pick: request.aiChoice };
     case "multiattack-swing": return { kind: "multiattack-swing" };
     case "roll": return { kind: "roll", outcome: request.outcome };
+    case "d20-change": return { kind: "d20-change", optionId: request.aiChoice };
   }
 }
 

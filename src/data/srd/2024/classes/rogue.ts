@@ -98,7 +98,12 @@ export const ROGUE: ClassDefinition = {
     { level: 14, grants: [grant("devious-strikes", reference("rogue_devious-strikes"))] },
     { level: 15, grants: [grant("slippery-mind", informational("rogue_slippery-mind"), { adjust: { saves: ["wis", "cha"] } })] },
     { level: 18, grants: [grant("elusive", reference("rogue_elusive"))] },
-    { level: 20, grants: [grant("stroke-of-luck", reference("rogue_stroke-of-luck"))] }
+    {
+      level: 20,
+      grants: [grant("stroke-of-luck", runs("rogue_stroke-of-luck", {
+        effects: [{ kind: "d20-change", rolls: ["attack", "save"], change: "twenty", resourceCost: { resourceId: "stroke-of-luck", amount: 1 } }]
+      }), { pool: { id: "stroke-of-luck", size: 1 } })]
+    }
   ],
   startingEquipment: [
     {

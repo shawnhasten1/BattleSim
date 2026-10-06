@@ -61,6 +61,7 @@ import type {
 import {
   askDecision,
   type DecisionHost,
+  type D20ChangeRequest,
   type LegendaryResistanceRequest,
   type ReactionContext,
   type ReactionOption,
@@ -2053,8 +2054,8 @@ function resolveAttackCore(
   let targetAc = inputs.targetAc;
   const d20 = rollD20(state.rng, { advantage: inputs.advantage, disadvantage: inputs.disadvantage });
   spendNextAttackConditions(state, attacker, target);
-  const total = d20.total + inputs.totalBonus;
-  const natural = d20.total;
+  let total = d20.total + inputs.totalBonus;
+  let natural = d20.total;
   let critical = natural >= inputs.criticalRange.minimum;
   let hit = critical || (natural !== 1 && total >= targetAc);
   // A DM may overrule the roll (Play): a hit, a critical hit or a miss, whatever the die said.
@@ -2065,6 +2066,19 @@ function resolveAttackCore(
   if (overridden) {
     hit = overridden !== "failure";
     critical = overridden === "critical";
+  }
+  // Heroic Inspiration, Luck, Boon of Combat Prowess: the attacker may change a miss it has seen (not one a DM ruled).
+  if (!hit && !overridden) {
+    const criticalAt = inputs.criticalRange.minimum;
+    const changed = changeFailedD20(state, attacker, {
+      roll: "attack", natural, modifier: inputs.totalBonus, against: targetAc, mode: rollMode, label: action.name, criticalAt
+    }, (n, t) => n >= criticalAt || (n !== 1 && t >= targetAc));
+    if (changed) {
+      natural = changed.natural;
+      total = changed.total;
+      critical = !changed.hit && natural >= criticalAt;
+      hit = changed.hit || critical || (natural !== 1 && total >= targetAc);
+    }
   }
   // Adamantine: a critical hit against it is a normal hit.
   const criticalNegatedBy = critical && !overridden
@@ -6702,6 +6716,163 @@ function wantsLegendaryResistance(target: CombatantState, ctx: SaveContext): boo
  * eight places, two of which (rider saves and repeated saves) forgot the feature bonuses and advantage, so an
  * Aura of Protection didn't apply to a Hold Person-style save.
  */
+/** A failed d20 roll as its roller saw it: the die, what's added to it, what it had to reach, and how it was rolled. */
+interface FailedD20 {
+  roll: "attack" | "save";
+  natural: number;
+  modifier: number;
+  against: number;
+  mode: AttackRollMode;
+  label?: string;
+  /** An attack's lowest critical roll (it hits on it whatever the total). */
+  criticalAt?: number;
+}
+
+/** One way `combatant` could change a failed roll: the feature it's from (`key`: its id and the effect's index) and the effect. */
+interface D20ChangeChoice {
+  key: string;
+  feature: string;
+  effect: Extract<FeatureEffect, { kind: "d20-change" }>;
+}
+
+/** The ways `combatant` could change this failed roll now: each feature once a roll, paid for, not spent this turn. */
+function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: FailedD20, used: Set<string>): D20ChangeChoice[] {
+  const definition = getDefinition(state.snapshot, combatant);
+  const choices: D20ChangeChoice[] = [];
+  for (const feature of featureSources(definition, combatant)) {
+    for (const [index, effect] of (feature.effects ?? []).entries()) {
+      if (effect.kind !== "d20-change" || !effect.rolls.includes(d20.roll) || (effect.change === "hit" && d20.roll !== "attack")) continue;
+      if (effect.onNatural1 && d20.natural !== 1) continue;
+      const key = `${feature.id}:${index}`;
+      if (used.has(key) || (effect.oncePerTurn && combatant.turnFlags?.d20ChangesUsed?.includes(key))) continue;
+      if (effect.resourceCost && (combatant.resources?.[effect.resourceCost.resourceId] ?? 0) < effect.resourceCost.amount) continue;
+      choices.push({ key, feature: feature.name, effect });
+    }
+  }
+  return choices;
+}
+
+/** The chance a change turns this failure into a success. */
+function d20ChangeChance(choice: D20ChangeChoice, d20: FailedD20, definition: CreatureDefinition): number {
+  const effect = choice.effect;
+  const attack = d20.roll === "attack";
+  const needed = d20.against - d20.modifier;
+  switch (effect.change) {
+    case "hit":
+      return 1;
+    case "twenty":
+      return attack || 20 >= needed ? 1 : 0;
+    case "add": {
+      // A natural 1 misses whatever is added.
+      if (attack && d20.natural === 1) return 0;
+      const parsed = parseDiceExpression(effect.dice ?? "1d4");
+      const low = parsed.terms.reduce((sum, term) => sum + term.count, 0) + parsed.modifier;
+      const high = parsed.terms.reduce((sum, term) => sum + term.count * term.sides, 0) + parsed.modifier;
+      const short = needed - d20.natural;
+      return high <= low ? (low >= short ? 1 : 0) : Math.min(1, Math.max(0, (high - short + 1) / (high - low + 1)));
+    }
+    case "reroll": {
+      const bonus = effect.bonus ? resolveNumericFormula(effect.bonus, definition) : 0;
+      const target = needed - bonus;
+      const lowest = attack ? Math.min(target, d20.criticalAt ?? 20) : target;
+      const single = attack ? Math.min(0.95, Math.max(0.05, (21 - Math.max(2, lowest)) / 20)) : Math.min(1, Math.max(0, (21 - target) / 20));
+      return d20.mode === "advantage" ? 1 - (1 - single) ** 2 : d20.mode === "disadvantage" ? single ** 2 : single;
+    }
+  }
+}
+
+/**
+ * The change the AI makes to a failed roll, or none: one that could help, the free ones first (Luck, Boon of Combat
+ * Prowess), then the likeliest to work. A resource is spent on a failed save, and on a missed attack unless the
+ * creature is conservative.
+ */
+function aiD20Change(combatant: CombatantState, choices: D20ChangeChoice[], d20: FailedD20, definition: CreatureDefinition): D20ChangeChoice | undefined {
+  return choices
+    .map((choice) => ({ choice, chance: d20ChangeChance(choice, d20, definition), free: !choice.effect.resourceCost }))
+    .filter((option) => option.chance > 0 && (option.free || d20.roll === "save" || combatant.resourceStance !== "conservative"))
+    .sort((a, b) => Number(b.free) - Number(a.free) || b.chance - a.chance || (a.choice.effect.resourceCost?.amount ?? 0) - (b.choice.effect.resourceCost?.amount ?? 0))[0]?.choice;
+}
+
+/** "Reroll, +9", "Add 1d10", "Make it a 20", "Hit instead". */
+function d20ChangeWords(effect: D20ChangeChoice["effect"], definition: CreatureDefinition): string {
+  if (effect.change === "reroll") {
+    const bonus = effect.bonus ? resolveNumericFormula(effect.bonus, definition) : 0;
+    return `Reroll${bonus ? `, +${bonus}` : ""}`;
+  }
+  if (effect.change === "add") return `Add ${effect.dice ?? "1d4"}`;
+  return effect.change === "twenty" ? "Make it a 20" : "Hit instead";
+}
+
+/**
+ * A failed save or a missed attack roll its roller may change: Luck, Indomitable, Heroic Inspiration, Stroke of Luck,
+ * Dark One's Own Luck, Boon of Combat Prowess. One change at a time while the roll still fails, each feature once a
+ * roll; a human playing the creature is asked, the AI decides for the rest (`aiD20Change`). Each change is logged
+ * (`RollChanged`). The roll as it ends up, or undefined when nothing changed it.
+ */
+function changeFailedD20(
+  state: EngineState,
+  combatant: CombatantState,
+  failed: FailedD20,
+  succeeds: (natural: number, total: number) => boolean
+): { natural: number; total: number; hit: boolean } | undefined {
+  const definition = getDefinition(state.snapshot, combatant);
+  const used = new Set<string>();
+  let d20 = failed;
+  let total = failed.natural + failed.modifier;
+  let changedAny = false;
+  for (;;) {
+    const choices = d20ChangeChoices(state, combatant, d20, used);
+    if (!choices.length) break;
+    const ai = aiD20Change(combatant, choices, d20, definition);
+    const answer = askDecision<D20ChangeRequest>(state, {
+      kind: "d20-change", combatantId: combatant.id, roll: d20.roll, natural: d20.natural, total, against: d20.against, label: d20.label,
+      options: choices.map((choice) => ({
+        id: choice.key,
+        name: choice.feature,
+        does: d20ChangeWords(choice.effect, definition),
+        ...(choice.effect.resourceCost ? { cost: { ...choice.effect.resourceCost, left: combatant.resources?.[choice.effect.resourceCost.resourceId] ?? 0 } } : {})
+      })),
+      aiChoice: ai?.key ?? null
+    }, combatant.id);
+    const picked = answer ? choices.find((choice) => choice.key === answer.optionId) : ai;
+    if (!picked) break;
+    used.add(picked.key);
+    const effect = picked.effect;
+    if (effect.resourceCost) {
+      const { resourceId, amount } = effect.resourceCost;
+      combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) - amount };
+    }
+    if (effect.oncePerTurn) {
+      combatant.turnFlags = { ...(combatant.turnFlags ?? {}), d20ChangesUsed: [...(combatant.turnFlags?.d20ChangesUsed ?? []), picked.key] };
+    }
+    const before = { natural: d20.natural, total };
+    let rolled: DiceRollResult | undefined;
+    let hit = false;
+    if (effect.change === "reroll") {
+      const bonus = effect.bonus ? resolveNumericFormula(effect.bonus, definition) : 0;
+      rolled = rollD20(state.rng, { advantage: d20.mode === "advantage", disadvantage: d20.mode === "disadvantage" });
+      d20 = { ...d20, natural: rolled.total };
+      total = rolled.total + d20.modifier + bonus;
+    } else if (effect.change === "add") {
+      rolled = rollDice(effect.dice ?? "1d4", state.rng);
+      total += rolled.total;
+    } else if (effect.change === "twenty") {
+      total += 20 - d20.natural;
+      d20 = { ...d20, natural: 20 };
+    } else {
+      hit = true;
+    }
+    changedAny = true;
+    const success = hit || succeeds(d20.natural, total);
+    state.log.push(event(state, "RollChanged", `${combatant.displayName} uses ${picked.feature}: ${d20.roll === "save" ? "the save" : "the attack roll"} ${success ? "now succeeds" : "still fails"}${hit ? "" : ` (${total})`}`, {
+      combatantId: combatant.id, feature: picked.feature, change: effect.change, roll: d20.roll, before, natural: d20.natural, total, against: d20.against,
+      ...(rolled ? { rolled } : {}), ...(effect.resourceCost ? { resourceId: effect.resourceCost.resourceId, left: combatant.resources?.[effect.resourceCost.resourceId] } : {}), success
+    }));
+    if (success) return { natural: d20.natural, total, hit };
+  }
+  return changedAny ? { natural: d20.natural, total, hit: false } : undefined;
+}
+
 export function rollSavingThrow(state: EngineState, target: CombatantState, ctx: SaveContext): SavingThrowResult {
   const definition = getDefinition(state.snapshot, target);
   const { bonus, featureBonus, featureAdvantage } = saveRollInputs(state, target, ctx);
@@ -6718,6 +6889,17 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
   if (overridden) {
     result.success = overridden !== "failure";
     result.overridden = overridden;
+  }
+  // Indomitable, Luck, Heroic Inspiration: the roller may change a failed save it has seen (not one a DM ruled).
+  if (!result.success && !overridden) {
+    const natural = roll.rolls.length > 1 ? roll.total - roll.modifier : roll.rolls[0]?.value ?? roll.total - roll.modifier;
+    const changed = changeFailedD20(state, target, {
+      roll: "save", natural, modifier: roll.modifier, against: ctx.dc, mode: featureAdvantage.applied ? "advantage" : "normal", label: ctx.label
+    }, (_natural, total) => total >= ctx.dc);
+    if (changed) {
+      result.roll = { ...roll, total: changed.total };
+      result.success = changed.total >= ctx.dc;
+    }
   }
   if (!result.success && ctx.kind !== "concentration") {
     const resistance = legendaryResistanceFor(state, definition, target, ctx);

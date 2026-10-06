@@ -145,7 +145,9 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     // The simulator already adds the ability modifier to a light weapon's off-hand attack, so there's nothing to switch on.
     grants: [{ key: "feat", feature: runs({ feat: "two-weapon-fighting" }) }]
   },
-  epicBoon("boon-of-combat-prowess", "Boon of Combat Prowess", reference({ feat: "boon-of-combat-prowess" })),
+  epicBoon("boon-of-combat-prowess", "Boon of Combat Prowess", runs({ feat: "boon-of-combat-prowess" }, {
+    effects: [{ kind: "d20-change", rolls: ["attack"], change: "hit", oncePerTurn: true }]
+  })),
   epicBoon("boon-of-dimensional-travel", "Boon of Dimensional Travel", reference({ feat: "boon-of-dimensional-travel" })),
   epicBoon("boon-of-fate", "Boon of Fate", reference({ feat: "boon-of-fate" })),
   epicBoon("boon-of-irresistible-offense", "Boon of Irresistible Offense", reference({ feat: "boon-of-irresistible-offense" })),

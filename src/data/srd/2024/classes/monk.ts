@@ -152,7 +152,9 @@ export const MONK: ClassDefinition = {
     },
     {
       level: 14,
-      grants: [grant("disciplined-survivor", runs("monk_disciplined-survivor", { notSimulated: "spending a point to reroll a failed save." }), { adjust: { saves: "all" } })]
+      grants: [grant("disciplined-survivor", runs("monk_disciplined-survivor", {
+        effects: [{ kind: "d20-change", rolls: ["save"], change: "reroll", resourceCost: { resourceId: "focus-points", amount: 1 } }]
+      }), { adjust: { saves: "all" } })]
     },
     { level: 15, grants: [grant("perfect-focus", informational("monk_perfect-focus"))] },
     {

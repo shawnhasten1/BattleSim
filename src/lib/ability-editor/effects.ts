@@ -104,6 +104,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
   },
   // Saving throws
   {
+    kind: "d20-change", label: "Change a failed roll", hint: "Luck, Indomitable, Heroic Inspiration: reroll a failed save or a missed attack, add a die, make it a 20, or hit", theme: "saves", when: false, scope: false,
+    blank: () => ({ kind: "d20-change", rolls: ["save"], change: "reroll" })
+  },
+  {
     kind: "save-bonus", label: "Bonus to its saves", hint: "All saves or one ability's", theme: "saves", when: false, scope: false,
     blank: () => ({ kind: "save-bonus", bonus: { base: 1 } })
   },

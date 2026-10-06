@@ -65,7 +65,7 @@ describe("the effect registry", () => {
   it("covers every kind once, each in a theme, each blank its own kind", () => {
     const kinds = EFFECT_KINDS.map((spec) => spec.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
-    expect(kinds).toHaveLength(26);
+    expect(kinds).toHaveLength(27);
     for (const spec of EFFECT_KINDS) {
       expect(spec.blank().kind).toBe(spec.kind);
       expect(THEMES.map((theme) => theme.theme)).toContain(spec.theme);

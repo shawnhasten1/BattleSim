@@ -93,6 +93,40 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(featureStatblock(named("Quick Start"), fighter()).text).toMatch(/^It gains a \+\d bonus to Initiative rolls\.$/);
   });
 
+  it("Change a failed roll: each roll, each change, and its limits", async () => {
+    await blankFeature("Lucky Break");
+    const card = await addEffect(/^Change a failed roll/, "Change a failed roll");
+    // A failed save and a reroll to start with; a missed attack too, and "Hit instead" appears.
+    expect(within(card.getByRole("radiogroup", { name: "It can" })).queryByRole("radio", { name: "Hit instead" })).toBeNull();
+    await chip(card, "Rolls it changes", "a missed attack");
+    await radio(card, "It can", "Add a die");
+    await retype(card.getByLabelText("Die it adds"), "1d8");
+    await userEvent.click(card.getByRole("checkbox", { name: "Only on a natural 1" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "Once until the start of its next turn" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Lucky Break").effects).toEqual([{ kind: "d20-change", rolls: ["save", "attack"], change: "add", dice: "1d8", onNatural1: true, oncePerTurn: true }]);
+  });
+
+  it("Change a failed roll: a reroll with a bonus, or a hit, spending a pool", async () => {
+    await blankFeature("Second Try");
+    const card = await addEffect(/^Change a failed roll/, "Change a failed roll");
+    await userEvent.click(card.getByRole("checkbox", { name: "Adding a bonus to the new roll" }));
+    expect(card.getAllByLabelText(/^Bonus to the new roll/).length).toBeGreaterThan(0);
+    await userEvent.click(card.getByRole("checkbox", { name: "Adding a bonus to the new roll" }));
+    await chip(card, "Rolls it changes", "a missed attack");
+    await radio(card, "It can", "Hit instead");
+    // No attack, no hit: back to a reroll.
+    await chip(card, "Rolls it changes", "a missed attack");
+    expect(within(card.getByRole("radiogroup", { name: "It can" })).getByRole("radio", { name: "Reroll" }).getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(card.getByRole("checkbox", { name: "Spends a use" }));
+    expect(card.getByLabelText(/name/i)).toBeTruthy();
+    await userEvent.click(card.getByRole("checkbox", { name: "Spends a use" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Second Try").effects).toEqual([{ kind: "d20-change", rolls: ["save"], change: "reroll" }]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");
