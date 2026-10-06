@@ -15,11 +15,11 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 7 | 2 | 8 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 8 | 2 | 7 | 6 | 1 |
 | Bard (College of Lore) | 17 | 0 | 2 | 4 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 1 | 3 | 5 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
-| Fighter (Champion) | 21 | 10 | 1 | 4 | 5 | 1 |
+| Fighter (Champion) | 21 | 12 | 0 | 3 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 6 | 1 | 7 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
@@ -37,13 +37,13 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
-| `free-move` | Moving as part of another action (Instinctive Pounce, Tactical Shift, Withdraw, Fleet Step) | Barbarian, Fighter, Monk, Feats | 1 | Instinctive Pounce (Barbarian); Tactical Shift (Fighter); Remarkable Athlete (Champion); Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `slot-conversion` | Turning spell slots into other resources, or back (Font of Magic, Wild Resurgence) | Bard, Druid, Sorcerer, Feats | 1 | Font of Inspiration (Bard); Wild Resurgence (Druid); Font of Magic (Sorcerer); Boon of Spell Recall (feat) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery) |
 | `next-attack` | Advantage on the next attack roll against a creature, or on the next one this turn | Fighter, Monk, Rogue | 3 | Studied Attacks (Fighter); Stunning Strike (Monk); Steady Aim (Rogue) |
 | `combined-utility` | Two of Dash, Disengage and Dodge in one bonus action, or Dash with temporary hit points | Monk, Species | 1 | Monk's Focus (Monk); Heightened Focus (Monk); Adrenaline Rush (Orc) |
 | `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
+| `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `pool-heal` | Healing from a pool by any amount (Lay on Hands, Preserve Life) | Cleric, Paladin | 1 | Preserve Life (Life Domain); Lay On Hands (Paladin) |
 | `weapon-property-scope` | Effects limited to weapons with a property: finesse or ranged (Sneak Attack), two-handed (Great Weapon Fighting) | Rogue, Feats | 1 | Sneak Attack (Rogue); Great Weapon Fighting (feat) |
@@ -106,7 +106,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Fast Movement | builder |  | +10 ft of speed; heavy armor isn't checked. |
 | 7 | Feral Instinct | full |  | Advantage on Initiative rolls. |
-| 7 | Instinctive Pounce | manual | `free-move` |  |
+| 7 | Instinctive Pounce | full |  | Half its speed more movement the turn it rages. |
 | 9 | Brutal Strike | manual | `dice-trade` |  |
 | 11 | Relentless Rage | manual | `relentless` |  |
 | 13 | Improved Brutal Strike | manual | `dice-trade` |  |
@@ -220,7 +220,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Fighter Subclass | builder |  | The subclass choice. |
 | 4, 6, 8, 12, 14, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Tactical Shift | manual | `free-move` |  |
+| 5 | Tactical Shift | full |  | Half its speed more movement with Second Wind, and no opportunity attacks for the rest of that turn (the rules say for that move). |
 | 9, 13, 17 | Indomitable | full |  | Rerolls a failed save with the fighter level added. |
 | 9 | Tactical Master | manual | `weapon-mastery` |  |
 | 11 | Two Extra Attacks | full |  |  |
@@ -233,7 +233,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Improved Critical | full |  | A weapon's or an Unarmed Strike's attack roll of 19 or 20 is a critical hit. |
-| 3 | Remarkable Athlete | partial | `free-move` | Advantage on Initiative rolls runs; the half-speed move after a critical hit doesn't, and Athletics checks are outside a fight. |
+| 3 | Remarkable Athlete | full |  | Advantage on Initiative rolls, and half its speed more movement after a critical hit on its turn, with no opportunity attacks for the rest of it; Athletics checks are outside a fight. |
 | 7 | Additional Fighting Style | builder |  | Another Fighting Style feat. |
 | 10 | Heroic Warrior | full |  | Heroic Inspiration back at the start of each turn without it; spent rerolling a failed save or a missed attack roll. |
 | 15 | Superior Critical | full |  | 18 to 20. |

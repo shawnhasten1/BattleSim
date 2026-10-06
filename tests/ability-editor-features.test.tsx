@@ -158,6 +158,22 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     ]);
   });
 
+  it("A move with something else: when, how far, and opportunity attacks", async () => {
+    await blankFeature("Quick Feet");
+    const card = await addEffect(/^A move with something else/, "A move with something else");
+    await userEvent.click(card.getByRole("checkbox", { name: "Half its speed" }));
+    await retype(card.getByLabelText("Feet it moves"), "15");
+    await userEvent.click(card.getByRole("checkbox", { name: "Without provoking opportunity attacks" }));
+    await radio(card, "It moves when it", "Spends a use of a pool");
+    // The creature has Second Wind's pool to pick.
+    const pool = card.getAllByRole("combobox").find((box) => within(box).queryByRole("option", { name: /second wind/i }));
+    expect(pool).toBeDefined();
+    await userEvent.selectOptions(pool!, within(pool!).getByRole("option", { name: /second wind/i }));
+    await done(card);
+    await addToSheet();
+    expect(named("Quick Feet").effects).toEqual([{ kind: "free-move", on: { spends: "second-wind" }, feet: 15, noOpportunityAttacks: true }]);
+  });
+
   it("Magic Resistance: advantage on saves against spells and other magic", async () => {
     await blankFeature("Magic Resistance");
     const card = await addEffect(/^Advantage on its saves/, "Advantage on its saves");

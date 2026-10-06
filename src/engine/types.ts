@@ -492,6 +492,17 @@ export type FeatureEffect =
     oncePerTurn?: boolean;
   }
   | {
+    /**
+     * Moving as part of something else: up to half its speed (or `feet`) more this turn, when it spends a use of
+     * `on.spends` (Rage: Instinctive Pounce; Second Wind: Tactical Shift) or scores a critical hit on its turn
+     * (Remarkable Athlete). `noOpportunityAttacks`: none for the rest of the turn (the rules say only for that move).
+     */
+    kind: "free-move";
+    on: { spends: string } | "critical-hit";
+    feet?: number;
+    noOpportunityAttacks?: boolean;
+  }
+  | {
     /** Its initiative rolls: advantage (Feral Instinct, Remarkable Athlete), and a bonus added (Alert: the proficiency bonus). */
     kind: "initiative";
     advantage?: boolean;

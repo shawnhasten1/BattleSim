@@ -97,7 +97,7 @@ export const BARBARIAN: ClassDefinition = {
       level: 7,
       grants: [
         grant("feral-instinct", runs("barbarian_feral-instinct", { effects: [{ kind: "initiative", advantage: true }] })),
-        grant("instinctive-pounce", reference("barbarian_instinctive-pounce"))
+        grant("instinctive-pounce", runs("barbarian_instinctive-pounce", { effects: [{ kind: "free-move", on: { spends: "rage" } }] }))
       ]
     },
     { level: 9, grants: [grant("brutal-strike", reference("barbarian_brutal-strike"))] },

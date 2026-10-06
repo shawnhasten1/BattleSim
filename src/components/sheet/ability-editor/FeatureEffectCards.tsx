@@ -832,6 +832,23 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: it works on every Dexterity save that would halve damage.</p>;
     case "no-critical-hits":
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
+    case "free-move": {
+      const spends = effect.on === "critical-hit" ? undefined : effect.on.spends;
+      return (
+        <>
+          <Segmented label="It moves when it" value={effect.on === "critical-hit" ? "critical-hit" : "spends"}
+            options={[{ value: "critical-hit", label: "Scores a critical hit" }, { value: "spends", label: "Spends a use of a pool" }]}
+            onChange={(on) => set({ ...effect, on: on === "critical-hit" ? "critical-hit" : { spends: spends ?? "" } })} />
+          {effect.on !== "critical-hit" ? (
+            <PoolPicker definition={definition} weapon={weapon} newPools={newPools} noAmount startCreating={!spends}
+              value={spends ? { resourceId: spends, amount: 1 } : undefined} onChange={(cost) => set({ ...effect, on: { spends: cost.resourceId } })} />
+          ) : null}
+          <Check label="Half its speed" checked={effect.feet === undefined} onChange={(on) => set(opt(effect, "feet", on ? undefined : 10))} />
+          {effect.feet !== undefined ? <NumberField label="Feet it moves" value={effect.feet} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, feet: n })} /> : null}
+          <Check label="Without provoking opportunity attacks" checked={effect.noOpportunityAttacks === true} onChange={(on) => set(opt(effect, "noOpportunityAttacks", on ? true : undefined))} />
+        </>
+      );
+    }
     case "initiative":
       return (
         <>

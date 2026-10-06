@@ -2228,6 +2228,10 @@ function resolveAttackCore(
     attacker.turnFlags = { ...(attacker.turnFlags ?? {}), droppedCreature: true, bonusMovement: (attacker.turnFlags?.bonusMovement ?? 0) + extraSquares };
   }
   if (hit) applyMeleeRetaliation(state, attacker, target, action);
+  // Remarkable Athlete: a critical hit on its own turn lets it move.
+  if (hit && critical && attacker.state === "active" && state.snapshot.combatants[state.snapshot.turnIndex]?.id === attacker.id) {
+    grantFreeMoves(state, attacker, { criticalHit: true });
+  }
   if (hit && attacker.state === "active") spillMarkDamage(state, attacker, target, attackerDefinition, targetHitDamage.spills ?? []);
   if (hit && action.cleave && action.attackType === "melee" && attacker.state === "active") {
     cleaveAfterHit(state, attacker, target, attackerDefinition, action);
@@ -2575,6 +2579,8 @@ export function resolveHealingAction(
   }
   validateAndSpendAction(healer, action);
   declareAction(state, healer, action, { target });
+  // Tactical Shift: Second Wind comes with a move.
+  if (action.resourceCost) grantFreeMoves(state, healer, { spends: action.resourceCost.resourceId });
   if (counterspellWindow(state, healer, action, { targetIds: [target.id] })) {
     return { healingApplied: 0 };
   }
@@ -2949,6 +2955,7 @@ export function resolveActivateFeatureAction(
   }
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action);
+  if (action.resourceCost) grantFreeMoves(state, actor, { spends: action.resourceCost.resourceId });
 
   const feature = featureSources(actorDefinition, actor).find((candidate) => candidate.id === action.featureId);
   // A self-contained activation (its own `condition` buff, or a reaction whose
@@ -2983,6 +2990,32 @@ export function resolveActivateFeatureAction(
 
   const conditionId = applyFeatureActivationCondition(state, actor, action);
   return { conditionId };
+}
+
+/**
+ * Movement that comes with something else (Instinctive Pounce with Rage, Tactical Shift with Second Wind, Remarkable
+ * Athlete after a critical hit): half its speed (or the effect's feet) added to this turn's, and with
+ * `noOpportunityAttacks` no opportunity attacks for the rest of the turn.
+ */
+function grantFreeMoves(state: EngineState, actor: CombatantState, trigger: { spends?: string; criticalHit?: boolean }): void {
+  const definition = getDefinition(state.snapshot, actor);
+  for (const feature of featureSources(definition, actor)) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "free-move") continue;
+      const fires = effect.on === "critical-hit" ? trigger.criticalHit === true : trigger.spends !== undefined && effect.on.spends === trigger.spends;
+      if (!fires) continue;
+      const feet = effect.feet ?? Math.floor(movementReference(movementProfileOf(definition)) / 2);
+      const squares = feet / state.snapshot.map.grid.distancePerSquare;
+      actor.turnFlags = {
+        ...(actor.turnFlags ?? {}),
+        bonusMovement: (actor.turnFlags?.bonusMovement ?? 0) + squares,
+        ...(effect.noOpportunityAttacks ? { disengaged: true } : {})
+      };
+      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName}'s ${feature.name}: ${feet} ft more movement${effect.noOpportunityAttacks ? ", provoking no opportunity attacks" : ""}`, {
+        combatantId: actor.id, featureId: feature.id, featureName: feature.name, effectKind: effect.kind, feet
+      }));
+    }
+  }
 }
 
 export function resetActionEconomy(combatant: CombatantState): void {

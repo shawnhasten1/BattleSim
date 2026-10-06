@@ -572,6 +572,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${attackScope(effect, definition)}attack rolls`)}${usingText(effect)}${gate}.`;
     case "d20-change":
       return d20ChangeSentence(effect, definition, who);
+    case "free-move":
+      return `${effect.on === "critical-hit" ? `When ${who.subject} scores a critical hit on its turn` : `When ${who.subject} uses ${poolName(effect.on.spends, 1, definition)}`}, ${who.subject} can move up to ${effect.feet ? `${effect.feet} feet` : "half its speed"}${effect.noOpportunityAttacks ? " without provoking opportunity attacks" : ""}.`;
     case "spell-damage-ability":
       return `${S} adds ${who.possessive} ${ABILITY_NAME[effect.ability]} modifier to one damage roll of ${spellScopeText(effect, who)}.`;
     case "spell-half-on-miss":
@@ -725,6 +727,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
     case "spell-half-on-miss": return `half damage on a miss or a save: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
+    case "free-move": return `${effect.feet ? `${effect.feet} ft` : "half speed"} move ${effect.on === "critical-hit" ? "after a critical hit" : `with ${poolName(effect.on.spends, 1, definition)}`}${effect.noOpportunityAttacks ? ", no opportunity attacks" : ""}`;
     case "d20-change": {
       const failed = effect.onNatural1 ? "a 1" : joinList(effect.rolls.map((roll) => (roll === "save" ? "a failed save" : "a miss")), "or");
       const does = effect.change === "reroll" ? `reroll${effect.bonus ? ` +${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "").replace(/^\+/, "")}` : ""}`

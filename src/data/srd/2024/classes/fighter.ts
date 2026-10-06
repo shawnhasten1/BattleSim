@@ -80,7 +80,7 @@ export const FIGHTER: ClassDefinition = {
       level: 5,
       grants: [
         grant("extra-attack", attacks("fighter_extra-attack", 2)),
-        grant("tactical-shift", reference("fighter_tactical-shift"))
+        grant("tactical-shift", runs("fighter_tactical-shift", { effects: [{ kind: "free-move", on: { spends: "second-wind" }, noOpportunityAttacks: true }] }))
       ]
     },
     {
@@ -136,8 +136,7 @@ export const CHAMPION: SubclassDefinition = {
       grants: [
         grant("improved-critical", critical("fighter_champion_improved-critical", 19)),
         grant("remarkable-athlete", runs("fighter_champion_remarkable-athlete", {
-          effects: [{ kind: "initiative", advantage: true }],
-          notSimulated: "moving half its speed without provoking opportunity attacks after a critical hit."
+          effects: [{ kind: "initiative", advantage: true }, { kind: "free-move", on: "critical-hit", noOpportunityAttacks: true }]
         }))
       ]
     },

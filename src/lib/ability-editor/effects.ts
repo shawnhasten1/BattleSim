@@ -46,6 +46,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "attack-bonus", condition: "always", bonus: { base: 1 } })
   },
   {
+    kind: "free-move", label: "A move with something else", hint: "Instinctive Pounce with Rage, Tactical Shift with Second Wind, a move after a critical hit", theme: "turn", when: false, scope: false,
+    blank: () => ({ kind: "free-move", on: "critical-hit" })
+  },
+  {
     kind: "initiative", label: "Initiative", hint: "Advantage on the roll (Feral Instinct) or a bonus to it (Alert)", theme: "turn", when: false, scope: false,
     blank: () => ({ kind: "initiative", advantage: true })
   },
