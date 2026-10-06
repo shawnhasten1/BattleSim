@@ -39,7 +39,8 @@ export const GAPS = {
   "gain-speed": "Dragon Wings again for sorcery points",
   "activated-aura": "An aura switched on for a while (Holy Nimbus)",
   "reaction-attack": "A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage)",
-  "summon-stat-blocks": "Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon)",
+  "summon-stat-blocks": "Familiars: a summon that can't attack but helps (Find Familiar)",
+  "concentration-optional": "Casting a concentration spell without concentration, for a shorter time (Dragon Companion)",
   "wild-shape": "Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid",
   "extra-target": "A spell aimed at a second creature for free (Words of Creation)",
   "free-cast-any": "Casting any spell of a level from a list for free, chosen when cast (Divine Intervention)",
@@ -225,7 +226,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "paladin_paladin-subclass": SUBCLASS,
   "paladin_ability-score-improvement": FEAT_CHOICE,
   "paladin_extra-attack": full(),
-  "paladin_faithful-steed": manual(["summon-stat-blocks"]),
+  "paladin_faithful-steed": full("Find Steed always prepared and once without a slot: the Otherworldly Steed, at the slot's level, sharing the paladin's initiative."),
   "paladin_aura-of-protection": full("Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied."),
   "paladin_abjure-foes": full("Charisma-modifier many (at least one) enemies within 60 ft, those with the most hit points left: Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns."),
   "paladin_aura-of-courage": full("Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there)."),
@@ -315,7 +316,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   "sorcerer_draconic-sorcery_draconic-spells": PREPARED("Draconic spells"),
   "sorcerer_draconic-sorcery_elemental-affinity": full("The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one."),
   "sorcerer_draconic-sorcery_dragon-wings": partial(["gain-speed"], "A bonus action: a fly speed of 60 ft for an hour, once a fight; again for 3 sorcery points doesn't run."),
-  "sorcerer_draconic-sorcery_dragon-companion": manual(["summon-stat-blocks"]),
+  "sorcerer_draconic-sorcery_dragon-companion": partial(["concentration-optional"], "Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; casting it without concentration doesn't run."),
 
   /* Warlock */
   "warlock_eldritch-invocations": builder("Invocation choices, as many as the table gives."),

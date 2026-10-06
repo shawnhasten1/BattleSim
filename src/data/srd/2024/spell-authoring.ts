@@ -243,6 +243,32 @@ export const AUTHORED_2024: Readonly<Record<string, AuthoredSpell>> = {
       automationSupport: "full"
     }
   },
+  "find-steed": {
+    // The Otherworldly Steed, made for the slot's level: it shares the caster's initiative and fights beside it (riding
+    // it isn't simulated).
+    castingTime: "action", range: 30, automationSupport: "partial",
+    description: "Not simulated: riding the steed (mounted combat) and Life Bond.",
+    action: {
+      kind: "summon", actionType: "action", range: 30, choice: "pick", sharesInitiative: true,
+      options: (["celestial", "fey", "fiend"] as const).map((creatureType) => ({
+        id: creatureType, label: `${creatureType.charAt(0).toUpperCase()}${creatureType.slice(1)} steed`, count: 1,
+        definitionId: `template:otherworldly-steed:${creatureType}`, template: { kind: "otherworldly-steed" as const, creatureType }
+      })),
+      automationSupport: "full"
+    }
+  },
+  "summon-dragon": {
+    // The Draconic Spirit, made for the slot's level, its breath of the type chosen (the caster resists it too).
+    castingTime: "action", range: 60, concentration: true, automationSupport: "full",
+    action: {
+      kind: "summon", actionType: "action", range: 60, choice: "pick", sharesInitiative: true, concentration: true, durationRounds: 600,
+      options: (["fire", "cold", "lightning", "acid", "poison"] as const).map((damageType) => ({
+        id: damageType, label: `${damageType.charAt(0).toUpperCase()}${damageType.slice(1)} breath`, count: 1,
+        definitionId: `template:draconic-spirit:${damageType}`, template: { kind: "draconic-spirit" as const, damageType }
+      })),
+      automationSupport: "full"
+    }
+  },
   "cure-wounds": {
     castingTime: "action", range: "touch", upcast: { perSlotAboveBase: { damageDice: "2d8" } }, automationSupport: "full",
     action: {

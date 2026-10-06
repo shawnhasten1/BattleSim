@@ -12,7 +12,8 @@ export function collectDependencies(definition: CreatureDefinition): Id[] {
   // Actions a not-yet-enabled optional rule would grant count too: switching it on later must find its targets.
   const optionalGrants = [...(definition.features ?? []), ...(definition.traits ?? [])].flatMap((feature) => feature.grantedActions ?? []);
   for (const action of [...getExecutableActions(definition), ...optionalGrants]) {
-    if (action.kind === "summon") for (const option of action.options) ids.add(option.definitionId);
+    // A templated summon (Find Steed) makes its own stat block: nothing to embed.
+    if (action.kind === "summon") for (const option of action.options) if (!option.template) ids.add(option.definitionId);
     if (action.kind === "transform") for (const form of action.forms) ids.add(form.definitionId);
   }
   ids.delete(definition.id);

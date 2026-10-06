@@ -208,6 +208,12 @@ export const DRACONIC_SORCERY: SubclassDefinition = {
         notSimulated: "using it again for 3 sorcery points."
       }), { pool: { id: "dragon-wings", size: 1 } })]
     },
-    { level: 18, grants: [grant("dragon-companion", reference("sorcerer_draconic-sorcery_dragon-companion"))] }
+    {
+      level: 18,
+      // Summon Dragon always prepared, and once without a slot.
+      grants: [grant("dragon-companion", runs("sorcerer_draconic-sorcery_dragon-companion", {
+        notSimulated: "casting it without concentration (for 1 minute)."
+      }), { spells: [spell("summon-dragon")], freeCasts: [{ spell: spell("summon-dragon"), uses: 1 }] })]
+    }
   ]
 };

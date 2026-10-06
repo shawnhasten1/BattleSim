@@ -3,6 +3,7 @@ import type {
   CombatantState,
   CombatLogEvent,
   ConditionInstance,
+  CreatureDefinition,
   DeathSaveState,
   EncounterSnapshot,
   Point
@@ -213,6 +214,9 @@ function applyEvent(
       // event here, which mutates an existing entry — this one inserts fresh ones from the logged data.
       const combatants = Array.isArray(data.combatants) ? (data.combatants as CombatantState[]) : [];
       if (combatants.length === 0) return;
+      // Find Steed, Summon Dragon: the stat block made for the summon.
+      const made = data.definition as CreatureDefinition | undefined;
+      if (made && !snapshot.definitions.some((definition) => definition.id === made.id)) snapshot.definitions = [...snapshot.definitions, structuredClone(made)];
       const insertIndex = typeof data.insertIndex === "number" ? data.insertIndex : snapshot.combatants.length;
       const fresh = combatants.map((combatant) => structuredClone(combatant));
       snapshot.combatants.splice(insertIndex, 0, ...fresh);

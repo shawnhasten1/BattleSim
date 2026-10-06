@@ -1997,7 +1997,17 @@ export interface SummonOption {
   label: string;
   /** A flat count, or a dice expression rolled once per use ("2d4 dretches"). */
   count: number | { dice: string };
+  /**
+   * A spell's own stat block, made when it's summoned from the summoner's numbers and the slot's level (Find Steed's
+   * Otherworldly Steed, Summon Dragon's Draconic Spirit). `definitionId` then only names the template.
+   */
+  template?: SummonTemplate;
 }
+
+/** A stat block a spell's summon uses (SRD 5.2), and the choice made when it's cast. */
+export type SummonTemplate =
+  | { kind: "otherworldly-steed"; creatureType: "celestial" | "fey" | "fiend" }
+  | { kind: "draconic-spirit"; damageType: "acid" | "cold" | "fire" | "lightning" | "poison" };
 
 /**
  * Conjure Animals / Summon Demon / Animate Dead — produces new combatants allied with the caster.
@@ -2022,6 +2032,8 @@ export interface SummonActionDefinition {
   durationRounds?: number;
   /** Ends when the caster's concentration ends, in addition to any `durationRounds`. */
   concentration?: boolean;
+  /** It shares the summoner's initiative, taking its turn right after the summoner's (Find Steed, Summon Dragon). */
+  sharesInitiative?: boolean;
   /** How many summoned-of-summoned generations deep this can go before a spawned creature's own summon actions are refused. Default 2. */
   maxGeneration?: number;
   resourceCost?: ResourceCost;
@@ -2701,6 +2713,8 @@ export interface CombatantState {
     expiresRound?: number;
     /** Ends when this combatant's concentration source loses concentration (set for a concentration summon). */
     concentrationSourceId?: Id;
+    /** It takes its turn right after its summoner's, on the same initiative (`SummonActionDefinition.sharesInitiative`). */
+    followsSummoner?: boolean;
   };
   /** Currently wearing another of its own definitions (a werewolf in Hybrid Form). Resolved by `getDefinition`. */
   activeForm?: { definitionId: Id };

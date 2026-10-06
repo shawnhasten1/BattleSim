@@ -1,5 +1,6 @@
 import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { activeMastery, isLightWeapon, masteryRiders } from "./mastery";
+import { templateCreature } from "./summon-templates";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
@@ -62,6 +63,9 @@ import type {
   SaveActionDefinition,
   TerrainZone,
   MultiattackStep,
+  SummonActionDefinition,
+  SummonOption,
+  SummonTemplate,
   UtilityActionDefinition,
   WeaponCantrip,
   ZoneTrigger
@@ -1197,6 +1201,16 @@ export function applyTimedFeatureEffects(state: EngineState, combatantId: Id, ti
  * that was rolled before the run by initiative then id, as it always has — see there.
  */
 export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState, b: CombatantState): number {
+  // Find Steed, Summon Dragon: a summon that shares its summoner's initiative goes right after it.
+  const lead = (combatant: CombatantState) => (combatant.summon?.followsSummoner
+    ? snapshot.combatants.find((candidate) => candidate.id === combatant.summon!.summonerId) ?? combatant
+    : combatant);
+  const aLead = lead(a);
+  const bLead = lead(b);
+  if (aLead !== a || bLead !== b) {
+    if (aLead.id === bLead.id) return a.id === aLead.id ? -1 : b.id === bLead.id ? 1 : a.id.localeCompare(b.id);
+    return compareInitiative(snapshot, aLead, bLead);
+  }
   const aDefinition = getDefinition(snapshot, a);
   const bDefinition = getDefinition(snapshot, b);
   return (b.initiative ?? 0) - (a.initiative ?? 0)
@@ -5100,7 +5114,10 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
   if (!chosen) {
     return [];
   }
-  const summonedDefinition = state.snapshot.definitions.find((definition) => definition.id === chosen.definitionId);
+  // Find Steed, Summon Dragon: the spell's own stat block, made now.
+  const summonedDefinition = chosen.template
+    ? templateDefinition(state, casterDefinition, action, chosen, chosen.template)
+    : state.snapshot.definitions.find((definition) => definition.id === chosen.definitionId);
   if (!summonedDefinition) {
     throw new Error(`${caster.displayName}'s ${action.name} references an unknown creature "${chosen.definitionId}" — is it embedded in this encounter?`);
   }
@@ -5135,13 +5152,22 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
       summonerId: casterId,
       generation,
       expiresRound: action.durationRounds ? state.snapshot.round + action.durationRounds : undefined,
-      concentrationSourceId: action.concentration ? casterId : undefined
+      concentrationSourceId: action.concentration ? casterId : undefined,
+      ...(action.sharesInitiative ? { followsSummoner: true } : {})
     }
   }));
 
-  const { initiative, insertIndex } = insertIntoTurnOrder(state, created);
+  const { initiative, insertIndex } = action.sharesInitiative ? insertAfterSummoner(state, caster, created) : insertIntoTurnOrder(state, created);
   if (action.concentration) {
     caster.concentration = { sourceConditionId: undefined };
+  }
+  // Summon Dragon's Shared Resistances: the summoner resists its breath's type while the spell lasts.
+  if (chosen.template?.kind === "draconic-spirit") {
+    applyCondition(state, caster.id, {
+      id: `${caster.id}:shared-resistances`, name: "custom", sourceName: "Shared Resistances", sourceCombatantId: caster.id,
+      startedRound: state.snapshot.round, modifiers: { damageAdjustments: [{ type: "resistance", damageType: chosen.template.damageType }] },
+      ...(action.concentration ? { concentration: true } : {})
+    });
   }
   state.log.push(event(state, "CombatantSpawned",
     `Success - ${action.name}: ${caster.displayName}${chanceRoll === undefined ? "" : ` rolled ${chanceRoll} against ${action.chance}% and`} summons ${created.length} ${created.length === 1 ? summonedDefinition.name : pluralName(summonedDefinition.name)} (initiative ${initiative})`, {
@@ -5149,9 +5175,52 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
       chance: action.chance, roll: chanceRoll, success: true,
       // The full combatant objects, not just ids: replay reconstructs board state purely by folding the log
       // forward over the pre-run snapshot, which never had these combatants in it. (`event` keeps a copy.)
-      combatants: created
+      combatants: created,
+      // A stat block made for this summon, which that snapshot didn't have either.
+      ...(chosen.template ? { definition: summonedDefinition } : {})
     }));
   return created;
+}
+
+/**
+ * Find Steed, Summon Dragon: the stat block a templated summon uses, made from the caster's spellcasting (its attack
+ * bonus, save DC and proficiency bonus) and the slot's level (the spell's own for a free cast), once per caster and level
+ * and kept in the encounter's definitions.
+ */
+function templateDefinition(state: EngineState, casterDefinition: CreatureDefinition, action: SummonActionDefinition, option: SummonOption, template: SummonTemplate): CreatureDefinition {
+  const made = templateSummonDefinition(casterDefinition, action, option, template);
+  const known = state.snapshot.definitions.find((definition) => definition.id === made.id);
+  if (known) return known;
+  state.snapshot.definitions = [...state.snapshot.definitions, made];
+  return made;
+}
+
+/** A templated summon's stat block as this caster would make it with this action (the AI weighs it before casting). Pure. */
+export function templateSummonDefinition(casterDefinition: CreatureDefinition, action: SummonActionDefinition, option: SummonOption, template: SummonTemplate): CreatureDefinition {
+  const level = spellSlotLevel(action.resourceCost?.resourceId) ?? (action as { spellLevel?: number }).spellLevel ?? (template.kind === "draconic-spirit" ? 5 : 2);
+  const ability = spellcastingAbility(casterDefinition);
+  const proficiencyBonus = casterDefinition.proficiencyBonus ?? proficiencyFromDefinition(casterDefinition);
+  const modifier = abilityModifier(casterDefinition.abilities[ability]);
+  return templateCreature(template, { attackBonus: modifier + proficiencyBonus, saveDc: 8 + modifier + proficiencyBonus, proficiencyBonus }, level, `${option.definitionId}:${casterDefinition.id}:${level}`);
+}
+
+/** Find Steed, Summon Dragon: new summons placed right after their summoner (and its earlier ones), on its initiative. */
+function insertAfterSummoner(state: EngineState, summoner: CombatantState, created: CombatantState[]): { initiative: number; insertIndex: number } {
+  const initiative = summoner.initiative ?? 0;
+  for (const combatant of created) combatant.initiative = initiative;
+  const combatants = state.snapshot.combatants;
+  let insertIndex = combatants.indexOf(summoner) + 1;
+  while (insertIndex < combatants.length && combatants[insertIndex]!.summon?.followsSummoner && combatants[insertIndex]!.summon?.summonerId === summoner.id) insertIndex += 1;
+  combatants.splice(insertIndex, 0, ...created);
+  if (insertIndex <= state.snapshot.turnIndex) state.snapshot.turnIndex += created.length;
+  for (const existing of combatants) {
+    for (const condition of existing.conditions ?? []) {
+      if (condition.expiresAt && condition.expiresAt.turnIndex >= insertIndex) {
+        condition.expiresAt = { ...condition.expiresAt, turnIndex: condition.expiresAt.turnIndex + created.length };
+      }
+    }
+  }
+  return { initiative, insertIndex };
 }
 
 /** Pass as the `formId` of `resolveTransformAction` to return to the creature's own (non-`hidden`) definition. */

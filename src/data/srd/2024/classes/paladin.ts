@@ -68,7 +68,7 @@ export const PALADIN: ClassDefinition = {
       level: 5,
       grants: [
         grant("extra-attack", attacks("paladin_extra-attack", 2)),
-        grant("faithful-steed", reference("paladin_faithful-steed"), { spells: [spell("find-steed")], freeCasts: [{ spell: spell("find-steed"), uses: 1 }] })
+        grant("faithful-steed", runs("paladin_faithful-steed"), { spells: [spell("find-steed")], freeCasts: [{ spell: spell("find-steed"), uses: 1 }] })
       ]
     },
     {

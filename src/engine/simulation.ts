@@ -10,6 +10,7 @@ import {
   whileConditionProblem,
   chosenAreaTargets,
   growthProblem,
+  templateSummonDefinition,
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
@@ -3004,7 +3005,10 @@ function selectSummonAction(snapshot: EncounterSnapshot, actor: CombatantState, 
 
   const candidates = actions.map((action) => {
     const scored = action.options.map((option) => {
-      const summonedDefinition = snapshot.definitions.find((candidate) => candidate.id === option.definitionId);
+      // Find Steed, Summon Dragon: the stat block it would make.
+      const summonedDefinition = option.template
+        ? templateSummonDefinition(definition, action, option, option.template)
+        : snapshot.definitions.find((candidate) => candidate.id === option.definitionId);
       if (!summonedDefinition) return { optionId: option.id, value: 0 };
       const count = typeof option.count === "number" ? option.count : Math.max(1, averageOfDice(option.count.dice));
       return { optionId: option.id, value: allyValue(summonedDefinition) * count };

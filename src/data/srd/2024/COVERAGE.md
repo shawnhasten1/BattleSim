@@ -21,10 +21,10 @@ its gaps, never dropped and never approximated without saying so.
 | Druid (Circle of the Land) | 19 | 5 | 0 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
+| Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 5 | 2 | 2 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 5 | 3 | 1 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 9 | 2 | 2 | 4 | 0 |
@@ -37,9 +37,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 | Gap | What's missing | Where | First level | Features |
 |---|---|---|---|---|
-| `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
+| `summon-stat-blocks` | Familiars: a summon that can't attack but helps (Find Familiar) | Druid, Warlock | 2 | Wild Companion (Druid); Eldritch Invocation Options (Warlock) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
@@ -55,6 +55,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | Rogue | 17 | Thief's Reflexes (Thief) |
+| `concentration-optional` | Casting a concentration spell without concentration, for a shorter time (Dragon Companion) | Sorcerer | 18 | Dragon Companion (Draconic Sorcery) |
 | `activated-aura` | An aura switched on for a while (Holy Nimbus) | Paladin | 20 | Holy Nimbus (Oath of Devotion) |
 | `extra-target` | A spell aimed at a second creature for free (Words of Creation) | Bard | 20 | Words of Creation (Bard) |
 
@@ -255,7 +256,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Paladin Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Extra Attack | full |  |  |
-| 5 | Faithful Steed | manual | `summon-stat-blocks` |  |
+| 5 | Faithful Steed | full |  | Find Steed always prepared and once without a slot: the Otherworldly Steed, at the slot's level, sharing the paladin's initiative. |
 | 6 | Aura of Protection | full |  | Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied. |
 | 9 | Abjure Foes | full |  | Charisma-modifier many (at least one) enemies within 60 ft, those with the most hit points left: Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns. |
 | 10 | Aura of Courage | full |  | Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there). |
@@ -366,7 +367,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Draconic Spells | builder |  | Draconic spells are always prepared. |
 | 6 | Elemental Affinity | full |  | The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one. |
 | 14 | Dragon Wings | partial | `gain-speed` | A bonus action: a fly speed of 60 ft for an hour, once a fight; again for 3 sorcery points doesn't run. |
-| 18 | Dragon Companion | manual | `summon-stat-blocks` |  |
+| 18 | Dragon Companion | partial | `concentration-optional` | Summon Dragon always prepared and once without a slot: the Draconic Spirit at the slot's level; casting it without concentration doesn't run. |
 
 ## Warlock
 
@@ -482,9 +483,9 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 
 ## Spells
 
-339 SRD 5.2 spells, 93 of which run in the simulator. 65 are copied from the 2014 library
-(their rules didn't change in a way the simulator models) and 29 are written for 2024: 15 that changed,
-14 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
+339 SRD 5.2 spells, 95 of which run in the simulator. 65 are copied from the 2014 library
+(their rules didn't change in a way the simulator models) and 31 are written for 2024: 15 that changed,
+16 new. The rest are reference only: on an actor, a spell's SRD text for the DM. The builder offers every
 spell on a class's list and suggests the ones that run first.
 
 | Class | Spells | Run | Cantrip | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th |
@@ -492,11 +493,11 @@ spell on a class's list and suggests the ones that run first.
 | Bard | 130 | 29 | 3/10 | 7/23 | 6/23 | 5/17 | 3/10 | 3/17 | 0/8 | 0/11 | 2/6 | 0/5 |
 | Cleric | 109 | 23 | 1/7 | 7/15 | 4/17 | 2/19 | 1/9 | 3/13 | 3/11 | 1/8 | 1/5 | 0/5 |
 | Druid | 124 | 28 | 4/11 | 5/18 | 6/21 | 1/13 | 5/18 | 3/15 | 2/10 | 1/6 | 1/8 | 0/4 |
-| Paladin | 38 | 8 | — | 5/13 | 2/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
+| Paladin | 38 | 9 | — | 5/13 | 3/11 | 0/6 | 1/4 | 0/4 | — | — | — | — |
 | Ranger | 48 | 9 | — | 4/13 | 3/15 | 0/12 | 2/5 | 0/3 | — | — | — | — |
 | Sorcerer | 140 | 56 | 8/16 | 8/21 | 9/27 | 7/21 | 8/13 | 5/12 | 5/11 | 2/8 | 3/6 | 1/5 |
 | Warlock | 72 | 23 | 4/7 | 5/12 | 3/10 | 3/11 | 3/5 | 1/7 | 1/4 | 1/4 | 2/5 | 0/7 |
-| Wizard | 218 | 55 | 7/15 | 9/30 | 10/36 | 7/29 | 8/26 | 4/24 | 5/19 | 1/15 | 3/12 | 1/12 |
+| Wizard | 218 | 56 | 7/15 | 9/30 | 10/36 | 7/29 | 8/26 | 5/24 | 5/19 | 1/15 | 3/12 | 1/12 |
 
 ### Spells with a simulation
 
@@ -545,6 +546,7 @@ spell on a class's list and suggests the ones that run first.
 | Aid | 2nd | bard, cleric, druid, paladin, ranger | 2014 copy | full |  |
 | Blindness/Deafness | 2nd | bard, cleric, sorcerer, wizard | 2014 copy | full | Changed from the 2014 copy: 120 ft in 2024 (30 in 2014). |
 | Blur | 2nd | sorcerer, wizard | 2014 copy | full |  |
+| Find Steed | 2nd | paladin | new | partial | Not simulated: riding the steed (mounted combat) and Life Bond. |
 | Gust of Wind | 2nd | druid, ranger, sorcerer, wizard | 2014 copy | full |  |
 | Heat Metal | 2nd | bard, druid | 2014 copy | full |  |
 | Hold Person | 2nd | bard, cleric, druid, sorcerer, warlock, wizard | 2014 copy | full |  |
@@ -583,6 +585,7 @@ spell on a class's list and suggests the ones that run first.
 | Hold Monster | 5th | bard, sorcerer, warlock, wizard | 2014 copy | full |  |
 | Insect Plague | 5th | cleric, druid, sorcerer | 2014 copy | full | Changed from the 2014 copy: in 2024 it strikes when it appears, and when a creature enters it or ends its turn there. |
 | Mass Cure Wounds | 5th | bard, cleric, druid | changed in 2024 | partial | Heals everyone on your side in the sphere, not up to six of them. |
+| Summon Dragon | 5th | wizard | new | full |  |
 | Chain Lightning | 6th | sorcerer, wizard | 2014 copy | full |  |
 | Circle of Death | 6th | sorcerer, warlock, wizard | changed in 2024 | full |  |
 | Disintegrate | 6th | sorcerer, wizard | 2014 copy | full |  |
