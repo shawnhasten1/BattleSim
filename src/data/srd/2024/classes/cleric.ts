@@ -32,13 +32,12 @@ const channelDivinity = runs("cleric_channel-divinity", {
       damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile",
       riders: [
         // It runs from the cleric on its turns.
-        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true, modifiers: { fleesFromSource: true } },
-        { kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true }
+        { kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true, endsWithSource: true, modifiers: { fleesFromSource: true } },
+        { kind: "condition", when: "on-save-fail", condition: "incapacitated", duration: { kind: "rounds", rounds: 10 }, restrictToCreatureTypes: ["undead"], endsOnDamage: true, endsWithSource: true }
       ],
       resourceCost: { resourceId: "channel-divinity", amount: 1 }, automationSupport: "full"
     }
   ],
-  notSimulated: "the turning ending when the cleric is incapacitated or dies."
 });
 
 export const CLERIC_SPELLS = [

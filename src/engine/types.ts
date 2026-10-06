@@ -1183,6 +1183,8 @@ export type ActionRider =
       nextSave?: { mode: "advantage" | "disadvantage" };
       /** It ends when its bearer takes damage, other than the same action's (Turn Undead, Abjure Foes). */
       endsOnDamage?: boolean;
+      /** It ends when the creature that gave it is incapacitated or dies (Turn Undead). */
+      endsWithSource?: boolean;
       /** Only a creature this size or smaller (Cunning Strike's Trip: Large). */
       maxSize?: SizeCategory;
     })
@@ -2540,6 +2542,8 @@ export interface ConditionInstance {
   nextSave?: { mode: "advantage" | "disadvantage" };
   /** It ends when its bearer takes damage, other than from the action that gave it (`sourceId`): Turn Undead. */
   endsOnDamage?: boolean;
+  /** It ends when the creature that gave it (`sourceCombatantId`) is incapacitated or dies: Turn Undead. */
+  endsWithSource?: boolean;
   effects?: FeatureEffect[];
   /**
    * The bearer re-rolls this save at the given timing on its own turn; a success

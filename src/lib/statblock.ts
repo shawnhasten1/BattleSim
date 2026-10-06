@@ -349,7 +349,11 @@ function riderSentence(rider: ActionRider, definition: CreatureDefinition, fallb
           : `${S} can't take reactions${lasts}${qualifiers}.`;
       }
       // Turn Undead: taking damage ends it.
-      const ends = rider.endsOnDamage ? ` It ends early if ${who.subject} takes damage.` : "";
+      const endsWhen = [
+        ...(rider.endsOnDamage ? [`${who.subject} takes damage`] : []),
+        ...(rider.endsWithSource ? ["this creature is incapacitated or dies"] : [])
+      ];
+      const ends = endsWhen.length ? ` It ends early if ${joinList(endsWhen, "or")}.` : "";
       // Trip: a bigger creature isn't affected.
       const size = rider.maxSize ? ` if it is ${rider.maxSize} or smaller` : "";
       if (rider.save && rollsOwnSave) {

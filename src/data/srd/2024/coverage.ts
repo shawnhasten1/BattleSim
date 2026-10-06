@@ -32,7 +32,6 @@ export const GAPS = {
   "max-damage": "Overchannel again before a Long Rest, with its necrotic damage to the wizard",
   "d20-reroll": "A penalty on another creature's successful d20 roll (Boon of Fate)",
   initiative: "Swapping initiative with an ally (Alert)",
-  "source-ends": "A condition that ends when the creature that gave it is incapacitated or dies (Turn Undead)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Two Cunning Strike effects on one hit (Improved Cunning Strike)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
@@ -128,7 +127,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
   /* Cleric */
   "cleric_divine-order": builder("Protector: martial weapons and heavy armor. Thaumaturge: a cantrip (its check bonus is outside a fight)."),
   cleric_spellcasting: builder(),
-  "cleric_channel-divinity": partial(["source-ends"], "Divine Spark (heal or damage), and Turn Undead: Frightened and Incapacitated, running from the cleric on its turns, until it takes damage. It doesn't end when the cleric is incapacitated or dies."),
+  "cleric_channel-divinity": full("Divine Spark (heal or damage), and Turn Undead: Frightened and Incapacitated, running from the cleric on its turns, until it takes damage or the cleric is incapacitated or dies."),
   "cleric_cleric-subclasses": SUBCLASS,
   "cleric_ability-score-improvement": FEAT_CHOICE,
   "cleric_sear-undead": full("The radiant damage with Turn Undead, which doesn't end the turning."),

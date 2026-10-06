@@ -17,7 +17,7 @@ its gaps, never dropped and never approximated without saying so.
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
-| Cleric (Life Domain) | 17 | 7 | 1 | 1 | 7 | 1 |
+| Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 4 | 1 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
@@ -48,7 +48,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
 | `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
-| `source-ends` | A condition that ends when the creature that gave it is incapacitated or dies (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
@@ -134,7 +133,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | 1 | Divine Order | builder |  | Protector: martial weapons and heavy armor. Thaumaturge: a cantrip (its check bonus is outside a fight). |
 | 1 | Spellcasting | builder |  |  |
-| 2 | Channel Divinity | partial | `source-ends` | Divine Spark (heal or damage), and Turn Undead: Frightened and Incapacitated, running from the cleric on its turns, until it takes damage. It doesn't end when the cleric is incapacitated or dies. |
+| 2 | Channel Divinity | full |  | Divine Spark (heal or damage), and Turn Undead: Frightened and Incapacitated, running from the cleric on its turns, until it takes damage or the cleric is incapacitated or dies. |
 | 3 | Cleric Subclasses | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Sear Undead | full |  | The radiant damage with Turn Undead, which doesn't end the turning. |

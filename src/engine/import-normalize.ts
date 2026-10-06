@@ -1019,6 +1019,7 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
         ? { nextSave: { mode: input.nextSave.mode } }
         : {}),
       ...(input.endsOnDamage === true ? { endsOnDamage: true } : {}),
+      ...(input.endsWithSource === true ? { endsWithSource: true } : {}),
       ...(SIZES.includes(input.maxSize as SizeCategory) ? { maxSize: input.maxSize as SizeCategory } : {})
     };
   }

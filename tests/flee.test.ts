@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCondition,
   createEngineState,
   getExecutableActions,
   resolveAreaSaveAction,
@@ -65,6 +66,15 @@ describe("Turn Undead", () => {
     // A goblin's 30 ft, all of it away.
     expect(spatialDistance(state.snapshot, goblin, find("pc-fighter"))).toBeGreaterThanOrEqual(before + 25);
     expect(state.log.some((entry) => entry.type === "ActionDeclared" && entry.data?.actorId === "enemy-goblin-1")).toBe(false);
+  });
+
+  it("ends when the cleric is incapacitated (7ak)", () => {
+    const { state, find, turn } = scene(cleric());
+    turn();
+    expect(find("enemy-goblin-1").conditions?.some((condition) => condition.name === "frightened")).toBe(true);
+    applyCondition(state, "pc-fighter", { id: "stun", name: "stunned", startedRound: 1 });
+    expect(find("enemy-goblin-1").conditions?.some((condition) => condition.name === "frightened" || condition.name === "incapacitated")).toBe(false);
+    expect(state.log.at(-1)).toMatchObject({ type: "ConditionExpired", data: { reason: "source-ended" } });
   });
 
   it("with the cleric gone, it no longer runs", () => {

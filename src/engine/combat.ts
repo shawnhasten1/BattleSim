@@ -3831,6 +3831,7 @@ export function resolveDeathSave(state: EngineState, combatantId: Id): DeathSave
   if (combatant.deathSaves.failures >= 3) {
     combatant.state = "dead";
     state.log.push(event(state, "CombatantDied", `${combatant.displayName} died`, { combatantId }));
+    endConditionsFromSource(state, combatant, "it died");
     resolveDeathEffect(state, combatantId);
   } else if (combatant.deathSaves.successes >= 3) {
     combatant.deathSaves.stable = true;
@@ -3983,7 +3984,10 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
   }));
   // Rage: no spells, so no concentration either.
   if (condition.modifiers?.noSpellcasting) breakConcentration(state, target.id);
-  if (INCAPACITATING_CONDITIONS.has(condition.name)) endOnIncapacitation(state, target, condition.name);
+  if (INCAPACITATING_CONDITIONS.has(condition.name)) {
+    endOnIncapacitation(state, target, condition.name);
+    endConditionsFromSource(state, target, `it is ${condition.name}`);
+  }
   // A flier that can no longer move (or is knocked prone) drops, unless it can hover.
   if ((target.altitude ?? 0) > 0 && GROUNDING_CONDITIONS.has(condition.name) && !movementProfileOf(getDefinition(state.snapshot, target)).hover) {
     fallCombatant(state, target, target.altitude ?? 0, `it is ${condition.name}`);
@@ -5855,6 +5859,7 @@ function defeatCombatant(state: EngineState, target: CombatantState, killerId?: 
     fallCombatant(state, target, target.altitude ?? 0, "it died in the air");
   }
   breakConcentration(state, target.id);
+  endConditionsFromSource(state, target, "it died");
   despawnSummons(state, summonsOf(state, target.id, false), "vanishes — its summoner died");
   resolveDeathEffect(state, target.id, killerId);
 }
@@ -6842,6 +6847,20 @@ function upkeepConditions(state: EngineState, actorId: Id): void {
   }
 }
 
+/** Turn Undead: the conditions `source` gave that end with it, ended (it's incapacitated, or dead). */
+function endConditionsFromSource(state: EngineState, source: CombatantState, why: string): void {
+  for (const bearer of state.snapshot.combatants) {
+    const ending = (bearer.conditions ?? []).filter((condition) => condition.endsWithSource && condition.sourceCombatantId === source.id);
+    if (!ending.length) continue;
+    bearer.conditions = (bearer.conditions ?? []).filter((condition) => !ending.includes(condition));
+    for (const condition of ending) {
+      state.log.push(event(state, "ConditionExpired", `${bearer.displayName}'s ${condition.name} ends: ${source.displayName} ${why.replace(/^it /, "")}`, {
+        combatantId: bearer.id, conditionId: condition.id, condition, reason: "source-ended", sourceId: source.id
+      }));
+    }
+  }
+}
+
 /** Rage ends when its bearer is incapacitated; with Persistent Rage, only when it falls unconscious. */
 function endOnIncapacitation(state: EngineState, target: CombatantState, cause: ConditionName): void {
   const definition = getDefinition(state.snapshot, target);
@@ -7567,6 +7586,7 @@ function applyConditionRider(
     ...(rider.nextAttack ? { nextAttack: nextAttackOf(rider.nextAttack, source.id) } : {}),
     ...(rider.nextSave ? { nextSave: rider.nextSave } : {}),
     ...(rider.endsOnDamage ? { endsOnDamage: true } : {}),
+    ...(rider.endsWithSource ? { endsWithSource: true } : {}),
     repeatSave: expiry.repeatTiming && repeatAbility
       ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming, ...(ctx.heightened ? { disadvantage: true } : {}) }
       : undefined,
