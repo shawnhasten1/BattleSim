@@ -22,20 +22,27 @@ const HELP = (
 
 /** The Spellcasting group's heading: its ability to pick, then its save DC, attack bonus and caster level. */
 export function SpellcastingHeading({ definition, facts }: { definition: CreatureDefinition; facts: NonNullable<ListGroup["spellcasting"]> }) {
-  const updateCreatureDefinition = useEncounterStore((s) => s.updateCreatureDefinition);
   return (
     <span className={styles.groupNote}>
-      <select
-        className={styles.castingAbility}
-        aria-label="Spellcasting ability"
-        value={definition.spellcasting?.ability ?? ""}
-        onChange={(event) => updateCreatureDefinition(definition.id, { spellcasting: event.target.value ? { ability: event.target.value as Ability } : undefined })}
-      >
-        <option value="">Auto: {ABILITY_NAMES[inferSpellcastingAbility(definition)]}</option>
-        {CHOICES.map((ability) => <option key={ability} value={ability}>{ABILITY_NAMES[ability]}</option>)}
-      </select>
+      <SpellcastingAbilitySelect definition={definition} />
       {" · "}{spellcastingFacts(facts)}
       <InfoTooltip label="About spellcasting ability" content={HELP} />
     </span>
+  );
+}
+
+/** The ability its spells use: Auto (the one its spells name most), or one picked. Standard's heading and the Codex's tile. */
+export function SpellcastingAbilitySelect({ definition, className }: { definition: CreatureDefinition; className?: string }) {
+  const updateCreatureDefinition = useEncounterStore((s) => s.updateCreatureDefinition);
+  return (
+    <select
+      className={className ?? styles.castingAbility}
+      aria-label="Spellcasting ability"
+      value={definition.spellcasting?.ability ?? ""}
+      onChange={(event) => updateCreatureDefinition(definition.id, { spellcasting: event.target.value ? { ability: event.target.value as Ability } : undefined })}
+    >
+      <option value="">Auto: {ABILITY_NAMES[inferSpellcastingAbility(definition)]}</option>
+      {CHOICES.map((ability) => <option key={ability} value={ability}>{ABILITY_NAMES[ability]}</option>)}
+    </select>
   );
 }

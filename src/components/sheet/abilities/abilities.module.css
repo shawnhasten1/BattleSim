@@ -122,7 +122,7 @@
 }
 
 .resourceLabel small.resourceWarn {
-  color: #d8b56a;
+  color: var(--ui-warn, #d8b56a);
 }
 
 .resourceLeft,
@@ -163,20 +163,20 @@
   width: 12px;
   height: 12px;
   padding: 0;
-  border: 1.5px solid #6fbf73;
+  border: 1.5px solid var(--ui-good, #6fbf73);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
 }
 
 .pip[aria-pressed="true"] {
-  background: #6fbf73;
+  background: var(--ui-good, #6fbf73);
 }
 
 .pip:hover,
 .pip:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(111, 191, 115, 0.35);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-good, #6fbf73) 35%, transparent);
 }
 
 .recharge {
@@ -191,8 +191,8 @@
 }
 
 .recharge[aria-pressed="true"] {
-  border-color: #6fbf73;
-  color: #6fbf73;
+  border-color: var(--ui-good, #6fbf73);
+  color: var(--ui-good, #6fbf73);
 }
 
 .resourceRemove {
@@ -209,7 +209,7 @@
 }
 
 .resourceRemove:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--ui-hover, rgba(255, 255, 255, 0.06));
   color: var(--ui-hp-red);
 }
 

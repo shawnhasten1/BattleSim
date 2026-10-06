@@ -158,3 +158,21 @@ both the Codex popped out and the Codex in the page.
   "off" chip has gone, since the switch shows it.
 - Tests: 8 new ones in `tests/codex-sheet.test.tsx`. Browser checks passed 12/12 in Chromium and in Firefox, in the
   page and popped out, Dark and Light.
+
+### Phase 2: uses and resources
+
+- `recordPool(record, rows)` in `src/lib/actor-sheet/resources.ts` gives the pool a record spends, as its row in the
+  resource list: its own uses or recharge, a weapon's charges, an item's stack, or a named pool. Spell slots and
+  legendary actions don't count. It takes the record rather than a ref, so the resources model stays separate from
+  the editor's refs.
+- Codex rows show that pool in place of the cost pill, for the token shown, through `updateResource`. Up to 8 it's
+  boxes (a filled box spends one, an empty one gets one back). Above that it's a number. A recharge is a Ready or
+  Recharging pill. The cost text ("1 rage") moves into the row's details. The boxes' group is named "Rage left: 2 of
+  3", so it isn't confused with the Resources list's dots for the same pool.
+- Abilities and Spells each have a Resources panel at the top, which is Standard's `ResourceList` hosted as is. Its
+  colours are now tokens (`--ui-good`, `--ui-warn`, and a new `--ui-hover`), with Standard's old values as the
+  fallbacks. The Codex maps `--ui-hover` to `--row`.
+- `SpellcastingAbilitySelect` comes out of `SpellcastingHeading`, and it's the Ability tile on Codex Spells.
+  `UpcastOffers` sits above the spells, and `ItemOffers` sits at the top of Items.
+- Tests: 2 in `tests/actor-sheet-resources.test.ts` and 6 in `tests/codex-sheet.test.tsx`. Browser checks passed 7/7
+  in Chromium and in Firefox: popped out, in the page, Light, and at 640 px.

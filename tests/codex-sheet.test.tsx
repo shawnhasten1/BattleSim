@@ -2,7 +2,9 @@
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { armorClassOf, type ActionDefinition, type CombatantState, type CreatureDefinition } from "@/engine";
+import { armorClassOf, type ActionDefinition, type CombatantState, type CreatureDefinition, type SpellDefinition } from "@/engine";
+import { normalizeOpen5eItem, type Open5eImportedPayload } from "@/adapters";
+import { findSrdSpell } from "@/data/srd";
 import { SheetWindowsHost } from "@/components/sheet/SheetWindowsHost";
 import type { Compendium } from "@/hooks/useCompendium";
 import { CODEX_PALETTE_IDS, CODEX_PALETTES, contrastRatio, paletteFrom } from "@/lib/actor-sheet/codex";
@@ -474,6 +476,114 @@ describe("a row's ⋯ menu and switches in the Codex", () => {
     const item = creature(fighter.definitionId).items![0]!;
     await rowMenu(item.name, "Delete");
     expect((creature(fighter.definitionId).items ?? []).map((entry) => entry.id)).not.toContain(item.id);
+  });
+});
+
+describe("uses and resources in the Codex", () => {
+  function patchFighter(patch: Partial<CreatureDefinition>) {
+    useEncounterStore.setState((state) => ({
+      encounter: { ...state.encounter, definitions: state.encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...definition, ...patch } : definition)) }
+    }));
+  }
+  const breath: ActionDefinition = {
+    kind: "save", id: "fire-breath", name: "Fire Breath", actionType: "action", saveAbility: "dex", dc: 13, range: 15,
+    damage: [{ dice: "4d6", damageType: "fire" }], onSuccess: "half", halfDamageOnSuccess: true,
+    usage: { kind: "recharge", recharge: { min: 5 } }, resourceCost: { resourceId: "usage:fire-breath", amount: 1 }, automationSupport: "full"
+  };
+  const salve = (uses: number): ActionDefinition => ({
+    kind: "healing", id: "salve", name: "Salve", actionType: "action", range: 0, healing: [{ dice: "1d4" }], targeting: { target: "self" },
+    usage: { kind: "uses", uses }, resourceCost: { resourceId: "usage:salve", amount: 1 }, automationSupport: "full"
+  });
+
+  it("shows a row's pool as boxes for the token shown, and spending one reaches no other token", async () => {
+    store().duplicateCombatant("pc-fighter");
+    const other = store().encounter.combatants.find((combatant) => combatant.definitionId === "def-fighter" && combatant.id !== "pc-fighter")!;
+    patchToken("pc-fighter", { resources: { "action-surge": 1, "second-wind": 1 } });
+    patchToken(other.id, { resources: { "action-surge": 1, "second-wind": 1 } });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const surge = screen.getByRole("group", { name: "Action Surge left: 1 of 1" });
+    await userEvent.click(within(surge).getByRole("button", { name: "Action Surge 1, left: spend it" }));
+    expect(token("pc-fighter").resources!["action-surge"]).toBe(0);
+    expect(token(other.id).resources!["action-surge"]).toBe(1);
+    await userEvent.click(within(screen.getByRole("group", { name: "Action Surge left: 0 of 1" })).getByRole("button", { name: "Action Surge 1, spent: get it back" }));
+    expect(token("pc-fighter").resources!["action-surge"]).toBe(1);
+    // What it costs moves to its details.
+    const row = screen.getByRole("button", { name: "Edit Action Surge" }).closest<HTMLElement>("[data-row-id]")!;
+    await userEvent.click(within(row).getByRole("button", { name: "Action Surge details" }));
+    expect(row.textContent).toContain("1 action surge");
+  });
+
+  it("shows a recharge as Ready or Recharging, and toggles it", async () => {
+    patchFighter({ actions: [...creature("def-fighter").actions, breath] });
+    patchToken("pc-fighter", { resources: { ...token("pc-fighter").resources, "usage:fire-breath": 1 } });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const ready = screen.getByRole("button", { name: "Fire Breath: ready" });
+    expect(ready.textContent).toBe("Ready");
+    await userEvent.click(ready);
+    expect(token("pc-fighter").resources!["usage:fire-breath"]).toBe(0);
+    expect(screen.getByRole("button", { name: "Fire Breath: recharging" }).textContent).toBe("Recharging");
+  });
+
+  it("shows a big pool as a number", async () => {
+    patchFighter({ actions: [...creature("def-fighter").actions, salve(12)], resources: { ...creature("def-fighter").resources, "usage:salve": 12 } });
+    patchToken("pc-fighter", { resources: { ...token("pc-fighter").resources, "usage:salve": 12 } });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const left = screen.getByLabelText("Salve left") as HTMLInputElement;
+    await userEvent.clear(left);
+    await userEvent.type(left, "7{Enter}");
+    expect(token("pc-fighter").resources!["usage:salve"]).toBe(7);
+  });
+
+  it("hosts Standard's Resources list: Refill all, and a pool added", async () => {
+    patchToken("pc-fighter", { resources: { "action-surge": 0, "second-wind": 0 } });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const resources = within(screen.getByRole("region", { name: "Resources" }));
+    await userEvent.click(resources.getByRole("button", { name: /Resources/ }));
+    expect(resources.getByRole("button", { name: /Resources/ }).closest("[data-palette]")).not.toBeNull();
+    await userEvent.click(resources.getByRole("button", { name: "Refill all" }));
+    expect(token("pc-fighter").resources).toMatchObject({ "action-surge": 1, "second-wind": 1 });
+    await userEvent.click(resources.getByRole("button", { name: "+ Add a pool" }));
+    await userEvent.type(resources.getByLabelText("New pool name"), "Ki points");
+    await userEvent.click(resources.getByRole("button", { name: "Add pool" }));
+    expect(creature("def-fighter").resources!["ki-points"]).toBe(3);
+  });
+
+  it("picks the spellcasting ability in its tile, and the DC follows", async () => {
+    const wizard = build("srd:class:wizard", "Ilse");
+    await openCodex(wizard.id);
+    await userEvent.click(codexTab("Spells"));
+    const picker = screen.getByRole("combobox", { name: "Spellcasting ability" }) as HTMLSelectElement;
+    expect(picker.value).toBe("int");
+    const dc = Number(screen.getByLabelText("Spell save DC").textContent);
+    await userEvent.selectOptions(picker, "str");
+    expect(creature(wizard.definitionId).spellcasting).toEqual({ ability: "str" });
+    expect(Number(screen.getByLabelText("Spell save DC").textContent)).toBeLessThan(dc);
+  });
+
+  it("offers the SRD's upcasting on Spells, and its simulated item on Items", async () => {
+    const cone: SpellDefinition = { ...structuredClone(findSrdSpell("srd:spell:cone-of-cold")!), id: "cone", upcast: undefined };
+    if (cone.action) delete (cone.action as { upcast?: unknown }).upcast;
+    patchFighter({ spells: [cone], resources: { ...creature("def-fighter").resources, "slot-5": 2 } });
+    const payload: Open5eImportedPayload = {
+      provider: "open5e", resource: "item", slug: "srd_potion-of-healing", key: "srd_potion-of-healing", documentKey: "srd-2014",
+      importedAt: "2026-10-05T00:00:00.000Z", payloadVersion: "v2",
+      raw: { key: "srd_potion-of-healing", name: "Potion of Healing", desc: "You regain 2d4 + 2 hit points.", category: { key: "potion", name: "Potion" }, document: { key: "srd-2014", name: "SRD 2014" } }
+    };
+    store().insertAbilityRecord("def-fighter", "items", normalizeOpen5eItem(payload));
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Spells"));
+    expect(screen.getByText(/1 spell could get stronger with a higher slot/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Use the SRD's upcasting for Cone of Cold" }));
+    expect(creature("def-fighter").spells![0]!.upcast).toBeDefined();
+
+    await userEvent.click(codexTab("Items"));
+    await userEvent.click(screen.getByRole("button", { name: "Use the SRD's simulated item for Potion of Healing (SRD 2014)" }));
+    expect(creature("def-fighter").items!.find((item) => item.name === "Potion of Healing")?.automationSupport).toBe("full");
   });
 });
 

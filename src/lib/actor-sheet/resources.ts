@@ -65,11 +65,13 @@ function spenders(definition: CreatureDefinition): Array<{ name: string; action:
 const costOf = (action: ActionDefinition) => ("resourceCost" in action ? action.resourceCost : undefined);
 const usageOf = (action: ActionDefinition) => ("usage" in action ? action.usage : undefined);
 
+const RESOURCE_ID = /"resourceId":("(?:[^"\\]|\\.)*")/g;
+
 /** Every resource id the creature refers to anywhere outside its own sizes: what it spends, and what its traits use. */
 function idsInUse(definition: CreatureDefinition): Set<string> {
   const { resources: _sizes, ...rest } = definition;
   const used = new Set<string>();
-  for (const match of JSON.stringify(rest).matchAll(/"resourceId":("(?:[^"\\]|\\.)*")/g)) used.add(JSON.parse(match[1]!) as string);
+  for (const match of JSON.stringify(rest).matchAll(RESOURCE_ID)) used.add(JSON.parse(match[1]!) as string);
   for (const weapon of definition.weapons ?? []) if (weapon.charges) used.add(weapon.charges.id);
   for (const item of definition.items ?? []) if (item.supply) used.add(item.supply.id);
   if (definition.legendary) used.add(LEGENDARY_POINTS);
@@ -170,6 +172,26 @@ export function resourceRows(definition: CreatureDefinition, combatant?: Combata
     add({ id, kind: "uses", label: poolTitle(id), left: leftOf(id, full), full, unused: true });
   }
   return rows;
+}
+
+/**
+ * The pool one record spends, as its row in `rows`: its own uses or recharge, a weapon's charges, an item's stack, or a
+ * named pool (Rage, Ki points). Not spell slots, which the Spells tab shows by level, nor legendary actions, which the
+ * engine refills every round. The Codex shows it on the record's row as boxes to spend and get back.
+ */
+export function recordPool(record: unknown, rows: ResourceRow[]): ResourceRow | undefined {
+  if (!record) return undefined;
+  const own = record as { charges?: { id?: string }; supply?: { id?: string } };
+  const ids = [
+    ...(own.charges?.id ? [own.charges.id] : []),
+    ...(own.supply?.id ? [own.supply.id] : []),
+    ...[...JSON.stringify(record).matchAll(RESOURCE_ID)].map((match) => JSON.parse(match[1]!) as string)
+  ];
+  for (const id of ids) {
+    const row = rows.find((candidate) => candidate.id === id);
+    if (row && row.kind !== "slot" && row.kind !== "legendary" && !row.missing && row.left !== undefined) return row;
+  }
+  return undefined;
 }
 
 /** The list folded to one line: "Slots 3/4, 3/3, 2/3 · Rage 2/3 · Fire Breath ready · Legendary actions 3 a round". */

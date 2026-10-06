@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ActionDefinition, CombatantState, CreatureDefinition } from "@/engine";
 import { SRD_MONSTER_INDEX, loadSrdMonster } from "@/data/srd/monsters";
-import { fullOf, poolTitle, refilledResources, resourceRows, resourceSummary, withResourceSize } from "@/lib/actor-sheet/resources";
+import { fullOf, poolTitle, recordPool, refilledResources, resourceRows, resourceSummary, withResourceSize } from "@/lib/actor-sheet/resources";
 import { actionStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
 
@@ -34,6 +34,37 @@ const srd = new Map<string, CreatureDefinition>();
 beforeAll(async () => {
   for (const entry of SRD_MONSTER_INDEX) srd.set(entry.id, (await loadSrdMonster(entry.id))!);
 }, 60000);
+
+describe("the pool a record spends", () => {
+  const breath: ActionDefinition = {
+    kind: "save", id: "fire-breath", name: "Fire Breath", actionType: "action", saveAbility: "dex", dc: 13, range: 15,
+    damage: [{ dice: "4d6", damageType: "fire" }], onSuccess: "half", halfDamageOnSuccess: true,
+    usage: { kind: "recharge", recharge: { min: 5 } }, resourceCost: { resourceId: "usage:fire-breath", amount: 1 }, automationSupport: "full"
+  };
+
+  it("is its uses, its recharge, a weapon's charges or a named pool, as the token has it", () => {
+    store().attachSrdWeapon("def-fighter", "srd:weapon:fear-sword");
+    patchDefinition("def-fighter", { actions: [...definition("def-fighter").actions, salve(3), breath], resources: { ...definition("def-fighter").resources, "usage:salve": 3 } });
+    patchToken("pc-fighter", { resources: { "action-surge": 0, "usage:salve": 2, "usage:fire-breath": 1 } });
+    const fighter = definition("def-fighter");
+    const rows = resourceRows(fighter, token("pc-fighter"));
+    const surge = fighter.features!.find((feature) => feature.id === "action-surge-feature");
+    expect(recordPool(surge, rows)).toMatchObject({ id: "action-surge", kind: "pool", left: 0, full: 1 });
+    expect(recordPool(fighter.actions.find((action) => action.id === "salve"), rows)).toMatchObject({ kind: "uses", left: 2, full: 3 });
+    expect(recordPool(fighter.actions.find((action) => action.id === "fire-breath"), rows)).toMatchObject({ kind: "recharge", left: 1 });
+    expect(recordPool(fighter.weapons!.find((weapon) => weapon.charges), rows)).toMatchObject({ kind: "charges", label: "The Fear Sword charges" });
+  });
+
+  it("is nothing for an ability that spends none, a spell's slots, or legendary actions", () => {
+    store().attachSrdSpell("def-fighter", "srd:spell:magic-missile");
+    patchDefinition("def-fighter", { resources: { ...definition("def-fighter").resources, "slot-1": 2 } });
+    const fighter = definition("def-fighter");
+    const rows = resourceRows(fighter, token("pc-fighter"));
+    expect(recordPool(fighter.actions.find((action) => action.id === "longsword"), rows)).toBeUndefined();
+    expect(recordPool(fighter.spells![0], rows)).toBeUndefined();
+    expect(recordPool(undefined, rows)).toBeUndefined();
+  });
+});
 
 describe("the rows", () => {
   it("list a caster's slots by level, and the levels its spells need that it hasn't", async () => {

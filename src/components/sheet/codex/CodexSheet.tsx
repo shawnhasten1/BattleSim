@@ -17,7 +17,8 @@ import {
 } from "@/engine";
 import { abilityList, type ListGroup, type ListRow } from "@/lib/ability-editor/list";
 import { withWorn } from "@/lib/ability-editor/items";
-import { refKey, type AbilityRef } from "@/lib/ability-editor/refs";
+import { findAbility, refKey, type AbilityRef } from "@/lib/ability-editor/refs";
+import { recordPool, resourceRows, type ResourceRow } from "@/lib/actor-sheet/resources";
 import {
   characterLevel,
   CONDITION_IMMUNITIES,
@@ -47,6 +48,10 @@ import { DAMAGE_TYPES } from "../ability-editor/DamageLines";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
 import { AutomationDot, refRowId, RowMenu, type RowHandlers } from "../abilities/AbilitiesList";
 import { useAbilityRemoval, useRowEdits } from "../abilities/row-actions";
+import { ResourceList } from "../abilities/ResourceList";
+import { SpellcastingAbilitySelect } from "../abilities/SpellcastingHeading";
+import { UpcastOffers } from "../abilities/UpcastOffers";
+import { ItemOffers } from "../abilities/ItemOffers";
 import { AddAbility } from "../abilities/AddAbility";
 import { blankTarget, preparedTarget, useAttachFromLibrary } from "../abilities/add-targets";
 import type { AddFilter } from "@/lib/ability-editor/add";
@@ -91,7 +96,14 @@ interface RowKit {
   under: (row: ListRow) => ReactNode;
   /** The row a duplicate or a move just made, highlighted. */
   flashId: string | null;
+  /** The pool a row spends (its uses, recharge, charges or a named pool), as the token shown has it. */
+  poolOf: (row: ListRow) => ResourceRow | undefined;
+  /** What the token shown has left of a pool. */
+  setLeft: (resourceId: string, left: number) => void;
 }
+
+/** Up to this many, a pool on a row is boxes; more, a number. */
+const MAX_USE_BOXES = 8;
 const RowKitContext = createContext<RowKit | null>(null);
 const useRowKit = () => useContext(RowKitContext)!;
 
@@ -138,6 +150,8 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   // A row's ⋯ menu and Use it: the same edits as Standard's. A copy or a moved row is shown, focused and highlighted.
   const edits = useRowEdits(definition);
   const removal = useAbilityRemoval(definition, { fieldClassName: styles.field });
+  const updateResource = useEncounterStore((s) => s.updateResource);
+  const pools = resourceRows(definition, combatant);
   const [shown, setShown] = useState<string | null>(null);
   const show = (id: string | undefined) => { if (id) setShown(id); };
   const kit: RowKit = {
@@ -145,7 +159,9 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
     handlers: { onDuplicate: (row) => show(edits.duplicate(row)), onMove: (row, to) => show(edits.move(row, to)), onDelete: removal.request },
     onOptional: edits.setOptional,
     under: removal.under,
-    flashId: shown
+    flashId: shown,
+    poolOf: (row) => (row.ref.list === "legendary" ? undefined : recordPool(findAbility(definition, row.ref), pools)),
+    setLeft: (resourceId, left) => updateResource(combatant.id, resourceId, left)
   };
 
   useEffect(() => {
@@ -262,7 +278,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                 <RowKitContext.Provider value={kit}>
                   {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
                   {tab === "items" ? <Items definition={definition} groups={groups} onAdd={() => openAdd("items")} /> : null}
-                  {tab === "abilities" ? <Abilities groups={groups} onAdd={() => openAdd("all")} /> : null}
+                  {tab === "abilities" ? <Abilities combatant={combatant} definition={definition} groups={groups} onAdd={() => openAdd("all")} /> : null}
                   {tab === "spells" && spellcasting ? (
                     <Spells group={spellcasting} combatant={combatant} definition={definition} onAdd={() => openAdd("spells")} />
                   ) : null}
@@ -712,6 +728,9 @@ function Row({ row, activation, lead }: { row: ListRow; activation?: string; lea
   const kit = useRowKit();
   const [open, setOpen] = useState(false);
   const id = refRowId(row.ref);
+  // Its pool shows as boxes in place of what it costs, which moves to the details.
+  const pool = kit.poolOf(row);
+  const chips = pool && row.cost ? [row.cost, ...row.chips] : row.chips;
   return (
     <div className={styles.li} data-row-id={id} data-flash={kit.flashId === id || undefined}>
       <div className={`${styles.liRow} ${lead ? "" : styles.liRowNoPip}`}>
@@ -727,19 +746,59 @@ function Row({ row, activation, lead }: { row: ListRow; activation?: string; lea
             Use it
           </button>
         ) : <span />}
-        {row.cost ? <span className={styles.usePill}>{row.cost}</span> : <span />}
+        {pool ? <Uses pool={pool} cost={row.cost} /> : row.cost ? <span className={styles.usePill}>{row.cost}</span> : <span />}
         {activation ? <span className={styles.actPill}>{activation}</span> : <span />}
         <RowEnd row={row} />
       </div>
       {open ? (
         <div className={styles.ex}>
           {row.line ? <span>{row.line}</span> : null}
-          {row.chips.length ? <span className={styles.exChips}>{row.chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
-          {!row.line && !row.chips.length ? <span>Edit opens it in the ability editor.</span> : null}
+          {chips.length ? <span className={styles.exChips}>{chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
+          {!row.line && !chips.length ? <span>Edit opens it in the ability editor.</span> : null}
         </div>
       ) : null}
       {kit.under(row)}
     </div>
+  );
+}
+
+/**
+ * Character Codex's Uses: a pool the row spends, as the token shown has it. Filled boxes are what's left; a filled box
+ * spends one, an empty one gets one back. A recharge is Ready or Recharging; a big pool, a number.
+ */
+function Uses({ pool, cost }: { pool: ResourceRow; cost?: string }) {
+  const kit = useRowKit();
+  const left = pool.left ?? 0;
+  if (pool.kind === "recharge") {
+    return (
+      <button
+        type="button" className={styles.usePill} data-ready={left === 1} aria-pressed={left === 1}
+        aria-label={`${pool.label}: ${left ? "ready" : "recharging"}`} title={cost}
+        onClick={() => kit.setLeft(pool.id, left ? 0 : 1)}
+      >
+        {left ? "Ready" : "Recharging"}
+      </button>
+    );
+  }
+  if (pool.full > MAX_USE_BOXES || left > pool.full) {
+    return (
+      <span className={styles.usesNum} title={cost}>
+        <SheetNumber className={styles.usesInput} label={`${pool.label} left`} value={left} min={0} max={999} onCommit={(next) => kit.setLeft(pool.id, next)} />
+        <span aria-hidden="true">/ {pool.full}</span>
+      </span>
+    );
+  }
+  return (
+    // Named apart from the Resources list's dots for the same pool: "Rage left: 2 of 3".
+    <span className={styles.uses} role="group" aria-label={`${pool.label} left: ${left} of ${pool.full}`} title={cost}>
+      {Array.from({ length: pool.full }, (_, index) => (
+        <button
+          key={index} type="button" className={styles.pip} data-v={index < left ? 1 : 0}
+          aria-label={`${pool.label} ${index + 1}, ${index < left ? "left: spend it" : "spent: get it back"}`}
+          onClick={() => kit.setLeft(pool.id, index < left ? left - 1 : Math.min(pool.full, left + 1))}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -760,6 +819,7 @@ function Items({ definition, groups, onAdd }: { definition: CreatureDefinition; 
   return (
     <section className={styles.panel} aria-labelledby="codex-items">
       <Heading id="codex-items" icon="chest">Items</Heading>
+      <ItemOffers definition={definition} />
       {itemsGroup?.note ? <p className={styles.grpNote}>{itemsGroup.note.replace(/^attuned/, "Attuned")}</p> : null}
       {ITEM_GROUPS.map((group) => {
         const mine = group.types
@@ -798,7 +858,12 @@ const ACTIVATION: Partial<Record<ListGroup["id"], string>> = {
  * Its attacks (its weapons, each with its statblock line in view), then its actions, bonus actions, reactions and
  * features. Items are on Items, spells on Spells.
  */
-function Abilities({ groups, onAdd }: { groups: ListGroup[]; onAdd: () => void }) {
+function Abilities({ combatant, definition, groups, onAdd }: {
+  combatant: CombatantState;
+  definition: CreatureDefinition;
+  groups: ListGroup[];
+  onAdd: () => void;
+}) {
   const kit = useRowKit();
   const attacks = groups.flatMap((group) => group.rows).filter((row) => row.ref.list === "weapons");
   const shown = groups
@@ -807,6 +872,7 @@ function Abilities({ groups, onAdd }: { groups: ListGroup[]; onAdd: () => void }
     .filter((group) => group.rows.length);
   return (
     <div className={styles.stack}>
+      <Resources combatant={combatant} definition={definition} />
       {attacks.length ? (
         <section className={styles.panel} aria-labelledby="codex-attacks">
           <Heading id="codex-attacks" icon="sword">Attacks</Heading>
@@ -843,6 +909,18 @@ function Abilities({ groups, onAdd }: { groups: ListGroup[]; onAdd: () => void }
   );
 }
 
+/**
+ * Every pool it spends, as on Standard's Abilities tab (its own ResourceList, in a Codex panel): what this token has
+ * left and what every token starts with, Refill all, a spell slot level or a named pool added, one removed.
+ */
+function Resources({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
+  return (
+    <div className={`${styles.panel} ${styles.resourcesPanel}`}>
+      <ResourceList definition={definition} combatant={combatant} />
+    </div>
+  );
+}
+
 const LEVEL_NAMES = ["Cantrip", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];
 
 /**
@@ -859,63 +937,67 @@ function Spells({ group, combatant, definition, onAdd }: {
   const facts = group.spellcasting;
   const slotted = (group.levels ?? []).filter((level) => level.level > 0 && definition.resources?.[`slot-${level.level}`] !== undefined);
   return (
-    <section className={styles.panel} aria-labelledby="codex-spells">
-      <Heading id="codex-spells" icon="star">Spellcasting</Heading>
-      {facts ? (
-        <div className={styles.stats}>
-          <div className={styles.stat}>
-            <output className={styles.statValue} aria-label="Spellcasting ability">{facts.ability.toUpperCase()}</output>
-            <span className={styles.cap}>Ability</span>
+    <div className={styles.stack}>
+      <Resources combatant={combatant} definition={definition} />
+      <section className={styles.panel} aria-labelledby="codex-spells">
+        <Heading id="codex-spells" icon="star">Spellcasting</Heading>
+        {facts ? (
+          <div className={styles.stats}>
+            <div className={styles.stat}>
+              <SpellcastingAbilitySelect definition={definition} className={`${styles.field} ${styles.statSelect}`} />
+              <span className={styles.cap}>Ability</span>
+            </div>
+            <div className={styles.stat}>
+              <output className={styles.statValue} aria-label="Spell save DC">{facts.dc}</output>
+              <span className={styles.cap}>Save DC</span>
+            </div>
+            <div className={styles.stat}>
+              <output className={styles.statValue} aria-label="Spell attack bonus">{formatBonus(facts.toHit)}</output>
+              <span className={styles.cap}>Attack bonus</span>
+            </div>
           </div>
-          <div className={styles.stat}>
-            <output className={styles.statValue} aria-label="Spell save DC">{facts.dc}</output>
-            <span className={styles.cap}>Save DC</span>
+        ) : null}
+        {slotted.length ? (
+          <>
+            <h3 className={styles.sub}>Spell slots · {combatant.displayName}</h3>
+            <div className={styles.slots}>
+              {slotted.map(({ level }) => {
+                const resource = `slot-${level}`;
+                const full = definition.resources![resource]!;
+                const now = Math.min(full, combatant.resources?.[resource] ?? 0);
+                return (
+                  <div key={level} className={styles.slot} role="group" aria-label={`Level ${level} spell slots: ${now} of ${full}`}>
+                    <span className={styles.cap}>{LEVEL_NAMES[level] ?? level}</span>
+                    <span className={styles.slotCount}>{now} of {full}</span>
+                    <span className={styles.slotPips}>
+                      {Array.from({ length: full }, (_, index) => (
+                        <button
+                          key={index} type="button" className={styles.pip} data-v={index < now ? 1 : 0}
+                          aria-label={`Level ${level} slot ${index + 1}, ${index < now ? "there: spend it" : "spent: get it back"}`}
+                          onClick={() => updateResource(combatant.id, resource, index < now ? now - 1 : Math.min(full, now + 1))}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className={styles.hint}>Filled boxes are slots it still has. Click one to spend it.</p>
+          </>
+        ) : null}
+        <h3 className={styles.sub}>Spells</h3>
+        <UpcastOffers definition={definition} />
+        {(group.levels ?? []).map((level) => (
+          <div key={level.level} className={styles.grp}>
+            <div className={styles.grpHead}>
+              <span className={styles.grpTitle}>{level.title}</span>
+              {level.slots ? <span className={styles.grpNote}>{level.slots}</span> : null}
+            </div>
+            {level.rows.map((row) => <Row key={row.key} row={row} />)}
           </div>
-          <div className={styles.stat}>
-            <output className={styles.statValue} aria-label="Spell attack bonus">{formatBonus(facts.toHit)}</output>
-            <span className={styles.cap}>Attack bonus</span>
-          </div>
-        </div>
-      ) : null}
-      {slotted.length ? (
-        <>
-          <h3 className={styles.sub}>Spell slots · {combatant.displayName}</h3>
-          <div className={styles.slots}>
-            {slotted.map(({ level }) => {
-              const resource = `slot-${level}`;
-              const full = definition.resources![resource]!;
-              const now = Math.min(full, combatant.resources?.[resource] ?? 0);
-              return (
-                <div key={level} className={styles.slot} role="group" aria-label={`Level ${level} spell slots: ${now} of ${full}`}>
-                  <span className={styles.cap}>{LEVEL_NAMES[level] ?? level}</span>
-                  <span className={styles.slotCount}>{now} of {full}</span>
-                  <span className={styles.slotPips}>
-                    {Array.from({ length: full }, (_, index) => (
-                      <button
-                        key={index} type="button" className={styles.pip} data-v={index < now ? 1 : 0}
-                        aria-label={`Level ${level} slot ${index + 1}, ${index < now ? "there: spend it" : "spent: get it back"}`}
-                        onClick={() => updateResource(combatant.id, resource, index < now ? now - 1 : Math.min(full, now + 1))}
-                      />
-                    ))}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <p className={styles.hint}>Filled boxes are slots it still has. Click one to spend it.</p>
-        </>
-      ) : null}
-      <h3 className={styles.sub}>Spells</h3>
-      {(group.levels ?? []).map((level) => (
-        <div key={level.level} className={styles.grp}>
-          <div className={styles.grpHead}>
-            <span className={styles.grpTitle}>{level.title}</span>
-            {level.slots ? <span className={styles.grpNote}>{level.slots}</span> : null}
-          </div>
-          {level.rows.map((row) => <Row key={row.key} row={row} />)}
-        </div>
-      ))}
-      <button type="button" className={styles.btnDash} onClick={onAdd}>Add spell</button>
-    </section>
+        ))}
+        <button type="button" className={styles.btnDash} onClick={onAdd}>Add spell</button>
+      </section>
+    </div>
   );
 }
