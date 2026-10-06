@@ -120,6 +120,17 @@ describe("Steady Aim", () => {
     expect(decisions.some((message) => /Steady Aim/.test(message))).toBe(true);
     expect(state.log.some((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter" && entry.data?.rollMode === "advantage")).toBe(true);
   });
+
+  // Found in Phase 7r: the AI reached for a bonus-action activation with its bonus action gone (a turn played again
+  // after Action Surge), and the engine refused it.
+  it("the AI doesn't reach for it with its bonus action gone", () => {
+    const definition = rogue();
+    const { state, me } = fight(definition, 6);
+    me().tacticsProfile = "basic-ranged";
+    me().actionEconomy = { action: true, bonus: false, reaction: true };
+    expect(() => takeAutomatedTurn(state, me())).not.toThrow();
+    expect(state.log.some((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter")).toBe(true);
+  });
 });
 
 describe("Stunning Strike", () => {

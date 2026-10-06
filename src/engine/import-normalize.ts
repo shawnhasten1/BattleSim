@@ -34,6 +34,7 @@ import {
   type RiderDuration,
   type RiderGate,
   type RiderSave,
+  type SizeCategory,
   type AreaTemplate,
   type SpellDefinition,
   type SpellUpcast,
@@ -926,6 +927,7 @@ function normalizeAreaTemplate(input: unknown): AreaTemplate {
 }
 
 const RIDER_GATES: RiderGate[] = ["always", "on-hit", "on-miss", "on-crit", "on-save-fail", "on-save-success"];
+const SIZES: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 const CONDITION_NAMES: ConditionName[] = [
   "blinded", "charmed", "confused", "deafened", "dominated", "frightened", "grappled", "incapacitated",
   "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "custom"
@@ -983,7 +985,7 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
     };
   }
   if (input.kind === "push") {
-    const maxSize = (["tiny", "small", "medium", "large", "huge", "gargantuan"] as const).find((size) => size === input.maxSize);
+    const maxSize = SIZES.find((size) => size === input.maxSize);
     return { ...base, kind: "push", distance: numberField(input, "distance") ?? 5, ...(maxSize ? { maxSize } : {}) };
   }
   // Grapples and swallows are structured records with no legacy shapes to translate; keep them as authored.
@@ -1010,7 +1012,8 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
         && (input.nextAttack.mode === "advantage" || input.nextAttack.mode === "disadvantage")
         ? { nextAttack: { role: input.nextAttack.role, mode: input.nextAttack.mode } }
         : {}),
-      ...(input.endsOnDamage === true ? { endsOnDamage: true } : {})
+      ...(input.endsOnDamage === true ? { endsOnDamage: true } : {}),
+      ...(SIZES.includes(input.maxSize as SizeCategory) ? { maxSize: input.maxSize as SizeCategory } : {})
     };
   }
   return null;
@@ -1043,6 +1046,9 @@ function normalizeRiderDuration(input: unknown): RiderDuration {
     }
     if (input.kind === "until-source-turn") {
       return { kind: "until-source-turn", timing: input.timing === "end" ? "end" : "start" };
+    }
+    if (input.kind === "until-end-of-next-turn") {
+      return { kind: "until-end-of-next-turn" };
     }
     const rounds = numberField(input, "rounds") ?? numberField(input, "durationRounds");
     if (input.kind === "rounds" || rounds !== undefined) {

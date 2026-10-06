@@ -504,12 +504,13 @@ function ConditionFields({ rider, onChange, definition, context }: {
   );
 }
 
-type DurationChoice = "next-turn" | "1-round" | "1-minute" | "rounds" | "save-ends" | "concentration" | "permanent";
+type DurationChoice = "next-turn" | "end-of-next-turn" | "1-round" | "1-minute" | "rounds" | "save-ends" | "concentration" | "permanent";
 
 function durationChoice(duration: RiderDuration): DurationChoice {
   switch (duration.kind) {
     case "until-start-of-next-turn":
     case "until-source-turn": return "next-turn";
+    case "until-end-of-next-turn": return "end-of-next-turn";
     case "rounds": return duration.rounds === 1 ? "1-round" : duration.rounds === 10 ? "1-minute" : "rounds";
     default: return duration.kind;
   }
@@ -524,6 +525,7 @@ function DurationField({ rider, onChange }: { rider: ConditionRider; onChange: (
     const repeat = repeatAt ? { repeatSaveAt: repeatAt } : {};
     switch (next) {
       case "next-turn": return setDuration({ kind: "until-start-of-next-turn" });
+      case "end-of-next-turn": return setDuration({ kind: "until-end-of-next-turn" });
       case "1-round": return setDuration({ kind: "rounds", rounds: 1, ...repeat });
       case "1-minute": return setDuration({ kind: "rounds", rounds: 10, ...repeat });
       case "rounds": return setDuration({ kind: "rounds", rounds: rider.duration.kind === "rounds" ? rider.duration.rounds : 3, ...repeat });
@@ -538,6 +540,7 @@ function DurationField({ rider, onChange }: { rider: ConditionRider; onChange: (
         <span className={styles.inline}>
           <select id={id} value={choice} onChange={(e) => choose(e.target.value as DurationChoice)}>
             <option value="next-turn">Until the start of its next turn</option>
+            <option value="end-of-next-turn">Until the end of its next turn</option>
             <option value="1-round">1 round</option>
             <option value="1-minute">1 minute (10 rounds)</option>
             <option value="rounds">A number of rounds…</option>

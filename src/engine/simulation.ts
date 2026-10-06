@@ -2,6 +2,8 @@ import {
   activeFactions,
   armorClassOf,
   canAct,
+  damageBonusExpected,
+  diceTradeCost,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   dividedHealing,
@@ -77,7 +79,7 @@ import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
 import { footprintGroundHeight, movementProfileOf, movementReference, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -542,7 +544,9 @@ function multiattackPlanningForms(action: MultiattackAction, executables: Action
 
 /**
  * The best attack for one swing against one target: the most expected damage for what it spends. A power attack
- * pays against a low AC and not a high one; a charge only when the stance and the payoff say so.
+ * pays against a low AC and not a high one; a charge only when the stance and the payoff say so. With the board
+ * (`weigh`), a dice trade (Cunning Strike) is weighed as `diceTradeValue` does, in damage terms; without, it's no
+ * better than the plain swing.
  */
 function bestSwingAttack(
   candidates: AttackAction[],
@@ -550,7 +554,8 @@ function bestSwingAttack(
   sourceCombatant: CombatantState,
   target: CreatureDefinition,
   targetCombatant: CombatantState | undefined,
-  usedOncePerTurnEffects: Set<string>
+  usedOncePerTurnEffects: Set<string>,
+  weigh?: { snapshot: EncounterSnapshot; tactics: TacticsSettings; log?: CombatLogEvent[] }
 ): { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined {
   const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
   let best: { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined;
@@ -561,7 +566,12 @@ function bestSwingAttack(
       + expectedRiderDamage(attack, source, target, { landChance: hitChance });
     // In damage terms, half the plan-level penalty a single attack that spends the same would carry.
     const cost = resourceCostWeight(attack) * 2 * resourceStanceMultiplier(sourceCombatant.resourceStance) * optionalRiderCostDiscount(attack, source, target);
-    const value = damage - cost;
+    const terms = attack.onHitTerms;
+    const trade = weigh && targetCombatant && terms?.tradesDice
+      ? (expectedRiderControl({ ...attack, riders: (attack.riders ?? []).filter((rider) => rider.group === terms.group) }, source, target, weigh.tactics)
+        + diceTradeValue(weigh.snapshot, sourceCombatant, source, attack, targetCombatant, target, weigh.tactics, weigh.log)) / 2
+      : 0;
+    const value = damage - cost + trade;
     if (!best || value > best.value + 1e-9) best = { attack, value, damage, hitChance };
   }
   return best;
@@ -661,15 +671,19 @@ function planMultiattackSwings(
   const family = bestRoutineFamily(routine, definition, actor, getDefinition(snapshot, primary), primary);
   const budget: Record<string, number> = { ...(actor.resources ?? {}) };
   const affordable = (attack: AttackAction) => !attack.resourceCost || (budget[attack.resourceCost.resourceId] ?? 0) >= attack.resourceCost.amount;
+  // A dice trade spends a once-a-turn bonus (Sneak Attack): one swing plans it.
+  const tradedFrom = new Set<string>();
   const candidatesFor = (swing: MultiattackSwing) => swingCandidates(swing.step, executables)
-    .filter((attack) => affordable(attack) && (!family || attackFamilyId(attack, executables) === family));
+    .filter((attack) => affordable(attack) && (!family || attackFamilyId(attack, executables) === family)
+      && !(attack.onHitTerms?.tradesDice && tradedFrom.has(attack.onHitTerms.tradesDice.featureId)));
   const reachOf = (swing: MultiattackSwing) => Math.max(0, ...candidatesFor(swing).map(attackReach));
   const assigned: Record<string, number> = {};
   const attackTargetIds: string[] = [];
   const attackActionIds: string[] = [];
+  const weigh = { snapshot, tactics: tacticsSettings(actor.tacticsProfile) };
   const choose = (swing: MultiattackSwing, target: CombatantState) => {
     const usable = candidatesFor(swing).filter((attack) => !targetingProblem(snapshot, actor, target, attack));
-    return bestSwingAttack(usable, definition, actor, getDefinition(snapshot, target), target, new Set());
+    return bestSwingAttack(usable, definition, actor, getDefinition(snapshot, target), target, new Set(), weigh);
   };
   const commit = (swing: MultiattackSwing, target: CombatantState, best: { attack: AttackAction; damage: number }) => {
     attackTargetIds[swing.index] = target.id;
@@ -677,6 +691,7 @@ function planMultiattackSwings(
     assigned[target.id] = (assigned[target.id] ?? 0) + Math.max(1, best.damage);
     const cost = best.attack.resourceCost;
     if (cost) budget[cost.resourceId] = (budget[cost.resourceId] ?? 0) - cost.amount;
+    if (best.attack.onHitTerms?.tradesDice) tradedFrom.add(best.attack.onHitTerms.tradesDice.featureId);
   };
 
   const order = [...swings].sort((a, b) => reachOf(a) - reachOf(b) || a.index - b.index);
@@ -732,7 +747,7 @@ function decideMultiattackSwing(
     && (combatant!.state === "active" || combatant!.state === "downed") && isTargetable(combatant!) && !taken.has(combatant!.id);
   const bestAgainst = (target: CombatantState) => bestSwingAttack(
     context.candidates.filter((attack) => !targetingProblem(snapshot, actor, target, attack)),
-    definition, actor, getDefinition(snapshot, target), target, new Set()
+    definition, actor, getDefinition(snapshot, target), target, new Set(), { snapshot, tactics: tacticsSettings(actor.tacticsProfile), log: state.log }
   );
 
   const plannedTarget = snapshot.combatants.find((combatant) => combatant.id === planned.attackTargetIds[context.swing.index]);
@@ -740,6 +755,11 @@ function decideMultiattackSwing(
     const best = bestAgainst(plannedTarget);
     if (best) {
       const wanted = context.candidates.find((attack) => attack.id === planned.attackActionIds[context.swing.index]);
+      // A dice trade goes on the first swing its bonus lands with, whichever the plan gave it to: the same weapon,
+      // traded or not, as the swing stands now (Sneak Attack still to come, or already dealt).
+      const retraded = wanted && (wanted.onHitTerms?.tradesDice || best.attack.onHitTerms?.tradesDice)
+        && attackFamilyId(wanted, context.candidates) === attackFamilyId(best.attack, context.candidates);
+      if (retraded) return { targetId: plannedTarget.id, actionId: best.attack.id };
       // The planned attack, unless that weapon can't reach from here any more.
       return { targetId: plannedTarget.id, actionId: wanted && !targetingProblem(snapshot, actor, plannedTarget, wanted) ? wanted.id : best.attack.id };
     }
@@ -2743,6 +2763,8 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
   if (hostiles.length === 0) {
     return undefined;
   }
+  // Its bonus action may be gone already (a turn played again after Action Surge).
+  if (!canAct(actor, "bonus")) return undefined;
   const actions = getExecutableActions(definition)
     .filter((action): action is FeatureActivationAction => action.kind === "activate-feature"
       && action.actionType === "bonus"
@@ -2953,6 +2975,7 @@ function selectOffensivePlan(
       const canMoveIntoRange = reachableNow || Boolean(bestDestinationTowardTarget(snapshot, actor, target, range, tactics));
       const expectedDamage = expectedDamageAgainst(action, definition, actor, targetDefinition, target);
       const controlValue = action.kind === "area-save" ? 0 : expectedRiderControl(action, definition, targetDefinition, tactics);
+      const tradeValue = diceTradeValue(snapshot, actor, definition, action, target, targetDefinition, tactics);
       const chargeValue = expectedChargeValue(snapshot, actor, definition, action, target, range, canMoveIntoRange);
       const preferredBonus = actionMatchesPreference(action, definition, tactics, targetDefinition) ? 8 : 0;
       const resourcePenalty = resourceCostWeight(action) * 4 * resourceStanceMultiplier(actor.resourceStance)
@@ -2993,11 +3016,15 @@ function selectOffensivePlan(
       if (threatenedRangedPenalty > 0) reasons.push("ranged attack threatened");
       if (coverPenalty > 0) reasons.push(targetCover >= 5 ? "target behind three-quarters cover" : "target behind half cover");
       if (controlValue > 0) reasons.push("imposes a condition");
+      if (tradeValue !== 0 && action.kind === "attack" && action.onHitTerms?.tradesDice) {
+        reasons.push(tradeValue > -1 ? `${action.onHitTerms.name} for ${action.onHitTerms.tradesDice.dice} damage ${action.onHitTerms.tradesDice.dice === 1 ? "die" : "dice"}` : `no ${action.onHitTerms.name} without the bonus it spends`);
+      }
       if (chargeValue > 0) reasons.push("charges in");
       if (tagPressure > 0) reasons.push("tagged high-priority");
       if (tagPressure < 0) reasons.push("tagged low-priority");
       let score = expectedDamage * 2
         + controlValue
+        + tradeValue
         + chargeValue * 2
         + preferredBonus
         + killPressure
@@ -3974,6 +4001,33 @@ function expectedRiderControl(
 
 type ConditionRider = Extract<ActionRider, { kind: "condition" }>;
 
+/**
+ * An on-hit option paid in dice of a damage bonus (Cunning Strike), weighed against the plain attack. Unless that
+ * bonus looks set to land, its riders and move won't come: what they'd add is taken back, and a little more so the
+ * plain attack wins. When it does: the move's worth (a skirmisher with a foe beside it), less the dice given up (their
+ * average at the chance to hit, on the damage scale of 2). Its riders' control is counted with the attack's own.
+ */
+function diceTradeValue(
+  snapshot: EncounterSnapshot,
+  actor: CombatantState,
+  definition: CreatureDefinition,
+  action: OffensiveAction,
+  target: CombatantState,
+  targetDefinition: CreatureDefinition,
+  tactics: TacticsSettings,
+  log?: CombatLogEvent[]
+): number {
+  const terms = action.kind === "attack" ? action.onHitTerms : undefined;
+  if (action.kind !== "attack" || !terms?.tradesDice) return 0;
+  if (!damageBonusExpected(snapshot, actor, target, action, terms.tradesDice.featureId, log)) {
+    const own = (action.riders ?? []).filter((rider) => rider.group === terms.group);
+    return -1 - expectedRiderControl({ ...action, riders: own }, definition, targetDefinition, tactics);
+  }
+  const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, definition), armorClassOf(targetDefinition).total);
+  const move = terms.move && tactics.reposition && isThreatenedAt(snapshot, actor, actor.position) ? 6 : 0;
+  return move - diceTradeCost(definition, terms.tradesDice) * hitChance * 2;
+}
+
 /** Chance a `condition` rider lands on `target`: always, on a failed save, or on a hit it doesn't save against. */
 function riderLandChance(
   action: OffensiveAction,
@@ -4352,6 +4406,7 @@ function turnsHeld(
   switch (duration.kind) {
     case "until-start-of-next-turn":
     case "until-source-turn":
+    case "until-end-of-next-turn":
       return 1;
     case "rounds": {
       const rounds = Math.min(MAX_TURNS_HELD, Math.max(1, duration.rounds));

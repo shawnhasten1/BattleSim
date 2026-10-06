@@ -74,6 +74,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "spell-range", bonus: 300, minRange: 10, cantripsOnly: true })
   },
   {
+    kind: "on-hit-option", label: "An upgrade it can add to a hit", hint: "Eldritch Smite, Fire's Burn, Cunning Strike: a choice made on a hit, paid with a use or with Sneak Attack dice", theme: "attacks", when: false, scope: false,
+    blank: () => ({ kind: "on-hit-option", option: { name: "Upgrade", riders: [] } })
+  },
+  {
     kind: "damage-dice", label: "Better damage dice", hint: "Great Weapon Fighting's 1s and 2s as 3s, Savage Attacker's second roll", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-dice", condition: "always", minimumDie: 3 })
   },

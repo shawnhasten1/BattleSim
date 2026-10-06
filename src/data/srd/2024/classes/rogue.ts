@@ -1,3 +1,4 @@
+import type { FeatureEffect, OnHitOption } from "@/engine";
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -15,6 +16,55 @@ const sneakAttack = runs("rogue_sneak-attack", {
     weaponProperties: ["finesse", "ranged"],
     damage: [{ dice: "1d6", damageType: "same-as-attack" }]
   }]
+});
+
+/** The builder's id for Sneak Attack (the class's id prefix and the grant's key): what Cunning Strike spends dice of. */
+const SNEAK_ATTACK_ID = "rogue-sneak-attack";
+/** A Cunning Strike save's DC: 8 + Dexterity modifier + proficiency bonus. */
+const CUNNING_DC = { base: 8, ability: "dex" as const, proficiency: true };
+
+/** A Cunning Strike effect: an on-hit option paid in Sneak Attack dice, landing only with Sneak Attack's damage. */
+const cunningStrike = (name: string, dice: number, option: Partial<OnHitOption>): FeatureEffect => ({
+  kind: "on-hit-option",
+  option: { name: `Cunning Strike: ${name}`, tradesDice: { featureId: SNEAK_ATTACK_ID, dice }, riders: [], ...option }
+});
+
+const cunningStrikes = runs("rogue_cunning-strike", {
+  effects: [
+    // Poison assumes the rogue carries a Poisoner's Kit.
+    cunningStrike("Poison", 1, {
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "poisoned", duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
+        save: { ability: "con", dcFormula: CUNNING_DC, onSuccess: "negates" }
+      }]
+    }),
+    cunningStrike("Trip", 1, {
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "prone", maxSize: "large", duration: { kind: "until-start-of-next-turn" },
+        save: { ability: "dex", dcFormula: CUNNING_DC, onSuccess: "negates" }
+      }]
+    }),
+    cunningStrike("Withdraw", 1, { move: { noOpportunityAttacks: true } })
+  ]
+});
+
+const deviousStrikes = runs("rogue_devious-strikes", {
+  effects: [
+    cunningStrike("Knock Out", 6, {
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "unconscious", endsOnDamage: true,
+        duration: { kind: "rounds", rounds: 10, repeatSaveAt: "turn-end" },
+        save: { ability: "con", dcFormula: CUNNING_DC, onSuccess: "negates" }
+      }]
+    }),
+    cunningStrike("Obscure", 3, {
+      riders: [{
+        kind: "condition", when: "on-hit", condition: "blinded", duration: { kind: "until-end-of-next-turn" },
+        save: { ability: "dex", dcFormula: CUNNING_DC, onSuccess: "negates" }
+      }]
+    })
+  ],
+  notSimulated: "Daze (a creature that can only move, take an action or take a bonus action on its next turn)."
 });
 
 const cunningAction = runs("rogue_cunning-action", {
@@ -77,7 +127,7 @@ export const ROGUE: ClassDefinition = {
     {
       level: 5,
       grants: [
-        grant("cunning-strike", reference("rogue_cunning-strike")),
+        grant("cunning-strike", cunningStrikes),
         grant("uncanny-dodge", runs("rogue_uncanny-dodge", {
           grantedActions: [{
             kind: "activate-feature", id: "uncanny-dodge", name: "Uncanny Dodge", actionType: "reaction", featureId: "",
@@ -96,7 +146,7 @@ export const ROGUE: ClassDefinition = {
       ]
     },
     { level: 11, grants: [grant("improved-cunning-strike", reference("rogue_improved-cunning-strike"))] },
-    { level: 14, grants: [grant("devious-strikes", reference("rogue_devious-strikes"))] },
+    { level: 14, grants: [grant("devious-strikes", deviousStrikes)] },
     { level: 15, grants: [grant("slippery-mind", informational("rogue_slippery-mind"), { adjust: { saves: ["wis", "cha"] } })] },
     { level: 18, grants: [grant("elusive", runs("rogue_elusive", { effects: [{ kind: "no-advantage-against" }] }))] },
     {

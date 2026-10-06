@@ -841,6 +841,25 @@ export interface OnHitOption {
   oncePerTurn?: boolean;
   /** Cast with a higher slot: this much more on its first damage rider per level above the spell's. A variant per slot. */
   upcast?: { damageDice: string };
+  /**
+   * Paid in dice of a damage bonus instead of a resource (Cunning Strike: Sneak Attack's). It's offered only on the
+   * attacks that bonus can add to, and comes only with the bonus's damage, which loses the dice.
+   */
+  tradesDice?: OnHitDiceTrade;
+  /** On the hit, the attacker can move up to this far (default half its speed), with `noOpportunityAttacks` provoking none (Withdraw). */
+  move?: OnHitMove;
+}
+
+/** Cunning Strike's cost: this many dice of the feature's `damage-bonus` (Sneak Attack's d6s). */
+export interface OnHitDiceTrade {
+  featureId: Id;
+  dice: number;
+}
+
+/** A move an on-hit option gives the attacker: up to `feet` (default half its speed), after the hit. */
+export interface OnHitMove {
+  feet?: number;
+  noOpportunityAttacks?: boolean;
 }
 /**
  * An always-on aura a creature radiates (Stench, Fear Aura, a balor's Fire Aura). Unlike `FeatureDefinition.aura`
@@ -924,7 +943,9 @@ export type RiderDuration =
    * Clears at the start or the end of the next turn of the creature that applied it (weapon mastery: Sap and Slow
    * "until the start of your next turn", Vex "before the end of your next turn").
    */
-  | { kind: "until-source-turn"; timing: "start" | "end" };
+  | { kind: "until-source-turn"; timing: "start" | "end" }
+  /** Clears at the end of the bearer's next turn (Cunning Strike's Obscure: blinded "until the end of its next turn"). */
+  | { kind: "until-end-of-next-turn" };
 
 export interface RiderSave {
   ability: Ability;
@@ -1019,6 +1040,8 @@ export type ActionRider =
       nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
       /** It ends when its bearer takes damage, other than the same action's (Turn Undead, Abjure Foes). */
       endsOnDamage?: boolean;
+      /** Only a creature this size or smaller (Cunning Strike's Trip: Large). */
+      maxSize?: SizeCategory;
     })
   | (TriggeredRider & {
       kind: "push";
@@ -1194,6 +1217,12 @@ export interface AttackActionDefinition {
    * lands, not when the attack is made (a weapon's charge, Stunning Strike's focus point, a smite's slot).
    */
   costPaidOnHit?: boolean;
+  /**
+   * A variant made from an on-hit option with terms beyond a cost (`onHitOptionVariants`): its riders (those in
+   * `group`) and its move land only when they're met. With `tradesDice`, only with that damage bonus's damage, which
+   * gives up the dice (Cunning Strike).
+   */
+  onHitTerms?: { group: string; name: string; tradesDice?: OnHitDiceTrade; move?: OnHitMove };
   /** On-hit effects: extra damage, a save-or-condition, a shove. */
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
@@ -2573,7 +2602,8 @@ export const riderDurationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("concentration") }),
   z.object({ kind: z.literal("permanent") }),
   z.object({ kind: z.literal("until-start-of-next-turn") }),
-  z.object({ kind: z.literal("until-source-turn"), timing: z.enum(["start", "end"]) })
+  z.object({ kind: z.literal("until-source-turn"), timing: z.enum(["start", "end"]) }),
+  z.object({ kind: z.literal("until-end-of-next-turn") })
 ]);
 
 export const riderSaveSchema = z.object({
@@ -2620,7 +2650,9 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
     modifiers: z.any().optional(),
     effects: z.array(z.any()).optional(),
     conditionKey: z.string().min(1).optional(),
-    nextAttack: z.object({ role: z.enum(["made", "against"]), mode: z.enum(["advantage", "disadvantage"]) }).optional()
+    nextAttack: z.object({ role: z.enum(["made", "against"]), mode: z.enum(["advantage", "disadvantage"]) }).optional(),
+    endsOnDamage: z.boolean().optional(),
+    maxSize: sizeSchema.optional()
   }),
   z.object({ ...triggeredRiderBase, kind: z.literal("push"), distance: z.number(), maxSize: sizeSchema.optional() }),
   z.object({

@@ -43,6 +43,8 @@ import type {
   Id,
   ItemUseMeta,
   MultiattackActionDefinition,
+  OnHitDiceTrade,
+  OnHitMove,
   OnHitOption,
   NumericFormula,
   Point,
@@ -192,6 +194,8 @@ interface FeatureDamageResolution {
   consumedConditionIds?: Id[];
   /** Marks whose damage spills onto a second creature (Superior Hunter's Prey). */
   spills?: Array<{ condition: ConditionInstance; damage: DamageComponent[]; withinFt: number }>;
+  /** An on-hit option's dice trade that was paid (Cunning Strike's): the bonus that gave them up, and the dice. */
+  traded?: { featureName: string; dice: string };
 }
 
 export function createEngineState(snapshot: EncounterSnapshot): EngineState {
@@ -395,6 +399,12 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
   const slots = Object.entries(definition.resources ?? {}).filter(([, count]) => count > 0).map(([id]) => slotLevelOf(id)).filter((level): level is number => level !== undefined);
   const out: AttackActionDefinition[] = [];
   options.forEach(({ key, option, spellLevel }, optionIndex) => {
+    // Cunning Strike: only on the attacks the damage bonus it spends dice of can add to, and only with enough dice.
+    const traded = option.tradesDice ? tradedDamageBonus(definition, option.tradesDice) : undefined;
+    if (option.tradesDice && !traded) return;
+    const terms = option.tradesDice || option.move
+      ? { group: key, name: option.name, ...(option.tradesDice ? { tradesDice: option.tradesDice } : {}), ...(option.move ? { move: option.move } : {}) }
+      : undefined;
     const base = spellLevel ?? slotLevelOf(option.resourceCost?.resourceId);
     // A slot-spending option: a variant per slot level it can use (only its own without upcast dice).
     const levels: Array<number | undefined> = base !== undefined && (spellLevel !== undefined || option.resourceCost)
@@ -404,6 +414,7 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       if (option.attackTypes && !option.attackTypes.includes(attack.attackType)) continue;
       if (option.weaponOnly && attack.attackType === "spell") continue;
       if (option.actionIds && !option.actionIds.includes(attack.id)) continue;
+      if (traded && !featureAppliesToAction(traded, attack)) continue;
       levels.forEach((level, levelIndex) => {
         const cost = level !== undefined ? { resourceId: `slot-${level}`, amount: 1 } : option.resourceCost;
         const extra = level !== undefined && base !== undefined && option.upcast && level > base ? repeatDice(option.upcast.damageDice, level - base) : "";
@@ -426,12 +437,71 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
           id: `${attack.id}:charged-${100 + optionIndex * 10 + levelIndex}`,
           name: `${attack.name} (${option.name}${level !== undefined && level !== base ? `, level ${level}` : ""})`,
           riders: [...(attack.riders ?? []), ...riders],
-          ...(cost ? { resourceCost: cost, costPaidOnHit: true } : {})
+          ...(cost ? { resourceCost: cost, costPaidOnHit: true } : {}),
+          ...(terms ? { onHitTerms: terms } : {})
         });
       });
     }
   });
   return out;
+}
+
+/** The average of the dice an on-hit option's trade gives up (Cunning Strike's 1d6: 3.5), or 0 without the bonus. */
+export function diceTradeCost(definition: CreatureDefinition, trade: OnHitDiceTrade): number {
+  const effect = tradedDamageBonus(definition, trade);
+  const fewer = effect ? withoutDice(effect.damage, trade.dice) : undefined;
+  if (!effect || !fewer) return 0;
+  const total = (damage: DamageComponent[]) => damage.reduce((sum, component) => sum + averageOfDice(component.dice), 0);
+  return total(effect.damage) - total(fewer);
+}
+
+/**
+ * Whether a damage bonus (Sneak Attack) looks set to add to `action` against `target` now: the roll's advantage or
+ * disadvantage as it stands, the bonus's other conditions, and (given the log) not used already this turn. Read-only,
+ * for the AI's weighing of a dice trade.
+ */
+export function damageBonusExpected(
+  snapshot: EncounterSnapshot,
+  attacker: CombatantState,
+  target: CombatantState,
+  action: AttackActionDefinition,
+  featureId: Id,
+  log: CombatLogEvent[] = []
+): boolean {
+  const definition = getDefinition(snapshot, attacker);
+  const feature = featureSources(definition, attacker).find((candidate) => candidate.id === featureId);
+  const effectIndex = feature?.effects?.findIndex((candidate) => candidate.kind === "damage-bonus") ?? -1;
+  const effect = effectIndex >= 0 ? feature!.effects![effectIndex]! : undefined;
+  if (!feature || !effect || !featureAppliesToAction(effect, action)) return false;
+  const noDice = (): never => {
+    throw new Error("A read-only check can't roll dice");
+  };
+  const state: EngineState = { snapshot, log, rng: { next: noDice, nextInt: noDice, fork: noDice } };
+  if (effect.kind === "damage-bonus" && effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) return false;
+  const inputs = attackRollInputs(state, attacker, target, action);
+  return featureConditionsMet(state, attacker, target, effect, { rollMode: inputs.rollMode, critical: false });
+}
+
+/** The damage bonus an on-hit option spends dice of (Sneak Attack's), when the creature has it with enough dice. */
+function tradedDamageBonus(definition: CreatureDefinition, trade: OnHitDiceTrade): Extract<FeatureEffect, { kind: "damage-bonus" }> | undefined {
+  const feature = [...(definition.features ?? []), ...(definition.traits ?? [])].find((candidate) => candidate.id === trade.featureId);
+  const effect = feature?.effects?.find((candidate): candidate is Extract<FeatureEffect, { kind: "damage-bonus" }> => candidate.kind === "damage-bonus");
+  return effect && withoutDice(effect.damage, trade.dice) ? effect : undefined;
+}
+
+/**
+ * Damage with `count` of its first dice given up before rolling ("3d6" less 1 die: "2d6"; all of them: nothing), or
+ * undefined when it hasn't that many.
+ */
+export function withoutDice(damage: DamageComponent[], count: number): DamageComponent[] | undefined {
+  const first = damage[0];
+  const match = first ? /^(\d+)d(\d+)(.*)$/.exec(first.dice.replace(/\s+/g, "")) : null;
+  if (!first || !match || Number(match[1]) < count) return undefined;
+  const left = Number(match[1]) - count;
+  const rest = match[3] ?? "";
+  if (left > 0) return [{ ...first, dice: `${left}d${match[2]}${rest}` }, ...damage.slice(1)];
+  const remainder = rest.replace(/^\+/, "");
+  return remainder ? [{ ...first, dice: remainder }, ...damage.slice(1)] : damage.slice(1);
 }
 
 /**
@@ -2149,9 +2219,19 @@ function resolveAttackCore(
       hit = total >= raisedAc;
     }
   }
-  const featureDamage = hit
-    ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical })
+  const terms = action.onHitTerms;
+  const featureDamage: FeatureDamageResolution = hit
+    ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical }, terms?.tradesDice)
     : { entries: [], sources: [] };
+  // An on-hit option's terms (Cunning Strike: Sneak Attack's dice, given up): unmet, its riders and move don't come.
+  const termsMet = hit && Boolean(terms) && (!terms!.tradesDice || featureDamage.traded !== undefined);
+  if (termsMet && featureDamage.traded) {
+    state.log.push(event(state, "FeatureEffectApplied", `${attacker.displayName} gives up ${featureDamage.traded.dice} of ${featureDamage.traded.featureName} for ${terms!.name}`, {
+      combatantId: attacker.id, targetId: target.id, actionId: action.id, featureName: terms!.name, effectKind: "on-hit-option",
+      tradedDice: featureDamage.traded.dice, tradedFrom: featureDamage.traded.featureName
+    }));
+  }
+  const riders = terms && !termsMet ? action.riders?.filter((rider) => rider.group !== terms.group) : action.riders;
   const targetHitDamage = hit
     ? targetIncomingHitDamageEntries(state, attacker, target, action, { rollMode, critical })
     : { entries: [], sources: [] };
@@ -2183,13 +2263,18 @@ function resolveAttackCore(
     // Studied Attacks: a miss sets up the next attack.
     appliedConditionEffects = applyOnHitFeatureConditions(state, attacker, target, action, attackerDefinition, { rollMode, critical }, true);
   }
-  if (action.riders?.length) {
-    const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, action.riders, {
+  if (riders?.length) {
+    const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, riders, {
       actionId: action.id, landed: hit, critical, saved: null, origin: attacker.position,
       fallbackDc: defaultSaveDc(attackerDefinition, action.ability),
       concentrating: action.concentration
     });
     appliedConditionEffects = [...appliedConditionEffects, ...riderOutcome.appliedConditions];
+  }
+
+  // Withdraw: the move the option gives.
+  if (termsMet && terms!.move && attacker.state === "active") {
+    giveMove(state, attacker, terms!.move, { featureName: terms!.name, actionId: action.id, effectKind: "on-hit-option" });
   }
 
   // Post-hit reactions — Hellish Rebuke: `target` retaliates against `attacker`.
@@ -3136,18 +3221,24 @@ function grantFreeMoves(state: EngineState, actor: CombatantState, trigger: { sp
       if (effect.kind !== "free-move") continue;
       const fires = effect.on === "critical-hit" ? trigger.criticalHit === true : trigger.spends !== undefined && effect.on.spends === trigger.spends;
       if (!fires) continue;
-      const feet = effect.feet ?? Math.floor(movementReference(movementProfileOf(definition)) / 2);
-      const squares = feet / state.snapshot.map.grid.distancePerSquare;
-      actor.turnFlags = {
-        ...(actor.turnFlags ?? {}),
-        bonusMovement: (actor.turnFlags?.bonusMovement ?? 0) + squares,
-        ...(effect.noOpportunityAttacks ? { disengaged: true } : {})
-      };
-      state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName}'s ${feature.name}: ${feet} ft more movement${effect.noOpportunityAttacks ? ", provoking no opportunity attacks" : ""}`, {
-        combatantId: actor.id, featureId: feature.id, featureName: feature.name, effectKind: effect.kind, feet
-      }));
+      giveMove(state, actor, effect, { featureId: feature.id, featureName: feature.name, effectKind: effect.kind });
     }
   }
+}
+
+/** More movement this turn (half its speed unless `feet` says), maybe provoking no opportunity attacks: a free move. */
+function giveMove(state: EngineState, actor: CombatantState, move: OnHitMove, about: { featureName: string } & Record<string, unknown>): void {
+  const definition = getDefinition(state.snapshot, actor);
+  const feet = move.feet ?? Math.floor(movementReference(movementProfileOf(definition)) / 2);
+  const squares = feet / state.snapshot.map.grid.distancePerSquare;
+  actor.turnFlags = {
+    ...(actor.turnFlags ?? {}),
+    bonusMovement: (actor.turnFlags?.bonusMovement ?? 0) + squares,
+    ...(move.noOpportunityAttacks ? { disengaged: true } : {})
+  };
+  state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName}'s ${about.featureName}: ${feet} ft more movement${move.noOpportunityAttacks ? ", provoking no opportunity attacks" : ""}`, {
+    combatantId: actor.id, ...about, feet
+  }));
 }
 
 export function resetActionEconomy(combatant: CombatantState): void {
@@ -6140,10 +6231,12 @@ function featureDamageEntries(
   target: CombatantState,
   action: AttackActionDefinition,
   definition: CreatureDefinition,
-  context: AttackFeatureContext
+  context: AttackFeatureContext,
+  trade?: OnHitDiceTrade
 ): FeatureDamageResolution {
   const entries: DamageApplicationEntry[] = [];
   const sources: string[] = [];
+  let traded: FeatureDamageResolution["traded"];
   for (const feature of featureSources(definition, attacker)) {
     for (const [effectIndex, effect] of (feature.effects ?? []).entries()) {
       if (!featureAppliesToAction(effect, action) || !featureConditionsMet(state, attacker, target, effect, context)) {
@@ -6157,7 +6250,14 @@ function featureDamageEntries(
       if (effect.kind === "damage-bonus") {
         markFeatureEffectApplied(state, attacker, target, action, feature, effect, effectIndex);
         noteChargeHit(attacker, target, effect);
-        entries.push(...effect.damage.map((component) => ({
+        // Cunning Strike: the dice it spends are taken off before rolling.
+        let damage = effect.damage;
+        const fewer = trade && !traded && feature.id === trade.featureId ? withoutDice(effect.damage, trade.dice) : undefined;
+        if (fewer) {
+          traded = { featureName: feature.name, dice: `${trade!.dice}d${/d(\d+)/.exec(effect.damage[0]!.dice)?.[1] ?? "6"}` };
+          damage = fewer;
+        }
+        entries.push(...damage.map((component) => ({
           component,
           critical: context.critical && (effect.critical ?? true),
           triggerDamageType: firstActionDamageType(action),
@@ -6198,7 +6298,7 @@ function featureDamageEntries(
       }
     }
   }
-  return { entries, sources };
+  return { entries, sources, ...(traded ? { traded } : {}) };
 }
 
 function targetIncomingHitDamageEntries(
@@ -6419,6 +6519,13 @@ function riderDurationToExpiry(state: EngineState, duration: RiderDuration, bear
           timing: "start"
         }
       };
+    }
+    case "until-end-of-next-turn": {
+      // The end of the bearer's next turn: later this round if it hasn't come yet, otherwise next round (its own, now,
+      // included: "its next turn" is the one after this).
+      const bearerIdx = bearerTurnIndex ?? state.snapshot.turnIndex;
+      const laterThisRound = bearerIdx > state.snapshot.turnIndex;
+      return { expiresAt: { round: state.snapshot.round + (laterThisRound ? 0 : 1), turnIndex: bearerIdx, timing: "end" } };
     }
     case "until-source-turn": {
       // The source's next turn: later this round if it hasn't come yet, otherwise next round (its own, now, included).
@@ -6778,6 +6885,8 @@ function applyActionRiders(
         return;
       }
     } else if (rider.kind === "condition") {
+      // Cunning Strike's Trip: only a Large or smaller creature, with no save for a bigger one.
+      if (rider.maxSize && SIZE_ORDER.indexOf(targetDefinition.size) > SIZE_ORDER.indexOf(rider.maxSize)) return;
       const applied = applyConditionRider(state, source, target, sourceDefinition, targetDefinition, rider, ctx);
       if (applied) {
         outcome.appliedConditions.push(applied);

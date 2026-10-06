@@ -174,6 +174,32 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Quick Feet").effects).toEqual([{ kind: "free-move", on: { spends: "second-wind" }, feet: 15, noOpportunityAttacks: true }]);
   });
 
+  it("An upgrade on a hit: what it adds, a move after it, paid in dice of a damage bonus, once a turn", async () => {
+    await blankFeature("Low Cut");
+    const card = await addEffect(/^An upgrade it can add to a hit/, "An upgrade it can add to a hit");
+    await retype(card.getByLabelText("Its name"), "Low Cut");
+    await chip(card, "After hits with", "melee");
+    await userEvent.click(card.getByRole("button", { name: "Add effect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /^Push/ }));
+    await userEvent.click(card.getAllByRole("button", { name: "Done" })[0]!);
+    await userEvent.click(card.getByRole("checkbox", { name: "A move after the hit" }));
+    await retype(card.getByLabelText("Up to (ft)"), "10");
+    await userEvent.click(card.getByRole("checkbox", { name: /^Paid in dice of a damage bonus/ }));
+    await retype(card.getByLabelText("Dice it gives up"), "2");
+    // Paid in dice: no use to spend, no bonus action.
+    expect(card.queryByRole("checkbox", { name: "Spends a use" })).toBeNull();
+    await userEvent.click(card.getByRole("checkbox", { name: "Once per turn" }));
+    await done(card);
+    await addToSheet();
+    expect(named("Low Cut").effects).toMatchObject([{
+      kind: "on-hit-option",
+      option: {
+        name: "Low Cut", attackTypes: ["melee"], riders: [{ kind: "push", when: "on-hit" }],
+        move: { noOpportunityAttacks: true, feet: 10 }, tradesDice: { featureId: "", dice: 2 }, oncePerTurn: true
+      }
+    }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

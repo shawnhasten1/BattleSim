@@ -23,7 +23,7 @@ its gaps, never dropped and never approximated without saying so.
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 8 | 0 | 5 | 6 | 4 |
+| Rogue (Thief) | 23 | 9 | 1 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
@@ -46,7 +46,8 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
-| `dice-trade` | Trading damage dice for an effect (Cunning Strike, Brutal Strike) | Barbarian, Rogue | 5 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Cunning Strike (Rogue); Improved Cunning Strike (Rogue); Devious Strikes (Rogue) |
+| `dice-trade` | Brutal Strike's trade of advantage for an effect, and two Cunning Strike effects on one hit (Improved Cunning Strike) | Barbarian, Rogue | 9 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Improved Cunning Strike (Rogue) |
+| `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin, Rogue | 9 | Abjure Foes (Paladin); Devious Strikes (Rogue) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
@@ -66,7 +67,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
-| `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
@@ -339,12 +339,12 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Rogue Subclass | builder |  | The subclass choice. |
 | 3 | Steady Aim | full |  | Before moving: advantage on its next attack roll, and no more movement, this turn. The AI takes it with an attack in reach from where it stands. |
 | 4, 8, 10, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
-| 5 | Cunning Strike | manual | `dice-trade` |  |
+| 5 | Cunning Strike | full |  | Poison, Trip and Withdraw, each a variant of the attacks Sneak Attack adds to, landing only with Sneak Attack's damage (which gives up the dice); Poison assumes a Poisoner's Kit. The AI trades dice for a condition under Controller tactics (the condition's worth is weighed low otherwise), and for Withdraw as a skirmisher with a foe beside it. |
 | 5 | Uncanny Dodge | full |  | Halves an attack roll's damage, taken by the AI for a cut of 5 or more or one that keeps it standing; damage that lands with the hit as a rider (a smite) is dealt apart and isn't halved. |
 | 7 | Evasion | full |  |  |
 | 7 | Reliable Talent | info |  | Ability checks. |
 | 11 | Improved Cunning Strike | manual | `dice-trade` |  |
-| 14 | Devious Strikes | manual | `dice-trade` |  |
+| 14 | Devious Strikes | partial | `action-limits` | Knock Out (unconscious until it saves or takes damage) and Obscure (blinded until the end of its next turn) run; Daze doesn't. |
 | 15 | Slippery Mind | builder |  | Wisdom and Charisma save proficiency. |
 | 18 | Elusive | full |  | No advantage on attack rolls against it while it isn't incapacitated. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |

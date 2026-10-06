@@ -282,6 +282,7 @@ function durationText(duration: RiderDuration | undefined, condition?: Condition
   if (condition && conditionName(condition) === "prone" && duration.kind === "until-start-of-next-turn") return "";
   if (duration.kind === "rounds") return ` for ${roundsText(duration.rounds)}`;
   if (duration.kind === "until-start-of-next-turn") return " until the start of its next turn";
+  if (duration.kind === "until-end-of-next-turn") return " until the end of its next turn";
   if (duration.kind === "concentration") return " (concentration)";
   return "";
 }
@@ -338,10 +339,12 @@ function riderSentence(rider: ActionRider, definition: CreatureDefinition, fallb
       }
       // Turn Undead: taking damage ends it.
       const ends = rider.endsOnDamage ? ` It ends early if ${who.subject} takes damage.` : "";
+      // Trip: a bigger creature isn't affected.
+      const size = rider.maxSize ? ` if it is ${rider.maxSize} or smaller` : "";
       if (rider.save && rollsOwnSave) {
-        return `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or ${beCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
+        return `${S} must succeed on a DC ${riderDc(rider.save, definition, fallbackDc)} ${ABILITY_NAME[rider.save.ability]} saving throw or ${beCondition(rider, definition)}${size}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
       }
-      return `${S} ${isCondition(rider, definition)}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
+      return `${S} ${isCondition(rider, definition)}${size}${qualifiers}.${repeatSaveText(rider.duration, who)}${ends}`;
     }
     case "damage":
       return `${S} takes an extra ${damageText(rider.components, definition)}${qualifiers}.`;
@@ -390,7 +393,7 @@ export function riderShort(rider: ActionRider, definition: CreatureDefinition, f
 function riderShortOf(rider: ActionRider, definition: CreatureDefinition, fallbackDc: number, rollsOwnSave: boolean): string {
   switch (rider.kind) {
     case "condition": {
-      const name = onlyDeniesReactions(rider) ? "no reactions" : conditionName(rider.condition);
+      const name = `${onlyDeniesReactions(rider) ? "no reactions" : conditionName(rider.condition)}${rider.maxSize ? ` (${rider.maxSize} or smaller)` : ""}`;
       if (rider.save && rollsOwnSave) return `DC ${riderDc(rider.save, definition, fallbackDc)} ${rider.save.ability.toUpperCase()} or ${name}`;
       return name;
     }
@@ -721,6 +724,17 @@ export function onHitOptionSentence(option: OnHitOption, definition: CreatureDef
   const cost = [option.resourceCost ? costText(option.resourceCost) : "", option.bonusAction ? "its bonus action" : ""].filter(Boolean);
   const spend = cost.length ? ` spend ${cost.join(" and ")} to` : "";
   const effects = option.riders.map((rider) => riderShort(rider, definition, 10, true)).filter(Boolean);
+  if (option.move) {
+    effects.push(`a move of up to ${option.move.feet ? `${option.move.feet} feet` : "half its speed"}${option.move.noOpportunityAttacks ? " without provoking opportunity attacks" : ""}`);
+  }
+  // Cunning Strike: paid in dice of a damage bonus, landing only with its damage.
+  if (option.tradesDice) {
+    const feature = [...(definition.features ?? []), ...(definition.traits ?? [])].find((candidate) => candidate.id === option.tradesDice!.featureId);
+    const bonus = feature?.effects?.find((effect) => effect.kind === "damage-bonus");
+    const die = bonus && bonus.kind === "damage-bonus" ? /d(\d+)/.exec(bonus.damage[0]?.dice ?? "")?.[1] : undefined;
+    const dice = die ? `${option.tradesDice.dice}d${die}` : `${countWord(option.tradesDice.dice)} ${option.tradesDice.dice === 1 ? "die" : "dice"}`;
+    return `${option.name}: when ${who.subject} deals ${feature?.name ?? "its bonus"} damage, ${who.subject} can give up ${dice} of it for ${effects.join(", ") || "nothing yet"}.`;
+  }
   const once = option.oncePerTurn ? " Once per turn." : "";
   const higher = option.upcast ? ` A higher slot adds ${option.upcast.damageDice} per level.` : "";
   return `When ${who.subject} hits with ${what}, ${who.subject} can${spend} add: ${effects.join(", ")}.${once}${higher}`;

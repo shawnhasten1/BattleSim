@@ -19,6 +19,7 @@ import {
   type FeatureEffectConditionApplication,
   type FeatureEffectSaveGate,
   type NumericFormula,
+  type OnHitOption,
   type WeaponDefinition
 } from "@/engine";
 import {
@@ -45,6 +46,7 @@ import { poolOptions } from "@/lib/ability-editor/pools";
 import { componentAverage, effectCardSentence, modifiersSentence } from "@/lib/statblock";
 import { Check, Field, More, NumberField, Segmented } from "./controls";
 import { DAMAGE_TYPES, DamageLines } from "./DamageLines";
+import { EffectCards } from "./EffectCards";
 import { PoolPicker, type NewPools } from "./LimitPicker";
 import styles from "./ability-editor.module.css";
 
@@ -684,6 +686,75 @@ function FeatureSave({ save, onChange, definition, label }: {
   );
 }
 
+/**
+ * An upgrade a hit can take (Eldritch Smite, Fire's Burn, Cunning Strike): its name, the attacks it follows, what it
+ * adds (effect cards, as a weapon's), and what it costs: a use and the bonus action, or dice of a damage bonus.
+ */
+function OnHitOptionFields({ option, onChange, context }: { option: OnHitOption; onChange: (next: OnHitOption) => void; context: CardContext }) {
+  const id = useId();
+  const { definition, newPools, weapon } = context;
+  const types = option.attackTypes ?? [];
+  const toggleType = (type: "melee" | "ranged" | "spell") => {
+    const next = types.includes(type) ? types.filter((candidate) => candidate !== type) : [...types, type];
+    onChange(opt(option, "attackTypes", next.length ? next : undefined));
+  };
+  // Cunning Strike: the damage bonuses it could spend dice of (Sneak Attack).
+  const bonuses = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => feature.effects?.some((candidate) => candidate.kind === "damage-bonus"));
+  const trade = option.tradesDice;
+  const ability: Ability = definition.abilities.dex > definition.abilities.str ? "dex" : "str";
+  return (
+    <>
+      <span className={styles.inline}>
+        <label htmlFor={`${id}-name`}>Called</label>
+        <input id={`${id}-name`} aria-label="Its name" value={option.name} onChange={(e) => onChange({ ...option, name: e.target.value })} />
+      </span>
+      <span className={styles.typeChips} role="group" aria-label="After hits with">
+        {(["melee", "ranged", "spell"] as const).map((type) => (
+          <button key={type} type="button" aria-pressed={types.includes(type)} onClick={() => toggleType(type)}>{type}</button>
+        ))}
+      </span>
+      <Check label="Weapon attacks only" checked={option.weaponOnly === true} onChange={(on) => onChange(opt(option, "weaponOnly", on ? true : undefined))} />
+      <EffectCards riders={option.riders} onChange={(riders) => onChange({ ...option, riders })} definition={definition}
+        context={{ kind: "attack", ability }} weapon={weapon} newPools={newPools} />
+      <Check label="A move after the hit" checked={Boolean(option.move)} onChange={(on) => onChange(opt(option, "move", on ? { noOpportunityAttacks: true } : undefined))} />
+      {option.move ? (
+        <span className={styles.inline}>
+          <NumberField label="Up to (ft)" value={option.move.feet} optional min={5} max={120} step={5} placeholder="half its speed"
+            onChange={(feet) => onChange({ ...option, move: opt(option.move!, "feet", feet) })} />
+          <Check label="Provoking no opportunity attacks" checked={option.move.noOpportunityAttacks === true}
+            onChange={(on) => onChange({ ...option, move: opt(option.move!, "noOpportunityAttacks", on ? true : undefined) })} />
+        </span>
+      ) : null}
+      <Check label="Paid in dice of a damage bonus (Cunning Strike: Sneak Attack's)" checked={Boolean(trade)}
+        onChange={(on) => {
+          const next = opt(opt(opt(option, "resourceCost", undefined), "bonusAction", undefined), "tradesDice", on ? { featureId: bonuses[0]?.id ?? "", dice: 1 } : undefined);
+          onChange(next);
+        }} />
+      {trade ? (
+        <span className={styles.inline}>
+          <NumberField label="Dice it gives up" value={trade.dice} min={1} max={20} onChange={(dice) => dice !== undefined && onChange({ ...option, tradesDice: { ...trade, dice } })} />
+          <span>of</span>
+          <select aria-label="The damage bonus it spends" value={trade.featureId} onChange={(e) => onChange({ ...option, tradesDice: { ...trade, featureId: e.target.value } })}>
+            {bonuses.map((feature) => <option key={feature.id} value={feature.id}>{feature.name}</option>)}
+            {!bonuses.some((feature) => feature.id === trade.featureId) ? <option value={trade.featureId}>{trade.featureId ? `${trade.featureId} (not found)` : "(none yet)"}</option> : null}
+          </select>
+        </span>
+      ) : (
+        <>
+          <Check label="Spends a use" checked={Boolean(option.resourceCost)} onChange={(on) => onChange(opt(option, "resourceCost", on ? option.resourceCost ?? { resourceId: "", amount: 1 } : undefined))} />
+          {option.resourceCost ? (
+            <PoolPicker definition={definition} weapon={weapon} newPools={newPools} startCreating={!option.resourceCost.resourceId}
+              value={option.resourceCost.resourceId ? option.resourceCost : undefined} onChange={(resourceCost) => onChange({ ...option, resourceCost })} />
+          ) : null}
+          <Check label="Takes its bonus action" checked={option.bonusAction === true} onChange={(on) => onChange(opt(option, "bonusAction", on ? true : undefined))} />
+        </>
+      )}
+      <Check label="Once per turn" checked={option.oncePerTurn === true} onChange={(on) => onChange(opt(option, "oncePerTurn", on ? true : undefined))} />
+    </>
+  );
+}
+
 function EffectFields({ effect, damageTypes, abilities, restricted, place, onChange, context }: {
   effect: FeatureEffect;
   damageTypes?: DamageTypes;
@@ -992,6 +1063,8 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
         </>
       );
     }
+    case "on-hit-option":
+      return <OnHitOptionFields option={effect.option} onChange={(option) => set({ ...effect, option })} context={context} />;
     case "d20-change": {
       const rolls = effect.rolls;
       const toggleRoll = (roll: "attack" | "save") => {
