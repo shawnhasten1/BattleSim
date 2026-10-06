@@ -1210,6 +1210,28 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
           {effect.change === "add" ? (
             <input aria-label="Die it adds" className={styles.expression} value={effect.dice ?? ""} placeholder="1d10" onChange={(e) => set({ ...effect, dice: e.target.value.replace(/\s+/g, "") })} />
           ) : null}
+          {effect.change === "reroll" ? (
+            <Check label="The new roll has advantage" checked={effect.advantage === true} onChange={(on) => set(opt(effect, "advantage", on ? true : undefined))} />
+          ) : null}
+          {/* Countercharm, Boon of Fate: another creature's roll. */}
+          <Check label="An ally's roll too" checked={Boolean(effect.forOthers)} onChange={(on) => set(opt(effect, "forOthers", on ? { withinFt: 30, includeSelf: true } : undefined))} />
+          {effect.forOthers ? (
+            <span className={styles.inline}>
+              <NumberField label="Ally within (ft)" value={effect.forOthers.withinFt} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, forOthers: { ...effect.forOthers!, withinFt: n } })} />
+              <Check label="Its own too" checked={effect.forOthers.includeSelf === true} onChange={(on) => set({ ...effect, forOthers: opt(effect.forOthers!, "includeSelf", on ? true : undefined) })} />
+            </span>
+          ) : null}
+          <Check label="Takes its reaction" checked={effect.reaction === true} onChange={(on) => set(opt(effect, "reaction", on ? true : undefined))} />
+          {rolls.includes("save") ? (
+            <span className={styles.typeChips} role="group" aria-label="Only saves against">
+              {CONDITIONS.map((condition) => {
+                const against = effect.againstConditions ?? [];
+                const on = against.includes(condition);
+                const next = on ? against.filter((entry) => entry !== condition) : [...against, condition];
+                return <button key={condition} type="button" aria-pressed={on} onClick={() => set(opt(effect, "againstConditions", next.length ? next : undefined))}>{condition}</button>;
+              })}
+            </span>
+          ) : null}
           <Check label="Only on a natural 1" checked={effect.onNatural1 === true} onChange={(on) => set(opt(effect, "onNatural1", on ? true : undefined))} />
           <Check label="Once until the start of its next turn" checked={effect.oncePerTurn === true} onChange={(on) => set(opt(effect, "oncePerTurn", on ? true : undefined))} />
           <Check label="Spends a use" checked={Boolean(effect.resourceCost)} onChange={(on) => set(opt(effect, "resourceCost", on ? effect.resourceCost ?? { resourceId: "", amount: 1 } : undefined))} />

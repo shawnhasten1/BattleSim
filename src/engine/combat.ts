@@ -7695,6 +7695,8 @@ function wantsLegendaryResistance(target: CombatantState, ctx: SaveContext): boo
 /** A failed d20 roll as its roller saw it: the die, what's added to it, what it had to reach, and how it was rolled. */
 interface FailedD20 {
   roll: "attack" | "save";
+  /** A save against these conditions (Countercharm only rerolls one against Charmed or Frightened). */
+  conditions?: ConditionName[];
   /** A spell's attack roll (Seeking Spell changes only these). */
   spellAttack?: boolean;
   natural: number;
@@ -7711,24 +7713,31 @@ interface D20ChangeChoice {
   key: string;
   feature: string;
   effect: Extract<FeatureEffect, { kind: "d20-change" }>;
+  /** Who it's from: the roller, or an ally helping (Countercharm, Boon of Fate). */
+  owner: CombatantState;
   /** The condition it comes from, when it's one (a Bardic Inspiration die), to end it once used (`usedUp`). */
   conditionId?: Id;
 }
 
 /** The ways `combatant` could change this failed roll now: each feature once a roll, paid for, not spent this turn. */
-function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: FailedD20, used: Set<string>): D20ChangeChoice[] {
+function d20ChangeChoices(state: EngineState, combatant: CombatantState, d20: FailedD20, used: Set<string>, roller: CombatantState = combatant): D20ChangeChoice[] {
   const definition = getDefinition(state.snapshot, combatant);
   const choices: D20ChangeChoice[] = [];
+  const own = roller.id === combatant.id;
   for (const feature of featureSources(definition, combatant)) {
     for (const [index, effect] of (feature.effects ?? []).entries()) {
       if (effect.kind !== "d20-change" || !effect.rolls.includes(d20.roll) || (effect.change === "hit" && d20.roll !== "attack")) continue;
+      // Its own roll, unless it's for others only; another's, only one within reach of it.
+      if (own ? effect.forOthers && !effect.forOthers.includeSelf : !effect.forOthers || spatialDistance(state.snapshot, combatant, roller) > effect.forOthers.withinFt) continue;
+      if (effect.reaction && !canAct(combatant, "reaction")) continue;
+      if (effect.againstConditions && !(d20.conditions ?? []).some((name) => effect.againstConditions!.includes(name))) continue;
       if (effect.onNatural1 && d20.natural !== 1) continue;
       if (effect.spellAttacksOnly && !d20.spellAttack) continue;
-      const key = `${feature.id}:${index}`;
+      const key = own ? `${feature.id}:${index}` : `${combatant.id}:${feature.id}:${index}`;
       if (used.has(key) || (effect.oncePerTurn && combatant.turnFlags?.d20ChangesUsed?.includes(key))) continue;
       if (effect.resourceCost && (combatant.resources?.[effect.resourceCost.resourceId] ?? 0) < effect.resourceCost.amount) continue;
       const condition = (combatant.conditions ?? []).find((candidate) => candidate.effects === feature.effects);
-      choices.push({ key, feature: feature.name, effect, ...(condition ? { conditionId: condition.id } : {}) });
+      choices.push({ key, feature: feature.name, effect, owner: combatant, ...(condition ? { conditionId: condition.id } : {}) });
     }
   }
   return choices;
@@ -7797,42 +7806,54 @@ function changeFailedD20(
   failed: FailedD20,
   succeeds: (natural: number, total: number) => boolean
 ): { natural: number; total: number; hit: boolean } | undefined {
-  const definition = getDefinition(state.snapshot, combatant);
   const used = new Set<string>();
   let d20 = failed;
   let total = failed.natural + failed.modifier;
   let changedAny = false;
-  for (;;) {
-    const choices = d20ChangeChoices(state, combatant, d20, used);
+  // Its own first; then, still failing, its allies who can help (Countercharm, Boon of Fate), the nearest first.
+  const faction = effectiveFaction(state.snapshot, combatant);
+  const helpers = [combatant, ...state.snapshot.combatants
+    .filter((other) => other.id !== combatant.id && other.state === "active" && effectiveFaction(state.snapshot, other) === faction)
+    .sort((a, b) => spatialDistance(state.snapshot, combatant, a) - spatialDistance(state.snapshot, combatant, b) || a.id.localeCompare(b.id))];
+  for (const owner of helpers) {
+    const definition = getDefinition(state.snapshot, owner);
+    for (;;) {
+    const choices = d20ChangeChoices(state, owner, d20, used, combatant);
     if (!choices.length) break;
-    const ai = aiD20Change(combatant, choices, d20, definition);
+    const ai = aiD20Change(owner, choices, d20, definition);
     const answer = askDecision<D20ChangeRequest>(state, {
-      kind: "d20-change", combatantId: combatant.id, roll: d20.roll, natural: d20.natural, total, against: d20.against, label: d20.label,
+      kind: "d20-change", combatantId: owner.id, ...(owner.id !== combatant.id ? { rollerId: combatant.id } : {}),
+      roll: d20.roll, natural: d20.natural, total, against: d20.against, label: d20.label,
       options: choices.map((choice) => ({
         id: choice.key,
         name: choice.feature,
         does: d20ChangeWords(choice.effect, definition),
-        ...(choice.effect.resourceCost ? { cost: { ...choice.effect.resourceCost, left: combatant.resources?.[choice.effect.resourceCost.resourceId] ?? 0 } } : {})
+        ...(choice.effect.resourceCost ? { cost: { ...choice.effect.resourceCost, left: owner.resources?.[choice.effect.resourceCost.resourceId] ?? 0 } } : {})
       })),
       aiChoice: ai?.key ?? null
-    }, combatant.id);
+    }, owner.id);
     const picked = answer ? choices.find((choice) => choice.key === answer.optionId) : ai;
     if (!picked) break;
     used.add(picked.key);
     const effect = picked.effect;
     if (effect.resourceCost) {
       const { resourceId, amount } = effect.resourceCost;
-      combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) - amount };
+      owner.resources = { ...(owner.resources ?? {}), [resourceId]: (owner.resources?.[resourceId] ?? 0) - amount };
     }
     if (effect.oncePerTurn) {
-      combatant.turnFlags = { ...(combatant.turnFlags ?? {}), d20ChangesUsed: [...(combatant.turnFlags?.d20ChangesUsed ?? []), picked.key] };
+      owner.turnFlags = { ...(owner.turnFlags ?? {}), d20ChangesUsed: [...(owner.turnFlags?.d20ChangesUsed ?? []), picked.key] };
+    }
+    // Countercharm: its reaction.
+    if (effect.reaction) {
+      owner.actionEconomy ??= { action: true, bonus: true, reaction: true };
+      owner.actionEconomy.reaction = false;
     }
     const before = { natural: d20.natural, total };
     let rolled: DiceRollResult | undefined;
     let hit = false;
     if (effect.change === "reroll") {
       const bonus = effect.bonus ? resolveNumericFormula(effect.bonus, definition) : 0;
-      rolled = rollD20(state.rng, { advantage: d20.mode === "advantage", disadvantage: d20.mode === "disadvantage" });
+      rolled = rollD20(state.rng, { advantage: effect.advantage === true || d20.mode === "advantage", disadvantage: !effect.advantage && d20.mode === "disadvantage" });
       d20 = { ...d20, natural: rolled.total };
       total = rolled.total + d20.modifier + bonus;
     } else if (effect.change === "add") {
@@ -7848,17 +7869,20 @@ function changeFailedD20(
     const success = hit || succeeds(d20.natural, total);
     // A Bardic Inspiration die is gone once rolled; Peerless Skill's use comes back if the roll still fails.
     if (effect.usedUp && picked.conditionId) {
-      combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.id !== picked.conditionId);
+      owner.conditions = (owner.conditions ?? []).filter((condition) => condition.id !== picked.conditionId);
     }
     if (effect.refundOnFailure && !success && effect.resourceCost) {
       const { resourceId, amount } = effect.resourceCost;
-      combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) + amount };
+      owner.resources = { ...(owner.resources ?? {}), [resourceId]: (owner.resources?.[resourceId] ?? 0) + amount };
     }
-    state.log.push(event(state, "RollChanged", `${combatant.displayName} uses ${picked.feature}: ${d20.roll === "save" ? "the save" : "the attack roll"} ${success ? "now succeeds" : "still fails"}${hit ? "" : ` (${total})`}`, {
-      combatantId: combatant.id, feature: picked.feature, change: effect.change, roll: d20.roll, before, natural: d20.natural, total, against: d20.against,
-      ...(rolled ? { rolled } : {}), ...(effect.resourceCost ? { resourceId: effect.resourceCost.resourceId, left: combatant.resources?.[effect.resourceCost.resourceId] } : {}), success
+    const whose = owner.id === combatant.id ? "" : ` on ${combatant.displayName}'s ${d20.roll === "save" ? "save" : "attack roll"}`;
+    state.log.push(event(state, "RollChanged", `${owner.displayName} uses ${picked.feature}${whose}: ${d20.roll === "save" ? "the save" : "the attack roll"} ${success ? "now succeeds" : "still fails"}${hit ? "" : ` (${total})`}`, {
+      combatantId: owner.id, ...(owner.id !== combatant.id ? { rollerId: combatant.id } : {}),
+      feature: picked.feature, change: effect.change, roll: d20.roll, before, natural: d20.natural, total, against: d20.against,
+      ...(rolled ? { rolled } : {}), ...(effect.resourceCost ? { resourceId: effect.resourceCost.resourceId, left: owner.resources?.[effect.resourceCost.resourceId] } : {}), success
     }));
     if (success) return { natural: d20.natural, total, hit };
+    }
   }
   return changedAny ? { natural: d20.natural, total, hit: false } : undefined;
 }
@@ -7899,7 +7923,8 @@ export function rollSavingThrow(state: EngineState, target: CombatantState, ctx:
   if (!result.success && !overridden) {
     const natural = roll.rolls.length > 1 ? roll.total - roll.modifier : roll.rolls[0]?.value ?? roll.total - roll.modifier;
     const changed = changeFailedD20(state, target, {
-      roll: "save", natural, modifier: roll.modifier, against: ctx.dc, mode: featureAdvantage.applied ? "advantage" : "normal", label: ctx.label
+      roll: "save", natural, modifier: roll.modifier, against: ctx.dc, mode: featureAdvantage.applied ? "advantage" : "normal", label: ctx.label,
+      ...(ctx.conditions?.length ? { conditions: ctx.conditions } : {})
     }, (_natural, total) => total >= ctx.dc);
     if (changed) {
       result.roll = { ...roll, total: changed.total };

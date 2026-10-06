@@ -125,6 +125,8 @@ export interface D20ChangeOption {
 export interface D20ChangeRequest extends RequestBase {
   kind: "d20-change";
   combatantId: Id;
+  /** Whose roll it is, when another creature's (Countercharm, Boon of Fate): `combatantId` is the one who'd change it. */
+  rollerId?: Id;
   /** The roll that failed: a save, or an attack roll that missed. */
   roll: "attack" | "save";
   natural: number;

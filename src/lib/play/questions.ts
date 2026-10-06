@@ -70,12 +70,14 @@ export function describeQuestion(request: DecisionRequest, board: EncounterSnaps
       return describeReaction(request, board);
     case "d20-change": {
       const who = nameOf(board, request.combatantId);
+      // Countercharm, Boon of Fate: another creature's roll.
+      const roller = request.rollerId ? nameOf(board, request.rollerId) : who;
       return {
         who,
         title: request.roll === "save"
-          ? `${who} failed a DC ${request.against} save${request.label ? ` against ${request.label}` : ""} (rolled ${request.total}).`
-          : `${who} missed with ${request.label ?? "an attack"}: ${request.total} against AC ${request.against}.`,
-        ask: "Change the roll?",
+          ? `${roller} failed a DC ${request.against} save${request.label ? ` against ${request.label}` : ""} (rolled ${request.total}).`
+          : `${roller} missed with ${request.label ?? "an attack"}: ${request.total} against AC ${request.against}.`,
+        ask: request.rollerId ? `Change ${roller}'s roll?` : "Change the roll?",
         options: [
           ...request.options.map((option): PromptOption => ({
             label: option.name,

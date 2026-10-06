@@ -16,7 +16,7 @@ its gaps, never dropped and never approximated without saying so.
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 24 | 14 | 3 | 0 | 6 | 1 |
-| Bard (College of Lore) | 17 | 3 | 2 | 1 | 9 | 2 |
+| Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 2 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
@@ -27,7 +27,7 @@ its gaps, never dropped and never approximated without saying so.
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 0 | 1 | 9 | 3 |
-| Feats | 17 | 7 | 2 | 4 | 4 | 0 |
+| Feats | 17 | 7 | 3 | 3 | 4 | 0 |
 | Species traits | 33 | 10 | 1 | 3 | 8 | 11 |
 
 ## Gaps, most widespread first
@@ -39,13 +39,13 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 |---|---|---|---|---|
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
-| `d20-reroll` | Changing another creature's d20 roll (Countercharm, Boon of Fate) | Bard, Feats | 1 | Countercharm (Bard); Boon of Fate (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
 | `attack-replacement` | Replacing one of the Attack action's attacks with something else (Breath Weapon) | Species | 1 | Breath Weapon (Dragonborn) |
+| `d20-reroll` | A penalty on another creature's successful d20 roll (Boon of Fate) | Feats | 1 | Boon of Fate (feat) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `ignore-resistance` | Damage that ignores resistance (Boon of Irresistible Offense) | Feats | 1 | Boon of Irresistible Offense (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
@@ -118,7 +118,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Bard Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Font of Inspiration | full |  | A spell slot (no action) for a Bardic Inspiration use back; the AI does it with its lowest slot once its uses are gone, unless it's conservative. Regaining uses on a short rest is outside a fight. |
-| 7 | Countercharm | manual | `d20-reroll` |  |
+| 7 | Countercharm | full |  | Its reaction: a failed save against being charmed or frightened, its own or one within 30 ft, rerolled with advantage. Play asks whoever plays the bard. |
 | 10 | Magical Secrets | builder |  | Prepared spells from the Bard, Cleric, Druid and Wizard lists. |
 | 18 | Superior Inspiration | info |  | A fight starts with full pools. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
@@ -444,7 +444,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Archery | fighting-style | full |  | +2 to ranged weapon attack rolls. |
 | Boon of Combat Prowess | epic-boon | full |  | The builder adds the +1 to a score; a miss becomes a hit once until the start of its next turn. |
 | Boon of Dimensional Travel | epic-boon | manual | `free-move` | The builder adds the +1 to a score; the teleport after an attack doesn't run. |
-| Boon of Fate | epic-boon | manual | `d20-reroll` | The builder adds the +1 to a score; changing a d20 Test doesn't run. |
+| Boon of Fate | epic-boon | partial | `d20-reroll` | 2d4 on a failed attack roll or save, its own or an ally's within 60 ft, once a fight; as a penalty on another creature's success it doesn't run. The builder adds the +1. |
 | Boon of Irresistible Offense | epic-boon | manual | `ignore-resistance` | The builder adds the +1 to a score; ignoring resistance and the extra damage on a 20 don't run. |
 | Boon of Spell Recall | epic-boon | full |  | A spell cast with a level 1-4 slot keeps it when a d4 comes up the slot's level; the builder adds the +1 to a score. |
 | Boon of the Night Spirit | epic-boon | manual | `stealth` | The builder adds the +1 to a score; invisibility and resistance in darkness don't run. |

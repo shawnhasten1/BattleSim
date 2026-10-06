@@ -65,7 +65,16 @@ export const BARD: ClassDefinition = {
         }]
       }), { scale: [{ path: "grantedActions.0.gains.max", value: "{mod:cha|min:1}" }] })]
     },
-    { level: 7, grants: [grant("countercharm", reference("bard_countercharm"))] },
+    {
+      level: 7,
+      // Its reaction: a save against being charmed or frightened, its own or one within 30 ft, rerolled with advantage.
+      grants: [grant("countercharm", runs("bard_countercharm", {
+        effects: [{
+          kind: "d20-change", rolls: ["save"], change: "reroll", advantage: true, reaction: true,
+          againstConditions: ["charmed", "frightened"], forOthers: { withinFt: 30, includeSelf: true }
+        }]
+      }))]
+    },
     { level: 9, grants: [], choices: [{ kind: "expertise", id: "expertise", count: 2 }] },
     {
       level: 10,

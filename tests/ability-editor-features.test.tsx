@@ -276,6 +276,21 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Sweep").effects).toEqual([{ kind: "follow-up-attack", withinFt: 10 }]);
   });
 
+  it("Change a failed roll: an ally's too, for its reaction, against some conditions, with advantage (Countercharm)", async () => {
+    await blankFeature("Steady Song");
+    const card = await addEffect(/^Change a failed roll/, "Change a failed roll");
+    await userEvent.click(card.getByRole("checkbox", { name: "The new roll has advantage" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "An ally's roll too" }));
+    await retype(card.getByLabelText("Ally within (ft)"), "20");
+    await userEvent.click(card.getByRole("checkbox", { name: "Takes its reaction" }));
+    await chip(card, "Only saves against", "frightened");
+    await done(card);
+    await addToSheet();
+    expect(named("Steady Song").effects).toEqual([{
+      kind: "d20-change", rolls: ["save"], change: "reroll", advantage: true, forOthers: { withinFt: 20, includeSelf: true }, reaction: true, againstConditions: ["frightened"]
+    }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

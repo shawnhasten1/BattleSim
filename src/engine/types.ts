@@ -507,6 +507,17 @@ export type FeatureEffect =
     refundOnFailure?: boolean;
     /** Only a spell's attack roll (Seeking Spell). */
     spellAttacksOnly?: boolean;
+    /**
+     * Another creature's roll: an ally's within `withinFt` (its own too with `includeSelf`). Countercharm: 30 ft, self
+     * included; Boon of Fate: 60 ft.
+     */
+    forOthers?: { withinFt: number; includeSelf?: boolean };
+    /** It takes the owner's reaction (Countercharm). */
+    reaction?: boolean;
+    /** Only a save against one of these conditions (Countercharm: Charmed, Frightened). */
+    againstConditions?: ConditionName[];
+    /** The reroll has advantage (Countercharm). */
+    advantage?: boolean;
   }
   | {
     /**
