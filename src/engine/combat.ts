@@ -1915,6 +1915,8 @@ export function remainingMovementBudget(snapshot: EncounterSnapshot, combatant: 
 
 /** A turn's whole movement, in squares: its fastest speed (slowed or Dashed, as it is now), plus any granted this turn. */
 export function turnMovementBudget(snapshot: EncounterSnapshot, combatant: CombatantState): number {
+  // Daze, Abjure Foes: having acted, it can't move.
+  if (oneThingTaken(combatant)) return 0;
   const definition = getDefinition(snapshot, combatant);
   const movementMultiplier = Math.max(1, ...(combatant.conditions ?? []).map((condition) => condition.modifiers?.movementMultiplier ?? 1));
   // Feet off its speed (weapon mastery's Slow): the largest, not their sum.
@@ -5673,6 +5675,9 @@ export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "re
   if (slot !== "free" && economy && economy[slot] === false) {
     return false;
   }
+  if ((slot === "action" || slot === "bonus") && oneThingTaken(combatant, slot)) {
+    return false;
+  }
   const denialFlag = slot === "free" ? "deniesActions" : DENIAL_FLAG[slot];
   for (const condition of combatant.conditions ?? []) {
     if (condition.modifiers?.[denialFlag]) {
@@ -5683,6 +5688,24 @@ export function canAct(combatant: CombatantState, slot: "action" | "bonus" | "re
     }
   }
   return true;
+}
+
+/** Daze, Abjure Foes: it can do only one of moving, an action and a bonus action on its turn. */
+export function limitedToOneThing(combatant: CombatantState): boolean {
+  return (combatant.conditions ?? []).some((condition) => condition.modifiers?.oneThingPerTurn);
+}
+
+/**
+ * Under `oneThingPerTurn`, whether its one thing this turn is already something other than `slot` (or movement, with
+ * `slot` absent): it has moved, or taken the other of an action and a bonus action, or the AI chose otherwise.
+ */
+function oneThingTaken(combatant: CombatantState, slot?: "action" | "bonus"): boolean {
+  if (!limitedToOneThing(combatant)) return false;
+  const economy = combatant.actionEconomy;
+  const flags = combatant.turnFlags;
+  if (slot === undefined) return economy?.action === false || economy?.bonus === false || flags?.limitedTo === "act";
+  const other = slot === "action" ? "bonus" : "action";
+  return economy?.[other] === false || (flags?.movementUsed ?? 0) > 0 || flags?.limitedTo === "move" || (slot === "bonus" && flags?.limitedTo === "act");
 }
 
 function validateAndSpendAction(combatant: CombatantState, action: ActionDefinition): void {

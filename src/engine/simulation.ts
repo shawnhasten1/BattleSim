@@ -4,6 +4,7 @@ import {
   canAct,
   damageBonusExpected,
   diceTradeCost,
+  limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
@@ -1251,6 +1252,35 @@ export function explainIdleTurn(snapshot: EncounterSnapshot, actor: CombatantSta
 
 export function takeAutomatedTurn(state: EngineState, actor: CombatantState): string | undefined {
   const tactics = tacticsSettings(actor.tacticsProfile);
+
+  // Daze, Abjure Foes: only one of moving, an action and a bonus action. It takes its action from where it stands when
+  // there's something to hit from there; otherwise it moves toward its target.
+  if (limitedToOneThing(actor) && !actor.turnFlags?.limitedTo && canAct(actor, "action")) {
+    const here = selectOffensivePlan(state.snapshot, actor, tactics, "action", { mustReachNow: true });
+    if (here && isValidTarget(state.snapshot, actor, here.target, here.range)) {
+      actor.turnFlags = { ...(actor.turnFlags ?? {}), limitedTo: "act" };
+      state.log.push(event(state, "AiDecision", `${actor.displayName} can do only one thing this turn: it acts from where it stands`, {
+        combatantId: actor.id, reason: "one-thing-act"
+      }));
+    } else {
+      const plan = selectOffensivePlan(state.snapshot, actor, tactics, "action", { relaxReachability: true });
+      actor.turnFlags = { ...(actor.turnFlags ?? {}), limitedTo: "move" };
+      const move = plan ? bestDestinationTowardTarget(state.snapshot, actor, plan.target, plan.range, tactics, { allowPartialApproach: true }) : undefined;
+      if (plan && move) {
+        try {
+          moveCombatant(state, actor.id, move.cell, { altitude: move.altitude });
+          state.log.push(event(state, "AiDecision", `${actor.displayName} can do only one thing this turn: it moves toward ${plan.target.displayName}`, {
+            combatantId: actor.id, targetId: plan.target.id, destination: move.cell, reason: "one-thing-move"
+          }));
+          return undefined;
+        } catch { /* map state moved on */ }
+      }
+      state.log.push(event(state, "AiDecision", `${actor.displayName} can do only one thing this turn, and has nothing worth doing`, {
+        combatantId: actor.id, reason: "one-thing-idle"
+      }));
+      return undefined;
+    }
+  }
 
   // Incapacitated / stunned / paralysed (or a `deniesActions` effect): no action
   // and no bonus action — the creature loses its turn rather than acting at a

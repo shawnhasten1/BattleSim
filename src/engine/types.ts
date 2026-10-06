@@ -2286,6 +2286,11 @@ export interface ConditionInstance {
     speedPenaltyFt?: number;
     /** The bearer can't make opportunity attacks (Staggering Blow). */
     deniesOpportunityAttacks?: boolean;
+    /**
+     * On its turns the bearer can do only one of: move, take an action, take a bonus action (Daze, Abjure Foes). Once it
+     * does one, the others close (`canAct`, `turnMovementBudget`).
+     */
+    oneThingPerTurn?: boolean;
   };
   /**
    * Weapon mastery's Sap and Vex: the condition changes one attack roll and is used up by it. `"made"`: the bearer's own
@@ -2349,6 +2354,11 @@ export interface TurnFlags {
   bonusMovement?: number;
   /** `d20-change` effects used since the start of its turn (`<feature id>:<effect index>`), for `oncePerTurn`. */
   d20ChangesUsed?: string[];
+  /**
+   * Under `oneThingPerTurn`, the AI's choice made at the start of its turn: `"act"` (its action, from where it stands)
+   * or `"move"`. A person's choice is read from what they've used.
+   */
+  limitedTo?: "act" | "move";
 }
 
 export interface CombatantState {

@@ -506,6 +506,7 @@ function modifierSentences(modifiers: ConditionModifiers | undefined, who: Who):
   if (modifiers.forcesRandomAction) sentences.push(`${S} acts at random on its turns.`);
   if (modifiers.speedPenaltyFt) sentences.push(`${capitalize(who.possessive)} speed is reduced by ${modifiers.speedPenaltyFt} feet.`);
   if (modifiers.deniesOpportunityAttacks) sentences.push(`${S} can't make opportunity attacks.`);
+  if (modifiers.oneThingPerTurn) sentences.push(`On ${who.possessive} turns, ${who.subject} can only move, take an action or take a bonus action.`);
   return sentences;
 }
 
@@ -884,7 +885,8 @@ export function modifierShorts(modifiers: ConditionModifiers | undefined): strin
     ...(modifiers.incomingAttackRoll ? [modifiers.incomingAttackRoll >= 5 ? "attackers have advantage" : modifiers.incomingAttackRoll <= -5 ? "attackers have disadvantage" : `attackers ${signed(modifiers.incomingAttackRoll)}`] : []),
     ...(modifiers.forcesRandomAction ? ["acts at random"] : []),
     ...(modifiers.speedPenaltyFt ? [`speed −${modifiers.speedPenaltyFt} ft`] : []),
-    ...(modifiers.deniesOpportunityAttacks ? ["no opportunity attacks"] : [])
+    ...(modifiers.deniesOpportunityAttacks ? ["no opportunity attacks"] : []),
+    ...(modifiers.oneThingPerTurn ? ["only one of moving, an action or a bonus action"] : [])
   ];
 }
 

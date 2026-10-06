@@ -23,7 +23,7 @@ its gaps, never dropped and never approximated without saying so.
 | Monk (Warrior of the Open Hand) | 26 | 9 | 5 | 3 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 8 | 2 | 4 | 8 | 1 |
 | Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
-| Rogue (Thief) | 23 | 9 | 1 | 3 | 6 | 4 |
+| Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 3 | 0 | 7 | 6 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 2 | 0 | 2 | 9 | 3 |
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
-| `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin, Rogue | 9 | Abjure Foes (Paladin); Devious Strikes (Rogue) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
 | `weapon-cantrip` | A cantrip that makes a weapon attack with the spellcasting ability (True Strike, Shillelagh) | Spells | 1 | True Strike (spell); Shillelagh (spell) |
@@ -66,6 +65,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `spare-allies` | Allies chosen to be spared by an area (Sculpt Spells, Careful Spell) | Wizard | 6 | Sculpt Spells (Evoker) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
+| `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
@@ -276,7 +276,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Faithful Steed | manual | `summon-stat-blocks` |  |
 | 6 | Aura of Protection | full |  | Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied. |
-| 9 | Abjure Foes | partial | `action-limits` | Frightened on a failed Wisdom save until it takes damage, for every enemy within 60 ft (not Charisma-modifier many); the one-thing-per-turn limit doesn't run. |
+| 9 | Abjure Foes | partial | `target-count` | Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns, for every enemy within 60 ft (not Charisma-modifier many). |
 | 10 | Aura of Courage | full |  | Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there). |
 | 11 | Radiant Strikes | full |  |  |
 | 14 | Restoring Touch | manual | `condition-removal` |  |
@@ -344,7 +344,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 7 | Evasion | full |  |  |
 | 7 | Reliable Talent | info |  | Ability checks. |
 | 11 | Improved Cunning Strike | manual | `dice-trade` |  |
-| 14 | Devious Strikes | partial | `action-limits` | Knock Out (unconscious until it saves or takes damage) and Obscure (blinded until the end of its next turn) run; Daze doesn't. |
+| 14 | Devious Strikes | full |  | Daze (on its next turn, only one of moving, an action and a bonus action), Knock Out (unconscious until it saves or takes damage) and Obscure (blinded until the end of its next turn). |
 | 15 | Slippery Mind | builder |  | Wisdom and Charisma save proficiency. |
 | 18 | Elusive | full |  | No advantage on attack rolls against it while it isn't incapacitated. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |

@@ -272,8 +272,8 @@ export function FeatureEffectCards({ groups, onAdd, definition, newPools, activa
 /* ─── one card ───────────────────────────────────────────────────────────── */
 
 const READ_ONLY_LABELS: Partial<Record<keyof ConditionModifiers, string>> = {
-  movementMultiplier: "Speed", deniesActions: "Can't act", deniesBonusActions: "No bonus actions", deniesReactions: "No reactions",
-  forcesRandomAction: "Acts at random"
+  movementMultiplier: "Speed", speedPenaltyFt: "Slower", deniesActions: "Can't act", deniesBonusActions: "No bonus actions", deniesReactions: "No reactions",
+  deniesOpportunityAttacks: "No opportunity attacks", oneThingPerTurn: "One thing a turn", forcesRandomAction: "Acts at random"
 };
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

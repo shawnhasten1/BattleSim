@@ -364,7 +364,10 @@ export interface ModifierCardView {
 }
 
 const ALL_ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
-const READ_ONLY_MODIFIERS = ["movementMultiplier", "deniesActions", "deniesBonusActions", "deniesReactions", "forcesRandomAction"] as const;
+const READ_ONLY_MODIFIERS = [
+  "movementMultiplier", "speedPenaltyFt", "deniesActions", "deniesBonusActions", "deniesReactions", "deniesOpportunityAttacks", "oneThingPerTurn",
+  "forcesRandomAction"
+] as const;
 
 export function modifierCards(modifiers: ConditionModifiers | undefined): ModifierCardView[] {
   if (!modifiers) return [];

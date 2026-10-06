@@ -86,10 +86,14 @@ export const PALADIN: ClassDefinition = {
           saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true },
           area: { type: "circle", size: 60 }, targeting: { origin: "self", range: 0 },
           damage: [], halfDamageOnSuccess: false, onSuccess: "negates", affects: "hostile",
-          riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, endsOnDamage: true }],
+          // Frightened's own −2 to hit, and only one of moving, an action and a bonus action on its turns.
+          riders: [{
+            kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, endsOnDamage: true,
+            modifiers: { attackRoll: -2, oneThingPerTurn: true }
+          }],
           resourceCost: { resourceId: CHANNEL, amount: 1 }, automationSupport: "full"
         }],
-        notSimulated: "it reaches every enemy within 60 feet rather than Charisma-modifier many, and the one-thing-a-turn limit doesn't run."
+        notSimulated: "it reaches every enemy within 60 feet rather than Charisma-modifier many."
       }))]
     },
     {

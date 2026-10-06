@@ -62,9 +62,15 @@ const deviousStrikes = runs("rogue_devious-strikes", {
         kind: "condition", when: "on-hit", condition: "blinded", duration: { kind: "until-end-of-next-turn" },
         save: { ability: "dex", dcFormula: CUNNING_DC, onSuccess: "negates" }
       }]
+    }),
+    // On its next turn it can only move, take an action or take a bonus action.
+    cunningStrike("Daze", 2, {
+      riders: [{
+        kind: "condition", when: "on-hit", condition: { custom: "Dazed" }, conditionKey: "Daze", modifiers: { oneThingPerTurn: true },
+        duration: { kind: "until-end-of-next-turn" }, save: { ability: "con", dcFormula: CUNNING_DC, onSuccess: "negates" }
+      }]
     })
-  ],
-  notSimulated: "Daze (a creature that can only move, take an action or take a bonus action on its next turn)."
+  ]
 });
 
 const cunningAction = runs("rogue_cunning-action", {
