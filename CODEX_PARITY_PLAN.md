@@ -1,7 +1,8 @@
 # Codex Parity Plan: everything Standard does, in the Codex
 
-**Status:** planned 2026-10-06, not built. It follows `CHARACTER_SHEET_WINDOWS_PLAN.md` (branch `sheet-windows`,
-Phases 0–10). The decisions below use their defaults until the user changes them.
+**Status:** being built on branch `sheet-windows` (2026-10-06). It follows `CHARACTER_SHEET_WINDOWS_PLAN.md` (Phases
+0–10). The user accepted the decisions' defaults and asked for every phase, committed as each is done. See "Built so
+far" at the end.
 
 The Codex can now edit and add abilities in place (that plan's D13 and D14). But Standard's sheet still does things the
 Codex can't. The user found the first one: an ability can't be deleted from the Codex. This plan lists every gap and
@@ -137,3 +138,23 @@ both the Codex popped out and the Codex in the page.
 - Editing death saves and spending hit dice (windows plan D10).
 - Fields the app doesn't store: XP, inspiration, coins, biography (windows plan D7).
 - Drag-to-reorder rows: Standard doesn't have it either.
+
+## Built so far
+
+### Phase 1: row actions
+
+- `src/components/sheet/abilities/row-actions.tsx` is the shared logic. `useRowEdits(definition)` does Duplicate,
+  Move to, Use it and Worn, and returns the row id to show for a copy or a moved row. `useAbilityRemoval(definition)`
+  handles Delete: it deletes at once, or opens "Delete Claws?" under the row through `under(row)`, and shows the
+  "Deleted Bite. Undo" toast. `RemovalPrompt` keeps its own "Replace it with" state, and a `fieldClassName` option
+  styles its dropdown as the sheet's own field. `ActionsTab` uses all of this, and its tests are unchanged.
+- `AbilitiesList` exports `RowMenu` (with an optional `className`) and `AutomationDot`. The dot's colours are now
+  `--ui-good` and `--ui-warn`, falling back to the old values. The app doesn't define those tokens, so Standard looks
+  the same.
+- The Codex: each row in its lists (Items, Attacks, Abilities, Spells) has the automation dot before its name, an
+  optional rule's **Use it** switch (`role="switch"`, named "Use <name>"), Edit, and the ⋯ menu. The delete prompt opens
+  under the row, and the toast sits at the foot of the view. A copy or a moved row is focused and briefly highlighted.
+  The rows read all of this from one context (`RowKitContext`) instead of passing `onEdit` through every tab. The
+  "off" chip has gone, since the switch shows it.
+- Tests: 8 new ones in `tests/codex-sheet.test.tsx`. Browser checks passed 12/12 in Chromium and in Firefox, in the
+  page and popped out, Dark and Light.

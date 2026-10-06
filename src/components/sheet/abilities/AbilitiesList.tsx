@@ -70,7 +70,7 @@ function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandl
   return (
     <div data-row-id={rowId(row)}>
       <div className={`${styles.row} ${flash ? styles.rowFlash : ""}`}>
-        <span className={styles.dot} data-automation={row.automation} role="img" aria-label={row.automationNote} title={row.automationNote} />
+        <AutomationDot row={row} />
         <button
           type="button" className={styles.rowOpen} aria-label={`Edit ${row.name}`}
           onClick={() => handlers.onOpen(row)}
@@ -101,8 +101,23 @@ function Row({ row, handlers, flash, under }: { row: ListRow; handlers: RowHandl
   );
 }
 
+/** ● simulated, ◐ partly, ○ reference only: how much of the row the simulator runs, and why (its label and tooltip). */
+export function AutomationDot({ row, className }: { row: ListRow; className?: string }) {
+  return (
+    <span
+      className={`${styles.dot} ${className ?? ""}`} data-automation={row.automation} role="img" aria-label={row.automationNote}
+      title={row.automationNote}
+    />
+  );
+}
+
 /** ⋯: Duplicate, Move to…, Delete. Arrow keys move between items; Escape closes it. */
-function RowMenu({ row, handlers }: { row: ListRow; handlers: RowHandlers }) {
+export function RowMenu({ row, handlers, className }: {
+  row: ListRow;
+  handlers: Pick<RowHandlers, "onDuplicate" | "onMove" | "onDelete">;
+  /** The ⋯ button's own look (the Codex's). */
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -141,7 +156,7 @@ function RowMenu({ row, handlers }: { row: ListRow; handlers: RowHandlers }) {
   return (
     <span className={styles.menuWrap}>
       <button
-        ref={buttonRef} type="button" className={styles.iconBtn} aria-label={`More for ${row.name}`} aria-haspopup="menu" aria-expanded={open}
+        ref={buttonRef} type="button" className={`${styles.iconBtn} ${className ?? ""}`} aria-label={`More for ${row.name}`} aria-haspopup="menu" aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
         <MoreHorizontal size={14} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   abilityModifier,
   armorClassOf,
@@ -45,7 +45,8 @@ import { useBuildSources } from "@/store/catalog-store";
 import { useEncounterStore } from "@/store/encounter-store";
 import { DAMAGE_TYPES } from "../ability-editor/DamageLines";
 import { AbilityEditor, type SheetEditorTarget } from "../ability-editor/AbilityEditor";
-import { refRowId } from "../abilities/AbilitiesList";
+import { AutomationDot, refRowId, RowMenu, type RowHandlers } from "../abilities/AbilitiesList";
+import { useAbilityRemoval, useRowEdits } from "../abilities/row-actions";
 import { AddAbility } from "../abilities/AddAbility";
 import { blankTarget, preparedTarget, useAttachFromLibrary } from "../abilities/add-targets";
 import type { AddFilter } from "@/lib/ability-editor/add";
@@ -78,6 +79,21 @@ export interface CodexSheetProps {
   /** Add ability's Open5e search. */
   compendium?: Compendium;
 }
+
+/**
+ * What every row in the Codex's lists does, as on Standard's Abilities tab: Edit (the ability editor, here), its ⋯ menu
+ * (Duplicate, Move to…, Delete), an optional rule's Use it, and what sits under it (its delete prompt).
+ */
+interface RowKit {
+  onEdit: (ref: AbilityRef) => void;
+  handlers: Pick<RowHandlers, "onDuplicate" | "onMove" | "onDelete">;
+  onOptional: (row: ListRow, on: boolean) => void;
+  under: (row: ListRow) => ReactNode;
+  /** The row a duplicate or a move just made, highlighted. */
+  flashId: string | null;
+}
+const RowKitContext = createContext<RowKit | null>(null);
+const useRowKit = () => useContext(RowKitContext)!;
 
 /** The nearest ancestor that scrolls: the window's body, in the page or popped out. */
 function scrollParent(node: HTMLElement | null): HTMLElement | null {
@@ -118,6 +134,28 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   const [editing, setEditing] = useState<SheetEditorTarget | null>(null);
   const left = useRef<{ scrollTop: number; rowId: string | null; reveal: boolean } | null>(null);
   const attachFromLibrary = useAttachFromLibrary(definition.id);
+
+  // A row's ⋯ menu and Use it: the same edits as Standard's. A copy or a moved row is shown, focused and highlighted.
+  const edits = useRowEdits(definition);
+  const removal = useAbilityRemoval(definition, { fieldClassName: styles.field });
+  const [shown, setShown] = useState<string | null>(null);
+  const show = (id: string | undefined) => { if (id) setShown(id); };
+  const kit: RowKit = {
+    onEdit: openEditor,
+    handlers: { onDuplicate: (row) => show(edits.duplicate(row)), onMove: (row, to) => show(edits.move(row, to)), onDelete: removal.request },
+    onOptional: edits.setOptional,
+    under: removal.under,
+    flashId: shown
+  };
+
+  useEffect(() => {
+    if (!shown) return;
+    const node = rootRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(shown)}"]`);
+    node?.scrollIntoView({ block: "nearest" });
+    node?.querySelector<HTMLElement>('button[aria-label^="Edit "]')?.focus({ preventScroll: true });
+    const timer = window.setTimeout(() => setShown(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [shown]);
 
   function leave(rowId: string | null) {
     left.current ??= { scrollTop: scrollParent(rootRef.current)?.scrollTop ?? 0, rowId, reveal: false };
@@ -221,17 +259,21 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                     </button>
                   ))}
                 </div>
-                {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
-                {tab === "items" ? <Items definition={definition} groups={groups} onEdit={openEditor} onAdd={() => openAdd("items")} /> : null}
-                {tab === "abilities" ? <Abilities groups={groups} onEdit={openEditor} onAdd={() => openAdd("all")} /> : null}
-                {tab === "spells" && spellcasting ? (
-                  <Spells group={spellcasting} combatant={combatant} definition={definition} onEdit={openEditor} onAdd={() => openAdd("spells")} />
-                ) : null}
+                <RowKitContext.Provider value={kit}>
+                  {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
+                  {tab === "items" ? <Items definition={definition} groups={groups} onAdd={() => openAdd("items")} /> : null}
+                  {tab === "abilities" ? <Abilities groups={groups} onAdd={() => openAdd("all")} /> : null}
+                  {tab === "spells" && spellcasting ? (
+                    <Spells group={spellcasting} combatant={combatant} definition={definition} onAdd={() => openAdd("spells")} />
+                  ) : null}
+                </RowKitContext.Provider>
               </div>
             </div>
           )}
         </div>
       </div>
+      {/* "Deleted Bite. Undo", at the foot of the view. */}
+      {editing || adding !== null ? null : removal.toast}
     </div>
   );
 }
@@ -640,30 +682,63 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
 
 const CHEVRON = <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1l5 4-5 4z" /></svg>;
 
-/**
- * One row of the Abilities list: a chevron that opens its statblock line and chips, its name, what using it costs, how
- * it's used, and Edit (the ability editor, opened in the Codex). `lead` goes between the chevron and the name (the Items tab's worn box).
- */
-function Row({ row, activation, lead, onEdit }: { row: ListRow; activation?: string; lead?: ReactNode; onEdit: (ref: AbilityRef) => void }) {
-  const [open, setOpen] = useState(false);
-  const chips = [...(row.enabled === false ? ["off"] : []), ...row.chips];
+/** A row's name, after its automation dot (● simulated, ◐ partly, ○ reference only: why, on hover). */
+function RowName({ row }: { row: ListRow }) {
   return (
-    <div className={styles.li} data-row-id={refRowId(row.ref)}>
+    <span className={styles.liName}>
+      <AutomationDot row={row} className={styles.dot} />
+      <span className={styles.rowName}>{row.name}</span>
+    </span>
+  );
+}
+
+/** Edit and the ⋯ menu (Duplicate, Move to…, Delete), at a row's end; a granted row has no menu. */
+function RowEnd({ row }: { row: ListRow }) {
+  const kit = useRowKit();
+  return (
+    <>
+      <button type="button" className={styles.edit} aria-label={`Edit ${row.name}`} onClick={() => kit.onEdit(row.ref)}>Edit</button>
+      {row.itemType ? <RowMenu row={row} handlers={kit.handlers} className={styles.more} /> : <span />}
+    </>
+  );
+}
+
+/**
+ * One row of the Abilities list: a chevron that opens its statblock line and chips, its name, an optional rule's Use it,
+ * what using it costs, how it's used, Edit (the ability editor, opened in the Codex) and its ⋯ menu. `lead` goes between
+ * the chevron and the name (the Items tab's worn box). Its delete prompt opens under it.
+ */
+function Row({ row, activation, lead }: { row: ListRow; activation?: string; lead?: ReactNode }) {
+  const kit = useRowKit();
+  const [open, setOpen] = useState(false);
+  const id = refRowId(row.ref);
+  return (
+    <div className={styles.li} data-row-id={id} data-flash={kit.flashId === id || undefined}>
       <div className={`${styles.liRow} ${lead ? "" : styles.liRowNoPip}`}>
         <button type="button" className={styles.chev} aria-expanded={open} aria-label={`${row.name} details`} onClick={() => setOpen(!open)}>{CHEVRON}</button>
         {lead}
-        <span className={styles.rowName}>{row.name}</span>
+        <RowName row={row} />
+        {row.enabled !== undefined ? (
+          <button
+            type="button" role="switch" className={styles.useSwitch} aria-checked={row.enabled} aria-label={`Use ${row.name}`}
+            title="An optional rule: what it grants is only available while it's on"
+            onClick={() => kit.onOptional(row, !row.enabled)}
+          >
+            Use it
+          </button>
+        ) : <span />}
         {row.cost ? <span className={styles.usePill}>{row.cost}</span> : <span />}
         {activation ? <span className={styles.actPill}>{activation}</span> : <span />}
-        <button type="button" className={styles.edit} aria-label={`Edit ${row.name}`} onClick={() => onEdit(row.ref)}>Edit</button>
+        <RowEnd row={row} />
       </div>
       {open ? (
         <div className={styles.ex}>
           {row.line ? <span>{row.line}</span> : null}
-          {chips.length ? <span className={styles.exChips}>{chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
-          {!row.line && !chips.length ? <span>Edit opens it in the ability editor.</span> : null}
+          {row.chips.length ? <span className={styles.exChips}>{row.chips.map((chip) => <span key={chip}>{chip}</span>)}</span> : null}
+          {!row.line && !row.chips.length ? <span>Edit opens it in the ability editor.</span> : null}
         </div>
       ) : null}
+      {kit.under(row)}
     </div>
   );
 }
@@ -676,7 +751,7 @@ const ITEM_GROUPS: Array<{ id: string; title: string; types?: ItemDefinition["ty
 ];
 
 /** Weapons, armor, consumables and gear: the list's own rows, with a box to wear armor or a shield. */
-function Items({ definition, groups, onEdit, onAdd }: { definition: CreatureDefinition; groups: ListGroup[]; onEdit: (ref: AbilityRef) => void; onAdd: () => void }) {
+function Items({ definition, groups, onAdd }: { definition: CreatureDefinition; groups: ListGroup[]; onAdd: () => void }) {
   const replaceAbilityRecord = useEncounterStore((s) => s.replaceAbilityRecord);
   const rows = groups.flatMap((group) => group.rows);
   const itemsGroup = groups.find((group) => group.id === "items");
@@ -704,7 +779,7 @@ function Items({ definition, groups, onEdit, onAdd }: { definition: CreatureDefi
                   onClick={() => replaceAbilityRecord(definition.id, row.ref, withWorn(item, !row.worn))}
                 />
               ) : <span className={styles.pip} aria-hidden="true" style={{ visibility: "hidden" }} />;
-              return <Row key={row.key} row={row} lead={lead} onEdit={onEdit} />;
+              return <Row key={row.key} row={row} lead={lead} />;
             })}
           </div>
         );
@@ -723,7 +798,8 @@ const ACTIVATION: Partial<Record<ListGroup["id"], string>> = {
  * Its attacks (its weapons, each with its statblock line in view), then its actions, bonus actions, reactions and
  * features. Items are on Items, spells on Spells.
  */
-function Abilities({ groups, onEdit, onAdd }: { groups: ListGroup[]; onEdit: (ref: AbilityRef) => void; onAdd: () => void }) {
+function Abilities({ groups, onAdd }: { groups: ListGroup[]; onAdd: () => void }) {
+  const kit = useRowKit();
   const attacks = groups.flatMap((group) => group.rows).filter((row) => row.ref.list === "weapons");
   const shown = groups
     .filter((group) => group.id !== "items" && group.id !== "spellcasting")
@@ -734,13 +810,19 @@ function Abilities({ groups, onEdit, onAdd }: { groups: ListGroup[]; onEdit: (re
       {attacks.length ? (
         <section className={styles.panel} aria-labelledby="codex-attacks">
           <Heading id="codex-attacks" icon="sword">Attacks</Heading>
-          {attacks.map((row) => (
-            <div key={row.key} className={styles.atkRow} data-row-id={refRowId(row.ref)}>
-              <span className={styles.rowName}>{row.name}</span>
-              <span className={styles.atkLine}>{row.line}</span>
-              <button type="button" className={styles.edit} aria-label={`Edit ${row.name}`} onClick={() => onEdit(row.ref)}>Edit</button>
-            </div>
-          ))}
+          {attacks.map((row) => {
+            const id = refRowId(row.ref);
+            return (
+              <div key={row.key} className={styles.atk} data-row-id={id} data-flash={kit.flashId === id || undefined}>
+                <div className={styles.atkRow}>
+                  <RowName row={row} />
+                  <span className={styles.atkLine}>{row.line}</span>
+                  <RowEnd row={row} />
+                </div>
+                {kit.under(row)}
+              </div>
+            );
+          })}
         </section>
       ) : null}
       <section className={styles.panel} aria-labelledby="codex-abilities">
@@ -751,7 +833,7 @@ function Abilities({ groups, onEdit, onAdd }: { groups: ListGroup[]; onEdit: (re
               <span className={styles.grpTitle}>{group.id === "traits" ? "Features & traits" : group.title}</span>
               {group.note ? <span className={styles.grpNote}>{group.note}</span> : null}
             </div>
-            {group.rows.map((row) => <Row key={row.key} row={row} activation={ACTIVATION[group.id]} onEdit={onEdit} />)}
+            {group.rows.map((row) => <Row key={row.key} row={row} activation={ACTIVATION[group.id]} />)}
           </div>
         )) : <p className={styles.empty}>No other abilities yet.</p>}
         <p className={styles.hint}>Open a row with the arrow for what it does. Edit opens it in the ability editor, here.</p>
@@ -767,11 +849,10 @@ const LEVEL_NAMES = ["Cantrip", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th",
  * How it casts (ability, DC, attack bonus), its slots as boxes on the token shown (filled: still there; a filled box
  * spends one, an empty one gives one back), and its spells by level.
  */
-function Spells({ group, combatant, definition, onEdit, onAdd }: {
+function Spells({ group, combatant, definition, onAdd }: {
   group: ListGroup;
   combatant: CombatantState;
   definition: CreatureDefinition;
-  onEdit: (ref: AbilityRef) => void;
   onAdd: () => void;
 }) {
   const updateResource = useEncounterStore((s) => s.updateResource);
@@ -831,7 +912,7 @@ function Spells({ group, combatant, definition, onEdit, onAdd }: {
             <span className={styles.grpTitle}>{level.title}</span>
             {level.slots ? <span className={styles.grpNote}>{level.slots}</span> : null}
           </div>
-          {level.rows.map((row) => <Row key={row.key} row={row} onEdit={onEdit} />)}
+          {level.rows.map((row) => <Row key={row.key} row={row} />)}
         </div>
       ))}
       <button type="button" className={styles.btnDash} onClick={onAdd}>Add spell</button>

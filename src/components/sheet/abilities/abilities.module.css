@@ -322,13 +322,13 @@
   height: 8px;
   margin-left: 4px;
   border-radius: 50%;
-  border: 1.5px solid #6fbf73;
-  background: #6fbf73;
+  border: 1.5px solid var(--ui-good, #6fbf73);
+  background: var(--ui-good, #6fbf73);
 }
 
 .dot[data-automation="partial"] {
-  border-color: #d8b56a;
-  background: linear-gradient(90deg, #d8b56a 50%, transparent 50%);
+  border-color: var(--ui-warn, #d8b56a);
+  background: linear-gradient(90deg, var(--ui-warn, #d8b56a) 50%, transparent 50%);
 }
 
 .dot[data-automation="reference"],

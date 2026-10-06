@@ -2,7 +2,7 @@
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { armorClassOf, type CombatantState } from "@/engine";
+import { armorClassOf, type ActionDefinition, type CombatantState, type CreatureDefinition } from "@/engine";
 import { SheetWindowsHost } from "@/components/sheet/SheetWindowsHost";
 import type { Compendium } from "@/hooks/useCompendium";
 import { CODEX_PALETTE_IDS, CODEX_PALETTES, contrastRatio, paletteFrom } from "@/lib/actor-sheet/codex";
@@ -352,6 +352,128 @@ describe("the Codex's tabs", () => {
     resetSheetWindows();
     await openCodex(wizard.id);
     expect(codexTab("Spells").getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("a row's ⋯ menu and switches in the Codex", () => {
+  function patchFighter(patch: Partial<CreatureDefinition>) {
+    useEncounterStore.setState((state) => ({
+      encounter: { ...state.encounter, definitions: state.encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...definition, ...patch } : definition)) }
+    }));
+  }
+  const rowOf = (name: string) => screen.getByRole("button", { name: `Edit ${name}` }).closest<HTMLElement>("[data-row-id]")!;
+  async function rowMenu(name: string, item: string) {
+    await userEvent.click(screen.getByRole("button", { name: `More for ${name}` }));
+    await userEvent.click(screen.getByRole("menuitem", { name: item }));
+  }
+  const deletedToast = () => screen.getAllByRole("status").find((node) => node.textContent?.includes("Deleted"));
+  const multiattack = (attacks: Array<{ actionId: string; count: number }>) =>
+    store().insertAbilityRecord("def-fighter", "actions", { kind: "multiattack", id: "", name: "Multiattack", actionType: "action", attacks, automationSupport: "full" });
+
+  it("deletes a row at once when nothing uses it, and Undo brings it back", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await rowMenu("Longsword", "Delete");
+    expect(creature("def-fighter").actions.map((action) => action.name)).not.toContain("Longsword");
+    expect(screen.queryByRole("button", { name: "Edit Longsword" })).toBeNull();
+    const toast = deletedToast()!;
+    expect(toast.textContent).toContain("Deleted Longsword.");
+    await userEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    expect(creature("def-fighter").actions.map((action) => action.name)).toContain("Longsword");
+    expect(deletedToast()).toBeUndefined();
+  });
+
+  it("asks under the row when a multiattack uses it: Cancel keeps both, and a replacement keeps the multiattack", async () => {
+    store().attachSrdWeapon("def-fighter", "srd:weapon:rapier");
+    multiattack([{ actionId: "longsword", count: 2 }]);
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await rowMenu("Longsword", "Delete");
+    let prompt = within(rowOf("Longsword")).getByRole("alertdialog", { name: "Delete Longsword?" });
+    expect(prompt.closest("[data-palette]")).not.toBeNull();
+    expect(prompt.textContent).toContain("Multiattack uses only Longsword, so it will be deleted too.");
+    await userEvent.click(within(prompt).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(creature("def-fighter").actions.map((action) => action.kind)).toEqual(["attack", "multiattack"]);
+
+    await rowMenu("Longsword", "Delete");
+    prompt = screen.getByRole("alertdialog", { name: "Delete Longsword?" });
+    const replace = within(prompt).getByRole("combobox", { name: "Replace Longsword with" }) as HTMLSelectElement;
+    const rapier = [...replace.options].find((option) => option.textContent?.includes("Rapier"))!;
+    await userEvent.selectOptions(replace, rapier.value);
+    const depth = store().undoStack.length;
+    await userEvent.click(within(prompt).getByRole("button", { name: "Delete Longsword" }));
+    expect(creature("def-fighter").actions.map((action) => action.name)).toEqual(["Multiattack"]);
+    expect(store().undoStack.length).toBe(depth + 1);
+  });
+
+  it("deletes a weapon from the Attacks panel, its ⋯ beside Edit", async () => {
+    store().attachSrdWeapon("def-fighter", "srd:weapon:rapier");
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const attacks = within(screen.getByRole("region", { name: "Attacks" }));
+    await userEvent.click(attacks.getByRole("button", { name: "More for Rapier" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(creature("def-fighter").weapons ?? []).toEqual([]);
+    expect(deletedToast()!.textContent).toContain("Deleted Rapier.");
+  });
+
+  it("duplicates a row, and shows the copy with its Edit focused", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await rowMenu("Longsword", "Duplicate");
+    expect(creature("def-fighter").actions.map((action) => action.name)).toEqual(["Longsword", "Longsword (copy)"]);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Edit Longsword (copy)");
+    expect(rowOf("Longsword (copy)").dataset.flash).toBe("true");
+  });
+
+  it("moves an action to bonus actions", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    await rowMenu("Longsword", "Move to bonus actions");
+    expect(creature("def-fighter").bonusActions?.find((action) => action.name === "Longsword")?.actionType).toBe("bonus");
+    expect(within(screen.getByRole("group", { name: "Bonus actions" })).getByRole("button", { name: "Edit Longsword" })).toBeTruthy();
+  });
+
+  it("switches an optional rule on and off from its row", async () => {
+    const help: ActionDefinition = { kind: "healing", id: "help", name: "Call Help", actionType: "action", range: 0, healing: [{ dice: "1d4" }], targeting: { target: "self" }, automationSupport: "full" };
+    patchFighter({ traits: [{ id: "variant", name: "Variant: Call Help", category: "trait", optional: true, automationSupport: "full", grantedActions: [help] }] });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    const use = screen.getByRole("switch", { name: "Use Variant: Call Help" });
+    expect(use.getAttribute("aria-checked")).toBe("false");
+    await userEvent.click(use);
+    expect(creature("def-fighter").traits![0]!.enabled).toBe(true);
+    expect(screen.getByRole("switch", { name: "Use Variant: Call Help" }).getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(screen.getByRole("switch", { name: "Use Variant: Call Help" }));
+    expect(creature("def-fighter").traits![0]!.enabled).toBeUndefined();
+  });
+
+  it("says why a row is simulated or not on its dot", async () => {
+    patchFighter({ actions: [...creature("def-fighter").actions, { kind: "unsupported", id: "roar", name: "Roar", actionType: "action", description: "It roars.", automationSupport: "unsupported" }] });
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Abilities"));
+    expect(within(rowOf("Roar")).getByRole("img").getAttribute("aria-label")).toBe("Reference only: the AI never uses it.");
+    expect(within(rowOf("Longsword")).getByRole("img").getAttribute("aria-label")).toBe("Simulated: the AI uses it as written.");
+  });
+
+  it("deletes from the Spells tab", async () => {
+    const wizard = build("srd:class:wizard", "Ilse");
+    await openCodex(wizard.id);
+    await userEvent.click(codexTab("Spells"));
+    const before = creature(wizard.definitionId).spells ?? [];
+    const first = before[0]!;
+    await rowMenu(first.name, "Delete");
+    expect((creature(wizard.definitionId).spells ?? []).map((spell) => spell.id)).not.toContain(first.id);
+  });
+
+  it("deletes from the Items tab", async () => {
+    const fighter = build("srd:class:fighter", "Mira");
+    await openCodex(fighter.id);
+    await userEvent.click(codexTab("Items"));
+    const item = creature(fighter.definitionId).items![0]!;
+    await rowMenu(item.name, "Delete");
+    expect((creature(fighter.definitionId).items ?? []).map((entry) => entry.id)).not.toContain(item.id);
   });
 });
 
