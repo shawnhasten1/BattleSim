@@ -817,6 +817,15 @@ export type FeatureEffect =
     kind: "on-hit-option";
     option: OnHitOption;
   }
+  | ({
+    /**
+     * Horde Breaker: once on each of its turns, after an attack with a weapon (hit or miss), another attack with the same
+     * weapon against a different creature within `withinFt` of the first target, in its reach or range, that it hasn't
+     * attacked this turn.
+     */
+    kind: "follow-up-attack";
+    withinFt: number;
+  } & FeatureEffectScope)
   | {
     /**
      * Self-Restoration: at the start or end of each of its turns, it ends one of these conditions on itself (the worst).

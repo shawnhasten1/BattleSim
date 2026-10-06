@@ -22,7 +22,7 @@ its gaps, never dropped and never approximated without saying so.
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 10 | 1 | 3 | 8 | 1 |
-| Ranger (Hunter) | 23 | 9 | 1 | 2 | 9 | 2 |
+| Ranger (Hunter) | 23 | 10 | 0 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
@@ -54,7 +54,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `flee` | A creature that must spend its turns moving away from its source (Turn Undead) | Cleric | 2 | Channel Divinity (Cleric) |
 | `ally-die` | A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only) | Bard | 3 | Cutting Words (College of Lore) |
-| `follow-up-attack` | An extra attack against a second creature near the first (Horde Breaker, Cleave) | Ranger | 3 | Hunter's Prey (Hunter) |
 | `mixed-area` | An area that harms enemies and heals one ally at once (Land's Aid) | Druid | 3 | Land's Aid (Circle of the Land) |
 | `ai-control-value` | How much the AI values a condition it could inflict for a resource: Stunning Strike is chosen only under Controller tactics | Monk | 5 | Stunning Strike (Monk) |
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
@@ -319,7 +318,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
 | 3 | Hunter's Lore | info |  |  |
-| 3 | Hunter's Prey | partial | `follow-up-attack` | Colossus Slayer runs; Horde Breaker doesn't. |
+| 3 | Hunter's Prey | full |  | Colossus Slayer (1d8 more once a turn on a creature missing hit points), or Horde Breaker (once a turn, after a weapon attack, another with the same weapon at a creature within 5 ft of the target that it hasn't attacked this turn, the one likeliest to drop). |
 | 7 | Defensive Tactics | manual | `oa-defense` |  |
 | 11 | Superior Hunter's Prey | full |  | The second creature is the one likeliest to drop: the fewest hit points left. |
 | 15 | Superior Hunter's Defense | full |  | Resistance to the damage's types until the end of the turn, taken by the AI for a cut of 5 or more or one that keeps it standing. |

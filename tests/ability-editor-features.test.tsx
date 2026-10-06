@@ -267,6 +267,15 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     expect(named("Clear Mind").effects).toEqual([{ kind: "shed-conditions", conditions: ["charmed", "frightened"], timing: "turn-start" }]);
   });
 
+  it("Another attack at a creature beside the target: how near (Horde Breaker)", async () => {
+    await blankFeature("Sweep");
+    const card = await addEffect(/^Another attack at a creature beside the target/, "Another attack at a creature beside the target");
+    await retype(card.getByLabelText("Of the target (ft)"), "10");
+    await done(card);
+    await addToSheet();
+    expect(named("Sweep").effects).toEqual([{ kind: "follow-up-attack", withinFt: 10 }]);
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

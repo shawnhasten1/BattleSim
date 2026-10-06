@@ -983,6 +983,14 @@ function EffectFields({ effect, damageTypes, abilities, restricted, place, onCha
       return <p className={styles.hint}>Nothing to set: a critical hit against it is a normal hit (a DM&apos;s ruling on the roll stands).</p>;
     case "no-advantage-against":
       return <p className={styles.hint}>Nothing to set: attack rolls against it can&apos;t have advantage while it isn&apos;t incapacitated.</p>;
+    case "follow-up-attack":
+      return (
+        <span className={styles.inline}>
+          <span>Once a turn, after an attack with a weapon, another at a creature within</span>
+          <NumberField label="Of the target (ft)" value={effect.withinFt} min={5} max={60} step={5} onChange={(n) => n !== undefined && set({ ...effect, withinFt: n })} />
+          <span>ft of the target</span>
+        </span>
+      );
     case "shed-conditions":
       return (
         <>

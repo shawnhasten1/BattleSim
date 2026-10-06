@@ -130,7 +130,10 @@ export const HUNTER: SubclassDefinition = {
           },
           {
             id: "horde-breaker", name: "Horde Breaker", description: "Another attack on a creature next to the first",
-            grants: [{ key: "hunters-prey", feature: reference("ranger_hunter_hunters-prey", { name: "Hunter's Prey: Horde Breaker" }) }]
+            grants: [{
+              key: "hunters-prey",
+              feature: runs("ranger_hunter_hunters-prey", { name: "Hunter's Prey: Horde Breaker", effects: [{ kind: "follow-up-attack", withinFt: 5 }] })
+            }]
           }
         ]
       }, "ranger_hunter_hunters-prey")]

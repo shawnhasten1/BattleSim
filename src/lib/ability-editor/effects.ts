@@ -98,6 +98,10 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "reaction-attack", trigger: { kind: "hit-by-attack", withinFt: 5, damaged: true }, attackTypes: ["melee"] })
   },
   {
+    kind: "follow-up-attack", label: "Another attack at a creature beside the target", hint: "Horde Breaker: once a turn, after a weapon attack, one more at a creature within 5 ft of the first", theme: "attacks", when: false, scope: true,
+    blank: () => ({ kind: "follow-up-attack", withinFt: 5 })
+  },
+  {
     kind: "damage-dice", label: "Better damage dice", hint: "Great Weapon Fighting's 1s and 2s as 3s, Savage Attacker's second roll", theme: "attacks", when: "attack", scope: true,
     blank: () => ({ kind: "damage-dice", condition: "always", minimumDie: 3 })
   },

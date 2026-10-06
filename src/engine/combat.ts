@@ -2321,6 +2321,38 @@ function cleaveAfterHit(state: EngineState, attacker: CombatantState, first: Com
 }
 
 /**
+ * Horde Breaker: once on each of its turns, after an attack with a weapon, another with the same weapon at a different
+ * creature within the effect's feet of the first target, in reach or range, that it hasn't attacked this turn: the one
+ * likeliest to drop.
+ */
+function followUpAttack(state: EngineState, attacker: CombatantState, first: CombatantState, attackerDefinition: CreatureDefinition, action: AttackActionDefinition): void {
+  if (action.attackType === "spell" || !action.weaponProperties) return;
+  if (state.snapshot.combatants[state.snapshot.turnIndex]?.id !== attacker.id) return;
+  for (const feature of featureSources(attackerDefinition, attacker)) {
+    for (const [index, effect] of (feature.effects ?? []).entries()) {
+      if (effect.kind !== "follow-up-attack" || !featureAppliesToAction(effect, action)) continue;
+      const useKey = `${feature.id}:${index}:follow-up`;
+      if (wasRiderUsedThisTurn(state, attacker.id, useKey)) return;
+      const attacked = new Set(state.log.filter((entry) => entry.type === "AttackRolled" && entry.round === state.snapshot.round
+        && entry.turnIndex === state.snapshot.turnIndex && entry.data?.attackerId === attacker.id).map((entry) => entry.data?.targetId as Id));
+      const faction = effectiveFaction(state.snapshot, attacker);
+      const second = state.snapshot.combatants
+        .filter((candidate) => candidate.id !== first.id && candidate.state === "active" && !attacked.has(candidate.id)
+          && effectiveFaction(state.snapshot, candidate) !== faction
+          && spatialDistance(state.snapshot, first, candidate) <= effect.withinFt
+          && !targetingProblem(state.snapshot, attacker, candidate, action))
+        .sort((a, b) => a.currentHp - b.currentHp || a.id.localeCompare(b.id))[0];
+      if (!second) return;
+      state.log.push(event(state, "RiderApplied", `${attacker.displayName}'s ${feature.name}: ${action.name} at ${second.displayName}`, {
+        sourceId: attacker.id, targetId: second.id, actionId: action.id, riderKind: "follow-up-attack", riderUseKey: useKey
+      }));
+      resolveAttackCore(state, attacker, second, attackerDefinition, { ...action, name: `${action.name} (${feature.name})` }, { suppressDeclare: true }, false);
+      return;
+    }
+  }
+}
+
+/**
  * Superior Hunter's Prey: once on each of the marker's turns, a mark's damage dealt again to another of its foes within
  * reach of the creature hit, one the marker has a clear line to: the one likeliest to drop (the fewest hit points left).
  */
@@ -2578,6 +2610,8 @@ function resolveAttackCore(
   if (hit && action.cleave && action.attackType === "melee" && attacker.state === "active") {
     cleaveAfterHit(state, attacker, target, attackerDefinition, action);
   }
+  // Horde Breaker: after a weapon attack, hit or miss, one at a creature beside the target.
+  if (attacker.state === "active" && !options.suppressDeclare) followUpAttack(state, attacker, target, attackerDefinition, action);
   // A Parry's bonus is for this attack only.
   for (const { combatantId, conditionId } of endsAfterAttack ?? []) {
     const bearer = state.snapshot.combatants.find((combatant) => combatant.id === combatantId);

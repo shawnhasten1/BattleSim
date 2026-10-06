@@ -734,6 +734,8 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return onHitOptionSentence(effect.option, definition, who);
     case "metamagic":
       return `Metamagic: ${who.subject} can spend ${costText(effect.resourceCost, definition)} to ${METAMAGIC_PHRASES[effect.option]}.`;
+    case "follow-up-attack":
+      return `Once on each of ${who.possessive} turns, when ${who.subject} makes an attack with a weapon, ${who.subject} can make another attack with the same weapon against a different creature within ${effect.withinFt} feet of the original target and within the weapon's range, one ${who.subject} hasn't attacked this turn.`;
     case "shed-conditions":
       return `At the ${effect.timing === "turn-start" ? "start" : "end"} of each of ${who.possessive} turns, ${who.subject} ends one of these conditions on ${who.object === "it" ? "itself" : who.object}: ${joinList(effect.conditions, "or")}.`;
     case "slot-recall":
@@ -876,6 +878,7 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;
+    case "follow-up-attack": return `another attack at a creature within ${effect.withinFt} ft of the first, once a turn`;
     case "slot-recall": return `a level 1–${effect.maxLevel} slot back on a d${effect.die} matching its level`;
     case "spare-allies": return `spares ${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""} allies in the areas of ${spellScopeText(effect, IT)}`;
   }

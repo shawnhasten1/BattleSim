@@ -34,7 +34,6 @@ export const GAPS = {
   initiative: "Swapping initiative with an ally (Alert)",
   smite: "What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment",
   "dice-trade": "Two Cunning Strike effects on one hit (Improved Cunning Strike)",
-  "follow-up-attack": "An extra attack against a second creature near the first (Horde Breaker, Cleave)",
   "free-move": "A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel)",
   flee: "A creature that must spend its turns moving away from its source (Turn Undead)",
   "ally-die": "A rolled die taken off an enemy's roll or damage (Cutting Words: here its average, off an attack roll only)",
@@ -280,7 +279,7 @@ export const CLASS_COVERAGE: Record<string, CoverageEntry> = {
 
   /* Hunter */
   "ranger_hunter_hunters-lore": info(),
-  "ranger_hunter_hunters-prey": partial(["follow-up-attack"], "Colossus Slayer runs; Horde Breaker doesn't."),
+  "ranger_hunter_hunters-prey": full("Colossus Slayer (1d8 more once a turn on a creature missing hit points), or Horde Breaker (once a turn, after a weapon attack, another with the same weapon at a creature within 5 ft of the target that it hasn't attacked this turn, the one likeliest to drop)."),
   "ranger_hunter_defensive-tactics": manual(["oa-defense"]),
   "ranger_hunter_superior-hunters-prey": full("The second creature is the one likeliest to drop: the fewest hit points left."),
   "ranger_hunter_superior-hunters-defense": full("Resistance to the damage's types until the end of the turn, taken by the AI for a cut of 5 or more or one that keeps it standing."),
