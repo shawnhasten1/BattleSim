@@ -958,6 +958,13 @@ export const useEncounterStore = create<EncounterStore>()(
         return rewritten ? log : log.length;
       };
 
+      /** A built character's Wild Shape forms (library beasts) come along, as a placed monster's summons do. */
+      const embedSpawnsOf = (definition: CreatureDefinition) => {
+        void loadDependencies(definition, get().encounter.definitions).then((embedded) => {
+          if (embedded.length > 0) get().embedDefinitions(embedded);
+        });
+      };
+
       const commitEncounter = (
         encounter: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
@@ -2940,6 +2947,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const id = `def-${crypto.randomUUID()}`;
         const { definition } = rebuildActor(blankCharacter(id, name), build, SRD_BUILD_SOURCES);
         get().addCreatureDefinition({ ...definition, source: { provider: "homebrew" } }, "party", position);
+        embedSpawnsOf(definition);
         // A player character's token is the character: "Vex", not "Vex 1". Part of the same undo step.
         const encounter = get().encounter;
         set({
@@ -2960,6 +2968,7 @@ export const useEncounterStore = create<EncounterStore>()(
           definitions: encounter.definitions.map((definition) => (definition.id === definitionId ? result.definition : definition)),
           combatants: encounter.combatants.map((combatant) => tokenAfterRebuild(combatant, before, result.definition))
         });
+        embedSpawnsOf(result.definition);
         return { changes: result.changes, warnings: result.warnings };
       },
       updateCombatant: (combatantId, updates) => {

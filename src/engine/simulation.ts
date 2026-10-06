@@ -10,6 +10,7 @@ import {
   whileConditionProblem,
   chosenAreaTargets,
   growthProblem,
+  resolveTransformAction,
   templateSummonDefinition,
   limitedToOneThing,
   onHitTermsProblem,
@@ -85,6 +86,7 @@ import {
 import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
 import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { FULL_SUFFIX, withArticle } from "./items";
+import { wildShapeForm } from "./wild-shape";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
@@ -1327,6 +1329,8 @@ export function takeAutomatedTurn(state: EngineState, actor: CombatantState): st
   }
 
   takeResourceConversions(state, actor);
+  // Wild Shape, when a beast fights better than the druid can without its slots.
+  maybeWildShape(state, actor);
 
   // Someone in a grapple spends the action breaking free when there's a fair chance of it (a restrained creature
   // fights at a penalty and can't move, so it matters most then); otherwise it fights on from where it is.
@@ -4200,6 +4204,44 @@ function masteryWorth(mastery: WeaponMastery, attack: AttackAction, source: Crea
     case "slow": return hitChance * 0.5;
     default: return 0;
   }
+}
+
+/**
+ * Wild Shape, with its bonus action at the start of its turn: into its best known form when that form's attacks beat what
+ * it can do without spending (its cantrips, its weapons) by a third, and it has no slot spell left that does damage or
+ * takes control, or it's already concentrating on one. Not when it's in a form already.
+ */
+function maybeWildShape(state: EngineState, actor: CombatantState): void {
+  if (actor.activeForm || !canAct(actor, "bonus")) return;
+  const snapshot = state.snapshot;
+  const definition = getDefinition(snapshot, actor);
+  const executables = getExecutableActions(definition);
+  const shape = executables.find((action): action is Extract<ActionDefinition, { kind: "transform" }> => action.kind === "transform"
+    && Boolean(action.wildShape) && action.actionType === "bonus" && canPayResource(actor, action));
+  if (!shape) return;
+  const hostiles = snapshot.combatants.some((combatant) => combatant.state === "active" && effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
+  if (!hostiles) return;
+  const offense = (source: CreatureDefinition, free: boolean) => Math.max(0, ...getExecutableActions(source)
+    .filter((action) => action.actionType === "action" && action.automationSupport === "full"
+      && (action.kind === "attack" || action.kind === "multiattack" || action.kind === "save" || action.kind === "area-save")
+      && (!free || !("resourceCost" in action) || !action.resourceCost))
+    .map((action) => averageDamage(action, source)));
+  const pb = definition.proficiencyBonus ?? 2;
+  const forms = shape.forms.flatMap((form) => {
+    const beast = snapshot.definitions.find((candidate) => candidate.id === form.definitionId);
+    return beast ? [{ form, value: offense(wildShapeForm(definition, beast, pb, `${definition.id}:wild-shape:${beast.id}`, shape.wildShape?.keepsSpells === true), false) }] : [];
+  }).sort((a, b) => b.value - a.value || a.form.id.localeCompare(b.form.id));
+  const best = forms[0];
+  if (!best) return;
+  const own = offense(definition, true);
+  const slotSpells = executables.some((action) => "spellLevel" in action && (action.spellLevel ?? 0) >= 1 && canPayResource(actor, action)
+    && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save"));
+  // Beast Spells: its slot spells come along, so they don't hold it back.
+  if (best.value < own * 1.33 || (slotSpells && !actor.concentration && !shape.wildShape?.keepsSpells)) return;
+  state.log.push(event(state, "AiDecision", `${actor.displayName} takes ${best.form.label} form: ${Math.round(best.value)} average damage against ${Math.round(own)} of its own`, {
+    combatantId: actor.id, actionId: shape.id, formId: best.form.id, reason: "wild-shape"
+  }));
+  resolveTransformAction(state, actor.id, shape.id, best.form.id);
 }
 
 /** Conditions that take a creature's turn from it. */

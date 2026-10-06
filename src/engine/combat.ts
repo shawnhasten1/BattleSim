@@ -1,6 +1,7 @@
 import { cellIntersectsArea, combatantsInArea, HAZARD_PATHING_MULTIPLIER, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { activeMastery, isLightWeapon, masteryRiders } from "./mastery";
 import { templateCreature } from "./summon-templates";
+import { wildShapeForm } from "./wild-shape";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
 import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
@@ -4153,6 +4154,7 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
   if (condition.modifiers?.noSpellcasting) breakConcentration(state, target.id);
   if (INCAPACITATING_CONDITIONS.has(condition.name)) {
     endOnIncapacitation(state, target, condition.name);
+    endWildShape(state, target, condition.name);
     endConditionsFromSource(state, target, `it is ${condition.name}`);
   }
   // A flier that can no longer move (or is knocked prone) drops, unless it can hover.
@@ -5248,13 +5250,50 @@ export function resolveTransformAction(state: EngineState, actorId: Id, actionId
   if (!target && action.canRevert === false) {
     throw new Error(`${actor.displayName} can't return to its true form with ${action.name}`);
   }
-  validateAndSpendAction(actor, action);
+  // Wild Shape: the beast's body with what the druid keeps of itself, made now; going back costs nothing.
+  const shifted = target && action.wildShape ? wildShapeDefinition(state, actor, target.definitionId, action.wildShape.keepsSpells === true) : undefined;
+  validateAndSpendAction(actor, !target && action.wildShape ? { ...action, resourceCost: undefined } : action);
   declareAction(state, actor, action, {
     message: target ? `${actor.displayName} uses ${action.name} to change shape` : `${actor.displayName} uses ${action.name} to return to its true form`
   });
-  actor.activeForm = target ? { definitionId: target.definitionId } : undefined;
+  actor.activeForm = target ? { definitionId: shifted?.id ?? target.definitionId } : undefined;
   state.log.push(event(state, "Transformed", `Success - ${action.name}: ${actor.displayName} ${target ? `becomes ${target.label}` : "returns to its true form"}`, {
-    combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null, success: true
+    combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null, success: true,
+    // A form made for this shift, which the pre-run snapshot replay starts from doesn't have.
+    ...(shifted ? { definition: shifted } : {})
+  }));
+  if (shifted && action.wildShape && action.wildShape.tempHp > 0 && action.wildShape.tempHp > actor.tempHp) {
+    actor.tempHp = action.wildShape.tempHp;
+    state.log.push(event(state, "FeatureEffectApplied", `${actor.displayName} gains ${action.wildShape.tempHp} temporary hit points`, {
+      targetId: actor.id, actionId, amount: action.wildShape.tempHp, tempHp: actor.tempHp
+    }));
+  }
+}
+
+/**
+ * Wild Shape: the form a shifter takes as `beastId` (`wildShapeForm`): made from its own definition and the beast's, once
+ * per shifter and beast, and kept in the encounter's definitions.
+ */
+function wildShapeDefinition(state: EngineState, actor: CombatantState, beastId: Id, keepsSpells: boolean): CreatureDefinition {
+  const shifter = state.snapshot.definitions.find((definition) => definition.id === actor.definitionId)!;
+  const id = `${shifter.id}:wild-shape:${beastId}${keepsSpells ? ":spells" : ""}`;
+  const known = state.snapshot.definitions.find((definition) => definition.id === id);
+  if (known) return known;
+  const beast = state.snapshot.definitions.find((definition) => definition.id === beastId)!;
+  const made = wildShapeForm(shifter, beast, shifter.proficiencyBonus ?? proficiencyFromDefinition(shifter), id, keepsSpells);
+  state.snapshot.definitions = [...state.snapshot.definitions, made];
+  return made;
+}
+
+/** Wild Shape: a druid's form ends when it's incapacitated. */
+function endWildShape(state: EngineState, combatant: CombatantState, cause: ConditionName): void {
+  if (!combatant.activeForm) return;
+  const own = state.snapshot.definitions.find((definition) => definition.id === combatant.definitionId);
+  const shape = own ? getExecutableActions(own).find((action) => action.kind === "transform" && action.wildShape) : undefined;
+  if (!shape) return;
+  combatant.activeForm = undefined;
+  state.log.push(event(state, "Transformed", `${shape.name}: ${combatant.displayName} returns to its true form (${cause})`, {
+    combatantId: combatant.id, actionId: shape.id, formId: BASE_FORM_ID, activeForm: null
   }));
 }
 

@@ -250,10 +250,10 @@ describe("the Bard (College of Lore)", () => {
 });
 
 describe("the Druid (Circle of the Land)", () => {
-  it("counts Wild Shape's uses (shifting is reference until Phase 7), and Land's Aid spends one", () => {
+  it("counts Wild Shape's uses (shifting runs since 7av), and Land's Aid spends one", () => {
     const druid = built("druid", 3);
     expect(druid.resources?.["wild-shape"]).toBe(2);
-    expect(feature(druid, "druid-wild-shape").automationSupport).toBe("manual-only");
+    expect(feature(druid, "druid-wild-shape").automationSupport).toBe("full");
     expect(action(druid, "Land's Aid")).toMatchObject({ kind: "area-save", saveAbility: "con", damage: [{ dice: "2d6" }], resourceCost: { resourceId: "wild-shape", amount: 1 } });
     expect(action(built("druid", 10), "Land's Aid")).toMatchObject({ damage: [{ dice: "3d6" }] });
     expect(action(built("druid", 14), "Land's Aid")).toMatchObject({ damage: [{ dice: "4d6" }] });

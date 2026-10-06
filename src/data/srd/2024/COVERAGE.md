@@ -18,7 +18,7 @@ its gaps, never dropped and never approximated without saying so.
 | Barbarian (Path of the Berserker) | 24 | 17 | 1 | 0 | 6 | 0 |
 | Bard (College of Lore) | 17 | 4 | 2 | 0 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 8 | 0 | 1 | 7 | 1 |
-| Druid (Circle of the Land) | 19 | 5 | 0 | 4 | 8 | 2 |
+| Druid (Circle of the Land) | 19 | 7 | 0 | 2 | 8 | 2 |
 | Fighter (Champion) | 21 | 15 | 0 | 0 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
 | Paladin (Oath of Devotion) | 23 | 12 | 0 | 2 | 8 | 1 |
@@ -43,7 +43,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
-| `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
@@ -155,13 +154,13 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 1 | Primal Order | builder |  | Magician: a cantrip (its check bonus is outside a fight). Warden: martial weapons and medium armor. |
 | 1 | Spellcasting | builder |  |  |
 | 2 | Wild Companion | manual | `summon-stat-blocks` |  |
-| 2 | Wild Shape | manual | `wild-shape` | Its uses are counted (Land's Aid spends them). Shifting needs the beast forms in the encounter and temporary hit points on shifting: plan Phase 7. |
+| 2 | Wild Shape | full |  | A bonus action into a known Beast form (the builder picks them: 4, 6 and 8 by level, with the Challenge Rating and fly limits; the library's beasts come into the encounter with the druid): the beast's body with the druid's hit points, mental scores, class features, feats and save proficiencies, temporary hit points equal to its level, and no spells; back for free, or when incapacitated. The AI shifts when a form's attacks beat what it can do without its slots by a third and it has no slot spell to cast (or is concentrating already). |
 | 3 | Druid Subclass | builder |  | The subclass choice. |
 | 4, 8, 12, 16 | Ability Score Improvement | builder |  | A feat choice: the Ability Score Improvement feat or another the character qualifies for. |
 | 5 | Wild Resurgence | full |  | A slot for a Wild Shape use once none are left, once on each of its turns, and a Wild Shape use for a 1st-level slot once. |
 | 7 | Elemental Fury | full |  | Primal Strike, or Potent Spellcasting: Wisdom on one damage roll of each Druid cantrip. |
 | 15 | Improved Elemental Fury | full |  | Primal Strike's 2d8, or Potent Spellcasting's 300 ft more on a Druid cantrip reaching 10 ft or more. |
-| 18 | Beast Spells | manual | `wild-shape` |  |
+| 18 | Beast Spells | full |  | Its spells come with it into a Wild Shape form (material components aren't modeled). |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Archdruid | info |  | A fight starts with full pools; turning Wild Shape into a slot isn't offered. |
 | — | Druid Spell List | builder |  | Read from each spell's own class list. |

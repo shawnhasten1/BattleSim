@@ -11,6 +11,7 @@ export * from "./import-normalize";
 export * from "./items";
 export * from "./mastery";
 export * from "./multiattack";
+export * from "./wild-shape";
 export * from "./report";
 export * from "./rng";
 export * from "./simulation";

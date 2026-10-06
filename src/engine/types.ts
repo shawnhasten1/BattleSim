@@ -2065,6 +2065,14 @@ export interface TransformActionDefinition {
   canRevert?: boolean;
   /** Forced back to its base form if this transform's HP-holder dies in a non-base form (lycanthropes/vampires revert on death). */
   revertOnDeath?: boolean;
+  /**
+   * Wild Shape: each form names a Beast, and the form is that beast's body with what the shifter keeps of itself
+   * (`wildShapeForm`, made when it shifts). It gains `tempHp` temporary hit points on shifting; going back costs nothing;
+   * being incapacitated ends the form. With `keepsSpells` it can cast its spells in a form (Beast Spells).
+   */
+  wildShape?: { tempHp: number; keepsSpells?: boolean };
+  /** What shifting spends (Wild Shape's uses). Going back to its own form spends nothing. */
+  resourceCost?: ResourceCost;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 

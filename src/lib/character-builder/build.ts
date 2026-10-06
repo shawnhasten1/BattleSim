@@ -1199,6 +1199,19 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         target.feature = { ...target.feature, grantedActions: target.feature.grantedActions!.map((candidate, at) => (at === index ? changed : candidate)) };
       }
     }
+    // Wild Shape's known forms: added to the transform an earlier grant gave (once each).
+    if (grant.formsOf) {
+      const { grant: earlier, action: index, forms } = grant.formsOf;
+      const target = features.find((entry) => entry.key.endsWith(`:${earlier}`));
+      const action = target?.feature.grantedActions?.[index];
+      if (!target || !action || action.kind !== "transform") {
+        state.warnings.push(`${label}: no shapechange ${index} from ${earlier} to add a form to`);
+      } else {
+        const added = forms.filter((form) => !action.forms.some((existing) => existing.id === form.id));
+        const changed = { ...action, forms: [...action.forms, ...added] };
+        target.feature = { ...target.feature, grantedActions: target.feature.grantedActions!.map((candidate, at) => (at === index ? changed : candidate)) };
+      }
+    }
     if (grant.onHitOf) {
       const onHitOf = grant.onHitOf;
       // A rider's dice can be a template ("{mod:wis|min:1}d8").

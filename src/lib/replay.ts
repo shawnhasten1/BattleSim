@@ -241,6 +241,9 @@ function applyEvent(
       if (combatant) {
         const form = data.activeForm as { definitionId: string } | null | undefined;
         combatant.activeForm = form ? { definitionId: form.definitionId } : undefined;
+        // Wild Shape: the form made for the shift.
+        const made = data.definition as CreatureDefinition | undefined;
+        if (made && !snapshot.definitions.some((definition) => definition.id === made.id)) snapshot.definitions = [...snapshot.definitions, structuredClone(made)];
       }
       return;
     }

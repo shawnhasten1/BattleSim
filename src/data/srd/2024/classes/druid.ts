@@ -1,4 +1,5 @@
 import type { DamageType } from "@/engine";
+import { SRD_MONSTER_INDEX } from "@/data/srd/monsters";
 import type { ClassDefinition, FeatureGrant, PickOption, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, spell, srdSpellcasting } from "../authoring";
 import { srd52Source, srdClass, srdColumns } from "../reference";
@@ -59,10 +60,22 @@ export const DRUID: ClassDefinition = {
       level: 2,
       grants: [
         grant("wild-companion", reference("druid_wild-companion")),
-        // Its uses are counted: Land's Aid and Nature's Sanctuary spend them.
-        grant("wild-shape", reference("druid_wild-shape"), { pool: { id: "wild-shape", size: "{col:wild-shape}" } })
-      ]
+        // A bonus action into a known Beast form (the forms are chosen below); its uses are counted, and Land's Aid and
+        // Nature's Sanctuary spend them too.
+        grant("wild-shape", runs("druid_wild-shape", {
+          grantedActions: [{
+            kind: "transform", id: "wild-shape", name: "Wild Shape", actionType: "bonus", forms: [], canRevert: true,
+            wildShape: { tempHp: 2 }, resourceCost: { resourceId: "wild-shape", amount: 1 }, automationSupport: "full"
+          }]
+        }), {
+          pool: { id: "wild-shape", size: "{col:wild-shape}" },
+          scale: [{ path: "grantedActions.0.wildShape.tempHp", value: "{level}" }]
+        })
+      ],
+      choices: [knownForms(2, 4)]
     },
+    { level: 4, grants: [], choices: [knownForms(4, 2)] },
+    { level: 8, grants: [], choices: [knownForms(8, 2)] },
     { level: 3, grants: [], choices: [choice({ kind: "subclass", id: "subclass" }, "druid_druid-subclass")] },
     {
       level: 5,
@@ -127,7 +140,8 @@ export const DRUID: ClassDefinition = {
       }, "druid_elemental-fury")]
     },
     { level: 15, grants: [grant("improved-elemental-fury", runs("druid_improved-elemental-fury"))] },
-    { level: 18, grants: [grant("beast-spells", reference("druid_beast-spells"))] },
+    // Its spells in a Wild Shape form.
+    { level: 18, grants: [grant("beast-spells", runs("druid_beast-spells"), { actionPatch: { grant: "wild-shape", action: 0, patch: { wildShape: { tempHp: "{level}", keepsSpells: true } } } })] },
     { level: 20, grants: [grant("archdruid", informational("druid_archdruid"))] }
   ],
   startingEquipment: [
@@ -144,6 +158,8 @@ export const DRUID: ClassDefinition = {
     skills: ["perception", "nature", "insight", "survival"],
     epicBoon: "srd:feat:boon-of-dimensional-travel",
     equipment: "A",
+    // Wild Shape's forms: fighters first.
+    picks: { "wild-shape-forms": ["wolf", "boar", "giant-badger", "panther", "black-bear", "ape", "brown-bear", "dire-wolf"] },
     cantrips: ["produce-flame", "starry-wisp", "poison-spray", "shillelagh", "guidance", "druidcraft"].map(spell),
     spells: DRUID_SPELLS
   },
@@ -186,6 +202,26 @@ function land(entry: Land): PickOption {
 
 /** Land's Aid's dice: 2d6, 3d6 from 10th level, 4d6 from 14th. */
 const LANDS_AID = Array.from({ length: 20 }, (_, index) => (index + 1 >= 14 ? "4d6" : index + 1 >= 10 ? "3d6" : "2d6"));
+
+/**
+ * Wild Shape's known forms: Beasts of the bundled library, up to Challenge Rating 1/4 (from 4th level 1/2, from 8th 1,
+ * and with a fly speed only from 8th), picked at 2nd (four), 4th (two more) and 8th level (two more).
+ */
+function knownForms(level: number, count: number) {
+  const cr = (value: number) => (value === 0.125 ? "1/8" : value === 0.25 ? "1/4" : value === 0.5 ? "1/2" : String(value));
+  return choice({
+    kind: "pick", id: "wild-shape-forms", label: `Wild Shape forms (${count} more)`, count,
+    options: SRD_MONSTER_INDEX.filter((entry) => entry.type === "beast" && entry.cr <= 1).map((beast) => {
+      const from = beast.cr > 0.5 || beast.speed.fly ? 8 : beast.cr > 0.25 ? 4 : 0;
+      return {
+        id: beast.slug, name: beast.name,
+        description: `CR ${cr(beast.cr)}, ${beast.size}${beast.speed.fly ? `, flies ${beast.speed.fly} ft` : ""}`,
+        ...(from ? { prerequisite: { level: from } } : {}),
+        grants: [{ key: `form-${beast.slug}`, formsOf: { grant: "wild-shape", action: 0, forms: [{ id: beast.slug, label: beast.name, definitionId: beast.id }] } }]
+      };
+    })
+  }, "druid_wild-shape");
+}
 
 export const CIRCLE_OF_THE_LAND: SubclassDefinition = {
   id: "srd:subclass:circle-of-the-land",
