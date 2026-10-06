@@ -200,6 +200,20 @@ describe("traits built from a blank one", { timeout: 20000 }, () => {
     }]);
   });
 
+  it("An upgrade paid with the roll's advantage, on Strength attacks only (Brutal Strike)", async () => {
+    await blankFeature("Wild Swing");
+    const card = await addEffect(/^An upgrade it can add to a hit/, "An upgrade it can add to a hit");
+    await chip(card, "Only attacks using", "STR");
+    await userEvent.click(card.getByRole("checkbox", { name: /^Paid with the roll's advantage/ }));
+    expect(card.getByLabelText("Only while it has")).toBeTruthy();
+    await userEvent.click(card.getByRole("checkbox", { name: "Once per turn" }));
+    await done(card);
+    await addToSheet();
+    const effect = named("Wild Swing").effects?.[0];
+    expect(effect).toMatchObject({ kind: "on-hit-option", option: { abilities: ["str"], oncePerTurn: true } });
+    expect(effect?.kind === "on-hit-option" && effect.option.forgoesAdvantage).toBeTruthy();
+  });
+
   it("Bigger healing: each of its three parts", async () => {
     await blankFeature("Life's Gift");
     const card = await addEffect(/^Bigger healing/, "Bigger healing");

@@ -15,7 +15,7 @@ its gaps, never dropped and never approximated without saying so.
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 24 | 11 | 2 | 4 | 6 | 1 |
+| Barbarian (Path of the Berserker) | 24 | 14 | 2 | 1 | 6 | 1 |
 | Bard (College of Lore) | 17 | 2 | 2 | 2 | 9 | 2 |
 | Cleric (Life Domain) | 17 | 6 | 2 | 1 | 7 | 1 |
 | Druid (Circle of the Land) | 19 | 3 | 1 | 5 | 8 | 2 |
@@ -46,7 +46,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
 | `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `reaction-attack` | A reaction attack when damaged (Retaliation), or after cutting an attack's damage to 0 (Deflect Attacks' redirect) | Barbarian, Monk | 3 | Retaliation (Path of the Berserker); Deflect Attacks (Monk) |
-| `dice-trade` | Brutal Strike's trade of advantage for an effect, and two Cunning Strike effects on one hit (Improved Cunning Strike) | Barbarian, Rogue | 9 | Brutal Strike (Barbarian); Improved Brutal Strike (Barbarian); Improved Brutal Strike (Enhanced) (Barbarian); Improved Cunning Strike (Rogue) |
 | `action-limits` | A creature that can do only one of move, action or bonus action on its turn (Daze, Abjure Foes) | Paladin, Rogue | 9 | Abjure Foes (Paladin); Devious Strikes (Rogue) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `rage-limits` | What raging forbids (spells, concentration), and its states (raging and reckless at once) | Barbarian | 1 | Rage (Barbarian); Frenzy (Path of the Berserker) |
@@ -69,6 +68,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
+| `dice-trade` | Two Cunning Strike effects on one hit (Improved Cunning Strike) | Rogue | 11 | Improved Cunning Strike (Rogue) |
 | `damage-vitality` | Temporary hit points given when a spell deals damage (Improved Blessed Strikes' Potent Spellcasting) | Cleric | 14 | Improved Blessed Strikes (Cleric) |
 | `max-damage` | Maximum damage instead of a roll (Overchannel) | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
@@ -93,11 +93,11 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Fast Movement | builder |  | +10 ft of speed; heavy armor isn't checked. |
 | 7 | Feral Instinct | full |  | Advantage on Initiative rolls. |
 | 7 | Instinctive Pounce | full |  | Half its speed more movement the turn it rages. |
-| 9 | Brutal Strike | manual | `dice-trade` |  |
+| 9 | Brutal Strike | full |  | Hamstring and Forceful Blows, each a variant of the Strength attacks, once a turn with Reckless Attack on: the roll gives up its advantage (none with disadvantage), and a hit adds 1d10 of the weapon's type. Forceful Blow's move toward the target isn't held to a straight line. The AI takes it when the die is worth more than the advantage. |
 | 11 | Relentless Rage | full |  | While raging: a DC 10 Constitution save, 5 higher each time after the first this fight, for twice the barbarian level in hit points. |
-| 13 | Improved Brutal Strike | manual | `dice-trade` |  |
+| 13 | Improved Brutal Strike | full |  | Staggering Blow (disadvantage on its next save, no opportunity attacks until the barbarian's next turn) and Sundering Blow (+5 to the next attack roll against it by another creature), among all four. |
 | 15 | Persistent Rage | info |  | A fight starts with full pools, and the simulated rage already lasts the fight. |
-| 17 | Improved Brutal Strike (Enhanced) | manual | `dice-trade` |  |
+| 17 | Improved Brutal Strike (Enhanced) | full |  | 2d10, and two different blows: every Brutal Strike is one of the six pairs. |
 | 18 | Indomitable Might | full |  | A Strength save totalling less than the Strength score uses the score; checks are outside a fight. |
 | 19 | Epic Boon | builder |  | A feat choice from the Epic Boons. |
 | 20 | Primal Champion | builder |  | +4 Strength and Constitution, to a maximum of 25. |

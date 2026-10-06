@@ -839,6 +839,8 @@ export interface OnHitOption {
   bonusAction?: boolean;
   /** Once a turn, whichever attack it follows. */
   oncePerTurn?: boolean;
+  /** With `oncePerTurn`: options with the same key share the once (Brutal Strike's blows: one of them a turn). */
+  onceKey?: string;
   /** Cast with a higher slot: this much more on its first damage rider per level above the spell's. A variant per slot. */
   upcast?: { damageDice: string };
   /**
@@ -848,6 +850,13 @@ export interface OnHitOption {
   tradesDice?: OnHitDiceTrade;
   /** On the hit, the attacker can move up to this far (default half its speed), with `noOpportunityAttacks` provoking none (Withdraw). */
   move?: OnHitMove;
+  /**
+   * Paid with the attack roll's advantage (Brutal Strike): only while the attacker holds `whileCondition` (Reckless
+   * Attack's), the roll gives up any advantage, and one with disadvantage can't take it.
+   */
+  forgoesAdvantage?: { whileCondition?: string };
+  /** Only attacks that use one of these abilities (Brutal Strike: Strength). */
+  abilities?: Ability[];
 }
 
 /** Cunning Strike's cost: this many dice of the feature's `damage-bonus` (Sneak Attack's d6s). */
@@ -947,6 +956,18 @@ export type RiderDuration =
   /** Clears at the end of the bearer's next turn (Cunning Strike's Obscure: blinded "until the end of its next turn"). */
   | { kind: "until-end-of-next-turn" };
 
+/**
+ * A change to the next attack roll, used up by it. `"made"`: the bearer's own (Sap: disadvantage; Steady Aim:
+ * advantage). `"against"`: the next one made against the bearer, by the creature that set it (Vex), or with `byOthers`
+ * by anyone else (Sundering Blow: +5).
+ */
+export interface NextAttackChange {
+  role: "made" | "against";
+  mode?: "advantage" | "disadvantage";
+  bonus?: number;
+  byOthers?: boolean;
+}
+
 export interface RiderSave {
   ability: Ability;
   dc?: number;
@@ -966,7 +987,7 @@ export interface RiderSave {
     duration: RiderDuration;
     modifiers?: ConditionInstance["modifiers"];
     conditionKey?: string;
-    nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
+    nextAttack?: NextAttackChange;
   };
 }
 
@@ -1037,7 +1058,9 @@ export type ActionRider =
        */
       conditionKey?: string;
       /** It changes, and is used up by, the next attack roll: see `ConditionInstance.nextAttack`. */
-      nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
+      nextAttack?: NextAttackChange;
+      /** It changes, and is used up by, the bearer's next saving throw (Staggering Blow: disadvantage). */
+      nextSave?: { mode: "advantage" | "disadvantage" };
       /** It ends when its bearer takes damage, other than the same action's (Turn Undead, Abjure Foes). */
       endsOnDamage?: boolean;
       /** Only a creature this size or smaller (Cunning Strike's Trip: Large). */
@@ -1222,7 +1245,16 @@ export interface AttackActionDefinition {
    * `group`) and its move land only when they're met. With `tradesDice`, only with that damage bonus's damage, which
    * gives up the dice (Cunning Strike).
    */
-  onHitTerms?: { group: string; name: string; tradesDice?: OnHitDiceTrade; move?: OnHitMove };
+  onHitTerms?: {
+    group: string;
+    name: string;
+    tradesDice?: OnHitDiceTrade;
+    move?: OnHitMove;
+    /** Brutal Strike: the roll gives up its advantage, while the attacker holds this condition. */
+    forgoesAdvantage?: { whileCondition?: string };
+    /** Once a turn: the key its riders share (`wasRiderUsedThisTurn`). */
+    onceKey?: string;
+  };
   /** On-hit effects: extra damage, a save-or-condition, a shove. */
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
@@ -2252,13 +2284,17 @@ export interface ConditionInstance {
     forcesRandomAction?: boolean;
     /** Feet taken off the bearer's speed (weapon mastery's Slow: 10). The largest of these counts, not their sum. */
     speedPenaltyFt?: number;
+    /** The bearer can't make opportunity attacks (Staggering Blow). */
+    deniesOpportunityAttacks?: boolean;
   };
   /**
    * Weapon mastery's Sap and Vex: the condition changes one attack roll and is used up by it. `"made"`: the bearer's own
    * next attack roll (Sap: disadvantage). `"against"`: the next attack roll `by` makes against the bearer (Vex: the
    * attacker's advantage).
    */
-  nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage"; by?: Id };
+  nextAttack?: { role: "made" | "against"; mode?: "advantage" | "disadvantage"; bonus?: number; by?: Id; notBy?: Id };
+  /** Staggering Blow: it changes, and is used up by, the bearer's next saving throw. */
+  nextSave?: { mode: "advantage" | "disadvantage" };
   /** It ends when its bearer takes damage, other than from the action that gave it (`sourceId`): Turn Undead. */
   endsOnDamage?: boolean;
   effects?: FeatureEffect[];
@@ -2650,7 +2686,11 @@ export const actionRiderSchema: z.ZodType<ActionRider> = z.discriminatedUnion("k
     modifiers: z.any().optional(),
     effects: z.array(z.any()).optional(),
     conditionKey: z.string().min(1).optional(),
-    nextAttack: z.object({ role: z.enum(["made", "against"]), mode: z.enum(["advantage", "disadvantage"]) }).optional(),
+    nextAttack: z.object({
+      role: z.enum(["made", "against"]), mode: z.enum(["advantage", "disadvantage"]).optional(),
+      bonus: z.number().int().optional(), byOthers: z.boolean().optional()
+    }).optional(),
+    nextSave: z.object({ mode: z.enum(["advantage", "disadvantage"]) }).optional(),
     endsOnDamage: z.boolean().optional(),
     maxSize: sizeSchema.optional()
   }),

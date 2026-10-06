@@ -34,6 +34,7 @@ import {
   type RiderDuration,
   type RiderGate,
   type RiderSave,
+  type NextAttackChange,
   type SizeCategory,
   type AreaTemplate,
   type SpellDefinition,
@@ -1008,15 +1009,29 @@ function normalizeRider(input: unknown, defaultGate: RiderGate, index: number): 
       modifiers: isRecord(input.modifiers) ? input.modifiers as ConditionInstance["modifiers"] : undefined,
       effects: Array.isArray(input.effects) ? input.effects as FeatureEffect[] : undefined,
       ...(typeof input.conditionKey === "string" && input.conditionKey ? { conditionKey: input.conditionKey } : {}),
-      ...(isRecord(input.nextAttack) && (input.nextAttack.role === "made" || input.nextAttack.role === "against")
-        && (input.nextAttack.mode === "advantage" || input.nextAttack.mode === "disadvantage")
-        ? { nextAttack: { role: input.nextAttack.role, mode: input.nextAttack.mode } }
+      ...(normalizeNextAttack(input.nextAttack) ? { nextAttack: normalizeNextAttack(input.nextAttack)! } : {}),
+      ...(isRecord(input.nextSave) && (input.nextSave.mode === "advantage" || input.nextSave.mode === "disadvantage")
+        ? { nextSave: { mode: input.nextSave.mode } }
         : {}),
       ...(input.endsOnDamage === true ? { endsOnDamage: true } : {}),
       ...(SIZES.includes(input.maxSize as SizeCategory) ? { maxSize: input.maxSize as SizeCategory } : {})
     };
   }
   return null;
+}
+
+/** A rider's change to the next attack roll: advantage or disadvantage, a bonus, and whose roll it waits for. */
+function normalizeNextAttack(input: unknown): NextAttackChange | undefined {
+  if (!isRecord(input) || (input.role !== "made" && input.role !== "against")) return undefined;
+  const mode = input.mode === "advantage" || input.mode === "disadvantage" ? input.mode : undefined;
+  const bonus = numberField(input, "bonus");
+  if (!mode && !bonus) return undefined;
+  return {
+    role: input.role,
+    ...(mode ? { mode } : {}),
+    ...(bonus ? { bonus } : {}),
+    ...(input.role === "against" && input.byOthers === true ? { byOthers: true } : {})
+  };
 }
 
 function normalizeRiderGate(input: unknown): RiderGate | undefined {

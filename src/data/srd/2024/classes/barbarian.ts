@@ -1,3 +1,4 @@
+import type { ActionRider, FeatureEffect, OnHitMove } from "@/engine";
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { choice, grant, informational, reference, runs, weaponMasteryFeature } from "../authoring";
 import { srd52Source, srdClass, srdColumns, srdNumbers } from "../reference";
@@ -37,6 +38,53 @@ const recklessAttack = runs("barbarian_reckless-attack", {
     automationSupport: "full"
   }]
 });
+
+const RECKLESS_ACTIVE = "reckless-attack-active";
+
+/** Brutal Strike's effects: what each adds to the hit beyond the extra die. */
+const BLOWS: Array<{ name: string; riders: ActionRider[]; move?: OnHitMove }> = [
+  {
+    // Only one at a time, the most recent: a keyed condition replaces itself.
+    name: "Hamstring", riders: [{
+      kind: "condition", when: "on-hit", condition: { custom: "Hamstrung" }, conditionKey: "Hamstring Blow",
+      modifiers: { speedPenaltyFt: 15 }, duration: { kind: "until-source-turn", timing: "start" }
+    }]
+  },
+  // Pushed 15 ft; the move toward it is half its speed, provoking no opportunity attacks (not held to a straight line).
+  { name: "Forceful", riders: [{ kind: "push", when: "on-hit", distance: 15 }], move: { noOpportunityAttacks: true } },
+  {
+    name: "Staggering", riders: [
+      { kind: "condition", when: "on-hit", condition: { custom: "Staggered" }, conditionKey: "Staggering Blow", nextSave: { mode: "disadvantage" }, duration: { kind: "permanent" } },
+      {
+        kind: "condition", when: "on-hit", condition: { custom: "No opportunity attacks" }, conditionKey: "Staggering Blow: no opportunity attacks",
+        modifiers: { deniesOpportunityAttacks: true }, duration: { kind: "until-source-turn", timing: "start" }
+      }
+    ]
+  },
+  {
+    name: "Sundering", riders: [{
+      kind: "condition", when: "on-hit", condition: { custom: "Sundered" }, conditionKey: "Sundering Blow",
+      nextAttack: { role: "against", bonus: 5, byOthers: true }, duration: { kind: "until-source-turn", timing: "start" }
+    }]
+  }
+];
+
+/**
+ * A Brutal Strike with these blows: an on-hit option on a Strength attack roll, once a turn while Reckless Attack is on,
+ * paid with the roll's advantage. On the hit, the extra damage of the weapon's type and each blow's effects.
+ */
+const brutalStrike = (blows: typeof BLOWS, dice: string): FeatureEffect => ({
+  kind: "on-hit-option",
+  option: {
+    name: `Brutal Strike: ${blows.map((blow) => blow.name).join(" + ")} Blow${blows.length > 1 ? "s" : ""}`,
+    abilities: ["str"], forgoesAdvantage: { whileCondition: RECKLESS_ACTIVE }, oncePerTurn: true, onceKey: "brutal-strike",
+    riders: [{ kind: "damage", when: "on-hit", components: [{ dice, damageType: "same-as-attack" }] }, ...blows.flatMap((blow) => blow.riders)],
+    ...(blows.some((blow) => blow.move) ? { move: { noOpportunityAttacks: true } } : {})
+  }
+});
+
+/** Two different blows each (Improved Brutal Strike at 17th level). */
+const PAIRS = BLOWS.flatMap((first, index) => BLOWS.slice(index + 1).map((second) => [first, second]));
 
 const attacks = (key: string, count: number) => runs(key, {
   grantedActions: [{ kind: "multiattack", id: "attack", name: "Attack", actionType: "action", attacks: [{ any: "weapon", count }], automationSupport: "full" }]
@@ -100,16 +148,26 @@ export const BARBARIAN: ClassDefinition = {
         grant("instinctive-pounce", runs("barbarian_instinctive-pounce", { effects: [{ kind: "free-move", on: { spends: "rage" } }] }))
       ]
     },
-    { level: 9, grants: [grant("brutal-strike", reference("barbarian_brutal-strike"))] },
+    { level: 9, grants: [grant("brutal-strike", runs("barbarian_brutal-strike", { effects: BLOWS.slice(0, 2).map((blow) => brutalStrike([blow], "1d10")) }))] },
     {
       level: 11,
       grants: [grant("relentless-rage", runs("barbarian_relentless-rage", {
         effects: [{ kind: "survive-lethal", whileCondition: "rage-active", save: { ability: "con", dcBase: 10 }, dcStep: 5, hpTo: 22 }]
       }), { scale: [{ path: "effects.0.hpTo", value: "{level*2}" }] })]
     },
-    { level: 13, grants: [grant("improved-brutal-strike", reference("barbarian_improved-brutal-strike"))] },
+    // All four blows (Brutal Strike's two among them), the earlier feature's place taken.
+    {
+      level: 13,
+      grants: [grant("improved-brutal-strike", runs("barbarian_improved-brutal-strike", { effects: BLOWS.map((blow) => brutalStrike([blow], "1d10")) }), { replaces: "brutal-strike" })]
+    },
     { level: 15, grants: [grant("persistent-rage", informational("barbarian_persistent-rage"))] },
-    { level: 17, grants: [grant("improved-brutal-strike-enhanced", reference("barbarian_improved-brutal-strike-enhanced"))] },
+    // 2d10, and two different blows: one costs no more than two, so every Brutal Strike is a pair.
+    {
+      level: 17,
+      grants: [grant("improved-brutal-strike-enhanced", runs("barbarian_improved-brutal-strike-enhanced", {
+        effects: PAIRS.map((pair) => brutalStrike(pair, "2d10"))
+      }), { replaces: "improved-brutal-strike" })]
+    },
     { level: 18, grants: [grant("indomitable-might", runs("barbarian_indomitable-might", { effects: [{ kind: "save-floor", ability: "str" }] }))] },
     { level: 20, grants: [grant("primal-champion", informational("barbarian_primal-champion"), { adjust: { abilities: { str: 4, con: 4 }, abilityMax: 25 } })] }
   ],

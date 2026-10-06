@@ -4,6 +4,7 @@ import {
   canAct,
   damageBonusExpected,
   diceTradeCost,
+  onHitTermsProblem,
   damageAdjustmentMultiplier,
   damageAdjustmentsFor,
   dividedHealing,
@@ -558,9 +559,17 @@ function bestSwingAttack(
   weigh?: { snapshot: EncounterSnapshot; tactics: TacticsSettings; log?: CombatLogEvent[] }
 ): { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined {
   const adjustments = targetCombatant ? damageAdjustmentsFor(target, targetCombatant) : target.damageAdjustments;
+  // Brutal Strike: only with the board to say it can be used now; the weapon's plain swing then has the advantage it
+  // gives up.
+  const usable = candidates.filter((attack) => !attack.onHitTerms?.forgoesAdvantage
+    || (weigh !== undefined && !onHitTermsProblem(weigh.snapshot, sourceCombatant, attack, weigh.log)));
+  const advantaged = new Set(usable.filter((attack) => attack.onHitTerms?.forgoesAdvantage).map((attack) => attackFamilyId(attack, candidates)));
   let best: { attack: AttackAction; value: number; damage: number; hitChance: number } | undefined;
-  for (const attack of candidates) {
-    const hitChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), armorClassOf(target).total);
+  for (const attack of usable) {
+    const plainChance = attack.autoHit ? 1 : chanceToHit(resolveAttackBonus(attack, source), armorClassOf(target).total);
+    const hitChance = !attack.onHitTerms?.forgoesAdvantage && advantaged.has(attackFamilyId(attack, candidates))
+      ? 1 - (1 - plainChance) ** 2
+      : plainChance;
     const damage = (averageDamage(attack, source, adjustments) + averageAttackFeatureDamage(attack, source, sourceCombatant, target, new Set(usedOncePerTurnEffects))
       + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments)) * hitChance
       + expectedRiderDamage(attack, source, target, { landChance: hitChance });
@@ -675,12 +684,13 @@ function planMultiattackSwings(
   const tradedFrom = new Set<string>();
   const candidatesFor = (swing: MultiattackSwing) => swingCandidates(swing.step, executables)
     .filter((attack) => affordable(attack) && (!family || attackFamilyId(attack, executables) === family)
-      && !(attack.onHitTerms?.tradesDice && tradedFrom.has(attack.onHitTerms.tradesDice.featureId)));
+      && !(attack.onHitTerms?.tradesDice && tradedFrom.has(attack.onHitTerms.tradesDice.featureId))
+      && !(attack.onHitTerms?.onceKey && tradedFrom.has(attack.onHitTerms.onceKey)));
   const reachOf = (swing: MultiattackSwing) => Math.max(0, ...candidatesFor(swing).map(attackReach));
   const assigned: Record<string, number> = {};
   const attackTargetIds: string[] = [];
   const attackActionIds: string[] = [];
-  const weigh = { snapshot, tactics: tacticsSettings(actor.tacticsProfile) };
+  const weigh = { snapshot, tactics: tacticsSettings(actor.tacticsProfile), log: undefined as CombatLogEvent[] | undefined };
   const choose = (swing: MultiattackSwing, target: CombatantState) => {
     const usable = candidatesFor(swing).filter((attack) => !targetingProblem(snapshot, actor, target, attack));
     return bestSwingAttack(usable, definition, actor, getDefinition(snapshot, target), target, new Set(), weigh);
@@ -692,6 +702,7 @@ function planMultiattackSwings(
     const cost = best.attack.resourceCost;
     if (cost) budget[cost.resourceId] = (budget[cost.resourceId] ?? 0) - cost.amount;
     if (best.attack.onHitTerms?.tradesDice) tradedFrom.add(best.attack.onHitTerms.tradesDice.featureId);
+    if (best.attack.onHitTerms?.onceKey) tradedFrom.add(best.attack.onHitTerms.onceKey);
   };
 
   const order = [...swings].sort((a, b) => reachOf(a) - reachOf(b) || a.index - b.index);
@@ -755,9 +766,9 @@ function decideMultiattackSwing(
     const best = bestAgainst(plannedTarget);
     if (best) {
       const wanted = context.candidates.find((attack) => attack.id === planned.attackActionIds[context.swing.index]);
-      // A dice trade goes on the first swing its bonus lands with, whichever the plan gave it to: the same weapon,
-      // traded or not, as the swing stands now (Sneak Attack still to come, or already dealt).
-      const retraded = wanted && (wanted.onHitTerms?.tradesDice || best.attack.onHitTerms?.tradesDice)
+      // A dice trade (or a Brutal Strike) goes on the first swing that can pay for it, whichever the plan gave it to:
+      // the same weapon, with it or not, as the swing stands now (Sneak Attack still to come, or already dealt).
+      const retraded = wanted && (wanted.onHitTerms || best.attack.onHitTerms)
         && attackFamilyId(wanted, context.candidates) === attackFamilyId(best.attack, context.candidates);
       if (retraded) return { targetId: plannedTarget.id, actionId: best.attack.id };
       // The planned attack, unless that weapon can't reach from here any more.
@@ -2963,6 +2974,8 @@ function selectOffensivePlan(
   const executables = getExecutableActions(definition);
   const candidates = (options.actions ?? executables)
     .filter((action): action is OffensiveAction => action.automationSupport === "full" && (options.actions !== undefined || action.actionType === slot) && canPayResource(actor, action, executables) && (action.kind === "attack" || action.kind === "save" || action.kind === "area-save" || action.kind === "multiattack"))
+    // Brutal Strike: not without Reckless Attack on.
+    .filter((action) => !onHitTermsProblem(snapshot, actor, action))
     // Don't trade a still-working concentration effect for a new one.
     .filter((action) => !("concentration" in action && action.concentration) || !hasWorkingConcentrationEffect(snapshot, actor))
     // A routine of "any weapon attack" swings is planned two ways: close in and swing, or shoot from here.

@@ -703,6 +703,15 @@ function OnHitOptionFields({ option, onChange, context }: { option: OnHitOption;
     .filter((feature) => feature.effects?.some((candidate) => candidate.kind === "damage-bonus"));
   const trade = option.tradesDice;
   const ability: Ability = definition.abilities.dex > definition.abilities.str ? "dex" : "str";
+  // Brutal Strike: the conditions its activations give (Reckless Attack's), one of which it can need.
+  const givers = getExecutableActions(definition).flatMap((action) => (action.kind === "activate-feature" && action.condition
+    ? [{ id: action.condition.id, name: action.name }] : []));
+  const forgo = option.forgoesAdvantage;
+  const abilities = option.abilities ?? [];
+  const toggleAbility = (name: Ability) => {
+    const next = abilities.includes(name) ? abilities.filter((candidate) => candidate !== name) : [...abilities, name];
+    onChange(opt(option, "abilities", next.length ? next : undefined));
+  };
   return (
     <>
       <span className={styles.inline}>
@@ -715,6 +724,11 @@ function OnHitOptionFields({ option, onChange, context }: { option: OnHitOption;
         ))}
       </span>
       <Check label="Weapon attacks only" checked={option.weaponOnly === true} onChange={(on) => onChange(opt(option, "weaponOnly", on ? true : undefined))} />
+      <span className={styles.typeChips} role="group" aria-label="Only attacks using">
+        {(["str", "dex", "con", "int", "wis", "cha"] as const).map((name) => (
+          <button key={name} type="button" aria-pressed={abilities.includes(name)} onClick={() => toggleAbility(name)}>{name.toUpperCase()}</button>
+        ))}
+      </span>
       <EffectCards riders={option.riders} onChange={(riders) => onChange({ ...option, riders })} definition={definition}
         context={{ kind: "attack", ability }} weapon={weapon} newPools={newPools} />
       <Check label="A move after the hit" checked={Boolean(option.move)} onChange={(on) => onChange(opt(option, "move", on ? { noOpportunityAttacks: true } : undefined))} />
@@ -750,6 +764,19 @@ function OnHitOptionFields({ option, onChange, context }: { option: OnHitOption;
           <Check label="Takes its bonus action" checked={option.bonusAction === true} onChange={(on) => onChange(opt(option, "bonusAction", on ? true : undefined))} />
         </>
       )}
+      <Check label="Paid with the roll's advantage (Brutal Strike), and not with disadvantage" checked={Boolean(forgo)}
+        onChange={(on) => onChange(opt(option, "forgoesAdvantage", on ? (givers[0] ? { whileCondition: givers[0].id } : {}) : undefined))} />
+      {forgo ? (
+        <span className={styles.inline}>
+          <label htmlFor={`${id}-while`}>Only while</label>
+          <select id={`${id}-while`} aria-label="Only while it has" value={forgo.whileCondition ?? ""}
+            onChange={(e) => onChange({ ...option, forgoesAdvantage: e.target.value ? { whileCondition: e.target.value } : {} })}>
+            <option value="">(any time)</option>
+            {givers.map((giver) => <option key={giver.id} value={giver.id}>{`${giver.name} is on`}</option>)}
+            {forgo.whileCondition && !givers.some((giver) => giver.id === forgo.whileCondition) ? <option value={forgo.whileCondition}>{`${forgo.whileCondition} (not found)`}</option> : null}
+          </select>
+        </span>
+      ) : null}
       <Check label="Once per turn" checked={option.oncePerTurn === true} onChange={(on) => onChange(opt(option, "oncePerTurn", on ? true : undefined))} />
     </>
   );

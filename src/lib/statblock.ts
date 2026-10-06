@@ -42,6 +42,7 @@ import {
   type LegendaryActionRef,
   type MultiattackStep,
   type NumericFormula,
+  type NextAttackChange,
   type OnHitOption,
   type ReactionTrigger,
   type ResourceCost,
@@ -271,9 +272,17 @@ function conditionLabel(rider: ConditionPhrase, definition?: CreatureDefinition)
   const name = conditionName(rider.condition);
   const effects = typeof rider.condition === "string" ? [] : [
     ...modifierShorts(rider.modifiers),
-    ...(definition ? effectShorts(rider.effects, definition) : [])
+    ...(definition ? effectShorts(rider.effects, definition) : []),
+    ...(rider.nextAttack ? [nextAttackShort(rider.nextAttack)] : []),
+    ...(rider.nextSave ? [`${rider.nextSave.mode} on its next save`] : [])
   ];
   return effects.length ? `${name} (${effects.join(", ")})` : name;
+}
+
+/** "advantage on its next attack roll", "+5 to the next attack roll against it by another creature". */
+function nextAttackShort(change: NextAttackChange): string {
+  const roll = change.role === "made" ? "its next attack roll" : `the next attack roll against it${change.byOthers ? " by another creature" : ""}`;
+  return [change.mode ? `${change.mode} on ${roll}` : "", change.bonus ? `${signed(change.bonus)} to ${roll}` : ""].filter(Boolean).join(", ");
 }
 
 function durationText(duration: RiderDuration | undefined, condition?: ConditionName | { custom: string }): string {
@@ -287,7 +296,7 @@ function durationText(duration: RiderDuration | undefined, condition?: Condition
   return "";
 }
 
-type ConditionPhrase = Pick<ConditionRider, "condition" | "duration"> & Partial<Pick<ConditionRider, "modifiers" | "effects">>;
+type ConditionPhrase = Pick<ConditionRider, "condition" | "duration"> & Partial<Pick<ConditionRider, "modifiers" | "effects" | "nextAttack" | "nextSave">>;
 
 /** "be knocked prone", "be paralyzed for 1 minute". */
 function beCondition(rider: ConditionPhrase, definition?: CreatureDefinition): string {
@@ -393,7 +402,9 @@ export function riderShort(rider: ActionRider, definition: CreatureDefinition, f
 function riderShortOf(rider: ActionRider, definition: CreatureDefinition, fallbackDc: number, rollsOwnSave: boolean): string {
   switch (rider.kind) {
     case "condition": {
-      const name = `${onlyDeniesReactions(rider) ? "no reactions" : conditionName(rider.condition)}${rider.maxSize ? ` (${rider.maxSize} or smaller)` : ""}`;
+      // A condition of its own says what it does ("Hamstrung (speed −15 ft)").
+      const label = typeof rider.condition === "string" ? conditionName(rider.condition) : conditionLabel(rider, definition);
+      const name = `${onlyDeniesReactions(rider) ? "no reactions" : label}${rider.maxSize ? ` (${rider.maxSize} or smaller)` : ""}`;
       if (rider.save && rollsOwnSave) return `DC ${riderDc(rider.save, definition, fallbackDc)} ${rider.save.ability.toUpperCase()} or ${name}`;
       return name;
     }
@@ -493,6 +504,8 @@ function modifierSentences(modifiers: ConditionModifiers | undefined, who: Who):
   if (denied.length) sentences.push(`${S} can't take ${joinList(denied, "or")}.`);
   if (modifiers.incomingAttackRoll) sentences.push(incomingText(modifiers.incomingAttackRoll, who));
   if (modifiers.forcesRandomAction) sentences.push(`${S} acts at random on its turns.`);
+  if (modifiers.speedPenaltyFt) sentences.push(`${capitalize(who.possessive)} speed is reduced by ${modifiers.speedPenaltyFt} feet.`);
+  if (modifiers.deniesOpportunityAttacks) sentences.push(`${S} can't make opportunity attacks.`);
   return sentences;
 }
 
@@ -727,6 +740,14 @@ export function onHitOptionSentence(option: OnHitOption, definition: CreatureDef
   if (option.move) {
     effects.push(`a move of up to ${option.move.feet ? `${option.move.feet} feet` : "half its speed"}${option.move.noOpportunityAttacks ? " without provoking opportunity attacks" : ""}`);
   }
+  // Brutal Strike: paid with the roll's advantage, while something (Reckless Attack) is on.
+  if (option.forgoesAdvantage) {
+    const needs = option.forgoesAdvantage.whileCondition;
+    const giver = needs ? getExecutableActions(definition).find((action) => action.kind === "activate-feature" && action.condition?.id === needs)?.name : undefined;
+    const ability = option.abilities?.length ? `${joinList(option.abilities.map((name) => ABILITY_NAME[name]), "or")} ` : "";
+    const once = option.oncePerTurn ? `once on each of ${who.possessive} turns, ` : "";
+    return `${option.name}: ${once}${giver ? `while ${giver} is on, ` : ""}${who.subject} can give up advantage on ${ability ? `a ${ability}` : "an "}attack roll that doesn't have disadvantage; if it hits, ${effects.join(", ") || "nothing yet"}.`;
+  }
   // Cunning Strike: paid in dice of a damage bonus, landing only with its damage.
   if (option.tradesDice) {
     const feature = [...(definition.features ?? []), ...(definition.traits ?? [])].find((candidate) => candidate.id === option.tradesDice!.featureId);
@@ -861,7 +882,9 @@ export function modifierShorts(modifiers: ConditionModifiers | undefined): strin
       ? [`no ${joinList([modifiers.deniesActions ? "actions" : "", modifiers.deniesBonusActions ? "bonus actions" : "", modifiers.deniesReactions ? "reactions" : ""].filter(Boolean), "or")}`]
       : []),
     ...(modifiers.incomingAttackRoll ? [modifiers.incomingAttackRoll >= 5 ? "attackers have advantage" : modifiers.incomingAttackRoll <= -5 ? "attackers have disadvantage" : `attackers ${signed(modifiers.incomingAttackRoll)}`] : []),
-    ...(modifiers.forcesRandomAction ? ["acts at random"] : [])
+    ...(modifiers.forcesRandomAction ? ["acts at random"] : []),
+    ...(modifiers.speedPenaltyFt ? [`speed −${modifiers.speedPenaltyFt} ft`] : []),
+    ...(modifiers.deniesOpportunityAttacks ? ["no opportunity attacks"] : [])
   ];
 }
 

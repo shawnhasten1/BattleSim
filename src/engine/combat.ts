@@ -43,6 +43,7 @@ import type {
   Id,
   ItemUseMeta,
   MultiattackActionDefinition,
+  NextAttackChange,
   OnHitDiceTrade,
   OnHitMove,
   OnHitOption,
@@ -402,8 +403,16 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
     // Cunning Strike: only on the attacks the damage bonus it spends dice of can add to, and only with enough dice.
     const traded = option.tradesDice ? tradedDamageBonus(definition, option.tradesDice) : undefined;
     if (option.tradesDice && !traded) return;
-    const terms = option.tradesDice || option.move
-      ? { group: key, name: option.name, ...(option.tradesDice ? { tradesDice: option.tradesDice } : {}), ...(option.move ? { move: option.move } : {}) }
+    const once = option.oncePerTurn || option.bonusAction;
+    const terms = option.tradesDice || option.move || option.forgoesAdvantage
+      ? {
+        group: key, name: option.name,
+        ...(option.tradesDice ? { tradesDice: option.tradesDice } : {}),
+        ...(option.move ? { move: option.move } : {}),
+        ...(option.forgoesAdvantage ? { forgoesAdvantage: option.forgoesAdvantage } : {}),
+        // The key its first rider's once is kept under (below).
+        ...(once && option.riders.length ? { onceKey: `${option.onceKey ?? key}:1` } : {})
+      }
       : undefined;
     const base = spellLevel ?? slotLevelOf(option.resourceCost?.resourceId);
     // A slot-spending option: a variant per slot level it can use (only its own without upcast dice).
@@ -415,14 +424,14 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       if (option.weaponOnly && attack.attackType === "spell") continue;
       if (option.actionIds && !option.actionIds.includes(attack.id)) continue;
       if (traded && !featureAppliesToAction(traded, attack)) continue;
+      if (option.abilities && !option.abilities.includes(attack.ability)) continue;
       levels.forEach((level, levelIndex) => {
         const cost = level !== undefined ? { resourceId: `slot-${level}`, amount: 1 } : option.resourceCost;
         const extra = level !== undefined && base !== undefined && option.upcast && level > base ? repeatDice(option.upcast.damageDice, level - base) : "";
-        const once = option.oncePerTurn || option.bonusAction;
         let grown = false;
         const riders = option.riders.map((rider, index): ActionRider => {
           if (rider.kind === "note") return rider;
-          let next = { ...rider, id: `${key}:on-hit-${index + 1}`, group: key, ...(once ? { oncePerTurn: true, onceKey: `${key}:${index + 1}` } : {}) } as ActionRider;
+          let next = { ...rider, id: `${key}:on-hit-${index + 1}`, group: key, ...(once ? { oncePerTurn: true, onceKey: `${option.onceKey ?? key}:${index + 1}` } : {}) } as ActionRider;
           if (index === 0) {
             next = { ...next, ...(cost ? { resourceCost: cost } : {}), ...(option.bonusAction ? { economy: "bonus" as const } : {}) } as ActionRider;
           }
@@ -444,6 +453,28 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
     }
   });
   return out;
+}
+
+/**
+ * Why an on-hit option's variant can't be used now, or undefined: Brutal Strike needs Reckless Attack on, and (given the
+ * log) is once a turn.
+ */
+export function onHitTermsProblem(snapshot: EncounterSnapshot, actor: CombatantState, action: ActionDefinition, log: CombatLogEvent[] = []): string | undefined {
+  const terms = action.kind === "attack" ? action.onHitTerms : undefined;
+  if (!terms?.forgoesAdvantage) return undefined;
+  const needs = terms.forgoesAdvantage.whileCondition;
+  if (needs && !(actor.conditions ?? []).some((condition) => condition.id === needs)) {
+    const giver = getExecutableActions(getDefinition(snapshot, actor))
+      .find((candidate) => candidate.kind === "activate-feature" && candidate.condition?.id === needs);
+    return `${terms.name} needs ${giver?.name ?? needs} first`;
+  }
+  const noDice = (): never => {
+    throw new Error("A read-only check can't roll dice");
+  };
+  if (terms.onceKey && onceSpentThisTurn({ snapshot, log, rng: { next: noDice, nextInt: noDice, fork: noDice } }, actor.id, terms.onceKey)) {
+    return `${terms.name} was used this turn`;
+  }
+  return undefined;
 }
 
 /** The average of the dice an on-hit option's trade gives up (Cunning Strike's 1d6: 3.5), or 0 without the bonus. */
@@ -2002,8 +2033,10 @@ export function attackRollInputs(
   const rollMode = attackRollMode({ advantage, disadvantage });
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
   const featureAttackBonus = featureAttackModifier(state, attacker, target, action, attackerDefinition, { rollMode, critical: false });
+  // Sundering Blow: a bonus to the next attack roll against it.
+  const nextBonus = nextAttack.reduce((sum, { condition }) => sum + (condition.nextAttack?.bonus ?? 0), 0);
   const totalBonus = attackBonus + conditionAttackModifier(attacker)
-    + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total;
+    + conditionIncomingAttackModifier(target) + featureIncomingAttackModifier(state, target, targetDefinition) + featureAttackBonus.total + nextBonus;
   const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
   const criticalRange = featureCriticalRange(state, attacker, target, action, attackerDefinition);
   return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover, criticalRange };
@@ -2043,9 +2076,21 @@ function nextAttackConditions(attacker: CombatantState, target: CombatantState):
     if (condition.nextAttack?.role === "made") found.push({ bearer: attacker, condition });
   }
   for (const condition of target.conditions ?? []) {
-    if (condition.nextAttack?.role === "against" && condition.nextAttack.by === attacker.id) found.push({ bearer: target, condition });
+    const next = condition.nextAttack;
+    // Vex: the next by the creature that set it. Sundering Blow: the next by anyone else.
+    if (next?.role === "against" && (next.by === attacker.id || (next.notBy !== undefined && next.notBy !== attacker.id))) found.push({ bearer: target, condition });
   }
   return found;
+}
+
+/** A rider's change to the next attack roll, as its condition holds it: whose roll it waits for. */
+function nextAttackOf(change: NextAttackChange, sourceId: Id): NonNullable<ConditionInstance["nextAttack"]> {
+  return {
+    role: change.role,
+    ...(change.mode ? { mode: change.mode } : {}),
+    ...(change.bonus ? { bonus: change.bonus } : {}),
+    ...(change.role === "against" ? (change.byOthers ? { notBy: sourceId } : { by: sourceId }) : {})
+  };
 }
 
 /** An attack roll was made: the Sap or Vex it used is spent. */
@@ -2169,7 +2214,19 @@ function resolveAttackCore(
     kind: "ally-targeted-by-attack", sourceId: attacker.id, targetId: target.id, attackType: action.attackType, actionId: action.id, actionName: action.name
   }).imposedDisadvantage === true;
 
-  const inputs = attackRollInputs(state, attacker, target, action, { ...options, forcedDisadvantage }, cover);
+  const rolled = attackRollInputs(state, attacker, target, action, { ...options, forcedDisadvantage }, cover);
+  // Brutal Strike: while Reckless Attack is on, once a turn, a roll without disadvantage gives up its advantage.
+  const terms = action.onHitTerms;
+  const forgoes = Boolean(terms?.forgoesAdvantage) && !rolled.disadvantage
+    && (!terms!.forgoesAdvantage!.whileCondition || (attacker.conditions ?? []).some((condition) => condition.id === terms!.forgoesAdvantage!.whileCondition))
+    && !(terms!.onceKey && onceSpentThisTurn(state, attacker.id, terms!.onceKey));
+  const inputs: AttackRollInputs = forgoes ? { ...rolled, advantage: false, rollMode: "normal" } : rolled;
+  if (forgoes) {
+    state.log.push(event(state, "FeatureEffectApplied", `${attacker.displayName} gives up advantage for ${terms!.name}`, {
+      combatantId: attacker.id, targetId: target.id, actionId: action.id, featureName: terms!.name, effectKind: "on-hit-option", forgoesAdvantage: true,
+      ...(terms!.onceKey ? { onceKey: terms!.onceKey } : {})
+    }));
+  }
   const { featureAdvantage, longRange, rollMode, attackBonus, featureAttackBonus } = inputs;
   let targetAc = inputs.targetAc;
   const d20 = rollD20(state.rng, { advantage: inputs.advantage, disadvantage: inputs.disadvantage });
@@ -2219,12 +2276,11 @@ function resolveAttackCore(
       hit = total >= raisedAc;
     }
   }
-  const terms = action.onHitTerms;
   const featureDamage: FeatureDamageResolution = hit
     ? featureDamageEntries(state, attacker, target, action, attackerDefinition, { rollMode, critical }, terms?.tradesDice)
     : { entries: [], sources: [] };
   // An on-hit option's terms (Cunning Strike: Sneak Attack's dice, given up): unmet, its riders and move don't come.
-  const termsMet = hit && Boolean(terms) && (!terms!.tradesDice || featureDamage.traded !== undefined);
+  const termsMet = hit && Boolean(terms) && (!terms!.tradesDice || featureDamage.traded !== undefined) && (!terms!.forgoesAdvantage || forgoes);
   if (termsMet && featureDamage.traded) {
     state.log.push(event(state, "FeatureEffectApplied", `${attacker.displayName} gives up ${featureDamage.traded.dice} of ${featureDamage.traded.featureName} for ${terms!.name}`, {
       combatantId: attacker.id, targetId: target.id, actionId: action.id, featureName: terms!.name, effectKind: "on-hit-option",
@@ -2265,7 +2321,7 @@ function resolveAttackCore(
   }
   if (riders?.length) {
     const riderOutcome = applyActionRiders(state, attacker, target, attackerDefinition, riders, {
-      actionId: action.id, landed: hit, critical, saved: null, origin: attacker.position,
+      actionId: action.id, landed: hit, critical, saved: null, origin: attacker.position, triggerDamageType: firstActionDamageType(action),
       fallbackDc: defaultSaveDc(attackerDefinition, action.ability),
       concentrating: action.concentration
     });
@@ -4797,7 +4853,7 @@ function applyDamageComponents(
   damage: DamageComponent[],
   source: CreatureDefinition,
   critical: boolean,
-  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id } = {},
+  options: { halve?: boolean; casterLevel?: number; extraDiceOnFirst?: string; actionId?: Id; triggerDamageType?: DamageType } = {},
   sourceId?: Id
 ): number {
   return applyDamageEntries(
@@ -4808,7 +4864,8 @@ function applyDamageComponents(
       critical,
       halve: options.halve,
       casterLevel: options.casterLevel,
-      extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined
+      extraDice: index === 0 ? options.extraDiceOnFirst || undefined : undefined,
+      ...(options.triggerDamageType ? { triggerDamageType: options.triggerDamageType } : {})
     })),
     source,
     sourceId,
@@ -6462,6 +6519,8 @@ interface RiderContext {
   concentrating?: boolean;
   /** Origin for push direction (usually the source's position or an area origin). */
   origin?: Point;
+  /** The attack's own damage type: what a rider's "same as the attack" damage is (Brutal Strike's extra die). */
+  triggerDamageType?: DamageType;
 }
 
 interface RiderOutcome {
@@ -6487,6 +6546,15 @@ function riderUseKey(actionId: Id, rider: ActionRider, index: number): string {
   if (rider.onceKey) return rider.onceKey;
   const explicit = "id" in rider && typeof rider.id === "string" ? rider.id : String(index);
   return `${actionId}:${explicit}`;
+}
+
+/** An on-hit option's once a turn: spent by its riders landing, or by choosing it at all (Brutal Strike's given-up advantage, hit or miss). */
+function onceSpentThisTurn(state: EngineState, sourceId: Id, key: string): boolean {
+  return wasRiderUsedThisTurn(state, sourceId, key) || state.log.some((entry) => entry.type === "FeatureEffectApplied"
+    && entry.round === state.snapshot.round
+    && entry.turnIndex === state.snapshot.turnIndex
+    && entry.data?.combatantId === sourceId
+    && entry.data.onceKey === key);
 }
 
 function wasRiderUsedThisTurn(state: EngineState, sourceId: Id, key: string): boolean {
@@ -6759,7 +6827,8 @@ function applyConditionRider(
     modifiers: rider.modifiers ?? defaultConditionModifiers(conditionName),
     effects: rider.effects,
     ...(rider.conditionKey ? { sourceName: rider.conditionKey } : {}),
-    ...(rider.nextAttack ? { nextAttack: { ...rider.nextAttack, ...(rider.nextAttack.role === "against" ? { by: source.id } : {}) } } : {}),
+    ...(rider.nextAttack ? { nextAttack: nextAttackOf(rider.nextAttack, source.id) } : {}),
+    ...(rider.nextSave ? { nextSave: rider.nextSave } : {}),
     ...(rider.endsOnDamage ? { endsOnDamage: true } : {}),
     repeatSave: expiry.repeatTiming && repeatAbility
       ? { ability: repeatAbility, dc: repeatDc, timing: expiry.repeatTiming }
@@ -6867,7 +6936,7 @@ function applyActionRiders(
 
     if (rider.kind === "damage") {
       outcome.extraDamage += applyDamageComponents(state, target, rider.components, sourceDefinition, ctx.critical === true, {
-        casterLevel: casterLevelOf(sourceDefinition), actionId: ctx.actionId
+        casterLevel: casterLevelOf(sourceDefinition), actionId: ctx.actionId, triggerDamageType: ctx.triggerDamageType
       }, source.id);
     } else if (rider.kind === "healing") {
       const recipient = rider.target === "self" ? source : target;
@@ -7361,8 +7430,19 @@ function changeFailedD20(
 export function rollSavingThrow(state: EngineState, target: CombatantState, ctx: SaveContext): SavingThrowResult {
   const definition = getDefinition(state.snapshot, target);
   const { bonus, featureBonus, featureAdvantage } = saveRollInputs(state, target, ctx);
+  // Staggering Blow: a condition that changes the next saving throw, used up by it.
+  const nextSave = (target.conditions ?? []).filter((condition) => condition.nextSave);
+  if (nextSave.length) {
+    target.conditions = (target.conditions ?? []).filter((condition) => !condition.nextSave);
+    for (const condition of nextSave) {
+      state.log.push(event(state, "ConditionExpired", `${target.displayName}'s ${condition.sourceName ?? condition.name} is used up`, {
+        combatantId: target.id, conditionId: condition.id, condition, reason: "next-save-made"
+      }));
+    }
+  }
   let roll = rollD20WithBonus(state.rng, bonus, {
-    advantage: featureAdvantage.applied
+    advantage: featureAdvantage.applied || nextSave.some((condition) => condition.nextSave!.mode === "advantage"),
+    disadvantage: nextSave.some((condition) => condition.nextSave!.mode === "disadvantage")
   });
   // Indomitable Might: a Strength save totalling less than the score uses the score.
   const floor = featureSources(definition, target).some((feature) => (feature.effects ?? []).some((effect) => effect.kind === "save-floor" && effect.ability === ctx.ability))
@@ -7882,7 +7962,9 @@ function leaveReachReactions(
   to: Point,
   altitudes?: { from?: number; to?: number }
 ): AttackActionDefinition[] {
-  if (effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || !canAct(reactor, "reaction")) {
+  if (effectiveFaction(snapshot, reactor) === effectiveFaction(snapshot, mover) || !canAct(reactor, "reaction")
+    // Staggering Blow: no opportunity attacks.
+    || (reactor.conditions ?? []).some((condition) => condition.modifiers?.deniesOpportunityAttacks)) {
     return [];
   }
   const definition = getDefinition(snapshot, reactor);
