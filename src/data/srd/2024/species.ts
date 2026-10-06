@@ -81,7 +81,22 @@ const DRAGONBORN: SpeciesDefinition = {
       grants: [{ key: "darkvision", feature: informational(trait("dragonborn", "Darkvision")) }],
       choices: [{ kind: "pick", id: "draconic-ancestry", label: "Draconic Ancestry", count: 1, options: ANCESTORS.map(ancestor) }]
     },
-    { level: 5, grants: [{ key: "draconic-flight", feature: reference(trait("dragonborn", "Draconic Flight")) }] }
+    {
+      level: 5,
+      // A bonus action: a fly speed equal to its speed for 10 minutes, once a fight.
+      grants: [{
+        key: "draconic-flight",
+        feature: runs(trait("dragonborn", "Draconic Flight"), {
+          grantedActions: [{
+            kind: "activate-feature", id: "draconic-flight", name: "Draconic Flight", actionType: "bonus", featureId: "",
+            resourceCost: { resourceId: "draconic-flight", amount: 1 },
+            condition: { id: "draconic-flight-active", name: "custom", durationRounds: 100, modifiers: { flySpeed: "walk" } },
+            automationSupport: "full"
+          }]
+        }),
+        pool: { id: "draconic-flight", size: 1 }
+      }]
+    }
   ],
   description: "Descended from dragons, with a breath weapon and a resistance from its ancestor."
 };
@@ -267,7 +282,22 @@ const GOLIATH: SpeciesDefinition = {
       grants: [{ key: "powerful-build", feature: informational(trait("goliath", "Powerful Build")) }],
       choices: [{ kind: "pick", id: "giant-ancestry", label: "Giant Ancestry", count: 1, options: GIANT_ANCESTRIES }]
     },
-    { level: 5, grants: [{ key: "large-form", feature: reference(trait("goliath", "Large Form")) }] }
+    {
+      level: 5,
+      // A bonus action: Large, with 10 ft more speed, for 10 minutes, once a fight (with room for it).
+      grants: [{
+        key: "large-form",
+        feature: runs(trait("goliath", "Large Form"), {
+          grantedActions: [{
+            kind: "activate-feature", id: "large-form", name: "Large Form", actionType: "bonus", featureId: "",
+            resourceCost: { resourceId: "large-form", amount: 1 },
+            condition: { id: "large-form-active", name: "custom", durationRounds: 100, modifiers: { sizeTo: "large", speedBonusFt: 10 } },
+            automationSupport: "full"
+          }]
+        }),
+        pool: { id: "large-form", size: 1 }
+      }]
+    }
   ],
   description: "Descended from giants, tall and strong, with a giant's boon."
 };

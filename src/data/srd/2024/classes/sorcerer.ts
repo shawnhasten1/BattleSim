@@ -195,7 +195,19 @@ export const DRACONIC_SORCERY: SubclassDefinition = {
     },
     { level: 7, grants: [{ key: "draconic-spells-7", spells: ["arcane-eye", "charm-monster"].map(spell) }] },
     { level: 9, grants: [{ key: "draconic-spells-9", spells: ["legend-lore", "summon-dragon"].map(spell) }] },
-    { level: 14, grants: [grant("dragon-wings", reference("sorcerer_draconic-sorcery_dragon-wings"))] },
+    {
+      level: 14,
+      // A bonus action: a fly speed of 60 ft for an hour, once a fight (or for 3 sorcery points, not modeled).
+      grants: [grant("dragon-wings", runs("sorcerer_draconic-sorcery_dragon-wings", {
+        grantedActions: [{
+          kind: "activate-feature", id: "dragon-wings", name: "Dragon Wings", actionType: "bonus", featureId: "",
+          resourceCost: { resourceId: "dragon-wings", amount: 1 },
+          condition: { id: "dragon-wings-active", name: "custom", durationRounds: 600, modifiers: { flySpeed: 60 } },
+          automationSupport: "full"
+        }],
+        notSimulated: "using it again for 3 sorcery points."
+      }), { pool: { id: "dragon-wings", size: 1 } })]
+    },
     { level: 18, grants: [grant("dragon-companion", reference("sorcerer_draconic-sorcery_dragon-companion"))] }
   ]
 };

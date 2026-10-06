@@ -225,7 +225,52 @@ export function getDefinition(snapshot: EncounterSnapshot, combatant: CombatantS
   if (!definition) {
     throw new Error(`Missing creature definition for combatant ${combatant.id}`);
   }
-  return definition;
+  return withConditionForm(definition, combatant);
+}
+
+/** The definitions conditions change (`withConditionForm`), kept per base definition and change, so each is one object. */
+const conditionForms = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>();
+
+/**
+ * Draconic Flight, Dragon Wings, Large Form: a creature's definition as its conditions change it for a while (a fly
+ * speed, its size, more speed), as `getDefinition` returns it: one object per base definition and change, so everything
+ * keyed on the definition (its compiled actions) works as it does for the base. Unchanged without such a condition.
+ */
+function withConditionForm(definition: CreatureDefinition, combatant: CombatantState): CreatureDefinition {
+  if (!combatant.conditions?.length) return definition;
+  const changes = combatant.conditions.flatMap((condition) => {
+    const modifiers = condition.modifiers;
+    return modifiers && (modifiers.flySpeed !== undefined || modifiers.sizeTo || modifiers.speedBonusFt) ? [modifiers] : [];
+  });
+  if (!changes.length) return definition;
+  const key = JSON.stringify(changes.map((modifiers) => [modifiers.flySpeed ?? null, modifiers.sizeTo ?? null, modifiers.speedBonusFt ?? 0]));
+  let forms = conditionForms.get(definition);
+  if (!forms) {
+    forms = new Map();
+    conditionForms.set(definition, forms);
+  }
+  const known = forms.get(key);
+  if (known) return known;
+  const speed = definition.speed + changes.reduce((sum, modifiers) => sum + (modifiers.speedBonusFt ?? 0), 0);
+  const fly = Math.max(0, ...changes.map((modifiers) => (modifiers.flySpeed === "walk" ? speed : modifiers.flySpeed ?? 0)));
+  const size = [...changes].reverse().find((modifiers) => modifiers.sizeTo)?.sizeTo;
+  const form: CreatureDefinition = {
+    ...definition,
+    speed,
+    ...(size ? { size } : {}),
+    ...(fly > (definition.movement?.fly ?? 0) ? { movement: { ...(definition.movement ?? { walk: speed }), fly } } : {})
+  };
+  forms.set(key, form);
+  return form;
+}
+
+/** Large Form: why an activation that makes its creature bigger can't be used here (no room for it), or undefined. */
+export function growthProblem(snapshot: EncounterSnapshot, combatant: CombatantState, action: ActionDefinition): string | undefined {
+  const to = action.kind === "activate-feature" ? action.condition?.modifiers?.sizeTo : undefined;
+  if (!to) return undefined;
+  const footprint = sizeFootprint(to);
+  if (footprint <= sizeFootprint(getDefinition(snapshot, combatant).size)) return undefined;
+  return isFootprintLegal(snapshot.map, combatant.position, footprint, occupiedCells(snapshot, combatant.id)) ? undefined : "There's no room to grow here";
 }
 
 /**
@@ -3800,6 +3845,8 @@ export function resolveActivateFeatureAction(
   if (action.stillOnly && (actor.turnFlags?.movementUsed ?? 0) > 0) {
     throw new Error(`${actor.displayName} has already moved this turn`);
   }
+  const cramped = growthProblem(state.snapshot, actor, action);
+  if (cramped) throw new Error(`${actor.displayName}: ${cramped}`);
   validateAndSpendAction(actor, action);
   declareAction(state, actor, action);
   if (action.oncePerTurn) actor.turnFlags = { ...(actor.turnFlags ?? {}), activationsUsed: [...(actor.turnFlags?.activationsUsed ?? []), action.id] };

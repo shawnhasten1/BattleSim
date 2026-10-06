@@ -2566,6 +2566,12 @@ export interface ConditionInstance {
     noSpellcasting?: boolean;
     /** Turn Undead: on its turns the bearer moves as far as it can from the creature that gave it the condition. */
     fleesFromSource?: boolean;
+    /** Draconic Flight, Dragon Wings: a fly speed while it lasts, its walking speed (`"walk"`) or so many feet. */
+    flySpeed?: "walk" | number;
+    /** Large Form: the bearer's size while it lasts. */
+    sizeTo?: SizeCategory;
+    /** Large Form: feet added to its speed while it lasts. */
+    speedBonusFt?: number;
   };
   /** Rage: what keeps it going from one of the bearer's turns to the next (`ConditionUpkeep`). */
   upkeep?: ConditionUpkeep;

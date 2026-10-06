@@ -9,6 +9,7 @@ import {
   spellTurnProblem,
   whileConditionProblem,
   chosenAreaTargets,
+  growthProblem,
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
@@ -2847,6 +2848,8 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       && canPayResource(actor, action)
       && Boolean(action.condition)
       && !hasActiveFeatureCondition(actor, action.featureId, action.condition?.id)
+      // Large Form: only with room to grow.
+      && !growthProblem(snapshot, actor, action)
       // Steady Aim: only standing still with an attack in reach from here, before it has moved.
       && (!action.stillOnly || ((actor.turnFlags?.movementUsed ?? 0) === 0 && plan !== undefined
         && (plan.action.kind === "attack" || plan.action.kind === "multiattack") && isValidTarget(snapshot, actor, plan.target, plan.range))));
@@ -2860,13 +2863,18 @@ function selectFeatureActivationAction(snapshot: EncounterSnapshot, actor: Comba
       || effect.kind === "save-advantage");
     const duration = action.condition?.durationRounds ?? 1;
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
+    // Draconic Flight, Large Form: flying, or more speed, for the fight.
+    const modifiers = action.condition?.modifiers;
+    const hasMobility = modifiers?.flySpeed !== undefined || (modifiers?.speedBonusFt ?? 0) > 0;
     const score = (hasOffense ? 25 : 0)
       + (hasDefense ? 18 : 0)
+      + (hasMobility ? 15 : 0)
       + Math.min(duration, 10)
       - resourcePenalty;
     const reasons = [
       hasOffense ? "improves attacks" : "no attack boost",
       hasDefense ? "improves defenses" : "no defensive boost",
+      ...(hasMobility ? ["more mobile"] : []),
       `${duration} round duration`
     ];
     return { action, score, reasons };

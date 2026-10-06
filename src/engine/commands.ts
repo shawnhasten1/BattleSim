@@ -12,6 +12,7 @@ import {
   onlyWhenEmptyProblem,
   spellTurnProblem,
   whileConditionProblem,
+  growthProblem,
   moveCombatant,
   placeByDm,
   repositionZone,
@@ -228,6 +229,9 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   if (spellTurn) return spellTurn;
   const empty = onlyWhenEmptyProblem(actor, action);
   if (empty) return empty;
+  // Large Form: room to grow.
+  const cramped = growthProblem(snapshot, actor, action);
+  if (cramped) return cramped;
   if (action.kind === "utility" && action.mode === "escape" && !(actor.conditions ?? []).some((condition) => condition.hold)) {
     return `${actor.displayName} isn't grappled`;
   }

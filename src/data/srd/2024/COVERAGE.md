@@ -24,11 +24,11 @@ its gaps, never dropped and never approximated without saying so.
 | Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 11 | 0 | 1 | 9 | 2 |
 | Rogue (Thief) | 23 | 11 | 0 | 2 | 6 | 4 |
-| Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
+| Sorcerer (Draconic Sorcery) | 17 | 5 | 2 | 2 | 7 | 1 |
 | Warlock (Fiend Patron) | 16 | 3 | 1 | 1 | 8 | 3 |
 | Wizard (Evoker) | 16 | 3 | 1 | 0 | 9 | 3 |
 | Feats | 17 | 9 | 2 | 2 | 4 | 0 |
-| Species traits | 33 | 11 | 0 | 3 | 8 | 11 |
+| Species traits | 33 | 13 | 0 | 1 | 8 | 11 |
 
 ## Gaps, most widespread first
 
@@ -40,12 +40,10 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `summon-stat-blocks` | Summons whose stat blocks aren't bundled (familiars, steeds, Summon Dragon) | Druid, Paladin, Sorcerer, Warlock | 2 | Wild Companion (Druid); Faithful Steed (Paladin); Dragon Companion (Draconic Sorcery); Eldritch Invocation Options (Warlock) |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | Ranger, Rogue, Feats | 1 | Nature's Veil (Ranger); Supreme Sneak (Thief); Boon of the Night Spirit (feat) |
 | `free-move` | A move that comes with another bonus action, or a teleport after an action (Fleet Step, Boon of Dimensional Travel) | Monk, Feats | 1 | Fleet Step (Warrior of the Open Hand); Boon of Dimensional Travel (feat) |
-| `gain-speed` | Gaining a speed for a while (Dragon Wings, Draconic Flight) | Sorcerer, Species | 1 | Dragon Wings (Draconic Sorcery); Draconic Flight (Dragonborn) |
 | `smite` | What comes with a smite beyond its hit's upgrade: Smite of Protection's half cover, Hurl Through Hell's save-gated damage and banishment | Paladin, Warlock | 14 | Smite of Protection (Oath of Devotion); Hurl Through Hell (Fiend Patron) |
 | `grapple-strike` | Damaging and grappling with the same Unarmed Strike (Grappler) | Feats | 1 | Grappler (feat) |
 | `initiative` | Swapping initiative with an ally (Alert) | Feats | 1 | Alert (feat) |
 | `move-through` | Moving through a larger creature's space (Halfling Nimbleness) | Species | 1 | Halfling Nimbleness (Halfling) |
-| `size-change` | Changing size (Large Form) | Species | 1 | Large Form (Goliath) |
 | `wild-shape` | Wild Shape: beast forms the druid carries into a fight (loaded into the encounter), temporary hit points on shifting, and what it keeps of the druid | Druid | 2 | Wild Shape (Druid); Beast Spells (Druid) |
 | `ally-die` | A rolled die taken off an enemy's damage roll (Cutting Words) | Bard | 3 | Cutting Words (College of Lore) |
 | `monk-weapons` | A Monk's on-hit features on its Monk weapons as well as its Unarmed Strike (Stunning Strike) | Monk | 5 | Stunning Strike (Monk) |
@@ -53,6 +51,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
 | `reaction-attack` | A reaction attack when damaged by something other than an attack's hit (Retaliation against a spell's damage) | Barbarian | 10 | Retaliation (Path of the Berserker) |
+| `gain-speed` | Dragon Wings again for sorcery points | Sorcerer | 14 | Dragon Wings (Draconic Sorcery) |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | Wizard | 14 | Overchannel (Evoker) |
 | `zone-cover` | A movable zone that gives cover and shares a resistance (Nature's Sanctuary) | Druid | 14 | Nature's Sanctuary (Circle of the Land) |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | Monk | 17 | Quivering Palm (Warrior of the Open Hand) |
@@ -367,7 +366,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 3 | Draconic Resilience | full |  | AC 10 + Dexterity + Charisma without armor, and hit points by sorcerer level. |
 | 3 | Draconic Spells | builder |  | Draconic spells are always prepared. |
 | 6 | Elemental Affinity | full |  | The resistance, and Charisma on one damage roll of a spell dealing that type; not on a spell of several beams (Scorching Ray), where it would land on every one. |
-| 14 | Dragon Wings | manual | `gain-speed` |  |
+| 14 | Dragon Wings | partial | `gain-speed` | A bonus action: a fly speed of 60 ft for an hour, once a fight; again for 3 sorcery points doesn't run. |
 | 18 | Dragon Companion | manual | `summon-stat-blocks` |  |
 
 ## Warlock
@@ -452,7 +451,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Dragonborn | Breath Weapon | full |  | A cone or line Dexterity save, proficiency-bonus uses a fight, in place of one of the Attack action's attacks: with Extra Attack, a copy of the Attack action with the breath first; without it, an action of its own (the same thing). |
 | Dragonborn | Damage Resistance | full |  |  |
 | Dragonborn | Darkvision | info |  | There's no vision in the simulator. |
-| Dragonborn | Draconic Flight | manual | `gain-speed` |  |
+| Dragonborn | Draconic Flight | full |  | A bonus action: a fly speed equal to its speed for 10 minutes, once a fight. The AI takes it. |
 | Dwarf | Darkvision | info |  | There's no vision in the simulator. |
 | Dwarf | Dwarven Resilience | full |  | Resistance to poison and advantage on saves against Poisoned. |
 | Dwarf | Dwarven Toughness | builder |  | +1 hit point per level. |
@@ -466,7 +465,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | Gnome | Gnomish Cunning | full |  | Advantage on Intelligence, Wisdom and Charisma saves. |
 | Gnome | Gnomish Lineage | builder |  | The lineage's cantrips and spells. |
 | Goliath | Giant Ancestry | full |  | Every boon runs: Cloud's Jaunt (a teleport), Storm's Thunder (a reaction to a hit by an attack, not to any damage from a creature within 60 feet), Fire's Burn, Frost's Chill and Hill's Tumble (a use spent on a hit; Hill's Tumble doesn't check the target's size), and Stone's Endurance (1d12 + Constitution off the damage, as a reaction). |
-| Goliath | Large Form | manual | `size-change` |  |
+| Goliath | Large Form | full |  | A bonus action, with room for it: Large, with 10 ft more speed, for 10 minutes, once a fight. Its advantage on Strength checks is nothing in a fight here (there are no checks). |
 | Goliath | Powerful Build | info |  | Escaping grapples and carrying. |
 | Halfling | Brave | full |  | Advantage on saves against Frightened. |
 | Halfling | Halfling Nimbleness | manual | `move-through` |  |
