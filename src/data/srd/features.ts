@@ -284,8 +284,8 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     name: "Draconic Resilience",
     category: "feature",
     automationSupport: "full",
-    description: "When you aren't wearing armor, your AC equals 13 + your Dexterity modifier. Your hit point maximum also increases by 1 for each sorcerer level: set it in Max HP.",
-    effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }]
+    description: "When you aren't wearing armor, your AC equals 13 + your Dexterity modifier. Your hit point maximum also increases by 1 for each sorcerer level.",
+    effects: [{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }, { kind: "hit-point-maximum", bonus: { perLevel: 1, levelClass: "sorcerer" } }]
   },
   {
     id: "srd:feature:mobile",

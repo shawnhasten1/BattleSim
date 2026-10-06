@@ -1177,7 +1177,24 @@ export function resolveNumericFormula(formula: NumericFormula | undefined, defin
   const ability = formulaAbility(formula.ability, definition);
   const abilityBonus = ability ? abilityModifier(definition.abilities[ability]) : 0;
   const proficiencyBonus = formula.proficiency ? (definition.proficiencyBonus ?? proficiencyFromDefinition(definition)) : 0;
-  return Math.trunc((base + abilityBonus + proficiencyBonus) * (formula.multiplier ?? 1));
+  const levels = formula.perLevel ? formula.perLevel * levelOf(definition, formula.levelClass) : 0;
+  return Math.trunc((base + abilityBonus + proficiencyBonus + levels) * (formula.multiplier ?? 1));
+}
+
+/**
+ * Its character level (1 without one), or with `className` its level in that class (0 when it has none of it), matched
+ * by the class's id, the end of its id ("srd:class:sorcerer"), or its name.
+ */
+export function levelOf(definition: CreatureDefinition, className?: string): number {
+  if (className) {
+    const wanted = className.toLowerCase();
+    const entry = definition.character?.classes?.find((candidate) => {
+      const id = candidate.id?.toLowerCase();
+      return id === wanted || id?.endsWith(`:${wanted}`) || candidate.name.toLowerCase() === wanted;
+    });
+    return entry?.level ?? 0;
+  }
+  return definition.character?.level ?? definition.character?.classes?.reduce((sum, entry) => sum + entry.level, 0) ?? 1;
 }
 
 export function resolveAttackBonus(action: AttackActionDefinition, definition: CreatureDefinition): number {
@@ -3675,6 +3692,7 @@ export function resolveBuffAction(
   }
 
   const conditionId = action.appliedCondition.id ?? upcastBaseId(action.id);
+  const effects = buffEffectsAsCast(action);
   for (const target of targets) {
     const instance: ConditionInstance = {
       id: conditionId,
@@ -3687,7 +3705,7 @@ export function resolveBuffAction(
         ? { round: state.snapshot.round + action.appliedCondition.durationRounds, turnIndex: state.snapshot.turnIndex, timing: "end" }
         : undefined,
       modifiers: action.appliedCondition.modifiers,
-      effects: action.appliedCondition.effects,
+      effects,
       concentration: action.concentration || undefined
     };
     if (!applyCondition(state, target.id, instance)) {
@@ -3711,6 +3729,18 @@ export function resolveBuffAction(
   }
 
   return { targetIds: targets.map((target) => target.id), tempHpApplied: tempHpAmount || undefined };
+}
+
+/** A buff's effects as cast: Aid's hit point maximum bonus grows with a higher slot (`perSlotAboveBase.hitPoints`). */
+export function buffEffectsAsCast(action: BuffActionDefinition): FeatureEffect[] | undefined {
+  const effects = action.appliedCondition.effects;
+  const perSlot = action.upcast?.perSlotAboveBase?.hitPoints;
+  const slot = spellSlotLevel(action.resourceCost?.resourceId);
+  const above = perSlot && action.spellLevel != null && slot != null ? Math.max(0, slot - action.spellLevel) : 0;
+  if (!effects || !above) return effects;
+  return effects.map((effect) => (effect.kind === "hit-point-maximum"
+    ? { ...effect, bonus: { ...effect.bonus, base: (effect.bonus.base ?? 0) + above * perSlot! } }
+    : effect));
 }
 
 /**
@@ -4208,6 +4238,7 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
     logConditionResisted(state, target, condition.name);
     return false;
   }
+  const maxBefore = getDefinition(state.snapshot, target).maxHp;
   target.conditions = [
     ...(target.conditions ?? []).filter((existing) => existing.id !== condition.id),
     condition
@@ -4216,6 +4247,7 @@ export function applyCondition(state: EngineState, targetId: Id, condition: Cond
     targetId,
     condition
   }));
+  raiseHitPointMaximum(state, target, maxBefore, condition.sourceName ?? condition.name);
   // Rage: no spells, so no concentration either.
   if (condition.modifiers?.noSpellcasting) breakConcentration(state, target.id);
   if (INCAPACITATING_CONDITIONS.has(condition.name)) {
@@ -4235,6 +4267,38 @@ function logConditionResisted(state: EngineState, target: CombatantState, name: 
     targetId: target.id,
     condition: name
   }));
+}
+
+/**
+ * Aid, Heroes' Feast: a condition raised its hit point maximum, so its current hit points rise by as much (a creature at
+ * 0 gets up, as healing would bring it up).
+ */
+function raiseHitPointMaximum(state: EngineState, target: CombatantState, maxBefore: number, what: string): void {
+  const maxAfter = getDefinition(state.snapshot, target).maxHp;
+  const gained = maxAfter - maxBefore;
+  if (gained <= 0 || target.state === "dead") return;
+  if (target.currentHp > 0) target.currentHp += gained;
+  else healTo(state, target, gained);
+  state.log.push(event(state, "HitPointMaximumChanged", `${target.displayName}'s hit point maximum rises by ${gained} (${what}): ${target.currentHp}/${maxAfter} HP`, {
+    combatantId: target.id, from: maxBefore, to: maxAfter, currentHp: target.currentHp
+  }));
+}
+
+/**
+ * Hit points above the maximum come down to it: a condition that raised it ended (conditions end in many places, so
+ * this runs where they expire, at each turn's start and end).
+ */
+export function capHitPoints(state: EngineState): void {
+  for (const combatant of state.snapshot.combatants) {
+    if (combatant.state === "dead" || combatant.state === "reserve") continue;
+    const max = getDefinition(state.snapshot, combatant).maxHp;
+    if (combatant.currentHp <= max) continue;
+    const from = combatant.currentHp;
+    combatant.currentHp = max;
+    state.log.push(event(state, "HitPointMaximumChanged", `${combatant.displayName}'s hit points come down to its maximum: ${max} HP`, {
+      combatantId: combatant.id, from, to: max, currentHp: max
+    }));
+  }
 }
 
 export function expireConditions(state: EngineState, timing: "start" | "end"): void {
@@ -4257,6 +4321,7 @@ export function expireConditions(state: EngineState, timing: "start" | "end"): v
     });
     combatant.conditions = remaining;
   }
+  capHitPoints(state);
 }
 
 /* ─── Persistent zones ────────────────────────────────────────────────────────
@@ -5210,7 +5275,7 @@ export function resolveSummonAction(state: EngineState, casterId: Id, actionId: 
     displayName: `${summonedDefinition.name} ${alreadyNamed + index + 1}`,
     faction: caster.faction,
     position,
-    currentHp: summonedDefinition.maxHp,
+    currentHp: effectiveDefinition(summonedDefinition).maxHp,
     tempHp: 0,
     resources: summonedDefinition.resources ? { ...summonedDefinition.resources } : undefined,
     state: "active",
@@ -6268,6 +6333,13 @@ export function applyRegeneration(state: EngineState, actor: CombatantState): vo
       }
       if (actor.currentHp < 1 && !effect.worksAtZero) continue;
       if (effect.whileBloodied && (actor.currentHp < 1 || !isBloodied(state.snapshot, actor))) continue;
+      if (effect.temporary) {
+        // Heroism: temporary hit points, which don't stack: fewer are replaced.
+        if (effect.amount <= (actor.tempHp ?? 0)) continue;
+        actor.tempHp = effect.amount;
+        state.log.push(event(state, "TempHpChanged", `${actor.displayName} gains ${effect.amount} temporary HP (${feature.name})`, { targetId: actor.id, tempHp: actor.tempHp }));
+        continue;
+      }
       const healed = Math.min(effect.amount, definition.maxHp - actor.currentHp);
       if (healed <= 0) continue;
       actor.currentHp += healed;
@@ -7013,7 +7085,8 @@ export function upcastAddsSomething(action: ActionDefinition): boolean {
     case "healing":
       return Boolean(per.damageDice) || Boolean(per.targets && action.targeting?.target === "chosen");
     case "buff":
-      return Boolean(per.targets && action.targeting?.target === "chosen");
+      return Boolean(per.targets && action.targeting?.target === "chosen")
+        || Boolean(per.hitPoints && action.appliedCondition.effects?.some((effect) => effect.kind === "hit-point-maximum"));
     default:
       return false;
   }

@@ -104,6 +104,19 @@ function applyEvent(
       return;
     }
 
+    case "HitPointMaximumChanged": {
+      const combatant = byId.get(String(data.combatantId));
+      if (!combatant || typeof data.currentHp !== "number") return;
+      combatant.currentHp = data.currentHp;
+      // Mirror combat.ts: a rise from 0 gets it up, as healing would.
+      if (combatant.currentHp > 0 && (combatant.state === "downed" || combatant.state === "defeated")) {
+        combatant.state = "active";
+        combatant.deathSaves = { successes: 0, failures: 0, stable: false };
+        combatant.conditions = (combatant.conditions ?? []).filter((condition) => condition.name !== "unconscious");
+      }
+      return;
+    }
+
     case "TempHpChanged": {
       const combatant = byId.get(String(data.targetId));
       if (combatant && typeof data.tempHp === "number") combatant.tempHp = data.tempHp;

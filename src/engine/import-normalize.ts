@@ -1,4 +1,5 @@
 import { abilityModifier } from "./dice";
+import { effectiveDefinition } from "./stats";
 import {
   combatantExportSchema,
   creatureDefinitionSchema,
@@ -264,7 +265,7 @@ function normalizeCombatantInput(input: Record<string, unknown>, definition: Cre
     displayName: typeof input.displayName === "string" && input.displayName.trim() ? input.displayName : definition.name,
     faction: input.faction === "party" || input.faction === "enemy" || input.faction === "neutral" ? input.faction : "enemy",
     position: isRecord(input.position) ? input.position : { x: 0, y: 0 },
-    currentHp: typeof input.currentHp === "number" ? input.currentHp : definition.maxHp,
+    currentHp: typeof input.currentHp === "number" ? input.currentHp : effectiveDefinition(definition).maxHp,
     tempHp: typeof input.tempHp === "number" ? input.tempHp : 0,
     resources: normalizeResourceRecord(input.resources),
     state,
@@ -1303,6 +1304,8 @@ function normalizeSpellUpcast(input: unknown): SpellUpcast | undefined {
   if (beams !== undefined) perSlot.beams = beams;
   const targets = numberField(source, "targets");
   if (targets !== undefined) perSlot.targets = targets;
+  const hitPoints = numberField(source, "hitPoints");
+  if (hitPoints !== undefined) perSlot.hitPoints = hitPoints;
   if (!Object.keys(perSlot).length && !notModelled) return undefined;
   return { ...(Object.keys(perSlot).length ? { perSlotAboveBase: perSlot } : {}), ...(notModelled ? { notModelled } : {}) };
 }

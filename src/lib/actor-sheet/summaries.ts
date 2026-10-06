@@ -1,4 +1,4 @@
-import { abilityModifier, effectiveDefinition, movementProfileOf, speedParts, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
+import { abilityModifier, effectiveDefinition, hitPointParts, movementProfileOf, speedParts, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { formatChallengeRating } from "@/lib/srd-monster-tree";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
@@ -33,6 +33,18 @@ export function speedReadout(definition: CreatureDefinition, combatant?: Combata
     .map((mode) => `${mode} ${actual[mode]} ft${mode === "fly" && actual.hover && !definition.movement?.hover ? " (hover)" : ""}`);
   const text = [...walk, ...modes].join("; ");
   return text || undefined;
+}
+
+/**
+ * What its effects make its hit point maximum, for the sheet beside the base it edits: "77: 65 base, Tough +12".
+ * Undefined when nothing changes it.
+ */
+export function hitPointsReadout(definition: CreatureDefinition, combatant?: CombatantState): string | undefined {
+  const parts = hitPointParts(definition, combatant);
+  if (!parts.length) return undefined;
+  const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value)}`;
+  const total = effectiveDefinition(definition, combatant).maxHp;
+  return `${total}: ${parts.map((part, index) => (index === 0 ? `${part.value} ${part.label}` : `${part.label} ${signed(part.value)}`)).join(", ")}`;
 }
 
 function joinList(items: string[], conjunction = "and"): string {

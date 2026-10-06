@@ -10,7 +10,9 @@ import {
   DEFAULT_GRID_VISUALS,
   DEFAULT_MAP_IMAGE_SETTINGS,
   footprintCells,
+  actualMaxHp,
   baseDefinition,
+  buffEffectsAsCast,
   getDefinition,
   groundHeightAt,
   LEGENDARY_POINTS,
@@ -655,12 +657,45 @@ function terrainTilePolygon(cell: Point): Point[] {
 }
 
 /**
+ * Tokens after an edit that changed their creature's actual hit point maximum (an item attuned, Tough added, its typed
+ * maximum): at full they follow it, the others keep their hit points, capped (EFFECTS_PLAN.md, Phase 2). A token whose
+ * hit points the edit set itself keeps them. Only an edit that changes definitions is looked at.
+ */
+function withHitPointsFollowing(before: EncounterSnapshot, after: EncounterSnapshot): EncounterSnapshot {
+  if (before.definitions === after.definitions) return after;
+  const earlier = new Map(before.combatants.map((combatant) => [combatant.id, combatant]));
+  const maxOf = (snapshot: EncounterSnapshot, token: CombatantState) => {
+    try {
+      return getDefinition(snapshot, token).maxHp;
+    } catch {
+      return undefined;
+    }
+  };
+  let changed = false;
+  const combatants = after.combatants.map((combatant) => {
+    const was = earlier.get(combatant.id);
+    if (!was || was.currentHp !== combatant.currentHp) return combatant;
+    const oldMax = maxOf(before, was);
+    const newMax = maxOf(after, combatant);
+    if (oldMax === undefined || newMax === undefined || oldMax === newMax) return combatant;
+    const currentHp = combatant.currentHp >= oldMax ? newMax : Math.min(combatant.currentHp, newMax);
+    if (currentHp === combatant.currentHp) return combatant;
+    changed = true;
+    return { ...combatant, currentHp };
+  });
+  return changed ? { ...after, combatants } : after;
+}
+
+/**
  * A token after its creature was rebuilt: at full hit points it follows a new maximum, otherwise it keeps its hit points
  * (capped); the same for each pool. A pool the creature no longer has goes.
  */
 function tokenAfterRebuild(combatant: CombatantState, before: CreatureDefinition, after: CreatureDefinition): CombatantState {
   if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== after.id) return combatant;
-  const currentHp = combatant.currentHp >= before.maxHp ? after.maxHp : Math.min(combatant.currentHp, after.maxHp);
+  // Measured on its actual maximum (Tough, a buff on it), before and after.
+  const oldMax = actualMaxHp(before, combatant);
+  const newMax = actualMaxHp(after, combatant);
+  const currentHp = combatant.currentHp >= oldMax ? newMax : Math.min(combatant.currentHp, newMax);
   const resources: Record<string, number> = {};
   for (const [id, held] of Object.entries(combatant.resources ?? {})) {
     if (before.resources?.[id] !== undefined && after.resources?.[id] === undefined) continue;
@@ -974,9 +1009,11 @@ export const useEncounterStore = create<EncounterStore>()(
       };
 
       const commitEncounter = (
-        encounter: EncounterSnapshot,
+        incoming: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
       ) => {
+        // An edit that changed a creature's actual maximum (an item attuned, Tough added) takes its full tokens with it.
+        const encounter = withHitPointsFollowing(get().encounter, incoming);
         const continuing = continuesMerge();
         const undoStack = continuing ? get().undoStack : [structuredClone(get().encounter), ...get().undoStack].slice(0, 50);
         const play = get().play;
@@ -1248,10 +1285,11 @@ export const useEncounterStore = create<EncounterStore>()(
           turnIndex: 0,
           // What was summoned during the fight goes with it: it isn't part of the setup.
           combatants: encounter.combatants.filter((combatant) => !combatant.summon).map((combatant) => {
-            const definition = getDefinition(encounter, combatant);
+            const definition = baseDefinition(encounter, combatant);
             return {
               ...combatant,
-              currentHp: definition.maxHp,
+              // Full, as its effects make it; its conditions (a buff's extra hit points) go.
+              currentHp: actualMaxHp(definition),
               tempHp: 0,
               initiative: undefined,
               conditions: [],
@@ -2744,11 +2782,14 @@ export const useEncounterStore = create<EncounterStore>()(
           // deliberately left alone — see the plan's "no auto-revert" note.
           const spent = slotCopiesOf(definition, action.id).find((copy) => copy.id === active.sourceId) ?? action;
           const cost = "resourceCost" in spent ? spent.resourceCost : undefined;
+          const conditions = (combatant.conditions ?? []).filter((condition) => condition.id !== conditionId);
           commitEncounter({
             ...encounter,
             combatants: encounter.combatants.map((candidate) => candidate.id !== combatantId ? candidate : {
               ...candidate,
-              conditions: (candidate.conditions ?? []).filter((condition) => condition.id !== conditionId),
+              conditions,
+              // Aid's extra hit points go with it: no more than the maximum without it.
+              currentHp: Math.min(candidate.currentHp, actualMaxHp(definition, { ...candidate, conditions })),
               resources: cost
                 ? {
                   ...(candidate.resources ?? {}),
@@ -2778,7 +2819,8 @@ export const useEncounterStore = create<EncounterStore>()(
           // last the whole encounter regardless, so no `expiresAt` at all.
           startedRound: 0,
           modifiers: action.appliedCondition.modifiers,
-          effects: action.appliedCondition.effects
+          // As cast: Aid with a higher slot gives more hit points.
+          effects: buffEffectsAsCast(cast)
         });
         const target = engine.snapshot.combatants.find((candidate) => candidate.id === combatantId);
         if (target) {
@@ -2826,7 +2868,7 @@ export const useEncounterStore = create<EncounterStore>()(
           displayName: `${definition.name} ${count}`,
           faction,
           position: position ?? openCellFor(encounter, sizeFootprint(definition.size)),
-          currentHp: definition.maxHp,
+          currentHp: actualMaxHp(definition),
           tempHp: 0,
           resources: defaultResourcesForDefinition(definition),
           state: "active" as const,
@@ -2867,7 +2909,7 @@ export const useEncounterStore = create<EncounterStore>()(
             displayName: `${definition.name} ${existing + index + 1}`,
             faction,
             position: cell,
-            currentHp: definition.maxHp,
+            currentHp: actualMaxHp(definition),
             tempHp: 0,
             resources: defaultResourcesForDefinition(definition),
             state: "active",
@@ -2907,7 +2949,7 @@ export const useEncounterStore = create<EncounterStore>()(
           displayName: imported?.displayName ?? definition.name,
           faction: imported?.faction ?? "enemy",
           position: findOpenCell(encounter),
-          currentHp: Math.min(definition.maxHp, Math.max(0, imported?.currentHp ?? definition.maxHp)),
+          currentHp: Math.min(actualMaxHp(definition), Math.max(0, imported?.currentHp ?? actualMaxHp(definition))),
           tempHp: Math.max(0, imported?.tempHp ?? 0),
           deathSaves: imported?.deathSaves ? structuredClone(imported.deathSaves) : undefined,
           conditions: imported?.conditions ? structuredClone(imported.conditions) : undefined,
@@ -2996,7 +3038,7 @@ export const useEncounterStore = create<EncounterStore>()(
             displayName: member.name,
             faction: "party",
             position: openCellFor({ ...encounter, definitions, combatants }, sizeFootprint(definition.size)),
-            currentHp: definition.maxHp,
+            currentHp: actualMaxHp(definition),
             tempHp: 0,
             resources: defaultResourcesForDefinition(definition),
             state: "active",
@@ -3137,19 +3179,21 @@ export const useEncounterStore = create<EncounterStore>()(
         // Saves and skills that were proficient follow a new proficiency bonus or level (plan D9).
         const follow = (next: CreatureDefinition) => (before ? withProficienciesFollowing(before, next, { saves: "saves" in updates, skills: "skills" in updates }) : next);
         const grid = encounter.map.grid;
+        const current = encounter.definitions.find((definition) => definition.id === definitionId);
+        const updated = current ? follow({ ...current, ...updates }) : undefined;
         commitEncounter({
           ...encounter,
-          definitions: encounter.definitions.map((definition) => definition.id === definitionId
-            ? follow({ ...definition, ...updates })
-            : definition),
+          definitions: encounter.definitions.map((definition) => (definition.id === definitionId && updated ? updated : definition)),
           combatants: maxHp === undefined && !updates.size ? encounter.combatants : encounter.combatants.map((combatant) => {
             // The tokens showing this creature: those in its form now.
             if ((combatant.activeForm?.definitionId ?? combatant.definitionId) !== definitionId) return combatant;
             let next = combatant;
-            if (maxHp !== undefined) {
+            if (maxHp !== undefined && updated) {
+              // Its actual maximum (Tough, an Amulet of Health, a buff on it), before the edit began and after.
               const was = base.combatants.find((candidate) => candidate.id === combatant.id) ?? combatant;
-              const wasFull = before !== undefined && was.currentHp >= before.maxHp;
-              next = { ...next, currentHp: wasFull ? maxHp : Math.min(Math.max(0, was.currentHp), maxHp) };
+              const wasFull = before !== undefined && was.currentHp >= actualMaxHp(before, was);
+              const newMax = actualMaxHp(updated, combatant);
+              next = { ...next, currentHp: wasFull ? newMax : Math.min(Math.max(0, was.currentHp), newMax) };
             }
             if (updates.size) {
               // A bigger creature grows from its top-left square; one that would leave the grid moves back onto it.
@@ -3395,7 +3439,7 @@ export const useEncounterStore = create<EncounterStore>()(
           id: `combatant-${crypto.randomUUID()}`,
           displayName: `${definition.name} ${encounter.combatants.filter((combatant) => combatant.definitionId === definition.id).length + 1}`,
           position: findOpenCell(encounter),
-          currentHp: definition.maxHp,
+          currentHp: actualMaxHp(definition),
           tempHp: 0,
           initiative: undefined,
           state: "active"

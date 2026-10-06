@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useState } from "react";
-import { armorClassOf, effectiveDefinition, type CombatantState, type ConditionInstance, type CreatureDefinition, type EncounterSnapshot, type Faction } from "@/engine";
+import { actualMaxHp, armorClassOf, effectiveDefinition, type CombatantState, type ConditionInstance, type CreatureDefinition, type EncounterSnapshot, type Faction } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { automationSummary } from "@/lib/actor-sheet/ai-uses";
 import { concentrationOf, conditionLabel, describeCondition, DM_CONDITIONS, statusOf } from "@/lib/actor-sheet/conditions";
@@ -44,7 +44,7 @@ export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }:
               onChange={(event) => onShowToken(event.target.value)}
             >
               {tokens.map((token) => (
-                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{definition.maxHp} HP</option>
+                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{actualMaxHp(definition, token)} HP</option>
               ))}
             </select>
             <span className={styles.vitalsDim}>{tokens.findIndex((token) => token.id === combatant.id) + 1} of {tokens.length}</span>
@@ -52,9 +52,9 @@ export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }:
         ) : null}
         <div className={styles.vitalsRow}>
           <span className={styles.vitalsLabel}>HP</span>
-          <SheetNumber label="Hit points" className={styles.vitalsBox} value={combatant.currentHp} min={0} max={definition.maxHp} onCommit={(hp) => updateHp(combatant.id, hp)} />
-          <span className={styles.vitalsDim}>/ {definition.maxHp}</span>
-          <HpBar current={combatant.currentHp} max={definition.maxHp} width={96} />
+          <SheetNumber label="Hit points" className={styles.vitalsBox} value={combatant.currentHp} min={0} max={actualMaxHp(definition, combatant)} onCommit={(hp) => updateHp(combatant.id, hp)} />
+          <span className={styles.vitalsDim}>/ {actualMaxHp(definition, combatant)}</span>
+          <HpBar current={combatant.currentHp} max={actualMaxHp(definition, combatant)} width={96} />
           <span className={styles.vitalsLabel}>Temp</span>
           <SheetNumber label="Temporary hit points" className={styles.vitalsBox} value={combatant.tempHp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
           <span className={styles.vitalsFacts} title={`AC ${armorClassOf(definition, combatant).total} · speed ${speedLine(effectiveDefinition(definition, combatant))} · ${FACTIONS[combatant.faction]}`}>

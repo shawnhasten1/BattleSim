@@ -8,7 +8,7 @@ import { CREATURE_TYPES } from "@/lib/creature-types";
 import { formatBonus, sourceLabel } from "@/lib/ui-helpers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { SheetNumber, SheetText } from "../SheetInputs";
-import { speedReadout } from "@/lib/actor-sheet/summaries";
+import { hitPointsReadout, speedReadout } from "@/lib/actor-sheet/summaries";
 import styles from "../sheet.module.css";
 
 const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
@@ -52,6 +52,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
   const proficiency = proficiencyOf(definition);
   // What its items and features make its speed: the field above edits the base.
   const speedNow = speedReadout(definition);
+  const hitPointsNow = hitPointsReadout(definition);
 
   /** A movement mode set (or, with no feet, taken away; hover goes with fly). */
   function setMode(mode: MovementMode, feet: number | undefined) {
@@ -120,6 +121,7 @@ export function StatsCore({ definition, focusName }: { definition: CreatureDefin
         <label className={styles.field}>
           Max HP
           <SheetNumber className={styles.coreBox} value={definition.maxHp} min={1} max={9999} onCommit={(maxHp) => update(definition.id, { maxHp })} />
+          {hitPointsNow ? <output className={styles.unit} aria-label="Hit points with its effects">With its effects: {hitPointsNow}</output> : null}
         </label>
         <div className={styles.field}>
           <span>Speed</span>

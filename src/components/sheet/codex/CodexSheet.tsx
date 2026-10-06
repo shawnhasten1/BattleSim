@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   abilityModifier,
+  actualMaxHp,
   armorClassOf,
   initiativeOf,
   proficiencyFromDefinition,
@@ -49,7 +50,7 @@ import {
   type MovementMode
 } from "@/lib/actor-sheet/edits";
 import { CODEX_PALETTES, hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
-import { speedReadout } from "@/lib/actor-sheet/summaries";
+import { hitPointsReadout, speedReadout } from "@/lib/actor-sheet/summaries";
 import { readBuild } from "@/lib/character-builder/summary";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { readJson, writeJson } from "@/lib/persist";
@@ -362,7 +363,7 @@ function Banner({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetP
             {tokens.length > 1 ? (
               <select className={styles.pillSelect} aria-label="Token shown" value={combatant.id} onChange={(event) => onShowToken(event.target.value)}>
                 {tokens.map((token) => (
-                  <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{definition.maxHp} HP</option>
+                  <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{actualMaxHp(definition, token)} HP</option>
                 ))}
               </select>
             ) : combatant.displayName !== definition.name ? <span className={styles.pill}>Token: {combatant.displayName}</span> : null}
@@ -416,7 +417,9 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
   // Worn armor (or a formula, Unarmored Defense) works the AC out: it's shown, not typed (as on Stats).
   const workedOut = Boolean(armored.armor || armored.shield || armored.formula);
   const initiative = initiativeOf(definition, combatant);
-  const max = definition.maxHp;
+  // Its actual maximum (Tough, an Amulet of Health, a buff on it); the box beside it edits the base.
+  const max = actualMaxHp(definition, combatant);
+  const hitPointsNow = hitPointsReadout(definition, combatant);
   const hp = combatant.currentHp;
   const temp = combatant.tempHp ?? 0;
   const ratio = max > 0 ? Math.max(0, Math.min(1, hp / max)) : 0;
@@ -489,11 +492,26 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
           <div className={styles.hpNums}>
             <SheetNumber className={`${styles.bare} ${styles.hpCur}`} label="Current hit points" value={hp} min={0} max={max} onCommit={(next) => updateHp(combatant.id, next)} />
             <span className={styles.slash} aria-hidden="true">/</span>
-            <SheetNumber
-              className={`${styles.bare} ${styles.hpMax}`} label="Maximum hit points" value={max} min={1} max={9999}
-              title="Every token's maximum: tokens at full stay full" onCommit={(maxHp) => update(definition.id, { maxHp })}
-            />
+            {hitPointsNow ? (
+              // Its effects change the maximum: that's shown here, and the base is typed below.
+              <output className={styles.hpMax} aria-label="Maximum with its effects">{max}</output>
+            ) : (
+              <SheetNumber
+                className={`${styles.bare} ${styles.hpMax}`} label="Maximum hit points" value={definition.maxHp} min={1} max={9999}
+                title="Every token's maximum: tokens at full stay full" onCommit={(maxHp) => update(definition.id, { maxHp })}
+              />
+            )}
           </div>
+          {hitPointsNow ? (
+            <div className={styles.lineField}>
+              <span className={styles.cap}>Base maximum</span>
+              <SheetNumber
+                className={styles.lineInput} label="Maximum hit points" value={definition.maxHp} min={1} max={9999}
+                title="Every token's maximum: tokens at full stay full" onCommit={(maxHp) => update(definition.id, { maxHp })}
+              />
+            </div>
+          ) : null}
+          {hitPointsNow ? <output className={styles.cap} aria-label="Hit points with its effects">With its effects: {hitPointsNow}</output> : null}
           <div className={styles.hpBar} aria-hidden="true">
             <div className={styles.hpFill} data-low={ratio <= 0.3} style={{ width: `${ratio * 100}%` }} />
             <div className={styles.hpTemp} style={{ left: `${ratio * 100}%`, width: `${tempRatio * 100}%` }} />

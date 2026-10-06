@@ -1,3 +1,4 @@
+import { actualMaxHp } from "./stats";
 import type { CombatLogEvent, CombatantState, EncounterSnapshot, Faction, Id } from "./types";
 
 /**
@@ -143,7 +144,12 @@ function emptyActor(combatant: CombatantState, maxHp: number): ActorReport {
 }
 
 export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEvent[]): BattleReport {
-  const maxHpByDefinition = new Map(snapshot.definitions.map((def) => [def.id, def.maxHp]));
+  const definitionsById = new Map(snapshot.definitions.map((def) => [def.id, def]));
+  // Its maximum as its effects make it (Tough, an Amulet of Health, a buff it starts with).
+  const maxHpOf = (combatant: CombatantState) => {
+    const definition = definitionsById.get(combatant.definitionId);
+    return definition ? actualMaxHp(definition, combatant) : undefined;
+  };
   const actors = new Map<Id, ActorReport>();
   const resourceTallies = new Map<Id, Map<string, number>>();
   const conditionsSuffered = new Map<Id, Set<string>>();
@@ -154,7 +160,7 @@ export function buildBattleReport(snapshot: EncounterSnapshot, log: CombatLogEve
   const revivals = new Map<Id, Id>();
 
   for (const combatant of snapshot.combatants) {
-    actors.set(combatant.id, emptyActor(combatant, maxHpByDefinition.get(combatant.definitionId) ?? combatant.currentHp));
+    actors.set(combatant.id, emptyActor(combatant, maxHpOf(combatant) ?? combatant.currentHp));
     resourceTallies.set(combatant.id, new Map());
     conditionsSuffered.set(combatant.id, new Set());
   }

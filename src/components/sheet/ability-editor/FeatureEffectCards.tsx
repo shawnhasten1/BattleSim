@@ -403,6 +403,47 @@ function SelfGateField({ effect, onChange, definition }: { effect: FeatureEffect
   );
 }
 
+/**
+ * A hit point maximum effect's fields: an amount, in all or for each level (its character level, or one of its classes'),
+ * and what that comes to now. A formula with more parts (from the JSON view) is read out, as `FormulaField` does.
+ */
+function HitPointFields({ effect, set, definition }: {
+  effect: Extract<FeatureEffect, { kind: "hit-point-maximum" }>;
+  set: (next: FeatureEffect) => void;
+  definition: CreatureDefinition;
+}) {
+  const bonus = effect.bonus;
+  const simple = !bonus.ability && !bonus.proficiency && (bonus.multiplier ?? 1) === 1 && !(bonus.base && bonus.perLevel);
+  if (!simple) return <FormulaField label="Hit points added" value={bonus} definition={definition} onChange={(next) => set({ ...effect, bonus: next })} />;
+  const per = bonus.perLevel !== undefined ? (bonus.levelClass ? `class:${bonus.levelClass}` : "level") : "total";
+  const amount = bonus.perLevel ?? bonus.base ?? 0;
+  const classes = definition.character?.classes ?? [];
+  const named = (name: string) => classes.some((entry) => entry.name.toLowerCase() === name.toLowerCase() || entry.id?.toLowerCase().endsWith(`:${name.toLowerCase()}`));
+  const write = (n: number, counted: string) => set({
+    ...effect,
+    bonus: counted === "total" ? { base: n } : counted === "level" ? { perLevel: n } : { perLevel: n, levelClass: counted.slice("class:".length) }
+  });
+  const total = resolveNumericFormula(bonus, definition);
+  return (
+    <>
+      <span className={styles.inline}>
+        <span>Its hit point maximum increases by</span>
+        <NumberField label="Hit points added" value={amount} min={-999} max={999} onChange={(n) => n !== undefined && write(n, per)} />
+        <select aria-label="Counted" value={per} onChange={(e) => write(amount, e.target.value)}>
+          <option value="total">in all</option>
+          <option value="level">for each of its levels</option>
+          {classes.map((entry) => <option key={entry.name} value={`class:${entry.name}`}>{`for each ${entry.name} level`}</option>)}
+          {bonus.levelClass && !named(bonus.levelClass) ? <option value={`class:${bonus.levelClass}`}>{`for each ${bonus.levelClass} level (it has none)`}</option> : null}
+        </select>
+      </span>
+      {per !== "total" ? <p className={styles.hint}>{`That's ${total < 0 ? total : `+${total}`} hit points now.`}</p> : null}
+      {per === "level" && !definition.character?.level && !classes.length
+        ? <p className={styles.warningText}>It has no level yet: set one under Stats › Level &amp; CR. Until then it counts as level 1.</p>
+        : null}
+    </>
+  );
+}
+
 type SpeedEffect = Extract<FeatureEffect, { kind: "speed" }>;
 type SpeedMode = keyof NonNullable<SpeedEffect["modes"]>;
 const SPEED_MODES: Array<{ mode: SpeedMode; label: string }> = [
@@ -1462,14 +1503,17 @@ function EffectFields({ effect, damageTypes, abilities, restricted, modifierKey,
         </>
       );
     }
+    case "hit-point-maximum":
+      return <HitPointFields effect={effect} set={set} definition={definition} />;
     case "hp-regen":
       return (
         <>
           <span className={styles.inline}>
-            <span>Regains</span>
+            <span>{effect.temporary ? "Gains" : "Regains"}</span>
             <NumberField label="Hit points regained" value={effect.amount} min={1} max={500} onChange={(n) => n !== undefined && set({ ...effect, amount: n })} />
-            <span>hit points at the start of its turn</span>
+            <span>{effect.temporary ? "temporary hit points" : "hit points"} at the start of its turn</span>
           </span>
+          <Check label="As temporary hit points (they don't stack)" checked={effect.temporary === true} onChange={(on) => set(opt(effect, "temporary", on ? true : undefined))} />
           <Check copy="worksAtZero" checked={effect.worksAtZero === true} onChange={(on) => set(opt(effect, "worksAtZero", on ? true : undefined))} />
           <Check label="Only while it's bloodied" checked={effect.whileBloodied === true} onChange={(on) => set(opt(effect, "whileBloodied", on ? true : undefined))} />
           <Field copy="regenStoppedBy">

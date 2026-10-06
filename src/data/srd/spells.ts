@@ -350,7 +350,7 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     castingTime: "action",
     range: 30,
     resourceCost: { resourceId: "slot-2", amount: 1 },
-    upcast: { notModelled: "5 more hit points per slot level above 2nd; Aid is cast before the fight" },
+    upcast: { perSlotAboveBase: { hitPoints: 5 } },
     automationSupport: "full",
     action: {
       kind: "buff",
@@ -360,13 +360,8 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
       range: 30,
       targeting: { target: "chosen", count: 3 },
       prepOnly: true,
-      // Real Aid raises max AND current HP by 5 — no max-HP field exists on
-      // a condition (only flat AC/attack/save modifiers), so this is
-      // approximated as 5 temp HP instead, the same deliberate
-      // simplification the buff shape's own doc comment already earmarks
-      // "Aid-family effects" for.
-      appliedCondition: { name: "custom", durationRounds: 100 },
-      tempHp: [{ dice: "5" }],
+      // Its hit point maximum and current hit points rise by 5 (EFFECTS_PLAN.md D7), 5 more per slot level above 2nd.
+      appliedCondition: { name: "custom", durationRounds: 100, effects: [{ kind: "hit-point-maximum", bonus: { base: 5 } }] },
       automationSupport: "full"
     }
   },

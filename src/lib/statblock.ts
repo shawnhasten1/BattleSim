@@ -239,8 +239,14 @@ export function healingShort(components: HealingComponent[], definition: Creatur
 }
 
 /** "+3", or "+3 (its Charisma modifier)" when the number is just an ability modifier. */
+/** A per-level count in words: "2 for each of its levels", "1 for each sorcerer level". */
+function perLevelWords(formula: NumericFormula): string {
+  return `${formula.perLevel} for each ${formula.levelClass ? `${formula.levelClass} level` : "of its levels"}`;
+}
+
 function formulaText(formula: NumericFormula, definition: CreatureDefinition): string {
   const value = signed(resolveNumericFormula(formula, definition));
+  if (formula.perLevel && !formula.base && !formula.ability && !formula.proficiency && (formula.multiplier ?? 1) === 1) return `${value} (${perLevelWords(formula)})`;
   const ability = formulaAbility(formula.ability, definition);
   return ability && !formula.base && !formula.proficiency && (formula.multiplier ?? 1) === 1
     ? `${value} (its ${formula.ability === "spellcasting" ? "spellcasting ability" : ABILITY_NAME[ability]} modifier)`
@@ -721,7 +727,13 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       ].filter(Boolean);
       return `${S} has advantage on ${abilities.length ? `${joinList(abilities.map((ability) => ABILITY_NAME[ability]))} ` : ""}saving throws${against.length ? ` against ${joinList(against)}` : ""}${gate}.`;
     }
+    case "hit-point-maximum": {
+      const value = resolveNumericFormula(effect.bonus, definition);
+      const words = effect.bonus.perLevel && !effect.bonus.base && !effect.bonus.ability && !effect.bonus.proficiency ? ` (${perLevelWords(effect.bonus)})` : "";
+      return `${P} hit point maximum ${value < 0 ? "decreases" : "increases"} by ${Math.abs(value)}${words}.`;
+    }
     case "hp-regen":
+      if (effect.temporary) return `${S} gains ${effect.amount} temporary hit points at the start of its turn, if it has fewer.`;
       return `${S} regains ${effect.amount} hit points at the start of its turn${effect.whileBloodied ? " while it's bloodied and has at least 1 hit point" : effect.worksAtZero ? ", even at 0 hit points" : " if it has at least 1 hit point"}.`
         + (effect.suppressedByDamageTypes?.length ? ` If it takes ${joinList(effect.suppressedByDamageTypes, "or")} damage, this doesn't work at the start of its next turn.` : "");
     case "survive-lethal": {
@@ -942,7 +954,9 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "damage-adjustment":
       return `${adjustmentShorts([effect.adjustment])[0]}${effect.adjustment.nonMagicalOnly ? " (nonmagical)" : ""}${gate}`;
     case "save-advantage": return `advantage on ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves${effect.against?.source ? ` vs ${effect.against.source === "spell" ? "spells" : "magic"}` : effect.against?.conditions?.length ? ` vs ${joinList(effect.against.conditions, "or")}` : ""}${gate}`;
-    case "hp-regen": return `regains ${effect.amount} HP a turn${effect.suppressedByDamageTypes?.length ? ` (not after ${joinList(effect.suppressedByDamageTypes, "or")})` : ""}`;
+    case "hit-point-maximum": return `max HP ${formulaText(effect.bonus, definition)}`;
+    case "hp-regen": if (effect.temporary) return `${effect.amount} temp HP a turn`;
+      return `regains ${effect.amount} HP a turn${effect.suppressedByDamageTypes?.length ? ` (not after ${joinList(effect.suppressedByDamageTypes, "or")})` : ""}`;
     case "survive-lethal": return `drops to ${effect.hpTo && effect.hpTo > 1 ? effect.hpTo : 1} HP instead of 0`;
     case "no-advantage-against": return "no advantage against it";
     case "condition-immunity": return `can't be ${joinList(effect.conditions, "or")}${effect.whileCondition ? " (while active)" : ""}`;

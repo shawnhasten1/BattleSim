@@ -113,6 +113,12 @@ describe("searching for an effect", () => {
     expect(top("fast movement")).toEqual({ kind: "speed", example: "+10 ft without heavy armor, like Fast Movement" });
   });
 
+  it("finds hit points, and Tough built by hand (D5)", () => {
+    for (const query of ["hp", "hit points", "max hp", "aid"]) expect(top(query)?.kind, query).toBe("hit-point-maximum");
+    expect(top("tough")).toEqual({ kind: "hit-point-maximum", example: "+2 for each level, like the Tough feat" });
+    expect(top("heroism")).toEqual({ kind: "hp-regen", example: "Heroism's temporary hit points" });
+  });
+
   it("finds nothing for what isn't an effect yet", () => {
     expect(searchEffects("xylophone")).toEqual([]);
   });

@@ -343,6 +343,13 @@ export interface NumericFormula {
    */
   ability?: Ability | "spellcasting";
   proficiency?: boolean;
+  /**
+   * This many for each of its levels: its character level, or with `levelClass` its level in that class (Tough: 2;
+   * Draconic Resilience: 1, sorcerer). Without a level it counts as level 1 (`levelOf`).
+   */
+  perLevel?: number;
+  /** With `perLevel`: the class whose level counts, by its id or name as `character.classes` has it. */
+  levelClass?: string;
   multiplier?: number;
 }
 
@@ -654,6 +661,15 @@ export type FeatureEffect =
   } & FeatureEffectConditions)
   | {
     /**
+     * Its hit point maximum increases by `bonus` while this works (Tough: 2 per level; Aid: 5), as `effectiveDefinition`
+     * works it out (stats.ts). From a condition, its current hit points rise by as much when it lands, and are capped at
+     * the maximum again when it ends.
+     */
+    kind: "hit-point-maximum";
+    bonus: NumericFormula;
+  }
+  | {
+    /**
      * Regains `amount` hit points at the start of the bearer's turn. `worksAtZero` (a troll) lets it work — and
      * keeps the creature from dying — at 0 HP; without it the creature needs at least 1 HP. Damage of a type in
      * `suppressedByDamageTypes` taken since its last turn switches it off for that turn (acid and fire vs a troll).
@@ -664,6 +680,8 @@ export type FeatureEffect =
     suppressedByDamageTypes?: DamageType[];
     /** Only while it's bloodied and has at least 1 hit point (Heroic Rally). */
     whileBloodied?: boolean;
+    /** Temporary hit points instead, replacing fewer it has (Heroism): they don't stack. */
+    temporary?: boolean;
   }
   | {
     /**
@@ -2319,6 +2337,8 @@ export interface SpellUpcast {
      * Person), and a buff or healing spell aimed at "up to N" creatures takes that many more (Bless).
      */
     targets?: number;
+    /** A buff's hit point maximum bonus grows by this much per slot level above the spell's (Aid: 5). */
+    hitPoints?: number;
   };
   /**
    * What a higher slot does that the simulator doesn't model, said in a few words for the DM (a longer duration, a
@@ -2933,6 +2953,7 @@ export interface CombatLogEvent {
     | "ManualActionUsed"
     | "DoorToggled"
     | "TempHpChanged"
+    | "HitPointMaximumChanged"
     | "ReactionRestored"
     | "ActionEconomyRefreshed"
     | "AiDecision"

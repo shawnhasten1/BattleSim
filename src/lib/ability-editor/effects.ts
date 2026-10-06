@@ -107,17 +107,34 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
   },
   // Hit points
   {
+    kind: "hit-point-maximum", label: "Hit point maximum", hint: "More hit points: a flat amount (Aid) or so many for each level (Tough)", group: "hit-points", when: false, scope: false, short: "Max HP",
+    keywords: ["hp", "hit points", "hit point maximum", "max hp", "maximum", "health", "more hit points", "tough", "toughness", "aid", "durable"],
+    examples: [
+      { label: "+2 for each level, like the Tough feat", keywords: ["tough", "feat"], effects: () => [{ kind: "hit-point-maximum", bonus: { perLevel: 2 } }] },
+      { label: "+1 for each level, like Dwarven Toughness", keywords: ["dwarf", "dwarven", "toughness"], effects: () => [{ kind: "hit-point-maximum", bonus: { perLevel: 1 } }] },
+      { label: "+1 for each sorcerer level, like Draconic Resilience", keywords: ["draconic", "sorcerer"], effects: () => [{ kind: "hit-point-maximum", bonus: { perLevel: 1, levelClass: "sorcerer" } }] },
+      { label: "+5, like Aid", keywords: ["aid"], effects: () => [{ kind: "hit-point-maximum", bonus: { base: 5 } }] }
+    ],
+    blank: () => ({ kind: "hit-point-maximum", bonus: { base: 5 } })
+  },
+  {
     kind: "hp-regen", label: "Regenerates", hint: "Regains hit points at the start of its turn", group: "hit-points", when: false, scope: false, short: "Regenerates",
-    keywords: ["regenerate", "regeneration", "regain", "heal each turn", "hit points", "hp", "troll", "heroic rally"],
-    examples: [{
-      label: "Troll Regeneration", hint: "10 a turn, even at 0 HP; acid or fire stops it for a turn", keywords: ["troll"],
-      effects: () => [{ kind: "hp-regen", amount: 10, worksAtZero: true, suppressedByDamageTypes: ["acid", "fire"] }]
-    }],
+    keywords: ["regenerate", "regeneration", "regain", "heal each turn", "hp", "troll", "heroic rally", "temporary hit points", "temp hp"],
+    examples: [
+      {
+        label: "Troll Regeneration", hint: "10 a turn, even at 0 HP; acid or fire stops it for a turn", keywords: ["troll"],
+        effects: () => [{ kind: "hp-regen", amount: 10, worksAtZero: true, suppressedByDamageTypes: ["acid", "fire"] }]
+      },
+      {
+        label: "Heroism's temporary hit points", hint: "its spellcasting modifier in temporary hit points at the start of each turn: set the number", keywords: ["heroism"],
+        effects: () => [{ kind: "hp-regen", amount: 3, temporary: true }]
+      }
+    ],
     blank: () => ({ kind: "hp-regen", amount: 10 })
   },
   {
     kind: "survive-lethal", label: "Drops to 1 HP instead of 0", hint: "Undead Fortitude, Relentless", group: "hit-points", when: false, scope: false,
-    keywords: ["1 hp", "one hit point", "undead fortitude", "relentless", "relentless endurance", "dying", "0 hp", "zero", "hit points"],
+    keywords: ["1 hp", "one hit point", "undead fortitude", "relentless", "relentless endurance", "dying", "0 hp", "zero"],
     examples: [{
       label: "Undead Fortitude", hint: "a CON save, DC 5 + the damage; never against radiant damage or a critical hit", keywords: ["zombie"],
       effects: () => [{ kind: "survive-lethal", save: { ability: "con", dcBase: 5 }, excludedDamageTypes: ["radiant"], excludeCritical: true }]
@@ -126,17 +143,17 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
   },
   {
     kind: "on-kill", label: "Temporary hit points on a kill", hint: "Dark One's Blessing: when it drops an enemy, or one drops near it", group: "hit-points", when: false, scope: false,
-    keywords: ["kill", "drops", "temporary hit points", "temp hp", "thp", "dark ones blessing", "hit points"],
+    keywords: ["kill", "drops", "temporary hit points", "temp hp", "thp", "dark ones blessing"],
     blank: () => ({ kind: "on-kill", tempHp: { base: 1 } })
   },
   {
     kind: "damage-vitality", label: "Temporary hit points when a spell deals damage", hint: "Improved Blessed Strikes: twice its Wisdom modifier, to itself or a creature within 60 ft, when a Cleric cantrip deals damage", group: "hit-points", when: false, scope: false,
-    keywords: ["temporary hit points", "temp hp", "thp", "blessed strikes", "spell", "hit points"],
+    keywords: ["temporary hit points", "temp hp", "thp", "blessed strikes", "spell"],
     blank: () => ({ kind: "damage-vitality", tempHp: { ability: "wis", multiplier: 2 }, withinFt: 60, cantripsOnly: true, spellClasses: ["cleric"] })
   },
   {
     kind: "healing-bonus", label: "Bigger healing", hint: "Disciple of Life, Blessed Healer, Supreme Healing", group: "hit-points", when: false, scope: false,
-    keywords: ["heal", "healing", "cure", "life domain", "hit points"],
+    keywords: ["heal", "healing", "cure", "life domain"],
     examples: [
       { label: "Disciple of Life", hint: "2 + the slot's level more for each creature a spell with a slot heals", effects: () => [{ kind: "healing-bonus", slotBonus: true }] },
       { label: "Blessed Healer", hint: "it heals itself as much when it heals someone else", effects: () => [{ kind: "healing-bonus", selfOnOthers: true }] },
@@ -496,9 +513,9 @@ export const EFFECT_SPECS = Object.fromEntries(EFFECT_KINDS.map((spec) => [spec.
 
 /** The usual effects for what they belong to, in the picker's Common row. Each has a `short` name. */
 export const COMMON: Record<EffectOwner, EffectKind[]> = {
-  item: ["armor-class-bonus", "save-bonus", "speed", "damage-adjustment", "attack-bonus", "damage-bonus", "save-advantage", "save-dc-bonus"],
-  buff: ["attack-bonus", "attack-advantage", "armor-class-bonus", "save-bonus", "speed", "damage-adjustment", "damage-bonus", "incoming-attack-modifier"],
-  feature: ["damage-adjustment", "save-advantage", "damage-bonus", "attack-advantage", "armor-class-bonus", "speed", "condition-immunity", "hp-regen"]
+  item: ["armor-class-bonus", "save-bonus", "speed", "hit-point-maximum", "damage-adjustment", "attack-bonus", "damage-bonus", "save-advantage", "save-dc-bonus"],
+  buff: ["attack-bonus", "attack-advantage", "armor-class-bonus", "save-bonus", "speed", "hit-point-maximum", "damage-adjustment", "damage-bonus", "incoming-attack-modifier"],
+  feature: ["damage-adjustment", "save-advantage", "damage-bonus", "attack-advantage", "armor-class-bonus", "speed", "hit-point-maximum", "condition-immunity", "hp-regen"]
 };
 
 /* ─── finding an effect ──────────────────────────────────────────────────── */
@@ -540,14 +557,14 @@ function tokenScore(token: string, fields: SearchField[]): number {
 }
 
 /** The whole query is a label or a keyword: a name typed in full ("magic resistance") beats words scattered across hints. */
-function phraseBonus(query: string, fields: SearchField[]): number {
+function phraseBonus(query: string, fields: SearchField[], inExample = false): number {
   let best = 0;
   for (const { phrases } of fields) {
     for (const phrase of phrases) {
       if (phrase === query) best = Math.max(best, 10);
       else if (query.length >= 3 && phrase.startsWith(query)) best = Math.max(best, 4);
       // A feature named inside an example's label ("…, like Fast Movement").
-      else if (query.includes(" ") && phrase.includes(query)) best = Math.max(best, 8);
+      else if (inExample && query.includes(" ") && phrase.includes(query)) best = Math.max(best, 8);
     }
   }
   return best;
@@ -594,7 +611,7 @@ export function searchEffects(query: string, offered: (spec: EffectKindSpec) => 
       if (!either.every((value) => value > 0)) return { example, score: 0, index };
       // Words only the kind has count a little less than the example's own.
       const borrowed = mine.every((value) => value > 0) ? 0 : 1;
-      return { example, score: either.reduce((sum, value) => sum + value, 0) + phraseBonus(phrase, fields) - borrowed, index };
+      return { example, score: either.reduce((sum, value) => sum + value, 0) + phraseBonus(phrase, fields, true) - borrowed, index };
     });
     const matched = examples.filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
     if (!score && !matched.length) return;
@@ -885,7 +902,7 @@ export function withModifierCard(
  * (a number and a modifier, a proficiency bonus, a multiplier), which a card reads out and the JSON view changes.
  */
 export function formulaShape(formula: NumericFormula): "number" | "ability" | "formula" {
-  const plain = !formula.proficiency && (formula.multiplier ?? 1) === 1;
+  const plain = !formula.proficiency && !formula.perLevel && (formula.multiplier ?? 1) === 1;
   if (plain && !formula.ability) return "number";
   if (plain && !formula.base) return "ability";
   return "formula";
@@ -897,7 +914,8 @@ export function formulaWords(formula: NumericFormula): string {
   const parts = [
     ...(formula.base ? [String(formula.base)] : []),
     ...(ability ? [ability] : []),
-    ...(formula.proficiency ? ["proficiency bonus"] : [])
+    ...(formula.proficiency ? ["proficiency bonus"] : []),
+    ...(formula.perLevel ? [`${formula.perLevel} per ${formula.levelClass ? `${formula.levelClass} ` : ""}level`] : [])
   ];
   const sum = parts.length ? parts.join(" + ") : "0";
   const multiplier = formula.multiplier ?? 1;

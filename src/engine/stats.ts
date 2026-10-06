@@ -1,4 +1,6 @@
 import { isArmorItem, isWorn, slowedByArmor, type ArmorItem } from "./armor";
+// A cycle, used only inside functions: combat.ts reads this module's effectiveDefinition the same way.
+import { resolveNumericFormula } from "./combat";
 import { workingItems } from "./items";
 import type { CombatantState, CreatureDefinition, FeatureEffect, MovementProfile, SelfGate, SizeCategory } from "./types";
 
@@ -11,9 +13,10 @@ import type { CombatantState, CreatureDefinition, FeatureEffect, MovementProfile
  */
 
 type SpeedEffect = Extract<FeatureEffect, { kind: "speed" }>;
+type HitPointEffect = Extract<FeatureEffect, { kind: "hit-point-maximum" }>;
 
 /** The kinds that change the stat block itself. */
-const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed"]);
+const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed", "hit-point-maximum"]);
 
 /** A stat-changing effect and what it comes from (a feature's, item's or condition's name). */
 interface StatSource {
@@ -158,7 +161,26 @@ function applying(definition: CreatureDefinition, combatant: CombatantState | un
   const holds = (source: StatSource) => selfGateHolds(definition, combatant, source.effect as SelfGate);
   const sources = [...own, ...fromConditions.sources].filter(holds);
   const speed = sources.filter((source): source is { label: string; effect: SpeedEffect } => source.effect.kind === "speed");
-  return { speed, size: fromConditions.size };
+  const hitPoints = sources.filter((source): source is { label: string; effect: HitPointEffect } => source.effect.kind === "hit-point-maximum");
+  return { speed, hitPoints, size: fromConditions.size };
+}
+
+/* ─── hit points ─────────────────────────────────────────────────────────── */
+
+/**
+ * Its hit point maximum with these effects, and where it came from: the typed maximum, then each bonus (Tough: 2 per
+ * level; Aid: 5), worked out on the creature. Never below 1.
+ */
+export function hitPointsWith(definition: CreatureDefinition, sources: Array<{ label: string; effect: HitPointEffect }>): { maxHp: number; parts: StatPart[] } {
+  const parts: StatPart[] = [{ label: "base", value: definition.maxHp }];
+  let maxHp = definition.maxHp;
+  for (const { label, effect } of sources) {
+    const value = resolveNumericFormula(effect.bonus, definition);
+    if (!value) continue;
+    maxHp += value;
+    parts.push({ label, value });
+  }
+  return { maxHp: Math.max(1, maxHp), parts };
 }
 
 const derived = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>();
@@ -171,9 +193,9 @@ const derived = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>
 export function effectiveDefinition(definition: CreatureDefinition, combatant?: CombatantState): CreatureDefinition {
   // The hot path: nothing of its own and no condition that could change it.
   if (!ownStatSources(definition).length && !(combatant?.conditions ?? []).some((condition) => condition.effects?.length || condition.modifiers)) return definition;
-  const { speed, size } = applying(definition, combatant);
-  if (!speed.length && !size) return definition;
-  const key = JSON.stringify([speed.map(({ effect }) => effect), size ?? null]);
+  const { speed, hitPoints, size } = applying(definition, combatant);
+  if (!speed.length && !hitPoints.length && !size) return definition;
+  const key = JSON.stringify([speed.map(({ effect }) => effect), hitPoints.map(({ effect }) => effect), size ?? null]);
   let forms = derived.get(definition);
   if (!forms) {
     forms = new Map();
@@ -188,8 +210,25 @@ export function effectiveDefinition(definition: CreatureDefinition, combatant?: 
     form.movement = movement;
     form.speedIncludesArmor = true;
   }
+  if (hitPoints.length) form.maxHp = hitPointsWith(definition, hitPoints).maxHp;
   forms.set(key, form);
   return form;
+}
+
+/**
+ * Its hit point maximum as its effects make it: what a token starts a fight with (no conditions yet), or with
+ * `combatant`, what it has now (a buff's too).
+ */
+export function actualMaxHp(definition: CreatureDefinition, combatant?: CombatantState): number {
+  return effectiveDefinition(definition, combatant).maxHp;
+}
+
+/** How its hit point maximum comes about, for the sheet: "base 65 + Tough 12". Empty when nothing changes it. */
+export function hitPointParts(definition: CreatureDefinition, combatant?: CombatantState): StatPart[] {
+  const { hitPoints } = applying(definition, combatant);
+  if (!hitPoints.length) return [];
+  const { parts } = hitPointsWith(definition, hitPoints);
+  return parts.length > 1 ? parts : [];
 }
 
 /** How its speed comes about, for the sheet: "base 30 + Fast Movement 10 + Boots of Striding 10". Empty when nothing changes it. */
