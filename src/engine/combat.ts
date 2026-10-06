@@ -3096,7 +3096,7 @@ export function areaSaveTargets(
       { blockers: coverBlockersFor(snapshot, attacker.id, target.id) }
     )
     : null;
-  return combatantsInArea(snapshot.map, placement.origin, action.area, snapshot.combatants, definitionsById, placement.aimVector)
+  const caught = combatantsInArea(snapshot.map, placement.origin, action.area, snapshot.combatants, definitionsById, placement.aimVector)
     .filter((target) => action.affects === "all" || effectiveFaction(snapshot, target) !== effectiveFaction(snapshot, attacker))
     // A self-origin template (cone / line / burst centred on the caster) emanates
     // *from* the caster — it never catches them, even when `affects: "all"`.
@@ -3106,6 +3106,22 @@ export function areaSaveTargets(
     .filter(({ cover }) => !(snapshot.rules.requireLineOfEffect && cover?.blocksTargeting))
     // Someone who already made the save against this action is immune to it (Frightful Presence).
     .filter(({ target }) => !isImmuneAfterSave(attacker, target, action));
+  if (action.maxTargets === undefined) return caught;
+  const chosen = new Set(chosenAreaTargets(snapshot, attacker, action, caught.map(({ target }) => target)).map((target) => target.id));
+  return caught.filter(({ target }) => chosen.has(target.id));
+}
+
+/**
+ * Abjure Foes: the creatures an area that takes only so many (`maxTargets`) is used on: its foes first, those with the
+ * most hit points left (the biggest threats), as many as it allows. Shared with the AI's weighing of the area.
+ */
+export function chosenAreaTargets(snapshot: EncounterSnapshot, caster: CombatantState, action: AreaSaveActionDefinition, caught: CombatantState[]): CombatantState[] {
+  if (action.maxTargets === undefined) return caught;
+  const faction = effectiveFaction(snapshot, caster);
+  return [...caught]
+    .sort((a, b) => Number(effectiveFaction(snapshot, b) !== faction) - Number(effectiveFaction(snapshot, a) !== faction)
+      || b.currentHp - a.currentHp || a.id.localeCompare(b.id))
+    .slice(0, Math.max(1, action.maxTargets));
 }
 
 /** The saving throw a save or area-save action calls for (`dc` resolved, a Dexterity save's cover bonus given). Shared with the previews. */

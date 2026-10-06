@@ -91,10 +91,11 @@ export const PALADIN: ClassDefinition = {
             kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "rounds", rounds: 10 }, endsOnDamage: true,
             modifiers: { attackRoll: -2, oneThingPerTurn: true }
           }],
+          // Charisma-modifier many (at least one) of the creatures within 60 ft.
+          maxTargets: 1,
           resourceCost: { resourceId: CHANNEL, amount: 1 }, automationSupport: "full"
-        }],
-        notSimulated: "it reaches every enemy within 60 feet rather than Charisma-modifier many."
-      }))]
+        }]
+      }), { scale: [{ path: "grantedActions.0.maxTargets", value: "{mod:cha|min:1}" }] })]
     },
     {
       level: 10,

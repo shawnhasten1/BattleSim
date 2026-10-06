@@ -21,7 +21,7 @@ its gaps, never dropped and never approximated without saying so.
 | Druid (Circle of the Land) | 19 | 4 | 1 | 4 | 8 | 2 |
 | Fighter (Champion) | 21 | 14 | 0 | 1 | 5 | 1 |
 | Monk (Warrior of the Open Hand) | 26 | 13 | 2 | 2 | 5 | 4 |
-| Paladin (Oath of Devotion) | 23 | 10 | 1 | 3 | 8 | 1 |
+| Paladin (Oath of Devotion) | 23 | 11 | 0 | 3 | 8 | 1 |
 | Ranger (Hunter) | 23 | 10 | 0 | 2 | 9 | 2 |
 | Rogue (Thief) | 23 | 10 | 0 | 3 | 6 | 4 |
 | Sorcerer (Draconic Sorcery) | 17 | 5 | 1 | 3 | 7 | 1 |
@@ -53,7 +53,6 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | `slot-conversion` | Once a turn for a slot turned into a Wild Shape use (Wild Resurgence) | Druid | 5 | Wild Resurgence (Druid) |
 | `metamagic` | Two Metamagic options on one spell (Sorcery Incarnate) or one for free (Arcane Apotheosis) | Sorcerer | 7 | Sorcery Incarnate (Sorcerer); Arcane Apotheosis (Sorcerer) |
 | `oa-defense` | Defenses against opportunity attacks or attacks after a hit (Escape the Horde, Multiattack Defense) | Ranger | 7 | Defensive Tactics (Hunter) |
-| `target-count` | A set number of creatures chosen in an area (Abjure Foes: Charisma-modifier many) | Paladin | 9 | Abjure Foes (Paladin) |
 | `weapon-mastery` | Weapon mastery properties: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex (plan Phase 3) | Fighter | 9 | Tactical Master (Fighter) |
 | `combined-utility` | Step of the Wind carrying an ally with the monk (Heightened Focus) | Monk | 10 | Heightened Focus (Monk) |
 | `free-cast-any` | Casting any spell of a level from a list for free, chosen when cast (Divine Intervention) | Cleric | 10 | Divine Intervention (Cleric) |
@@ -265,7 +264,7 @@ closes every feature it lists (plan Phase 7; weapon mastery is Phase 3).
 | 5 | Extra Attack | full |  |  |
 | 5 | Faithful Steed | manual | `summon-stat-blocks` |  |
 | 6 | Aura of Protection | full |  | Charisma to allies' saves within 10 ft; the minimum of +1 isn't applied. |
-| 9 | Abjure Foes | partial | `target-count` | Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns, for every enemy within 60 ft (not Charisma-modifier many). |
+| 9 | Abjure Foes | full |  | Charisma-modifier many (at least one) enemies within 60 ft, those with the most hit points left: Frightened on a failed Wisdom save until it takes damage, able to do only one of moving, an action and a bonus action on its turns. |
 | 10 | Aura of Courage | full |  | Immunity to Frightened for the paladin and allies in its aura; an ally already frightened is freed at the start of its turn there (the rules: while it's there). |
 | 11 | Radiant Strikes | full |  |  |
 | 14 | Restoring Touch | full |  | Lay On Hands also ends Blinded, Charmed, Deafened, Frightened, Paralyzed or Stunned, 5 of the pool each, the worst first, before it heals; the AI frees a paralyzed or stunned ally first. |

@@ -1188,7 +1188,11 @@ function areaBody(action: AreaAction, definition: CreatureDefinition): Body {
   const zone = action.zone;
   const notSimulated = notesOf(action.riders);
   if (!zone) {
-    const clause = saveClause(action, definition, `Each ${who} ${areaWhere(action)}`, A_CREATURE);
+    // Abjure Foes: only so many of them.
+    const subject = action.maxTargets !== undefined
+      ? `${action.maxTargets === 1 ? "One" : `Up to ${action.maxTargets}`} ${who === "enemy" ? (action.maxTargets === 1 ? "enemy" : "enemies") : (action.maxTargets === 1 ? "creature" : "creatures")} of its choice ${areaWhere(action)}`
+      : `Each ${who} ${areaWhere(action)}`;
+    const clause = saveClause(action, definition, subject, A_CREATURE);
     // Land's Aid: and one of its side in the area heals.
     const heal = action.healsOneAlly?.length ? healingText(action.healsOneAlly, definition) : "";
     return {

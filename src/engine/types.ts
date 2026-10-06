@@ -1473,6 +1473,11 @@ export interface AreaSaveActionDefinition {
    * points left, a creature at 0 first.
    */
   healsOneAlly?: HealingComponent[];
+  /**
+   * Abjure Foes: only this many of the creatures in the area, chosen by the caster (`chosenAreaTargets`: its foes with the
+   * most hit points left).
+   */
+  maxTargets?: number;
   riders?: ActionRider[];
   resourceCost?: ResourceCost;
   concentration?: boolean;

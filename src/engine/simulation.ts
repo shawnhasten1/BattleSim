@@ -8,6 +8,7 @@ import {
   onlyWhenEmptyProblem,
   spellTurnProblem,
   whileConditionProblem,
+  chosenAreaTargets,
   limitedToOneThing,
   onHitTermsProblem,
   damageAdjustmentMultiplier,
@@ -3181,9 +3182,12 @@ function areaPlanValue(
   definitionsById: Map<string, CreatureDefinition>
 ): { score: number; reasons: string[] } {
   const { origin, aimVector, fromSelf } = resolveAreaTargeting(actor, definition, action, target.position);
-  const affected = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
+  const inArea = combatantsInArea(snapshot.map, origin, action.area, snapshot.combatants, definitionsById, aimVector)
     // A self-origin blast never catches its own caster (matches resolution).
     .filter((combatant) => !(fromSelf && combatant.id === actor.id));
+  // Abjure Foes: only the creatures it's used on.
+  const affected = action.maxTargets === undefined ? inArea
+    : chosenAreaTargets(snapshot, actor, action, inArea.filter((combatant) => action.affects === "all" || effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor)));
   const hostiles = affected.filter((combatant) => effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
   // Heightened Spell's target and the allies Careful Spell or Sculpt Spells spares, as the engine picks them.
   const { heightenedId, spared } = areaSaveChoices({ snapshot }, actor, action, affected);
