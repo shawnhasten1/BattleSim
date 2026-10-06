@@ -11,7 +11,7 @@ import {
 } from "@/engine";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions, type CharacterBuild } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
-import { actionStatblock } from "@/lib/statblock";
+import { actionStatblock, poolName } from "@/lib/statblock";
 
 /**
  * PC builder plan, Phase 7k: healing by any amount. Lay on Hands heals what a creature is missing from a pool of five
@@ -72,6 +72,12 @@ describe("Lay On Hands", () => {
     const definition = paladin();
     expect(actionStatblock(getExecutableActions(definition).find((entry) => entry.name === "Lay On Hands")!, definition).text)
       .toBe("A creature it touches regains the hit points it's missing, as many as are left in its Lay On Hands pool, which spends them.");
+  });
+
+  // Found in the Phase 7 browser check: the editor's pool picker read "lay on hand (25)".
+  it("keeps its pool's name whole", () => {
+    expect(poolName("lay-on-hands")).toBe("lay on hands");
+    expect(poolName("lay-on-hands", 5)).toBe("lay on hands");
   });
 });
 

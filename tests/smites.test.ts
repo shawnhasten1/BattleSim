@@ -11,6 +11,7 @@ import {
 import { runAutomatedEncounter } from "@/engine/turns";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions, type CharacterBuild } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { abilityWarnings } from "@/lib/ability-editor/validate";
 
 /**
  * PC builder plan, Phase 7b: smites. A smite spell (or an invocation, a species' boon) is an on-hit option: a variant
@@ -164,5 +165,18 @@ describe("an optional on-hit upgrade's cost", () => {
     state.rng = scripted([19]);
     resolveAttack(state, "pc-fighter", "enemy-goblin-1", stunning.id);
     expect(me().resources?.["focus-points"]).toBe(4);
+  });
+});
+
+describe("a smite in the ability editor", () => {
+  // Found in the Phase 7 browser check: the warnings read a spell's on-hit option as a weapon's rider list and crashed.
+  it("checks its slot like a spell's own action", () => {
+    const paladin = actor(quick("paladin", 5));
+    const smite = paladin.spells!.find((spell) => spell.name === "Divine Smite")!;
+    expect(smite.onHit).toBeDefined();
+    const warnings = abilityWarnings(paladin, { list: "spells", id: smite.id }, smite);
+    expect(warnings.map((warning) => warning.id)).not.toContain("missing-pool");
+    const noSlots = { ...paladin, resources: {} };
+    expect(abilityWarnings(noSlots, { list: "spells", id: smite.id }, smite).map((warning) => warning.message).join(" ")).toMatch(/slot/i);
   });
 });

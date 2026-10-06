@@ -126,8 +126,9 @@ export function poolName(resourceId: string, amount = 1, definition?: Pick<Creat
   if (resourceId.startsWith(ITEM_POOL_PREFIX) || resourceId === "supply") return plural(amount, "use");
   const bare = resourceId.includes(":") ? resourceId.slice(resourceId.lastIndexOf(":") + 1) : resourceId;
   const words = bare.replace(/[-_]+/g, " ").trim();
-  // "1 charge", "2 ki points": one of a plural-named pool drops its "s"; more than one gains it. Ki and dice don't.
-  if (/(^|\s)(ki|psi)$|dice$/.test(words)) return words;
+  // "1 charge", "2 ki points": one of a plural-named pool drops its "s"; more than one gains it. Ki, dice and Lay On
+  // Hands (a name, not a count) don't.
+  if (/(^|\s)(ki|psi)$|dice$|(^|\s)lay on hands$/.test(words)) return words;
   if (amount === 1) return words.endsWith("s") && !words.endsWith("ss") ? words.slice(0, -1) : words;
   return words.endsWith("s") ? words : `${words}s`;
 }

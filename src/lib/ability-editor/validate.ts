@@ -18,6 +18,8 @@ import {
   type FeatureEffect,
   type ItemDefinition,
   type LegendaryActionRef,
+  type OnHitOption,
+  type ResourceCost,
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
@@ -153,20 +155,23 @@ function missingPools(definition: CreatureDefinition, record: AbilityRecord): st
   // An item's stack is there once it's saved, including an item being edited (its use is edited inside it).
   const has = (id: string) => definition.resources?.[id] !== undefined || Boolean(definition.items?.some((item) => item.supply?.id === id));
   const missing = new Set<string>();
-  const costs = [
-    ...actionsIn(record).map((action) => ({ action, cost: "resourceCost" in action ? action.resourceCost : undefined })),
-    ...(((record as WeaponDefinition).onHit ?? []).map((rider) => ({ action: undefined, cost: rider.kind === "note" ? undefined : rider.resourceCost })))
+  // A weapon's on-hit riders are a list; a smite spell's is one option, which spends a slot like the spell's own action.
+  const onHit = (record as { onHit?: WeaponDefinition["onHit"] | OnHitOption }).onHit;
+  const costs: Array<{ upcasts: boolean; cost: ResourceCost | undefined }> = [
+    ...actionsIn(record).map((action) => ({ upcasts: true, cost: "resourceCost" in action ? action.resourceCost : undefined })),
+    ...(Array.isArray(onHit) ? onHit.map((rider) => ({ upcasts: false, cost: rider.kind === "note" ? undefined : rider.resourceCost })) : []),
+    ...(onHit && !Array.isArray(onHit) ? [{ upcasts: true, cost: onHit.resourceCost ?? (record as SpellDefinition).resourceCost }] : [])
   ];
   // Pools its effects spend (Legendary Resistance's uses, a regained resource), on the record or while it's active.
   const holder = record as { effects?: FeatureEffect[]; grantedActions?: ActionDefinition[] };
   const effectIds = [...effectPools(holder.effects), ...effectPools(activationOf(holder)?.condition?.effects)];
   for (const id of effectIds) if (!seeds.has(id) && !has(id)) missing.add(poolName(id));
-  for (const { action, cost } of costs) {
+  for (const { upcasts, cost } of costs) {
     if (!cost || seeds.has(cost.resourceId) || has(cost.resourceId)) continue;
     const slot = spellSlotLevel(cost.resourceId);
     // An ability that spends a slot can spend a higher one the creature has, whether or not that makes it stronger
     // (a weapon's on-hit rider can't: it spends the slot it names).
-    if (slot !== undefined && action && Object.keys(definition.resources ?? {}).some((id) => (spellSlotLevel(id) ?? 0) > slot)) continue;
+    if (slot !== undefined && upcasts && Object.keys(definition.resources ?? {}).some((id) => (spellSlotLevel(id) ?? 0) > slot)) continue;
     missing.add(slot !== undefined ? poolName(cost.resourceId, 2) : poolName(cost.resourceId));
   }
   return [...missing];
