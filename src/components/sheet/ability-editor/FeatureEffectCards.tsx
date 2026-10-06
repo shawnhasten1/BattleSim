@@ -3,6 +3,7 @@
 import { Pencil, Plus, X } from "lucide-react";
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { CREATURE_TYPES } from "@/lib/creature-types";
 import {
   abilityModifier,
   getExecutableActions,
@@ -13,6 +14,8 @@ import {
   type Ability,
   type ConditionName,
   type CreatureDefinition,
+  type CreatureType,
+  type SizeCategory,
   type DamageAdjustment,
   type DamageComponent,
   type DamageType,
@@ -297,6 +300,8 @@ function EffectCard({ effect, modifierKey, sentence, damageTypes, abilities, res
   }
   const set = (next: FeatureEffect) => onChange({ effect: next, damageTypes, abilities });
   const more = effectMore(effect, set, (edit) => onChange({ abilities, ...edit }), damageTypes, context.attacks, Boolean(restricted));
+  // A card with a More options of its own (Drops to 1 HP) puts "While" in it.
+  const whileInMore = spec?.selfGate === "more" && !restricted && effect.kind !== "survive-lethal";
   return (
     <div className={`${styles.card} ${styles.cardOpen}`} role="group" aria-label={`${label} effect`}>
       <div className={styles.cardHead}>
@@ -305,9 +310,14 @@ function EffectCard({ effect, modifierKey, sentence, damageTypes, abilities, res
       </div>
       <EffectFields effect={effect} damageTypes={damageTypes} abilities={abilities} restricted={Boolean(restricted)} modifierKey={modifierKey} place={place} onChange={onChange} context={context} />
       {spec?.when && !restricted ? <WhenField effect={effect} kind={spec.when} onChange={set} /> : null}
-      {spec?.selfGate && !restricted ? <SelfGateField effect={effect} onChange={set} definition={context.definition} /> : null}
+      {spec?.selfGate === true && !restricted ? <SelfGateField effect={effect} onChange={set} definition={context.definition} /> : null}
       {spec?.scope && !restricted ? <ScopeField effect={effect} onChange={set} /> : null}
-      {more.node ? <More set={more.set}>{more.node}</More> : null}
+      {more.node || whileInMore ? (
+        <More set={more.set + (whileInMore && gateIsSet(effect) ? 1 : 0)}>
+          {more.node}
+          {whileInMore ? <SelfGateField effect={effect} onChange={set} definition={context.definition} /> : null}
+        </More>
+      ) : null}
       <p className={styles.hint} aria-live="polite">{sentence}</p>
       <button type="button" className={`${styles.btn} ${styles.cardDone}`} onClick={onClose}>Done</button>
     </div>
@@ -368,7 +378,14 @@ function WhenField({ effect, kind, onChange }: { effect: FeatureEffect; kind: "a
  * (Rage). Nothing picked: always.
  */
 function SelfGateField({ effect, onChange, definition }: { effect: FeatureEffect; onChange: (next: FeatureEffect) => void; definition: CreatureDefinition }) {
-  const gate = effect as FeatureEffect & SelfGate;
+  // Bracers of Defense's older "no armor and no shield" reads as the same "While", and becomes it once changed.
+  const legacy = effect.kind === "armor-class-bonus" && effect.unarmoredOnly;
+  const gate = (legacy ? { ...effect, armor: effect.armor ?? "none", shield: effect.shield ?? false } : effect) as FeatureEffect & SelfGate;
+  const write = (next: FeatureEffect) => {
+    const out = { ...next };
+    if (out.kind === "armor-class-bonus") delete out.unarmoredOnly;
+    onChange(out);
+  };
   const givers = getExecutableActions(definition).flatMap((action) => (action.kind === "activate-feature" && action.condition?.id
     ? [{ id: action.condition.id, name: action.name }] : []));
   return (
@@ -376,7 +393,7 @@ function SelfGateField({ effect, onChange, definition }: { effect: FeatureEffect
       <span className={styles.inline}>
         <select
           aria-label="While it wears" value={gate.armor ?? ""}
-          onChange={(e) => onChange(opt(gate, "armor", (e.target.value || undefined) as SelfGate["armor"]))}
+          onChange={(e) => write(opt(gate, "armor", (e.target.value || undefined) as SelfGate["armor"]))}
         >
           <option value="">any armor, or none</option>
           <option value="worn">it wears armor</option>
@@ -385,14 +402,14 @@ function SelfGateField({ effect, onChange, definition }: { effect: FeatureEffect
         </select>
         <select
           aria-label="While it holds" value={gate.shield === undefined ? "" : gate.shield ? "yes" : "no"}
-          onChange={(e) => onChange(opt(gate, "shield", e.target.value === "" ? undefined : e.target.value === "yes"))}
+          onChange={(e) => write(opt(gate, "shield", e.target.value === "" ? undefined : e.target.value === "yes"))}
         >
           <option value="">a shield or not</option>
           <option value="yes">it holds a shield</option>
           <option value="no">it holds no shield</option>
         </select>
         {givers.length || gate.whileCondition ? (
-          <select aria-label="While it has" value={gate.whileCondition ?? ""} onChange={(e) => onChange(opt(gate, "whileCondition", e.target.value || undefined))}>
+          <select aria-label="While it has" value={gate.whileCondition ?? ""} onChange={(e) => write(opt(gate, "whileCondition", e.target.value || undefined))}>
             <option value="">(any time)</option>
             {givers.map((giver) => <option key={giver.id} value={giver.id}>{`${giver.name} is on`}</option>)}
             {gate.whileCondition && !givers.some((giver) => giver.id === gate.whileCondition) ? <option value={gate.whileCondition}>{`${gate.whileCondition} (not found)`}</option> : null}
@@ -486,6 +503,34 @@ function ScoreFields({ effect, set, definition }: {
   );
 }
 
+/** Whether an effect's "While" says anything (counted on More options' "set"). */
+function gateIsSet(effect: FeatureEffect): boolean {
+  return Boolean(effect.armor || effect.shield !== undefined || effect.whileCondition || (effect.kind === "armor-class-bonus" && effect.unarmoredOnly));
+}
+
+const SIZE_CHOICES: Array<{ value: string; label: string }> = [
+  { value: "steps:1", label: "one size larger" }, { value: "steps:2", label: "two sizes larger" },
+  { value: "steps:-1", label: "one size smaller" }, { value: "steps:-2", label: "two sizes smaller" },
+  ...(["tiny", "small", "medium", "large", "huge", "gargantuan"] as SizeCategory[]).map((size) => ({ value: `to:${size}`, label: size }))
+];
+
+/** A size effect's field: a size, or so many larger or smaller than its own. A buff's older `sizeTo` takes a size only. */
+function SizeFields({ effect, set, restricted }: { effect: Extract<FeatureEffect, { kind: "size" }>; set: (next: FeatureEffect) => void; restricted: boolean }) {
+  const value = effect.to ? `to:${effect.to}` : `steps:${effect.steps ?? 1}`;
+  const choices = restricted ? SIZE_CHOICES.filter((choice) => choice.value.startsWith("to:")) : SIZE_CHOICES;
+  return (
+    <span className={styles.inline}>
+      <span>It becomes</span>
+      <select aria-label="It becomes" value={value} onChange={(e) => {
+        const [how, what] = e.target.value.split(":");
+        set(how === "to" ? { kind: "size", to: what as SizeCategory } : { kind: "size", steps: Number(what) });
+      }}>
+        {choices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+      </select>
+    </span>
+  );
+}
+
 type SpeedEffect = Extract<FeatureEffect, { kind: "speed" }>;
 type SpeedMode = keyof NonNullable<SpeedEffect["modes"]>;
 const SPEED_MODES: Array<{ mode: SpeedMode; label: string }> = [
@@ -496,7 +541,7 @@ const SPEED_MODES: Array<{ mode: SpeedMode; label: string }> = [
  * A speed effect's fields: feet more or less, a multiplier, a minimum, and movement modes it gains. On a buff's older
  * modifier card (Large Form's speed, Draconic Flight's fly speed) only what that modifier holds.
  */
-function SpeedFields({ effect, set, only }: { effect: SpeedEffect; set: (next: FeatureEffect) => void; only?: "bonus" | "fly" }) {
+function SpeedFields({ effect, set, only }: { effect: SpeedEffect; set: (next: FeatureEffect) => void; only?: "bonus" | "fly" | "penalty" | "multiplier" }) {
   const setMode = (mode: SpeedMode, value: number | "walk" | undefined) => {
     const modes = { ...(effect.modes ?? {}) };
     if (value === undefined) delete modes[mode];
@@ -534,6 +579,26 @@ function SpeedFields({ effect, set, only }: { effect: SpeedEffect; set: (next: F
   };
   if (only === "bonus") return bonus;
   if (only === "fly") return mode(SPEED_MODES[0]!);
+  if (only === "penalty") {
+    // Weapon mastery's Slow: feet off its speed.
+    return (
+      <span className={styles.inline}>
+        <span>Its speed is</span>
+        <NumberField label="Slower by (ft)" value={-(effect.bonusFt ?? 0)} min={5} max={120} step={5} onChange={(n) => n !== undefined && set({ ...effect, bonusFt: -n })} />
+        <span>ft slower</span>
+      </span>
+    );
+  }
+  if (only === "multiplier") {
+    // A condition that slows or holds it: its movement halved, or none.
+    return (
+      <Segmented
+        label="Its speed is" value={effect.multiplier === 0 ? "none" : "half"}
+        options={[{ value: "half", label: "Halved" }, { value: "none", label: "Zero: it can't move" }]}
+        onChange={(next) => set({ ...effect, multiplier: next === "none" ? 0 : 0.5 })}
+      />
+    );
+  }
   const multiplier = effect.multiplier === 2 ? "double" : effect.multiplier === 0.5 ? "half" : "same";
   return (
     <>
@@ -640,6 +705,23 @@ function effectMore(
             <button key={type} type="button" aria-pressed={already.includes(type)} onClick={() => set(withList(scoped, "damageTypes", already.includes(type) ? already.filter((t) => t !== type) : [...already, type]))}>
               {type}
             </button>
+          ))}
+        </div>
+      </Field>
+    );
+  }
+  if (spec?.when === "attack" && !restricted) {
+    const types = ("targetTypes" in effect ? effect.targetTypes : undefined) ?? [];
+    count += types.length ? 1 : 0;
+    const toggle = (type: CreatureType) => {
+      const next = types.includes(type) ? types.filter((candidate) => candidate !== type) : [...types, type];
+      set(opt(effect as FeatureEffect & { targetTypes?: CreatureType[] }, "targetTypes", next.length ? next : undefined));
+    };
+    parts.push(
+      <Field key="target-types" copy="effectTargetTypes">
+        <div className={styles.typeChips} role="group" aria-label="Only against">
+          {CREATURE_TYPES.map((type) => (
+            <button key={type.value} type="button" aria-pressed={types.includes(type.value)} onClick={() => toggle(type.value)}>{type.label.toLowerCase()}</button>
           ))}
         </div>
       </Field>
@@ -985,17 +1067,26 @@ function EffectFields({ effect, damageTypes, abilities, restricted, modifierKey,
     case "attack-bonus":
       return <FormulaField label="Bonus to hit" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />;
     case "armor-class-bonus":
+      // "Only with no armor and no shield" is its "While" now (Bracers of Defense, Defense).
+      return <FormulaField label="AC bonus" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />;
+    case "speed": {
+      const only = modifierKey === "speedBonusFt" ? "bonus" : modifierKey === "flySpeed" ? "fly" : modifierKey === "speedPenaltyFt" ? "penalty" : modifierKey === "movementMultiplier" ? "multiplier" : undefined;
+      return <SpeedFields effect={effect} set={set} only={only} />;
+    }
+    case "size":
+      return <SizeFields effect={effect} set={set} restricted={restricted} />;
+    case "ignore-difficult-terrain":
+      return <p className={styles.hint}>Difficult terrain costs it no extra movement. Hazards still work.</p>;
+    case "damage-reduction":
       return (
         <>
-          <FormulaField label="AC bonus" value={effect.bonus} restricted={restricted} definition={definition} onChange={(bonus) => set({ ...effect, bonus })} />
-          <Check
-            label="Only with no armor and no shield worn" checked={effect.unarmoredOnly === true}
-            onChange={(on) => set(opt(effect, "unarmoredOnly", on ? true : undefined))}
-          />
+          <FormulaField label="Damage reduced by" value={effect.amount} definition={definition} onChange={(amount) => set({ ...effect, amount })} />
+          <Field copy="damageReductionTypes">
+            <TypeChips label="Of these types" value={effect.damageTypes ?? []} onChange={(list) => set(opt(effect, "damageTypes", list.length ? list : undefined))} />
+          </Field>
+          <Check label="Only from nonmagical attacks" checked={effect.nonMagicalOnly === true} onChange={(on) => set(opt(effect, "nonMagicalOnly", on ? true : undefined))} />
         </>
       );
-    case "speed":
-      return <SpeedFields effect={effect} set={set} only={modifierKey === "speedBonusFt" ? "bonus" : modifierKey === "flySpeed" ? "fly" : undefined} />;
     case "unarmored-ac":
       return (
         <>
@@ -1582,7 +1673,9 @@ function EffectFields({ effect, damageTypes, abilities, restricted, modifierKey,
             <TypeChips label="Never against" value={effect.excludedDamageTypes ?? []} onChange={(list) => set(opt(effect, "excludedDamageTypes", list.length ? list : undefined))} />
           </Field>
           <Check copy="notCrits" checked={effect.excludeCritical === true} onChange={(on) => set(opt(effect, "excludeCritical", on ? true : undefined))} />
-          <More set={(effect.maxDamage ? 1 : 0) + (effect.resourceId !== undefined ? 1 : 0)}>
+          {/* Its own More options holds its "While" too: one fold on the card, not two. */}
+          <More set={(effect.maxDamage ? 1 : 0) + (effect.resourceId !== undefined ? 1 : 0) + (gateIsSet(effect) ? 1 : 0)}>
+            <SelfGateField effect={effect} onChange={set} definition={definition} />
             <span className={styles.inline}>
               <span>Only for damage up to</span>
               <NumberField label="Most damage it survives" value={effect.maxDamage} optional min={1} max={999} placeholder="any" wide onChange={(n) => set(opt(effect, "maxDamage", n))} />

@@ -261,7 +261,7 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     category: "feature",
     automationSupport: "full",
     description: "While wearing armor: +1 to AC.",
-    effects: [{ kind: "armor-class-bonus", bonus: { base: 1 } }]
+    effects: [{ kind: "armor-class-bonus", bonus: { base: 1 }, armor: "worn" }]
   },
   {
     id: "srd:feature:unarmored-defense-barbarian",

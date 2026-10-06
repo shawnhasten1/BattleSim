@@ -7,7 +7,7 @@ import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight
 import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { armoredAc, isArmorItem, isWorn, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
-import { effectiveDefinition } from "./stats";
+import { effectiveDefinition, selfGateHolds } from "./stats";
 import { SeededRandom, type RandomSource } from "./rng";
 import { MAX_STEP_HEIGHT_FT, type TraitEmanation } from "./types";
 import type {
@@ -5936,7 +5936,7 @@ interface PendingDamage {
 /** Each part after the target's resistances, immunities, vulnerabilities and absorption, then halved for a made save. */
 function resolvePendingDamage(target: CombatantState, targetDefinition: CreatureDefinition, pending: PendingDamage[]): Array<{ adjusted: number; finalAmount: number; absorbed: number }> {
   const adjustments = damageAdjustmentsFor(targetDefinition, target);
-  return pending.map((part) => {
+  return reducedDamage(target, targetDefinition, pending).map((part) => {
     const resolved = resolveDamageAdjustment(part.base, part.damageType, adjustments, part.origin);
     return {
       adjusted: resolved.amount,
@@ -5944,6 +5944,30 @@ function resolvePendingDamage(target: CombatantState, targetDefinition: Creature
       absorbed: part.halve ? Math.floor(resolved.absorbed / 2) : resolved.absorbed
     };
   });
+}
+
+/**
+ * The damage with its `damage-reduction` effects taken off (Heavy Armor Master): each one's amount once, off the parts
+ * of its types (and only nonmagical ones, if it says so) in order, before resistance.
+ */
+function reducedDamage(target: CombatantState, definition: CreatureDefinition, pending: PendingDamage[]): PendingDamage[] {
+  const reductions = featureSources(definition, target).flatMap((feature) => (feature.effects ?? [])
+    .filter((effect): effect is Extract<FeatureEffect, { kind: "damage-reduction" }> => effect.kind === "damage-reduction")
+    .filter((effect) => featureConditionsMetForSelf(definition, target, effect)));
+  if (!reductions.length) return pending;
+  let parts = pending;
+  for (const effect of reductions) {
+    let left = Math.max(0, resolveNumericFormula(effect.amount, definition));
+    parts = parts.map((part) => {
+      if (left <= 0 || part.base <= 0) return part;
+      if (effect.damageTypes?.length && !effect.damageTypes.includes(part.damageType)) return part;
+      if (effect.nonMagicalOnly && part.origin.magical) return part;
+      const cut = Math.min(left, part.base);
+      left -= cut;
+      return { ...part, base: part.base - cut };
+    });
+  }
+  return parts;
 }
 
 /** Whether `target` has a reaction it could take against damage about to land (Uncanny Dodge), and its reaction left. */
@@ -7319,7 +7343,34 @@ export function featureSources(definition: CreatureDefinition, combatant?: Comba
       effects: item.effects,
       automationSupport: "full" as const
     }));
-  return [...simulatedFeatures(definition), ...weaponSources, ...itemSources, ...activeConditionSources];
+  return gatedSources(definition, combatant, [...simulatedFeatures(definition), ...weaponSources, ...itemSources, ...activeConditionSources]);
+}
+
+/**
+ * Its effect sources with each effect's "While" (`SelfGate`) applied: armor and a shield always (they're on the
+ * definition), an activation's condition once the combatant is known. A source loses only the effects that don't hold.
+ */
+function gatedSources<S extends { effects?: FeatureEffect[] }>(definition: CreatureDefinition, combatant: CombatantState | undefined, sources: S[]): S[] {
+  return sources.map((source) => {
+    const effects = source.effects;
+    if (!effects?.some(hasSelfGate)) return source;
+    return { ...source, effects: effects.filter((effect) => effectGateHolds(definition, combatant, effect)) };
+  });
+}
+
+const hasSelfGate = (effect: FeatureEffect) => Boolean(effect.armor || effect.shield !== undefined || effect.whileCondition);
+
+/**
+ * Whether an effect's "While" holds: its armor and shield, and with a combatant, an activation's condition (Frenzy's own
+ * check reads it again per attack). A Metamagic boost's names what its compiled copies need, not when it works.
+ */
+export function effectGateHolds(definition: CreatureDefinition, combatant: Pick<CombatantState, "conditions"> | undefined, effect: FeatureEffect): boolean {
+  if (!hasSelfGate(effect)) return true;
+  if (!selfGateHolds(definition, undefined, { armor: effect.armor, shield: effect.shield })) return false;
+  if (effect.whileCondition && combatant && effect.kind !== "metamagic-boost") {
+    return (combatant.conditions ?? []).some((condition) => condition.id === effect.whileCondition);
+  }
+  return true;
 }
 
 /**
@@ -9018,6 +9069,7 @@ function featureConditionsMet(
   const alternatives = "anyConditions" in effect && effect.anyConditions ? effect.anyConditions : [];
   const chargeFeet = "chargeFeet" in effect ? effect.chargeFeet : undefined;
   if (!whileConditionHeld(attacker, effect) || !targetMarkedBy(attacker, target, effect)) return false;
+  if (!targetTypeMatches(getDefinition(state.snapshot, target), effect)) return false;
   return required.every((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet))
     && (alternatives.length === 0 || alternatives.some((condition) => featureConditionMet(state, attacker, target, condition, context, chargeFeet)));
 }
@@ -9061,6 +9113,12 @@ function featureConditionsMetForSelf(
   if (!whileConditionHeld(combatant, effect)) return false;
   return required.every((condition) => selfFeatureConditionMet(definition, combatant, condition))
     && (alternatives.length === 0 || alternatives.some((condition) => selfFeatureConditionMet(definition, combatant, condition)));
+}
+
+/** An effect only against some creature types (a favored enemy's damage): whether the target is one of them. */
+export function targetTypeMatches(target: Pick<CreatureDefinition, "type">, effect: FeatureEffect): boolean {
+  const types = "targetTypes" in effect ? effect.targetTypes : undefined;
+  return !types?.length || Boolean(target.type && types.includes(target.type));
 }
 
 /** An effect against its bearer's own mark only (Precise Hunter): whether `target` bears it. */

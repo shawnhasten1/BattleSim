@@ -124,7 +124,7 @@ export const SRD_2024_FEATS: FeatDefinition[] = [
     edition: "2024",
     category: "fighting-style",
     prerequisite: { feature: "Fighting Style" },
-    grants: [{ key: "feat", feature: runs({ feat: "defense" }, { effects: [{ kind: "armor-class-bonus", bonus: { base: 1 } }] }) }]
+    grants: [{ key: "feat", feature: runs({ feat: "defense" }, { effects: [{ kind: "armor-class-bonus", bonus: { base: 1 }, armor: "worn" }] }) }]
   },
   {
     id: "srd:feat:great-weapon-fighting",

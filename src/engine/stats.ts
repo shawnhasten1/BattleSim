@@ -17,7 +17,7 @@ type HitPointEffect = Extract<FeatureEffect, { kind: "hit-point-maximum" }>;
 type ScoreEffect = Extract<FeatureEffect, { kind: "ability-score" }>;
 
 /** The kinds that change the stat block itself. */
-const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed", "hit-point-maximum", "ability-score"]);
+const STAT_KINDS = new Set<FeatureEffect["kind"]>(["speed", "hit-point-maximum", "ability-score", "size", "ignore-difficult-terrain"]);
 
 /** A stat-changing effect and what it comes from (a feature's, item's or condition's name). */
 interface StatSource {
@@ -127,12 +127,16 @@ export function speedWith(definition: CreatureDefinition, sources: Array<{ label
     parts.push({ label, value: effect.bonusFt });
     if (effect.allModes) for (const mode of OTHER_MODES) if (others[mode]) others[mode] = Math.max(0, others[mode]! + effect.bonusFt);
   }
-  const doubling = sources.filter(({ effect }) => (effect.multiplier ?? 1) > 1).sort((a, b) => b.effect.multiplier! - a.effect.multiplier!)[0];
-  if (doubling && walk > 0) {
-    const multiplied = Math.floor(walk * doubling.effect.multiplier!);
-    parts.push({ label: `${doubling.label} ×${doubling.effect.multiplier}`, value: multiplied - walk });
+  // The largest multiplier above 1 (they don't stack), then the smallest below it (Slow: halved; 0: it can't move).
+  const up = sources.filter(({ effect }) => (effect.multiplier ?? 1) > 1).sort((a, b) => b.effect.multiplier! - a.effect.multiplier!)[0];
+  const down = sources.filter(({ effect }) => effect.multiplier !== undefined && effect.multiplier < 1).sort((a, b) => a.effect.multiplier! - b.effect.multiplier!)[0];
+  for (const multiplying of [up, down]) {
+    if (!multiplying || walk <= 0) continue;
+    const factor = Math.max(0, multiplying.effect.multiplier!);
+    const multiplied = Math.floor(walk * factor);
+    parts.push({ label: `${multiplying.label} ×${factor}`, value: multiplied - walk });
     walk = multiplied;
-    if (doubling.effect.allModes) for (const mode of OTHER_MODES) if (others[mode]) others[mode] = Math.floor(others[mode]! * doubling.effect.multiplier!);
+    if (multiplying.effect.allModes) for (const mode of OTHER_MODES) if (others[mode]) others[mode] = Math.floor(others[mode]! * factor);
   }
   const floor = sources.filter(({ effect }) => effect.minimumFt !== undefined).sort((a, b) => b.effect.minimumFt! - a.effect.minimumFt!)[0];
   if (floor && walk < floor.effect.minimumFt!) {
@@ -151,6 +155,19 @@ export function speedWith(definition: CreatureDefinition, sources: Array<{ label
     if (effect.hover) hover = true;
   }
   return { movement: { ...others, walk, ...(hover ? { hover } : {}) }, parts };
+}
+
+/* ─── size ───────────────────────────────────────────────────────────────── */
+
+const SIZES: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+
+/** Its size with these effects: the last `to`, then every `steps` (Enlarge: 1), within Tiny to Gargantuan. Undefined when unchanged. */
+export function sizeWith(size: SizeCategory, effects: Array<Extract<FeatureEffect, { kind: "size" }>>): SizeCategory | undefined {
+  if (!effects.length) return undefined;
+  let at = SIZES.indexOf([...effects].reverse().find((effect) => effect.to)?.to ?? size);
+  for (const effect of effects) at += effect.steps ?? 0;
+  const next = SIZES[Math.max(0, Math.min(SIZES.length - 1, at))]!;
+  return next === size ? undefined : next;
 }
 
 /* ─── ability scores ─────────────────────────────────────────────────────── */
@@ -241,7 +258,13 @@ function applying(definition: CreatureDefinition, combatant: CombatantState | un
   const sources = [...own, ...fromConditions.sources].filter(holds);
   const of = <K extends FeatureEffect["kind"]>(kind: K) =>
     sources.filter((source): source is { label: string; effect: Extract<FeatureEffect, { kind: K }> } => source.effect.kind === kind);
-  return { speed: of("speed"), hitPoints: of("hit-point-maximum"), scores: of("ability-score"), size: fromConditions.size };
+  // A size effect, then a condition's older `sizeTo` (Large Form) after it.
+  const sizes = of("size");
+  return {
+    speed: of("speed"), hitPoints: of("hit-point-maximum"), scores: of("ability-score"),
+    size: fromConditions.size ?? sizeWith(definition.size, sizes.map(({ effect }) => effect)),
+    ignoresDifficult: of("ignore-difficult-terrain").length > 0
+  };
 }
 
 /* ─── hit points ─────────────────────────────────────────────────────────── */
@@ -280,10 +303,10 @@ const derived = new WeakMap<CreatureDefinition, Map<string, CreatureDefinition>>
 export function effectiveDefinition(definition: CreatureDefinition, combatant?: CombatantState): CreatureDefinition {
   // The hot path: nothing of its own and no condition that could change it.
   if (!ownStatSources(definition).length && !(combatant?.conditions ?? []).some((condition) => condition.effects?.length || condition.modifiers)) return definition;
-  const { speed, hitPoints, scores, size } = applying(definition, combatant);
-  if (!speed.length && !hitPoints.length && !scores.length && !size) return definition;
+  const { speed, hitPoints, scores, size, ignoresDifficult } = applying(definition, combatant);
+  if (!speed.length && !hitPoints.length && !scores.length && !size && !ignoresDifficult) return definition;
   const effectsOf = (list: StatSource[]) => list.map(({ effect }) => effect);
-  const key = JSON.stringify([effectsOf(speed), effectsOf(hitPoints), effectsOf(scores), size ?? null]);
+  const key = JSON.stringify([effectsOf(speed), effectsOf(hitPoints), effectsOf(scores), size ?? null, ignoresDifficult]);
   let forms = derived.get(definition);
   if (!forms) {
     forms = new Map();
@@ -300,6 +323,7 @@ export function effectiveDefinition(definition: CreatureDefinition, combatant?: 
     form.speedIncludesArmor = true;
   }
   if (hitPoints.length) form.maxHp = hitPointsWith(base, hitPoints).maxHp;
+  if (ignoresDifficult) form.movement = { ...(form.movement ?? { walk: form.speed }), ignoresDifficultTerrain: true };
   forms.set(key, form);
   return form;
 }

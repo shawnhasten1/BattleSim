@@ -28,6 +28,8 @@ import {
   featureSources,
   findActionDefinition,
   simulatedFeatures,
+  effectGateHolds,
+  targetTypeMatches,
   targetingProblem,
   isImmuneToCondition,
   riderAffectsCreatureType,
@@ -4481,7 +4483,8 @@ function averageAttackFeatureDamage(
     for (const [effectIndex, effect] of (feature.effects ?? []).entries()) {
       if ((effect.kind !== "damage-bonus" && effect.kind !== "save-gated-damage")
         || !featureAppliesToExpectedAction(effect, action)
-        || !hasOnlyAlwaysExpectedConditions(effect)) {
+        || !hasOnlyAlwaysExpectedConditions(effect)
+        || !targetTypeMatches(target, effect)) {
         continue;
       }
       const effectKey = `${feature.id}:${effectIndex}`;
@@ -4560,7 +4563,11 @@ function featureEffectSources(source: ReturnType<typeof getDefinition>, combatan
       id: condition.sourceId ?? condition.id,
       effects: condition.effects
     }));
-  return [...simulatedFeatures(source), ...activeConditionSources];
+  // Each effect's "While" as the engine applies it (armor, a shield, an activation).
+  return [...simulatedFeatures(source), ...activeConditionSources]
+    .map((entry) => (entry.effects?.some((effect) => !effectGateHolds(source, combatant, effect))
+      ? { ...entry, effects: entry.effects.filter((effect) => effectGateHolds(source, combatant, effect)) }
+      : entry));
 }
 
 function hasOnlyAlwaysExpectedConditions(effect: FeatureEffect): boolean {

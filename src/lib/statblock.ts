@@ -647,8 +647,20 @@ function d20ChangeSentence(effect: Extract<FeatureEffect, { kind: "d20-change" }
   return `When ${who.subject} ${when}, ${who.subject} can ${does}${cost}${effect.oncePerTurn ? " (once until the start of its next turn)" : ""}.`;
 }
 
-/** One feature effect as a sentence about `who` (the creature that has it, unless an aura or a buff says otherwise). */
+/** Kinds whose sentence already says when an activation's condition holds (`whileCondition`), in words of their own. */
+const OWN_WHILE_WORDS = new Set<FeatureEffect["kind"]>(["condition-immunity", "survive-lethal", "metamagic-boost"]);
+
+/**
+ * One feature effect as a sentence about `who` (the creature that has it, unless an aura or a buff says otherwise), with
+ * its "While" at the end: "…while it wears no heavy armor".
+ */
 export function effectSentence(effect: FeatureEffect, definition: CreatureDefinition, who: Who = IT): string {
+  const sentence = effectSentenceOnly(effect, definition, who);
+  const gate = OWN_WHILE_WORDS.has(effect.kind) ? selfGateText({ ...effect, whileCondition: undefined } as FeatureEffect, who) : selfGateText(effect, who);
+  return gate && sentence.endsWith(".") ? `${sentence.slice(0, -1)}${gate}.` : sentence;
+}
+
+function effectSentenceOnly(effect: FeatureEffect, definition: CreatureDefinition, who: Who = IT): string {
   const gate = gateText(effect);
   const S = capitalize(who.subject);
   const P = capitalize(who.possessive);
@@ -784,8 +796,16 @@ export function effectSentence(effect: FeatureEffect, definition: CreatureDefini
       return `While ${who.subject} wears no armor${effect.noShield ? " and no shield" : ""}, ${who.possessive} AC is ${unarmoredFormulaText(effect)}.`;
     case "speed": {
       const changes = speedChanges(effect, who, false);
-      return changes.length ? `${capitalize(joinList(changes))}${selfGateText(effect, who)}.` : `${P} speed doesn't change.`;
+      return changes.length ? `${capitalize(joinList(changes))}.` : `${P} speed doesn't change.`;
     }
+    case "damage-reduction": {
+      const types = effect.damageTypes?.length ? `${joinList(effect.damageTypes)} damage` : "Damage";
+      return `${capitalize(types)} ${who.subject} takes${effect.nonMagicalOnly ? " from nonmagical attacks" : ""} is reduced by ${Math.max(0, resolveNumericFormula(effect.amount, definition))}.`;
+    }
+    case "ignore-difficult-terrain":
+      return `Difficult terrain costs ${who.object} no extra movement.`;
+    case "size":
+      return effect.to ? `${S} is ${effect.to}.` : `${S} is ${Math.abs(effect.steps ?? 0) === 1 ? "one size" : `${Math.abs(effect.steps ?? 0)} sizes`} ${(effect.steps ?? 0) < 0 ? "smaller" : "larger"}.`;
     case "save-bonus":
       return `${S} gains ${bonusPhrase(formulaText(effect.bonus, definition), `${effect.ability ? `${ABILITY_NAME[effect.ability]} ` : ""}saving throws`)}.`;
     case "save-dc-bonus":
@@ -925,8 +945,22 @@ function gateShort(effect: FeatureEffect): string {
   return parts.length ? ` ${parts.join(", ")}` : "";
 }
 
+/** An effect's "While", short: " (no heavy armor)", " (no armor, no shield, while raging)". */
+function selfGateShort(effect: FeatureEffect): string {
+  const parts = [
+    effect.armor === "worn" ? "in armor" : effect.armor === "none" ? "no armor" : effect.armor === "not-heavy" ? "no heavy armor" : "",
+    effect.shield === true ? "with a shield" : effect.shield === false ? "no shield" : "",
+    !OWN_WHILE_WORDS.has(effect.kind) && effect.whileCondition ? (effect.whileCondition === "rage-active" ? "while raging" : `while ${effect.whileCondition.replace(/-/g, " ")}`) : ""
+  ].filter(Boolean);
+  return parts.length ? ` (${parts.join(", ")})` : "";
+}
+
 /** A feature effect's gist for a list row: "advantage on attacks with an ally next to the target", "resists fire". */
 function effectShort(effect: FeatureEffect, definition: CreatureDefinition): string {
+  return `${effectShortOnly(effect, definition)}${selfGateShort(effect)}`;
+}
+
+function effectShortOnly(effect: FeatureEffect, definition: CreatureDefinition): string {
   const gate = gateShort(effect);
   const scope = attackScope(effect, definition);
   switch (effect.kind) {
@@ -980,7 +1014,10 @@ function effectShort(effect: FeatureEffect, definition: CreatureDefinition): str
     case "swarm-damage": return "less damage when bloodied";
     case "armor-class-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} AC${effect.unarmoredOnly ? " (no armor or shield)" : ""}`;
     case "unarmored-ac": return `AC ${unarmoredFormulaText(effect, true)} without armor${effect.noShield ? " or shield" : ""}`;
-    case "speed": return `${joinList(speedChanges(effect, IT, true)) || "speed"}${selfGateText(effect).replace(/^ while it /, ", while it ")}`;
+    case "speed": return joinList(speedChanges(effect, IT, true)) || "speed";
+    case "damage-reduction": return `−${Math.max(0, resolveNumericFormula(effect.amount, definition))} ${effect.damageTypes?.length ? effect.damageTypes.join("/") : "all"} damage${effect.nonMagicalOnly ? " (nonmagical)" : ""}`;
+    case "ignore-difficult-terrain": return "ignores difficult terrain";
+    case "size": return effect.to ? effect.to : `${(effect.steps ?? 0) < 0 ? "−" : "+"}${Math.abs(effect.steps ?? 0)} size`;
     case "save-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} ${effect.ability ? `${effect.ability.toUpperCase()} ` : ""}saves`;
     case "save-dc-bonus": return `${signed(resolveNumericFormula(effect.bonus, definition))} save DCs`;
     case "resource-regain": return `regains ${poolName(effect.resourceId)}`;

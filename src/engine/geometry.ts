@@ -327,14 +327,14 @@ export function isFootprintLegal(
   });
 }
 
-/** What crossing a cell costs a walker, in squares. */
-function walkMultiplier(zone: TerrainZone | undefined): number {
+/** What crossing a cell costs a walker, in squares. `ignoresDifficult`: difficult terrain costs it nothing extra (Freedom of Movement). */
+function walkMultiplier(zone: TerrainZone | undefined, ignoresDifficult = false): number {
   if (!zone) return 1;
   const tags = zone.tags ?? [];
   if (zone.type === "impassable" || tags.includes("solid") || tags.includes("deep") || tags.includes("climbable")) {
     return Number.POSITIVE_INFINITY;
   }
-  if (zone.type === "difficult") return zone.movementMultiplier ?? 2;
+  if (zone.type === "difficult") return ignoresDifficult ? 1 : zone.movementMultiplier ?? 2;
   return zone.movementMultiplier ?? 1;
 }
 
@@ -345,12 +345,12 @@ function walkMultiplier(zone: TerrainZone | undefined): number {
  * - flying ignores everything on the ground except solid rock and impassable terrain;
  * - swimming works only in water; burrowing only in solid ground; climbing works anywhere except water and rock.
  */
-function modeMultiplier(zone: TerrainZone | undefined, mode: "walk" | "fly" | "swim" | "climb" | "burrow"): number {
+function modeMultiplier(zone: TerrainZone | undefined, mode: "walk" | "fly" | "swim" | "climb" | "burrow", ignoresDifficult = false): number {
   const tags = zone?.tags ?? [];
   const blocked = zone?.type === "impassable" || tags.includes("solid");
   switch (mode) {
     case "walk":
-      return walkMultiplier(zone);
+      return walkMultiplier(zone, ignoresDifficult);
     case "fly":
       return blocked ? Number.POSITIVE_INFINITY : 1;
     case "swim":
@@ -389,7 +389,7 @@ export function movementCostForCell(terrain: TerrainZone[], cell: Point, movemen
   let best = Number.POSITIVE_INFINITY;
   for (const mode of ["walk", "fly", "swim", "climb", "burrow"] as const) {
     const speed = movement[mode] ?? 0;
-    if (speed > 0) best = Math.min(best, modeMultiplier(zone, mode) * heightMultiplier(mode, heightDelta) * reference / speed);
+    if (speed > 0) best = Math.min(best, modeMultiplier(zone, mode, movement.ignoresDifficultTerrain) * heightMultiplier(mode, heightDelta) * reference / speed);
   }
   return best;
 }

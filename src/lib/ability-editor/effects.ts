@@ -17,7 +17,7 @@ export type EffectGroup = "movement" | "hit-points" | "scores" | "defense" | "at
 export const GROUPS: Array<{ group: EffectGroup; label: string }> = [
   { group: "movement", label: "Movement" },
   { group: "hit-points", label: "Hit points" },
-  { group: "scores", label: "Ability scores & initiative" },
+  { group: "scores", label: "Scores, size & initiative" },
   { group: "defense", label: "AC & defenses" },
   { group: "attacks", label: "Attacks & damage" },
   { group: "spells", label: "Spells" },
@@ -61,8 +61,11 @@ export interface EffectKindSpec {
   when: false | "attack" | "self";
   /** It takes "Which attacks": melee, ranged or spell, an ability, specific attacks. */
   scope: boolean;
-  /** It takes "While": armor worn or not, a shield, an activation (`SelfGate`). */
-  selfGate?: boolean;
+  /**
+   * It takes "While": armor worn or not, a shield, an activation (`SelfGate`). `true`: on the card itself (Fast Movement,
+   * Defense); `"more"`: under More options. Absent: it doesn't (Metamagic, an extra action: compiled or fired at once).
+   */
+  selfGate?: true | "more";
   /** The engine reads it only from a condition (an activation), never from a trait that's always on. */
   conditionOnly?: boolean;
   blank: () => FeatureEffect;
@@ -102,6 +105,11 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
     blank: () => ({ kind: "avoids-opportunity-attacks", condition: "always" })
   },
   {
+    kind: "ignore-difficult-terrain", label: "Ignores difficult terrain", hint: "Freedom of Movement, Land's Stride: difficult terrain costs it no extra movement", group: "movement", when: false, scope: false,
+    keywords: ["difficult terrain", "terrain", "freedom of movement", "lands stride", "rough ground", "free action"],
+    blank: () => ({ kind: "ignore-difficult-terrain" })
+  },
+  {
     kind: "free-move", label: "A move with something else", hint: "Instinctive Pounce with Rage, Tactical Shift with Second Wind, a move after a critical hit", group: "movement", when: false, scope: false,
     keywords: ["move", "movement", "pounce", "tactical shift", "reposition", "extra movement"],
     blank: () => ({ kind: "free-move", on: "critical-hit" })
@@ -120,6 +128,16 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
       { label: "+2 Constitution, to a maximum of 20, like an Ioun Stone of Fortitude", keywords: ["fortitude"], effects: () => [{ kind: "ability-score", ability: "con", bonus: 2, max: 20 }] }
     ],
     blank: () => ({ kind: "ability-score", ability: "str", setTo: 19 })
+  },
+  {
+    kind: "size", label: "Size", hint: "A size, or larger or smaller than its own: Enlarge, Reduce, Large Form", group: "scores", when: false, scope: false,
+    keywords: ["size", "enlarge", "reduce", "large", "huge", "small", "tiny", "grow", "shrink", "bigger", "smaller"],
+    examples: [
+      { label: "One size larger, like Enlarge", effects: () => [{ kind: "size", steps: 1 }] },
+      { label: "One size smaller, like Reduce", effects: () => [{ kind: "size", steps: -1 }] },
+      { label: "Large, like a goliath's Large Form", keywords: ["goliath"], effects: () => [{ kind: "size", to: "large" }] }
+    ],
+    blank: () => ({ kind: "size", steps: 1 })
   },
   // Hit points
   {
@@ -216,6 +234,21 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
       { label: "Poison immunity", effects: () => [{ kind: "damage-adjustment", condition: "always", adjustment: { type: "immunity", damageType: "poison" } }] }
     ],
     blank: () => ({ kind: "damage-adjustment", condition: "always", adjustment: { type: "resistance", damageType: "fire" } })
+  },
+  {
+    kind: "damage-reduction", label: "Damage reduction", hint: "Less damage from each hit or effect: Heavy Armor Master", group: "defense", when: "self", scope: false,
+    keywords: ["damage reduction", "reduce damage", "less damage", "soak", "dr"],
+    examples: [
+      {
+        label: "3 less from nonmagical bludgeoning, piercing and slashing, like Heavy Armor Master", keywords: ["heavy armor master", "ham"],
+        effects: () => [{ kind: "damage-reduction", amount: { base: 3 }, damageTypes: ["bludgeoning", "piercing", "slashing"], nonMagicalOnly: true }]
+      },
+      {
+        label: "Its proficiency bonus less in armor, like the 2024 Heavy Armor Master", keywords: ["heavy armor master"],
+        effects: () => [{ kind: "damage-reduction", amount: { proficiency: true }, damageTypes: ["bludgeoning", "piercing", "slashing"], armor: "worn" }]
+      }
+    ],
+    blank: () => ({ kind: "damage-reduction", amount: { base: 3 } })
   },
   {
     kind: "condition-immunity", label: "Immune to a condition", hint: "Mindless Rage while raging; on an aura, its allies too (Aura of Courage)", group: "defense", when: false, scope: false, short: "Condition immunity",
@@ -525,6 +558,16 @@ export const EFFECT_KINDS: EffectKindSpec[] = [
   }
 ];
 
+/** Kinds whose "While" sits on the card itself rather than under More options. */
+const WHILE_ON_CARD = new Set<EffectKind>(["speed", "armor-class-bonus"]);
+/** Kinds without one: compiled into actions or fired the moment something activates, so armor or Rage can't gate them. */
+const NO_WHILE = new Set<EffectKind>([
+  "extra-action", "resource-regain", "metamagic", "metamagic-boost", "on-hit-option", "paired-on-hit-options", "mastery-swap", "martial-arts-weapons",
+  "condition-persists", "split-on-damage", "swarm-damage", "slot-recall", "max-damage", "spare-allies", "spell-range", "spell-half-on-miss",
+  "spell-damage-ability", "weapon-mastery"
+]);
+for (const spec of EFFECT_KINDS) spec.selfGate ??= WHILE_ON_CARD.has(spec.kind) ? true : NO_WHILE.has(spec.kind) ? undefined : "more";
+
 export const EFFECT_SPECS = Object.fromEntries(EFFECT_KINDS.map((spec) => [spec.kind, spec])) as Record<EffectKind, EffectKindSpec>;
 
 /** The usual effects for what they belong to, in the picker's Common row. Each has a `short` name. */
@@ -803,8 +846,8 @@ export interface ModifierCardView {
 
 const ALL_ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
 const READ_ONLY_MODIFIERS = [
-  "movementMultiplier", "speedPenaltyFt", "deniesActions", "deniesBonusActions", "deniesReactions", "deniesOpportunityAttacks", "oneThingPerTurn",
-  "forcesRandomAction", "noSpellcasting", "fleesFromSource", "sizeTo"
+  "deniesActions", "deniesBonusActions", "deniesReactions", "deniesOpportunityAttacks", "oneThingPerTurn",
+  "forcesRandomAction", "noSpellcasting", "fleesFromSource"
 ] as const;
 
 export function modifierCards(modifiers: ConditionModifiers | undefined): ModifierCardView[] {
@@ -827,10 +870,13 @@ export function modifierCards(modifiers: ConditionModifiers | undefined): Modifi
   // Large Form's speed and Draconic Flight's fly speed read as Speed cards (EFFECTS_PLAN.md D9).
   if (modifiers.speedBonusFt) cards.push({ key: "speedBonusFt", effect: { kind: "speed", bonusFt: modifiers.speedBonusFt } });
   if (modifiers.flySpeed !== undefined) cards.push({ key: "flySpeed", effect: { kind: "speed", modes: { fly: modifiers.flySpeed } } });
-  for (const key of READ_ONLY_MODIFIERS) {
-    const value = modifiers[key];
-    if (key === "movementMultiplier" ? value !== undefined && value !== 1 : Boolean(value)) cards.push({ key });
+  // Slowed or held (a Slow-style halving, grappled: can't move), a speed cut (weapon mastery's Slow), a size (Large Form).
+  if (modifiers.movementMultiplier !== undefined && modifiers.movementMultiplier !== 1) {
+    cards.push({ key: "movementMultiplier", effect: { kind: "speed", multiplier: modifiers.movementMultiplier >= 100 ? 0 : 1 / modifiers.movementMultiplier, allModes: true } });
   }
+  if (modifiers.speedPenaltyFt) cards.push({ key: "speedPenaltyFt", effect: { kind: "speed", bonusFt: -modifiers.speedPenaltyFt } });
+  if (modifiers.sizeTo) cards.push({ key: "sizeTo", effect: { kind: "size", to: modifiers.sizeTo } });
+  for (const key of READ_ONLY_MODIFIERS) if (modifiers[key]) cards.push({ key });
   return cards;
 }
 
@@ -881,6 +927,25 @@ export function withModifierCard(
       const fly = next?.effect.kind === "speed" ? next.effect.modes?.fly : undefined;
       delete out.flySpeed;
       if (fly !== undefined) out.flySpeed = fly;
+      break;
+    }
+    case "movementMultiplier": {
+      const multiplier = next?.effect.kind === "speed" ? next.effect.multiplier : undefined;
+      delete out.movementMultiplier;
+      // It divides the creature's movement: 2 halves it, 999 holds it in place.
+      if (multiplier !== undefined && multiplier < 1) out.movementMultiplier = multiplier <= 0 ? 999 : Math.round(1 / multiplier);
+      break;
+    }
+    case "speedPenaltyFt": {
+      const feet = next?.effect.kind === "speed" && (next.effect.bonusFt ?? 0) < 0 ? -next.effect.bonusFt! : undefined;
+      delete out.speedPenaltyFt;
+      if (feet) out.speedPenaltyFt = feet;
+      break;
+    }
+    case "sizeTo": {
+      const to = next?.effect.kind === "size" ? next.effect.to : undefined;
+      delete out.sizeTo;
+      if (to) out.sizeTo = to;
       break;
     }
     case "damageAdjustments": {

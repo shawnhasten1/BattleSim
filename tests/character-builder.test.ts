@@ -167,7 +167,8 @@ describe("a Fighter built from 1st to 20th level", () => {
     expect(fighter.resources).toEqual({ "second-wind": 2 });
     const secondWind = feature(fighter, "fighter-second-wind");
     expect(secondWind.grantedActions?.[0]).toMatchObject({ kind: "healing", healing: [{ dice: "1d10+1" }], resourceCost: { resourceId: "second-wind", amount: 1 } });
-    expect(feature(fighter, "feat-defense").effects).toEqual([{ kind: "armor-class-bonus", bonus: { base: 1 } }]);
+    // "While you're wearing light, medium, or heavy armor" (EFFECTS_PLAN.md, Phase 4).
+    expect(feature(fighter, "feat-defense").effects).toEqual([{ kind: "armor-class-bonus", bonus: { base: 1 }, armor: "worn" }]);
     expect(feature(fighter, "fighter-weapon-mastery").description).toMatch(/Mastered: Greatsword \(Graze\), Flail \(Sap\), Spear \(Sap\)\./);
     expect(fighter.weapons?.map((weapon) => weapon.name)).toEqual(["Greatsword", "Flail", "Spear", "Shortbow"]);
     expect(fighter.items?.map((item) => item.name)).toEqual(["Chain Mail"]);

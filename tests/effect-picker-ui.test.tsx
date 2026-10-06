@@ -28,7 +28,7 @@ describe("the Add effect picker", () => {
     );
     const folds = picker.getAllByRole("button", { expanded: false });
     expect(folds.map((fold) => fold.textContent?.replace(/\d+$/, ""))).toEqual(
-      ["Movement", "Hit points", "Ability scores & initiative", "AC & defenses", "Attacks & damage", "Spells", "Saves & d20 rolls", "Actions & turn", "Class & monster mechanics"]
+      ["Movement", "Hit points", "Scores, size & initiative", "AC & defenses", "Attacks & damage", "Spells", "Saves & d20 rolls", "Actions & turn", "Class & monster mechanics"]
     );
   });
 

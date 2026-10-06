@@ -294,6 +294,8 @@ export interface MovementProfile {
   climb?: number;
   burrow?: number;
   hover?: boolean;
+  /** Set only on a derived definition's movement (an `ignore-difficult-terrain` effect): difficult terrain costs it nothing extra. */
+  ignoresDifficultTerrain?: boolean;
 }
 
 /** Ranges in feet. Informational until the engine models light and vision. */
@@ -456,6 +458,8 @@ export interface FeatureEffectConditions {
    * Hunter: advantage against the creature its Hunter's Mark is on).
    */
   targetMarked?: string;
+  /** Only against a creature of one of these types (a favored enemy's damage, a slayer's). */
+  targetTypes?: CreatureType[];
 }
 
 /**
@@ -496,7 +500,8 @@ export interface FeatureEffectConditionApplication {
   nextAttack?: { role: "made" | "against"; mode: "advantage" | "disadvantage" };
 }
 
-export type FeatureEffect =
+/** Every effect can take "While" (`SelfGate`): `featureSources` leaves out one whose armor, shield or activation it lacks. */
+export type FeatureEffect = (
   | ({
     kind: "attack-advantage";
     condition: FeatureCondition;
@@ -1032,7 +1037,32 @@ export type FeatureEffect =
     kind: "reaction-attack";
     trigger: Extract<ReactionTrigger, { kind: "hit-by-attack" }>;
     attackTypes?: Array<"melee" | "ranged" | "spell">;
-  };
+  }
+  | ({
+    /**
+     * Damage of these types (any, without `damageTypes`) that each hit or effect deals it is reduced by `amount`, before
+     * resistance as the rules order it, coming off the parts it covers in order (Heavy Armor Master: bludgeoning,
+     * piercing and slashing from nonmagical attacks, by 3; the 2024 feat: its proficiency bonus, in heavy armor).
+     */
+    kind: "damage-reduction";
+    amount: NumericFormula;
+    damageTypes?: DamageType[];
+    nonMagicalOnly?: boolean;
+  } & FeatureEffectConditions)
+  | {
+    /** Difficult terrain costs it no extra movement (Freedom of Movement, Land's Stride). Hazards still work. */
+    kind: "ignore-difficult-terrain";
+  }
+  | {
+    /**
+     * Its size while this works: `to` a size, or `steps` larger (1, Enlarge) or smaller (-1, Reduce) than its own
+     * (stats.ts). A condition's older `sizeTo` modifier comes after it.
+     */
+    kind: "size";
+    to?: SizeCategory;
+    steps?: number;
+  }
+) & SelfGate;
 
 /**
  * Something an attack's hit can be upgraded with, for a cost paid only when it lands: a smite spell (Divine Smite), an
