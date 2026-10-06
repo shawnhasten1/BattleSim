@@ -69,6 +69,7 @@ import type { AddFilter } from "@/lib/ability-editor/add";
 import type { Compendium } from "@/hooks/useCompendium";
 import { ConditionsRow } from "../SheetHeader";
 import { DefensesSection, LevelSection } from "../stats/StatsSections";
+import { TokenTab } from "../sheet-tabs/TokenTab";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { Astrolabe, Portrait } from "./ornaments";
 import { codexBody, codexDisplay } from "./fonts";
@@ -82,8 +83,8 @@ const KIND_WORDS = { none: "not proficient", proficient: "proficient", expertise
 const SIZES: SizeCategory[] = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
-type CodexTab = "details" | "items" | "abilities" | "spells";
-const TAB_LABELS: Record<CodexTab, string> = { details: "Details", items: "Items", abilities: "Abilities", spells: "Spells" };
+type CodexTab = "details" | "items" | "abilities" | "spells" | "token";
+const TAB_LABELS: Record<CodexTab, string> = { details: "Details", items: "Items", abilities: "Abilities", spells: "Spells", token: "Token" };
 const TAB_KEY = "codex-tab";
 
 export interface CodexSheetProps {
@@ -142,7 +143,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   const groups = abilityList(definition, combatant);
   const spellcasting = groups.find((group) => group.id === "spellcasting");
   const hasItems = Boolean(definition.weapons?.length || definition.items?.length);
-  const available: CodexTab[] = ["details", ...(hasItems ? ["items" as const] : []), "abilities", ...(spellcasting ? ["spells" as const] : [])];
+  const available: CodexTab[] = ["details", ...(hasItems ? ["items" as const] : []), "abilities", ...(spellcasting ? ["spells" as const] : []), "token"];
   const [stored, setStored] = useState<CodexTab>(() => readJson<CodexTab>(TAB_KEY, "details"));
   const tab = available.includes(stored) ? stored : "details";
   const choose = (next: CodexTab) => {
@@ -293,6 +294,12 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                   {tab === "abilities" ? <Abilities combatant={combatant} definition={definition} groups={groups} onAdd={() => openAdd("all")} /> : null}
                   {tab === "spells" && spellcasting ? (
                     <Spells group={spellcasting} combatant={combatant} definition={definition} onAdd={() => openAdd("spells")} />
+                  ) : null}
+                  {tab === "token" ? (
+                    // Standard's Token tab, hosted: the token the switcher shows. What the AI will use opens in the editor here.
+                    <div className={`${styles.panel} ${styles.hosted} ${styles.tokenPanel}`}>
+                      <TokenTab combatant={combatant} definition={definition} onOpenAbility={openEditor} />
+                    </div>
                   ) : null}
                 </RowKitContext.Provider>
               </div>

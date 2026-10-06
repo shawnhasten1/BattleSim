@@ -1589,7 +1589,7 @@ select.lvSelect option {
   padding-block: 8px;
 }
 
-.hosted > section > button[aria-expanded] > span:first-of-type {
+.hosted section[aria-label] > button[aria-controls] > span:first-of-type {
   font-family: var(--display);
   font-weight: 600;
   font-size: 1.05rem;
@@ -1637,6 +1637,22 @@ select.lvSelect option {
 
 .more2:hover {
   text-decoration: underline;
+}
+
+/* The Token tab: Standard's, hosted. Its name and side first, the name in the Codex's face; then its sections. */
+.panel.tokenPanel {
+  padding: 4px 14px 10px;
+}
+
+.tokenPanel > div > div:first-child {
+  padding: 10px 0 12px;
+  border-bottom-color: var(--edge-2);
+}
+
+.panel.tokenPanel > div > div:first-child input {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.15rem;
 }
 
 /* ── narrower windows ── */

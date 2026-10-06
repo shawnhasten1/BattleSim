@@ -252,7 +252,7 @@ describe("a monster on the Codex", () => {
     await openCodex("enemy-goblin-1");
     expect((screen.getByLabelText("Challenge rating") as HTMLSelectElement).selectedOptions[0]!.textContent).toBe("1/4");
     expect(screen.queryByRole("group", { name: "Death saves" })).toBeNull();
-    expect(within(screen.getByRole("tablist", { name: "Codex sections" })).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Details", "Abilities"]);
+    expect(within(screen.getByRole("tablist", { name: "Codex sections" })).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Details", "Abilities", "Token"]);
   });
 });
 
@@ -689,6 +689,61 @@ describe("Details in the Codex: what Standard's Stats edits", () => {
     await userEvent.click(within(built).getByRole("button", { name: /Class & level/ }));
     await userEvent.click(within(built).getByRole("button", { name: "Level down" }));
     expect(readBuild(creature(fighter.definitionId))!.levels).toHaveLength(2);
+  });
+});
+
+describe("the Token tab in the Codex", () => {
+  /** pc-fighter and a second token of the same creature. */
+  function twoFighters() {
+    store().duplicateCombatant("pc-fighter");
+    return store().encounter.combatants.find((combatant) => combatant.definitionId === "def-fighter" && combatant.id !== "pc-fighter")!;
+  }
+
+  it("hosts Standard's Token tab, in the Codex's colours, for the token shown only", async () => {
+    const other = twoFighters();
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Token"));
+    const name = screen.getByDisplayValue(token("pc-fighter").displayName) as HTMLInputElement;
+    expect(name.closest("[data-palette]")).not.toBeNull();
+    await userEvent.clear(name);
+    await userEvent.type(name, "Brakka{Enter}");
+    expect(token("pc-fighter").displayName).toBe("Brakka");
+    expect(token(other.id).displayName).not.toBe("Brakka");
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Faction" })).getByRole("radio", { name: "Neutral" }));
+    expect(token("pc-fighter").faction).toBe("neutral");
+    expect(token(other.id).faction).toBe("party");
+  });
+
+  it("sets a token's tactics, and Use these for every one reaches them all", async () => {
+    const other = twoFighters();
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Token"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Tactics profile" }), "brute");
+    expect(token("pc-fighter").tacticsProfile).toBe("brute");
+    expect(token(other.id).tacticsProfile).not.toBe("brute");
+    await userEvent.click(screen.getByRole("button", { name: `Use these for every ${creature("def-fighter").name}` }));
+    expect(token(other.id).tacticsProfile).toBe("brute");
+    expect(creature("def-fighter").defaultTactics).toBe("brute");
+  });
+
+  it("follows the token switcher", async () => {
+    const other = twoFighters();
+    act(() => store().updateCombatant(other.id, { displayName: "Second" }));
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Token"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Token shown" }), other.id);
+    expect(screen.getByDisplayValue("Second")).toBeTruthy();
+    expect(codexTab("Token").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens what the AI will use in the Codex's editor, and comes back to Token", async () => {
+    await openCodex("pc-fighter");
+    await userEvent.click(codexTab("Token"));
+    await userEvent.click(screen.getByRole("button", { name: "Longsword" }));
+    const editor = screen.getByRole("region", { name: "Edit Longsword" });
+    expect(editor.closest("[data-palette]")).not.toBeNull();
+    await userEvent.click(within(editor).getByRole("button", { name: "Cancel" }));
+    expect(codexTab("Token").getAttribute("aria-selected")).toBe("true");
   });
 });
 

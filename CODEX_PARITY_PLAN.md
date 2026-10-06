@@ -201,3 +201,16 @@ both the Codex popped out and the Codex in the page.
 - Tests: 9 in `tests/codex-sheet.test.tsx`. Two older ones now read the proficiency box and the CR dropdown, since both
   became inputs. Browser checks passed 11/11 in Chromium and in Firefox: popped out, in the page, Light, at 640 px. They
   caught two layout bugs, both fixed: save names squeezed out by the typed box, and clipped sense labels.
+
+### Phase 4: the Token tab
+
+- The Codex has a fifth tab, **Token**, after Spells. It hosts Standard's `TokenTab` whole, in a Codex panel: the token
+  name and faction, then This fight, Tactics, Appearance, and Status & position, with Standard's fold state. It uses
+  the same component, so nothing is copied. Its fields take the palette through the `--ui-*` mapping, its fold heads
+  take the Codex's face, and the token name is set in the display face.
+- It shows the token the switcher shows, so its edits reach that token only. "Use these for every Brakka" reaches them
+  all, as on Standard. "What the AI will use" opens the ability in the Codex's own editor (`onOpenAbility` is the
+  Codex's `openEditor`), and Cancel comes back to Token.
+- Tests: 4 in `tests/codex-sheet.test.tsx`. The monster test's tab list now includes Token. Browser checks passed 10/10
+  in Chromium and in Firefox: in the page, popped out, the switcher, Light, and 640 px. The check caught that the
+  hosted-fields rule outranked the token name's face, and that is fixed.
