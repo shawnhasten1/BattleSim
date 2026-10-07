@@ -179,6 +179,10 @@ the log.
 
 ### 2.2 Your turn
 
+> **Superseded in part (2026-10-07):** the hotbar's tabs, colours and attacks were redesigned in
+> HOTBAR_REDESIGN_PLAN.md. The tabs are Actions · Bonus · Reactions, grouped inside by what a thing is, and there's no
+> Multiattack button: a creature's weapons are its swings.
+
 - **A turn bar** runs across the top of the map: portraits in initiative order, the current one raised, You/AI
   badges, HP bars, and the lair slot at 20. Click a portrait to select that creature.
 - At the start of your creature's turn, the map pans to it and selects it. **The hotbar** appears at the bottom of the
@@ -215,6 +219,10 @@ the log.
 - **Other tokens** can only be dragged with Alt, as a logged DM move.
 
 ### 2.4 Aiming
+
+> **Superseded in part (2026-10-07):** a creature's own multiattack is made a swing at a time from its weapon buttons
+> (HOTBAR_REDESIGN_PLAN.md §3), not through the swing card. The card is still used for legendary and lair actions that
+> are routines.
 
 Arming an ability draws its range around the creature and marks who it can target. Hovering one it can't target says
 why: "beyond 60 ft.", "line of effect is blocked", "inside another creature".

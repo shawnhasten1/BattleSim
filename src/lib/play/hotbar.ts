@@ -237,7 +237,9 @@ function toneOf(action: ActionDefinition, group: HotbarGroup, spell?: SpellOf): 
   if (group !== "spells") return group;
   if (action.kind === "healing") return "healing";
   const damage = "damage" in action && Array.isArray(action.damage) ? action.damage : [];
-  const dealt = damage.map((component) => damageTone(component.damageType)).find(Boolean)
+  const tones = damage.map((component) => damageTone(component.damageType)).filter((tone): tone is HotbarTone => Boolean(tone));
+  // An element over plain force of arms: Ice Storm's hail is bludgeoning, but it's a cold spell.
+  const dealt = tones.find((tone) => tone !== "physical") ?? tones[0]
     ?? (action.kind === "area-save" ? damageTone(action.zone?.movementDamage?.damageType) : undefined);
   if (dealt) return dealt;
   const school = (action.spellSchool ?? spell?.school)?.toLowerCase();
@@ -570,15 +572,14 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     });
   }
 
-  // Spells by level, cantrips first; a multiattack heads the attacks, as in a statblock; the rest as the creature has them.
-  const routine = (button: HotbarButton) => (button.variants[0]!.aim.kind === "routine" ? 0 : 1);
+  // Spells by level, cantrips first; the rest as the creature has them.
   const tabs = HOTBAR_TABS.map(({ id, label }) => {
     const groups = HOTBAR_GROUPS.map((group) => ({
       ...group,
       buttons: buttons
         .filter((button) => button.tab === id && button.group === group.id)
         .map((button, index) => ({ button, index }))
-        .sort((a, b) => (group.id === "spells" ? (a.button.spellLevel ?? 0) - (b.button.spellLevel ?? 0) : routine(a.button) - routine(b.button)) || a.index - b.index)
+        .sort((a, b) => (group.id === "spells" ? (a.button.spellLevel ?? 0) - (b.button.spellLevel ?? 0) : 0) || a.index - b.index)
         .map(({ button }) => button)
     })).filter((group) => group.buttons.length > 0);
     return { id, label, groups, buttons: groups.flatMap((group) => group.buttons) };

@@ -1,7 +1,7 @@
 # Hotbar Redesign Plan: what you can do, by what it costs
 
-**Status:** planned 2026-10-07. Phases 1–2 built on branch `hotbar-redesign` (see "Built so far" at the end); Phases
-3–5 not started. D1–D3 are the user's decisions (2026-10-07). D4–D12 are defaults derived from them; reverse any of
+**Status:** complete 2026-10-07: Phases 1–5 built on branch `hotbar-redesign`, one commit each (see "Built so far" at
+the end). D1–D3 are the user's decisions (2026-10-07). D4–D12 are defaults derived from them; reverse any of
 them before building.
 
 Play's hotbar (PLAY_MODE_PLAN.md §2.2) should work more like Baldur's Gate 3's. The user asked for three things:
@@ -485,3 +485,17 @@ Differences from the plan:
   charge".
 - **No "Skip this swing" on the hotbar:** a swing left unused is skipped when the turn ends. The swing card stays for
   legendary and lair actions that are routines (D11).
+
+### Phase 5 — Docs and tidy (2026-10-07)
+
+- The Docs page's Play section covers the tabs, groups, colours and marks, and attacking a swing at a time. Its Items
+  note describes the per-slot potion buttons.
+- `docs/guides/play-a-fight-by-hand.md` steps 2–4 now name the Actions tab and its groups, with a note on Extra Attack
+  and Multiattack. Screenshots 02–04 were retaken in the Sandbox with the new hotbar.
+  - An SRD Mage can only be added as an enemy, so the Fireball shot catches the party, and its caption says so.
+- PLAY_MODE_PLAN.md §2.2 and §2.4 now point here.
+- Removed the hotbar's "routine" hint and its multiattack-first sort. `aimForAction` and `aimAtCreature` keep the
+  routine aim for legendary picks.
+- A spell's colour prefers an element over bludgeoning, piercing or slashing (Ice Storm is cold, not physical). It was
+  spotted in the guide's Mage shot.
+- Full suite: 272 files, 3,067 tests.

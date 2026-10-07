@@ -871,10 +871,11 @@ const SECTIONS: Section[] = [
           for the bonus action, and the action still attacks.
         </p>
         <p>
-          In Play, the hotbar&apos;s <strong>Items</strong> tab has a button for each item with how many are left: a
-          potion&apos;s <em>Drink</em> is used at once, and <em>Give</em> is aimed at an ally within 5 ft, one who&apos;s
-          down included. With full healing for an action, the button also has <em>Drink · full 10</em> and{" "}
-          <em>Give · full 10</em>, each taking the action. A potion whose benefit lasts 10 minutes or more (Heroism) can be drunk before the fight:
+          In Play, each item has a button in the hotbar&apos;s <strong>Items</strong> group, with how many are left, on
+          the tab of what it takes: a potion&apos;s <em>Drink</em> is used at once, and <em>Give</em> is aimed at an ally
+          within 5 ft, one who&apos;s down included. When drinking takes a bonus action and giving an action, the potion
+          has a button on each tab (<em>Potion of Healing: Drink</em> under Bonus, <em>…: Give</em> under Actions). With
+          full healing for an action, the Actions button has <em>Drink · full 10</em> and <em>Give · full 10</em>. A potion whose benefit lasts 10 minutes or more (Heroism) can be drunk before the fight:
           it&apos;s listed with the spells cast before it, in the Combat panel and on the Token tab, and ticking it spends
           one.
         </p>
@@ -1048,9 +1049,13 @@ const SECTIONS: Section[] = [
         <ul>
           <li>
             <strong>The hotbar</strong>, at the bottom of the map, shows what's left of the turn and everything the
-            creature can use, by tab: Attacks, Spells (with the slots left), Bonus, Features, Items (for a creature
-            that carries any: how many are left, and a potion's Drink and Give), Common (Dash, Disengage, Dodge…) and
-            Reactions. A button greyed out says why. Keys 1–0 press the tab's first ten.
+            creature can use, by what it takes: <strong>Actions</strong> (free ones too, like Action Surge),{" "}
+            <strong>Bonus</strong> and <strong>Reactions</strong>. Inside a tab the buttons are grouped by what they
+            are: Attacks, Spells (with the slots left), Features, Items and Common (Dash, Disengage, Dodge…). Each is
+            coloured by what it is: attacks red, features gold, items teal, common actions grey, and a spell by its
+            element (fire orange, radiant pale gold, healing green, or its school&apos;s colour when it deals no damage).
+            A corner mark says what it takes: a green ● for an action, an orange ▲ for a bonus action, a hollow ◇ for
+            free. A button greyed out says why. Keys 1–0 press the tab's first ten.
           </li>
           <li>
             <strong>Moving</strong>: the squares it can still reach are tinted; over a square, the route, its cost,
@@ -1067,8 +1072,15 @@ const SECTIONS: Section[] = [
             <strong>Variants</strong> sit under their ability: the slot to cast at, Power Attack, spend a charge.
           </li>
           <li>
-            <strong>A multiattack</strong> takes its first target, then asks for each swing: which attack, which
-            creature, or a square to step to first.
+            <strong>Attacking</strong>: there's no Extra Attack or Multiattack button. Press a weapon (or a claw, a
+            bite): the first swing takes the Attack action or the Multiattack, and the swings left stay on the weapon
+            buttons for the rest of the turn (<em>⚔ 1 left</em>, and <em>Attack · 1 left</em> on the Action pill).
+            Move, use a bonus action or drink a potion between them; Undo takes back one swing. A routine&apos;s rules
+            hold: an owlbear&apos;s second claws is greyed out, a tyrannosaurus&apos;s tail won&apos;t go at the
+            bite&apos;s target, a grick&apos;s beak follows only a tentacle hit. Frightful Presence or Breath Weapon in
+            place of an attack is a swing too. A routine that costs more than its action (Flurry of Blows) has a button
+            of its own, and its second strike rides the strike&apos;s button. Swings left unused when the turn ends are
+            skipped.
           </li>
           <li>
             <strong>By hand</strong>: an ability the simulator doesn't run takes its slot and its cost and is logged;

@@ -27,26 +27,28 @@ Click **Start**. Initiative is rolled if it hasn't been, and the board as it is 
 
 On your creature's turn the **hotbar** sits at the bottom of the map, and the squares it can still reach are tinted. Point at a square: the route the engine would take appears, with what it costs.
 
-![A route, its cost, and an opportunity attack on the way](img/play-a-fight-by-hand/02-moving.png)
+![A route, its cost, and the opportunity attacks on the way](img/play-a-fight-by-hand/02-moving.png)
 
 - **Click** to move there. **Shift-click** to plan a stop on the way, to go round something; **Esc** or right-click takes the last stop back.
 - A red ring and a weapon's name mark each creature that would get an **opportunity attack**, and the line under the hotbar says so.
-- **Dash** and **Disengage** are on the **Common** tab: the movement doubles, or the opportunity attacks go away.
+- **Dash** and **Disengage** are on the **Actions** tab, in its **Common** group: the movement doubles, or the opportunity attacks go away.
 - You can also drag the token. Dropped somewhere it can't reach, it stays put and says why.
 
 ## 3. Attack
 
-Press a weapon on the **Attacks** tab, or its number key. Its range is tinted and each creature it can hit gets a ring. Point at one to see your chances.
+The hotbar's tabs are what each thing takes: **Actions**, **Bonus** and **Reactions**. Press a weapon in the **Attacks** group of the Actions tab, or its number key. Its range is tinted and each creature it can hit gets a ring. Point at one to see your chances.
 
 ![Aiming the shortbow: the chance to hit, the AC and the damage](img/play-a-fight-by-hand/03-aiming.png)
 
 Click the creature to attack. A greyed-out button says why it can't be used ("Fighter has already used its action"); a creature it can't reach says so too ("Line of effect is blocked").
 
+> **Extra Attack and Multiattack:** a creature that attacks more than once has no button for it. Its first weapon attack takes the action, and the attacks it has left stay on its weapon buttons (**⚔ 1 left**) for the rest of the turn. Move, use a bonus action, then press a weapon again for the next one. The Action pill reads **Attack · 1 left** until they're used.
+
 ## 4. Cast an area spell
 
-Give a creature spells to try this: the SRD **Mage** in the Actors tab's monster library has plenty. On the **Spells** tab, the slots left are shown as pips, and the level to cast at sits under each spell.
+Give a creature spells to try this: the SRD **Mage** in the Actors tab's monster library has plenty. Its spells are in the **Spells** group, an action's on the Actions tab and a bonus action's (Misty Step) on Bonus, each coloured by its element. The slots left are shown as pips, and the level to cast at sits under each spell.
 
-![Fireball following the cursor, with the goblin it catches](img/play-a-fight-by-hand/04-area.png)
+![Fireball following the cursor: who it catches, each with the chance to fail the save](img/play-a-fight-by-hand/04-area.png)
 
 The template follows the cursor. Foes it catches are ringed with their chance to fail the save; a friend it would catch is ringed in yellow, and the hotbar warns you. Click to cast.
 

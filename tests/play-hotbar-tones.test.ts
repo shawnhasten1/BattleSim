@@ -6,7 +6,7 @@ import { HOTBAR_TONES, hotbarFor, type HotbarModel } from "@/lib/play/hotbar";
 
 /** HOTBAR_REDESIGN_PLAN.md §2: the colour each hotbar button takes, and a style for every one. */
 
-const SPELLS = ["fire-bolt", "fireball", "hold-person", "cure-wounds", "spiritual-weapon", "moonbeam", "mage-armor", "spike-growth"];
+const SPELLS = ["fire-bolt", "fireball", "hold-person", "cure-wounds", "spiritual-weapon", "moonbeam", "mage-armor", "spike-growth", "ice-storm"];
 
 /** The sample fighter with these spells, a wand of web, a healing potion, and the slots and charges to use them. */
 function board(): EncounterSnapshot {
@@ -22,7 +22,7 @@ function board(): EncounterSnapshot {
     automationSupport: "full"
   };
   fighter.items = [withItemPool(structuredClone(findSrdItem("srd:item:wand-of-web")!) as ItemDefinition, "wand"), potion];
-  const resources = { "slot-1": 4, "slot-2": 3, "slot-3": 2, "item:potions": 2, "item:wand": 7 };
+  const resources = { "slot-1": 4, "slot-2": 3, "slot-3": 2, "slot-4": 1, "item:potions": 2, "item:wand": 7 };
   fighter.resources = { ...fighter.resources, ...resources };
   const token = encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!;
   token.resources = { ...token.resources, ...resources };
@@ -40,6 +40,8 @@ describe("a hotbar button's colour", () => {
       Moonbeam: "radiant",
       "Spiritual Weapon": "force",
       "Spike Growth": "physical",
+      // Bludgeoning hail and cold: the element, not the hail.
+      "Ice Storm": "cold",
       "Cure Wounds": "healing",
       "Hold Person": "enchantment",
       "Mage Armor": "abjuration",

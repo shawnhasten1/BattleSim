@@ -405,11 +405,9 @@ function HotbarHint({ model, armedButton, armed, aim, note, preview, board, wayp
     const variant = armedButton?.variants.find((candidate) => candidate.actionId === armed.actionId);
     const many = armed.aim.kind === "creatures" && armed.aim.count > 1;
     const routine = armedButton?.routine;
-    const lead = armed.aim.kind === "routine"
-      ? `Pick the first target for ${name}: you pick each swing after it.`
-      : many
-        ? `Pick up to ${armed.aim.kind === "creatures" ? armed.aim.count : 1} ${armed.aim.kind === "creatures" && armed.aim.repeat ? "targets (one can be picked again)" : "creatures"} for ${name}${armed.picked.length ? `: ${armed.picked.length} picked, Enter to use it on them` : ""}.`
-        : `Pick a target for ${name}${variant && variant.label !== "Normal" && armedButton && armedButton.variants.length > 1 ? ` (${variant.label})` : ""}${swingOf(routine, armedButton)}.`;
+    const lead = many
+      ? `Pick up to ${armed.aim.kind === "creatures" ? armed.aim.count : 1} ${armed.aim.kind === "creatures" && armed.aim.repeat ? "targets (one can be picked again)" : "creatures"} for ${name}${armed.picked.length ? `: ${armed.picked.length} picked, Enter to use it on them` : ""}.`
+      : `Pick a target for ${name}${variant && variant.label !== "Normal" && armedButton && armedButton.variants.length > 1 ? ` (${variant.label})` : ""}${swingOf(routine, armedButton)}.`;
     const concentration = armedButton?.concentration && model.concentration ? ` It ends your concentration on ${model.concentration}.` : "";
     return (
       <p className={styles.dockHint} data-warning={Boolean(concentration)}>
