@@ -25,7 +25,8 @@ const UNARMED: WeaponDefinition = {
   reach: 5,
   damage: [{ dice: "1d4", damageType: "bludgeoning" }],
   // The bonus unarmed strike after the Attack action, and an opportunity attack.
-  usableAs: ["action", "bonus", "reaction"]
+  usableAs: ["action", "bonus", "reaction"],
+  bonusAfterAttack: true
 };
 const UNARMED_BONUS = "monk-martial-arts:bonus";
 const KI = { resourceId: "ki", amount: 1 };
@@ -39,14 +40,14 @@ const openHand = (name: string, riders: ActionRider[]): FeatureEffect => ({
 const ki = runs("monk_ki", {
   grantedActions: [
     {
-      kind: "multiattack", id: "flurry-of-blows", name: "Flurry of Blows", actionType: "bonus",
+      kind: "multiattack", id: "flurry-of-blows", name: "Flurry of Blows", actionType: "bonus", afterAttackAction: true,
       attacks: [{ actionId: UNARMED_BONUS, count: 2 }], resourceCost: KI, automationSupport: "full"
     },
     { kind: "utility", id: "patient-defense", name: "Patient Defense", actionType: "bonus", mode: "dodge", resourceCost: KI, automationSupport: "full" },
     { kind: "utility", id: "step-of-the-wind-dash", name: "Step of the Wind: Dash", actionType: "bonus", mode: "dash", resourceCost: KI, automationSupport: "full" },
     { kind: "utility", id: "step-of-the-wind-disengage", name: "Step of the Wind: Disengage", actionType: "bonus", mode: "disengage", resourceCost: KI, automationSupport: "full" }
-  ],
-  notSimulated: "Flurry of Blows only after the Attack action; Step of the Wind's doubled jump."
+  ]
+  // Step of the Wind's doubled jump is outside the grid.
 });
 
 const ALL_BUT_FORCE: DamageType[] = ["acid", "bludgeoning", "cold", "fire", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
@@ -71,8 +72,7 @@ export const MONK_2014: ClassDefinition = {
       level: 1,
       grants: [
         grant("martial-arts", runs("monk_martial-arts", {
-          effects: [{ kind: "martial-arts-weapons", weaponId: "monk-martial-arts", monkWeapons: "2014" }],
-          notSimulated: "the bonus unarmed strike only after the Attack action."
+          effects: [{ kind: "martial-arts-weapons", weaponId: "monk-martial-arts", monkWeapons: "2014" }]
         }), { weapon: UNARMED, scale: [{ path: "weapon.damage.0.dice", value: "{col:martial-arts}" }] }),
         grant("unarmored-defense", runs("monk_unarmored-defense", { effects: [{ kind: "unarmored-ac", base: 10, abilities: ["dex", "wis"], noShield: true }] }))
       ]

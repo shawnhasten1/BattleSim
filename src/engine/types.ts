@@ -2237,6 +2237,11 @@ export interface CompiledActionMeta {
   metamagic?: { option: MetamagicOption; name: string; also?: MetamagicOption; free?: boolean };
   /** A second cost paid along with `resourceCost`: Metamagic's sorcery points beside the spell's slot. */
   extraCost?: ResourceCost;
+  /**
+   * Only once the creature has taken the Attack action this turn (`TurnFlags.attackActionTaken`): the 2014 Martial
+   * Arts' bonus unarmed strike and Flurry of Blows. A weapon's bonus copy gets it from `bonusAfterAttack`.
+   */
+  afterAttackAction?: boolean;
   /** Empowered Spell: up to this many of its damage dice below average rolled again (the first damage line's). */
   rerollDamageDice?: number;
   /** Overchannel (`<id>:overchannel`): its damage dice give their highest. */
@@ -2376,6 +2381,8 @@ export interface WeaponDefinition {
    * treat an absent list on a melee weapon as reaction-capable).
    */
   usableAs?: Array<"action" | "bonus" | "reaction">;
+  /** Its bonus-action copy only once the wielder has taken the Attack action this turn (the 2014 Martial Arts). */
+  bonusAfterAttack?: boolean;
   /**
    * How the weapon is wielded. `"two-handed"` always uses `versatileDamage`;
    * `"versatile"` uses it only when the wielder has no drawn off-hand weapon
@@ -2840,6 +2847,8 @@ export interface TurnFlags {
   movedFrom?: Point;
   /** Creatures a charge / pounce has hit this turn (unlocks `onlyAfter: "charge-hit"` attacks against them). */
   chargeHitTargetIds?: Id[];
+  /** The Attack action was taken this turn: a weapon attack, or an Attack routine (unlocks `afterAttackAction`). */
+  attackActionTaken?: boolean;
   /** Dropped a creature to 0 HP with a melee attack this turn (unlocks `onlyAfter: "dropped-creature"`). */
   droppedCreature?: boolean;
   /** Extra movement granted this turn (Rampage), in grid squares. */

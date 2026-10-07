@@ -17,7 +17,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
-| Monk (Way of the Open Hand) | 23 | 10 | 4 | 3 | 2 | 4 |
+| Monk (Way of the Open Hand) | 23 | 12 | 2 | 3 | 2 | 4 |
 | Paladin (Oath of Devotion) | 19 | 8 | 1 | 3 | 4 | 3 |
 | Ranger (Hunter) | 17 | 2 | 3 | 0 | 8 | 4 |
 | Rogue (Thief) | 18 | 6 | 0 | 1 | 3 | 8 |
@@ -33,7 +33,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `activated-aura` | An aura switched on for a while (Holy Nimbus) | 3 |
 | `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 3 |
-| `after-attack-action` | A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting) | 2 |
 | `attack-each` | An attack roll against each creature in an area (Volley, Whirlwind Attack) | 2 |
 | `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
@@ -198,9 +197,9 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Martial Arts | partial | after-attack-action | the bonus unarmed strike only after the Attack action. |
+| 1 | Martial Arts | full |  |  |
 | 1 | Unarmored Defense | full |  |  |
-| 2 | Ki | partial | after-attack-action | Flurry of Blows only after the Attack action; Step of the Wind's doubled jump. |
+| 2 | Ki | full |  |  |
 | 2 | Unarmored Movement | full |  |  |
 | 3 | Deflect Missiles | partial | catch-missile | catching the missile and throwing it back for a ki point. |
 | 3 | Monastic Tradition | builder |  |  |

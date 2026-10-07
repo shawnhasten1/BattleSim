@@ -479,8 +479,12 @@ function weaponCantripAttack(base: AttackActionDefinition, cantrip: WeaponCantri
   };
 }
 
-/** Shillelagh's copies: why the attack can't be made now (its spell isn't on), or undefined. */
+/**
+ * What the creature must have first this turn: Shillelagh's copies their spell on, the 2014 Martial Arts' bonus strike
+ * and Flurry of Blows the Attack action taken. Why it can't be used now, or undefined.
+ */
 export function whileConditionProblem(combatant: CombatantState, action: ActionDefinition): string | undefined {
+  if (action.afterAttackAction && !combatant.turnFlags?.attackActionTaken) return "Only after the Attack action this turn";
   const needs = action.whileCondition;
   return needs && !(combatant.conditions ?? []).some((condition) => condition.id === needs.id) ? `Only while ${needs.name} lasts` : undefined;
 }
@@ -7074,6 +7078,10 @@ function validateAndSpendAction(combatant: CombatantState, action: ActionDefinit
     const { resourceId, amount } = action.extraCost;
     combatant.resources = { ...(combatant.resources ?? {}), [resourceId]: (combatant.resources?.[resourceId] ?? 0) - amount };
   }
+  // The Attack action: a weapon attack, or an Attack routine, with the action.
+  if (slot === "action" && ((action.kind === "attack" && action.attackType !== "spell" && action.spellLevel == null) || (action.kind === "multiattack" && action.attackAction))) {
+    combatant.turnFlags = { ...(combatant.turnFlags ?? {}), attackActionTaken: true };
+  }
   if (usesMetamagic(action, "quickened")) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), quickenedSpell: true };
   if (action.metamagic?.free) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), freeMetamagicUsed: true };
   if ((castLevelOf(action) ?? 0) >= 1) combatant.turnFlags = { ...(combatant.turnFlags ?? {}), leveledSpellCast: true };
@@ -7229,7 +7237,7 @@ function weaponToActions(definition: CreatureDefinition, weapon: WeaponInput): A
         }
       };
     } else {
-      forSlot = { ...base, id: `${base.id}:${slot}`, actionType: slot };
+      forSlot = { ...base, id: `${base.id}:${slot}`, actionType: slot, ...(weapon.bonusAfterAttack ? { afterAttackAction: true } : {}) };
     }
     out.push(forSlot);
     if (weapon.powerAttack) {

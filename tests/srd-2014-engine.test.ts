@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { canPayFor, getExecutableActions, type CombatantState } from "@/engine";
+import {
+  actionProblem,
+  canPayFor,
+  createEngineState,
+  getExecutableActions,
+  resolveAttack,
+  sampleEncounter,
+  type CombatantState,
+  type CreatureDefinition
+} from "@/engine";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { runAutomatedEncounter } from "@/engine/turns";
 
 /**
  * EDITIONS_PLAN.md Phase 10: the engine families the 2014 features needed, each closing a gap code in
@@ -26,5 +36,57 @@ describe("a spell cast with a slot, but once a day (10a: once-a-day-slot)", () =
     expect(canPayFor(holder({ "slot-4": 2, "slow-free-casts": 1 }), fourth as never)).toBe(true);
     expect(canPayFor(holder({ "slot-4": 2, "slow-free-casts": 0 }), fourth as never)).toBe(false);
     expect(canPayFor(holder({ "slot-4": 0, "slow-free-casts": 1 }), fourth as never)).toBe(false);
+  });
+});
+
+/** The sample fight with `actor` in the fighter's place, on its turn, a goblin next to it. */
+function onItsTurn(actor: CreatureDefinition) {
+  const snapshot = structuredClone(sampleEncounter);
+  snapshot.map.walls = [];
+  snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), { ...actor, id: "def-fighter" }];
+  for (const token of snapshot.combatants) {
+    if (token.id === "pc-fighter") { token.currentHp = actor.maxHp; token.resources = { ...(actor.resources ?? {}) }; token.position = { x: 3, y: 3 }; }
+    if (token.id === "enemy-goblin-1") token.position = { x: 4, y: 3 };
+  }
+  snapshot.turnIndex = snapshot.combatants.findIndex((token) => token.id === "pc-fighter");
+  return createEngineState(snapshot);
+}
+
+describe("a bonus action only after the Attack action (10b: after-attack-action)", () => {
+  const monk = (classId: string) => rebuildActor(blankCharacter("def-fighter", "Monk"), withSuggestions(quickBuild(sources, { classId, level: 5 }), sources), sources).definition;
+
+  it("a 2014 monk's Flurry of Blows and bonus unarmed strike wait for the Attack action", () => {
+    const actor = monk("srd:class:monk-2014");
+    const actions = getExecutableActions(actor);
+    const flurry = actions.find((action) => action.name === "Flurry of Blows")!;
+    const bonus = actions.find((action) => action.id === "monk-martial-arts:bonus")!;
+    const strike = actions.find((action) => action.id === "monk-martial-arts")!;
+    const state = onItsTurn(actor);
+    expect(actionProblem(state.snapshot, "pc-fighter", flurry.id)).toBe("Only after the Attack action this turn");
+    expect(actionProblem(state.snapshot, "pc-fighter", bonus.id)).toBe("Only after the Attack action this turn");
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", strike.id);
+    expect(state.snapshot.combatants.find((token) => token.id === "pc-fighter")!.turnFlags?.attackActionTaken).toBe(true);
+    expect(actionProblem(state.snapshot, "pc-fighter", flurry.id)).toBeUndefined();
+    expect(actionProblem(state.snapshot, "pc-fighter", bonus.id)).toBeUndefined();
+  });
+
+  it("a 2024 monk's don't", () => {
+    const actor = monk("srd:class:monk");
+    const state = onItsTurn(actor);
+    const flurry = getExecutableActions(actor).find((action) => action.name === "Flurry of Blows")!;
+    expect(actionProblem(state.snapshot, "pc-fighter", flurry.id)).toBeUndefined();
+  });
+
+  it("the AI makes its Attack, then the bonus strike or Flurry", () => {
+    const state = onItsTurn(monk("srd:class:monk-2014"));
+    // One goblin, too tough to drop in a turn: the monk stays next to it.
+    const goblin = state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!;
+    goblin.currentHp = 200;
+    state.snapshot.definitions = state.snapshot.definitions.map((entry) => (entry.id === goblin.definitionId ? { ...entry, maxHp: 200 } : entry));
+    state.snapshot.combatants.find((token) => token.id === "enemy-goblin-2")!.state = "dead";
+    const result = runAutomatedEncounter({ ...state.snapshot, seed: "monk-2014-flurry" }, 2);
+    expect(result.outcome.warnings).toEqual([]);
+    const ours = result.log.filter((entry) => entry.type === "AiDecision" && entry.data?.combatantId === "pc-fighter");
+    expect(ours.some((entry) => /bonus action/.test(entry.message))).toBe(true);
   });
 });
