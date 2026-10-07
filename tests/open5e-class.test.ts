@@ -60,7 +60,7 @@ describe("an Open5e class", () => {
     }
     const imported = normalizeOpen5eClass(payload("srd-2024_rogue"));
     const merged = mergeCatalog(SRD_BUILD_SOURCES, [imported]);
-    expect(merged.catalog.classes.filter((entry) => entry.name === "Rogue").map(entryLabel)).toEqual(["Rogue", "Rogue (5e 2024 Rules)"]);
+    expect(merged.catalog.classes.filter((entry) => entry.name === "Rogue").map(entryLabel)).toEqual(["Rogue", "Rogue", "Rogue (5e 2024 Rules)"]);
     const build = quickBuild(merged, { classId: imported.entry.id, level: 5 });
     expect(build.levels[0]?.classId).toBe("open5e:class:srd-2024_rogue");
   });

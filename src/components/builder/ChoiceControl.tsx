@@ -14,7 +14,9 @@ import styles from "./builder.module.css";
 function editionOptions(slot: ChoiceSlot, choice: EditionChoice | undefined): { options: ChoiceOption[]; mark: boolean } {
   const chosen = new Set(Array.isArray(slot.value) ? slot.value as string[] : typeof slot.value === "string" ? [slot.value]
     : slot.value && typeof slot.value === "object" && "feat" in slot.value ? [(slot.value as FeatChoice).feat] : []);
-  const shown = choice ? preferEdition(slot.options, choice, (option) => (chosen.has(option.id) ? undefined : option.edition), (option) => editionNameKey(option.name)) : slot.options;
+  // A chosen option still hides its twin, and is itself never hidden.
+  const kept = choice ? new Set(preferEdition(slot.options, choice, (option) => option.edition, (option) => editionNameKey(option.name))) : undefined;
+  const shown = kept ? slot.options.filter((option) => kept.has(option) || chosen.has(option.id)) : slot.options;
   return { options: shown, mark: new Set(shown.map((option) => option.edition).filter(Boolean)).size > 1 };
 }
 

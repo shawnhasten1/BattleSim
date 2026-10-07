@@ -33,7 +33,12 @@ function verdictOf(feature: FeatureDefinition): Covered {
 export function catalogVerdicts(catalog: Catalog): Map<string, Covered> {
   const covered = new Map<string, Covered>();
   const grant = (entry: FeatureGrant) => {
-    if (!entry.feature || typeof entry.feature === "string") return;
+    // A grant with no feature of its own is the builder's (a race's Darkvision, a class's Spellcasting).
+    if (!entry.feature) {
+      if (entry.ref && !covered.has(entry.ref)) covered.set(entry.ref, { verdict: "builder" });
+      return;
+    }
+    if (typeof entry.feature === "string") return;
     const key = entry.ref ?? entry.feature.source?.slug;
     if (key && !covered.has(key)) covered.set(key, verdictOf(entry.feature));
   };
@@ -46,6 +51,11 @@ export function catalogVerdicts(catalog: Catalog): Map<string, Covered> {
   };
   for (const entry of [...catalog.classes, ...catalog.subclasses, ...catalog.species]) {
     for (const level of entry.levels) { level.grants.forEach(grant); choices(level.choices); }
+  }
+  // A class's Ability Score Improvement is its feat levels: the builder's.
+  for (const entry of catalog.classes) {
+    const key = `${entry.source.slug ?? ""}_ability-score-improvement`;
+    if (entry.featLevels.length && !covered.has(key)) covered.set(key, { verdict: "builder" });
   }
   for (const feat of catalog.feats) { feat.grants.forEach(grant); choices(feat.choices); }
   for (const background of catalog.backgrounds) (background.grants ?? []).forEach(grant);
@@ -82,20 +92,24 @@ export function checkCoverage2014(reference: Srd2014Reference, catalog: Catalog 
     }
   }
   for (const race of reference.races) {
-    if (!present.races.has(race.key)) continue;
+    // A subrace is checked with its race (it's a choice the race's entry offers).
+    if (!present.races.has(race.key) && !(race.subraceOf && present.races.has(race.subraceOf))) continue;
     for (const trait of race.traits) {
       const key = raceTraitKey(race.key, trait.name);
       keys.push(key);
       if (!verdicts.has(key)) errors.push(`${race.name}: ${trait.name} (${key}) has no grant in the 2014 catalog`);
     }
   }
-  for (const key of keys) {
-    const verdict = verdicts.get(key)?.verdict;
-    if ((verdict === "partial" || verdict === "manual") && !FEATURE_GAPS_2014[key]?.length) errors.push(`${key} is ${verdict} but names no gap in FEATURE_GAPS_2014`);
+  // Everything the catalog covers that doesn't run in full says why: its features and traits, and an option of one (a
+  // fighting style, `srd_fighter_fighting-style:Dueling`).
+  for (const [key, covered] of verdicts) {
+    if ((covered.verdict === "partial" || covered.verdict === "manual") && !FEATURE_GAPS_2014[key]?.length) errors.push(`${key} is ${covered.verdict} but names no gap in FEATURE_GAPS_2014`);
   }
+  void keys;
   const known = new Set([...reference.classes.flatMap((entry) => entry.features.map((feature) => feature.key)), ...reference.races.flatMap((race) => race.traits.map((trait) => raceTraitKey(race.key, trait.name)))]);
+  const isKnown = (key: string) => known.has(key) || (key.includes(":") && known.has(key.slice(0, key.lastIndexOf(":")))) || verdicts.has(key);
   for (const [key, gaps] of Object.entries(FEATURE_GAPS_2014)) {
-    if (!known.has(key)) errors.push(`FEATURE_GAPS_2014 names ${key}, which isn't in the reference`);
+    if (!isKnown(key)) errors.push(`FEATURE_GAPS_2014 names ${key}, which isn't in the reference or the catalog`);
     for (const gap of gaps) if (!(gap in ALL_GAPS)) errors.push(`${key} names an unknown gap ${gap}`);
   }
   return errors;
@@ -179,6 +193,7 @@ export function renderCoverage2014(reference: Srd2014Reference, spells: Srd2014S
     if (!present.races.has(race.key)) { line(`- ${race.name}: not in the 2014 catalog yet.`); continue; }
     line(`### ${race.name}`);
     line();
+    if (!raceTraits(race).length) { line("No traits beyond its ability increases."); line(); continue; }
     line("| Trait | Verdict | Gaps | Note |");
     line("|---|---|---|---|");
     for (const { race: owner, trait } of raceTraits(race)) {
@@ -189,6 +204,25 @@ export function renderCoverage2014(reference: Srd2014Reference, spells: Srd2014S
     line();
   }
   line();
+
+  // The 2014 feats (the ASI, Grappler, the fighting styles) and backgrounds, each by its grant's feature.
+  const feats = (catalog?.feats ?? []).filter((entry) => entry.edition === "2014");
+  const backgrounds = (catalog?.backgrounds ?? []).filter((entry) => entry.edition === "2014");
+  if (feats.length || backgrounds.length) {
+    line("## Feats and backgrounds");
+    line();
+    line("| Feat or background | Verdict | Gaps | Note |");
+    line("|---|---|---|---|");
+    const row = (name: string, feature: FeatureDefinition | undefined) => {
+      const key = feature?.source?.slug ?? "";
+      const covered = feature ? verdictOf(feature) : undefined;
+      line(`| ${cell(name)} | ${covered?.verdict ?? "—"} | ${(FEATURE_GAPS_2014[key] ?? []).join(", ")} | ${cell(covered?.note)} |`);
+    };
+    const featureOf = (grants: readonly FeatureGrant[] | undefined) => grants?.map((entry) => entry.feature).find((feature): feature is FeatureDefinition => Boolean(feature) && typeof feature !== "string");
+    for (const feat of feats) row(`${feat.name}${feat.category === "fighting-style" ? " (fighting style)" : ""}`, featureOf(feat.grants));
+    for (const background of backgrounds) row(`${background.name} (background)`, featureOf(background.grants));
+    line();
+  }
 
   const running = library.filter((spell) => spellRuns(spell)).length;
   line("## Spells");

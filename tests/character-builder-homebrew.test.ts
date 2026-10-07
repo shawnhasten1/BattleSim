@@ -139,8 +139,9 @@ describe("homebrew entries", () => {
     const rogue: ClassDefinition = { ...gunslinger, id: "homebrew:class:rogue", name: "Rogue" };
     const merged = mergeCatalog(SRD_BUILD_SOURCES, [{ kind: "class", entry: rogue }]);
     const rogues = merged.catalog.classes.filter((entry) => entry.name === "Rogue");
-    expect(rogues.map((entry) => entry.id)).toEqual(["srd:class:rogue", "homebrew:class:rogue"]);
-    expect(rogues.map(entryLabel)).toEqual(["Rogue", "Rogue (Homebrew)"]);
+    // The SRD 5.2 Rogue, the SRD 5.1 one (told apart by the builder's edition groups), then the homebrew one.
+    expect(rogues.map((entry) => entry.id)).toEqual(["srd:class:rogue", "srd:class:rogue-2014", "homebrew:class:rogue"]);
+    expect(rogues.map(entryLabel)).toEqual(["Rogue", "Rogue", "Rogue (Homebrew)"]);
     expect(entryLabel({ name: "Marshal", source: { provider: "open5e", documentName: "Adventurer's Guide" } })).toBe("Marshal (Adventurer's Guide)");
     // Nothing to add: the SRD's sources as they are, so their caches stay warm.
     expect(mergeCatalog(SRD_BUILD_SOURCES, [])).toBe(SRD_BUILD_SOURCES);

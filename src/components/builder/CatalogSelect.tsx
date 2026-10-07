@@ -28,13 +28,16 @@ export function CatalogOptions<T extends Listed>({ entries, choice, keep }: { en
   // The chosen entry stays, in its place.
   const listed = entries.filter((entry) => shown.includes(entry) || entry.id === keep);
   const groups = GROUPS.map((group) => ({ label: group.label, entries: listed.filter(group.test) })).filter((group) => group.entries.length);
+  // A name both editions have says which it is, so a closed select tells the 2014 Fighter from the 2024 one.
+  const srdNames = listed.filter((entry) => entry.source.provider === "srd").map((entry) => editionNameKey(entry.name));
+  const label = (entry: T) => (entry.source.provider === "srd" && srdNames.filter((name) => name === editionNameKey(entry.name)).length > 1 ? `${entry.name} (${entry.edition})` : entryLabel(entry));
   // One group needs no heading.
-  if (groups.length === 1) return <>{groups[0]!.entries.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}</>;
+  if (groups.length === 1) return <>{groups[0]!.entries.map((entry) => <option key={entry.id} value={entry.id}>{label(entry)}</option>)}</>;
   return (
     <>
       {groups.map((group) => (
         <optgroup key={group.label} label={group.label}>
-          {group.entries.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+          {group.entries.map((entry) => <option key={entry.id} value={entry.id}>{label(entry)}</option>)}
         </optgroup>
       ))}
     </>

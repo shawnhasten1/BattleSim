@@ -16,19 +16,24 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Bard (College of Lore) | 15 | not in the 2014 catalog yet | | | | |
 | Cleric (Life Domain) | 13 | not in the 2014 catalog yet | | | | |
 | Druid (Circle of the Land) | 14 | not in the 2014 catalog yet | | | | |
-| Fighter (Champion) | 12 | not in the 2014 catalog yet | | | | |
+| Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
 | Monk (Way of the Open Hand) | 23 | not in the 2014 catalog yet | | | | |
 | Paladin (Oath of Devotion) | 19 | not in the 2014 catalog yet | | | | |
 | Ranger (Hunter) | 17 | not in the 2014 catalog yet | | | | |
-| Rogue (Thief) | 18 | not in the 2014 catalog yet | | | | |
+| Rogue (Thief) | 18 | 6 | 0 | 1 | 3 | 8 |
 | Sorcerer (Draconic Bloodline) | 11 | not in the 2014 catalog yet | | | | |
 | Warlock (The Fiend) | 12 | not in the 2014 catalog yet | | | | |
 | Wizard (School of Evocation) | 11 | not in the 2014 catalog yet | | | | |
-| Race traits | 34 | 0 of 9 races in the catalog | | | | |
+| Race traits | 34 | 2 of 9 races in the catalog | | | | |
 
 ## Gaps, most widespread first
 
-None recorded yet.
+| Gap | What the engine lacks | Features |
+|---|---|---|
+| `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
+| `extra-turn` | Two turns in the first round (Thief's Reflexes) | 1 |
+| `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
+| `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
 
 ## Barbarian
 
@@ -64,11 +69,25 @@ Not in the 2014 catalog yet: 6 features.
 
 ## Fighter
 
-Not in the 2014 catalog yet: 7 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Fighting Style | builder |  |  |
+| 1 | Second Wind | full |  |  |
+| 2, 17 | Action Surge | full |  |  |
+| 3 | Martial Archetype | builder |  |  |
+| 4, 6, 8, 12, 14, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5, 11, 20 | Extra Attack | full |  |  |
+| 9, 13, 17 | Indomitable | full |  |  |
 
 ### Champion (Fighter subclass)
 
-Not in the 2014 catalog yet: 5 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Improved Critical | full |  |  |
+| 7 | Remarkable Athlete | full |  |  |
+| 10 | Additional Fighting Style | builder |  |  |
+| 15 | Superior Critical | full |  |  |
+| 18 | Survivor | full |  |  |
 
 ## Monk
 
@@ -96,11 +115,31 @@ Not in the 2014 catalog yet: 4 features.
 
 ## Rogue
 
-Not in the 2014 catalog yet: 13 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1, 6 | Expertise | builder |  |  |
+| 1 | Sneak Attack | full |  |  |
+| 1 | Thieves' Cant | info |  |  |
+| 2 | Cunning Action | full |  |  |
+| 3 | Roguish Archetype | builder |  |  |
+| 4, 8, 10, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5 | Uncanny Dodge | full |  |  |
+| 7 | Evasion | full |  |  |
+| 11 | Reliable Talent | info |  |  |
+| 14 | Blindsense | info |  |  |
+| 15 | Slippery Mind | info |  |  |
+| 18 | Elusive | full |  |  |
+| 20 | Stroke of Luck | full |  |  |
 
 ### Thief (Rogue subclass)
 
-Not in the 2014 catalog yet: 5 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Fast Hands | info |  |  |
+| 3 | Second-Story Work | info |  |  |
+| 9 | Supreme Sneak | info |  |  |
+| 13 | Use Magic Device | info |  |  |
+| 17 | Thief's Reflexes | manual | extra-turn |  |
 
 ## Sorcerer
 
@@ -129,14 +168,41 @@ Not in the 2014 catalog yet: 5 features.
 ## Races
 
 - Dragonborn: not in the 2014 catalog yet.
-- Dwarf: not in the 2014 catalog yet.
+### Dwarf
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Dwarven Resilience | full |  |  |
+| Dwarven Combat Training | info |  |  |
+| Tool Proficiency | info |  |  |
+| Stonecunning | info |  |  |
+| Hill Dwarf: Dwarven Toughness | full |  |  |
+
 - Elf: not in the 2014 catalog yet.
 - Gnome: not in the 2014 catalog yet.
 - Half-Elf: not in the 2014 catalog yet.
 - Half-Orc: not in the 2014 catalog yet.
 - Halfling: not in the 2014 catalog yet.
-- Human: not in the 2014 catalog yet.
+### Human
+
+No traits beyond its ability increases.
+
 - Tiefling: not in the 2014 catalog yet.
+
+## Feats and backgrounds
+
+| Feat or background | Verdict | Gaps | Note |
+|---|---|---|---|
+| Ability Score Improvement | info |  |  |
+| Grappler | partial | grapple-pin | pinning a creature you're grappling (both of you restrained). |
+| Archery (fighting style) | full |  |  |
+| Defense (fighting style) | full |  |  |
+| Dueling (fighting style) | partial | equipment-check | that the weapon is held in one hand with no other weapon: every melee weapon attack gets the +2. |
+| Great Weapon Fighting (fighting style) | manual | reroll-damage |  |
+| Protection (fighting style) | partial | equipment-check | that it wields a shield. |
+| Two-Weapon Fighting (fighting style) | full |  |  |
+| Acolyte (background) | info |  |  |
 
 ## Spells
 

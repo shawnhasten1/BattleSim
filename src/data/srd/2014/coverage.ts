@@ -18,10 +18,12 @@ export const GAPS_2014 = {
   "after-attack-action": "A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting)",
   "rage-2014": "Rage ending when a turn passes without an attack on a hostile creature or damage taken",
   "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
-  "regain-at-turn-start": "Hit points regained at the start of each turn while at half or less (Survivor)",
   exhaustion: "Exhaustion (Frenzy's cost)",
   "wild-shape-hp": "Wild Shape into a beast's own hit points, the rest carrying over (2014)",
-  "manual-roll": "A roll the rules leave to the DM (Divine Intervention's percentile)"
+  "manual-roll": "A roll the rules leave to the DM (Divine Intervention's percentile)",
+  "equipment-check": "A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield)",
+  "reroll-damage": "Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s)",
+  "grapple-pin": "Pinning a creature it's grappling, both restrained (2014 Grappler)"
 } as const;
 
 export type Gap2014 = GapCode | keyof typeof GAPS_2014;
@@ -34,4 +36,10 @@ export const ALL_GAPS: Readonly<Record<Gap2014, string>> = { ...GAPS, ...GAPS_20
  * doesn't run in full. Every feature the catalog marks partial or manual (and not informational) needs one; the generator
  * fails otherwise.
  */
-export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {};
+export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
+  "srd_thief_thiefs-reflexes": ["extra-turn"],
+  "srd_grappler": ["grapple-pin"],
+  "srd_fighter_fighting-style:Dueling": ["equipment-check"],
+  "srd_fighter_fighting-style:Great Weapon Fighting": ["reroll-damage"],
+  "srd_fighter_fighting-style:Protection": ["equipment-check"]
+};

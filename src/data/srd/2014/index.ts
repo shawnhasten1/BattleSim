@@ -1,4 +1,9 @@
 import type { Catalog } from "@/lib/character-builder/catalog";
+import { SRD_2014_BACKGROUNDS } from "./backgrounds";
+import { CHAMPION_2014, FIGHTER_2014 } from "./classes/fighter";
+import { ROGUE_2014, THIEF_2014 } from "./classes/rogue";
+import { SRD_2014_FEATS } from "./feats";
+import { SRD_2014_RACES } from "./races";
 
 /**
  * The bundled 2014 catalog (SRD 5.1): the 2014 classes, subclasses, races, the Acolyte and Grappler, beside the 2024
@@ -14,11 +19,11 @@ function freeze<T>(value: T): T {
 }
 
 export const SRD_2014_CATALOG: Catalog = freeze({
-  classes: [],
-  subclasses: [],
-  feats: [],
-  backgrounds: [],
-  species: []
+  classes: [FIGHTER_2014, ROGUE_2014],
+  subclasses: [CHAMPION_2014, THIEF_2014],
+  feats: SRD_2014_FEATS,
+  backgrounds: SRD_2014_BACKGROUNDS,
+  species: SRD_2014_RACES
 });
 
 /**

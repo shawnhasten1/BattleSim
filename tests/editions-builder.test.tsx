@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Ability, SourceMetadata } from "@/engine";
 import { CatalogOptions } from "@/components/builder/CatalogSelect";
+import { ChoiceControl } from "@/components/builder/ChoiceControl";
 import {
   buildCharacter,
   epicBoonLevelOf,
@@ -10,6 +11,7 @@ import {
   increasesSource,
   otherEditionTwin,
   preparedAt,
+  quickBuild,
   spellSlots,
   startBuild,
   withChoice,
@@ -244,14 +246,25 @@ describe("the builder's lists", () => {
 
   it("group the SRD's entries by edition, homebrew apart", () => {
     render(<select><CatalogOptions entries={entries} choice="both" /></select>);
-    expect(groups()).toEqual(["2024 rules: Fighter", "2014 rules: Fighter, Wizard", "Homebrew & imported: Marksman (Homebrew)"]);
+    expect(groups()).toEqual(["2024 rules: Fighter (2024)", "2014 rules: Fighter (2014), Wizard", "Homebrew & imported: Marksman (Homebrew)"]);
   });
 
   it("under one edition, hide the other's twin, never homebrew or what's chosen", () => {
     render(<select><CatalogOptions entries={entries} choice="2024" keep="f14" /></select>);
-    expect(groups()).toEqual(["2024 rules: Fighter", "2014 rules: Fighter, Wizard", "Homebrew & imported: Marksman (Homebrew)"]);
+    expect(groups()).toEqual(["2024 rules: Fighter (2024)", "2014 rules: Fighter (2014), Wizard", "Homebrew & imported: Marksman (Homebrew)"]);
     cleanup();
     render(<select><CatalogOptions entries={entries} choice="2024" /></select>);
     expect(groups()).toEqual(["2024 rules: Fighter", "2014 rules: Wizard", "Homebrew & imported: Marksman (Homebrew)"]);
+  });
+
+  it("a chosen feat still hides its other edition's twin", () => {
+    const build = quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:fighter-2014", level: 4 });
+    const slot = buildCharacter(build, SRD_BUILD_SOURCES).choices.find((entry) => entry.spec.kind === "feat" && entry.scope.kind === "level" && entry.scope.index === 3)!;
+    expect(slot.value).toEqual({ feat: "srd:feat:ability-score-improvement-2014" });
+    render(<ChoiceControl slot={slot} edition="2014" onChange={() => undefined} />);
+    const names = within(screen.getByRole("combobox", { name: /Ability Score Improvement/ })).getAllByRole("option").map((option) => option.textContent);
+    expect(names).toContain("Ability Score Improvement");
+    expect(names).toContain("Grappler");
+    expect(names.filter((name) => /Ability Score Improvement|Grappler/.test(name ?? ""))).toHaveLength(2);
   });
 });
