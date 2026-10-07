@@ -3,12 +3,12 @@ import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { findSrdItem } from "@/data/srd";
-import type { CreatureDefinition, ItemDefinition } from "@/engine";
+import type { ActionDefinition, CreatureDefinition, ItemDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
 import { prepareSaved, savedFrom, type SavedAbility } from "@/lib/ability-editor/my-library";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useMyLibraryStore } from "@/store/my-library-store";
-import { openAdd, openFromLibrary } from "./helpers/abilities-tab";
+import { group, openAdd, openFromLibrary } from "./helpers/abilities-tab";
 import { renderSheet, resetSheetWindows } from "./helpers/sheet";
 
 /** My library from the sheet: an SRD item changed and saved as a new one, added to a creature, updated and removed. */
@@ -43,7 +43,8 @@ afterEach(() => {
 });
 
 const compendium = { status: "", setStatus: () => undefined, attach: async () => undefined } as unknown as Compendium;
-const fighter = () => useEncounterStore.getState().encounter.definitions.find((d) => d.id === "def-fighter")! as CreatureDefinition;
+const creature = (id: string) => useEncounterStore.getState().encounter.definitions.find((d) => d.id === id)! as CreatureDefinition;
+const fighter = () => creature("def-fighter");
 const prompt = () => within(screen.getByRole("group", { name: "Save to my library" }));
 
 describe("My library on the sheet", { timeout: 20000 }, () => {
@@ -109,6 +110,49 @@ describe("My library on the sheet", { timeout: 20000 }, () => {
     expect(posted[1]).toMatchObject({ name: "Skyboots II" });
     expect(posted[1]!.id).not.toBe("mine:sky");
     expect(useMyLibraryStore.getState().entries.map((saved) => saved.name)).toEqual(["Skyboots", "Skyboots II"]);
+  });
+
+  it("saves an action, and adds it to another creature in its own list", async () => {
+    renderSheet(compendium, "pc-fighter");
+    await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
+    await userEvent.click(group("Actions").getByRole("button", { name: "Edit Longsword" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to my library", expanded: false }));
+    const nameBox = prompt().getByLabelText("Name in my library");
+    await userEvent.clear(nameBox);
+    await userEvent.type(nameBox, "Heirloom Sword");
+    await userEvent.click(prompt().getByRole("button", { name: "Save to my library" }));
+    expect(posted[0]).toMatchObject({ kind: "action", list: "actions", name: "Heirloom Sword", record: { kind: "attack", name: "Heirloom Sword" } });
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    cleanup();
+    resetSheetWindows();
+
+    renderSheet(compendium, "pc-archer");
+    await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
+    await openAdd();
+    const mine = within(screen.getByRole("region", { name: "My library" }));
+    expect(mine.getByRole("button", { name: /^Heirloom Sword/ }).textContent).toMatch(/· action/);
+    await userEvent.click(mine.getByRole("button", { name: "Add Heirloom Sword" }));
+    const sword = creature("def-archer").actions.find((action) => action.name === "Heirloom Sword")!;
+    expect(sword).toMatchObject({ kind: "attack", source: { slug: posted[0]!.id } });
+    expect(mine.getByRole("button", { name: /^Heirloom Sword/ }).textContent).toMatch(/on the sheet/);
+  });
+
+  it("opens a multiattack to choose its steps when the creature lacks what they use", async () => {
+    const routine: ActionDefinition = {
+      kind: "multiattack", id: "m", name: "Multiattack", actionType: "action", automationSupport: "full",
+      attacks: [{ actionId: "scimitar", count: 2 }]
+    };
+    useMyLibraryStore.getState().setEntries([savedFrom("action", routine, creature("def-goblin"), { id: "mine:m", name: "Goblin Flurry", list: "actions" })]);
+    renderSheet(compendium, "pc-archer");
+    await userEvent.click(screen.getByRole("tab", { name: "Abilities" }));
+    await openAdd();
+    const mine = within(screen.getByRole("region", { name: "My library" }));
+    expect(mine.getByRole("button", { name: /^Goblin Flurry/ }).textContent).toMatch(/Uses Scimitar, which this creature doesn't have/);
+    await userEvent.click(mine.getByRole("button", { name: "Add Goblin Flurry" }));
+    // Nothing added: the editor is open on it instead, saying what's missing.
+    expect(creature("def-archer").actions.some((action) => action.name === "Goblin Flurry")).toBe(false);
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Goblin Flurry");
+    expect(screen.getByText(/A step uses an ability this creature no longer has/)).toBeTruthy();
   });
 
   it("says why a broken ability can't be saved there", async () => {

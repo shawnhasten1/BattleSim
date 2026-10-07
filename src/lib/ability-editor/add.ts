@@ -49,6 +49,8 @@ export interface Prepared {
   pools?: Record<string, number>;
   /** Sections to open highlighted: the ones a recipe expects filled in. */
   focus?: SectionId[];
+  /** Creatures it summons or changes into that the scene may not have (a My library entry's): they come with it. */
+  creatures?: CreatureDefinition[];
 }
 
 /* ─── recipes ────────────────────────────────────────────────────────────── */

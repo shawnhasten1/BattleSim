@@ -69,6 +69,8 @@ export type AbilityEditorTarget =
     focus?: SectionId[];
     /** Pools it spends that the creature may lack (a copied monster ability's), offered as new pools. */
     pools?: Record<string, number>;
+    /** Creatures it summons or changes into that the scene may lack (a My library entry's), embedded when it's saved. */
+    creatures?: CreatureDefinition[];
     /** Handed back instead of put on the creature: the Homebrew window's class features. */
     commit?: AbilityCommit;
   }
@@ -271,7 +273,8 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
   const parkedLegendary = useRef<ParkedLegendary>({});
   // The creatures its summons and shapechanges name that the scene doesn't have yet, fetched from the library.
   const scene = useEncounterStore((s) => s.encounter.definitions);
-  const [fetched, setFetched] = useState<CreatureDefinition[]>([]);
+  const [fetched, setFetched] = useState<CreatureDefinition[]>(() => (target.mode === "new" ? target.creatures ?? [] : [])
+    .filter((creature) => !scene.some((candidate) => candidate.id === creature.id)));
   const [unfetchable, setUnfetchable] = useState<string[]>([]);
   // A new record opens every section (a recipe only the ones to fill in); a multiattack opens on its routine.
   const focus = target.mode === "new" ? target.focus ?? [] : [];
@@ -299,7 +302,7 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
   const poolChanged = type === "legendary" && legendaryPool !== currentPool;
   const dirty = !deepEqual(working, opened) || nestedChanged || poolChanged;
 
-  // My library: an item, weapon, spell or feature can be kept there to add to any creature (the sheet isn't changed).
+  // My library: any ability can be kept there to add to any creature (the sheet isn't changed).
   const savedKind = !nestedTarget && !commit ? savedKindOf(type) : undefined;
   const libraryEntries = useMyLibraryStore((s) => s.entries);
   const saveLibraryEntry = useMyLibraryStore((s) => s.save);
@@ -470,12 +473,22 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
   async function saveToLibrary(entryName: string, mode: "new" | "update"): Promise<string | undefined> {
     if (!savedKind) return "This kind of ability can't be kept in My library.";
     const id = mode === "update" && linked ? linked.id : newSavedId();
-    const entry = savedFrom(savedKind, merged as SavedRecord, definition, { id, name: entryName, newPools: pools });
+    const entry = savedFrom(savedKind, merged as SavedRecord, definition, { id, name: entryName, list: listName, newPools: pools, scene: [...scene, ...fetched] });
     const result = await saveLibraryEntry(entry);
     if (!result.entry) return `It wasn't saved: ${result.problem}`;
     setLibraryPrompt(false);
-    setLibraryNote(`Saved “${result.entry.name}” to My library: Add ability lists it for any creature.`);
+    const brings = result.entry.creatures?.map((creature) => creature.name) ?? [];
+    setLibraryNote([
+      `Saved “${result.entry.name}” to My library: Add ability lists it for any creature.`,
+      ...(brings.length ? [`${joinNames(brings)} ${brings.length === 1 ? "comes" : "come"} with it.`] : []),
+      ...(result.entry.steps ? ["On another creature, its steps use that creature's abilities of the same names."] : [])
+    ].join(" "));
     return undefined;
+  }
+
+  /** "A, B and C". */
+  function joinNames(names: string[]): string {
+    return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   }
 
   function requestClose() {

@@ -30,7 +30,7 @@ import type { BlankKind } from "./AddAbility";
 
 /** A prepared copy (a recipe, or a library or monster entry opened to check first): the editor on it. */
 export function preparedTarget(prepared: Prepared): SheetEditorTarget {
-  return { mode: "new", list: prepared.list, record: prepared.record, focus: prepared.focus, pools: prepared.pools };
+  return { mode: "new", list: prepared.list, record: prepared.record, focus: prepared.focus, pools: prepared.pools, creatures: prepared.creatures };
 }
 
 /** "Start from scratch": the editor on a blank record of that kind. */

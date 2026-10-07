@@ -92,6 +92,8 @@ The boots you made live on this fighter only. To use them on other creatures and
 
 From then on, **Add ability** lists it under **My library** (there's a filter for it too) for any creature: click the row to check it first, or **+** to add it as it is. A copy you open again from a sheet can update its entry in your library, or be saved as a new one beside it. **×** on the row removes it from your library; creatures that already have a copy keep it.
 
+It isn't only for items: every ability the editor opens has the button, so an action, a reaction, a lair or legendary action and what happens on death can be kept too. A summon or shapechange keeps the creatures it names with it. A multiattack uses the abilities of the same names on the creature you add it to; if that creature has none by one of those names, the editor opens so you can choose what the step uses.
+
 ---
 
 **Recipes to try** in Add ability: *Faster without heavy armor*, *Faster without armor or a shield*, *Proficiency in a save* (a feat like Resilient) and *A bonus while wearing armor* (the Defense fighting style).

@@ -329,6 +329,8 @@ export interface LegendaryActionRef {
   actionId?: Id;
   /** A self-contained action when the text isn't just a reference to an existing one. */
   action?: ActionDefinition;
+  /** Where it was copied from: My library's entry (its `slug`). */
+  source?: SourceMetadata;
 }
 
 export interface LegendaryConfig {
@@ -2264,7 +2266,12 @@ export type ActionDefinition = (
   | UtilityActionDefinition
   | SummonActionDefinition
   | TransformActionDefinition
-) & CompiledActionMeta;
+) & CompiledActionMeta & ActionProvenance;
+
+/** Where an action was copied from, when that matters later: My library's entry (its `slug`), to update or mark it. */
+export interface ActionProvenance {
+  source?: SourceMetadata;
+}
 
 /** Limited-use pool backing a weapon's spell-like `onHit` riders. */
 export interface WeaponCharges {

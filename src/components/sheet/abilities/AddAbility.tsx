@@ -2,7 +2,16 @@
 
 import { Check, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { CreatureDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
+import type {
+  ActionDefinition,
+  CreatureDefinition,
+  DeathEffectDefinition,
+  FeatureDefinition,
+  ItemDefinition,
+  LegendaryActionRef,
+  SpellDefinition,
+  WeaponDefinition
+} from "@/engine";
 import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { loadSrdMonsterAbilities, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
@@ -17,8 +26,10 @@ import {
   type Prepared,
   type Recipe
 } from "@/lib/ability-editor/add";
-import { prepareSaved, searchSaved, type SavedAbility } from "@/lib/ability-editor/my-library";
-import { featureStatblock, itemStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
+import { prepareSaved, savedKindWord, searchSaved, srdCreaturesNeeded, unboundSteps, type SavedAbility } from "@/lib/ability-editor/my-library";
+import { withNewAbilityAt } from "@/lib/ability-editor/refs";
+import { loadCreatures, newSummonLoop } from "@/lib/ability-editor/spawns";
+import { actionStatblock, deathEffectStatblock, featureStatblock, itemStatblock, legendaryStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useMyLibraryStore } from "@/store/my-library-store";
 import styles from "./abilities.module.css";
@@ -57,9 +68,30 @@ function line(entry: LibraryEntry, definition: CreatureDefinition): string {
   return short.startsWith(`${entry.name}: `) ? short.slice(entry.name.length + 2) : short;
 }
 
-/** The library entries this creature has already (a weapon, spell, feature or item keeps the library id it came from). */
+/**
+ * A My library row's line, as it would be on this creature. A multiattack naming abilities the creature has none of
+ * says which: adding it opens the editor to change those steps.
+ */
+function savedLine(entry: SavedAbility, definition: CreatureDefinition): string {
+  if (entry.kind === "item" || entry.kind === "weapon" || entry.kind === "spell" || entry.kind === "feature") {
+    return line({ kind: entry.kind, id: entry.id, name: entry.name, entry: entry.record as LibraryEntry["entry"] }, definition);
+  }
+  const record = prepareSaved(entry, definition).record;
+  const missing = unboundSteps(record, definition).map((id) => entry.steps?.[id] ?? id);
+  if (missing.length) return `Uses ${missing.join(" and ")}, which this creature doesn't have: you'll choose what it uses instead.`;
+  const short = entry.kind === "legendary" ? legendaryStatblock(record as LegendaryActionRef, definition).short
+    : entry.kind === "death" ? deathEffectStatblock(record as DeathEffectDefinition, definition).short
+      : actionStatblock(record as ActionDefinition, definition).short;
+  return short.startsWith(`${entry.name}: `) ? short.slice(entry.name.length + 2) : short;
+}
+
+/** The library entries this creature has already (a copy keeps the id of the entry it came from as its source's slug). */
 function onSheet(definition: CreatureDefinition): Set<string> {
-  const records = [...(definition.weapons ?? []), ...(definition.items ?? []), ...(definition.spells ?? []), ...(definition.features ?? []), ...(definition.traits ?? [])];
+  const records: Array<{ source?: { slug?: string } }> = [
+    ...(definition.weapons ?? []), ...(definition.items ?? []), ...(definition.spells ?? []), ...(definition.features ?? []), ...(definition.traits ?? []),
+    ...definition.actions, ...(definition.bonusActions ?? []), ...(definition.reactions ?? []), ...(definition.lairActions ?? []),
+    ...(definition.deathEffects ?? []), ...(definition.legendary?.actions ?? [])
+  ];
   return new Set(records.flatMap((record) => (record.source?.slug ? [record.source.slug] : [])));
 }
 
@@ -129,9 +161,30 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   function chooseSaved(entry: SavedAbility) {
     onPrepared(prepareSaved(entry, definition));
   }
-  function attachSaved(entry: SavedAbility) {
+  /**
+   * "+" on a My library row: added as it is, with the creatures it summons or changes into (the ones it keeps, and SRD
+   * monsters fetched). One that needs a choice first opens the editor instead: a multiattack whose attacks this creature
+   * lacks, or a summon that would loop back to this creature.
+   */
+  async function attachSaved(entry: SavedAbility) {
     const prepared = prepareSaved(entry, definition);
-    insertAbilityRecord(definition.id, prepared.list, prepared.record, prepared.pools ? { pools: prepared.pools } : undefined);
+    if (unboundSteps(prepared.record, definition).length) return chooseSaved(entry);
+    const scene = useEncounterStore.getState().encounter.definitions;
+    const kept = (prepared.creatures ?? []).filter((creature) => !scene.some((candidate) => candidate.id === creature.id));
+    const needed = srdCreaturesNeeded(entry);
+    let fetched: CreatureDefinition[] = [];
+    if (needed.length) {
+      setBusy(entry.id);
+      try {
+        fetched = await loadCreatures(needed, [...scene, ...kept]);
+      } finally {
+        setBusy(null);
+      }
+    }
+    const embed = [...kept, ...fetched];
+    if (newSummonLoop([...scene, ...embed], withNewAbilityAt(definition, prepared.list, prepared.record).definition)) return chooseSaved(entry);
+    const extras = { ...(prepared.pools ? { pools: prepared.pools } : {}), ...(embed.length ? { embed } : {}) };
+    insertAbilityRecord(definition.id, prepared.list, prepared.record, Object.keys(extras).length ? extras : undefined);
     setAdded(entry.name);
     searchRef.current?.focus();
     searchRef.current?.select();
@@ -203,13 +256,13 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
                 <div key={entry.id} className={styles.item}>
                   <button type="button" className={styles.itemOpen} onClick={() => chooseSaved(entry)} title="Open it to check or change before adding">
                     <span className={styles.itemName}>
-                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{already.has(entry.id) ? " · on the sheet" : ""}</span>
+                      {entry.name} <span className={styles.itemMeta}>· {savedKindWord(entry)}{already.has(entry.id) ? " · on the sheet" : ""}</span>
                     </span>
-                    <span className={styles.itemLine}>{line({ kind: entry.kind, id: entry.id, name: entry.name, entry: entry.record }, definition)}</span>
+                    <span className={styles.itemLine}>{savedLine(entry, definition)}</span>
                   </button>
                   <button
-                    type="button" className={styles.plus} aria-label={`Add ${entry.name}`}
-                    title={already.has(entry.id) ? "It's on the sheet already: add another copy" : "Add it as it is"} onClick={() => attachSaved(entry)}
+                    type="button" className={styles.plus} aria-label={`Add ${entry.name}`} disabled={busy === entry.id}
+                    title={already.has(entry.id) ? "It's on the sheet already: add another copy" : "Add it as it is"} onClick={() => void attachSaved(entry)}
                   >
                     <Plus size={13} />
                   </button>
