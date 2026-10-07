@@ -18,10 +18,11 @@ const rage = runs("barbarian_rage", {
     resourceCost: { resourceId: "rage", amount: 1 },
     condition: {
       id: RAGE_ACTIVE, name: "custom", durationRounds: 10,
-      // No spells or concentration; it lapses on a turn without an attack.
+      // No spells or concentration; it lapses on a turn without an attack on an enemy or damage taken since the last,
+      // and ends early only if the barbarian falls unconscious.
       modifiers: { noSpellcasting: true },
-      upkeep: { by: ["attack"] },
-      endsOnIncapacitated: true,
+      upkeep: { by: ["attack", "damaged"] },
+      endsOnUnconscious: true,
       effects: [
         // A melee weapon attack using Strength.
         { kind: "damage-bonus", abilities: ["str"], attackTypes: ["melee"], damage: [{ dice: "2", damageType: "same-as-attack" }] },
@@ -32,8 +33,7 @@ const rage = runs("barbarian_rage", {
       ]
     },
     automationSupport: "full"
-  }],
-  notSimulated: "taking damage keeping the rage going (only an attack does), and only falling unconscious ending it early (being incapacitated does)."
+  }]
 });
 
 const recklessAttack = runs("barbarian_reckless-attack", {

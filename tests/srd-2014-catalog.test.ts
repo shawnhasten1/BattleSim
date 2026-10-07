@@ -170,7 +170,7 @@ describe("the 2014 Barbarian and Monk (Phase 8)", () => {
     expect(first.resources).toMatchObject({ rage: 2 });
     const rage = feature(first, "Rage")!.grantedActions![0] as Extract<ActionDefinition, { kind: "activate-feature" }>;
     expect(rage.condition!.effects![0]).toMatchObject({ kind: "damage-bonus", abilities: ["str"], attackTypes: ["melee"], damage: [{ dice: "2" }] });
-    expect(rage.condition!.upkeep).toEqual({ by: ["attack"] });
+    expect(rage.condition).toMatchObject({ upkeep: { by: ["attack", "damaged"] }, endsOnUnconscious: true });
     expect(first.equipment.map((entry) => `${entry.ref}×${entry.count ?? 1}`).sort()).toEqual(["srd:weapon:greataxe×1", "srd:weapon:handaxe×2", "srd:weapon:javelin×4"]);
 
     const top = built("srd:class:barbarian-2014", 20);

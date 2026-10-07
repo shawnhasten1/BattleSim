@@ -12,7 +12,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 18 | 10 | 3 | 2 | 2 | 1 |
+| Barbarian (Path of the Berserker) | 18 | 11 | 2 | 2 | 2 | 1 |
 | Bard (College of Lore) | 15 | 4 | 0 | 1 | 5 | 5 |
 | Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
@@ -58,7 +58,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | 1 |
 | `pact-weapon-form` | Choosing the pact weapon's form (a longsword here), or bonding a magic weapon (Pact of the Blade) | 1 |
-| `rage-2014` | Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious | 1 |
 | `reaction-by-size` | A reaction to an attacker of a size (Giant Killer: Large or larger) | 1 |
 | `redirect-attack` | A missed attack made again at another creature (Stand Against the Tide) | 1 |
 | `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
@@ -74,7 +73,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 1 | Rage | partial | rage-2014 | taking damage keeping the rage going (only an attack does), and only falling unconscious ending it early (being incapacitated does). |
+| 1 | Rage | full |  |  |
 | 1 | Unarmored Defense | full |  |  |
 | 2 | Danger Sense | full |  |  |
 | 2 | Reckless Attack | full |  |  |

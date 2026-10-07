@@ -2014,6 +2014,8 @@ export interface ActivateFeatureActionDefinition {
     upkeep?: ConditionUpkeep;
     /** Rage: it ends when the bearer is incapacitated. */
     endsOnIncapacitated?: boolean;
+    /** The 2014 Rage: it ends early only when the bearer falls unconscious. */
+    endsOnUnconscious?: boolean;
   };
   /** What a `would-take-damage` reaction does to the damage about to land. */
   damageCut?: DamageCut;
@@ -2777,6 +2779,8 @@ export interface ConditionInstance {
   upkeep?: ConditionUpkeep;
   /** Rage: it ends when the bearer is incapacitated (stunned, paralyzed, unconscious…). */
   endsOnIncapacitated?: boolean;
+  /** The 2014 Rage: it ends when the bearer falls unconscious, and no other incapacitation ends it. */
+  endsOnUnconscious?: boolean;
   /**
    * Weapon mastery's Sap and Vex: the condition changes one attack roll and is used up by it. `"made"`: the bearer's own
    * next attack roll (Sap: disadvantage). `"against"`: the next attack roll `by` makes against the bearer (Vex: the
@@ -2814,8 +2818,12 @@ export interface ConditionInstance {
  * the bearer made an attack roll against an enemy (`"attack"`) or forced one to make a saving throw (`"save"`); with
  * `"bonus-action"`, a bonus action it still has is spent to keep it instead.
  */
+/**
+ * What keeps a condition going at the end of each of the bearer's turns: an attack on an enemy this turn, a save it
+ * forced on one, a bonus action spent on it, or (the 2014 Rage) damage it took since its last turn.
+ */
 export interface ConditionUpkeep {
-  by: Array<"attack" | "save" | "bonus-action">;
+  by: Array<"attack" | "save" | "bonus-action" | "damaged">;
 }
 
 export interface DeathSaveState {

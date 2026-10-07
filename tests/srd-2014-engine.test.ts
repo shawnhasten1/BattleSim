@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   actionProblem,
+  applyCondition,
   canPayFor,
   createEngineState,
   getExecutableActions,
+  resolveActivateFeatureAction,
   resolveAttack,
+  runTurnEnd,
   sampleEncounter,
   type CombatantState,
   type CreatureDefinition,
@@ -12,6 +15,7 @@ import {
 } from "@/engine";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { featureStatblock } from "@/lib/statblock";
 import { runAutomatedEncounter } from "@/engine/turns";
 
 /**
@@ -120,5 +124,62 @@ describe("more weapon dice on a critical hit (10c: brutal-critical)", () => {
     const halfOrc = (level: number) => rebuildActor(blankCharacter("def-fighter", "Barbarian"), withSuggestions(quickBuild(sources, { classId: "srd:class:barbarian-2014", level, speciesId: "srd:species:half-orc-2014" }), sources), sources).definition;
     expect(greataxeHit(halfOrc(5), 20)).toBe(3);
     expect(greataxeHit(halfOrc(13), 20)).toBe(4);
+  });
+});
+
+describe("the 2014 Rage: kept by damage taken, ended only by falling unconscious (10d: rage-2014)", () => {
+  const barbarian = rebuildActor(blankCharacter("def-fighter", "Barbarian"), withSuggestions(quickBuild(sources, { classId: "srd:class:barbarian-2014", level: 5 }), sources), sources).definition;
+  /** Raging since round 1, on its round 2 turn now; Goblin 1 next to it with 200 hit points. */
+  const raging = () => {
+    const state = onItsTurn(barbarian);
+    state.snapshot.round = 1;
+    const goblin = state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!;
+    goblin.currentHp = 200;
+    state.snapshot.definitions = state.snapshot.definitions.map((entry) => (entry.id === goblin.definitionId ? { ...entry, maxHp: 200 } : entry));
+    const me = () => state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    resolveActivateFeatureAction(state, "pc-fighter", getExecutableActions(barbarian).find((action) => action.name === "Rage")!.id);
+    state.snapshot.round = 2;
+    me().actionEconomy = { action: true, bonus: true, reaction: true };
+    me().turnFlags = undefined;
+    const rages = () => (me().conditions ?? []).some((condition) => condition.id === "rage-active");
+    return { state, me, rages, goblin };
+  };
+  const scimitar = (state: ReturnType<typeof onItsTurn>) => getExecutableActions(state.snapshot.definitions.find((entry) => entry.id === "def-goblin")!)
+    .find((action) => action.kind === "attack" && action.attackType === "melee")!;
+  const hitting: RandomSource = { next: () => 0.99, nextInt: (_min, max) => (max === 20 ? 19 : max), fork: () => hitting };
+
+  it("a turn with neither an attack nor damage taken ends it; a bonus action can't keep it", () => {
+    const { state, rages } = raging();
+    runTurnEnd(state, "pc-fighter");
+    expect(rages()).toBe(false);
+    expect(state.log.at(-1)!.message).toMatch(/didn't attack or take damage since its last turn/);
+  });
+
+  it("damage taken since its last turn keeps it going, though it made no attack", () => {
+    const { state, rages } = raging();
+    state.rng = hitting;
+    // The goblin's turn in round 1, after the barbarian's.
+    state.snapshot.round = 1;
+    state.snapshot.turnIndex += 1;
+    resolveAttack(state, "enemy-goblin-1", "pc-fighter", scimitar(state).id);
+    state.snapshot.round = 2;
+    state.snapshot.turnIndex -= 1;
+    runTurnEnd(state, "pc-fighter");
+    expect(rages()).toBe(true);
+  });
+
+  it("being stunned doesn't end it; falling unconscious does", () => {
+    const stunned = raging();
+    applyCondition(stunned.state, "pc-fighter", { id: "stun", name: "stunned", startedRound: 2 });
+    expect(stunned.rages()).toBe(true);
+    const down = raging();
+    applyCondition(down.state, "pc-fighter", { id: "out", name: "unconscious", startedRound: 2 });
+    expect(down.rages()).toBe(false);
+  });
+
+  it("says so on the sheet", () => {
+    const text = featureStatblock(barbarian.features!.find((entry) => entry.name === "Rage")!, barbarian).text;
+    expect(text).toContain("unless that turn it made an attack roll against an enemy or took damage since its last turn");
+    expect(text).toContain("It ends early if it falls unconscious.");
   });
 });

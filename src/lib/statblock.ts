@@ -1548,10 +1548,12 @@ function activationText(action: ActivateAction, definition: CreatureDefinition, 
     `It ends at the end of any of its turns after the first unless that turn it ${joinList([
       ...(upkeep.includes("attack") ? ["made an attack roll against an enemy"] : []),
       ...(upkeep.includes("save") ? ["forced an enemy to make a saving throw"] : []),
-      ...(upkeep.includes("bonus-action") ? ["spends a bonus action to keep it"] : [])
+      ...(upkeep.includes("bonus-action") ? ["spends a bonus action to keep it"] : []),
+      ...(upkeep.includes("damaged") ? ["took damage since its last turn"] : [])
     ], "or")}.`
   ] : [];
-  const ends = action.condition?.endsOnIncapacitated ? ["It ends early if it is incapacitated."] : [];
+  const ends = action.condition?.endsOnIncapacitated ? ["It ends early if it is incapacitated."]
+    : action.condition?.endsOnUnconscious ? ["It ends early if it falls unconscious."] : [];
   const state = [lasting.length === 1 ? withDuration(lasting[0]!, lasts) : `It gains these benefits${lasts}: ${afterColon(lasting)}`, ...keeps, ...ends].join(" ");
   const shorts = [...modifierShorts(action.condition?.modifiers), ...effectShorts(action.condition?.effects, definition)];
   return {

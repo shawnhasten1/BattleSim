@@ -14,7 +14,6 @@ export const GAPS_2014 = {
   "smite-feature": "A slot spent on a weapon hit for extra radiant damage, as a class feature (2014 Divine Smite)",
   "destroy-undead": "Turn Undead destroying an undead of a low enough challenge rating outright",
   "cantrip-half-on-save": "A cantrip's half damage on a successful save (Potent Cantrip)",
-  "rage-2014": "Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious",
   "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
   exhaustion: "Exhaustion (Frenzy's cost)",
   "wild-shape-revert": "Going back from Wild Shape with a bonus action, though it shifted with its action (2014)",
@@ -60,7 +59,6 @@ export const ALL_GAPS: Readonly<Record<Gap2014, string>> = { ...GAPS, ...GAPS_20
  */
 export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_thief_thiefs-reflexes": ["extra-turn"],
-  "srd_barbarian_rage": ["rage-2014"],
   "srd_barbarian_feral-instinct": ["surprise-rage"],
   "srd_barbarian_indomitable-might": ["check-floor"],
   "srd_path-of-the-berserker_frenzy": ["frenzy-attack", "exhaustion"],

@@ -7523,7 +7523,8 @@ function applyFeatureActivationCondition(
     effects: action.condition.effects,
     ...(action.condition.nextAttack ? { nextAttack: action.condition.nextAttack } : {}),
     ...(action.condition.upkeep ? { upkeep: action.condition.upkeep } : {}),
-    ...(action.condition.endsOnIncapacitated ? { endsOnIncapacitated: true } : {})
+    ...(action.condition.endsOnIncapacitated ? { endsOnIncapacitated: true } : {}),
+    ...(action.condition.endsOnUnconscious ? { endsOnUnconscious: true } : {})
   });
   return conditionId;
 }
@@ -7540,8 +7541,8 @@ function conditionPersistence(definition: CreatureDefinition, combatant: Combata
 
 /**
  * Rage's upkeep, at the end of its bearer's turn: a condition with `upkeep` that didn't begin this round ends unless the
- * bearer attacked an enemy or forced one to make a save this turn, or spends a bonus action it still has to keep it (when
- * the upkeep allows). Persistent Rage needs none.
+ * bearer attacked an enemy or forced one to make a save this turn, took damage since its last turn (the 2014 Rage), or
+ * spends a bonus action it still has to keep it (when the upkeep allows). Persistent Rage needs none.
  */
 function upkeepConditions(state: EngineState, actorId: Id): void {
   const actor = findCombatant(state.snapshot, actorId);
@@ -7558,9 +7559,13 @@ function upkeepConditions(state: EngineState, actorId: Id): void {
   const thisTurn = state.log.filter((entry) => entry.round === round && entry.turnIndex === turnIndex && entry.data?.attackerId === actor.id);
   const attacked = thisTurn.some((entry) => entry.type === "AttackRolled" && enemy(entry.data?.targetId));
   const forcedSave = thisTurn.some((entry) => entry.type === "SaveRolled" && enemy(entry.data?.targetId));
+  // Damage since its last turn: this round up to now, and last round after its turn.
+  const damaged = due.some((condition) => condition.upkeep!.by.includes("damaged")) && state.log.some((entry) => entry.type === "DamageApplied"
+    && entry.data?.targetId === actor.id && Number(entry.data?.totalApplied ?? 0) > 0
+    && (entry.round === round ? (entry.turnIndex ?? 0) <= turnIndex : entry.round === round - 1 && (entry.turnIndex ?? 0) > turnIndex));
   for (const condition of due) {
     const by = condition.upkeep!.by;
-    if ((by.includes("attack") && attacked) || (by.includes("save") && forcedSave)) continue;
+    if ((by.includes("attack") && attacked) || (by.includes("save") && forcedSave) || (by.includes("damaged") && damaged)) continue;
     const name = condition.sourceName ?? condition.id;
     if (by.includes("bonus-action") && actor.state === "active" && actor.actionEconomy?.bonus !== false && canAct(actor, "bonus")) {
       actor.actionEconomy = { ...(actor.actionEconomy ?? { action: true, bonus: true, reaction: true }), bonus: false };
@@ -7570,7 +7575,8 @@ function upkeepConditions(state: EngineState, actorId: Id): void {
       continue;
     }
     actor.conditions = (actor.conditions ?? []).filter((entry) => entry !== condition);
-    state.log.push(event(state, "ConditionExpired", `${actor.displayName}'s ${name} ends: it didn't attack or force a save this turn`, {
+    const kept = [by.includes("attack") ? "attack" : "", by.includes("save") ? "force a save" : "", by.includes("damaged") ? "take damage" : ""].filter(Boolean).join(" or ");
+    state.log.push(event(state, "ConditionExpired", `${actor.displayName}'s ${name} ends: it didn't ${kept} ${by.includes("damaged") ? "since its last turn" : "this turn"}`, {
       combatantId: actor.id, conditionId: condition.id, condition, reason: "upkeep"
     }));
   }
@@ -7593,8 +7599,9 @@ function endConditionsFromSource(state: EngineState, source: CombatantState, why
 /** Rage ends when its bearer is incapacitated; with Persistent Rage, only when it falls unconscious. */
 function endOnIncapacitation(state: EngineState, target: CombatantState, cause: ConditionName): void {
   const definition = getDefinition(state.snapshot, target);
-  const ending = (target.conditions ?? []).filter((condition) => condition.endsOnIncapacitated
-    && (cause === "unconscious" || !conditionPersistence(definition, target, condition.id)));
+  const ending = (target.conditions ?? []).filter((condition) => (condition.endsOnIncapacitated
+    && (cause === "unconscious" || !conditionPersistence(definition, target, condition.id)))
+    || (condition.endsOnUnconscious && cause === "unconscious"));
   if (!ending.length) return;
   target.conditions = (target.conditions ?? []).filter((condition) => !ending.includes(condition));
   for (const condition of ending) {
