@@ -77,6 +77,8 @@ import {
 } from "@/engine";
 import { attachedSource, findSrdFeature, findSrdWeapon } from "@/data/srd";
 import { findLibraryItem, findLibrarySpell } from "@/data/srd/library";
+import { findSrd2024Feature } from "@/data/srd/2024/feature-library";
+import { featureAtLevel, startingLevel } from "@/lib/ability-editor/class-features";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
@@ -513,7 +515,8 @@ interface EncounterStore extends PlayActions {
    * `resourceCost` pool (rage / action-surge / second-wind …) on the definition
    * and its combatants. One undo step. `undefined` if the srd id is unknown.
    */
-  attachSrdFeature: (definitionId: string, srdId: string) => string | undefined;
+  /** A library feature: a 2014 one as it is, or a 2024 class feature at `level` (the creature's own by default). */
+  attachSrdFeature: (definitionId: string, srdId: string, level?: number) => string | undefined;
   /**
    * Attach a copy of a bundled SRD item (a potion, a wand): fresh ids, its pool named after its new id and seeded on the
    * creature and its tokens (see `insertAbilityRecord`). One undo step. Returns the new item's id.
@@ -3522,15 +3525,19 @@ export const useEncounterStore = create<EncounterStore>()(
           })
         });
       },
-      attachSrdFeature: (definitionId, srdId) => {
-        const source = findSrdFeature(srdId);
+      attachSrdFeature: (definitionId, srdId, level) => {
         const encounter = get().encounter;
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
+        // A 2024 class feature is worked out at a class level, with the pool it spends (EDITIONS_PLAN.md Phase 2).
+        const classFeature = findSrd2024Feature(srdId);
+        const prepared = classFeature && definition ? featureAtLevel(classFeature, level ?? startingLevel(classFeature, definition), definition) : undefined;
+        const source = prepared?.feature ?? findSrdFeature(srdId);
         if (!source || !definition) return undefined;
 
         const featureId = `feature-${crypto.randomUUID()}`;
         const feature = normalizeFeatureRecord(structuredClone(source), featureId, srdId);
-        const seeded = featurePoolsToSeed(feature);
+        const pools = { ...featurePoolsToSeed(feature), ...prepared?.pools };
+        const seeded = Object.keys(pools).length ? pools : undefined;
 
         const bucket: "features" | "traits" = feature.category === "trait" ? "traits" : "features";
         commitEncounter({

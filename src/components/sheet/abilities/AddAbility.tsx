@@ -2,16 +2,17 @@
 
 import { Check, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type {
-  ActionDefinition,
-  CreatureDefinition,
-  DeathEffectDefinition,
-  FeatureDefinition,
-  ItemDefinition,
-  LegendaryActionRef,
-  SourceMetadata,
-  SpellDefinition,
-  WeaponDefinition
+import {
+  levelOf,
+  type ActionDefinition,
+  type CreatureDefinition,
+  type DeathEffectDefinition,
+  type FeatureDefinition,
+  type ItemDefinition,
+  type LegendaryActionRef,
+  type SourceMetadata,
+  type SpellDefinition,
+  type WeaponDefinition
 } from "@/engine";
 import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
 import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
@@ -111,7 +112,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   definition: CreatureDefinition;
   compendium?: Compendium;
   onPrepared: (prepared: Prepared) => void;
-  onAttach: (kind: SrdEntryKind, id: string) => void;
+  /** A library row's "+": `level` is the class level a 2024 class feature is added at (the creature's own when absent). */
+  onAttach: (kind: SrdEntryKind, id: string, level?: number) => void;
   onBlank: (kind: BlankKind) => void;
   onClose: () => void;
   /** What it shows first: All, or (the Codex's Spells and Items tabs) Spells or Items. */
@@ -123,6 +125,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   const [filter, setFilter] = useState<AddFilter>(initialFilter);
   // Which version shows where the library has a 2014 and a 2024 one; a built character's opens on its own edition.
   const [edition, setEdition] = useEditionFilter("add-ability", readBuild(definition)?.edition);
+  // The class level a 2024 class feature is added at: the creature's own if it has one, otherwise each at the level it's gained.
+  const [featureLevel, setFeatureLevel] = useState<number | undefined>(() => (definition.character ? levelOf(definition) : undefined));
   const [abilities, setAbilities] = useState<readonly SrdMonsterAbilityEntry[] | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
   const [open5e, setOpen5e] = useState(false);
@@ -150,14 +154,25 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     }
     return new Set([...seen].filter(([, count]) => count > 1).map(([key]) => key));
   }, [results.library]);
-  // Each row's statblock line, worked out once per creature rather than on every keystroke.
+  // Each row's statblock line, worked out once per creature (and a 2024 class feature's, per level) rather than on every keystroke.
   const lines = useMemo(() => new Map<string, string>(), [definition]);
   const lineOf = (entry: LibraryEntry) => {
-    let text = lines.get(entry.id);
-    if (text === undefined) lines.set(entry.id, text = line(entry, definition));
+    const key = entry.from ? `${entry.id}@${featureLevel ?? ""}` : entry.id;
+    let text = lines.get(key);
+    if (text === undefined) {
+      // A 2024 class feature at the level it would be added at: its numbers are that level's.
+      const scaled = entry.from ? prepareLibrary(entry.kind, entry.id, definition, featureLevel)?.record as FeatureDefinition | undefined : undefined;
+      lines.set(key, text = line(scaled ? { ...entry, entry: scaled } : entry, definition));
+    }
     return text;
   };
-  const addLabel = (entry: LibraryEntry) => `Add ${entry.name}${entry.edition && twinned.has(`${entry.kind}:${editionNameKey(entry.name)}`) ? ` (${entry.edition})` : ""}`;
+  // Which is which, when a name is listed more than once: its edition beside its other version, and what gives a 2024 class
+  // feature (five classes have Extra Attack).
+  const addLabel = (entry: LibraryEntry) => {
+    const which = [entry.edition && twinned.has(`${entry.kind}:${editionNameKey(entry.name)}`) ? entry.edition : undefined, entry.from].filter(Boolean);
+    return `Add ${entry.name}${which.length ? ` (${which.join(", ")})` : ""}`;
+  };
+  const classFeatures = results.library.some((entry) => entry.from);
   // My library: what the DM saved from the editor, for any creature.
   const mine = useMyLibraryStore((s) => s.entries);
   const mineStatus = useMyLibraryStore((s) => s.status);
@@ -178,7 +193,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     onPrepared(recipe.prepare(definition));
   }
   function attach(entry: LibraryEntry) {
-    onAttach(entry.kind, entry.id);
+    onAttach(entry.kind, entry.id, entry.from ? featureLevel : undefined);
     setAdded(entry.name);
     // Ready for the next one: the search keeps its words, selected, so typing replaces them.
     searchRef.current?.focus();
@@ -221,7 +236,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     await forgetSaved(entry.id);
   }
   function chooseLibrary(entry: LibraryEntry) {
-    const prepared = prepareLibrary(entry.kind, entry.id, definition);
+    const prepared = prepareLibrary(entry.kind, entry.id, definition, featureLevel);
     if (prepared) onPrepared(prepared);
   }
   async function chooseMonster(entry: SrdMonsterAbilityEntry) {
@@ -333,6 +348,19 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
         {results.library.length ? (
           <section className={styles.section} aria-label="Library">
             <h5>Library</h5>
+            {classFeatures ? (
+              <label className={styles.featureLevel} title="A 2024 class feature's numbers (Rage's uses, Second Wind's healing) are that class level's. Empty: each at the level it's gained.">
+                2024 class features at level
+                <input
+                  type="number" min={1} max={20} inputMode="numeric" aria-label="Class level for 2024 features" placeholder="as gained"
+                  value={featureLevel ?? ""}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setFeatureLevel(event.target.value === "" || !Number.isFinite(value) ? undefined : Math.min(20, Math.max(1, Math.round(value))));
+                  }}
+                />
+              </label>
+            ) : null}
             <div className={styles.items}>
               {results.library.map((entry) => (
                 <div
@@ -344,7 +372,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
                 >
                   <button type="button" className={styles.itemOpen} onClick={() => chooseLibrary(entry)} title="Open it to check or change before adding">
                     <span className={styles.itemName}>
-                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{entry.reference ? " · ref" : ""}{already.has(librarySlug(entry)) ? " · on the sheet" : ""}</span>{" "}
+                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{entry.from ? ` · ${entry.from}` : ""}{entry.reference ? " · ref" : ""}{already.has(librarySlug(entry)) ? " · on the sheet" : ""}</span>{" "}
                       <EditionBadge edition={entry.edition} />
                     </span>
                     <span className={styles.itemLine}>{lineOf(entry)}</span>

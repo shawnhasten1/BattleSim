@@ -178,7 +178,8 @@ describe("Add", { timeout: 20000 }, () => {
     expect(within(screen.getByRole("region", { name: "Library" })).getByRole("button", { name: /^Greataxe · weapon · on the sheet/ })).toBeTruthy();
 
     await searchAdd("extra attack");
-    await userEvent.click(screen.getByRole("button", { name: "Add Extra Attack" }));
+    // The 2014 one: five 2024 classes have an Extra Attack of their own beside it.
+    await userEvent.click(screen.getByRole("button", { name: "Add Extra Attack (2014)" }));
     expect(fighter().features?.map((feature) => feature.name)).toContain("Extra Attack");
     expect(screen.getByRole("status").textContent?.trim()).toBe("Added Extra Attack.Done");
     await userEvent.click(screen.getByRole("button", { name: "Done" }));

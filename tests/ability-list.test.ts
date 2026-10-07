@@ -152,7 +152,9 @@ describe("Add: recipes, search and copies", () => {
     expect(breath.monsterMore).toBeGreaterThan(0);
     expect(searchAdd("fire breath", "monster", abilities).monster.some((entry) => entry.name === "Fire Breath" && entry.monster === "Adult Red Dragon")).toBe(true);
     const rage = searchAdd("rage", "all", abilities);
-    expect(rage.library.filter((entry) => entry.kind === "feature").map((entry) => entry.name)).toEqual(["Rage", "Rage (Totem Warrior: Bear)", "Rage (Zealot)"]);
+    const features = rage.library.filter((entry) => entry.kind === "feature");
+    expect(features.filter((entry) => entry.edition === "2014").map((entry) => entry.name)).toEqual(["Rage", "Rage (Totem Warrior: Bear)", "Rage (Zealot)"]);
+    expect(features.find((entry) => entry.edition === "2024" && entry.name === "Rage")?.from).toBe("Barbarian 1");
     // A search also finds reference-only spells (the 2024 Mirage Arcane).
     expect(rage.library.find((entry) => entry.name === "Mirage Arcane")).toMatchObject({ reference: true, edition: "2024" });
     // Filters narrow it; monster abilities wait for a query.

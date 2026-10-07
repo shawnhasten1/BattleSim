@@ -16,10 +16,12 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, attachedSource, findSrdFeature, findSrdWeapon, type SrdEntryKind } from "@/data/srd";
+import { SRD_2024_FEATURES, findSrd2024Feature } from "@/data/srd/2024/feature-library";
 import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
 import { SRD_2024_SPELL_SCROLLS, findLibraryItem, findLibrarySpell } from "@/data/srd/library";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { editionNameKey, editionOf, preferEdition, type Edition, type EditionChoice } from "@/lib/editions";
+import { featureAtLevel, featureFrom, startingLevel } from "./class-features";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
 import type { AbilityInsertTarget, AbilityRecord } from "./refs";
 import { ownSpellScroll, ownSpellScrolls } from "./scrolls";
@@ -174,6 +176,8 @@ export interface LibraryEntry {
   edition?: Edition;
   /** A spell kept for reference only (its SRD text, run by hand): listed only when searched for. */
   reference?: boolean;
+  /** What gives a 2024 class feature, feat or species trait, and the level it's gained at: "Barbarian 1". */
+  from?: string;
 }
 
 function libraryEntry(kind: SrdEntryKind, entry: LibraryEntry["entry"]): LibraryEntry {
@@ -187,6 +191,7 @@ const LIBRARY: LibraryEntry[] = [
   ...SRD_SPELLS.map((entry) => libraryEntry("spell", entry)),
   ...SRD_2024_SPELLS.map((entry) => libraryEntry("spell", entry)),
   ...SRD_FEATURES.map((entry) => libraryEntry("feature", entry)),
+  ...SRD_2024_FEATURES.map((entry) => ({ ...libraryEntry("feature", entry.feature), from: featureFrom(entry) })),
   ...SRD_ITEMS.map((entry) => libraryEntry("item", entry))
 ];
 
@@ -206,9 +211,10 @@ const freshRiders = (riders: ActionRider[] | undefined) => riders?.map((rider) =
 
 /**
  * A library entry as one-click attach would add it, for the editor: a weapon or feature copied with its source; a spell
- * cast with this creature's spellcasting ability (its DC and attack follow it), its effects given fresh ids.
+ * cast with this creature's spellcasting ability (its DC and attack follow it), its effects given fresh ids; a 2024
+ * class feature at `level` (the creature's own by default, `startingLevel`), with the pool it spends.
  */
-export function prepareLibrary(kind: SrdEntryKind, id: string, definition: CreatureDefinition): Prepared | undefined {
+export function prepareLibrary(kind: SrdEntryKind, id: string, definition: CreatureDefinition, level?: number): Prepared | undefined {
   if (kind === "weapon") {
     const weapon = findSrdWeapon(id);
     return weapon ? { list: "weapons", record: { ...structuredClone(weapon), source: attachedSource(weapon, id) } } : undefined;
@@ -225,6 +231,11 @@ export function prepareLibrary(kind: SrdEntryKind, id: string, definition: Creat
     const spell = castWith(structuredClone(source), spellcastingAbility(definition));
     const action = spell.action && "riders" in spell.action ? { ...spell.action, riders: freshRiders(spell.action.riders) } as ActionDefinition : spell.action;
     return { list: "spells", record: { ...spell, ...(action ? { action } : {}), source: attachedSource(source, id) } };
+  }
+  const classFeature = findSrd2024Feature(id);
+  if (classFeature) {
+    const { feature, pools } = featureAtLevel(classFeature, level ?? startingLevel(classFeature, definition), definition);
+    return { list: feature.category === "trait" ? "traits" : "features", record: feature, ...(pools ? { pools } : {}) };
   }
   const feature = findSrdFeature(id);
   return feature ? { list: feature.category === "trait" ? "traits" : "features", record: { ...structuredClone(feature), source: attachedSource(feature, id) } } : undefined;

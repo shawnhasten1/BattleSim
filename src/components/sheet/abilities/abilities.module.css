@@ -810,6 +810,25 @@
   color: var(--ui-text-dim);
 }
 
+.featureLevel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 10.5px;
+  color: var(--ui-text-dim);
+}
+
+.featureLevel input {
+  width: 64px;
+  padding: 2px 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-bg-deep);
+  color: var(--ui-text);
+  font: inherit;
+}
+
 .linkBtn {
   align-self: flex-start;
   padding: 0;

@@ -1032,6 +1032,34 @@ function setPath(target: unknown, path: string, value: unknown): boolean {
   return true;
 }
 
+/**
+ * A grant's feature at one level: a copy with its scale bindings worked out (all but the `weapon.` ones, which go into
+ * the grant's weapon). The builder places every feature this way, and Add ability a 2024 class feature put on any creature
+ * at a class level (EDITIONS_PLAN.md Phase 2), so the two never work a number out differently. `problems` names each
+ * binding it couldn't work out (`error`) or found nothing to write into.
+ */
+export function scaledFeature(source: FeatureDefinition, grant: Pick<FeatureGrant, "scale">, scope: TemplateScope): {
+  feature: FeatureDefinition;
+  scaled: string[];
+  problems: Array<{ path: string; error?: string }>;
+} {
+  const feature = structuredClone(source) as FeatureDefinition;
+  const scaled: string[] = [];
+  const problems: Array<{ path: string; error?: string }> = [];
+  for (const binding of (grant.scale ?? []).filter((candidate) => !candidate.path.startsWith("weapon."))) {
+    let value: string | number;
+    try {
+      value = evaluateTemplate(binding.value, scope);
+    } catch (error) {
+      problems.push({ path: binding.path, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    if (setPath(feature, binding.path, value)) scaled.push(binding.path);
+    else problems.push({ path: binding.path });
+  }
+  return { feature, scaled, problems };
+}
+
 /** A feature as it goes on the actor: its own id, its granted actions' ids after it, pointing back at it. */
 function placedFeature(feature: FeatureDefinition, id: string): FeatureDefinition {
   const grantedActions = feature.grantedActions?.map((action, index) => {
@@ -1162,13 +1190,9 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       if (!source) {
         state.warnings.push(`${label}: no library feature ${grant.feature as string}`);
       } else {
-        const feature = structuredClone(source) as FeatureDefinition;
-        const scaled: string[] = [];
-        for (const binding of (grant.scale ?? []).filter((candidate) => !candidate.path.startsWith("weapon."))) {
-          const value = evaluate(`${label} ${binding.path}`, () => evaluateTemplate(binding.value, scope));
-          if (value === undefined) continue;
-          if (setPath(feature, binding.path, value)) scaled.push(binding.path);
-          else state.warnings.push(`${label}: no ${binding.path} to scale`);
+        const { feature, scaled, problems } = scaledFeature(source, grant, scope);
+        for (const problem of problems) {
+          state.warnings.push(problem.error ? `${label} ${problem.path}: ${problem.error}` : `${label}: no ${problem.path} to scale`);
         }
         if (collected.note) feature.description = [feature.description, collected.note].filter(Boolean).join("\n\n");
         if (collected.nameSuffix) feature.name = `${feature.name}${collected.nameSuffix}`;

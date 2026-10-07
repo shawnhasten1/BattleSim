@@ -52,16 +52,16 @@ export function blankTarget(kind: BlankKind, definition: CreatureDefinition): Sh
   }
 }
 
-/** A library row's "+": the weapon, spell, item or feature added to the creature as it is. */
-export function useAttachFromLibrary(definitionId: string): (kind: SrdEntryKind, id: string) => void {
+/** A library row's "+": the weapon, spell, item or feature added to the creature as it is (a 2024 class feature at `level`). */
+export function useAttachFromLibrary(definitionId: string): (kind: SrdEntryKind, id: string, level?: number) => void {
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
   const attachSrdFeature = useEncounterStore((s) => s.attachSrdFeature);
   const attachSrdItem = useEncounterStore((s) => s.attachSrdItem);
-  return useCallback((kind: SrdEntryKind, id: string) => {
+  return useCallback((kind: SrdEntryKind, id: string, level?: number) => {
     if (kind === "weapon") attachSrdWeapon(definitionId, id);
     else if (kind === "spell") attachSrdSpell(definitionId, id);
     else if (kind === "item") attachSrdItem(definitionId, id);
-    else attachSrdFeature(definitionId, id);
+    else attachSrdFeature(definitionId, id, level);
   }, [attachSrdFeature, attachSrdItem, attachSrdSpell, attachSrdWeapon, definitionId]);
 }
