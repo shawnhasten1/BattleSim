@@ -2,6 +2,10 @@ import {
   activeFactions,
   armorClassOf,
   canAct,
+  closeOpenRoutines,
+  openRoutineIn,
+  resolveRoutineSwing,
+  routinesOf,
   areaSaveChoices,
   damageBonusExpected,
   diceTradeCost,
@@ -87,14 +91,14 @@ import {
   type EngineState
 } from "./combat";
 import { askDecision, type SpellThreat, type SpellThreatLine, type TurnOptionRequest, type TurnPick } from "./decisions";
-import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { attackFamilyId, attackReach, canPayFor, defaultSwingAttack, nextSwingOptions, routineFit, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
 import { FULL_SUFFIX, withArticle } from "./items";
 import { wildShapeForm } from "./wild-shape";
 import { cellIntersectsArea, cellsInArea, combatantsInArea, hazardPathingOverlay, zoneTerrainOverlay, type AimVector } from "./areas";
 import { abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage } from "./dice";
 import { altitudeMoveCost, combatantHeight, spatialDistance, spatialDistanceToPoint } from "./combat";
 import { footprintGroundHeight, movementProfileOf, movementReference, coverBetween, findPath, movementOptionsFor, findReachableCells, gridDistance, isFootprintLegal, lineOfEffect, pathCostField, sizeFootprint, terrainAtCell, wallCover, type ReachableCell } from "./geometry";
-import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, Point, ResourceStance, SummonActionDefinition, TacticsProfile, WeaponMastery } from "./types";
+import type { Ability, ActionDefinition, ActionRider, ActorTag, AreaSaveActionDefinition, CombatantState, CombatLogEvent, ConditionName, CreatureDefinition, EncounterSnapshot, FeatureEffect, Id, LegendaryActionRef, OpenRoutine, Point, ResourceStance, SummonActionDefinition, TacticsProfile, WeaponMastery } from "./types";
 
 type HealingAction = Extract<ActionDefinition, { kind: "healing" }>;
 type RepositionAction = Extract<ActionDefinition, { kind: "reposition" }>;
@@ -269,6 +273,8 @@ function resourceStanceMultiplier(stance: ResourceStance): number {
  * legendary creatures other than the one who just acted get to act. Called only by `closeTurn` (turns.ts).
  */
 export function finishTurn(state: EngineState, actorId: Id): void {
+  // A routine a person left with swings to spare (Play): they're skipped. Auto Run never leaves one open.
+  closeOpenRoutines(state, actorId, "its controller ended the turn");
   runTurnEnd(state, actorId);
   runLegendaryWindow(state, actorId);
 }
@@ -832,6 +838,61 @@ function decideMultiattackSwing(
     return best ? { targetId: target.id, actionId: best.attack.id } : { skip: true };
   }
   return undefined;
+}
+
+/**
+ * "AI: take this turn" in the middle of a routine a person started (Play, HOTBAR_REDESIGN_PLAN.md §4.1): the AI makes the
+ * swings left from where it stands, each decided as its own routines' are (`decideMultiattackSwing`), and the routine
+ * closes. A swing it won't or can't make closes it there. Nothing happens when no routine is open (Auto Run).
+ */
+export function finishOpenRoutines(state: EngineState, actor: CombatantState): void {
+  for (const slot of ["action", "bonus"] as const) {
+    // Each pass makes a swing or closes the routine; its swings bound it.
+    for (let pass = 0; pass < 20 && actor.state === "active"; pass += 1) {
+      const open = openRoutineIn(actor, slot);
+      if (!open) break;
+      const next = nextAiSwing(state, actor, open);
+      if ("reason" in next) {
+        closeOpenRoutines(state, actor.id, next.reason, slot);
+        break;
+      }
+      try {
+        resolveRoutineSwing(state, actor.id, next.actionId, { targetIds: [next.targetId] });
+      } catch {
+        closeOpenRoutines(state, actor.id, "nothing it can attack with", slot);
+        break;
+      }
+    }
+  }
+}
+
+/** The AI's next swing of a routine left open: the first swing left that it has an attack for, aimed as its own would be. */
+function nextAiSwing(state: EngineState, actor: CombatantState, open: OpenRoutine): { actionId: Id; targetId: Id } | { reason: string } {
+  const executables = getExecutableActions(getDefinition(state.snapshot, actor));
+  const routines = routinesOf(executables, open);
+  const offered = new Set(nextSwingOptions(routines, open.made, executables).keys());
+  const routine = routines.find((candidate) => routineFit(candidate, open.made, executables));
+  const fit = routine ? routineFit(routine, open.made, executables) ?? [] : [];
+  const last = open.made.at(-1);
+  const previous = last?.targetId && executables.find((candidate) => candidate.id === last.actionId)?.kind === "attack"
+    ? { targetId: last.targetId, actionId: last.actionId, hit: Boolean(last.hit) }
+    : undefined;
+  const targetedIds = open.made.flatMap((made) => (made.targetId ? [made.targetId] : []));
+  for (const swing of routine ? swingsOf(routine.attacks) : []) {
+    // A save step left untaken is passed over, as a whole routine passes one that isn't worth it.
+    if (fit.includes(swing.index) || stepAbility(swing.step, executables)) continue;
+    const candidates = swingCandidates(swing.step, executables).filter((attack) => offered.has(attack.id) && canPayFor(actor, attack));
+    if (!candidates.length) continue;
+    const choice = decideMultiattackSwing(state, actor, { swing, candidates, previous, targetedIds }, { attackTargetIds: [], attackActionIds: [] });
+    if (choice?.skip || actor.state !== "active") return { reason: "its controller passed" };
+    const targetId = choice?.targetId ?? (swing.step.target === "same-as-previous" ? previous?.targetId : undefined);
+    const target = targetId ? state.snapshot.combatants.find((combatant) => combatant.id === targetId) : undefined;
+    if (!target) return { reason: "no target left" };
+    const reaching = candidates.filter((attack) => !targetingProblem(state.snapshot, actor, target, attack));
+    const actionId = reaching.find((attack) => attack.id === choice?.actionId)?.id ?? defaultSwingAttack(swing.step, reaching)?.id;
+    return actionId ? { actionId, targetId: target.id } : { reason: `${target.displayName} is out of its reach` };
+  }
+  return { reason: "nothing it can attack with" };
 }
 
 

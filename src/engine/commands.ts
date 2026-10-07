@@ -26,6 +26,9 @@ import {
   spatialDistanceToPoint,
   spellSlotLevel,
   chosenTargetCount,
+  closeOpenRoutines,
+  planSwing,
+  resolveRoutineSwing,
   standingProblem,
   targetingProblem,
   validateBuffTargeting,
@@ -52,6 +55,11 @@ export type CombatCommand =
   | { kind: "move"; actorId: Id; waypoints: Point[]; altitude?: number }
   /** Use an ability the engine runs, aimed at `target`. */
   | { kind: "use"; actorId: Id; actionId: Id; target?: UseTarget }
+  /**
+   * A swing of a routine made a swing at a time (HOTBAR_REDESIGN_PLAN.md §4.1): `actionId` is the attack (or a step's
+   * ability) it's made with. It continues the routine open in its slot, or opens one; `routineId` opens a costed one.
+   */
+  | { kind: "swing"; actorId: Id; actionId: Id; target?: UseTarget; routineId?: Id }
   /** Use an ability by hand: it takes its slot and its cost and is logged; the DM applies what it does. */
   | { kind: "use-by-hand"; actorId: Id; actionId: Id; targetIds?: Id[]; note?: string }
   /** Move a zone the creature controls (Moonbeam): a bonus action. */
@@ -112,6 +120,9 @@ export function executeCommand(state: EngineState, command: CombatCommand): void
     case "use":
       resolveUse(state, actor.id, command.actionId, command.target ?? {});
       return;
+    case "swing":
+      resolveRoutineSwing(state, actor.id, command.actionId, command.target ?? {}, command.routineId);
+      return;
     case "use-by-hand":
       resolveManualAction(state, actor.id, command.actionId, { targetIds: command.targetIds, note: command.note });
       return;
@@ -153,6 +164,7 @@ function endTurn(state: EngineState, actor: CombatantState): void {
   if (activeFactions(state.snapshot).size > 1) {
     closeTurn(state, actor.id);
   } else {
+    closeOpenRoutines(state, actor.id, "its controller ended the turn");
     closeActionEconomy(actor);
   }
 }
@@ -180,6 +192,8 @@ export function commandProblem(snapshot: EncounterSnapshot, command: CombatComma
       return command.waypoints.length === 0 ? "Pick where to move" : previewMove(snapshot, actor.id, command.waypoints, command.altitude).problem;
     case "use":
       return actionProblem(snapshot, actor.id, command.actionId) ?? targetProblem(snapshot, actor.id, command.actionId, command.target ?? {});
+    case "swing":
+      return swingProblem(snapshot, actor.id, command.actionId, command.target ?? {}, command.routineId);
     case "use-by-hand":
       return actionProblem(snapshot, actor.id, command.actionId, { byHand: true });
     case "move-zone":
@@ -244,6 +258,36 @@ export function actionProblem(snapshot: EncounterSnapshot, actorId: Id, actionId
   const terms = onHitTermsProblem(snapshot, actor, action);
   if (terms) return terms;
   return undefined;
+}
+
+/**
+ * Why a swing with `actionId` can't be made now (at `target`, if it's given): the routine open won't take it, the
+ * creature can't open one (its slot is spent, the routine's cost), it can't pay for the attack, or can't reach the
+ * creature aimed at. HOTBAR_REDESIGN_PLAN.md §4.1.
+ */
+export function swingProblem(snapshot: EncounterSnapshot, actorId: Id, actionId: Id, target: UseTarget = {}, routineId?: Id): string | undefined {
+  const plan = planSwing(snapshot, actorId, actionId, { routineId, targetId: target.targetIds?.[0] });
+  if ("problem" in plan) return plan.problem;
+  const actor = findCombatant(snapshot, actorId);
+  if (!plan.open) {
+    const opening = actionProblem(snapshot, actorId, plan.routines[0]!.id);
+    if (opening) return opening;
+  } else if (!canAct(actor, "free")) {
+    // Its slot is spent on the routine already: whether it can act at all (stunned by a reaction between swings).
+    return `${actor.displayName} can't act right now`;
+  }
+  const gated = whileConditionProblem(actor, plan.action);
+  if (gated) return gated;
+  if (!canPayFor(actor, plan.action)) return costProblem(actor, plan.action);
+  const terms = onHitTermsProblem(snapshot, actor, plan.action);
+  if (terms) return terms;
+  const ids = target.targetIds ?? [];
+  if (plan.action.kind !== "attack") return ids.length || target.aim ? targetProblem(snapshot, actorId, plan.action.id, target) : undefined;
+  if (ids.length === 0) return undefined;
+  const creature = snapshot.combatants.find((combatant) => combatant.id === ids[0]);
+  if (!creature) return "That target isn't in the fight";
+  if (creature.state !== "active" && creature.state !== "downed") return `${creature.displayName} is ${creature.state}`;
+  return targetingProblem(snapshot, actor, creature, plan.action);
 }
 
 const ORDINALS = ["0th", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];

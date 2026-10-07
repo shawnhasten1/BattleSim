@@ -4,7 +4,7 @@ import { templateCreature } from "./summon-templates";
 import { wildShapeForm } from "./wild-shape";
 import { rollDice, abilityModifier, parseDiceExpression, repeatDice, resolveScaledDamage, type DiceRollResult } from "./dice";
 import { coverBetween, distanceWithHeight, footprintCells, footprintGroundHeight, groundHeightAt, gridDistance, movementOptionsFor, movementProfileOf, movementReference, isFootprintLegal, lineOfEffect, findPath, findReachableCells, pathCostAlong, sizeFootprint, stepCost, stepDistance, terrainAtCell, type CoverBlocker, type CoverResult, type OccupancyMovementOptions, type PathResult } from "./geometry";
-import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, stepAbility, swingCandidates, swingsOf, type MultiattackSwing } from "./multiattack";
+import { attackFamilyId, canPayFor, defaultSwingAttack, isAttackVariant, multiattackVariants, nextSwingOptions, routineBaseId, routineFit, stepAbility, swingCandidates, swingsFilledBy, swingsOf, type MadeSwing, type MultiattackSwing } from "./multiattack";
 import { armoredAc, isArmorItem, isWorn, type ArmoredAc, type UnarmoredFormula } from "./armor";
 import { compileItemUses, withArticle, workingItems } from "./items";
 import { effectiveDefinition, selfGateHolds } from "./stats";
@@ -65,6 +65,7 @@ import type {
   SaveActionDefinition,
   TerrainZone,
   MultiattackStep,
+  OpenRoutine,
   SummonActionDefinition,
   SummonOption,
   SummonTemplate,
@@ -2402,6 +2403,211 @@ export function askingSwingHook(
     }
     return { targetId: answer.targetId, actionId: answer.actionId };
   };
+}
+
+/* ─── A routine made a swing at a time (Play: HOTBAR_REDESIGN_PLAN.md §4.1) ─────────────────────────────────────────
+ * A person's creature attacks with a weapon; that takes the Attack action (or its Multiattack), and the swings left stay
+ * open for the rest of its turn, each its own command: it can move, use its bonus action or drink a potion between them,
+ * and Undo takes back one swing. Each swing is made as a whole routine's are, and the routine is logged as one.
+ */
+
+type RoutineSlot = OpenRoutine["slot"];
+type SwingAction = AttackActionDefinition | Extract<ActionDefinition, { kind: "save" | "area-save" }>;
+
+/**
+ * The routines a swing opens without one being asked for by name (D4): the creature's multiattacks taking `slot` (either,
+ * if left out) that cost nothing more than it. The Attack action with Extra Attack, a monster's Multiattack, their
+ * options and their copies with an attack replaced.
+ */
+export function freeRoutines(executables: ActionDefinition[], slot?: RoutineSlot): MultiattackActionDefinition[] {
+  return executables.filter((action): action is MultiattackActionDefinition => action.kind === "multiattack"
+    && (action.actionType === "action" || action.actionType === "bonus") && (!slot || action.actionType === slot)
+    && !action.resourceCost && !action.usage && (action.automationSupport === "full" || action.automationSupport === "partial")
+    && !isLegendaryVariant(action) && !isLairVariant(action));
+}
+
+/** The routine `combatant` has open in `slot`: started this turn, with swings left. */
+export function openRoutineIn(combatant: CombatantState, slot: RoutineSlot): OpenRoutine | undefined {
+  return combatant.turnFlags?.routines?.find((routine) => routine.slot === slot);
+}
+
+/** The compiled routines an open one can still be. */
+export function routinesOf(executables: ActionDefinition[], open: OpenRoutine): MultiattackActionDefinition[] {
+  return open.candidates.flatMap((id) => {
+    const routine = executables.find((action) => action.id === id);
+    return routine?.kind === "multiattack" ? [routine] : [];
+  });
+}
+
+/** A swing as it would be made: the routine open in its slot that it continues (none: it opens one), and those it fits. */
+export interface SwingPlan {
+  slot: RoutineSlot;
+  open?: OpenRoutine;
+  /** The routines it's a swing of; it's logged under the first. */
+  routines: MultiattackActionDefinition[];
+  /** The attack it's made with, or a step's ability (Frightful Presence, Breath Weapon in place of an attack). */
+  action: SwingAction;
+}
+
+/**
+ * How a swing with `actionId` would be made now, at `targetId` if given: the next of the routine open in its slot, or
+ * the first of one it opens (`routineId` names a costed one: Flurry of Blows) — or why it can't be. Whether the
+ * creature can open one (its slot, the routine's cost) is the caller's to ask (`actionProblem` on the routine).
+ */
+export function planSwing(snapshot: EncounterSnapshot, actorId: Id, actionId: Id, options: { routineId?: Id; targetId?: Id } = {}): SwingPlan | { problem: string } {
+  const actor = findCombatant(snapshot, actorId);
+  if (actor.state !== "active") return { problem: `${actor.displayName} is ${actor.state}` };
+  const executables = getExecutableActions(getDefinition(snapshot, actor));
+  const action = executables.find((candidate): candidate is SwingAction => candidate.id === actionId
+    && (candidate.kind === "attack" || candidate.kind === "save" || candidate.kind === "area-save"));
+  if (!action) return { problem: `${actor.displayName} has no ${actionId} to swing with` };
+  const swing: MadeSwing = { actionId, ...(options.targetId ? { targetId: options.targetId } : {}) };
+  const sameFamily = (id: Id) => !options.routineId || routineBaseId(id) === routineBaseId(options.routineId);
+
+  // A routine open in a slot goes on while the swing fits it (D5).
+  let blocked: { slot: RoutineSlot; problem: string } | undefined;
+  for (const open of actor.turnFlags?.routines ?? []) {
+    if (!open.candidates.some(sameFamily)) continue;
+    const routines = routinesOf(executables, open);
+    const fitting = routines.filter((routine) => routineFit(routine, [...open.made, swing], executables));
+    if (fitting.length) return { slot: open.slot, open, routines: fitting, action };
+    const problem = blockedSwing(snapshot, action, routines, open.made, swing, executables);
+    if (problem) blocked ??= { slot: open.slot, problem };
+  }
+
+  // Else the first swing of a routine it opens.
+  const pool = options.routineId
+    ? executables.filter((candidate): candidate is MultiattackActionDefinition => candidate.kind === "multiattack" && sameFamily(candidate.id))
+    : freeRoutines(executables);
+  const fitting = pool.filter((routine) => routineFit(routine, [swing], executables));
+  // Routines in both slots that it fits (rare): the slot the attack itself takes.
+  const slot = (fitting.find((routine) => routine.actionType === action.actionType) ?? fitting[0])?.actionType as RoutineSlot | undefined;
+  // Its routine's swings used up, and no action to open another with: say why the routine won't take it.
+  if (blocked && (!slot || (slot === blocked.slot && actor.actionEconomy?.[slot] === false))) return { problem: blocked.problem };
+  if (!slot) return { problem: `${action.name} isn't one of a routine's swings` };
+  return { slot, routines: fitting.filter((routine) => routine.actionType === slot), action };
+}
+
+/** Why the routine open won't take a swing that is one of its own: used up, after a miss, at the wrong creature, or another weapon. */
+function blockedSwing(
+  snapshot: EncounterSnapshot,
+  action: SwingAction,
+  routines: MultiattackActionDefinition[],
+  made: MadeSwing[],
+  swing: MadeSwing,
+  executables: ActionDefinition[]
+): string | undefined {
+  const filled = routines.flatMap((routine) => swingsFilledBy(routine, action.id, executables));
+  if (!filled.length) return undefined;
+  // The routine as the creature has it: "Attack", not the copy "Attack with Breath Weapon (cone)".
+  const base = routines[0] ? executables.find((candidate) => candidate.id === routineBaseId(routines[0]!.id)) : undefined;
+  const name = base?.name ?? routines[0]?.name ?? "the routine";
+  const nameOf = (id: Id | undefined) => snapshot.combatants.find((combatant) => combatant.id === id)?.displayName ?? "that creature";
+  if (routines.some((routine) => routineFit(routine, [...made, { actionId: action.id }], executables))) {
+    // It would fit at someone else.
+    const previous = made.at(-1);
+    if (filled.some((candidate) => candidate.step.target === "same-as-previous") && previous?.targetId) return `${action.name} has to go at ${nameOf(previous.targetId)}, as the attack before it did`;
+    return `${name} can't attack ${nameOf(swing.targetId)} twice`;
+  }
+  const attacked = made.some((entry) => executables.find((candidate) => candidate.id === entry.actionId)?.kind === "attack");
+  if (action.kind === "attack" && attacked && routines.every((routine) => routine.oneWeapon)) return `${name} is made with one weapon`;
+  if (filled.every((candidate) => candidate.step.requiresPreviousHit)) return `${action.name} comes only right after a hit with the attack before it`;
+  return `No ${action.name} ${action.kind === "attack" ? "attack" : "use"} left in ${name}`;
+}
+
+function setOpenRoutine(combatant: CombatantState, open: OpenRoutine): void {
+  const others = (combatant.turnFlags?.routines ?? []).filter((entry) => entry.slot !== open.slot);
+  combatant.turnFlags = { ...(combatant.turnFlags ?? {}), routines: [...others, open] };
+}
+
+/**
+ * One swing of a routine a person's creature makes a swing at a time: the next of the routine open in its slot, or
+ * the first of one it opens, which spends the slot (and a costed routine's cost) and is declared then. Made as a whole
+ * routine's swings are (`resolveAttackCore` under the routine; a step's ability `embedded`), and the routine closes,
+ * logged as one, when nothing more can be swung in it. Throws, before anything is spent, when it can't be made.
+ */
+export function resolveRoutineSwing(state: EngineState, actorId: Id, actionId: Id, use: UseTarget = {}, routineId?: Id): void {
+  const targetId = use.targetIds?.[0];
+  const plan = planSwing(state.snapshot, actorId, actionId, { routineId, targetId });
+  if ("problem" in plan) throw new Error(plan.problem);
+  const attacker = findCombatant(state.snapshot, actorId);
+  const definition = getDefinition(state.snapshot, attacker);
+  const executables = getExecutableActions(definition);
+  const { action } = plan;
+  const parent = plan.routines[0]!;
+  const target = targetId ? findCombatant(state.snapshot, targetId) : undefined;
+  if (action.kind === "attack") {
+    if (!target) throw new Error(`Pick a target for ${action.name}`);
+    if (target.state !== "active" && target.state !== "downed") throw new Error(`${target.displayName} is ${target.state}`);
+    const problem = targetingProblem(state.snapshot, attacker, target, action);
+    if (problem) throw new Error(problem);
+  } else if (action.kind === "area-save" ? !use.aim && !target && action.targeting?.origin !== "self" : !target && action.targeting?.target !== "self") {
+    throw new Error(`Pick where to aim ${action.name}`);
+  }
+  if (!canPayFor(attacker, action)) throw new Error(`${attacker.displayName} can't pay for ${action.name}`);
+
+  if (!plan.open) {
+    validateAndSpendAction(attacker, parent);
+    // A routine still open in this slot (its action came back: Action Surge) ends where it stands.
+    const stale = openRoutineIn(attacker, plan.slot);
+    if (stale) closeRoutine(state, attacker, stale, "it took another action");
+    declareAction(state, attacker, parent, { target });
+  }
+  const made = plan.open?.made ?? [];
+  spendEmbeddedCost(attacker, action);
+  let swing: MadeSwing;
+  if (action.kind === "attack") {
+    const result = resolveAttackCore(state, attacker, target!, definition, action, {}, false, parent);
+    swing = { actionId, targetId: target!.id, hit: result.hit };
+  } else {
+    // Aimed as when the ability is used on its own.
+    if (action.kind === "area-save") resolveAreaSaveAction(state, actorId, use.aim ?? target?.position ?? attacker.position, action.id, { embedded: true });
+    else resolveSaveAction(state, actorId, target?.id ?? actorId, action.id, { embedded: true, bonusTargetIds: use.targetIds?.slice(1) });
+    swing = { actionId, ...(target ? { targetId: target.id } : {}) };
+  }
+  const open: OpenRoutine = { slot: plan.slot, candidates: plan.routines.map((routine) => routine.id), made: [...made, swing] };
+  setOpenRoutine(attacker, open);
+  const more = attacker.state === "active" && [...nextSwingOptions(plan.routines, open.made, executables).keys()]
+    .some((id) => { const next = executables.find((candidate) => candidate.id === id); return Boolean(next && canPayFor(attacker, next as { resourceCost?: ResourceCost })); });
+  if (!more) closeRoutine(state, attacker, open, "nothing it can attack with");
+}
+
+/** Close a routine left open: each swing it had left is skipped (`reason`), and it's logged as one, as a whole routine is. */
+function closeRoutine(state: EngineState, attacker: CombatantState, open: OpenRoutine, reason: string): void {
+  const remaining = (attacker.turnFlags?.routines ?? []).filter((entry) => entry.slot !== open.slot);
+  attacker.turnFlags = { ...(attacker.turnFlags ?? {}), routines: remaining.length ? remaining : undefined };
+  const executables = getExecutableActions(getDefinition(state.snapshot, attacker));
+  const routines = routinesOf(executables, open);
+  const routine = routines.find((candidate) => routineFit(candidate, open.made, executables)) ?? routines[0];
+  if (!routine) return;
+  const fit = routineFit(routine, open.made, executables) ?? [];
+  if (attacker.state === "active") {
+    for (const swing of swingsOf(routine.attacks)) {
+      // A save step not taken is passed over quietly, as a whole routine passes it.
+      if (fit.includes(swing.index) || stepAbility(swing.step, executables)) continue;
+      const before = fit.indexOf(swing.index - 1);
+      const why = swing.step.requiresPreviousHit && before >= 0 && open.made[before]?.hit === false ? "the attack before it missed" : reason;
+      state.log.push(event(state, "MultiattackSwingSkipped", `${attacker.displayName} skips a ${routine.name} attack: ${why}`, {
+        attackerId: attacker.id, actionId: routine.id, step: swing.stepIndex, swing: swing.index, reason: why
+      }));
+    }
+  }
+  const targetIds = [...new Set(open.made.flatMap((swing) => (swing.targetId ? [swing.targetId] : [])))];
+  state.log.push(event(state, "MultiattackResolved", `${attacker.displayName} resolved ${routine.name}`, {
+    attackerId: attacker.id,
+    targetId: targetIds[0],
+    targetIds,
+    actionId: routine.id,
+    attacks: open.made.filter((swing) => executables.find((candidate) => candidate.id === swing.actionId)?.kind === "attack").length
+  }));
+}
+
+/** Close the routines `actorId` has open (in `slot`, or every one: its turn is ending): the swings left are skipped with `reason`. */
+export function closeOpenRoutines(state: EngineState, actorId: Id, reason: string, slot?: RoutineSlot): void {
+  const actor = state.snapshot.combatants.find((combatant) => combatant.id === actorId);
+  for (const open of actor?.turnFlags?.routines ?? []) {
+    if (!slot || open.slot === slot) closeRoutine(state, actor!, open, reason);
+  }
 }
 
 /**

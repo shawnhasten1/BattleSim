@@ -2824,6 +2824,25 @@ export interface TurnFlags {
   leveledSpellCast?: boolean;
   /** A spell was cast with Quickened Spell this turn: no level 1+ spell after it. */
   quickenedSpell?: boolean;
+  /** Routines a person's creature is making a swing at a time (Play), at most one per slot. Closed when its turn ends. */
+  routines?: OpenRoutine[];
+}
+
+/**
+ * The Attack action (or a Multiattack, or Flurry of Blows) a person's creature has started and has swings left of
+ * (HOTBAR_REDESIGN_PLAN.md §4.1). Each swing is its own command, so it can move, use its bonus action or drink a potion
+ * between them.
+ */
+export interface OpenRoutine {
+  /** The slot it took. */
+  slot: "action" | "bonus";
+  /**
+   * The compiled routines it can still be (`<id>`, `<id>:option-N`, `<id>:with-<ability>`): those the swings made so far
+   * fit. The routine is settled only when it has to be (a vampire's unarmed strike may yet be followed by a bite).
+   */
+  candidates: Id[];
+  /** The swings made so far, in order. */
+  made: Array<{ actionId: Id; targetId?: Id; hit?: boolean }>;
 }
 
 export interface CombatantState {
@@ -3476,7 +3495,12 @@ export const encounterSnapshotSchema = z.object({
       turnFlags: z.object({
         dashed: z.boolean().optional(),
         disengaged: z.boolean().optional(),
-        movementUsed: z.number().optional()
+        movementUsed: z.number().optional(),
+        routines: z.array(z.object({
+          slot: z.union([z.literal("action"), z.literal("bonus")]),
+          candidates: z.array(z.string()),
+          made: z.array(z.object({ actionId: z.string(), targetId: z.string().optional(), hit: z.boolean().optional() }))
+        })).optional()
       }).optional(),
       initiative: z.number().optional(),
       state: z.union([

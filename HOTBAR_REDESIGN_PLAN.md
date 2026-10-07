@@ -422,3 +422,30 @@ Found while checking in the browser, not fixed here:
   Lore Bard and Arcane Trickster carry it on Faerie Fire, Hypnotic Pattern, Charm Person and Tasha's Hideous Laughter,
   so the hotbar colours them "physical". The engine does deal it: the library bard's Faerie Fire logged "Goblin 1 took
   1 damage" on all 13 failed saves in 20 seeded casts. The SRD's own copies have `damage: []` and are fine.
+
+### Phase 3 — Open routines (2026-10-07)
+
+- `multiattack.ts` (pure):
+  - `routineFit` places the swings made into a routine's swings (D6, D7) or returns null.
+  - `nextSwingOptions` gives what each routine still fitting can swing next.
+  - `swingsLeftOf`, `swingsFilledBy` and `routineBaseId` support the hotbar and the refusal messages.
+- `combat.ts`:
+  - `planSwing`: how a swing would be made (continue the routine open in its slot, or open one), or why not.
+  - `resolveRoutineSwing`: makes the swing. It opens the routine on the first swing (spends the slot and a costed
+    routine's cost, then declares it) and closes it, logged as one, when nothing more fits.
+  - `closeOpenRoutines` and `freeRoutines`.
+  - `TurnFlags.routines`, in the zod schema too.
+- `commands.ts`: the `swing` command and `swingProblem`. End turn closes any routine left open when it ends the fight.
+- `simulation.ts`: `finishTurn` closes open routines ("its controller ended the turn"). `finishOpenRoutines`, called
+  first in `playAutomatedTurn`, makes the swings left with `decideMultiattackSwing`.
+- `tests/play-routines.test.ts` (15 tests) covers every case in the Phase 3 list. The full suite passes: 272 files,
+  3,065 tests, with the golden Auto Run logs unchanged.
+
+Differences from the plan:
+
+- **The AI's loop in `resolveMultiattackAction` is untouched.** A person's swing is validated differently: the target
+  and attack are explicit, and an illegal pick is refused rather than retargeted. So the two share the resolution
+  (`resolveAttackCore` under the routine, `spendEmbeddedCost`, a step's ability `embedded`), not the choosing.
+  Auto Run's logs can't change.
+- **A swing aimed at a creature the routine's rule forbids** (a tyrannosaurus's tail at the bite's target, a grick's
+  beak at anyone but the tentacles' target) is refused with the reason, not moved to someone else.

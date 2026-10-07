@@ -175,3 +175,103 @@ export function defaultSwingAttack(step: MultiattackStep, candidates: AttackActi
   if (!step.any) return plain[0] ?? candidates[0];
   return [...plain].sort((a, b) => roughAttackDamage(b) - roughAttackDamage(a))[0] ?? candidates[0];
 }
+
+/* ─── Routines left open across commands (Play: HOTBAR_REDESIGN_PLAN.md §4.1) ──────────────────────────────────────
+ * A person's creature makes its routine's swings one command at a time, moving or using its bonus action between
+ * them. Which routine it's making isn't settled until it has to be: the swings made so far only need to fit one.
+ */
+
+/** A swing made in a routine left open: what it was made with (an attack, or a step's ability), at whom, and if it hit. */
+export interface MadeSwing {
+  actionId: Id;
+  targetId?: Id;
+  hit?: boolean;
+}
+
+/** Whether a swing made with `actionId` can be this swing of a routine. */
+function fills(swing: MultiattackSwing, actionId: Id, executables: ActionDefinition[]): boolean {
+  const ability = stepAbility(swing.step, executables);
+  if (ability) return ability.id === actionId;
+  return swingCandidates(swing.step, executables).some((candidate) => candidate.id === actionId);
+}
+
+/** The swings of `routine` a swing with `actionId` could be, whatever has been swung already. */
+export function swingsFilledBy(routine: MultiattackActionDefinition, actionId: Id, executables: ActionDefinition[]): MultiattackSwing[] {
+  return swingsOf(routine.attacks).filter((swing) => fills(swing, actionId, executables));
+}
+
+/** A swing tied to the one before it: a grick's beak, "if that attack hits … against the same target". */
+function tiedToPrevious(step: MultiattackStep): boolean {
+  return Boolean(step.requiresPreviousHit) || step.target === "same-as-previous";
+}
+
+/**
+ * Which of `routine`'s swings the swings `made` took, in the order they were made, or null when they can't all be its
+ * swings. Each fills a different swing whose step takes what it was made with, in any order but these:
+ * - a swing tied to the one before it comes straight after that one (after a hit, if its step needs one, and at the
+ *   same target).
+ * - a "different" step's swing goes at someone no swing before it attacked.
+ * - under `oneWeapon`, every attack is made with one weapon.
+ * A target or a hit left out (a swing not made yet) isn't checked.
+ */
+export function routineFit(routine: MultiattackActionDefinition, made: MadeSwing[], executables: ActionDefinition[]): number[] | null {
+  const swings = swingsOf(routine.attacks);
+  if (made.length > swings.length) return null;
+  if (routine.oneWeapon) {
+    const weapons = new Set(made.flatMap((swing) => {
+      const attack = executables.find((candidate) => candidate.id === swing.actionId);
+      return attack?.kind === "attack" ? [attackFamilyId(attack, executables)] : [];
+    }));
+    if (weapons.size > 1) return null;
+  }
+  const taken: number[] = [];
+  const place = (at: number): boolean => {
+    if (at === made.length) return true;
+    const swingMade = made[at]!;
+    const before = made[at - 1];
+    for (const swing of swings) {
+      if (taken.includes(swing.index) || !fills(swing, swingMade.actionId, executables)) continue;
+      const { step } = swing;
+      if (tiedToPrevious(step) && swing.index > 0) {
+        if (taken[at - 1] !== swing.index - 1) continue;
+        if (step.requiresPreviousHit && before?.hit !== true) continue;
+        if (step.target === "same-as-previous" && swingMade.targetId && before?.targetId && swingMade.targetId !== before.targetId) continue;
+      }
+      if (step.target === "different" && swingMade.targetId && made.slice(0, at).some((other) => other.targetId === swingMade.targetId)) continue;
+      taken.push(swing.index);
+      if (place(at + 1)) return true;
+      taken.pop();
+    }
+    return false;
+  };
+  return place(0) ? taken : null;
+}
+
+/**
+ * What a swing can be made with next in one of `routines`, after the swings `made`: each attack (or variant of one) and
+ * step ability that fits at least one of them, with the ids of the routines it fits.
+ */
+export function nextSwingOptions(routines: MultiattackActionDefinition[], made: MadeSwing[], executables: ActionDefinition[]): Map<Id, Id[]> {
+  const options = new Map<Id, Id[]>();
+  for (const routine of routines) {
+    if (!routineFit(routine, made, executables)) continue;
+    const ids = new Set(swingsOf(routine.attacks).flatMap((swing) => {
+      const ability = stepAbility(swing.step, executables);
+      return ability ? [ability.id] : swingCandidates(swing.step, executables).map((candidate) => candidate.id);
+    }));
+    for (const id of ids) {
+      if (routineFit(routine, [...made, { actionId: id }], executables)) options.set(id, [...(options.get(id) ?? []), routine.id]);
+    }
+  }
+  return options;
+}
+
+/** How many swings the routines still fitting `made` have left: the most of any. */
+export function swingsLeftOf(routines: MultiattackActionDefinition[], made: MadeSwing[], executables: ActionDefinition[]): number {
+  return Math.max(0, ...routines.filter((routine) => routineFit(routine, made, executables)).map((routine) => swingsOf(routine.attacks).length - made.length));
+}
+
+/** A routine's family: the multiattack itself, from any of its compiled copies (`…:option-2`, `…:with-breath-weapon`). */
+export function routineBaseId(id: Id): Id {
+  return multiattackBaseId(id.replace(/:with-[a-z0-9-]+$/, ""));
+}
