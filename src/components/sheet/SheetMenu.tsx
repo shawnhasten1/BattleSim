@@ -18,8 +18,8 @@ export interface SheetToast {
   undo?: () => void;
 }
 
-const SAVE_LABELS: Record<LibraryStatus, string> = {
-  saved: "Update my library copy",
+/** A library actor you own has none: it's linked, so its changes are saved there already (ACTORS_TAB_PLAN.md D3). */
+const SAVE_LABELS: Record<Exclude<LibraryStatus, "saved">, string> = {
   template: "Copy to my library",
   srd: "Save a copy to my library",
   scene: "Save to my library"
@@ -68,7 +68,7 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
     const state = useEncounterStore.getState();
     const id = state.encounter.combatants.find((candidate) => candidate.id === combatant.id)?.definitionId ?? definition.id;
     const saved = state.definitionsLibrary.some((candidate) => candidate.id === id || candidate.id === definition.id);
-    onToast({ message: saved ? `${status === "saved" ? "Updated" : "Saved"} ${name} in your library.` : `Couldn't save ${name} to your library.` });
+    onToast({ message: saved ? `Saved ${name} in your library.` : `Couldn't save ${name} to your library.` });
   }
 
   function duplicate() {
@@ -121,7 +121,7 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
       { label: "Open in the character builder…", onSelect: () => guard(() => openBuilder({ kind: "edit", definitionId: definition.id })) },
       { separator: true as const }
     ] : []),
-    { label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) },
+    ...(status === "saved" ? [] : [{ label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) }]),
     { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition, ownerDocument)) },
     { separator: true },
     { label: "Duplicate token", onSelect: () => guard(duplicate) },

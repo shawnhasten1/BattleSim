@@ -21,7 +21,7 @@ import type { ContextMenuItem } from "@/components/ui/ContextMenu";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
 import { SheetGuardContext, type EditorGuard } from "./SheetGuard";
 import { UnsavedPrompt } from "./UnsavedPrompt";
-import { AutomationCount, VitalsStrip } from "./SheetHeader";
+import { AutomationCount, LibrarySaveStatus, VitalsStrip } from "./SheetHeader";
 import { SheetMenu, type SheetToast } from "./SheetMenu";
 import { ScopedTabs, type SheetTabId } from "./ScopedTabs";
 import { StatsTab } from "./sheet-tabs/StatsTab";
@@ -235,6 +235,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   const controls = (
     <>
+      <LibrarySaveStatus definition={definition} />
       <StyleSwitch style={sheet.style} onChange={switchStyle} />
       <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
       <SheetMenu

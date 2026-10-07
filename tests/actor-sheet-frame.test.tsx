@@ -150,8 +150,9 @@ describe("the ⋯ menu", () => {
     await menuItem("Save to my library");
     expect(saveDefinition).toHaveBeenCalledWith("def-goblin");
     expect(screen.getByRole("status").textContent).toBe("Saved Imported Goblin Stand-in in your library.");
+    // Linked now: its changes save to the library by themselves, so there's nothing left to offer.
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: "Update my library copy" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /library/ })).toBeNull();
   });
 });
 

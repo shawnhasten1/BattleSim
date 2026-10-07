@@ -101,6 +101,8 @@ import { wouldCreateCycle, type ActorFolder } from "@/lib/actor-folders";
 import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
 import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, sameNamedAbilities, withoutAbilities, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
 import { useCatalogStore } from "@/store/catalog-store";
+import { changedLibraryActors, syncLibraryActors } from "@/lib/library-link";
+import { onLibrarySaved, useLibrarySyncStore } from "@/store/library-sync-store";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
 
@@ -1008,6 +1010,34 @@ export const useEncounterStore = create<EncounterStore>()(
         });
       };
 
+      /** Linked library actors (ACTORS_TAB_PLAN.md, Phase 1): the ones a change to the board edited are saved to the library. */
+      const queueLibrarySaves = (before: EncounterSnapshot, after: EncounterSnapshot) => {
+        const { definitionsLibrary, templateDefinitionIds } = get();
+        for (const definition of changedLibraryActors(before.definitions, after.definitions, definitionsLibrary, templateDefinitionIds)) {
+          useLibrarySyncStore.getState().queue(definition);
+        }
+      };
+
+      /**
+       * `encounter` with your library actors in it as the library has them (an opening scene, the library just loaded),
+       * tokens at full hit points following a new maximum. An actor whose save is still on its way keeps the scene's copy.
+       */
+      const withLibraryActors = (
+        encounter: EncounterSnapshot,
+        library = get().definitionsLibrary,
+        templateIds = get().templateDefinitionIds
+      ): EncounterSnapshot => {
+        const synced = syncLibraryActors(encounter, library, templateIds, useLibrarySyncStore.getState().busyIds());
+        return synced === encounter ? encounter : withHitPointsFollowing(encounter, synced);
+      };
+
+      // A save that went through is the library's copy now.
+      onLibrarySaved((definition) => {
+        set((state) => ({
+          definitionsLibrary: state.definitionsLibrary.map((candidate) => (candidate.id === definition.id ? definition : candidate))
+        }));
+      });
+
       const commitEncounter = (
         incoming: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
@@ -1021,6 +1051,7 @@ export const useEncounterStore = create<EncounterStore>()(
         lastMerge = mergingKey ? { key: mergingKey, step: undoStack[0]! } : null;
         // An edit by hand during a fight changes the board an open question's step would run on again, as an overruled
         // roll's would: the question goes, and the rolls before the edit can't be overruled any more.
+        const before = get().encounter;
         const handEdited = play && !playCommitting
           ? {
             play: {
@@ -1043,6 +1074,7 @@ export const useEncounterStore = create<EncounterStore>()(
           replayIndex: null,
           ...extras
         });
+        queueLibrarySaves(before, get().encounter);
       };
 
       /**
@@ -1381,6 +1413,7 @@ export const useEncounterStore = create<EncounterStore>()(
       undo: () => {
         const [previous, ...rest] = get().undoStack;
         if (!previous) return;
+        const before = get().encounter;
         const play = get().play;
         if (play) {
           // In a fight the log goes back with the board (the whole of it, if the step rewrote it), and the rolls that
@@ -1402,6 +1435,7 @@ export const useEncounterStore = create<EncounterStore>()(
             play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, recent: mark.recent, status: sessionStatusOf(playStatusOf(previous, play.control)) }
           });
           lastMerge = null;
+          queueLibrarySaves(before, previous);
           return;
         }
         set({
@@ -1420,10 +1454,12 @@ export const useEncounterStore = create<EncounterStore>()(
             message: "Undo applied"
           }]
         });
+        queueLibrarySaves(before, previous);
       },
       redo: () => {
         const [next, ...rest] = get().redoStack;
         if (!next) return;
+        const before = get().encounter;
         const play = get().play;
         if (play) {
           const [mark = { tail: [] }, ...marks] = get().redoPlay;
@@ -1438,6 +1474,7 @@ export const useEncounterStore = create<EncounterStore>()(
             play: { ...play, pending: undefined, playback: undefined, skipping: false, undoGroup: undefined, message: undefined, recent: mark.recent, status: sessionStatusOf(playStatusOf(next, play.control)) }
           });
           lastMerge = null;
+          queueLibrarySaves(before, next);
           return;
         }
         set({
@@ -1456,6 +1493,7 @@ export const useEncounterStore = create<EncounterStore>()(
             message: "Redo applied"
           }]
         });
+        queueLibrarySaves(before, next);
       },
       mergeEdits: (key, edit) => {
         const outer = mergingKey;
@@ -1822,7 +1860,7 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ projectStatus: "Project has no encounter" });
           return;
         }
-        const normalizedSnapshot = normalizeEncounterVisuals(snapshot);
+        const normalizedSnapshot = withLibraryActors(normalizeEncounterVisuals(snapshot));
         set({
           currentProjectId: data.project.id,
           currentEncounterId: data.project.encounters[0]?.id ?? null,
@@ -1940,7 +1978,7 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         const data = await response.json() as { encounter: EncounterSummary };
-        const normalizedSnapshot = normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot);
+        const normalizedSnapshot = withLibraryActors(normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot));
         const currentMapImage = get().mapImageDataUrl;
         set({
           currentProjectId: projectId,
@@ -2027,7 +2065,7 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         // The campaign's rules are its own: the encounter takes them as it opens.
-        const normalizedSnapshot = withCampaignRules(normalizeEncounterVisuals(snapshot), data.encounter.campaignRules);
+        const normalizedSnapshot = withLibraryActors(withCampaignRules(normalizeEncounterVisuals(snapshot), data.encounter.campaignRules));
         set({
           campaignRules: data.encounter.campaignRules ?? {},
           currentProjectId: data.encounter.projectId ?? get().currentProjectId,
@@ -2112,7 +2150,7 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         const data = await response.json() as { encounter: EncounterSummary };
-        const normalizedSnapshot = normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot);
+        const normalizedSnapshot = withLibraryActors(normalizeEncounterVisuals(data.encounter.snapshotJson ?? snapshot));
         set({
           currentProjectId: projectId,
           currentEncounterId: data.encounter.id,
@@ -2179,11 +2217,19 @@ export const useEncounterStore = create<EncounterStore>()(
           return;
         }
         const data = await response.json() as { definitions: CreatureDefinition[]; templateIds?: string[] };
-        set({
-          definitionsLibrary: data.definitions.map(migrateDefinition),
-          templateDefinitionIds: data.templateIds ?? [],
-          definitionStatus: `${data.definitions.length} saved definitions`
-        });
+        const library = data.definitions.map(migrateDefinition);
+        const templateIds = data.templateIds ?? [];
+        // The scene takes the library's version of each of your actors in it, and so does its undo history: undoing
+        // something else mustn't bring back an older copy, which would then be saved over the library's.
+        const sync = (snapshot: EncounterSnapshot) => withLibraryActors(snapshot, library, templateIds);
+        set((state) => ({
+          definitionsLibrary: library,
+          templateDefinitionIds: templateIds,
+          definitionStatus: `${data.definitions.length} saved definitions`,
+          encounter: sync(state.encounter),
+          undoStack: state.undoStack.map(sync),
+          redoStack: state.redoStack.map(sync)
+        }));
       },
       saveSelectedDefinition: async () => {
         const state = get();
@@ -2306,8 +2352,8 @@ export const useEncounterStore = create<EncounterStore>()(
         }
       },
       addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position) => {
-        // Already in the scene: another token of the scene's copy, as for SRD monsters. The library's copy would
-        // replace it, silently undoing every edit made to it on the sheet, for every token of it.
+        // Already in the scene: another token of the scene's copy. It's the library's (they're linked), or newer while a
+        // save is on its way, which the library's copy would silently undo for every token of it.
         const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId)
           ?? get().definitionsLibrary.find((candidate) => candidate.id === definitionId);
         if (definition) {

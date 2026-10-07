@@ -6,6 +6,7 @@ import type { SheetTabId } from "@/components/sheet/ScopedTabs";
 import { readJson, writeJson } from "@/lib/persist";
 import { paletteFrom, type CodexPaletteId } from "@/lib/actor-sheet/codex";
 import { useEncounterStore } from "./encounter-store";
+import { useLibrarySyncStore } from "./library-sync-store";
 
 /** How a sheet looks: today's sheet, or the Codex (CHARACTER_SHEET_WINDOWS_PLAN.md Part 3). */
 export type SheetStyle = "standard" | "codex";
@@ -191,10 +192,15 @@ export const useSheetWindowsStore = create<SheetWindowsState>((set, get) => {
       return id;
     },
 
-    close: (id) => set((state) => {
-      const { [id]: _dropped, ...positions } = state.positions;
-      return { windows: state.windows.filter((entry) => entry.id !== id), positions };
-    }),
+    close: (id) => {
+      // Its library actor's last change goes now, not a moment later (a page left meanwhile would lose it).
+      const closing = get().windows.find((entry) => entry.id === id);
+      if (closing) void useLibrarySyncStore.getState().flush(closing.definitionId);
+      set((state) => {
+        const { [id]: _dropped, ...positions } = state.positions;
+        return { windows: state.windows.filter((entry) => entry.id !== id), positions };
+      });
+    },
 
     closeAll: () => set({ windows: [], positions: {} }),
 

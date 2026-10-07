@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { actualMaxHp, armorClassOf, effectiveDefinition, type CombatantState, type ConditionInstance, type CreatureDefinition, type EncounterSnapshot, type Faction } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
+import { useLibrarySyncStore } from "@/store/library-sync-store";
 import { automationSummary } from "@/lib/actor-sheet/ai-uses";
 import { concentrationOf, conditionLabel, describeCondition, DM_CONDITIONS, statusOf } from "@/lib/actor-sheet/conditions";
 import { speedLine } from "@/lib/actor-sheet/summaries";
@@ -157,6 +158,35 @@ function ConditionChip({ condition, combatant, encounter, onRemove }: {
       <button type="button" className={styles.conditionRemove} aria-label={`Remove ${label}`} onClick={onRemove}>
         <X size={11} />
       </button>
+    </span>
+  );
+}
+
+/**
+ * Where the last change to a library actor you own stands (ACTORS_TAB_PLAN.md, Phase 1): saving to the library, saved
+ * there, or failed with Retry. Nothing for an actor that isn't linked, or before its first change.
+ */
+export function LibrarySaveStatus({ definition }: { definition: Pick<CreatureDefinition, "id" | "name"> }) {
+  const state = useLibrarySyncStore((s) => s.states[definition.id]);
+  const retry = useLibrarySyncStore((s) => s.retry);
+  if (!state) return null;
+  if (state === "failed") {
+    return (
+      <span className={styles.librarySave} data-state="failed" role="status">
+        Not saved
+        <button type="button" onClick={() => retry(definition.id)} title={`Save ${definition.name} to your library again`}>Retry</button>
+      </span>
+    );
+  }
+  const saved = state === "saved";
+  return (
+    <span
+      className={styles.librarySave}
+      data-state={state}
+      role="status"
+      title={saved ? `Changes to ${definition.name} are saved to your library.` : `Saving ${definition.name} to your library…`}
+    >
+      {saved ? "Saved" : "Saving…"}
     </span>
   );
 }

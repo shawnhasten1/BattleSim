@@ -16,7 +16,7 @@ export function libraryStatus(definition: Pick<CreatureDefinition, "id">, librar
 }
 
 const LIBRARY_NOTES: Record<LibraryStatus, string> = {
-  saved: "Your library copy only changes when you update it (⋯).",
+  saved: "It's linked to your library: changes save there and reach it in your other scenes too.",
   template: "The template itself never changes: copy it to your library from ⋯.",
   srd: "The SRD monster itself never changes: save a copy to your library from ⋯.",
   scene: "It isn't in your library: save it there from ⋯."

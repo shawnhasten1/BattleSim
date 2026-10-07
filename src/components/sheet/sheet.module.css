@@ -230,6 +230,29 @@
   color: var(--ui-text);
 }
 
+.librarySave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.librarySave[data-state="failed"] {
+  color: var(--ui-danger, #e5484d);
+}
+
+.librarySave button {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .menuButton {
   display: grid;
   place-items: center;

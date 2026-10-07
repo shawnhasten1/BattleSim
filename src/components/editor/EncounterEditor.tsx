@@ -27,6 +27,7 @@ import { useSyncEncounterRoute, type EncounterRouteParams } from "@/hooks/useSyn
 import type { CreatureDefinition } from "@/engine";
 import { useCatalogStore } from "@/store/catalog-store";
 import { useMyLibraryStore } from "@/store/my-library-store";
+import { hasUnsavedLibraryEdits, useLibrarySyncStore } from "@/store/library-sync-store";
 import { useSheetWindowsStore } from "@/store/sheet-windows-store";
 
 /** Open the sheet of a token: the one given, or the selected one (a token just created, imported or built is selected). */
@@ -134,6 +135,17 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
     // The abilities saved to My library, for Add ability on any creature.
     void useMyLibraryStore.getState().load();
   }, [loadActorFolders, loadDefinitionsLibrary, loadProjects]);
+
+  // A change to a library actor is saved a moment after it's made: leaving before then asks first.
+  useEffect(() => {
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!hasUnsavedLibraryEdits()) return;
+      void useLibrarySyncStore.getState().flush();
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   function onCanvasDragOver(event: DragEvent<HTMLDivElement>) {
     if (event.dataTransfer.types.includes("application/x-battle-sim-actor")) {
