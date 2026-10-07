@@ -687,7 +687,9 @@ function effectSentenceOnly(effect: FeatureEffect, definition: CreatureDefinitio
     case "spell-damage-ability":
       return `${S} adds ${who.possessive} ${ABILITY_NAME[effect.ability]} modifier to one damage roll of ${spellScopeText(effect, who)}.`;
     case "spell-half-on-miss":
-      return `When ${who.subject} misses with ${spellScopeText(effect, who, true)}, or a creature succeeds on a saving throw against one, it still takes half the damage, and nothing else.`;
+      return effect.savesOnly
+        ? `When a creature succeeds on a saving throw against ${spellScopeText(effect, who, true)}, it still takes half the damage, and nothing else.`
+        : `When ${who.subject} misses with ${spellScopeText(effect, who, true)}, or a creature succeeds on a saving throw against one, it still takes half the damage, and nothing else.`;
     case "spell-range":
       return `${capitalize(spellScopeText(effect, who))} with a range of ${effect.minRange ?? 0} feet or more reach ${effect.bonus} feet farther.`;
     case "initiative": {
@@ -968,7 +970,7 @@ function effectShortOnly(effect: FeatureEffect, definition: CreatureDefinition):
     case "attack-bonus": return `${formulaText(effect.bonus, definition).replace(/ \(.*\)$/, "")} to hit${gate}`;
     case "critical-range": return `${scope}crits on ${effect.minimum}–20${gate}`;
     case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
-    case "spell-half-on-miss": return `half damage on a miss or a save: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
+    case "spell-half-on-miss": return `half damage on ${effect.savesOnly ? "a save" : "a miss or a save"}: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "damage-dice": return [effect.minimumDie ? `${scope}damage dice min ${effect.minimumDie}` : "", effect.rollTwice ? `${scope}damage rolled twice${effect.oncePerTurn ? " once a turn" : ""}` : ""].filter(Boolean).join(", ") || "damage dice";
     case "healing-bonus": return [effect.slotBonus ? "+2 + slot level healing" : "", effect.selfOnOthers ? "heals itself when it heals others" : "", effect.maximize ? "healing dice maximized" : ""].filter(Boolean).join(", ") || "healing";

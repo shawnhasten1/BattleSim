@@ -30,7 +30,9 @@ export const GAPS_2014 = {
   "immune-after-save": "A creature that saves being safe from it for a while (Intimidating Presence's 24 hours)",
   "catch-missile": "Catching a missile and throwing it back for a ki point (Deflect Missiles)",
   "end-own-condition": "An action ending a condition on itself (Stillness of Mind)",
-  "unsimulated-spell": "A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary)"
+  "unsimulated-spell": "A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary)",
+  "metamagic-2014": "A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell)",
+  "activation-timing": "A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type)"
 } as const;
 
 export type Gap2014 = GapCode | keyof typeof GAPS_2014;
@@ -58,6 +60,14 @@ export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_monk_empty-body": ["stealth"],
   "srd_way-of-the-open-hand_tranquility": ["unsimulated-spell"],
   "srd_way-of-the-open-hand_quivering-palm": ["delayed-damage"],
+  "srd_school-of-evocation_overchannel": ["max-damage"],
+  "srd_sorcerer_metamagic:Careful Spell": ["metamagic-2014"],
+  "srd_sorcerer_metamagic:Extended Spell": ["metamagic-2014"],
+  "srd_sorcerer_metamagic:Twinned Spell": ["metamagic-2014"],
+  "srd_draconic-bloodline_elemental-affinity": ["activation-timing"],
+  "srd_draconic-bloodline_draconic-presence": ["activated-aura"],
+  "srd_cleric_destroy-undead": ["destroy-undead"],
+  "srd_cleric_divine-intervention": ["manual-roll"],
   "srd_grappler": ["grapple-pin"],
   "srd_half-orc:Savage Attacks": ["brutal-critical"],
   "srd_fighter_fighting-style:Dueling": ["equipment-check"],

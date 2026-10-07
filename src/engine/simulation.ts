@@ -1222,6 +1222,11 @@ function selectJointTurnPlan(
   if (!bonusPick) {
     return undefined;
   }
+  // Both spending what there's only enough of for one (a cleric's last 9th-level slot on Spiritual Weapon and Insect
+  // Plague): the single-slot flow chooses the bonus action once the action has spent it.
+  if (!affordsBoth(actor, mainPlan.action, bonusPick.plan.action)) {
+    return undefined;
+  }
   const mainTarget = { target: mainPlan.target, range: mainPlan.range };
   const bonusTarget = bonusPickTargetRange(bonusPick);
   if (mainTarget.target.id === bonusTarget.target.id) {
@@ -1239,6 +1244,17 @@ function selectJointTurnPlan(
     return { order: "bonus-first", mainPlan, bonusPick, leg1: bonusFirst.leg1, leg2: bonusFirst.leg2 };
   }
   return undefined;
+}
+
+/** Whether the creature has enough of every resource the two actions spend between them. */
+function affordsBoth(actor: CombatantState, first: ActionDefinition, second: ActionDefinition): boolean {
+  const needs = new Map<string, number>();
+  for (const action of [first, second]) {
+    for (const cost of ["resourceCost" in action ? action.resourceCost : undefined, action.extraCost]) {
+      if (cost) needs.set(cost.resourceId, (needs.get(cost.resourceId) ?? 0) + cost.amount);
+    }
+  }
+  return [...needs].every(([resourceId, amount]) => (actor.resources?.[resourceId] ?? 0) >= amount);
 }
 
 /** Log and resolve `plan` as the main action — the exact steps `takeAutomatedTurn`'s own tail uses. */

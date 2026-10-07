@@ -14,28 +14,32 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 18 | 9 | 3 | 3 | 2 | 1 |
 | Bard (College of Lore) | 15 | not in the 2014 catalog yet | | | | |
-| Cleric (Life Domain) | 13 | not in the 2014 catalog yet | | | | |
+| Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | not in the 2014 catalog yet | | | | |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
 | Monk (Way of the Open Hand) | 23 | 10 | 4 | 3 | 2 | 4 |
 | Paladin (Oath of Devotion) | 19 | not in the 2014 catalog yet | | | | |
 | Ranger (Hunter) | 17 | not in the 2014 catalog yet | | | | |
 | Rogue (Thief) | 18 | 6 | 0 | 1 | 3 | 8 |
-| Sorcerer (Draconic Bloodline) | 11 | not in the 2014 catalog yet | | | | |
+| Sorcerer (Draconic Bloodline) | 11 | 4 | 1 | 1 | 3 | 2 |
 | Warlock (The Fiend) | 12 | not in the 2014 catalog yet | | | | |
-| Wizard (School of Evocation) | 11 | not in the 2014 catalog yet | | | | |
+| Wizard (School of Evocation) | 11 | 6 | 1 | 0 | 2 | 2 |
 | Race traits | 34 | 9 of 9 races in the catalog | | | | |
 
 ## Gaps, most widespread first
 
 | Gap | What the engine lacks | Features |
 |---|---|---|
+| `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
 | `after-attack-action` | A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting) | 2 |
 | `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
+| `activated-aura` | An aura switched on for a while (Holy Nimbus) | 1 |
+| `activation-timing` | A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type) | 1 |
 | `catch-missile` | Catching a missile and throwing it back for a ki point (Deflect Missiles) | 1 |
 | `check-floor` | A check's total raised to the ability score (Indomitable Might, when escaping a grapple) | 1 |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | 1 |
+| `destroy-undead` | Turn Undead destroying an undead of a low enough challenge rating outright | 1 |
 | `end-own-condition` | An action ending a condition on itself (Stillness of Mind) | 1 |
 | `exhaustion` | Exhaustion (Frenzy's cost) | 1 |
 | `extend-with-action` | Keeping an effect going with an action on later turns (Intimidating Presence) | 1 |
@@ -43,6 +47,8 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
 | `immune-after-save` | A creature that saves being safe from it for a while (Intimidating Presence's 24 hours) | 1 |
+| `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
+| `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | 1 |
 | `rage-2014` | Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious | 1 |
 | `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 1 |
@@ -87,11 +93,26 @@ Not in the 2014 catalog yet: 4 features.
 
 ## Cleric
 
-Not in the 2014 catalog yet: 6 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Divine Domain | builder |  |  |
+| 1 | Spellcasting | full |  |  |
+| 2, 6, 18 | Channel Divinity | full |  |  |
+| 4, 8, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5, 8, 11, 14, 17 | Destroy Undead | manual | destroy-undead |  |
+| 10, 20 | Divine Intervention | manual | manual-roll |  |
 
 ### Life Domain (Cleric subclass)
 
-Not in the 2014 catalog yet: 7 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Bonus Proficiency | info |  |  |
+| 1 | Disciple of Life | full |  |  |
+| 1 | Life Domain Spells (table) | builder |  |  |
+| 2 | Channel Divinity: Preserve Life | full |  |  |
+| 6 | Blessed Healer | full |  |  |
+| 8 | Divine Strike | full |  |  |
+| 17 | Supreme Healing | full |  |  |
 
 ## Druid
 
@@ -202,11 +223,24 @@ Not in the 2014 catalog yet: 4 features.
 
 ## Sorcerer
 
-Not in the 2014 catalog yet: 6 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Sorcerous Origin | builder |  |  |
+| 1 | Spellcasting | full |  |  |
+| 2 | Font of Magic | full |  |  |
+| 3, 10, 17 | Metamagic | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 20 | Sorcerous Restoration | info |  |  |
 
 ### Draconic Bloodline (Sorcerer subclass)
 
-Not in the 2014 catalog yet: 5 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Draconic Resilience | full |  |  |
+| 1 | Dragon Ancestor | info |  |  |
+| 6 | Elemental Affinity | partial | activation-timing | the resistance can be bought at any time, not only along with a spell of its type. |
+| 14 | Dragon Wings | full |  |  |
+| 18 | Draconic Presence | manual | activated-aura |  |
 
 ## Warlock
 
@@ -218,11 +252,24 @@ Not in the 2014 catalog yet: 5 features.
 
 ## Wizard
 
-Not in the 2014 catalog yet: 6 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Arcane Recovery | info |  |  |
+| 1 | Spellcasting | full |  |  |
+| 2 | Arcane Tradition | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 18 | Spell Mastery | full |  |  |
+| 20 | Signature Spells | full |  |  |
 
 ### School of Evocation (Wizard subclass)
 
-Not in the 2014 catalog yet: 5 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 2 | Evocation Savant | info |  |  |
+| 2 | Sculpt Spells | full |  |  |
+| 6 | Potent Cantrip | full |  |  |
+| 10 | Empowered Evocation | full |  |  |
+| 14 | Overchannel | partial | max-damage | using it again before a long rest, for necrotic damage to itself. |
 
 ## Races
 

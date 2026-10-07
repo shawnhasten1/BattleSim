@@ -273,6 +273,90 @@ describe("the 2014 Barbarian and Monk (Phase 8)", () => {
   });
 });
 
+describe("the 2014 Wizard, Sorcerer and Cleric (Phase 9a)", () => {
+  const BASE = { str: 8, dex: 14, con: 14, int: 16, wis: 16, cha: 16 };
+  const build = (classId: string, level: number) => withSuggestions(quickBuild(sources, { classId, level, abilities: { method: "manual", base: BASE } }), sources);
+  const built = (classId: string, level: number) => buildCharacter(build(classId, level), sources);
+  const feature = (entry: ReturnType<typeof built>, name: string) => entry.features.find((candidate) => candidate.feature.name === name)?.feature;
+  const slot = (entry: ReturnType<typeof built>, kind: string, id?: string) => entry.choices.find((candidate) => candidate.spec.kind === kind && (!id || candidate.spec.id === id));
+  const actorOf = (classId: string, level: number) => rebuildActor(blankCharacter("def-fighter", "Caster"), build(classId, level), sources).definition;
+  const mod = (score: number) => Math.floor((score - 10) / 2);
+  const prepared = (entry: ReturnType<typeof built>) => entry.choices.filter((candidate) => candidate.spec.kind === "spells" && candidate.spec.what === "prepared").reduce((sum, candidate) => sum + candidate.count, 0);
+
+  it("a 2014 Wizard: its tradition at 2nd level, its modifier plus its level prepared from a book of 6 + 2 a level, 2014 spells", () => {
+    const first = built("srd:class:wizard-2014", 1);
+    expect(first.warnings).toEqual([]);
+    expect(slot(first, "subclass")).toBeUndefined();
+    expect(slot(built("srd:class:wizard-2014", 2), "subclass")).toBeDefined();
+    const fifth = built("srd:class:wizard-2014", 5);
+    // Its Intelligence modifier (after the background's points and the 4th-level ASI) plus 5.
+    expect(prepared(fifth)).toBe(mod(fifth.fields.abilities.int) + 5);
+    expect(fifth.choices.filter((entry) => entry.spec.kind === "spells" && entry.spec.what === "spellbook").reduce((sum, entry) => sum + entry.count, 0)).toBe(6 + 2 * 4);
+    const cantrips = fifth.choices.filter((entry) => entry.spec.kind === "spells" && entry.spec.what === "cantrips");
+    expect(cantrips.reduce((sum, entry) => sum + entry.count, 0)).toBe(4);
+    expect(cantrips.every((entry) => entry.options.every((option) => option.edition === "2014"))).toBe(true);
+    expect(feature(fifth, "Sculpt Spells")).toBeDefined();
+    expect(feature(fifth, "Potent Cantrip")).toBeUndefined();
+  });
+
+  it("a 2014 Evoker's Potent Cantrip halves a cantrip's damage on a made save, never on a miss", () => {
+    const wizard = actorOf("srd:class:wizard-2014", 6);
+    expect(wizard.features!.find((entry) => entry.name === "Potent Cantrip")!.effects).toEqual([{ kind: "spell-half-on-miss", cantripsOnly: true, savesOnly: true }]);
+    const armed = { ...wizard, spells: [...(wizard.spells ?? []).filter((spell) => spell.level > 0), SRD_BUILDER_LIBRARY.spell!("srd:spell:fire-bolt")!, SRD_BUILDER_LIBRARY.spell!("srd:spell:acid-splash")!] };
+    const fireBolt = getExecutableActions(armed).find((action) => action.name === "Fire Bolt") as Extract<ActionDefinition, { kind: "attack" }>;
+    expect(fireBolt.halfDamageOnMiss).toBeUndefined();
+    const acidSplash = getExecutableActions(armed).find((action) => action.name === "Acid Splash") as Extract<ActionDefinition, { kind: "save" | "area-save" }>;
+    expect(acidSplash.onSuccess).toBe("half");
+  });
+
+  it("a 2014 Sorcerer knows its table's spells, makes slots and points with bonus actions, and has the eight 2014 Metamagic options", () => {
+    const first = built("srd:class:sorcerer-2014", 1);
+    expect(slot(first, "subclass")).toBeDefined();
+    expect(slot(first, "spells", "cantrips")!.count).toBe(4);
+    expect(prepared(first)).toBe(2);
+    const third = built("srd:class:sorcerer-2014", 3);
+    const font = feature(third, "Font of Magic")!.grantedActions!;
+    expect(font.map((action) => action.actionType)).toEqual(["bonus", "bonus", "bonus", "bonus", "bonus", "bonus"]);
+    const options = slot(third, "pick", "metamagic-options")!;
+    expect(options.count).toBe(2);
+    expect(options.options.map((option) => option.name)).toEqual(["Careful Spell", "Distant Spell", "Empowered Spell", "Extended Spell", "Heightened Spell", "Quickened Spell", "Subtle Spell", "Twinned Spell"]);
+    const twentieth = buildCharacter(withChoice(build("srd:class:sorcerer-2014", 3), { kind: "level", index: 2 }, ["metamagic-options"], ["heightened-spell", "careful-spell"]), sources);
+    expect(feature(twentieth, "Metamagic: Heightened Spell")!.effects).toEqual([{ kind: "metamagic", option: "heightened", resourceCost: { resourceId: "sorcery-points", amount: 3 } }]);
+    expect(feature(twentieth, "Metamagic: Careful Spell")!.automationSupport).toBe("partial");
+  });
+
+  it("a 2014 Draconic sorcerer: 13 + Dexterity, a hit point a level, its ancestor's affinity at 6th level, wings at 14th", () => {
+    let draconic = build("srd:class:sorcerer-2014", 14);
+    draconic = withChoice(draconic, { kind: "level", index: 0 }, ["subclass"], "srd:subclass:draconic-bloodline-2014");
+    draconic = withChoice(draconic, { kind: "level", index: 0 }, ["dragon-ancestor"], ["red"]);
+    const entry = buildCharacter(draconic, sources);
+    expect(entry.warnings).toEqual([]);
+    expect(feature(entry, "Draconic Resilience")!.effects).toEqual([{ kind: "unarmored-ac", base: 13, abilities: ["dex"] }]);
+    const affinity = feature(entry, "Elemental Affinity (fire)")!;
+    expect(affinity.effects).toEqual([{ kind: "spell-damage-ability", ability: "cha", spellsOnly: true, damageTypes: ["fire"] }]);
+    expect(feature(entry, "Dragon Wings")!.grantedActions![0]).toMatchObject({ actionType: "bonus", condition: { modifiers: { flySpeed: "walk" } } });
+    // Hit points: 6 + 13 × 4, and Constitution and Draconic Resilience's 1 a level.
+    expect(entry.fields.maxHp).toBe(6 + 13 * 4 + 14 * mod(entry.fields.abilities.con) + 14);
+  });
+
+  it("a 2014 Cleric: its domain at 1st level, Channel Divinity once, twice, three times, Divine Strike growing at 14th", () => {
+    const first = built("srd:class:cleric-2014", 1);
+    expect(first.warnings).toEqual([]);
+    // Its Wisdom modifier plus 1.
+    expect(prepared(first)).toBe(mod(first.fields.abilities.wis) + 1);
+    expect(first.spells.map((entry) => entry.spell.name)).toEqual(expect.arrayContaining(["Bless", "Cure Wounds"]));
+    expect(feature(first, "Disciple of Life")).toBeDefined();
+    for (const [level, uses] of [[2, 1], [6, 2], [18, 3]] as const) expect(built("srd:class:cleric-2014", level).resources["channel-divinity"], `level ${level}`).toBe(uses);
+    const eighth = built("srd:class:cleric-2014", 8);
+    expect((feature(eighth, "Divine Strike")!.effects![0] as { damage: Array<{ dice: string }> }).damage[0]!.dice).toBe("1d8");
+    expect((feature(built("srd:class:cleric-2014", 14), "Divine Strike")!.effects![0] as { damage: Array<{ dice: string }> }).damage[0]!.dice).toBe("2d8");
+    expect(feature(eighth, "Destroy Undead")!.automationSupport).toBe("manual-only");
+    expect(feature(eighth, "Turn Undead")).toBeUndefined();
+    expect(feature(eighth, "Channel Divinity")!.grantedActions!.map((action) => action.name)).toEqual(["Turn Undead"]);
+    expect(feature(eighth, "Channel Divinity: Preserve Life")!.grantedActions![0]).toMatchObject({ divided: { total: 40 } });
+  });
+});
+
 describe("the other 2014 races (Phase 7)", () => {
   const BASE = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const raceBuild = (speciesId: string, level = 1, classId = "srd:class:fighter-2014") =>

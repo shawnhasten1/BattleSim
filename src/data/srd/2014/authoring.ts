@@ -1,5 +1,5 @@
 import type { ActionDefinition, FeatureDefinition, FeatureEffect } from "@/engine";
-import type { ChoiceSpec, FeatureGrant } from "@/lib/character-builder/catalog";
+import type { ChoiceSpec, FeatureGrant, PickOption } from "@/lib/character-builder/catalog";
 import { srd51Source } from "../source";
 import { PREFIX_2014, srd14Feat, srd14Feature, srd14FeatureText, srd14TraitText } from "./reference";
 
@@ -93,6 +93,36 @@ export function fromLevels(steps: Array<[number, number]>): Array<number | null>
     let value: number | null = null;
     for (const [level, amount] of steps) if (index + 1 >= level) value = amount;
     return value;
+  });
+}
+
+/**
+ * The options a feature's text lists ("### Careful Spell" …), each as a `pick` option putting its text on the actor as a
+ * feature named `<prefix>: <option>`: `effects` by option id say what runs; the rest stay the SRD's text (manual).
+ * `partial` names the options that run only in part, with what doesn't.
+ */
+export function referenceOptions(key: string, prefix: string, effects: Record<string, FeatureEffect[]> = {}, partial: Record<string, string> = {}): PickOption[] {
+  const feature = srd14Feature(key);
+  return srd14FeatureText(key).split(/^### /m).slice(1).map((section) => {
+    const [heading, ...body] = section.split("\n");
+    const name = heading!.trim();
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const text = body.join("\n").trim();
+    const runs = effects[id];
+    return {
+      id,
+      name,
+      description: text.split("\n").find((line) => line.trim())?.trim(),
+      grants: [{
+        key: id,
+        feature: {
+          id, name: `${prefix}: ${name}`, category: "feature" as const, source: srd51Source(`${feature.key}:${name}`),
+          description: partial[id] ? `${text}\n\nNot simulated: ${partial[id]}` : text,
+          automationSupport: runs ? (partial[id] ? "partial" as const : "full" as const) : "manual-only" as const,
+          ...(runs ? { effects: runs } : {})
+        }
+      }]
+    };
   });
 }
 

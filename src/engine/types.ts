@@ -842,6 +842,8 @@ export type FeatureEffect = (
   | ({
     /** Its spells (as scoped) deal half damage on a missed attack roll or a made save, and nothing else (Potent Cantrip). */
     kind: "spell-half-on-miss";
+    /** Only on a made save, never a missed attack roll (the 2014 Potent Cantrip). */
+    savesOnly?: boolean;
   } & FeatureEffectScope)
   | ({
     /** Its spells (as scoped) with a range of at least `minRange` feet reach `bonus` feet farther (Improved Elemental Fury: 300). */

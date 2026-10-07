@@ -174,4 +174,38 @@ describe("AI — joint action/bonus-action turn planning", () => {
     expect(state.log.some((e) => e.type === "HealingApplied" && e.data?.targetId === "pc-archer")).toBe(true);
     expect(actorOf(state, "pc-archer").currentHp).toBeGreaterThan(4);
   });
+
+  it("never plans an action and a bonus action that need more of a resource than it has (one slot, two spells)", () => {
+    const slotSpell: ActionDefinition = {
+      kind: "attack", id: "main-atk", name: "Searing Strike", actionType: "action", attackType: "melee",
+      ability: "str", attackBonus: 20, range: 5, reach: 5, damage: [{ dice: "1d6", damageType: "fire" }],
+      resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    };
+    const slotHeal: ActionDefinition = {
+      kind: "healing", id: "quick-heal", name: "Quick Heal", actionType: "bonus", range: 5,
+      healing: [{ dice: "1d4+3" }], resourceCost: { resourceId: "slot-1", amount: 1 }, automationSupport: "full"
+    };
+    const encounter = baseEncounter("joint-one-slot");
+    const casterDef = encounter.definitions.find((d) => d.id === CASTER_DEF)!;
+    casterDef.actions = [slotSpell, slotHeal];
+    casterDef.features = [];
+    casterDef.resources = { "slot-1": 1 };
+    const caster = encounter.combatants.find((c) => c.id === CASTER)!;
+    caster.position = { x: 0, y: 0 };
+    caster.resources = { "slot-1": 1 };
+    caster.tacticsProfile = "basic-melee";
+    // The heal first (its target is next to it), then the move to the goblin: the order that spent the slot twice.
+    const archer = encounter.combatants.find((c) => c.id === "pc-archer")!;
+    archer.position = { x: 0, y: 1 };
+    archer.currentHp = 4;
+    encounter.combatants.find((c) => c.id === "enemy-goblin-1")!.position = { x: 6, y: 0 };
+    encounter.combatants.find((c) => c.id === "enemy-goblin-2")!.state = "dead";
+
+    const state = createEngineState(encounter);
+    expect(() => takeAutomatedTurn(state, actorOf(state, CASTER))).not.toThrow();
+    expect(actorOf(state, CASTER).resources?.["slot-1"]).toBe(0);
+    // One of the two, never both.
+    const used = state.log.filter((e) => (e.type === "AttackRolled" && e.data?.attackerId === CASTER) || (e.type === "HealingApplied" && e.data?.targetId === "pc-archer"));
+    expect(used).toHaveLength(1);
+  });
 });

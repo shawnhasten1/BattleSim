@@ -524,7 +524,7 @@ function shapedSpell(action: ActionDefinition, effects: SpellShapingEffect[]): A
         : !part.bonusFormula ? { ...part, bonusFormula: { ability: effect.ability } } : part;
       next = { ...next, damage: damage.map((component, at) => (at === index ? added : component)) } as typeof next;
     } else if (effect.kind === "spell-half-on-miss") {
-      if (next.kind === "attack") next = { ...next, halfDamageOnMiss: true };
+      if (next.kind === "attack") { if (!effect.savesOnly) next = { ...next, halfDamageOnMiss: true }; }
       else if ((next.kind === "save" || next.kind === "area-save") && (next.onSuccess ? next.onSuccess !== "half" : !next.halfDamageOnSuccess)) {
         next = { ...next, onSuccess: "half", halfDamageOnSuccess: true } as typeof next;
       }
