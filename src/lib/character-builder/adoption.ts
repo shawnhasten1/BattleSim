@@ -1,4 +1,4 @@
-import type { Ability, CreatureDefinition } from "@/engine";
+import type { Ability, CreatureDefinition, Edition } from "@/engine";
 import { ABILITIES, buildCharacter, withSuggestions, type BuildSources } from "./build";
 import type { CharacterBuild } from "./build-record";
 import type { ClassDefinition } from "./catalog";
@@ -12,11 +12,15 @@ import { readBuild } from "./summary";
  * the DM to remove.
  */
 
-/** A catalog class by a hand-built PC's class name ("rogue" finds the Rogue): the SRD's before a homebrew one. */
-export function matchClass(name: string | undefined, sources: BuildSources): ClassDefinition | undefined {
+/**
+ * A catalog class by a hand-built PC's class name ("rogue" finds the Rogue): the SRD's before a homebrew one, and of
+ * `edition` where both editions have it (the builder's filter).
+ */
+export function matchClass(name: string | undefined, sources: BuildSources, edition?: Edition): ClassDefinition | undefined {
   const wanted = name?.trim().toLowerCase();
   if (!wanted) return undefined;
-  return sources.catalog.classes.find((entry) => entry.name.toLowerCase() === wanted);
+  const named = sources.catalog.classes.filter((entry) => entry.name.toLowerCase() === wanted);
+  return (edition ? named.find((entry) => entry.edition === edition) : undefined) ?? named[0];
 }
 
 export interface Adoption {
@@ -30,18 +34,18 @@ export interface Adoption {
  * levels), each matched subclass chosen at its level, its scores and maximum hit points as they are. `fallbackClassId`
  * also stands for a PC with no class at all, at its level.
  */
-export function adoptionBuild(definition: CreatureDefinition, sources: BuildSources, fallbackClassId?: string): Adoption | undefined {
+export function adoptionBuild(definition: CreatureDefinition, sources: BuildSources, fallbackClassId?: string, edition?: Edition): Adoption | undefined {
   const notes: string[] = [];
   const entries = definition.character?.classes ?? [];
   const fallback = fallbackClassId ? sources.catalog.classes.find((entry) => entry.id === fallbackClassId) : undefined;
   const levels: CharacterBuild["levels"] = [];
   for (const entry of entries) {
-    const matched = matchClass(entry.name, sources) ?? fallback;
+    const matched = matchClass(entry.name, sources, edition) ?? fallback;
     if (!matched) {
       notes.push(`${entry.name || "A class with no name"} isn't a class the builder has: its levels are left out`);
       continue;
     }
-    if (matched !== matchClass(entry.name, sources)) notes.push(`${entry.name || "A class with no name"} isn't a class the builder has: its levels go to ${matched.name}`);
+    if (matched !== matchClass(entry.name, sources, edition)) notes.push(`${entry.name || "A class with no name"} isn't a class the builder has: its levels go to ${matched.name}`);
     const before = levels.filter((level) => level.classId === matched.id).length;
     const count = Math.max(1, Math.min(entry.level ?? 1, 20 - levels.length));
     for (let n = 0; n < count && levels.length < 20; n += 1) levels.push({ classId: matched.id, choices: {} });

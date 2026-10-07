@@ -1,6 +1,6 @@
 "use client";
 
-import type { Ability, CreatureType, SizeCategory } from "@/engine";
+import type { Ability, CreatureType, Edition, SizeCategory } from "@/engine";
 import { SKILLS } from "@/lib/actor-sheet/edits";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import {
@@ -20,16 +20,24 @@ import {
 } from "@/lib/character-builder";
 import { blankChoice, ChoiceEditor, CHOICE_KINDS } from "./ChoiceEditor";
 import { SpellcastingFields, TableFields } from "./ClassEditor";
-import { ABILITY_LABELS, Checks, NumberField, useHomebrew } from "./controls";
+import { ABILITY_LABELS, Checks, EditionField, NumberField, useHomebrew } from "./controls";
 import { GrantEditor } from "./GrantEditor";
 import { LevelsEditor } from "./LevelsEditor";
 import styles from "./homebrew.module.css";
 
-/** Name and description: every entry has them. */
-function NameFields({ name, description, onChange }: { name: string; description?: string; onChange: (patch: { name?: string; description?: string }) => void }) {
+/** Name, the rules it's written for, and description: every entry has them. */
+function NameFields({ name, description, edition, onChange }: {
+  name: string;
+  description?: string;
+  edition: Edition;
+  onChange: (patch: { name?: string; description?: string; edition?: Edition }) => void;
+}) {
   return (
     <>
-      <label className={styles.field}>Name<input value={name} onChange={(event) => onChange({ name: event.target.value })} aria-label="Name" /></label>
+      <div className={styles.row}>
+        <label className={`${styles.field} ${styles.wide}`}>Name<input value={name} onChange={(event) => onChange({ name: event.target.value })} aria-label="Name" /></label>
+        <EditionField value={edition} onChange={(next) => onChange({ edition: next })} />
+      </div>
       <label className={styles.field}>
         Description
         <textarea value={description ?? ""} onChange={(event) => onChange({ description: event.target.value || undefined })} aria-label="Description" />
@@ -50,7 +58,7 @@ export function SubclassEditor({ entry, classes, onChange }: { entry: SubclassDe
     <>
       <section className={styles.section} aria-label="Basics">
         <h4>Basics</h4>
-        <NameFields name={entry.name} description={entry.description} onChange={set} />
+        <NameFields name={entry.name} description={entry.description} edition={entry.edition} onChange={set} />
         <label className={styles.field}>
           Class
           <select value={entry.classId} aria-label="Class" onChange={(event) => set({ classId: event.target.value })}>
@@ -155,7 +163,7 @@ export function FeatEditor({ entry, onChange }: { entry: FeatDefinition; onChang
     <>
       <section className={styles.section} aria-label="Basics">
         <h4>Basics</h4>
-        <NameFields name={entry.name} description={entry.description} onChange={set} />
+        <NameFields name={entry.name} description={entry.description} edition={entry.edition} onChange={set} />
         <div className={styles.row}>
           <label className={styles.field}>
             Category
@@ -192,7 +200,7 @@ export function BackgroundEditor({ entry, feats, onChange }: { entry: Background
   return (
     <section className={styles.section} aria-label="Basics">
       <h4>Basics</h4>
-      <NameFields name={entry.name} description={entry.description} onChange={set} />
+      <NameFields name={entry.name} description={entry.description} edition={entry.edition} onChange={set} />
       <div className={styles.row}>
         {abilities.map((ability, index) => (
           <label key={index} className={styles.field}>
@@ -231,7 +239,7 @@ export function SpeciesEditor({ entry, onChange }: { entry: SpeciesDefinition; o
     <>
       <section className={styles.section} aria-label="Basics">
         <h4>Basics</h4>
-        <NameFields name={entry.name} description={entry.description} onChange={set} />
+        <NameFields name={entry.name} description={entry.description} edition={entry.edition} onChange={set} />
         <Checks label="Sizes (more than one: the player chooses)" options={SIZES} value={entry.sizes} onChange={(sizes) => set({ sizes: sizes.length ? sizes : entry.sizes })} />
         <div className={styles.row}>
           <NumberField label="Speed" value={entry.speed} min={0} onChange={(speed) => set({ speed: speed ?? 30 })} />

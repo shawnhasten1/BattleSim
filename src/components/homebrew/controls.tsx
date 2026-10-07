@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useId, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import type { Ability, FeatureDefinition } from "@/engine";
+import type { Ability, Edition, FeatureDefinition } from "@/engine";
+import { SRD_2014_SPELLS } from "@/data/srd/2014/spells";
 import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
 import { ABILITIES, type BuilderLibrary, type ClassTableColumn } from "@/lib/character-builder";
 import styles from "./homebrew.module.css";
@@ -28,6 +29,22 @@ export function useHomebrew(): HomebrewContextValue {
 }
 
 export const ABILITY_LABELS: Record<Ability, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
+
+/** Which edition's rules an entry is written for: what the builder follows with it (EDITIONS_PLAN.md). */
+export function EditionField({ value, onChange }: { value: Edition; onChange: (next: Edition) => void }) {
+  return (
+    <label className={styles.field}>
+      Rules
+      <select value={value} aria-label="Rules edition" onChange={(event) => onChange(event.target.value as Edition)}>
+        <option value="2024">2024 (SRD 5.2)</option>
+        <option value="2014">2014 (SRD 5.1)</option>
+      </select>
+    </label>
+  );
+}
+
+/** Both editions' spells, the 2024 first: a picker offers either (EDITIONS_PLAN.md). */
+const ALL_SPELLS = [...SRD_2024_SPELLS, ...SRD_2014_SPELLS];
 
 /** Which of the six abilities: a row of checkboxes. */
 export function AbilityChecks({ label, value, onChange }: { label: string; value: Ability[]; onChange: (next: Ability[]) => void }) {
@@ -149,7 +166,7 @@ export function SpellPicker({ label, value, onChange }: { label: string; value: 
   const matches = useMemo(() => {
     const text = query.trim().toLowerCase();
     if (text.length < 2) return [];
-    return SRD_2024_SPELLS.filter((spell) => spell.name.toLowerCase().includes(text) && !value.includes(spell.id)).slice(0, 8);
+    return ALL_SPELLS.filter((spell) => spell.name.toLowerCase().includes(text) && !value.includes(spell.id)).slice(0, 12);
   }, [query, value]);
   return (
     <div className={styles.field} role="group" aria-label={label}>
@@ -172,7 +189,7 @@ export function SpellPicker({ label, value, onChange }: { label: string; value: 
           {matches.map((spell) => (
             <li key={spell.id}>
               <button type="button" className={styles.btn} onClick={() => { onChange([...value, spell.id]); setQuery(""); }}>
-                + {spell.name} ({spell.level === 0 ? "cantrip" : `level ${spell.level}`})
+                + {spell.name} ({spell.level === 0 ? "cantrip" : `level ${spell.level}`}{spell.source?.edition ? `, ${spell.source.edition}` : ""})
               </button>
             </li>
           ))}

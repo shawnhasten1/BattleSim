@@ -1,4 +1,4 @@
-import type { FeatureDefinition } from "@/engine";
+import type { Edition, FeatureDefinition } from "@/engine";
 import { buildCharacter, type BuildSources } from "./build";
 import type {
   BackgroundDefinition,
@@ -23,38 +23,42 @@ import { blankCharacter, quickBuild, rebuildActor } from "./quick";
 const homebrew = { provider: "homebrew" as const };
 const twenty = <T>(value: T): T[] => Array.from({ length: 20 }, () => value);
 
-/** A new entry of a kind, named, with an id nothing else has. */
-export function blankEntry(kind: CatalogKind, name: string, taken: Iterable<string>, classId = "srd:class:fighter"): CatalogEntry {
+/**
+ * A new entry of a kind, named, with an id nothing else has, written for `edition`'s rules: a 2014 class has an Ability
+ * Score Improvement at 19th level (no Epic Boon), a 2014 background no increases or feat, a 2014 race its own increases.
+ */
+export function blankEntry(kind: CatalogKind, name: string, taken: Iterable<string>, classId = "srd:class:fighter", edition: Edition = "2024"): CatalogEntry {
   const id = homebrewId(kind, name, taken);
+  const old = edition === "2014";
   switch (kind) {
     case "class": {
       const entry: ClassDefinition = {
-        id, name, source: homebrew, edition: "2024", hitDie: 8,
+        id, name, source: homebrew, edition, hitDie: 8,
         primaryAbilities: ["str"], saves: ["str", "con"], skills: { count: 2, from: "any" },
         weaponProficiency: ["simple"], armorTraining: ["light"],
-        // An Epic Boon at 19 is every class's (the builder asks for it), so it isn't a feat level here.
-        subclassLevel: 3, subclassLabel: `${name} Subclass`, featLevels: [4, 8, 12, 16],
+        // An Epic Boon at 19 is every 2024 class's (the builder asks for it), so it isn't a feat level there.
+        subclassLevel: 3, subclassLabel: `${name} Subclass`, featLevels: old ? [4, 8, 12, 16, 19] : [4, 8, 12, 16],
         table: [], levels: [{ level: 3, grants: [], choices: [{ kind: "subclass", id: "subclass" }] }],
         suggested: { abilities: ["str", "con", "dex", "wis", "cha", "int"], tactics: "basic-melee" }
       };
       return { kind, entry };
     }
     case "subclass": {
-      const entry: SubclassDefinition = { id, name, source: homebrew, edition: "2024", classId, levels: [] };
+      const entry: SubclassDefinition = { id, name, source: homebrew, edition, classId, levels: [] };
       return { kind, entry };
     }
     case "feat": {
-      const entry: FeatDefinition = { id, name, source: homebrew, edition: "2024", category: "general", grants: [] };
+      const entry: FeatDefinition = { id, name, source: homebrew, edition, category: "general", grants: [] };
       return { kind, entry };
     }
     case "background": {
-      const entry: BackgroundDefinition = {
-        id, name, source: homebrew, edition: "2024", abilities: ["str", "dex", "con"], skills: [], feat: "srd:feat:alert"
-      };
+      const entry: BackgroundDefinition = old
+        ? { id, name, source: homebrew, edition, skills: [] }
+        : { id, name, source: homebrew, edition, abilities: ["str", "dex", "con"], skills: [], feat: "srd:feat:alert" };
       return { kind, entry };
     }
     case "species": {
-      const entry: SpeciesDefinition = { id, name, source: homebrew, edition: "2024", sizes: ["medium"], speed: 30, type: "humanoid", levels: [] };
+      const entry: SpeciesDefinition = { id, name, source: homebrew, edition, sizes: ["medium"], speed: 30, type: "humanoid", levels: [], ...(old ? { abilities: {} } : {}) };
       return { kind, entry };
     }
   }

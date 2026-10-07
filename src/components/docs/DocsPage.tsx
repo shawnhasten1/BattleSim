@@ -1232,6 +1232,80 @@ const SECTIONS: Section[] = [
     )
   },
   {
+    id: "editions",
+    label: "Editions (2014 & 2024)",
+    content: (
+      <>
+        <p>
+          The library has both editions of the rules side by side: the 2024 ones (System Reference Document 5.2) and
+          the 2014 ones (System Reference Document 5.1). There&apos;s no edition setting for a campaign or an
+          encounter. Each class, subclass, race or species, background, feat and spell says which rules it&apos;s
+          written for, and the simulator plays it by them: a 2014 Fighter can cast a 2024 spell, and a 2014
+          Counterspell and a 2024 one can meet in the same fight.
+        </p>
+
+        <h3>The lists</h3>
+        <p>
+          Where both editions have something, its rows carry a <strong>2014</strong> or <strong>2024</strong> badge, and
+          the list has a <strong>2014 · 2024 · Both</strong> filter, remembered for each list. A single edition hides
+          only the other edition&apos;s version of what both have (so the 2014-only weapons stay listed under 2024), and
+          never hides homebrew or what&apos;s already chosen. A built character&apos;s builder opens on its own edition.
+          In a select whose entry has a namesake in the other edition, the name says which: <em>Fighter (2014)</em>.
+        </p>
+
+        <h3>Building a 2014 character</h3>
+        <ul>
+          <li>
+            <strong>Ability increases from</strong> the background or the race: a 2014 race has its own (a Hill
+            Dwarf&apos;s +2 Constitution and +1 Wisdom); a 2024 background has three points. Mixing them, the character
+            takes one set, never both: the background&apos;s by default when it has them, and you can switch.
+          </li>
+          <li>
+            The 2014 rules come with the 2014 class: an Ability Score Improvement at 19th level instead of an Epic
+            Boon, spells prepared by modifier and level (a cleric, a druid, a wizard; a paladin by half its level),
+            no slots before 2nd level for a paladin or ranger, and starting equipment chosen line by line.
+          </li>
+          <li>
+            A character can&apos;t have both editions&apos; versions of a class. <strong>Rebuild with the
+            builder</strong> matches a hand-built character&apos;s classes in the edition the filter shows.
+          </li>
+          <li><strong>Quick party</strong> takes its classes from the edition the filter shows, and any mix with Both.</li>
+        </ul>
+
+        <h3>Add ability</h3>
+        <p>
+          Add ability lists both editions&apos; spells (the 2014 ones the simulator doesn&apos;t cast only for a
+          search), and the 2024 class features, at the class level you set in the panel, for a monster or a homebrew
+          actor.
+        </p>
+
+        <h3>Table rules</h3>
+        <p>
+          A few rules belong to no class or spell, so the campaign sets them, beside the potion rules: being
+          <strong> grappled</strong>, being <strong>stunned</strong> and being <strong>surprised</strong>, each 2014 or
+          2024. Each defaults to how the simulator always played it. The Combat panel names the rule in force where it
+          matters.
+        </p>
+
+        <h3>What runs</h3>
+        <p>
+          Most 2014 features run as their 2024 namesakes do, and the ones that differ run by the 2014 rules: the 2014
+          Rage, Brutal Critical, Divine Smite as a feature, Wild Shape into a beast&apos;s own hit points, Destroy Undead
+          and so on. A feature that runs only in part says on the sheet what isn&apos;t simulated, and one the
+          simulator can&apos;t run is there as its text for you. The project&apos;s
+          <code> src/data/srd/2014/COVERAGE.md</code> lists every 2014 feature and race trait with what it does.
+        </p>
+
+        <h3>Homebrew</h3>
+        <p>
+          Each homebrew entry has a <strong>Rules</strong> field. A 2014 class has its 19th-level Ability Score
+          Improvement; its spellcasting can prepare by modifier and level, start its slots at 2nd level, and round its
+          levels down when multiclassed. The spell picker and the spell lists offer both editions.
+        </p>
+      </>
+    )
+  },
+  {
     id: "credits",
     label: "Credits & Licensing",
     content: (
@@ -1239,7 +1313,8 @@ const SECTIONS: Section[] = [
         <p>
           The built-in library of monsters, spells, weapons and features is based on the System Reference
           Document 5.1, and the character builder&apos;s classes, species, backgrounds and feats on the System
-          Reference Document 5.2. Both are provided under the Creative Commons Attribution 4.0 International License.
+          Reference Document 5.2 (the 2024 rules) and 5.1 (the 2014 rules). Both are provided under the Creative Commons
+          Attribution 4.0 International License.
           BattleSim is compatible with fifth edition.
         </p>
         <SrdAttribution />

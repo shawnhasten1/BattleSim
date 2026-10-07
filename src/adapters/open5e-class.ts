@@ -139,10 +139,15 @@ function levelsOf(features: Open5eFeature[], skip: (feature: Open5eFeature) => b
 
 const CASTER_KINDS: Record<string, SpellcastingProgression["kind"]> = { FULL: "full", HALF: "half", THIRD: "third", PACT: "pact" };
 
-/** The catalog id a subclass's Open5e class key names: the bundled SRD 5.2 class it is, or the Open5e one imported. */
+/**
+ * The catalog id a subclass's Open5e class key names: the bundled SRD 5.2 class it is (`srd-2024_fighter`), the bundled
+ * SRD 5.1 one (`srd_fighter`: `srd:class:fighter-2014`), or the Open5e one imported.
+ */
 export function open5eClassId(key: string): string {
   const srd = /^srd-2024_([a-z-]+)$/.exec(key);
-  return srd ? `srd:class:${srd[1]}` : `open5e:class:${key}`;
+  if (srd) return `srd:class:${srd[1]}`;
+  const srd51 = /^srd_([a-z-]+)$/.exec(key);
+  return srd51 ? `srd:class:${srd51[1]}-2014` : `open5e:class:${key}`;
 }
 
 /** An Open5e class or subclass record (`/v2/classes/<key>/`), as a catalog skeleton. */

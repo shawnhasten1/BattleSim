@@ -11,6 +11,7 @@ import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { EditionFilter } from "@/components/ui/Edition";
 import { CatalogOptions, speciesWord } from "@/components/builder/CatalogSelect";
 import { useEditionFilter } from "@/hooks/useEditionFilter";
+import { editionTwin, type EditionChoice } from "@/lib/editions";
 import { QUICK_PARTY_CLASSES, quickBuild, quickParty } from "@/lib/character-builder";
 import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
@@ -58,15 +59,21 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const openBuilder = useBuilderUiStore((s) => s.open);
   const buildSources = useBuildSources();
   // Quick party: four classes (changeable), built at the Level chosen above.
-  const [partyClasses, setPartyClasses] = useState<string[]>(() => QUICK_PARTY_CLASSES.filter((id) => buildSources.catalog.classes.some((entry) => entry.id === id)));
+  // Which edition's version the Character tab's lists show where there are two (EDITIONS_PLAN.md D2).
+  const [edition, setEdition] = useEditionFilter("create-character");
+  // In one edition, the party's classes are that edition's (a 2014 Fighter for the 2024 one), and follow the filter.
+  const inEdition = (ids: string[], choice: EditionChoice) => (choice === "both" ? ids : ids.map((id) => editionTwin(buildSources.catalog.classes, id, choice)));
+  const [partyClasses, setPartyClasses] = useState<string[]>(() => inEdition(QUICK_PARTY_CLASSES.filter((id) => buildSources.catalog.classes.some((entry) => entry.id === id)), edition));
+  const chooseEdition = (next: EditionChoice) => {
+    setEdition(next);
+    setPartyClasses((ids) => inEdition(ids, next));
+  };
   const [character, setCharacter] = useState(() => {
     const first = buildSources.catalog.classes[0]!;
     return { name: "New Character", classId: first.id, level: 1, backgroundId: first.suggested.background ?? "", speciesId: "" };
   });
 
   const [tab, setTab] = useState<TabId>("custom");
-  // Which edition's version the Character tab's lists show where there are two (EDITIONS_PLAN.md D2).
-  const [edition, setEdition] = useEditionFilter("create-character");
   const chosenClass = buildSources.catalog.classes.find((entry) => entry.id === character.classId);
   const chosenSpecies = buildSources.catalog.species.find((entry) => entry.id === character.speciesId);
 
@@ -229,7 +236,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                 A player character built from a class, under the 2024 or the 2014 rules: its features, hit points, saves and
                 skills by level, and leveled up later from its sheet.
               </p>
-              <EditionFilter value={edition} onChange={setEdition} />
+              <EditionFilter value={edition} onChange={chooseEdition} />
             </div>
             <label className={styles.field}>Name<input value={character.name} onChange={(e) => setCharacter({ ...character, name: e.target.value })} /></label>
             <div className={styles.grid3}>

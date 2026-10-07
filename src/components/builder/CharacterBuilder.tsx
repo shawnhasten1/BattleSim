@@ -36,6 +36,7 @@ import { formatBonus } from "@/lib/ui-helpers";
 import { EditionFilter } from "@/components/ui/Edition";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEditionFilter } from "@/hooks/useEditionFilter";
+import type { EditionChoice } from "@/lib/editions";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useBuilderUiStore, type BuilderSeed } from "@/store/builder-ui-store";
 import { CatalogOptions, speciesWord } from "./CatalogSelect";
@@ -124,9 +125,16 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   const creating = !definitionId;
   // A hand-built PC, rebuilt: its classes matched by name (the first class when none is), its scores and HP kept.
   const adopting = Boolean(adopt && definition && !saved);
-  const [adoption] = useState(() => (adopting && definition
-    ? adoptionBuild(definition, sources) ?? adoptionBuild(definition, sources, sources.catalog.classes[0]?.id)
-    : undefined));
+  // Which edition's version the lists show where there are two: a built character's opens on its own (D2). Rebuilding,
+  // its classes are matched in that edition, and again when it changes.
+  const [edition, setEdition] = useEditionFilter("builder", saved?.edition);
+  const adoptIn = (choice: EditionChoice) => {
+    if (!adopting || !definition) return undefined;
+    const preferred = choice === "both" ? undefined : choice;
+    const first = sources.catalog.classes.find((entry) => !preferred || entry.edition === preferred) ?? sources.catalog.classes[0];
+    return adoptionBuild(definition, sources, undefined, preferred) ?? adoptionBuild(definition, sources, first?.id, preferred);
+  };
+  const [adoption, setAdoption] = useState(() => adoptIn(edition));
 
   const [name, setName] = useState(seed?.name ?? "New Character");
   const [draft, setDraft] = useState<CharacterBuild | undefined>(() => {
@@ -137,8 +145,11 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   });
   const [update, setUpdate] = useState<string[]>([]);
   const [removeTwins, setRemoveTwins] = useState(false);
-  // Which edition's version the lists show where there are two: a built character's opens on its own (D2).
-  const [edition, setEdition] = useEditionFilter("builder", saved?.edition);
+  const chooseEdition = (next: EditionChoice) => {
+    setEdition(next);
+    const again = adoptIn(next);
+    if (again) { setAdoption(again); setDraft(again.build); }
+  };
 
   const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
   // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
@@ -241,7 +252,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         <section className={styles.section} aria-label="Basics">
           <div className={styles.sectionHead}>
             <h4>Basics</h4>
-            <EditionFilter value={edition} onChange={setEdition} />
+            <EditionFilter value={edition} onChange={chooseEdition} />
           </div>
           <div className={styles.row}>
             {creating ? (

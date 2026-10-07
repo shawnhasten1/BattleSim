@@ -5,7 +5,7 @@ import type { TacticsProfile } from "@/engine";
 import { SKILLS } from "@/lib/actor-sheet/edits";
 import { blankColumnValues, grantKeyFor, type ClassDefinition, type ClassTableColumn, type SpellcastingProgression } from "@/lib/character-builder";
 import { SRD_SPELL_LISTS } from "@/lib/character-builder/srd";
-import { AbilityChecks, Checks, LevelNumbers, NumberField, SpellPicker } from "./controls";
+import { AbilityChecks, Checks, EditionField, LevelNumbers, NumberField, SpellPicker } from "./controls";
 import { LevelsEditor } from "./LevelsEditor";
 import styles from "./homebrew.module.css";
 
@@ -94,6 +94,35 @@ export function SpellcastingFields({ value, onChange, ownListKey }: {
         />
         Keeps a spellbook (prepares from it)
       </label>
+      <div className={styles.row}>
+        <label className={styles.field}>
+          How many it prepares
+          <select
+            value={value.preparedFormula?.add ?? "table"} aria-label="How many it prepares"
+            onChange={(event) => onChange({ ...value, preparedFormula: event.target.value === "table" ? undefined : { add: event.target.value as "level" | "half-level" } })}
+          >
+            <option value="table">The number by level, above</option>
+            <option value="level">Its modifier + its level (2014)</option>
+            <option value="half-level">Its modifier + half its level (2014)</option>
+          </select>
+        </label>
+        <NumberField
+          label="First slots at level" value={value.firstSlotsAt ?? 1} min={1} max={3}
+          onChange={(level) => onChange({ ...value, firstSlotsAt: level && level > 1 ? level : undefined })}
+        />
+        {value.kind === "half" || value.kind === "third" ? (
+          <label className={styles.field}>
+            Multiclassing
+            <select
+              value={value.multiclassRounding ?? "up"} aria-label="Multiclass rounding"
+              onChange={(event) => onChange({ ...value, multiclassRounding: event.target.value === "down" ? "down" : undefined })}
+            >
+              <option value="up">Its levels round up (2024)</option>
+              <option value="down">Its levels round down (2014)</option>
+            </select>
+          </label>
+        ) : null}
+      </div>
       {value.spellbook ? (
         <div className={styles.row}>
           <NumberField label="Spellbook starts with" value={value.spellbook.start} min={0} onChange={(start) => onChange({ ...value, spellbook: { ...value.spellbook!, start: start ?? 0 } })} />
@@ -183,6 +212,11 @@ export function ClassEditor({ entry, onChange }: { entry: ClassDefinition; onCha
           </label>
           <NumberField label="Subclass at level" value={entry.subclassLevel} min={1} max={20} onChange={(subclassLevel) => set({ subclassLevel: subclassLevel ?? 3 })} />
           <label className={styles.field}>Subclass called<input value={entry.subclassLabel} onChange={(event) => set({ subclassLabel: event.target.value })} aria-label="Subclass called" /></label>
+          {/* A 2014 class has an Ability Score Improvement at 19th level where a 2024 one has its Epic Boon. */}
+          <EditionField value={entry.edition} onChange={(edition) => set({
+            edition,
+            featLevels: edition === "2014" ? [...new Set([...entry.featLevels, 19])].sort((a, b) => a - b) : entry.featLevels.filter((level) => level !== 19)
+          })} />
         </div>
         <label className={styles.field}>
           Description

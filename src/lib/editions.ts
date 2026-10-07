@@ -69,6 +69,17 @@ export function isEditionChoice(value: unknown): value is EditionChoice {
   return value === "2014" || value === "2024" || value === "both";
 }
 
+/**
+ * The other edition's version of an SRD entry, when `edition` has one (a 2014 Fighter for the 2024 one): the same name,
+ * the SRD's. Anything else (homebrew, or no twin) is itself.
+ */
+export function editionTwin<T extends { id: string; name: string; edition?: Edition; source?: SourceMetadata }>(entries: readonly T[], id: string, edition: Edition): string {
+  const entry = entries.find((candidate) => candidate.id === id);
+  if (!entry || entry.edition === edition || entry.source?.provider !== "srd") return id;
+  const key = editionNameKey(entry.name);
+  return entries.find((candidate) => candidate.edition === edition && candidate.source?.provider === "srd" && editionNameKey(candidate.name) === key)?.id ?? id;
+}
+
 /** A name as two editions' versions of one thing share it: "Melf's Acid Arrow" and "Acid Arrow" are the same spell. */
 export function editionNameKey(name: string): string {
   return name.toLowerCase().replace(/^[a-z]+'s /, "").replace(/[^a-z0-9]+/g, " ").trim();
