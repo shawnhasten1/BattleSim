@@ -378,3 +378,22 @@
   gap: 6px;
   font-size: 12px;
 }
+
+/* A 2014 class's starting equipment: a choice on each line. */
+.equipment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+}
+
+.equipment > legend {
+  padding: 0 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ui-text-dim);
+}

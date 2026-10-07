@@ -7,6 +7,7 @@ import {
   entryLabel,
   multiclassProblems,
   orderedChanges,
+  otherEditionTwin,
   readBuild,
   rebuildActor,
   storedChoice,
@@ -90,7 +91,12 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
             })}
             {others.length ? (
               <optgroup label="A new class (multiclass)">
-                {others.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                {others.map((entry) => {
+                  // The other edition's version of a class it has can't be taken: one character, one Fighter.
+                  const twin = otherEditionTwin(saved, entry.id, sources);
+                  const label = `${entryLabel(entry)}${entry.source.provider === "srd" ? ` (${entry.edition})` : ""}`;
+                  return <option key={entry.id} value={entry.id} disabled={Boolean(twin)} title={twin}>{label}</option>;
+                })}
               </optgroup>
             ) : null}
           </select>
@@ -124,7 +130,7 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
           {slots.map((slot) => (
             <ChoiceControl
               key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-              slot={slot}
+              slot={slot} edition={saved.edition}
               onChange={(value) => setDraft(withChoice(draft, slot.scope, slot.path, value, slot.spec))}
             />
           ))}

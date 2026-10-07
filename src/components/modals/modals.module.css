@@ -361,3 +361,16 @@
 .partyBox .grid3 {
   grid-template-columns: 1fr 1fr;
 }
+
+/* The Character tab's note, with its edition filter beside it. */
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row > .status {
+  flex: 1;
+  margin: 0;
+}

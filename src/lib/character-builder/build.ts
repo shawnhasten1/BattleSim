@@ -5,6 +5,7 @@ import {
   type ConditionImmunity,
   type CreatureSenses,
   type CreatureType,
+  type Edition,
   type FeatureDefinition,
   type ItemDefinition,
   type MovementProfile,
@@ -16,6 +17,7 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { SKILLS, skillName } from "@/lib/actor-sheet/edits";
+import { editionOf } from "@/lib/editions";
 import type {
   BackgroundDefinition,
   Catalog,
@@ -23,6 +25,7 @@ import type {
   ClassDefinition,
   ClassSuggestions,
   ClassTableColumn,
+  EquipmentLine,
   FeatDefinition,
   FeatureGrant,
   FreeCast,
@@ -36,7 +39,7 @@ import type {
 } from "./catalog";
 import type { CharacterBuild, ChoiceValue, FeatChoice } from "./build-record";
 import { sourceLabel } from "./homebrew";
-import { spellSlots } from "./slots";
+import { spellSlots, type SlotCaster } from "./slots";
 import { castAs, maxSpellLevel, spellRuns, spellSlug } from "./spells";
 import { evaluateNumber, evaluateTemplate, type TemplateScope } from "./template";
 
@@ -60,6 +63,8 @@ export interface BuilderLibrary {
   weaponKind?(kind: string): { name: string; mastery: string } | undefined;
   /** Every weapon kind there is, for the mastery choice. */
   weaponKinds?(): string[];
+  /** The library's plain weapons (no magic ones), by id: what a 2014 "any martial weapon" equipment line offers. */
+  weaponRefs?(): string[];
   /** A library spell, by id. */
   spell?(id: string): SpellDefinition | undefined;
   /** The spells on a class's spell list (`"wizard"`), by library id. */
@@ -108,6 +113,8 @@ export interface ChoiceOption {
   reference?: boolean;
   /** Where a homebrew or imported subclass or feat is from ("Homebrew"), shown beside its name. Absent for the SRD's. */
   from?: string;
+  /** The rules it's written for, when it says: a badge beside it (EDITIONS_PLAN.md D2). */
+  edition?: Edition;
 }
 
 /** A spell the builder puts on the actor: prepared, always prepared, or the copy a free cast spends its own pool on. */
@@ -176,7 +183,8 @@ export interface BuiltCharacter {
 }
 
 export const pbForLevel = (level: number) => 2 + Math.floor((Math.max(level, 1) - 1) / 4);
-const slugOf = (id: string) => id.slice(id.lastIndexOf(":") + 1);
+/** An id's last part: `fighter`. A 2014 class's (`srd:class:fighter-2014`) gives the same, so its features are `fighter-…`. */
+const slugOf = (id: string) => id.slice(id.lastIndexOf(":") + 1).replace(/-2014$/, "");
 const skillAbility = (id: string): Ability => SKILLS.find((skill) => skill.id === id)?.ability ?? "int";
 const ALL_SKILLS = SKILLS.map((skill) => skill.id);
 
@@ -281,6 +289,10 @@ interface WalkState {
   picked: Map<string, Set<string>>;
   /** Whether to rank spells for suggestions: not on the first of two walks, which only finds always-prepared spells. */
   suggest: boolean;
+  /** The character's increases come from its species (a 2014 race's, a subrace's): `increasesSource`. */
+  speciesIncreases: boolean;
+  /** Each class's spells prepared so far, by class id: a 2014 caster's number follows its modifier (`preparedFormula`). */
+  preparedSoFar: Map<string, number>;
 }
 
 /** A spell the character has, and how. */
@@ -401,7 +413,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
     case "subclass": {
       const classId = context.owner.classId;
       const options = state.sources.catalog.subclasses.filter((entry) => entry.classId === classId);
-      slot.options = options.map((entry) => ({ id: entry.id, name: entry.name, detail: entry.source.documentName, ...fromOf(entry.source) }));
+      slot.options = options.map((entry) => ({ id: entry.id, name: entry.name, detail: entry.source.documentName, ...fromOf(entry.source), edition: entry.edition }));
       slot.suggestion = options[0]?.id;
       if (typeof stored === "string") {
         if (options.some((entry) => entry.id === stored)) {
@@ -558,6 +570,7 @@ interface SpellFacts {
   school?: string;
   castingTime: string;
   runs: boolean;
+  edition?: Edition;
 }
 
 const SPELL_FACTS = new WeakMap<BuilderLibrary, Map<string, SpellFacts | null>>();
@@ -569,7 +582,8 @@ function spellFacts(library: BuilderLibrary, id: string): SpellFacts | undefined
   let facts = cache.get(id);
   if (facts === undefined) {
     const spell = library.spell?.(id);
-    facts = spell ? { name: spell.name, level: spell.level, school: spell.school, castingTime: spell.castingTime, runs: spellRuns(spell) } : null;
+    const edition = spell ? editionOf(spell) : undefined;
+    facts = spell ? { name: spell.name, level: spell.level, school: spell.school, castingTime: spell.castingTime, runs: spellRuns(spell), ...(edition ? { edition } : {}) } : null;
     cache.set(id, facts);
   }
   return facts ?? undefined;
@@ -659,7 +673,7 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
     : [];
   const lists = spec.lists ?? (spec.listFrom ? [sibling(spec.listFrom)].filter((list): list is string => Boolean(list)) : classLists);
   const ability = (sibling(spec.abilityFrom) as Ability | undefined) ?? progression?.ability;
-  const castable = progression ? maxSpellLevel(progression.kind, context.classLevel ?? 1) : 1;
+  const castable = progression ? maxSpellLevel(progression.kind, context.classLevel ?? 1, progression.firstSlotsAt) : 1;
   const top = spec.what === "cantrips" ? 0 : spec.level ?? Math.min(castable, spec.maxLevel ?? 9);
   const bottom = spec.what === "cantrips" ? 0 : spec.level ?? spec.minLevel ?? 1;
   const count = spec.count ?? 0;
@@ -697,7 +711,7 @@ function visitSpells(state: WalkState, spec: SpellsChoice, context: ChoiceContex
     .map((id): ChoiceOption => {
       const spell = spellOf(id)!;
       const taken = takenBy(id);
-      return { id, name: spell.name, level: spell.level, ...(spell.runs ? {} : { reference: true }), ...(taken ? { taken: true, detail: taken } : {}) };
+      return { id, name: spell.name, level: spell.level, ...(spell.runs ? {} : { reference: true }), ...(taken ? { taken: true, detail: taken } : {}), ...(spell.edition ? { edition: spell.edition } : {}) };
     })
     .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || byName(a.name, b.name));
 
@@ -778,6 +792,8 @@ function visitOption(state: WalkState, option: PickOption, pick: Extract<ChoiceS
     return;
   }
   const owner: Owner = { ...context.owner, key: `${context.owner.key}:${pick.id}=${option.id}` };
+  // A 2014 subrace's increases, when the character's come from its species.
+  if (option.abilities && state.speciesIncreases && context.scope.kind === "species") addAbilities(state, option.abilities, 20);
   for (const grant of option.grants) state.grants.push({ grant, owner });
   for (const nested of option.choices ?? []) {
     visitChoice(state, { ...nested, id: `${pick.id}.${option.id}.${nested.id}` } as ChoiceSpec, { ...context, owner }, parentPath);
@@ -792,9 +808,11 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
     && meetsPrerequisite(state, feat, level));
   const suggested = context.classDefinition?.suggested;
   const pickSuggestion = (): string | undefined => {
+    // A 2014 class's Ability Score Improvement is the 2014 one, when the catalog has it.
+    const asi = context.classDefinition?.edition === "2014" && eligible.some((feat) => feat.id === ASI_2014) ? ASI_2014 : "srd:feat:ability-score-improvement";
     const wanted = spec.categories.includes("epic-boon") ? suggested?.epicBoon
       : spec.categories.includes("fighting-style") ? suggested?.fightingStyle
-      : spec.categories.includes("general") ? "srd:feat:ability-score-improvement"
+      : spec.categories.includes("general") ? asi
       : spec.categories.includes("origin") ? "srd:feat:skilled" : undefined;
     return eligible.find((feat) => feat.id === wanted)?.id ?? eligible[0]?.id;
   };
@@ -803,7 +821,7 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
   const suggestedExtra = spec.categories.includes("fighting-style") ? extras.find((option) => option.id === suggested?.fightingStyle)?.id : undefined;
   const suggestedFeat = suggestedExtra ?? pickSuggestion();
   slot.options = [
-    ...eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category, ...fromOf(feat.source) })),
+    ...eligible.map((feat) => ({ id: feat.id, name: feat.name, detail: feat.category, ...fromOf(feat.source), edition: feat.edition })),
     ...extras.map((option) => ({ id: option.id, name: option.name, ...(option.description ? { detail: option.description } : {}) }))
   ];
   slot.suggestion = suggestedFeat ? { feat: suggestedFeat } : undefined;
@@ -874,6 +892,7 @@ function carriedKindsOf(build: CharacterBuild, sources: BuildSources): string[] 
   const background = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
   const refs = [
     ...(firstClass?.startingEquipment?.find((entry) => entry.id === build.equipment?.classOption)?.items ?? []),
+    ...(firstClass ? equipmentLineItems(build, firstClass, sources) : []),
     ...(background?.equipment?.find((entry) => entry.id === build.equipment?.backgroundOption)?.items ?? [])
   ].map((item) => item.ref).filter((ref) => ref.startsWith("srd:weapon:"));
   const kinds = refs.map((ref) => sources.library.weapon(ref)?.baseWeapon ?? ref.slice("srd:weapon:".length));
@@ -882,15 +901,18 @@ function carriedKindsOf(build: CharacterBuild, sources: BuildSources): string[] 
 
 /** Walk the whole build in order: background, then each level, gathering grants and choices. */
 function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string, string>, suggest = true): WalkState {
+  const fromSpecies = increasesSource(build, sources) === "species";
   const state: WalkState = {
     build, sources,
     abilities: { ...build.abilities.base },
     skills: new Set(), expertise: new Set(), masteries: [], carriedKinds: carriedKindsOf(build, sources), feats: new Map(),
     grants: [], choices: [], warnings: [], saves: new Set(),
-    classLevels: new Map(), subclassOf: new Map(), spellPicks: [], spellbooks: new Map(), reserved, picked: new Map(), suggest
+    classLevels: new Map(), subclassOf: new Map(), spellPicks: [], spellbooks: new Map(), reserved, picked: new Map(), suggest,
+    speciesIncreases: fromSpecies, preparedSoFar: new Map()
   };
 
-  // The background: its ability increases, its skills and its origin feat.
+  // The background: its ability increases (unless they come from the species), its skills, its origin feat (2024) or
+  // its own feature (2014).
   const background = build.background.id
     ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id)
     : undefined;
@@ -900,10 +922,16 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
   const backgroundName = background?.name ?? (custom ? "Custom background" : "No background");
   const backgroundOwner: Owner = { key: `background:${background?.id ?? "custom"}`, idPrefix: "background", name: backgroundName, level: build.levels.length, columns: [] };
   const backgroundContext: ChoiceContext = { scope: { kind: "background" }, owner: backgroundOwner, ownerName: backgroundName, where: "background", fixed: background?.featChoices as Record<string, ChoiceValue> | undefined };
-  if (backgroundAbilities.length) {
-    visitChoice(state, { kind: "abilities", id: "increases", label: "Ability score increases", points: 3, from: [...backgroundAbilities], maxPerAbility: 2, cap: 20 }, backgroundContext);
+  if (!fromSpecies && (background || custom)) {
+    // A background with no abilities of its own (2014's Acolyte): the 2024 rule's three points, on any abilities.
+    const from = backgroundAbilities.length ? [...backgroundAbilities] : [...ABILITIES];
+    visitChoice(state, {
+      kind: "abilities", id: "increases", label: backgroundAbilities.length ? "Ability score increases" : "Ability score increases (any three)",
+      points: 3, from, maxPerAbility: 2, cap: 20
+    }, backgroundContext);
   }
   for (const skill of background?.skills ?? custom?.skills ?? []) state.skills.add(skill);
+  for (const grant of background?.grants ?? []) state.grants.push({ grant, owner: backgroundOwner });
   const originFeat = featOf(sources, background?.feat ?? custom?.feat ?? "");
   if (originFeat) {
     takeFeat(state, originFeat, { feat: originFeat.id, choices: build.background.choices }, backgroundContext, []);
@@ -914,6 +942,18 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
   // The species: its traits up to the character's level, and its choices (a lineage, an ancestry, a skill), before the
   // class levels so a class's skill choices know what it gave.
   const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
+  if (species && fromSpecies) {
+    // A 2014 race's increases: its own, then those of the player's choice (a Half-Elf's). A subrace's come with it.
+    addAbilities(state, species.abilities ?? {}, 20);
+    const choice = species.abilityChoice;
+    if (choice) {
+      const owner: Owner = { key: `species:${species.id}`, idPrefix: slugOf(species.id), name: species.name, level: build.levels.length, columns: [] };
+      visitChoice(state, {
+        kind: "abilities", id: "increases", label: "Ability score increases", points: choice.count * choice.amount,
+        from: ABILITIES.filter((ability) => !(choice.exclude ?? []).includes(ability)), maxPerAbility: choice.amount, cap: 20
+      }, { scope: { kind: "species" }, owner, ownerName: species.name, where: "species" });
+    }
+  }
   if (species) {
     const characterLevel = build.levels.length;
     const abilityChoice = species.spellcastingAbilityChoice ? storedChoice(build, { kind: "species" }, [species.spellcastingAbilityChoice]) : undefined;
@@ -968,7 +1008,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
     if (definition.featLevels.includes(classLevel)) {
       visitChoice(state, { kind: "feat", id: "feat", categories: ["general"], label: "Ability Score Improvement or another feat" }, context);
     }
-    if (classLevel === 19) {
+    if (classLevel === epicBoonLevelOf(definition)) {
       visitChoice(state, { kind: "feat", id: "epic-boon", categories: ["epic-boon", "general"], label: "Epic Boon or another feat" }, context);
     }
     // The subclass: chosen at its level (above), its features from then on.
@@ -998,11 +1038,93 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
         const count = classLevel === 1 ? progression.spellbook.start : progression.spellbook.perLevel;
         visitChoice(state, { kind: "spells", id: "spellbook", what: "spellbook", count, label: "Spellbook" }, context);
       }
-      const prepared = gained(progression.prepared);
-      if (prepared > 0) visitChoice(state, { kind: "spells", id: "prepared", what: "prepared", count: prepared, label: "Prepared spells" }, context);
+      // The number prepared now, less what's prepared already: a 2014 caster's follows its modifier (an Ability Score
+      // Improvement at this level adds a spell).
+      const before = state.preparedSoFar.get(definition.id) ?? 0;
+      const target = preparedAt(progression, classLevel, state.abilities);
+      state.preparedSoFar.set(definition.id, Math.max(before, target));
+      const prepared = Math.max(0, target - before);
+      const label = progression.preparedFormula ? "Prepared spells" : definition.edition === "2014" ? "Spells known" : "Prepared spells";
+      if (prepared > 0) visitChoice(state, { kind: "spells", id: "prepared", what: "prepared", count: prepared, label }, context);
     }
   });
   return state;
+}
+
+/** The Ability Score Improvement a 2014 class's feat levels suggest, when the catalog has it. */
+const ASI_2014 = "srd:feat:ability-score-improvement-2014";
+
+/** The class level with an Epic Boon choice: its own, or 19 for a 2024 class and none for a 2014 one. */
+export function epicBoonLevelOf(definition: Pick<ClassDefinition, "epicBoonLevel" | "edition">): number | undefined {
+  return definition.epicBoonLevel ?? (definition.edition === "2024" ? 19 : undefined);
+}
+
+/**
+ * How many leveled spells a class has prepared (or known) at a class level: its table's number, or a 2014 prepared
+ * caster's modifier plus its level (or half of it), at least 1. None before its spellcasting starts (`firstSlotsAt`).
+ */
+export function preparedAt(progression: SpellcastingProgression, classLevel: number, abilities: Record<Ability, number>): number {
+  if (classLevel < (progression.firstSlotsAt ?? 1)) return 0;
+  const formula = progression.preparedFormula;
+  if (!formula) return progression.prepared[classLevel - 1] ?? 0;
+  const levels = formula.add === "level" ? classLevel : Math.floor(classLevel / 2);
+  return Math.max(1, abilityModifier(abilities[progression.ability]) + levels);
+}
+
+/**
+ * Where a build's ability increases come from (EDITIONS_PLAN.md D3): its own `increasesFrom`, or the background when
+ * the background gives increases (a 2024 one), otherwise the species when it gives some (a 2014 race), otherwise the
+ * background (the 2024 rule's three points on any abilities).
+ */
+export function increasesSource(build: CharacterBuild, sources: BuildSources): "background" | "species" {
+  if (build.increasesFrom) return build.increasesFrom;
+  const background = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
+  if (background?.abilities?.length || build.background.custom?.abilities?.length) return "background";
+  const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
+  return species && speciesGivesIncreases(species) ? "species" : "background";
+}
+
+/** Whether a species has ability increases of its own (a 2014 race), or a subrace that has. */
+export function speciesGivesIncreases(species: SpeciesDefinition): boolean {
+  if (Object.keys(species.abilities ?? {}).length || species.abilityChoice) return true;
+  return species.levels.some((level) => (level.choices ?? []).some((choice) => choice.kind === "pick" && choice.options.some((option) => option.abilities)));
+}
+
+/**
+ * The library items a 2014 class's equipment lines give: each line's pick (the build's, the class's suggestion, or its
+ * first option), and the weapons chosen where it asks for "any martial weapon".
+ */
+export function equipmentLineItems(build: CharacterBuild, definition: ClassDefinition, sources: BuildSources): Array<{ ref: string; count?: number }> {
+  const items: Array<{ ref: string; count?: number }> = [];
+  for (const line of definition.equipmentLines ?? []) {
+    const option = equipmentLineOption(build, definition, line);
+    items.push(...option.items);
+    if (option.anyWeapon) items.push(...equipmentLineWeapons(build, definition, line.id, option.anyWeapon, sources).map((ref) => ({ ref })));
+  }
+  return items;
+}
+
+/** A line's option as the build has it: its pick, the class's suggestion, or the first. */
+export function equipmentLineOption(build: CharacterBuild, definition: ClassDefinition, line: EquipmentLine): EquipmentLine["options"][number] {
+  const id = build.equipment?.lines?.[line.id] ?? definition.suggested.equipmentLines?.[line.id];
+  return line.options.find((option) => option.id === id) ?? line.options[0]!;
+}
+
+/** The library weapons a line's "any … weapon" option can take: the plain weapons of its category (melee ones, if it says). */
+export function equipmentWeaponOptions(anyWeapon: NonNullable<EquipmentLine["options"][number]["anyWeapon"]>, sources: BuildSources): string[] {
+  return (sources.library.weaponRefs?.() ?? []).filter((ref) => {
+    const weapon = sources.library.weapon(ref);
+    return weapon?.category === anyWeapon.category && (!anyWeapon.melee || weapon.attackType === "melee");
+  });
+}
+
+/** The weapons a line's "any … weapon" option takes: the build's, the class's suggestion, or the first it can. */
+export function equipmentLineWeapons(build: CharacterBuild, definition: ClassDefinition, lineId: string, anyWeapon: NonNullable<EquipmentLine["options"][number]["anyWeapon"]>, sources: BuildSources): string[] {
+  const allowed = equipmentWeaponOptions(anyWeapon, sources);
+  const wanted = (build.equipment?.weapons?.[lineId] ?? definition.suggested.equipmentWeapons?.[lineId] ?? []).filter((ref) => allowed.includes(ref));
+  const filled = [...wanted];
+  while (filled.length < anyWeapon.count && allowed.length) filled.push(allowed[0]!);
+  return filled.slice(0, anyWeapon.count);
 }
 
 /* ── turning grants into features and numbers ─────────────────────────────────────────────────────────────────── */
@@ -1302,12 +1424,16 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   }
 
   // Spells: the choices', then the grants' (always prepared, and free casts), each cast with what gave it.
-  const casters: Array<{ kind: "full" | "half" | "third" | "pact"; classLevel: number }> = [];
+  const casters: SlotCaster[] = [];
   let spellcasting: { ability: Ability } | undefined;
   for (const [classId, classLevel] of state.classLevels) {
     const progression = progressionOf(state, classId);
     if (!progression) continue;
-    casters.push({ kind: progression.kind, classLevel });
+    casters.push({
+      kind: progression.kind, classLevel,
+      ...(progression.firstSlotsAt ? { firstSlotsAt: progression.firstSlotsAt } : {}),
+      ...(progression.multiclassRounding ? { multiclassRounding: progression.multiclassRounding } : {})
+    });
     spellcasting ??= { ability: progression.ability };
   }
   const picks: SpellPick[] = [...state.spellPicks];
@@ -1464,6 +1590,14 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     }
   };
   addPackage(firstClass?.startingEquipment, build.equipment?.classOption);
+  // A 2014 class's lines: each line's pick, and the weapons chosen where it asks.
+  if (firstClass?.equipmentLines?.length) {
+    for (const item of equipmentLineItems(build, firstClass, sources)) {
+      const existing = equipment.find((entry) => entry.ref === item.ref);
+      if (existing) existing.count += item.count ?? 1;
+      else equipment.push({ ref: item.ref, count: item.count ?? 1 });
+    }
+  }
   const backgroundDefinition = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
   addPackage(backgroundDefinition?.equipment, build.equipment?.backgroundOption);
 

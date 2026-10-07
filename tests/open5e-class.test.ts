@@ -40,7 +40,8 @@ describe("an Open5e class", () => {
 
   it("2014 (the Proficiencies list), and a third-party class with text columns", () => {
     const rogue = asClass("srd_rogue");
-    expect(rogue).toMatchObject({ edition: "2014", hitDie: 8, saves: ["dex", "int"], armorTraining: ["light"], subclassLabel: "Roguish Archetype", featLevels: [4, 8, 10, 12, 16] });
+    // A 2014 class keeps its 19th-level Ability Score Improvement: it has no Epic Boon.
+    expect(rogue).toMatchObject({ edition: "2014", hitDie: 8, saves: ["dex", "int"], armorTraining: ["light"], subclassLabel: "Roguish Archetype", featLevels: [4, 8, 10, 12, 16, 19] });
     expect(rogue.skills.count).toBe(4);
     expect(rogue.table[0]).toMatchObject({ id: "sneak-attack", label: "Sneak Attack" });
     const marshal = asClass("a5e_marshal");

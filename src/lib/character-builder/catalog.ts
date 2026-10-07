@@ -232,6 +232,11 @@ export interface PickOption {
   choices?: ChoiceSpec[];
   /** A feat the option is (a Fighting Style feat), instead of its own grants. */
   feat?: string;
+  /**
+   * Ability increases it gives (a 2014 subrace's: Hill Dwarf, +1 Wisdom), when the character's increases come from its
+   * species (`CharacterBuild.increasesFrom`).
+   */
+  abilities?: Partial<Record<Ability, number>>;
 }
 
 /** What one level of a class, subclass or species gives and asks. */
@@ -257,10 +262,41 @@ export interface SpellcastingProgression {
   spells?: string[];
   /** Cantrips known, by class level (20 entries). */
   cantrips?: number[];
-  /** Level 1+ spells prepared, by class level (20 entries). Every 2024 caster prepares. */
+  /** Level 1+ spells prepared (or known), by class level (20 entries). Every 2024 caster prepares from a table. */
   prepared: number[];
+  /**
+   * A 2014 prepared caster's number instead of the table: its spellcasting modifier plus its class level (a Cleric, a
+   * Druid, a Wizard) or half of it rounded down (a Paladin), at least 1, once it has slots. It follows the modifier, so
+   * an Ability Score Improvement adds a spell.
+   */
+  preparedFormula?: { add: "level" | "half-level" };
   /** A wizard's spellbook: how many 1st-level spells it starts with, and how many each level adds. It prepares from it. */
   spellbook?: { start: number; perLevel: number };
+  /** The class level its spellcasting starts at: 2 for a 2014 Paladin or Ranger. Absent: 1. */
+  firstSlotsAt?: number;
+  /**
+   * How a half or third caster's levels count toward a multiclass caster level: rounded up (2024 rules, the default) or
+   * down (2014 rules).
+   */
+  multiclassRounding?: "up" | "down";
+}
+
+/**
+ * One line of a 2014 class's starting equipment: a choice between options ("(a) chain mail or (b) leather armor, longbow
+ * and 20 arrows"), or one option that's simply given. 2024 classes offer whole packages (`startingEquipment`) instead.
+ */
+export interface EquipmentLine {
+  id: string;
+  options: EquipmentOption[];
+}
+
+export interface EquipmentOption {
+  id: string;
+  label: string;
+  /** Library ids (`srd:weapon:…`, `srd:item:…`), with how many. Only weapons and armor reach the sheet (plan D15). */
+  items: Array<{ ref: string; count?: number }>;
+  /** Weapons the player chooses ("a martial weapon and a shield": one martial weapon), as library weapons. */
+  anyWeapon?: { category: "simple" | "martial"; melee?: boolean; count: number };
 }
 
 export interface ClassDefinition {
@@ -292,9 +328,16 @@ export interface ClassDefinition {
   subclassLabel: string;
   /** Levels with a feat choice (Ability Score Improvement or another). An Epic Boon is a feat choice of its own. */
   featLevels: number[];
+  /**
+   * The class level with an Epic Boon choice. Absent: 19 for a 2024 class, none for a 2014 one (whose 19th level is an
+   * Ability Score Improvement, in `featLevels`).
+   */
+  epicBoonLevel?: number;
   table: ClassTableColumn[];
   levels: ClassLevel[];
   startingEquipment?: EquipmentPackage[];
+  /** A 2014 class's starting equipment, a choice on each line (`EquipmentLine`). */
+  equipmentLines?: EquipmentLine[];
   suggested: ClassSuggestions;
   description?: string;
 }
@@ -315,6 +358,9 @@ export interface ClassSuggestions {
   /** Weapon kinds to master first (`longsword`, `shortbow`). */
   masteries?: string[];
   equipment?: string;
+  /** A 2014 class's pick on each equipment line, by line id, and the weapons it chooses for a line that asks. */
+  equipmentLines?: Record<string, string>;
+  equipmentWeapons?: Record<string, string[]>;
   /**
    * Spells to choose first, most wanted first (library ids): cantrips, then leveled spells. A leveled choice takes the
    * highest-level ones it can, so this list is read level by level. Spells that run come before reference-only ones.
@@ -357,12 +403,17 @@ export interface BackgroundDefinition {
   name: string;
   source: SourceMetadata;
   edition: Edition;
-  /** The three abilities its increases go to: +2 and +1, or +1 to all three. */
-  abilities: [Ability, Ability, Ability];
+  /**
+   * The three abilities its increases go to: +2 and +1, or +1 to all three (2024). A 2014 background has none: its
+   * character's increases come from its race, or from any three abilities (`CharacterBuild.increasesFrom`).
+   */
+  abilities?: [Ability, Ability, Ability];
   skills: string[];
-  /** Its origin feat, and any choice that feat needs made for it (Magic Initiate's spell list). */
-  feat: string;
+  /** Its origin feat (2024), and any choice that feat needs made for it (Magic Initiate's spell list). */
+  feat?: string;
   featChoices?: Record<string, unknown>;
+  /** A 2014 background's own feature (the Acolyte's Shelter of the Faithful). */
+  grants?: FeatureGrant[];
   equipment?: EquipmentPackage[];
   description?: string;
 }
@@ -381,6 +432,12 @@ export interface SpeciesDefinition {
   levels: ClassLevel[];
   /** The id of its choice whose value is the spellcasting ability for its spells (an elf's lineage spells). */
   spellcastingAbilityChoice?: string;
+  /**
+   * A 2014 race's ability increases (a Dwarf's +2 Constitution), and those of the player's choice (a Half-Elf's +1 to two
+   * abilities other than Charisma), when the character's increases come from its species. A 2024 species has none.
+   */
+  abilities?: Partial<Record<Ability, number>>;
+  abilityChoice?: { count: number; amount: number; exclude?: Ability[] };
   description?: string;
 }
 
@@ -483,7 +540,8 @@ const pickOptionSchema: z.ZodType<PickOption> = z.lazy(() => z.object({
   repeatable: z.boolean().optional(),
   grants: z.array(featureGrantSchema),
   choices: z.array(choiceSpecSchema).optional(),
-  feat: z.string().optional()
+  feat: z.string().optional(),
+  abilities: z.record(abilitySchema, z.number().int()).optional()
 })) as z.ZodType<PickOption>;
 
 export const choiceSpecSchema: z.ZodType<ChoiceSpec> = z.lazy(() => z.discriminatedUnion("kind", [
@@ -541,7 +599,20 @@ const spellcastingSchema = z.object({
   spells: z.array(z.string().min(1)).optional(),
   cantrips: twenty(z.number().int().min(0)).optional(),
   prepared: twenty(z.number().int().min(0)),
-  spellbook: z.object({ start: z.number().int(), perLevel: z.number().int() }).optional()
+  preparedFormula: z.object({ add: z.enum(["level", "half-level"]) }).optional(),
+  spellbook: z.object({ start: z.number().int(), perLevel: z.number().int() }).optional(),
+  firstSlotsAt: z.number().int().min(1).max(20).optional(),
+  multiclassRounding: z.enum(["up", "down"]).optional()
+});
+
+const equipmentLineSchema = z.object({
+  id: z.string().min(1),
+  options: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string(),
+    items: z.array(z.object({ ref: z.string(), count: z.number().int().min(1).optional() })),
+    anyWeapon: z.object({ category: z.enum(["simple", "martial"]), melee: z.boolean().optional(), count: z.number().int().min(1) }).optional()
+  })).min(1)
 });
 
 export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
@@ -562,9 +633,11 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
   subclassLevel: z.number().int().min(1).max(20),
   subclassLabel: z.string(),
   featLevels: z.array(z.number().int().min(1).max(20)),
+  epicBoonLevel: z.number().int().min(1).max(20).optional(),
   table: z.array(tableColumnSchema),
   levels: z.array(classLevelSchema),
   startingEquipment: z.array(equipmentSchema).optional(),
+  equipmentLines: z.array(equipmentLineSchema).optional(),
   suggested: z.object({
     abilities: z.array(abilitySchema),
     tactics: z.enum(["basic-melee", "basic-ranged", "skirmisher", "brute", "defender", "controller"]),
@@ -576,6 +649,8 @@ export const classDefinitionSchema: z.ZodType<ClassDefinition> = z.object({
     epicBoon: z.string().optional(),
     masteries: z.array(z.string()).optional(),
     equipment: z.string().optional(),
+    equipmentLines: z.record(z.string(), z.string()).optional(),
+    equipmentWeapons: z.record(z.string(), z.array(z.string())).optional(),
     cantrips: z.array(z.string()).optional(),
     spells: z.array(z.string()).optional(),
     picks: z.record(z.string(), z.array(z.string())).optional()
@@ -619,10 +694,11 @@ export const backgroundDefinitionSchema: z.ZodType<BackgroundDefinition> = z.obj
   name: z.string().min(1),
   source: sourceSchema,
   edition: editionSchema,
-  abilities: z.tuple([abilitySchema, abilitySchema, abilitySchema]),
+  abilities: z.tuple([abilitySchema, abilitySchema, abilitySchema]).optional(),
   skills: z.array(z.string()),
-  feat: z.string().min(1),
+  feat: z.string().min(1).optional(),
   featChoices: z.record(z.string(), z.unknown()).optional(),
+  grants: z.array(featureGrantSchema).optional(),
   equipment: z.array(equipmentSchema).optional(),
   description: z.string().optional()
 }) as z.ZodType<BackgroundDefinition>;
@@ -638,5 +714,7 @@ export const speciesDefinitionSchema: z.ZodType<SpeciesDefinition> = z.object({
   senses: sensesSchema.optional(),
   levels: z.array(classLevelSchema),
   spellcastingAbilityChoice: z.string().optional(),
+  abilities: z.record(abilitySchema, z.number().int()).optional(),
+  abilityChoice: z.object({ count: z.number().int().min(1), amount: z.number().int().min(1), exclude: z.array(abilitySchema).optional() }).optional(),
   description: z.string().optional()
 }) as z.ZodType<SpeciesDefinition>;

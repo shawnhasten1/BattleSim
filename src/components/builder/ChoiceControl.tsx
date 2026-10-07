@@ -2,8 +2,25 @@
 
 import { useState, type ReactNode } from "react";
 import type { Ability } from "@/engine";
-import { suggestedValue, type ChoiceSlot, type ChoiceValue, type FeatChoice } from "@/lib/character-builder";
+import { EditionBadge } from "@/components/ui/Edition";
+import { suggestedValue, type ChoiceOption, type ChoiceSlot, type ChoiceValue, type FeatChoice } from "@/lib/character-builder";
+import { editionNameKey, preferEdition, type EditionChoice } from "@/lib/editions";
 import styles from "./builder.module.css";
+
+/**
+ * A slot's options as the builder's edition filter shows them (EDITIONS_PLAN.md D2): the other edition's version of one
+ * both editions have is hidden, unless it's chosen. Whether to mark each with its edition: only when both are listed.
+ */
+function editionOptions(slot: ChoiceSlot, choice: EditionChoice | undefined): { options: ChoiceOption[]; mark: boolean } {
+  const chosen = new Set(Array.isArray(slot.value) ? slot.value as string[] : typeof slot.value === "string" ? [slot.value]
+    : slot.value && typeof slot.value === "object" && "feat" in slot.value ? [(slot.value as FeatChoice).feat] : []);
+  const shown = choice ? preferEdition(slot.options, choice, (option) => (chosen.has(option.id) ? undefined : option.edition), (option) => editionNameKey(option.name)) : slot.options;
+  return { options: shown, mark: new Set(shown.map((option) => option.edition).filter(Boolean)).size > 1 };
+}
+
+/** An option's name in a select, with where it's from and, when the list has both editions, which edition. */
+const optionText = (option: ChoiceOption, mark: boolean) =>
+  [option.name, option.from ? `(${option.from})` : "", mark && option.edition ? `(${option.edition})` : ""].filter(Boolean).join(" ");
 
 const KIND_LABELS: Record<ChoiceSlot["spec"]["kind"], string> = {
   subclass: "Subclass",
@@ -30,12 +47,13 @@ const SPELL_LEVELS = ["Cantrips", "1st level", "2nd level", "3rd level", "4th le
  * Spells to choose, grouped by level, with a filter once there are many. A spell the simulator doesn't cast has a dashed
  * outline: it goes on the actor as its text.
  */
-function SpellPicker({ slot, title, onChange }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void }) {
+function SpellPicker({ slot, title, onChange, edition }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void; edition?: EditionChoice }) {
   const [filter, setFilter] = useState("");
   const chosen = asList(slot.value);
   const full = chosen.length >= slot.count;
   const needle = filter.trim().toLowerCase();
-  const shown = slot.options.filter((option) => chosen.includes(option.id) || !needle || option.name.toLowerCase().includes(needle));
+  const { options, mark } = editionOptions(slot, edition);
+  const shown = options.filter((option) => chosen.includes(option.id) || !needle || option.name.toLowerCase().includes(needle));
   const levels = [...new Set(shown.map((option) => option.level ?? 0))].sort((a, b) => a - b);
   return (
     <div className={styles.spells}>
@@ -63,7 +81,7 @@ function SpellPicker({ slot, title, onChange }: { slot: ChoiceSlot; title: strin
                     type="checkbox" checked={checked} disabled={disabled}
                     onChange={() => onChange(checked ? chosen.filter((id) => id !== option.id) : [...chosen, option.id])}
                   />
-                  {option.name}{option.reference ? <small> ref</small> : null}
+                  {option.name}{option.reference ? <small> ref</small> : null}{mark ? <> <EditionBadge edition={option.edition} /></> : null}
                 </label>
               );
             })}
@@ -80,9 +98,10 @@ const asList = (value: ChoiceValue | undefined): string[] => (Array.isArray(valu
  * One choice the build asks for, as a control: a list to pick from, a subclass or a feat, points for ability increases.
  * Changes go to `onChange` as the slot's whole new value. A pending choice offers its suggestion.
  */
-export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: (value: ChoiceValue | undefined) => void }) {
+export function ChoiceControl({ slot, onChange, edition }: { slot: ChoiceSlot; onChange: (value: ChoiceValue | undefined) => void; edition?: EditionChoice }) {
   const spec = slot.spec;
   const title = choiceTitle(slot);
+  const { options: editionShown, mark } = editionOptions(slot, edition);
   const suggest = slot.pending && slot.suggestion !== undefined
     ? <button type="button" className={styles.linkButton} onClick={() => onChange(suggestedValue(slot))}>Suggest</button>
     : null;
@@ -92,16 +111,16 @@ export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: 
     body = (
       <select aria-label={title} value={typeof slot.value === "string" ? slot.value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
         <option value="">Choose…</option>
-        {slot.options.map((option) => <option key={option.id} value={option.id}>{option.from ? `${option.name} (${option.from})` : option.name}</option>)}
+        {editionShown.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
       </select>
     );
   } else if (spec.kind === "feat") {
     const current = slot.value && typeof slot.value === "object" && !Array.isArray(slot.value) && "feat" in slot.value ? (slot.value as FeatChoice).feat : "";
-    const options = current && !slot.options.some((option) => option.id === current) ? [{ id: current, name: current }, ...slot.options] : slot.options;
+    const options: ChoiceOption[] = current && !slot.options.some((option) => option.id === current) ? [{ id: current, name: current }, ...editionShown] : editionShown;
     body = (
       <select aria-label={title} value={current} onChange={(event) => onChange(event.target.value ? { feat: event.target.value } : undefined)}>
         <option value="">Choose a feat…</option>
-        {options.map((option) => <option key={option.id} value={option.id}>{"from" in option && option.from ? `${option.name} (${option.from})` : option.name}</option>)}
+        {options.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
       </select>
     );
   } else if (spec.kind === "abilities") {
@@ -126,7 +145,7 @@ export function ChoiceControl({ slot, onChange }: { slot: ChoiceSlot; onChange: 
       </div>
     );
   } else if (spec.kind === "spells") {
-    body = <SpellPicker slot={slot} title={title} onChange={onChange} />;
+    body = <SpellPicker slot={slot} title={title} onChange={onChange} edition={edition} />;
   } else {
     const chosen = asList(slot.value);
     const full = chosen.length >= slot.count;

@@ -184,7 +184,8 @@ export function normalizeOpen5eClass(imported: Open5eImportedPayload): CatalogEn
   const subclassFeature = features.find((feature) => feature.feature_type === "CLASS_LEVEL_FEATURE" && feature.name && SUBCLASS_FEATURE.test(feature.name));
   const subclassLevel = subclassFeature?.gained_at?.map((entry) => entry.level).find((level): level is number => typeof level === "number") ?? 3;
   const asi = features.find((feature) => feature.name && /^ability score improvement$/i.test(feature.name));
-  const featLevels = [...new Set((asi?.gained_at ?? []).map((entry) => entry.level).filter((level): level is number => typeof level === "number" && level !== 19))].sort((a, b) => a - b);
+  // 19th level is an Epic Boon under the 2024 rules (the builder adds it), an Ability Score Improvement under the 2014 ones.
+  const featLevels = [...new Set((asi?.gained_at ?? []).map((entry) => entry.level).filter((level): level is number => typeof level === "number" && (level !== 19 || edition === "2014")))].sort((a, b) => a - b);
   const hitDie = Number(/(\d+)/.exec(text(raw.hit_dice) ?? text(record(raw.hit_points).hit_dice) ?? "")?.[1] ?? 8);
   const primary = [
     ...abilitiesIn(trait(traits, "primary ability")),

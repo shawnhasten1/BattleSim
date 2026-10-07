@@ -48,7 +48,9 @@ export function startBuild(sources: BuildSources, options: StartOptions): Charac
   const backgroundId = options.backgroundId
     ?? (sources.catalog.backgrounds.some((entry) => entry.id === definition.suggested.background) ? definition.suggested.background : sources.catalog.backgrounds[0]?.id);
   const classOption = options.classOption === null ? undefined : options.classOption ?? definition.suggested.equipment ?? definition.startingEquipment?.[0]?.id;
-  const backgroundOption = options.backgroundOption === null ? undefined : options.backgroundOption ?? "A";
+  // A background's package A, when it has packages (a 2014 background's gear isn't a package).
+  const hasPackages = Boolean(sources.catalog.backgrounds.find((entry) => entry.id === backgroundId)?.equipment?.length);
+  const backgroundOption = options.backgroundOption === null ? undefined : options.backgroundOption ?? (hasPackages ? "A" : undefined);
   return {
     version: 1,
     edition: definition.edition,
@@ -100,6 +102,8 @@ export function withLevelUp(build: CharacterBuild, classId?: string): CharacterB
  */
 export function multiclassProblems(build: CharacterBuild, classId: string, sources: BuildSources): string[] {
   if (build.levels.some((entry) => entry.classId === classId)) return [];
+  const twin = otherEditionTwin(build, classId, sources);
+  if (twin) return [twin];
   const scores = buildCharacter(build, sources).fields.abilities;
   const classes = [classId, ...new Set(build.levels.map((entry) => entry.classId))];
   const names: Record<Ability, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
@@ -114,6 +118,18 @@ export function multiclassProblems(build: CharacterBuild, classId: string, sourc
     const has = named.length === 1 ? String(scores[named[0]!]) : named.map((ability) => `${names[ability]} ${scores[ability]}`).join(", ");
     return [`${definition.name} needs ${needed} (it has ${has})`];
   });
+}
+
+/**
+ * Why a class can't be taken at all: the character has the other edition's class of the same name (a 2014 Fighter and a
+ * 2024 Fighter can't be one character's two classes). Undefined when it can.
+ */
+export function otherEditionTwin(build: CharacterBuild, classId: string, sources: BuildSources): string | undefined {
+  const wanted = sources.catalog.classes.find((entry) => entry.id === classId);
+  if (!wanted) return undefined;
+  const twin = build.levels.map((entry) => sources.catalog.classes.find((candidate) => candidate.id === entry.classId))
+    .find((entry) => entry && entry.id !== wanted.id && entry.name === wanted.name && entry.edition !== wanted.edition);
+  return twin ? `It's a ${twin.edition} ${twin.name} already: a character can't have both editions' ${wanted.name}` : undefined;
 }
 
 /** The build one level lower: the last level and what was chosen at it go. */

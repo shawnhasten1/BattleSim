@@ -141,7 +141,7 @@ export function missingFor(item: CatalogEntry, catalog: Catalog): string[] {
     case "subclass":
       return catalog.classes.some((entry) => entry.id === item.entry.classId) ? [] : [`its class (${item.entry.classId}) isn't in the catalog`];
     case "background":
-      return catalog.feats.some((entry) => entry.id === item.entry.feat) ? [] : [`its feat (${item.entry.feat}) isn't in the catalog`];
+      return !item.entry.feat || catalog.feats.some((entry) => entry.id === item.entry.feat) ? [] : [`its feat (${item.entry.feat}) isn't in the catalog`];
     default:
       return [];
   }

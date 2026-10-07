@@ -8,8 +8,10 @@ import type { Compendium } from "@/hooks/useCompendium";
 import { formatBonus } from "@/lib/ui-helpers";
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
+import { EditionFilter } from "@/components/ui/Edition";
+import { CatalogOptions, speciesWord } from "@/components/builder/CatalogSelect";
+import { useEditionFilter } from "@/hooks/useEditionFilter";
 import { QUICK_PARTY_CLASSES, quickBuild, quickParty } from "@/lib/character-builder";
-import { entryLabel } from "@/lib/character-builder/homebrew";
 import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./modals.module.css";
@@ -63,6 +65,10 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   });
 
   const [tab, setTab] = useState<TabId>("custom");
+  // Which edition's version the Character tab's lists show where there are two (EDITIONS_PLAN.md D2).
+  const [edition, setEdition] = useEditionFilter("create-character");
+  const chosenClass = buildSources.catalog.classes.find((entry) => entry.id === character.classId);
+  const chosenSpecies = buildSources.catalog.species.find((entry) => entry.id === character.speciesId);
 
   const targetFolderName = targetFolderId
     ? actorFolders.find((folder) => folder.id === targetFolderId)?.name
@@ -218,10 +224,13 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
 
         {tab === "character" ? (
           <>
-            <p className={styles.status}>
-              A player character built from a 2024 class: its features, hit points, saves and skills by level, and leveled
-              up later from its sheet.
-            </p>
+            <div className={styles.row}>
+              <p className={styles.status}>
+                A player character built from a class, under the 2024 or the 2014 rules: its features, hit points, saves and
+                skills by level, and leveled up later from its sheet.
+              </p>
+              <EditionFilter value={edition} onChange={setEdition} />
+            </div>
             <label className={styles.field}>Name<input value={character.name} onChange={(e) => setCharacter({ ...character, name: e.target.value })} /></label>
             <div className={styles.grid3}>
               <label className={styles.field}>
@@ -233,7 +242,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                     setCharacter({ ...character, classId: e.target.value, backgroundId: chosen?.suggested.background ?? character.backgroundId });
                   }}
                 >
-                  {buildSources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                  <CatalogOptions entries={buildSources.catalog.classes} choice={edition} keep={character.classId} />
                 </select>
               </label>
               <label className={styles.field}>
@@ -245,15 +254,15 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               <label className={styles.field}>
                 Background
                 <select value={character.backgroundId} onChange={(e) => setCharacter({ ...character, backgroundId: e.target.value })}>
-                  {buildSources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                  <CatalogOptions entries={buildSources.catalog.backgrounds} choice={edition} keep={character.backgroundId} />
                 </select>
               </label>
             </div>
             <label className={styles.field}>
-              Species
-              <select value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
+              {speciesWord(chosenSpecies?.edition ?? chosenClass?.edition)}
+              <select aria-label="Species" value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
                 <option value="">None (set size, speed and senses by hand)</option>
-                {buildSources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                <CatalogOptions entries={buildSources.catalog.species} choice={edition} keep={character.speciesId || undefined} />
               </select>
             </label>
             <button
@@ -296,7 +305,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
                       aria-label={`Party member ${index + 1}`} value={classId}
                       onChange={(e) => setPartyClasses(partyClasses.map((id, at) => (at === index ? e.target.value : id)))}
                     >
-                      {buildSources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                      <CatalogOptions entries={buildSources.catalog.classes} choice={edition} keep={classId} />
                     </select>
                   </label>
                 ))}

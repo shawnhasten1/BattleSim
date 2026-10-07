@@ -187,17 +187,19 @@ export function BackgroundEditor({ entry, feats, onChange }: { entry: Background
   const set = (patch: Partial<BackgroundDefinition>) => onChange({ ...entry, ...patch });
   const skillOptions = SKILLS.map((skill) => ({ id: skill.id, label: skill.name }));
   const origin = feats.filter((feat) => feat.category === "origin" || feat.id === entry.feat);
+  // A 2024 background's three abilities (a 2014 one, which has none, starts from these when edited here).
+  const abilities = entry.abilities ?? ["str", "dex", "con"];
   return (
     <section className={styles.section} aria-label="Basics">
       <h4>Basics</h4>
       <NameFields name={entry.name} description={entry.description} onChange={set} />
       <div className={styles.row}>
-        {entry.abilities.map((ability, index) => (
+        {abilities.map((ability, index) => (
           <label key={index} className={styles.field}>
             {`Ability ${index + 1}`}
             <select
               value={ability} aria-label={`Ability ${index + 1}`}
-              onChange={(event) => set({ abilities: entry.abilities.map((a, i) => (i === index ? event.target.value as Ability : a)) as BackgroundDefinition["abilities"] })}
+              onChange={(event) => set({ abilities: abilities.map((a, i) => (i === index ? event.target.value as Ability : a)) as BackgroundDefinition["abilities"] })}
             >
               {ABILITIES.map((option) => <option key={option} value={option}>{ABILITY_LABELS[option]}</option>)}
             </select>
@@ -205,7 +207,7 @@ export function BackgroundEditor({ entry, feats, onChange }: { entry: Background
         ))}
         <label className={styles.field}>
           Origin feat
-          <select value={entry.feat} aria-label="Origin feat" onChange={(event) => set({ feat: event.target.value })}>
+          <select value={entry.feat ?? ""} aria-label="Origin feat" onChange={(event) => set({ feat: event.target.value })}>
             {origin.map((feat) => <option key={feat.id} value={feat.id}>{entryLabel(feat)}</option>)}
           </select>
         </label>

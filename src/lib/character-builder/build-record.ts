@@ -44,8 +44,17 @@ export interface CharacterBuild {
   hp: { method: "average" | "rolled"; rolls?: number[]; adjust?: number };
   /** One entry per character level, in order: the class that level went to and what was chosen at it. */
   levels: Array<{ classId: string; choices: Record<string, ChoiceValue> }>;
-  /** The starting packages taken on the first build. Leveling up never touches equipment. */
-  equipment?: { classOption?: string; backgroundOption?: string; applied: boolean };
+  /**
+   * The starting packages taken on the first build (a 2024 class's option A or B), or a 2014 class's pick on each line
+   * (`lines`, by line id) with the weapons chosen where a line asks (`weapons`). Leveling up never touches equipment.
+   */
+  equipment?: { classOption?: string; backgroundOption?: string; lines?: Record<string, string>; weapons?: Record<string, string[]>; applied: boolean };
+  /**
+   * Where the character's ability increases come from (EDITIONS_PLAN.md D3): its background (2024 rules: three points on
+   * the background's abilities, or on any three when the background has none) or its species (2014 rules: the race's
+   * own). Absent: the background when it gives increases, otherwise the species.
+   */
+  increasesFrom?: "background" | "species";
   /**
    * What the builder last wrote: a record's id (or a field's name) → the grant key that made it and a fingerprint of it
    * as written. A record that no longer matches its fingerprint was edited by the DM, and a rebuild keeps it (plan D5).
@@ -99,8 +108,11 @@ export const characterBuildSchema: z.ZodType<CharacterBuild> = z.object({
   equipment: z.object({
     classOption: z.string().optional(),
     backgroundOption: z.string().optional(),
+    lines: z.record(z.string(), z.string()).optional(),
+    weapons: z.record(z.string(), z.array(z.string())).optional(),
     applied: z.boolean()
   }).optional(),
+  increasesFrom: z.enum(["background", "species"]).optional(),
   made: z.record(z.string(), z.object({ key: z.string(), fingerprint: z.string() }))
 }) as z.ZodType<CharacterBuild>;
 

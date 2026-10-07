@@ -23,8 +23,8 @@ export function spellRuns(spell: SpellDefinition | undefined): boolean {
 }
 
 /** The highest spell level one class's levels let it prepare (its own slots, as if it were the only class). 0: none. */
-export function maxSpellLevel(kind: SpellcastingProgression["kind"], classLevel: number): number {
-  if (classLevel < 1) return 0;
+export function maxSpellLevel(kind: SpellcastingProgression["kind"], classLevel: number, firstSlotsAt = 1): number {
+  if (classLevel < Math.max(1, firstSlotsAt)) return 0;
   if (kind === "pact") return PACT_SLOTS[Math.min(classLevel, 20) - 1]?.level ?? 0;
   const casterLevel = kind === "full" ? classLevel : kind === "half" ? Math.ceil(classLevel / 2) : Math.ceil(classLevel / 3);
   return casterLevel > 0 ? FULL_CASTER_SLOTS[Math.min(casterLevel, 20) - 1]?.length ?? 0 : 0;

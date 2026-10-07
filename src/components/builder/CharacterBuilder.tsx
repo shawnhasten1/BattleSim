@@ -21,17 +21,24 @@ import {
   withLevelUp,
   withSuggestions,
   adoptionBuild,
+  equipmentLineOption,
+  equipmentLineWeapons,
+  equipmentWeaponOptions,
+  increasesSource,
   sameNamedAbilities,
   type BuildChange,
   type CharacterBuild,
+  type ClassDefinition,
   type ChoiceSlot
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
-import { entryLabel } from "@/lib/character-builder/homebrew";
 import { formatBonus } from "@/lib/ui-helpers";
+import { EditionFilter } from "@/components/ui/Edition";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
+import { useEditionFilter } from "@/hooks/useEditionFilter";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useBuilderUiStore, type BuilderSeed } from "@/store/builder-ui-store";
+import { CatalogOptions, speciesWord } from "./CatalogSelect";
 import { ChoiceControl } from "./ChoiceControl";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import styles from "./builder.module.css";
@@ -62,11 +69,11 @@ function withLevel(build: CharacterBuild, level: number): CharacterBuild {
   return next;
 }
 
-/** The choices, grouped by what asks for them (the background, each level), in order. */
-function groups(slots: ChoiceSlot[]): Array<{ label: string; slots: ChoiceSlot[] }> {
+/** The choices, grouped by what asks for them (the background, the species or race, each level), in order. */
+function groups(slots: ChoiceSlot[], species: "Species" | "Race" = "Species"): Array<{ label: string; slots: ChoiceSlot[] }> {
   const out: Array<{ label: string; slots: ChoiceSlot[] }> = [];
   for (const slot of slots) {
-    const label = slot.scope.kind === "level" ? `Level ${slot.scope.index + 1}` : slot.scope.kind === "background" ? "Background" : "Species";
+    const label = slot.scope.kind === "level" ? `Level ${slot.scope.index + 1}` : slot.scope.kind === "background" ? "Background" : species;
     const last = out[out.length - 1];
     if (last?.label === label) last.slots.push(slot);
     else out.push({ label, slots: [slot] });
@@ -130,6 +137,8 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   });
   const [update, setUpdate] = useState<string[]>([]);
   const [removeTwins, setRemoveTwins] = useState(false);
+  // Which edition's version the lists show where there are two: a built character's opens on its own (D2).
+  const [edition, setEdition] = useEditionFilter("builder", saved?.edition);
 
   const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
   // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
@@ -149,6 +158,10 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   const classId = draft.levels[0]!.classId;
   const firstClass = sources.catalog.classes.find((entry) => entry.id === classId);
   const species = draft.species ? sources.catalog.species.find((entry) => entry.id === draft.species!.id) : undefined;
+  const background = draft.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === draft.background.id) : undefined;
+  // "Race" for a 2014 race, "Species" for a 2024 one (the character's edition while there's none).
+  const speciesLabel = speciesWord(species?.edition ?? draft.edition);
+  const increasesFrom = increasesSource(draft, sources);
   const pending = built.choices.filter((slot) => slot.pending);
   const scores = scoresProblem(draft.abilities);
   const changes: BuildChange[] = creating ? [] : orderedChanges(preview.changes).filter((change) => !(change.kind === "field" && change.key === "field:classes"));
@@ -217,15 +230,19 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         {adopting ? (
           <div className={styles.warning} role="note">
             <p className={styles.dim}>
-              {definition?.name} becomes a built character: its class features become the 2024 versions, its ability scores and
-              hit point maximum stay as they are, and nothing is added to its equipment. Its own abilities stay too.
+              {definition?.name} becomes a built character: its class features become the {firstClass?.edition ?? "2024"} rules&apos;
+              versions, its ability scores and hit point maximum stay as they are, and nothing is added to its equipment. Its own
+              abilities stay too.
             </p>
             {adoption?.notes.length ? <ul className={styles.dim}>{adoption.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
           </div>
         ) : null}
 
         <section className={styles.section} aria-label="Basics">
-          <h4>Basics</h4>
+          <div className={styles.sectionHead}>
+            <h4>Basics</h4>
+            <EditionFilter value={edition} onChange={setEdition} />
+          </div>
           <div className={styles.row}>
             {creating ? (
               <label className={styles.field}>
@@ -236,7 +253,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
             <label className={styles.field}>
               Class
               <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
-                {sources.catalog.classes.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                <CatalogOptions entries={sources.catalog.classes} choice={edition} keep={classId} />
               </select>
             </label>
             <label className={styles.field}>
@@ -251,16 +268,26 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
             <label className={styles.field}>
               Background
               <select value={draft.background.id ?? ""} onChange={(event) => changeBackground(event.target.value)} aria-label="Background">
-                {sources.catalog.backgrounds.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                <CatalogOptions entries={sources.catalog.backgrounds} choice={edition} keep={draft.background.id} />
               </select>
             </label>
           </div>
           <div className={styles.row}>
             <label className={styles.field}>
-              Species
+              {speciesLabel}
               <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
                 <option value="">None (size, speed and senses by hand)</option>
-                {sources.catalog.species.map((entry) => <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>)}
+                <CatalogOptions entries={sources.catalog.species} choice={edition} keep={draft.species?.id} />
+              </select>
+            </label>
+            <label className={styles.field}>
+              Ability increases from
+              <select
+                aria-label="Ability increases from" value={increasesFrom}
+                onChange={(event) => set(withSuggestions({ ...draft, increasesFrom: event.target.value as "background" | "species" }, sources))}
+              >
+                <option value="background">The background{background && !background.abilities?.length ? " (any three)" : ""}</option>
+                <option value="species">The {speciesLabel.toLowerCase()}</option>
               </select>
             </label>
             {species && species.sizes.length > 1 ? (
@@ -275,6 +302,16 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
               </label>
             ) : null}
           </div>
+          <p className={styles.dim}>
+            {increasesFrom === "background"
+              ? background?.abilities?.length
+                ? `Three points on the background's abilities (2024 rules); the ${speciesLabel.toLowerCase()}'s increases, if it has any, don't apply.`
+                : `Three points on any abilities, +2 and +1 or +1 to three (the 2024 rule for a background without its own); the ${speciesLabel.toLowerCase()}'s increases don't apply.`
+              : `The ${speciesLabel.toLowerCase()}'s own increases (2014 rules); the background gives none.`}
+          </p>
+          {creating && firstClass?.equipmentLines?.length ? (
+            <EquipmentLines draft={draft} classDefinition={firstClass} sources={sources} onChange={set} />
+          ) : null}
           {creating && firstClass?.startingEquipment?.length ? (
             <label className={styles.field}>
               Starting equipment
@@ -336,13 +373,13 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
             <span className={styles.dim}>{pending.length ? `${pending.length} still to choose` : "All made"}</span>
             {pending.length ? <button type="button" className={styles.linkButton} onClick={() => set(withSuggestions(draft, sources))}>Suggest the rest</button> : null}
           </div>
-          {groups(built.choices).map((group) => (
+          {groups(built.choices, speciesLabel).map((group) => (
             <div key={group.label} className={styles.group}>
               <h5>{group.label}</h5>
               {group.slots.map((slot) => (
                 <ChoiceControl
                   key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-                  slot={slot}
+                  slot={slot} edition={edition}
                   onChange={(value) => set(withChoice(draft, slot.scope, slot.path, value, slot.spec))}
                 />
               ))}
@@ -419,6 +456,53 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         {pending.length ? <p className={styles.dim}>Choices still open are left out until they&apos;re made.</p> : null}
       </div>
     </FloatingWindow>
+  );
+}
+
+/**
+ * A 2014 class's starting equipment, a choice on each line (EDITIONS_PLAN.md): the line's options, and a weapon to choose
+ * for each "any martial weapon" the option asks for. Only weapons and armor reach the sheet.
+ */
+function EquipmentLines({ draft, classDefinition, sources, onChange }: {
+  draft: CharacterBuild;
+  classDefinition: ClassDefinition;
+  sources: BuildSources;
+  onChange: (next: CharacterBuild) => void;
+}) {
+  const equipment = draft.equipment ?? { applied: false };
+  return (
+    <fieldset className={styles.equipment} aria-label="Starting equipment">
+      <legend>Starting equipment</legend>
+      {(classDefinition.equipmentLines ?? []).map((line, index) => {
+        const option = equipmentLineOption(draft, classDefinition, line);
+        const weapons = option.anyWeapon ? equipmentLineWeapons(draft, classDefinition, line.id, option.anyWeapon, sources) : [];
+        const choices = option.anyWeapon ? equipmentWeaponOptions(option.anyWeapon, sources) : [];
+        return (
+          <div key={line.id} className={styles.row}>
+            {line.options.length > 1 ? (
+              <select
+                aria-label={`Equipment line ${index + 1}`} value={option.id}
+                onChange={(event) => onChange({ ...draft, equipment: { ...equipment, applied: false, lines: { ...equipment.lines, [line.id]: event.target.value } } })}
+              >
+                {line.options.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+              </select>
+            ) : <span className={styles.dim}>{option.label}</span>}
+            {weapons.map((ref, at) => (
+              <select
+                key={at} aria-label={`Equipment line ${index + 1}: weapon ${at + 1}`} value={ref}
+                onChange={(event) => {
+                  const next = [...weapons];
+                  next[at] = event.target.value;
+                  onChange({ ...draft, equipment: { ...equipment, applied: false, weapons: { ...equipment.weapons, [line.id]: next } } });
+                }}
+              >
+                {choices.map((choice) => <option key={choice} value={choice}>{sources.library.weapon(choice)?.name ?? choice}</option>)}
+              </select>
+            ))}
+          </div>
+        );
+      })}
+    </fieldset>
   );
 }
 

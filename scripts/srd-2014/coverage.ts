@@ -48,7 +48,7 @@ export function catalogVerdicts(catalog: Catalog): Map<string, Covered> {
     for (const level of entry.levels) { level.grants.forEach(grant); choices(level.choices); }
   }
   for (const feat of catalog.feats) { feat.grants.forEach(grant); choices(feat.choices); }
-  for (const background of catalog.backgrounds) ((background as { grants?: FeatureGrant[] }).grants ?? []).forEach(grant);
+  for (const background of catalog.backgrounds) (background.grants ?? []).forEach(grant);
   return covered;
 }
 

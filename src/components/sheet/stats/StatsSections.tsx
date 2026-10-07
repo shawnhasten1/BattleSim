@@ -288,7 +288,7 @@ function TypedLevelSection({ definition, open, onToggle }: SectionProps) {
       {definition.character ? (
         <button
           type="button" className={styles.addSmall}
-          title="Make it a built character at this level: its class features become the 2024 versions, its scores and HP stay, and Level up works from then on"
+          title="Make it a built character at this level: its class features become the builder&apos;s versions (2024 or 2014 rules, as its class is), its scores and HP stay, and Level up works from then on"
           onClick={() => openBuilder({ kind: "adopt", definitionId: definition.id })}
         >
           Rebuild with the builder…
