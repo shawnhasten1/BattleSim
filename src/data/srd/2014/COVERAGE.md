@@ -14,7 +14,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 18 | 11 | 2 | 2 | 2 | 1 |
 | Bard (College of Lore) | 15 | 4 | 0 | 1 | 5 | 5 |
-| Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
+| Cleric (Life Domain) | 13 | 8 | 0 | 1 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
 | Monk (Way of the Open Hand) | 23 | 12 | 2 | 3 | 2 | 4 |
@@ -44,7 +44,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `catch-missile` | Catching a missile and throwing it back for a ki point (Deflect Missiles) | 1 |
 | `check-floor` | A check's total raised to the ability score (Indomitable Might, when escaping a grapple) | 1 |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | 1 |
-| `destroy-undead` | Turn Undead destroying an undead of a low enough challenge rating outright | 1 |
 | `end-own-condition` | An action ending a condition on itself (Stillness of Mind) | 1 |
 | `end-spell` | Ending a spell on a creature (Cleansing Touch) | 1 |
 | `exhaustion` | Exhaustion (Frenzy's cost) | 1 |
@@ -130,7 +129,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | 1 | Spellcasting | full |  |  |
 | 2, 6, 18 | Channel Divinity | full |  |  |
 | 4, 8, 16, 19 | Ability Score Improvement | builder |  |  |
-| 5, 8, 11, 14, 17 | Destroy Undead | manual | destroy-undead |  |
+| 5, 8, 11, 14, 17 | Destroy Undead | full |  |  |
 | 10, 20 | Divine Intervention | manual | manual-roll |  |
 
 ### Life Domain (Cleric subclass)

@@ -10,6 +10,8 @@ import { srd14Class, srd14Columns, srd14Numbers } from "../reference";
  * times from 18th). Destroy Undead and Divine Intervention's percentile roll are left to the DM for now.
  */
 const ref = srd14Class("cleric");
+/** Destroy Undead's table: the cleric level, and the highest challenge rating destroyed from it. */
+const DESTROY_UNDEAD: Array<[number, number]> = [[5, 0.5], [8, 1], [11, 2], [14, 3], [17, 4]];
 const WIS_DC = { base: 8, ability: "wis" as const, proficiency: true };
 
 export const CLERIC_SPELLS_2014 = [
@@ -65,8 +67,15 @@ export const CLERIC_2014: ClassDefinition = {
         }]
       }), { pool: { id: "channel-divinity", size: "{col:channel-divinity}" } })]
     },
-    // A turned undead of a low enough challenge rating (1/2 at 5th level … 4 at 17th) destroyed outright.
-    { level: 5, grants: [grant("destroy-undead", reference("cleric_destroy-undead"))] },
+    // An undead that fails its save against Turn Undead is destroyed outright up to a challenge rating: 1/2 at 5th level,
+    // 1 at 8th, 2 at 11th, 3 at 14th, 4 at 17th (each grant taking the last one's place).
+    ...DESTROY_UNDEAD.map(([level, maxChallengeRating], index) => ({
+      level,
+      grants: [grant(index ? `destroy-undead-${level}` : "destroy-undead", runs("cleric_destroy-undead"), {
+        actionPatch: { grant: "channel-divinity", action: 0, patch: { destroysOnFail: { maxChallengeRating, creatureTypes: ["undead"] } } },
+        ...(index ? { replaces: index === 1 ? "destroy-undead" : `destroy-undead-${DESTROY_UNDEAD[index - 1]![0]}` } : {})
+      })]
+    })),
     // A percentile roll at or under its level for its deity's help (automatic at 20th): the DM's to decide.
     { level: 10, grants: [grant("divine-intervention", reference("cleric_divine-intervention"))] }
   ],

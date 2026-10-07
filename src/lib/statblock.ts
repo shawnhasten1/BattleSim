@@ -102,6 +102,8 @@ function ordinal(n: number): string {
 
 /** "a" or "an" before a number or word: "an 8th-level slot", "an 11th-level slot". */
 const article = (next: string): string => (/^(8|11|18|[aeiou])/i.test(next) ? "an" : "a");
+/** A challenge rating as the SRD writes it: 1/8, 1/4, 1/2, 1 … */
+const crText = (cr: number): string => (cr === 0.125 ? "1/8" : cr === 0.25 ? "1/4" : cr === 0.5 ? "1/2" : String(cr));
 
 function joinList(items: string[], conjunction = "and"): string {
   if (items.length <= 1) return items[0] ?? "";
@@ -1303,6 +1305,10 @@ function saveClause(action: SaveAction | AreaAction, definition: CreatureDefinit
     })
     .join("");
   const immune = action.immuneAfterSave ? " A creature that succeeds is immune to this for the rest of the fight." : "";
+  const destroying = "destroysOnFail" in action ? action.destroysOnFail : undefined;
+  const destroys = destroying
+    ? ` On a failed save, ${destroying.creatureTypes?.length ? `${article(destroying.creatureTypes[0]!)} ${joinList(destroying.creatureTypes, "or")}` : "a creature"} of challenge rating ${crText(destroying.maxChallengeRating)} or lower is destroyed.`
+    : "";
 
   const consequences = [
     damage.length ? `${damageShort(damage, definition)}${onSuccess === "half" ? ", half on save" : ""}` : "",
@@ -1310,7 +1316,7 @@ function saveClause(action: SaveAction | AreaAction, definition: CreatureDefinit
     ...unfolded.map((rider) => riderShort(rider, definition, dc, false))
   ].filter(Boolean);
   const short = consequences.length ? [`DC ${dc} ${action.saveAbility.toUpperCase()}`, ...consequences].join(" · ") : "";
-  return { text: `${lead} ${text}${repeat}${others}${immune}`, short };
+  return { text: `${lead} ${text}${repeat}${others}${immune}${destroys}`, short };
 }
 
 function zoneLasts(zone: ZonePersistence): string {

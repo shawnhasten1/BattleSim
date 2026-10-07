@@ -6,6 +6,7 @@ import {
   createEngineState,
   getExecutableActions,
   resolveActivateFeatureAction,
+  resolveAreaSaveAction,
   resolveAttack,
   runTurnEnd,
   sampleEncounter,
@@ -15,7 +16,8 @@ import {
 } from "@/engine";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
-import { featureStatblock } from "@/lib/statblock";
+import { actionStatblock, featureStatblock } from "@/lib/statblock";
+import { loadSrdMonster } from "@/data/srd/monsters";
 import { runAutomatedEncounter } from "@/engine/turns";
 
 /**
@@ -183,3 +185,39 @@ describe("the 2014 Rage: kept by damage taken, ended only by falling unconscious
     expect(text).toContain("It ends early if it falls unconscious.");
   });
 });
+
+describe("Destroy Undead (10e: destroy-undead)", () => {
+  const cleric = (level: number) => rebuildActor(blankCharacter("def-fighter", "Cleric"), withSuggestions(quickBuild(sources, { classId: "srd:class:cleric-2014", level }), sources), sources).definition;
+  const turnUndead = (actor: CreatureDefinition) => getExecutableActions(actor).find((action) => action.name === "Turn Undead")! as Extract<ReturnType<typeof getExecutableActions>[number], { kind: "area-save" }>;
+
+  it("Turn Undead destroys an undead that fails, up to its table's challenge rating (1/2 at 5th level … 4 at 17th)", () => {
+    expect(turnUndead(cleric(4)).destroysOnFail).toBeUndefined();
+    expect([5, 8, 11, 14, 17].map((level) => turnUndead(cleric(level)).destroysOnFail?.maxChallengeRating)).toEqual([0.5, 1, 2, 3, 4]);
+    expect(turnUndead(cleric(5)).destroysOnFail).toEqual({ maxChallengeRating: 0.5, creatureTypes: ["undead"] });
+    expect(actionStatblock(turnUndead(cleric(8)), cleric(8)).text).toContain("On a failed save, an undead of challenge rating 1 or lower is destroyed.");
+  });
+
+  it("an 8th-level cleric's: a zombie and a ghoul that fail are destroyed; a wight (CR 3) is only turned", async () => {
+    const actor = cleric(8);
+    const state = onItsTurn(actor);
+    const undead = await Promise.all(["srd:monster:zombie", "srd:monster:ghoul", "srd:monster:wight"].map((id) => loadSrdMonster(id)));
+    state.snapshot.definitions = [...state.snapshot.definitions, ...undead.map((entry) => entry!)];
+    const tokens = state.snapshot.combatants.filter((token) => token.faction === "enemy");
+    // The two goblins become a zombie and a ghoul, and a wight joins them, all within 30 ft.
+    tokens[0]!.definitionId = "srd:monster:zombie"; tokens[0]!.currentHp = undead[0]!.maxHp; tokens[0]!.position = { x: 5, y: 3 };
+    tokens[1]!.definitionId = "srd:monster:ghoul"; tokens[1]!.currentHp = undead[1]!.maxHp; tokens[1]!.position = { x: 5, y: 4 };
+    state.snapshot.combatants.push({ ...structuredClone(tokens[1]!), id: "wight", displayName: "Wight", definitionId: "srd:monster:wight", currentHp: undead[2]!.maxHp, position: { x: 5, y: 2 } });
+    const failing: RandomSource = { next: () => 0, nextInt: (min, max) => (max === 20 ? 1 : min), fork: () => failing };
+    state.rng = failing;
+    me(state).resources = { ...(me(state).resources ?? {}), "channel-divinity": 2 };
+    resolveAreaSaveAction(state, "pc-fighter", me(state).position, turnUndead(actor).id);
+    const find = (id: string) => state.snapshot.combatants.find((token) => token.id === id)!;
+    expect(find(tokens[0]!.id)).toMatchObject({ state: "defeated", currentHp: 0 });
+    expect(find(tokens[1]!.id)).toMatchObject({ state: "defeated", currentHp: 0 });
+    expect(find("wight").state).toBe("active");
+    expect((find("wight").conditions ?? []).map((condition) => condition.name)).toContain("frightened");
+    expect(state.log.filter((entry) => entry.data?.effectKind === "destroy")).toHaveLength(2);
+  });
+});
+
+const me = (state: ReturnType<typeof onItsTurn>) => state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;

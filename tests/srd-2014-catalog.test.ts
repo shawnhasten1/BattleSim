@@ -350,9 +350,10 @@ describe("the 2014 Wizard, Sorcerer and Cleric (Phase 9a)", () => {
     const eighth = built("srd:class:cleric-2014", 8);
     expect((feature(eighth, "Divine Strike")!.effects![0] as { damage: Array<{ dice: string }> }).damage[0]!.dice).toBe("1d8");
     expect((feature(built("srd:class:cleric-2014", 14), "Divine Strike")!.effects![0] as { damage: Array<{ dice: string }> }).damage[0]!.dice).toBe("2d8");
-    expect(feature(eighth, "Destroy Undead")!.automationSupport).toBe("manual-only");
+    expect(feature(eighth, "Destroy Undead")!.automationSupport).toBe("full");
     expect(feature(eighth, "Turn Undead")).toBeUndefined();
     expect(feature(eighth, "Channel Divinity")!.grantedActions!.map((action) => action.name)).toEqual(["Turn Undead"]);
+    expect(feature(eighth, "Channel Divinity")!.grantedActions![0]).toMatchObject({ destroysOnFail: { maxChallengeRating: 1 } });
     expect(feature(eighth, "Channel Divinity: Preserve Life")!.grantedActions![0]).toMatchObject({ divided: { total: 40 } });
   });
 });

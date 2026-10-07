@@ -12,7 +12,6 @@ import { GAPS } from "../2024/coverage";
 /** What the engine lacks for the 2014 features, beyond the 2024 audit's families (`GAPS`). */
 export const GAPS_2014 = {
   "smite-feature": "A slot spent on a weapon hit for extra radiant damage, as a class feature (2014 Divine Smite)",
-  "destroy-undead": "Turn Undead destroying an undead of a low enough challenge rating outright",
   "cantrip-half-on-save": "A cantrip's half damage on a successful save (Potent Cantrip)",
   "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
   exhaustion: "Exhaustion (Frenzy's cost)",
@@ -74,7 +73,6 @@ export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_sorcerer_metamagic:Twinned Spell": ["metamagic-2014"],
   "srd_draconic-bloodline_elemental-affinity": ["activation-timing"],
   "srd_draconic-bloodline_draconic-presence": ["activated-aura"],
-  "srd_cleric_destroy-undead": ["destroy-undead"],
   "srd_cleric_divine-intervention": ["manual-roll"],
   "srd_bard_countercharm": ["activated-aura"],
   "srd_warlock_pact-boon:Pact of the Chain": ["summon-stat-blocks"],

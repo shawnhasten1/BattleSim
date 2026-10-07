@@ -1611,6 +1611,11 @@ export interface SaveActionDefinition {
 
 export interface AreaSaveActionDefinition {
   kind: "area-save";
+  /**
+   * A creature (of these types) that fails its save is destroyed outright, its hit points to 0, if its challenge rating
+   * is at most `maxChallengeRating` (the 2014 Destroy Undead on Turn Undead).
+   */
+  destroysOnFail?: { maxChallengeRating: number; creatureTypes?: CreatureType[] };
   id: Id;
   name: string;
   /** Reference text shown with the ability (its statblock wording, a note for the DM). Not read by the simulator. */

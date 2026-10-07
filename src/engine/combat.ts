@@ -3500,6 +3500,17 @@ export function resolveAreaSaveAction(
       ...(heightened ? { heightened: true } : {})
     }));
     damagedByEffect(state, attacker, target, action, damageApplied);
+    // Destroy Undead: a failed save, and a low enough challenge rating, destroys it outright.
+    const destroys = action.destroysOnFail;
+    if (destroys && success === false && target.state === "active" && (targetDefinition.challengeRating ?? Number.POSITIVE_INFINITY) <= destroys.maxChallengeRating
+      && (!destroys.creatureTypes?.length || (targetDefinition.type !== undefined && destroys.creatureTypes.includes(targetDefinition.type)))) {
+      target.currentHp = 0;
+      target.tempHp = 0;
+      state.log.push(event(state, "FeatureEffectApplied", `${target.displayName} is destroyed by ${attacker.displayName}'s ${action.name}`, {
+        combatantId: attacker.id, targetId: target.id, actionId, effectKind: "destroy", challengeRating: targetDefinition.challengeRating, currentHp: 0, tempHp: 0
+      }));
+      defeatCombatant(state, target, attacker.id);
+    }
 
     return { targetId: target.id, success, damageApplied };
   });
