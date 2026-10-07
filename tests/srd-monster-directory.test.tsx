@@ -201,7 +201,7 @@ describe("SRD Monsters directory in the Actors panel", () => {
     expect(within(root).queryByText("Wolf")).toBeNull();
   });
 
-  it("adds a monster to the scene from its row, as enemy or party", async () => {
+  it("adds a monster to the scene from its row's +, as an enemy; a click only selects it", async () => {
     render(<Harness />);
     const root = screen.getByTestId("srd-monsters-root");
     await userEvent.click(within(root).getByText("SRD Monsters"));
@@ -209,12 +209,12 @@ describe("SRD Monsters directory in the Actors panel", () => {
     const wolf = within(root).getByText("Wolf").closest("li")!;
 
     await userEvent.click(within(wolf).getByText("Wolf"));
+    expect(tokensOf("srd:monster:wolf")).toHaveLength(0);
+    expect(within(wolf).getByRole("button", { pressed: true })).toBeTruthy();
+
+    await userEvent.click(within(wolf).getByTitle("Add to the map as an enemy"));
     await waitFor(() => expect(tokensOf("srd:monster:wolf")).toHaveLength(1));
     expect(tokensOf("srd:monster:wolf")[0]!.faction).toBe("enemy");
-
-    await userEvent.click(within(wolf).getByTitle("Add as party"));
-    await waitFor(() => expect(tokensOf("srd:monster:wolf")).toHaveLength(2));
-    expect(tokensOf("srd:monster:wolf")[1]!.faction).toBe("party");
   });
 
   it("drags as an ordinary actor so the map and user folders can accept it", async () => {

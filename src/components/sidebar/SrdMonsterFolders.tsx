@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Copy, Folder, Image as ImageIcon, Lock, Minus, Plus, Search, SlidersHorizontal, Swords, Users, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, Image as ImageIcon, Lock, Minus, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
@@ -15,13 +15,20 @@ import {
 import { SRD_ROOT_FOLDER_ID, buildSrdMonsterTree, formatChallengeRating } from "@/lib/srd-monster-tree";
 import { MAX_TOKEN_BATCH } from "@/store/encounter-store";
 import { TokenArtModal } from "./TokenArtModal";
+import { ActorRow } from "./ActorRow";
 import styles from "./ActorsPanel.module.css";
 
 interface SrdMonsterFoldersProps {
   expandedFolderIds: Set<string>;
   onToggleExpanded: (folderId: string) => void;
+  /** The row picked in the directory (one at a time, across every folder). */
+  selectedId: string | null;
+  onSelect: (monsterId: string) => void;
+  /** Its sheet, read-only (ACTORS_TAB_PLAN.md D4). */
+  onOpen: (monster: SrdMonsterIndexEntry) => void;
   onAdd: (monster: SrdMonsterIndexEntry, faction: "party" | "enemy", quantity: number) => void;
-  onCopyToLibrary: (monster: SrdMonsterIndexEntry) => void;
+  /** Its menu, at `at`. */
+  onMenu: (monster: SrdMonsterIndexEntry, at: { x: number; y: number }) => void;
   onDragStartMonster: (event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry, quantity: number) => void;
 }
 
@@ -37,9 +44,9 @@ function clampQuantity(text: string | number): number {
   return Number.isFinite(value) ? Math.max(1, Math.min(MAX_TOKEN_BATCH, value)) : 1;
 }
 
-/** "Add as party" / "Add 3 as party". */
-function addLabel(quantity: number, faction: "party" | "enemy"): string {
-  return quantity > 1 ? `Add ${quantity} as ${faction}` : `Add as ${faction}`;
+/** "Add to the map" / "Add 3 to the map". */
+function addLabel(quantity: number): string {
+  return quantity > 1 ? `Add ${quantity} to the map` : "Add to the map";
 }
 
 function toggle<T>(list: T[], value: T): T[] {
@@ -49,10 +56,10 @@ function toggle<T>(list: T[], value: T): T[] {
 /**
  * The permanent "SRD Monsters → Monster Type → monster" directory. It looks and behaves like the
  * user's own folders (same rows, same expand/collapse, same drag-to-map) but is read-only: no
- * rename, move, delete, context menu, or "create actor here". A search box and filters narrow it;
- * while any filter is on, the folders that still have matches open by themselves.
+ * rename, move, delete, or "create actor here", and its sheets open read-only. A search box and
+ * filters narrow it; while any filter is on, the folders that still have matches open by themselves.
  */
-export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, onCopyToLibrary, onDragStartMonster }: SrdMonsterFoldersProps) {
+export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, selectedId, onSelect, onOpen, onAdd, onMenu, onDragStartMonster }: SrdMonsterFoldersProps) {
   const [filters, setFilters] = useState<SrdMonsterFilters>(EMPTY_SRD_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   // While filtering, folders default to open; this remembers the ones the user closed anyway.
@@ -261,19 +268,20 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, onAdd, 
                   {expanded ? (
                     <ul className={styles.list}>
                       {type.monsters.map((monster) => (
-                        <li key={monster.id} draggable onDragStart={(event) => onDragStartMonster(event, monster, quantity)} title={gapSummary(monster)}>
-                          <ActorThumbnail definition={{ name: monster.name, source: { provider: "srd", slug: monster.slug } }} />
-                          <button type="button" className={styles.cardMain} onClick={() => onAdd(monster, "enemy", quantity)}>
-                            <strong>{monster.name}</strong>
-                            <span>
-                              CR {formatChallengeRating(monster.cr)} · HP {monster.hp} · AC {monster.ac}
-                              {monster.tier === "full" ? "" : ` · ${monster.tier === "partial" ? "Partial" : "Manual"}`}
-                            </span>
-                          </button>
-                          <button type="button" onClick={() => onAdd(monster, "party", quantity)} title={addLabel(quantity, "party")}><Users size={14} /></button>
-                          <button type="button" onClick={() => onAdd(monster, "enemy", quantity)} title={addLabel(quantity, "enemy")}><Swords size={14} /></button>
-                          <button type="button" onClick={() => onCopyToLibrary(monster)} title="Copy to my library (editable)"><Copy size={14} /></button>
-                        </li>
+                        <ActorRow
+                          key={monster.id}
+                          name={monster.name}
+                          subtitle={`CR ${formatChallengeRating(monster.cr)} · HP ${monster.hp} · AC ${monster.ac}${monster.tier === "full" ? "" : ` · ${monster.tier === "partial" ? "Partial" : "Manual"}`}`}
+                          thumbnail={<ActorThumbnail definition={{ name: monster.name, source: { provider: "srd", slug: monster.slug } }} />}
+                          title={gapSummary(monster)}
+                          selected={selectedId === monster.id}
+                          addTitle={`${addLabel(quantity)} as an enemy`}
+                          onSelect={() => onSelect(monster.id)}
+                          onOpen={() => onOpen(monster)}
+                          onAdd={() => onAdd(monster, "enemy", quantity)}
+                          onMenu={(at) => onMenu(monster, at)}
+                          onDragStart={(event) => onDragStartMonster(event, monster, quantity)}
+                        />
                       ))}
                     </ul>
                   ) : null}

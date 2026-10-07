@@ -85,7 +85,8 @@ describe("SRD monster search", { timeout: 20000 }, () => {
   it("still adds the monster you found", async () => {
     const root = await openSrd();
     await userEvent.type(search(root), "dire wolf");
-    await userEvent.click(within(root).getByText("Dire Wolf", { exact: true }));
+    const row = within(root).getByText("Dire Wolf", { exact: true }).closest("li")!;
+    await userEvent.click(within(row).getByTitle("Add to the map as an enemy"));
     await vi.waitFor(() => expect(useEncounterStore.getState().encounter.combatants.some((combatant) => combatant.definitionId === "srd:monster:dire-wolf")).toBe(true));
   });
 });

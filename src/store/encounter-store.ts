@@ -107,6 +107,18 @@ import { onLibrarySaved, useLibrarySyncStore } from "@/store/library-sync-store"
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
 
+/** What `deleteActor` did, for its toast and Undo. */
+export interface ActorDeletion {
+  /** The creature as it was. */
+  deleted?: CreatureDefinition;
+  /** It left the library (Undo saves it back). */
+  fromLibrary: boolean;
+  /** It left this scene in an undo step (Undo is the scene's undo). */
+  sceneStep: boolean;
+  /** Why it wasn't deleted. */
+  blocked?: string;
+}
+
 /** What the elevation tool does to the cells it is dragged over. */
 export type ElevationMode = "set" | "raise" | "lower" | "ramp" | "flatten";
 
@@ -339,6 +351,17 @@ interface EncounterStore extends PlayActions {
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
   copyLibraryDefinition: (definitionId: string) => Promise<string | undefined>;
+  /**
+   * Deletes an actor from the Actors tab (ACTORS_TAB_PLAN.md, Phase 3). A library actor you own leaves the library; with
+   * `withTokens`, or when no token shows it here, its copy in this scene goes too, with its tokens (one undo step, none
+   * for a creature only on the bench). A creature only in this scene leaves it with its tokens (one undo step). SRD
+   * monsters and shared templates can't be deleted, nor a creature something else in the scene names.
+   */
+  deleteActor: (definitionId: string, options?: { withTokens?: boolean }) => Promise<ActorDeletion>;
+  /** Undo of a library delete: the same actor saved back, with its id and folder. */
+  restoreLibraryDefinition: (definition: CreatureDefinition) => Promise<boolean>;
+  /** A copy of a library actor you own, "Goblin Boss (copy)", in its folder. Its id, or undefined when it failed. */
+  duplicateLibraryDefinition: (definitionId: string) => Promise<string | undefined>;
   /** Puts a creature with no token here on the bench, for its sheet: into the scene's definitions, with no undo step. */
   benchCreature: (definition: CreatureDefinition) => void;
   /** Its sheet closed: off the bench, and out of the scene unless a token shows it or something there names it. */
@@ -2405,6 +2428,76 @@ export const useEncounterStore = create<EncounterStore>()(
         const data = await response.json().catch(() => ({})) as { definition?: CreatureDefinition };
         await get().loadDefinitionsLibrary();
         return data.definition?.id;
+      },
+      deleteActor: async (definitionId, { withTokens = false } = {}) => {
+        const state = get();
+        if (isSrdMonsterId(definitionId) || state.templateDefinitionIds.includes(definitionId)) {
+          return { fromLibrary: false, sceneStep: false, blocked: "SRD monsters and shared templates can't be deleted." };
+        }
+        const libraryCopy = state.definitionsLibrary.find((definition) => definition.id === definitionId);
+        const sceneCopy = state.encounter.definitions.find((definition) => definition.id === definitionId);
+        const deleted = sceneCopy ?? libraryCopy;
+        if (!deleted) return { fromLibrary: false, sceneStep: false, blocked: "It isn't in your library or this scene." };
+        const tokens = hasToken(state.encounter, definitionId);
+        // The scene's copy goes with a creature only in this scene, with its tokens when asked, and when no token shows it.
+        const leavesScene = Boolean(sceneCopy) && (!libraryCopy || withTokens || !tokens);
+        if (leavesScene) {
+          const naming = namedBy(state.encounter, definitionId);
+          if (naming) return { fromLibrary: false, sceneStep: false, blocked: `${naming}, so it can't leave this scene.` };
+        }
+        if (libraryCopy) {
+          useLibrarySyncStore.getState().cancel(definitionId);
+          const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}`, { method: "DELETE" });
+          if (!response.ok) {
+            set({ definitionStatus: `Couldn't delete ${deleted.name}` });
+            return { fromLibrary: false, sceneStep: false, blocked: `Couldn't delete ${deleted.name} from your library.` };
+          }
+          set((current) => ({ definitionsLibrary: current.definitionsLibrary.filter((definition) => definition.id !== definitionId) }));
+        }
+        if (!leavesScene) return { deleted, fromLibrary: Boolean(libraryCopy), sceneStep: false };
+        const encounter = get().encounter;
+        const next: EncounterSnapshot = {
+          ...encounter,
+          definitions: encounter.definitions.filter((definition) => definition.id !== definitionId),
+          combatants: encounter.combatants.filter((combatant) => combatant.definitionId !== definitionId && combatant.activeForm?.definitionId !== definitionId)
+        };
+        if (!tokens && get().benchIds.includes(definitionId)) {
+          // Only on the bench, which was never an undo step.
+          set({ encounter: next, benchIds: get().benchIds.filter((id) => id !== definitionId) });
+          return { deleted, fromLibrary: Boolean(libraryCopy), sceneStep: false };
+        }
+        const selected = get().selectedCombatantId;
+        commitEncounter(next, {
+          selectedCombatantId: next.combatants.some((combatant) => combatant.id === selected) ? selected : next.combatants[0]?.id ?? null
+        });
+        return { deleted, fromLibrary: Boolean(libraryCopy), sceneStep: true };
+      },
+      restoreLibraryDefinition: async (definition) => {
+        const response = await fetch("/api/definitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ definition })
+        });
+        set({ definitionStatus: response.ok ? "" : `Couldn't bring back ${definition.name}` });
+        if (response.ok) await get().loadDefinitionsLibrary();
+        return response.ok;
+      },
+      duplicateLibraryDefinition: async (definitionId) => {
+        const state = get();
+        // The scene's copy is the library's, or newer while a save is on its way.
+        const source = state.encounter.definitions.find((definition) => definition.id === definitionId)
+          ?? state.definitionsLibrary.find((definition) => definition.id === definitionId);
+        if (!source) return undefined;
+        const copy: CreatureDefinition = { ...structuredClone(source), id: `def-${crypto.randomUUID()}`, name: `${source.name} (copy)` };
+        const response = await fetch("/api/definitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ definition: copy })
+        });
+        set({ definitionStatus: response.ok ? "" : `Couldn't duplicate ${source.name}` });
+        if (!response.ok) return undefined;
+        await get().loadDefinitionsLibrary();
+        return copy.id;
       },
       benchCreature: (definition) => {
         const { encounter, benchIds } = get();

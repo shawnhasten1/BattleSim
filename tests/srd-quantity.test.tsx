@@ -175,19 +175,16 @@ describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () =
     expect((within(root).getByLabelText("Increase quantity") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("adds that many when you click a monster, and the buttons say so", async () => {
+  it("adds that many with a monster's +, and the button says so", async () => {
     const root = await open();
     await userEvent.clear(input(root));
     await userEvent.type(input(root), "3");
     const wolf = within(root).getByText("Wolf", { exact: true }).closest("li")!;
-    expect(within(wolf).getByTitle("Add 3 as party")).toBeTruthy();
-    expect(within(wolf).getByTitle("Add 3 as enemy")).toBeTruthy();
+    expect(within(wolf).getByTitle("Add 3 to the map as an enemy")).toBeTruthy();
 
-    await userEvent.click(within(wolf).getByText("Wolf"));
+    await userEvent.click(within(wolf).getByTitle("Add 3 to the map as an enemy"));
     await waitFor(() => expect(tokens("srd:monster:wolf")).toHaveLength(3));
-    await userEvent.click(within(wolf).getByTitle("Add 3 as party"));
-    await waitFor(() => expect(tokens("srd:monster:wolf")).toHaveLength(6));
-    expect(tokens("srd:monster:wolf").map((token) => token.faction)).toEqual(["enemy", "enemy", "enemy", "party", "party", "party"]);
+    expect(tokens("srd:monster:wolf").map((token) => token.faction)).toEqual(["enemy", "enemy", "enemy"]);
   });
 
   it("clamps whatever is typed, and tidies the box when you leave it", async () => {
@@ -195,7 +192,7 @@ describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () =
     await userEvent.clear(input(root));
     await userEvent.type(input(root), "999");
     const wolf = within(root).getByText("Wolf", { exact: true }).closest("li")!;
-    await userEvent.click(within(wolf).getByText("Wolf"));
+    await userEvent.click(within(wolf).getByTitle(`Add ${MAX_TOKEN_BATCH} to the map as an enemy`));
     await waitFor(() => expect(tokens("srd:monster:wolf")).toHaveLength(MAX_TOKEN_BATCH));
 
     fireEvent.blur(input(root));

@@ -530,3 +530,62 @@
   appearance: none;
   margin: 0;
 }
+
+/* ── an actor row (ACTORS_TAB_PLAN.md, Phase 3): click selects, double-click opens, + and ⋯ show on hover ── */
+
+.list > li.actorRowSelected {
+  background: var(--ui-panel-2);
+  box-shadow: inset 2px 0 0 var(--ui-accent);
+}
+
+.actorRow .rowAction {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.actorRow:hover .rowAction,
+.actorRow:focus-within .rowAction,
+.actorRowSelected .rowAction {
+  opacity: 1;
+}
+
+.toast {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 9px 10px;
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+  font-size: 12px;
+}
+
+.toast span {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast button {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--ui-accent);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmMessage {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dangerChoice {
+  border-color: var(--ui-hp-red) !important;
+  background: var(--ui-hp-red) !important;
+}

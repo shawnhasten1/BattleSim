@@ -83,17 +83,23 @@ export function ownCreatureBlock(
     return "A shapechanger and its forms change into each other by name, so one can't be split off.";
   }
   if (tokensOf(encounter, definition.id).length <= 1) return `It's the only ${name} in the scene, so changes to ${name} reach only it already.`;
-  const naming = namedBy(encounter, definition.id);
+  const naming = namedBy(encounter, definition.id, { includeSelf: true });
   return naming ? `${naming}, and would go on making the original.` : undefined;
 }
 
 /**
- * What in the scene names a creature by its id, so the creature can't leave the scene: "Balor's Summon Demon summons
- * Vrock by name", a form it's the base of, or a token in its shape. Undefined when nothing does.
+ * What else in the scene names a creature by its id, so the creature can't leave the scene: "Balor's Summon Demon
+ * summons Vrock by name", a form it's the base of, or a token in its shape. Undefined when nothing does. Its own actions
+ * naming it ("Its own Summon Mephits") only count with `includeSelf`: they go with it.
  */
-export function namedBy(encounter: Pick<EncounterSnapshot, "combatants" | "definitions">, definitionId: string): string | undefined {
+export function namedBy(
+  encounter: Pick<EncounterSnapshot, "combatants" | "definitions">,
+  definitionId: string,
+  { includeSelf = false }: { includeSelf?: boolean } = {}
+): string | undefined {
   const name = encounter.definitions.find((definition) => definition.id === definitionId)?.name ?? "it";
   for (const owner of encounter.definitions) {
+    if (owner.id === definitionId && !includeSelf) continue;
     for (const action of everyAction(owner)) {
       const named = action.kind === "summon" ? action.options.some((option) => option.definitionId === definitionId)
         : action.kind === "transform" ? action.forms.some((form) => form.definitionId === definitionId)
