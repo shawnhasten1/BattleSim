@@ -73,6 +73,12 @@ describe("the hotbar", () => {
     expect(within(within(panel).getByRole("group", { name: "Attacks" })).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Extra Attack2 attacks", "2Longsword"]);
     expect(within(within(panel).getByRole("group", { name: "Features" })).getAllByRole("button")[0]!.textContent).toMatch(/^3Action Surge.*free$/);
     expect(within(within(panel).getByRole("group", { name: "Common" })).getAllByRole("button")[0]!.textContent).toBe("4Dash");
+    // Each button is coloured by what it is and marked with what it takes; so is each tab (HOTBAR_REDESIGN_PLAN.md §2).
+    const longsword = within(panel).getByRole("button", { name: "Longsword" });
+    expect([longsword.closest("[data-tone]")?.getAttribute("data-tone"), longsword.getAttribute("data-slot")]).toEqual(["attacks", "action"]);
+    const surge = within(panel).getByRole("button", { name: /Action Surge/ });
+    expect([surge.closest("[data-tone]")?.getAttribute("data-tone"), surge.getAttribute("data-slot")]).toEqual(["features", "free"]);
+    expect(within(tabs).getAllByRole("tab").map((entry) => entry.getAttribute("data-slot"))).toEqual(["action", "bonus", "reaction"]);
 
     // 2 arms the longsword; the hint says what to do.
     await userEvent.keyboard("2");

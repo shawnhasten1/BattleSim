@@ -398,3 +398,27 @@ Differences from the plan:
 - **A potion split across tabs** whose button holds one use is named for it: "Potion of Healing: Drink" under Bonus,
   "Potion of Healing: Give" under Actions. With two uses on a tab, it keeps its name and its Drink / Give chips.
 - **A Quickened copy** alone under Bonus keeps its compiled name, "Fireball (Quickened)".
+
+### Phase 2 — Colours and marks (2026-10-07)
+
+- `hotbar.ts`: each button has a `tone`, following §2's rule. `HOTBAR_TONES` lists every tone the model can produce,
+  and a test checks that `play.module.css` styles each one. "Move Moonbeam" takes its zone's damage colour.
+- `play.module.css`: one `[data-tone]` rule per tone, with the hues from §2's table. A button has a 3 px left edge and a
+  13% tint of its tone; armed, a 30% tint and a ring. The cost marks (● ▲ ◇ ◆) are CSS `::before` / `::after`
+  content with empty alt text, so they're not read out and don't change any button's name. The tabs and the
+  Action / Bonus / Reaction pills use the slot colours, and the selected tab is underlined in its slot's colour.
+
+Differences from the plan:
+
+- **Spells the engine doesn't run** (Hex, Misty Step and Mage Hand used by hand) were filed under Features. That was
+  true before this work too: the engine stamps `spellLevel` and `spellSchool` only on the kinds it runs. The hotbar now
+  finds them in the creature's spell list, so they sit in Spells at their level, in their school's colour.
+- **The group panel** is 190 px tall rather than 156 px: a level-6 bard's 18 actions need three rows.
+
+Found while checking in the browser, not fixed here:
+
+- **Imported save spells that deal no damage get a phantom damage line.** In `import-normalize.ts`,
+  `normalizeDamageComponents` turns a missing `damage` into `[{ dice: "1", damageType: "slashing" }]`. The library's
+  Lore Bard and Arcane Trickster carry it on Faerie Fire, Hypnotic Pattern, Charm Person and Tasha's Hideous Laughter,
+  so the hotbar colours them "physical". The engine does deal it: the library bard's Faerie Fire logged "Goblin 1 took
+  1 damage" on all 13 failed saves in 20 seeded casts. The SRD's own copies have `damage: []` and are fine.

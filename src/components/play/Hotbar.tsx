@@ -12,6 +12,8 @@ import { armedFor, usePlayUiStore } from "@/store/play-ui-store";
 import styles from "./play.module.css";
 
 const ALTITUDE_STEP = 5;
+/** The slot whose mark and colour a tab carries. */
+const TAB_SLOT: Record<HotbarModel["tabs"][number]["id"], "action" | "bonus" | "reaction"> = { actions: "action", bonus: "bonus", reactions: "reaction" };
 const ORDINALS = ["Cantrips", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];
 
 /** What a move sets off, in words: the opportunity attacks it draws and the hazards on the way. */
@@ -118,9 +120,9 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
           {model.concentration ? <span className={styles.concentrating}>{`Concentrating: ${model.concentration}`}</span> : null}
         </div>
         <div className={styles.dockEconomy} role="list" aria-label="What's left of the turn">
-          <span role="listitem" data-spent={economy.action === false} title={economy.action === false ? "Action used" : "Action"}>Action</span>
-          <span role="listitem" data-spent={economy.bonus === false} title={economy.bonus === false ? "Bonus action used" : "Bonus action"}>Bonus</span>
-          <span role="listitem" data-spent={economy.reaction === false} title={economy.reaction === false ? "Reaction used" : "Reaction"}>Reaction</span>
+          <span role="listitem" data-slot="action" data-spent={economy.action === false} title={economy.action === false ? "Action used" : "Action"}>Action</span>
+          <span role="listitem" data-slot="bonus" data-spent={economy.bonus === false} title={economy.bonus === false ? "Bonus action used" : "Bonus action"}>Bonus</span>
+          <span role="listitem" data-slot="reaction" data-spent={economy.reaction === false} title={economy.reaction === false ? "Reaction used" : "Reaction"}>Reaction</span>
         </div>
         <div className={styles.dockMove}>
           <div className={styles.moveBar} aria-hidden="true">
@@ -169,6 +171,7 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
               key={entry.id}
               type="button"
               role="tab"
+              data-slot={TAB_SLOT[entry.id]}
               aria-selected={entry.id === current.id}
               disabled={countOf(entry) === 0}
               onClick={() => setTab(entry.id)}
@@ -205,7 +208,7 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
         <div className={styles.hotbarGroups} role="tabpanel" aria-label={current.label}>
           {current.groups.map((group) => (
             <div key={group.id} className={styles.hotGroup} role="group" aria-label={group.label}>
-              <span className={styles.hotGroupLabel} aria-hidden="true">{group.label}</span>
+              <span className={styles.hotGroupLabel} data-tone={group.id === "spells" ? "spell" : group.id} aria-hidden="true">{group.label}</span>
               <div className={styles.hotbarButtons}>
                 {group.buttons.map((button) => (
                   <HotbarItem
@@ -259,10 +262,11 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
   // The tab says what it takes; only a free one says so.
   const cost = [button.cost, button.slot === "free" ? "free" : undefined].filter(Boolean).join(" · ");
   return (
-    <div className={styles.hotItem} data-armed={Boolean(armedActionId)}>
+    <div className={styles.hotItem} data-armed={Boolean(armedActionId)} data-tone={button.tone}>
       <button
         type="button"
         className={styles.hotButton}
+        data-slot={button.slot}
         disabled={Boolean(button.problem)}
         aria-pressed={Boolean(armedActionId)}
         onMouseDown={keepFocus}

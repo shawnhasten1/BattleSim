@@ -483,6 +483,49 @@
   width: min(560px, calc(100% - 32px));
 }
 
+/*
+ * What a slot's marks look like (HOTBAR_REDESIGN_PLAN.md §2): BG3's green circle for an action and orange triangle for
+ * a bonus action, a purple diamond for a reaction, a hollow one for something free.
+ */
+.hotbar {
+  --slot-action: #6fcf6a;
+  --slot-bonus: #f0a03c;
+  --slot-reaction: #b98cf0;
+  --slot-free: #9aa3b5;
+}
+
+/* A button's colour: its group's, or a spell's element (`HOTBAR_TONES` in lib/play/hotbar.ts; a test checks each has one). */
+.hotbar [data-tone="attacks"] { --tone: #d0574e; }
+.hotbar [data-tone="features"] { --tone: #d8b04a; }
+.hotbar [data-tone="items"] { --tone: #3fb0a5; }
+.hotbar [data-tone="common"] { --tone: #8a94a6; }
+.hotbar [data-tone="spell"] { --tone: #6fa8ff; }
+.hotbar [data-tone="healing"] { --tone: #7ee08a; }
+.hotbar [data-tone="acid"] { --tone: #c3d83a; }
+.hotbar [data-tone="cold"] { --tone: #8fdcff; }
+.hotbar [data-tone="fire"] { --tone: #ff8a3d; }
+.hotbar [data-tone="force"] { --tone: #e46fd8; }
+.hotbar [data-tone="lightning"] { --tone: #4f86ff; }
+.hotbar [data-tone="necrotic"] { --tone: #5f9a72; }
+.hotbar [data-tone="poison"] { --tone: #74c04a; }
+.hotbar [data-tone="psychic"] { --tone: #c48aff; }
+.hotbar [data-tone="radiant"] { --tone: #fff0a0; }
+.hotbar [data-tone="thunder"] { --tone: #9d9bff; }
+.hotbar [data-tone="physical"] { --tone: #b4bcc8; }
+.hotbar [data-tone="abjuration"] { --tone: #6fa8ff; }
+.hotbar [data-tone="conjuration"] { --tone: #45c6cf; }
+.hotbar [data-tone="divination"] { --tone: #d6dde8; }
+.hotbar [data-tone="enchantment"] { --tone: #ff8fc8; }
+.hotbar [data-tone="evocation"] { --tone: #ff9f4a; }
+.hotbar [data-tone="illusion"] { --tone: #a98bff; }
+.hotbar [data-tone="necromancy"] { --tone: #6f9f6a; }
+.hotbar [data-tone="transmutation"] { --tone: #d9a35a; }
+
+.hotbar [data-slot="action"] { --slot: var(--slot-action); }
+.hotbar [data-slot="bonus"] { --slot: var(--slot-bonus); }
+.hotbar [data-slot="reaction"] { --slot: var(--slot-reaction); }
+.hotbar [data-slot="free"] { --slot: var(--slot-free); }
+
 .swingCard .promptTitle small {
   color: var(--ui-text-dim);
   font-size: 12px;
@@ -557,8 +600,29 @@
 }
 
 .hotbarTabs [role="tab"][aria-selected="true"] {
-  border-bottom-color: var(--ui-accent);
+  border-bottom-color: var(--slot, var(--ui-accent));
   color: var(--ui-text);
+}
+
+.hotbarTabs [role="tab"][data-slot]::before,
+.dockEconomy span[data-slot]::before {
+  color: var(--slot);
+  font-size: 9px;
+}
+
+.hotbarTabs [role="tab"][data-slot="action"]::before,
+.dockEconomy span[data-slot="action"]::before {
+  content: "\25CF" / "";
+}
+
+.hotbarTabs [role="tab"][data-slot="bonus"]::before,
+.dockEconomy span[data-slot="bonus"]::before {
+  content: "\25B2" / "";
+}
+
+.hotbarTabs [role="tab"][data-slot="reaction"]::before,
+.dockEconomy span[data-slot="reaction"]::before {
+  content: "\25C6" / "";
 }
 
 .hotbarTabs [role="tab"]:disabled {
@@ -605,7 +669,7 @@
 .hotbarGroups {
   display: grid;
   gap: 6px;
-  max-height: 156px;
+  max-height: 190px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -620,7 +684,7 @@
 
 .hotGroupLabel {
   padding-top: 11px;
-  color: var(--ui-text-dim);
+  color: var(--tone, var(--ui-text-dim));
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.4px;
@@ -646,6 +710,7 @@
 }
 
 .hotItem {
+  --tone: var(--ui-text-dim);
   display: grid;
   align-content: start;
   gap: 2px;
@@ -660,10 +725,11 @@
   min-width: 96px;
   max-width: 200px;
   min-height: 36px;
-  padding: 4px 9px 4px 6px;
+  padding: 4px 16px 4px 6px;
   border: 1px solid var(--ui-border);
+  border-left: 3px solid var(--tone);
   border-radius: var(--ui-radius);
-  background: var(--ui-panel-2);
+  background: color-mix(in srgb, var(--tone) 13%, var(--ui-panel-2));
   color: var(--ui-text);
   font: inherit;
   text-align: left;
@@ -671,12 +737,37 @@
 }
 
 .hotButton:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+  border-left-color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 20%, var(--ui-panel-2));
 }
 
 .hotButton[aria-pressed="true"] {
-  border-color: var(--ui-accent);
-  background: rgba(217, 138, 61, 0.2);
+  border-color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 30%, var(--ui-panel-2));
+  box-shadow: 0 0 0 1px var(--tone);
+}
+
+/* What it takes, in the corner. */
+.hotButton[data-slot]::after {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  color: var(--slot);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.hotButton[data-slot="action"]::after {
+  content: "\25CF" / "";
+}
+
+.hotButton[data-slot="bonus"]::after {
+  content: "\25B2" / "";
+}
+
+.hotButton[data-slot="free"]::after {
+  content: "\25C7" / "";
 }
 
 .hotButton:disabled {
@@ -743,8 +834,8 @@
 }
 
 .hotVariants button[aria-pressed="true"] {
-  border-color: var(--ui-accent);
-  color: var(--ui-accent);
+  border-color: var(--tone);
+  color: var(--tone);
 }
 
 .hotVariants button:disabled {
@@ -781,10 +872,13 @@
 }
 
 .dockEconomy span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 7px;
-  border: 1px solid var(--ui-accent);
+  border: 1px solid var(--slot, var(--ui-accent));
   border-radius: 999px;
-  color: var(--ui-accent);
+  color: var(--slot, var(--ui-accent));
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
@@ -795,6 +889,10 @@
   border-color: var(--ui-border);
   color: var(--ui-text-dim);
   text-decoration: line-through;
+}
+
+.dockEconomy span[data-spent="true"]::before {
+  opacity: 0.5;
 }
 
 .dockMove {

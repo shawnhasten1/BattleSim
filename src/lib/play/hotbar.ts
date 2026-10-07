@@ -25,6 +25,7 @@ import {
   type ActionDefinition,
   type CombatantState,
   type CreatureDefinition,
+  type DamageTypeReference,
   type EncounterSnapshot,
   type Id
 } from "@/engine";
@@ -49,6 +50,19 @@ export const HOTBAR_GROUPS: ReadonlyArray<{ id: HotbarGroup; label: string }> = 
   { id: "items", label: "Items" },
   { id: "common", label: "Common" }
 ];
+
+/** A spell's colour from the damage it deals: bludgeoning, piercing and slashing share one. */
+const DAMAGE_TONES = ["acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder", "physical"] as const;
+/** A spell's colour from its school, when it deals no damage. */
+const SCHOOL_TONES = ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"] as const;
+
+/**
+ * A button's colour (HOTBAR_REDESIGN_PLAN.md §2): its group's, or for a spell its element — the damage it deals, healing,
+ * its school, or plain `"spell"`.
+ */
+export type HotbarTone = Exclude<HotbarGroup, "spells"> | "spell" | "healing" | (typeof DAMAGE_TONES)[number] | (typeof SCHOOL_TONES)[number];
+
+export const HOTBAR_TONES: readonly HotbarTone[] = ["attacks", "features", "items", "common", "spell", "healing", ...DAMAGE_TONES, ...SCHOOL_TONES];
 
 /** How an ability is aimed once it's armed. */
 export type Aim =
@@ -88,6 +102,7 @@ export interface HotbarButton {
   /** Its slot's tab: an action or a free one under Actions, a bonus action under Bonus. */
   tab: HotbarTab;
   group: HotbarGroup;
+  tone: HotbarTone;
   name: string;
   /** What using it takes. */
   slot: "action" | "bonus" | "free";
@@ -162,15 +177,38 @@ function featureGrantedIds(definition: CreatureDefinition): Set<Id> {
   return ids;
 }
 
+/** A spell of the creature's, as its spell list has it: what an action the engine doesn't run (by hand) is cast from. */
+type SpellOf = NonNullable<CreatureDefinition["spells"]>[number];
+
 /** What it is: an item's use, one of the actions anyone can take, a spell, an attack, or a feature's. */
-function groupOf(action: ActionDefinition, granted: Set<Id>): HotbarGroup {
+function groupOf(action: ActionDefinition, granted: Set<Id>, spell?: SpellOf): HotbarGroup {
   if (action.item) return "items";
   if (action.kind === "utility") return "common";
-  if ("spellLevel" in action && action.spellLevel != null) return "spells";
+  if (("spellLevel" in action && action.spellLevel != null) || spell) return "spells";
   if (action.kind === "attack" || action.kind === "multiattack") return "attacks";
   if (action.kind === "activate-feature" || granted.has(familyKey(action.id))) return "features";
   if (action.kind === "save" || action.kind === "area-save") return "attacks";
   return "features";
+}
+
+function damageTone(type: DamageTypeReference | undefined): HotbarTone | undefined {
+  if (!type || type === "same-as-attack") return undefined;
+  return type === "bludgeoning" || type === "piercing" || type === "slashing" ? "physical" : type;
+}
+
+/**
+ * Its colour: its group's, or a spell's element — healing, then the damage it deals (a zone's for one that only leaves a
+ * zone, Spike Growth), then its school. A weapon is an attack whatever it deals; a wand's spell is an item.
+ */
+function toneOf(action: ActionDefinition, group: HotbarGroup, spell?: SpellOf): HotbarTone {
+  if (group !== "spells") return group;
+  if (action.kind === "healing") return "healing";
+  const damage = "damage" in action && Array.isArray(action.damage) ? action.damage : [];
+  const dealt = damage.map((component) => damageTone(component.damageType)).find(Boolean)
+    ?? (action.kind === "area-save" ? damageTone(action.zone?.movementDamage?.damageType) : undefined);
+  if (dealt) return dealt;
+  const school = (action.spellSchool ?? spell?.school)?.toLowerCase();
+  return SCHOOL_TONES.find((tone) => tone === school) ?? "spell";
 }
 
 /** The tab a slot's abilities are on: a free one goes with the actions (Action Surge, Reckless Attack). */
@@ -380,6 +418,9 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
   const definition = getDefinition(board, actor);
   const executables = getExecutableActions(definition);
   const granted = featureGrantedIds(definition);
+  // The engine stamps a spell's level and school only on the kinds it runs; a spell used by hand (Hex, Mage Hand) has
+  // them in the creature's spell list.
+  const spellOf = new Map<Id, SpellOf>((definition.spells ?? []).flatMap((spell) => (spell.action ? [[spell.action.id, spell] as const] : [])));
 
   // Families in the order the creature has them: the plain ability first, then its variants.
   const families = new Map<Id, ActionDefinition[]>();
@@ -424,10 +465,14 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     const slot = base.actionType === "reaction" ? "action" : base.actionType;
     // A potion given with an action and drunk with a bonus action: the button with only one of them says which.
     const oneUse = item && (itemSlots.get(item.id)?.size ?? 0) > 1 && variants.length === 1 ? variants[0]!.label : undefined;
+    const spell = spellOf.get(familyKey(base.id));
+    const group = groupOf(base, granted, spell);
+    const spellLevel = "spellLevel" in base && base.spellLevel != null ? base.spellLevel : spell?.level;
     return {
       key: familyKey(base.id),
       tab: tabOfSlot(slot),
-      group: groupOf(base, granted),
+      group,
+      tone: toneOf(base, group, spell),
       // A wand's spell is "Web (Wand of Web)"; a potion's use is the potion; True Strike's copies are True Strike.
       name: oneUse ? `${item!.name}: ${oneUse}`
         : item && base.name !== item.name ? `${base.name} (${item.name})` : base.viaWeapon ? base.name.replace(/ \([^)]*\)$/, "") : base.name,
@@ -441,7 +486,7 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       problem: usable < 0 ? variants[0]!.problem : undefined,
       title: entry.title,
       text: entry.text,
-      ...("spellLevel" in base && base.spellLevel != null ? { spellLevel: base.spellLevel } : {}),
+      ...(spellLevel != null ? { spellLevel } : {}),
       ...("concentration" in base && base.concentration ? { concentration: true } : {})
     };
   });
@@ -454,6 +499,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       key: `zone:${zone.id}`,
       tab: "bonus",
       group: "spells",
+      // The colour of the spell that left it: Moonbeam's radiant.
+      tone: (zone.damage ?? []).map((component) => damageTone(component.damageType)).find(Boolean) ?? "spell",
       name: `Move ${zone.name}`,
       slot: "bonus",
       variants: [{
