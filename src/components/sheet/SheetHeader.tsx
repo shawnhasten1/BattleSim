@@ -13,6 +13,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { HpBar } from "@/components/ui/HpBar";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { SheetNumber } from "./SheetInputs";
+import { useSheetMode } from "./sheet-mode";
 import abilityStyles from "./abilities/abilities.module.css";
 import styles from "./sheet.module.css";
 
@@ -32,6 +33,25 @@ export function VitalsStrip({ combatant, definition, tokens = [], onShowToken }:
 }) {
   const updateHp = useEncounterStore((s) => s.updateHp);
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
+  const { tokenless } = useSheetMode();
+
+  if (tokenless) {
+    // No token: what every new one starts with, and nothing that belongs to one (hit points taken, conditions).
+    const facts = `HP ${actualMaxHp(definition)} · AC ${armorClassOf(definition).total} · ${speedLine(definition)}`;
+    return (
+      <div className={styles.vitals} role="group" aria-label="Vitals">
+        <ActorThumbnail definition={definition} />
+        <div className={styles.vitalsBody}>
+          <div className={styles.vitalsRow}>
+            <span className={styles.vitalsFacts} title={facts}>{facts}</span>
+          </div>
+          <div className={styles.vitalsRow}>
+            <span className={styles.vitalsDim}>No token in this scene: drag {definition.name} onto the map from the Actors tab to place one.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.vitals} role="group" aria-label="Vitals">

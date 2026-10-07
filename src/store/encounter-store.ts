@@ -84,8 +84,8 @@ import { featurePoolsToSeed, usagePools, withNewGrantedAction, withNewLegendaryA
 import { withLegendaryPool } from "@/lib/ability-editor/legendary";
 import { fullOf, refilledResources, withoutResource, withResourceSize } from "@/lib/actor-sheet/resources";
 import { withProficienciesFollowing } from "@/lib/actor-sheet/edits";
-import { defaultTacticsOf, isSurprised } from "@/lib/actor-sheet/token";
-import { ownCreatureBlock } from "@/lib/actor-sheet/scope";
+import { defaultResourcesForDefinition, defaultTacticsOf, isSurprised, newToken } from "@/lib/actor-sheet/token";
+import { namedBy, ownCreatureBlock } from "@/lib/actor-sheet/scope";
 import { ownSpellScroll } from "@/lib/ability-editor/scrolls";
 import { loadDependencies, withSpawnsSettled } from "@/lib/ability-editor/spawns";
 import { castWith, withSettledSpellcasting } from "@/lib/ability-editor/spells";
@@ -102,6 +102,7 @@ import { withCampaignRules, type CampaignRules } from "@/lib/campaign-rules";
 import { blankCharacter, parseCharacterBuild, readBuild, rebuildActor, sameNamedAbilities, withoutAbilities, type BuildChange, type CharacterBuild } from "@/lib/character-builder";
 import { useCatalogStore } from "@/store/catalog-store";
 import { changedLibraryActors, syncLibraryActors } from "@/lib/library-link";
+import { hasToken, isLockedOnBench, notifyLockedEdit, withBenchKept, withoutBench } from "@/lib/actor-sheet/bench";
 import { onLibrarySaved, useLibrarySyncStore } from "@/store/library-sync-store";
 
 export type EditorTool = "select" | "measure" | "wall" | "terrain" | "elevation";
@@ -201,6 +202,11 @@ interface EncounterStore extends PlayActions {
   /** Ids within definitionsLibrary that are shared, read-only templates (not owned by you) — see copyLibraryDefinition. */
   templateDefinitionIds: string[];
   definitionStatus: string;
+  /**
+   * The bench (ACTORS_TAB_PLAN.md, Phase 2): creatures in the scene's definitions with no token, only because a sheet
+   * is open for them. Not saved, not undoable, and emptied when the scene changes.
+   */
+  benchIds: string[];
   actorFolders: ActorFolder[];
   folderStatus: string;
   undoStack: EncounterSnapshot[];
@@ -327,12 +333,16 @@ interface EncounterStore extends PlayActions {
    */
   adoptSrdDefinition: (definitionId: string) => string | undefined;
   /** Saves a private, editable copy of a library monster to the user's own library ("Customize"). */
-  saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<void>;
+  saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<string | undefined>;
   /** Adds a token of a saved actor. When the scene already has that actor, the token shares the scene's copy and its edits. */
   addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
-  copyLibraryDefinition: (definitionId: string) => Promise<void>;
+  copyLibraryDefinition: (definitionId: string) => Promise<string | undefined>;
+  /** Puts a creature with no token here on the bench, for its sheet: into the scene's definitions, with no undo step. */
+  benchCreature: (definition: CreatureDefinition) => void;
+  /** Its sheet closed: off the bench, and out of the scene unless a token shows it or something there names it. */
+  unbenchCreature: (definitionId: string) => void;
   loadActorFolders: () => Promise<void>;
   createActorFolder: (name: string, parentId?: string | null) => Promise<void>;
   renameActorFolder: (folderId: string, name: string) => Promise<void>;
@@ -711,13 +721,6 @@ function tokenAfterRebuild(combatant: CombatantState, before: CreatureDefinition
   return { ...combatant, currentHp, resources: Object.keys(resources).length ? resources : undefined };
 }
 
-function defaultResourcesForDefinition(definition: CreatureDefinition): Record<string, number> | undefined {
-  if (!definition.resources || Object.keys(definition.resources).length === 0) {
-    return undefined;
-  }
-  return structuredClone(definition.resources);
-}
-
 /** Give every rider a fresh id so an attached copy never collides with the library entry or a sibling. */
 function remintRiderIds(riders: ActionRider[] | undefined): ActionRider[] | undefined {
   return riders?.map((rider) => ({ ...rider, id: `rider-${crypto.randomUUID()}` }));
@@ -853,8 +856,8 @@ async function prepareMapImage(image: MapImageFile, pxPerSquare?: number): Promi
  * The save flows migrate the draft key to the DB key.
  */
 /** What saving the scene keeps: while a fight is played, its setup, not the half-fought board (PLAY_MODE_PLAN.md D8). */
-function boardToSave(state: Pick<EncounterStore, "encounter" | "play" | "playSetup">): EncounterSnapshot {
-  return state.play && state.playSetup ? state.playSetup : state.encounter;
+function boardToSave(state: Pick<EncounterStore, "encounter" | "play" | "playSetup" | "benchIds">): EncounterSnapshot {
+  return withoutBench(state.play && state.playSetup ? state.playSetup : state.encounter, state.benchIds);
 }
 
 function mapImageKey(state: Pick<EncounterStore, "currentEncounterId" | "encounter">): string {
@@ -1038,10 +1041,29 @@ export const useEncounterStore = create<EncounterStore>()(
         }));
       });
 
+      // Creatures benched and then closed this scene: undo mustn't bring them back (see withBenchKept).
+      const closedBench = { scene: "", ids: new Set<string>() };
+      /** The creatures benched and closed in the scene open now. */
+      const closedHere = (): ReadonlySet<string> => (closedBench.scene === get().encounter.id ? closedBench.ids : new Set<string>());
+
+      /** A creature on the bench that can't change (an SRD monster, a shared template) that `incoming` changes. */
+      const lockedChange = (incoming: EncounterSnapshot): string | undefined => {
+        const { benchIds, templateDefinitionIds, encounter } = get();
+        if (benchIds.length === 0 || incoming.definitions === encounter.definitions) return undefined;
+        return benchIds.find((id) => isLockedOnBench(id, benchIds, templateDefinitionIds)
+          && encounter.definitions.find((definition) => definition.id === id) !== incoming.definitions.find((definition) => definition.id === id));
+      };
+
       const commitEncounter = (
         incoming: EncounterSnapshot,
         extras: Partial<EncounterStore> = {}
       ) => {
+        // Read-only on the bench: refused, and its sheet says why.
+        const locked = lockedChange(incoming);
+        if (locked) {
+          notifyLockedEdit(locked);
+          return;
+        }
         // An edit that changed a creature's actual maximum (an item attuned, Tough added) takes its full tokens with it.
         const encounter = withHitPointsFollowing(get().encounter, incoming);
         const continuing = continuesMerge();
@@ -1075,6 +1097,12 @@ export const useEncounterStore = create<EncounterStore>()(
           ...extras
         });
         queueLibrarySaves(before, get().encounter);
+        // A creature given a token is a scene creature now, off the bench; one gone from the scene is off it too.
+        const { benchIds, encounter: after } = get();
+        if (benchIds.length) {
+          const still = benchIds.filter((id) => !hasToken(after, id) && after.definitions.some((definition) => definition.id === id));
+          if (still.length !== benchIds.length) set({ benchIds: still });
+        }
       };
 
       /**
@@ -1240,6 +1268,7 @@ export const useEncounterStore = create<EncounterStore>()(
       definitionsLibrary: [],
       templateDefinitionIds: [],
       definitionStatus: "",
+      benchIds: [],
       actorFolders: [],
       folderStatus: "",
       undoStack: [],
@@ -1411,9 +1440,10 @@ export const useEncounterStore = create<EncounterStore>()(
         });
       },
       undo: () => {
-        const [previous, ...rest] = get().undoStack;
-        if (!previous) return;
+        const [stored, ...rest] = get().undoStack;
+        if (!stored) return;
         const before = get().encounter;
+        const previous = withBenchKept(stored, before, get().benchIds, closedHere());
         const play = get().play;
         if (play) {
           // In a fight the log goes back with the board (the whole of it, if the step rewrote it), and the rolls that
@@ -1457,9 +1487,10 @@ export const useEncounterStore = create<EncounterStore>()(
         queueLibrarySaves(before, previous);
       },
       redo: () => {
-        const [next, ...rest] = get().redoStack;
-        if (!next) return;
+        const [stored, ...rest] = get().redoStack;
+        if (!stored) return;
         const before = get().encounter;
+        const next = withBenchKept(stored, before, get().benchIds, closedHere());
         const play = get().play;
         if (play) {
           const [mark = { tail: [] }, ...marks] = get().redoPlay;
@@ -2124,7 +2155,7 @@ export const useEncounterStore = create<EncounterStore>()(
           set({ projectStatus: "Duplicate scene failed" });
           return;
         }
-        let source = get().encounter;
+        let source = withoutBench(get().encounter, get().benchIds);
         if (encounterId && encounterId !== get().currentEncounterId) {
           const loadResponse = await fetch(`/api/encounters/${encodeURIComponent(encounterId)}`);
           if (!loadResponse.ok) {
@@ -2347,9 +2378,9 @@ export const useEncounterStore = create<EncounterStore>()(
           body: JSON.stringify({ definition: copy })
         });
         set({ definitionStatus: response.ok ? `${definition.name} copied to your library` : "Copy failed" });
-        if (response.ok) {
-          await get().loadDefinitionsLibrary();
-        }
+        if (!response.ok) return undefined;
+        await get().loadDefinitionsLibrary();
+        return copy.id;
       },
       addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position) => {
         // Already in the scene: another token of the scene's copy. It's the library's (they're linked), or newer while a
@@ -2370,9 +2401,35 @@ export const useEncounterStore = create<EncounterStore>()(
       copyLibraryDefinition: async (definitionId) => {
         const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}/copy`, { method: "POST" });
         set({ definitionStatus: response.ok ? "Copied to your library" : "Copy failed" });
-        if (response.ok) {
-          await get().loadDefinitionsLibrary();
+        if (!response.ok) return undefined;
+        const data = await response.json().catch(() => ({})) as { definition?: CreatureDefinition };
+        await get().loadDefinitionsLibrary();
+        return data.definition?.id;
+      },
+      benchCreature: (definition) => {
+        const { encounter, benchIds } = get();
+        if (encounter.definitions.some((candidate) => candidate.id === definition.id)) return;
+        closedBench.ids.delete(definition.id);
+        set({
+          encounter: { ...encounter, definitions: [...encounter.definitions, structuredClone(definition)] },
+          benchIds: [...benchIds, definition.id]
+        });
+      },
+      unbenchCreature: (definitionId) => {
+        const { encounter, benchIds } = get();
+        if (!benchIds.includes(definitionId)) return;
+        const rest = benchIds.filter((id) => id !== definitionId);
+        if (hasToken(encounter, definitionId) || namedBy(encounter, definitionId)) {
+          set({ benchIds: rest });
+          return;
         }
+        if (closedBench.scene !== encounter.id) closedBench.ids = new Set();
+        closedBench.scene = encounter.id;
+        closedBench.ids.add(definitionId);
+        set({
+          benchIds: rest,
+          encounter: { ...encounter, definitions: encounter.definitions.filter((definition) => definition.id !== definitionId) }
+        });
       },
       loadActorFolders: async () => {
         const response = await fetch("/api/folders");
@@ -2908,20 +2965,12 @@ export const useEncounterStore = create<EncounterStore>()(
           definition
         ];
         const count = encounter.combatants.filter((combatant) => combatant.definitionId === definition.id).length + 1;
-        const combatant = {
+        const combatant = newToken(definition, {
           id: `combatant-${crypto.randomUUID()}`,
-          definitionId: definition.id,
           displayName: `${definition.name} ${count}`,
           faction,
-          position: position ?? openCellFor(encounter, sizeFootprint(definition.size)),
-          currentHp: actualMaxHp(definition),
-          tempHp: 0,
-          resources: defaultResourcesForDefinition(definition),
-          state: "active" as const,
-          tacticsProfile: defaultTacticsOf(definition),
-          ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
-          resourceStance: definition.defaultResourceStance ?? ("balanced" as const)
-        };
+          position: position ?? openCellFor(encounter, sizeFootprint(definition.size))
+        });
         commitEncounter({
           ...encounter,
           definitions: dedupedDefinitions,
@@ -2949,20 +2998,12 @@ export const useEncounterStore = create<EncounterStore>()(
           const cell = index === 0
             ? position ?? openCellFor(working, footprint)
             : nearestOpenCell(working, origin ?? findOpenCell(working), footprint) ?? findOpenCell(working);
-          added.push({
+          added.push(newToken(definition, {
             id: `combatant-${crypto.randomUUID()}`,
-            definitionId: definition.id,
             displayName: `${definition.name} ${existing + index + 1}`,
             faction,
-            position: cell,
-            currentHp: actualMaxHp(definition),
-            tempHp: 0,
-            resources: defaultResourcesForDefinition(definition),
-            state: "active",
-            tacticsProfile: defaultTacticsOf(definition),
-            ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
-            resourceStance: definition.defaultResourceStance ?? "balanced"
-          });
+            position: cell
+          }));
         }
         commitEncounter({
           ...encounter,
@@ -3522,7 +3563,7 @@ export const useEncounterStore = create<EncounterStore>()(
       name: "battle-sim-encounter-v1",
       storage: createJSONStorage(() => createEncounterStorage()),
       partialize: (state) => ({
-        encounter: state.encounter,
+        encounter: withoutBench(state.encounter, state.benchIds),
         log: state.log,
         play: persistedPlay(state.play),
         // Map backgrounds live in IndexedDB (see mapImageStore), never here.
@@ -3564,6 +3605,11 @@ export const useEncounterStore = create<EncounterStore>()(
     }
   )
 );
+
+// Another scene: the bench was this one's. (Its sheets close as the scene changes; they find nothing left to unbench.)
+useEncounterStore.subscribe((state, previous) => {
+  if (state.encounter.id !== previous.encounter.id && state.benchIds.length) useEncounterStore.setState({ benchIds: [] });
+});
 
 function findOpenCell(encounter: EncounterSnapshot): Point {
   // Counts every square a token covers, not just its top-left one: a Large token added earlier must not

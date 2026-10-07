@@ -29,7 +29,7 @@ const SAVE_LABELS: Record<Exclude<LibraryStatus, "saved">, string> = {
  * The sheet's ⋯ menu: what the Actors panel offers for the selected token, from the sheet itself, and Make it its own
  * creature. Every item waits on `guard`, which asks first when an ability being edited has unsaved changes.
  */
-export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature, onShowToken, extraItems }: {
+export function SheetMenu({ combatant, definition, status, guard, onToast, onOwnCreature, onShowToken, extraItems, tokenless = false, onCopyToLibrary }: {
   combatant: CombatantState;
   definition: CreatureDefinition;
   status: LibraryStatus;
@@ -41,6 +41,10 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   onShowToken?: (combatantId: string) => void;
   /** More items at the end, after a separator (the Codex's palettes). */
   extraItems?: ContextMenuItem[];
+  /** Its creature has no token in the scene (ACTORS_TAB_PLAN.md, Phase 2): no token items. */
+  tokenless?: boolean;
+  /** A read-only creature's copy to the library, which then opens in this window's place. */
+  onCopyToLibrary?: () => void;
 }) {
   const saveDefinition = useEncounterStore((s) => s.saveDefinition);
   const copyLibraryDefinition = useEncounterStore((s) => s.copyLibraryDefinition);
@@ -109,10 +113,13 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
   }
 
   // Only worked out while the menu is open: it looks through every creature's summons.
-  const block = menu ? ownCreatureBlock(encounter, combatant, definition) : undefined;
+  const block = menu && !tokenless ? ownCreatureBlock(encounter, combatant, definition) : undefined;
+  const library: ContextMenuItem[] = onCopyToLibrary ? [{ label: "Copy to my library", onSelect: () => guard(onCopyToLibrary) }]
+    : status === "saved" ? []
+      : [{ label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) }];
   const items: ContextMenuItem[] = [
-    // A character made by the character builder levels up from here, as from Stats › Class & level.
-    ...(build ? [
+    // A character made by the character builder levels up from here, as from Stats › Class & level (not a read-only one).
+    ...(build && !onCopyToLibrary ? [
       {
         label: "Level up…",
         disabled: build.levels.length >= 20,
@@ -121,17 +128,20 @@ export function SheetMenu({ combatant, definition, status, guard, onToast, onOwn
       { label: "Open in the character builder…", onSelect: () => guard(() => openBuilder({ kind: "edit", definitionId: definition.id })) },
       { separator: true as const }
     ] : []),
-    ...(status === "saved" ? [] : [{ label: SAVE_LABELS[status], onSelect: () => guard(() => void save()) }]),
+    ...library,
     { label: "Export JSON", onSelect: () => guard(() => exportCombatant(combatant, definition, ownerDocument)) },
-    { separator: true },
-    { label: "Duplicate token", onSelect: () => guard(duplicate) },
-    {
-      label: "Make it its own creature",
-      disabled: Boolean(block),
-      hint: block ?? `A copy of ${definition.name} for this token alone, named ${combatant.displayName}.`,
-      onSelect: () => guard(ownCreature)
-    },
-    { label: "Delete token", danger: true, onSelect: () => guard(remove) },
+    // A sheet with no token has none to duplicate, split off or delete.
+    ...(tokenless ? [] : [
+      { separator: true as const },
+      { label: "Duplicate token", onSelect: () => guard(duplicate) },
+      {
+        label: "Make it its own creature",
+        disabled: Boolean(block),
+        hint: block ?? `A copy of ${definition.name} for this token alone, named ${combatant.displayName}.`,
+        onSelect: () => guard(ownCreature)
+      },
+      { label: "Delete token", danger: true, onSelect: () => guard(remove) }
+    ]),
     ...(extraItems?.length ? [{ separator: true } as ContextMenuItem, ...extraItems] : [])
   ];
 

@@ -18,6 +18,8 @@ import { UpcastOffers } from "../abilities/UpcastOffers";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP, STANDARD_ACTIONS } from "@/lib/sheet-help";
 import type { Compendium } from "@/hooks/useCompendium";
+import { notifyLockedEdit } from "@/lib/actor-sheet/bench";
+import { useSheetMode } from "../sheet-mode";
 import abilityStyles from "../abilities/abilities.module.css";
 
 /**
@@ -35,6 +37,7 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
   const removal = useAbilityRemoval(definition);
 
   const [addOpen, setAddOpen] = useState(false);
+  const { readOnly } = useSheetMode();
   // The ability editor, open in place of the list: on `openFirst`, when the creature has it.
   const [abilityEditor, setAbilityEditor] = useState<SheetEditorTarget | null>(() =>
     openFirst && openFirst.list !== "granted" && findAbility(definition, openFirst) ? { mode: "edit", ref: openFirst } : null);
@@ -100,7 +103,11 @@ export function ActionsTab({ combatant, definition, compendium, openFirst }: {
     <div ref={listRef}>
       <div className={abilityStyles.top}>
         <div className={abilityStyles.topRow}>
-          <button type="button" className={abilityStyles.addBtn} aria-expanded={addOpen} onClick={() => setAddOpen((value) => !value)}>
+          <button
+            type="button" className={abilityStyles.addBtn} aria-expanded={addOpen}
+            // A read-only sheet says why nothing can be added.
+            onClick={() => (readOnly ? notifyLockedEdit(definition.id) : setAddOpen((value) => !value))}
+          >
             <Plus size={14} /> Add ability
           </button>
           <span className={abilityStyles.spacer} />

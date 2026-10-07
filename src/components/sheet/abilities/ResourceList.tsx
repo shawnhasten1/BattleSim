@@ -8,6 +8,7 @@ import { resourceRows, resourceSummary, type ResourceRow } from "@/lib/actor-she
 import { newPoolId } from "@/lib/ability-editor/pools";
 import { readJson, writeJson } from "@/lib/persist";
 import { SheetNumber } from "../SheetInputs";
+import { useSheetMode } from "../sheet-mode";
 import styles from "./abilities.module.css";
 
 const OPEN_KEY = "actor-sheet-resources-open";
@@ -26,6 +27,8 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
   const removeResource = useEncounterStore((s) => s.removeResource);
   const refillResources = useEncounterStore((s) => s.refillResources);
   const updateResource = useEncounterStore((s) => s.updateResource);
+  // No token in the scene: only what every token starts with; nothing is left or spent.
+  const { tokenless } = useSheetMode();
   const [open, setOpenState] = useState(() => readJson<boolean>(OPEN_KEY, false));
   // A pool being named, before it's added.
   const [adding, setAdding] = useState<{ name: string; size: string } | null>(null);
@@ -61,6 +64,7 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
     <ResourceLine
       key={entry.id} row={entry}
       removable={entry.unused || (entry.kind === "slot" && !entry.missing)}
+      tokenless={tokenless}
       onLeft={(left) => updateResource(combatant.id, entry.id, left)}
       onFull={(full) => setResourceSize(definition.id, entry.id, full)}
       onRemove={() => removeResource(definition.id, entry.id)}
@@ -79,7 +83,7 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
           {live.length ? (
             <div className={styles.resourceGrid} role="group" aria-label="Resource sizes">
               <span />
-              <span className={styles.resourceHead} title="What this token has left">Left · {combatant.displayName}</span>
+              <span className={styles.resourceHead} title={tokenless ? undefined : "What this token has left"}>{tokenless ? "" : `Left · ${combatant.displayName}`}</span>
               <span className={styles.resourceHead} title="What every token of this creature starts a fight with">Full · every {definition.name}</span>
               <span />
               {live.map(row)}
@@ -99,7 +103,7 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
               <button type="button" className={styles.addSlots} onClick={() => setAdding({ name: "", size: "3" })}>+ Add a pool</button>
             )}
             <span className={styles.spacer} />
-            {live.some((entry) => entry.kind !== "legendary" && !entry.missing) ? (
+            {!tokenless && live.some((entry) => entry.kind !== "legendary" && !entry.missing) ? (
               <button type="button" className={styles.refill} onClick={() => refillResources(combatant.id)}>Refill all</button>
             ) : null}
           </div>
@@ -127,8 +131,14 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
             </div>
           ) : null}
           <p className={styles.poolNote}>
-            Left is {combatant.displayName}&apos;s. Full is what every {definition.name} starts a fight with; changing it
-            changes the ability that spends it too, and tokens that were full stay full.
+            {tokenless ? (
+              <>Full is what every {definition.name} starts a fight with; changing it changes the ability that spends it too.</>
+            ) : (
+              <>
+                Left is {combatant.displayName}&apos;s. Full is what every {definition.name} starts a fight with; changing it
+                changes the ability that spends it too, and tokens that were full stay full.
+              </>
+            )}
           </p>
         </div>
       ) : null}
@@ -137,9 +147,11 @@ export function ResourceList({ definition, combatant }: { definition: CreatureDe
 }
 
 /** One resource: its name, what this token has left, the creature's full size, and × when it can go. */
-function ResourceLine({ row, removable, onLeft, onFull, onRemove }: {
+function ResourceLine({ row, removable, tokenless, onLeft, onFull, onRemove }: {
   row: ResourceRow;
   removable: boolean;
+  /** No token to have anything left: the column stays empty. */
+  tokenless: boolean;
   onLeft: (left: number) => void;
   onFull: (full: number) => void;
   onRemove: () => void;
@@ -152,7 +164,7 @@ function ResourceLine({ row, removable, onLeft, onFull, onRemove }: {
         {row.missing ? <small className={styles.resourceWarn}>None yet: {row.note}.</small> : null}
       </span>
       <span className={styles.resourceLeft}>
-        {row.kind === "recharge" ? (
+        {tokenless ? null : row.kind === "recharge" ? (
           <button type="button" className={styles.recharge} aria-pressed={row.left === 1} aria-label={`${row.label}: ${row.left ? "ready" : "recharging"}`} onClick={() => onLeft(row.left ? 0 : 1)}>
             {row.left ? "● ready" : "○ recharging"}
           </button>

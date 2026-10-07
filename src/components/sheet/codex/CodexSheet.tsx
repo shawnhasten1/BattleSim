@@ -75,6 +75,8 @@ import { ConditionsRow } from "../SheetHeader";
 import { DefensesSection, LevelSection } from "../stats/StatsSections";
 import { TokenTab } from "../sheet-tabs/TokenTab";
 import { SheetNumber, SheetText } from "../SheetInputs";
+import { useSheetMode } from "../sheet-mode";
+import { notifyLockedEdit } from "@/lib/actor-sheet/bench";
 import { Astrolabe, Portrait } from "./ornaments";
 import { codexBody, codexDisplay } from "./fonts";
 import styles from "./codex.module.css";
@@ -169,6 +171,8 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   const removal = useAbilityRemoval(definition, { fieldClassName: styles.field });
   const updateResource = useEncounterStore((s) => s.updateResource);
   const pools = resourceRows(definition, combatant);
+  // No token in the scene: no uses to tick off.
+  const { tokenless, readOnly } = useSheetMode();
   const [shown, setShown] = useState<string | null>(null);
   const show = (id: string | undefined) => { if (id) setShown(id); };
   const kit: RowKit = {
@@ -177,7 +181,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
     onOptional: edits.setOptional,
     under: removal.under,
     flashId: shown,
-    poolOf: (row) => (row.ref.list === "legendary" ? undefined : recordPool(findAbility(definition, row.ref), pools)),
+    poolOf: (row) => (tokenless || row.ref.list === "legendary" ? undefined : recordPool(findAbility(definition, row.ref), pools)),
     setLeft: (resourceId, left) => updateResource(combatant.id, resourceId, left)
   };
 
@@ -202,6 +206,11 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   }
 
   function openAdd(filter: AddFilter) {
+    // A read-only sheet says why nothing can be added.
+    if (readOnly) {
+      notifyLockedEdit(definition.id);
+      return;
+    }
     leave(null);
     setAdding(filter);
   }
@@ -415,6 +424,8 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
   const updateHp = useEncounterStore((s) => s.updateHp);
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
+  // No token in the scene: its maximum, with nothing taken or added, and no death saves.
+  const { tokenless } = useSheetMode();
   const sources = useBuildSources();
   const armored = armorClassOf(definition, combatant);
   // Worn armor (or a formula, Unarmored Defense) works the AC out: it's shown, not typed (as on Stats).
@@ -487,13 +498,19 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
         <div className={styles.hp} role="group" aria-label="Hit points">
           <div className={styles.hpTop}>
             <span className={styles.cap}>Hit points</span>
-            <label className={styles.tmpWrap}>
-              <span className={styles.cap}>Temp</span>
-              <SheetNumber className={styles.tmp} label="Temporary hit points" value={temp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
-            </label>
+            {tokenless ? null : (
+              <label className={styles.tmpWrap}>
+                <span className={styles.cap}>Temp</span>
+                <SheetNumber className={styles.tmp} label="Temporary hit points" value={temp} min={0} max={999} onCommit={(tempHp) => updateCombatant(combatant.id, { tempHp })} />
+              </label>
+            )}
           </div>
           <div className={styles.hpNums}>
-            <SheetNumber className={`${styles.bare} ${styles.hpCur}`} label="Current hit points" value={hp} min={0} max={max} onCommit={(next) => updateHp(combatant.id, next)} />
+            {tokenless ? (
+              <output className={`${styles.bare} ${styles.hpCur}`} aria-label="Current hit points">{max}</output>
+            ) : (
+              <SheetNumber className={`${styles.bare} ${styles.hpCur}`} label="Current hit points" value={hp} min={0} max={max} onCommit={(next) => updateHp(combatant.id, next)} />
+            )}
             <span className={styles.slash} aria-hidden="true">/</span>
             {hitPointsNow ? (
               // Its effects change the maximum: that's shown here, and the base is typed below.
@@ -526,7 +543,7 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
             <span className={styles.lineValue}>{hitDice}</span>
           </div>
         ) : null}
-        {pc ? (
+        {pc && !tokenless ? (
           <div className={styles.lineField} role="group" aria-label="Death saves">
             <span className={styles.cap}>Death saves{deathSaves.stable ? " · stable" : ""}</span>
             <span className={styles.ds}>
@@ -771,6 +788,8 @@ const DEFENSE_GROUPS: Array<{ type: DamageAdjustment["type"]; title: string; tag
 /** Damage it's immune to, resists or is vulnerable to, the conditions it's immune to, and the token's conditions now. */
 function Defenses({ combatant, definition }: { combatant: CombatantState; definition: CreatureDefinition }) {
   const update = useEncounterStore((s) => s.updateCreatureDefinition);
+  // No token in the scene: no conditions on one.
+  const { tokenless } = useSheetMode();
   const adjustments = definition.damageAdjustments ?? [];
   const conditionImmunities = definition.conditionImmunities ?? [];
   const absorbs = adjustments.filter((adjustment) => adjustment.type === "absorb");
@@ -843,10 +862,12 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
       ) : (
         <button type="button" className={styles.more2} aria-expanded={false} onClick={() => setMore(true)}>More defenses: qualified, and absorbing…</button>
       )}
-      <div className={styles.def} role="group" aria-label="Conditions">
-        <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>Conditions · {combatant.displayName}</h3>
-        <ConditionsRow combatant={combatant} definition={definition} className={styles.conditions} />
-      </div>
+      {tokenless ? null : (
+        <div className={styles.def} role="group" aria-label="Conditions">
+          <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>Conditions · {combatant.displayName}</h3>
+          <ConditionsRow combatant={combatant} definition={definition} className={styles.conditions} />
+        </div>
+      )}
     </section>
   );
 }
@@ -1121,6 +1142,8 @@ function Spells({ group, combatant, definition, onAdd }: {
   onAdd: () => void;
 }) {
   const updateResource = useEncounterStore((s) => s.updateResource);
+  // No token in the scene: no slots spent or left (Resources shows how many every token starts with).
+  const { tokenless } = useSheetMode();
   const facts = group.spellcasting;
   const slotted = (group.levels ?? []).filter((level) => level.level > 0 && definition.resources?.[`slot-${level.level}`] !== undefined);
   return (
@@ -1144,7 +1167,7 @@ function Spells({ group, combatant, definition, onAdd }: {
             </div>
           </div>
         ) : null}
-        {slotted.length ? (
+        {slotted.length && !tokenless ? (
           <>
             <h3 className={styles.sub}>Spell slots · {combatant.displayName}</h3>
             <div className={styles.slots}>

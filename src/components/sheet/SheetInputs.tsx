@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useEncounterStore } from "@/store/encounter-store";
+import { useSheetMode } from "./sheet-mode";
 
 /**
  * The sheet's boxes commit as you type (plan D3). Everything committed while one box has focus is one undo step: the
@@ -62,6 +63,7 @@ const show = (n: number | undefined, signed?: boolean) => (n === undefined ? "" 
  */
 export function SheetNumber(props: SheetNumberProps) {
   const { value, min, max, step = 1, label, id, placeholder, signed, className, style, disabled, title } = props;
+  const { readOnly } = useSheetMode();
   const session = useEditSession();
   const [text, setText] = useState(show(value, signed));
   const focused = useRef(false);
@@ -88,7 +90,7 @@ export function SheetNumber(props: SheetNumberProps) {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    if (readOnly || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
     event.preventDefault();
     const from = parse(text) ?? value ?? 0;
     let next = Number((from + (event.key === "ArrowUp" ? step : -step)).toFixed(decimals));
@@ -111,6 +113,7 @@ export function SheetNumber(props: SheetNumberProps) {
       className={className}
       style={style}
       disabled={disabled}
+      readOnly={readOnly}
       title={title}
       onFocus={() => { focused.current = true; session.begin(); }}
       onBlur={() => { focused.current = false; session.end(); setText(show(value, signed)); }}
@@ -137,6 +140,7 @@ export function SheetText({ value, onCommit, label, placeholder, style, classNam
   autoSelect?: boolean;
 }) {
   const session = useEditSession();
+  const { readOnly } = useSheetMode();
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!autoSelect) return;
@@ -151,6 +155,7 @@ export function SheetText({ value, onCommit, label, placeholder, style, classNam
       placeholder={placeholder}
       style={style}
       className={className}
+      readOnly={readOnly}
       onFocus={session.begin}
       onBlur={session.end}
       onChange={(event) => {
@@ -167,6 +172,7 @@ export function SheetText({ value, onCommit, label, placeholder, style, classNam
  */
 export function SheetColor({ value, onCommit, label }: { value: string; onCommit: (next: string) => void; label?: string }) {
   const session = useEditSession();
+  const { readOnly } = useSheetMode();
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const node = ref.current;
@@ -180,6 +186,7 @@ export function SheetColor({ value, onCommit, label }: { value: string; onCommit
       type="color"
       aria-label={label}
       value={value}
+      disabled={readOnly}
       onFocus={session.begin}
       onBlur={session.end}
       onChange={(event) => {

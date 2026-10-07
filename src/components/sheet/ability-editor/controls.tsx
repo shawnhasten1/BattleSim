@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { COPY, type CopyKey } from "./copy";
+import { useSheetMode } from "../sheet-mode";
 import styles from "./ability-editor.module.css";
 
 /** A label (with its hint behind a "?"), above one control. Pass `id` to tie the label to the control. */
@@ -43,6 +44,8 @@ export function Segmented<T extends string>({
   title?: string;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  // A read-only sheet (an SRD monster opened with no token) shows the choice without taking a new one.
+  const off = Boolean(disabled) || useSheetMode().readOnly;
   const index = options.findIndex((option) => option.value === value);
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, at: number) {
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
@@ -53,7 +56,7 @@ export function Segmented<T extends string>({
     refs.current[next]?.focus();
   }
   return (
-    <div className={styles.segmented} role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} title={title}>
+    <div className={styles.segmented} role="radiogroup" aria-label={label} aria-disabled={off || undefined} title={title}>
       {options.map((option, at) => (
         <button
           key={option.value}
@@ -64,7 +67,7 @@ export function Segmented<T extends string>({
           // One stop in the tab order: the chosen option, or the first when none is chosen.
           tabIndex={option.value === value || (index < 0 && at === 0) ? 0 : -1}
           title={option.title}
-          disabled={disabled}
+          disabled={off}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => onKeyDown(event, at)}
         >

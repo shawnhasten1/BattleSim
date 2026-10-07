@@ -1,5 +1,5 @@
 import { tokenImageSource, type TokenImageSource } from "@/lib/token-image";
-import { cheapestCastable, getExecutableActions, isPrepDrink, isUpcastVariant, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
+import { actualMaxHp, cheapestCastable, getExecutableActions, isPrepDrink, isUpcastVariant, type ActionDefinition, type CombatantState, type CreatureDefinition, type TacticsProfile } from "@/engine";
 
 type BuffAction = Extract<ActionDefinition, { kind: "buff" }>;
 
@@ -57,6 +57,48 @@ export function defaultTacticsOf(definition: CreatureDefinition): TacticsProfile
   return full.some((action) => action.kind === "attack" && (action.attackType === "ranged" || action.attackType === "spell"))
     ? "basic-ranged"
     : "basic-melee";
+}
+
+/** The pools a new token starts a fight with: the creature's, full. */
+export function defaultResourcesForDefinition(definition: CreatureDefinition): Record<string, number> | undefined {
+  if (!definition.resources || Object.keys(definition.resources).length === 0) {
+    return undefined;
+  }
+  return structuredClone(definition.resources);
+}
+
+/** A new token of a creature, as the store adds one: at full hit points and pools, with its default tactics and spending. */
+export function newToken(
+  definition: CreatureDefinition,
+  token: Pick<CombatantState, "id" | "displayName" | "faction" | "position">
+): CombatantState {
+  return {
+    ...token,
+    definitionId: definition.id,
+    currentHp: actualMaxHp(definition),
+    tempHp: 0,
+    resources: defaultResourcesForDefinition(definition),
+    state: "active",
+    tacticsProfile: defaultTacticsOf(definition),
+    ...(definition.defaultActiveForm ? { activeForm: { definitionId: definition.defaultActiveForm } } : {}),
+    resourceStance: definition.defaultResourceStance ?? "balanced"
+  };
+}
+
+/** The id of the token a sheet shows for a creature with none in the scene: never one of the encounter's. */
+export const PREVIEW_TOKEN_ID = "preview-token";
+
+/**
+ * What a sheet opened with no token shows for the token-shaped values it reads (ACTORS_TAB_PLAN.md, Phase 2): a new
+ * token, never added to the encounter. The sheet hides whatever would change it.
+ */
+export function previewToken(definition: CreatureDefinition): CombatantState {
+  return newToken(definition, {
+    id: PREVIEW_TOKEN_ID,
+    displayName: definition.name,
+    faction: definition.character ? "party" : "enemy",
+    position: { x: 0, y: 0 }
+  });
 }
 
 /** Surprised: it loses its first turn (the condition `toggleCombatantSurprised` and the Combat panel set). */

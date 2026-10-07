@@ -15,6 +15,7 @@ import { useDeviceTokenImages, useTokenPackStore } from "@/store/token-pack-stor
 import { Segmented } from "../ability-editor/controls";
 import { SheetColor, SheetNumber } from "../SheetInputs";
 import { SheetSection } from "../SheetSection";
+import { useSheetMode } from "../sheet-mode";
 import { Row } from "./Row";
 import styles from "../sheet.module.css";
 
@@ -191,7 +192,10 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
     const remove = useTokenPackStore.getState().remove;
     for (const each of [slug, ...(TWIN_SLUGS[slug] ?? [])]) await remove(each);
   };
-  const [scope, setScope] = useState<"token" | "creature">(source === "token" ? "token" : "creature");
+  // No token in the scene: only the image every token of it shows.
+  const { tokenless } = useSheetMode();
+  const [chosenScope, setScope] = useState<"token" | "creature">(source === "token" ? "token" : "creature");
+  const scope = tokenless ? "creature" : chosenScope;
   const scopedImage = scope === "token" ? combatant.tokenVisuals?.imageUrl : definition.tokenVisuals?.imageUrl;
   const every = `every ${definition.name}`;
 
@@ -223,13 +227,15 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
       <div className={styles.appearance}>
         <TokenPreview combatant={combatant} definition={definition} />
         <div className={styles.stack}>
-          <div className={styles.field}>
-            Image for
-            <Segmented
-              label="Image for" value={scope} onChange={setScope}
-              options={[{ value: "token", label: "This token" }, { value: "creature", label: `Every ${definition.name}` }]}
-            />
-          </div>
+          {tokenless ? null : (
+            <div className={styles.field}>
+              Image for
+              <Segmented
+                label="Image for" value={scope} onChange={setScope}
+                options={[{ value: "token", label: "This token" }, { value: "creature", label: `Every ${definition.name}` }]}
+              />
+            </div>
+          )}
           <div className={styles.inlineRow}>
             <label className={styles.upload}>
               <ImagePlus size={13} /> {scopedImage ? "Replace image" : "Upload image"}
@@ -247,6 +253,7 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
           <p className={styles.note}>{imageNote}</p>
         </div>
       </div>
+      {tokenless ? null : <>
       <div className={styles.rows}>
         <Row label="Border">
           <SheetColor label="Border color" value={visuals.borderColor ?? "#ffffff"} onCommit={(borderColor) => updateCombatantVisuals(combatant.id, { borderColor })} />
@@ -290,6 +297,7 @@ export function AppearanceSection({ combatant, definition, open, onToggle }: Sec
         </Row>
       </div>
       {visuals.imageUrl ? null : <p className={styles.note}>With an image, it can also be scaled and given a glow.</p>}
+      </>}
     </SheetSection>
   );
 }

@@ -230,6 +230,43 @@
   color: var(--ui-text);
 }
 
+/* ── a read-only sheet's banner (an SRD monster or a template opened with no token) ── */
+
+.readOnlyBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border);
+  border-left: 3px solid var(--ui-accent);
+  border-radius: var(--ui-radius);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ui-text);
+  font-size: 12px;
+}
+
+.readOnlyBanner button {
+  padding: 3px 10px;
+  border: 1px solid var(--ui-accent);
+  border-radius: var(--ui-radius);
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.readOnlyBanner button:hover {
+  background: var(--ui-accent);
+  color: var(--ui-bg, #111);
+}
+
+.readOnlyHint {
+  color: var(--ui-text-dim);
+}
+
 .librarySave {
   display: inline-flex;
   align-items: center;

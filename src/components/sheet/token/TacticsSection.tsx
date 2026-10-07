@@ -15,6 +15,7 @@ import { defaultTacticsOf } from "@/lib/actor-sheet/token";
 import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { Segmented } from "../ability-editor/controls";
 import { SheetSection } from "../SheetSection";
+import { useSheetMode } from "../sheet-mode";
 import { Row } from "./Row";
 import abilityStyles from "../abilities/abilities.module.css";
 import styles from "../sheet.module.css";
@@ -102,6 +103,8 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
   const setCreatureBehavior = useEncounterStore((s) => s.setCreatureBehavior);
   const combatants = useEncounterStore((s) => s.encounter.combatants);
   const srd = useSrdDefaults(definition.id);
+  // No token: the profile and spending shown are the creature's defaults, and they're what changes.
+  const { tokenless } = useSheetMode();
 
   const tags = combatant.tags ?? [];
   const first = tags.includes("high-priority");
@@ -133,8 +136,19 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
   const uses = aiUses(definition, combatant);
   const nothing = !uses.simulated.length && !uses.partly.length && !uses.reference.length && !uses.off.length;
 
+  const profile = tokenless ? defaultTactics : combatant.tacticsProfile;
+  const stance = tokenless ? defaultStance : combatant.resourceStance;
+  function setProfile(next: TacticsProfile) {
+    if (tokenless) setCreatureBehavior(definition.id, { tactics: next, stance: defaultStance });
+    else updateTactics(combatant.id, next);
+  }
+  function setStance(next: CombatantState["resourceStance"]) {
+    if (tokenless) setCreatureBehavior(definition.id, { tactics: defaultTactics, stance: next });
+    else updateResourceStance(combatant.id, next);
+  }
+
   return (
-    <SheetSection title="Tactics" summary={tacticsLine(combatant)} open={open} onToggle={onToggle}>
+    <SheetSection title="Tactics" summary={tacticsLine(tokenless ? { tacticsProfile: profile, resourceStance: stance } : combatant)} open={open} onToggle={onToggle}>
       <span className={styles.subhead}>
         How it fights
         <InfoTooltip label="About how the AI plays it" content={HOW_IT_FIGHTS_HELP} />
@@ -142,21 +156,22 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
       <div className={styles.rows}>
         <Row label="Profile" htmlFor={`${id}-profile`} help={TACTICS_PROFILE_HELP}>
           <select
-            id={`${id}-profile`} aria-label="Tactics profile" className={styles.profileSelect} value={combatant.tacticsProfile}
-            onChange={(e) => updateTactics(combatant.id, e.target.value as TacticsProfile)}
+            id={`${id}-profile`} aria-label="Tactics profile" className={styles.profileSelect} value={profile}
+            onChange={(e) => setProfile(e.target.value as TacticsProfile)}
           >
             {TACTICS_PROFILES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </Row>
-        <p className={`${styles.note} ${styles.rowNote}`}>{TACTICS_PROFILES.find((option) => option.value === combatant.tacticsProfile)?.description}</p>
+        <p className={`${styles.note} ${styles.rowNote}`}>{TACTICS_PROFILES.find((option) => option.value === profile)?.description}</p>
         <Row label="Spending">
           <Segmented
-            label="Spending" value={combatant.resourceStance} onChange={(stance) => updateResourceStance(combatant.id, stance)}
+            label="Spending" value={stance} onChange={setStance}
             options={RESOURCE_STANCES.map(({ value, label }) => ({ value, label }))}
           />
         </Row>
-        <p className={`${styles.note} ${styles.rowNote}`}>{RESOURCE_STANCES.find((option) => option.value === combatant.resourceStance)?.description}</p>
+        <p className={`${styles.note} ${styles.rowNote}`}>{RESOURCE_STANCES.find((option) => option.value === stance)?.description}</p>
       </div>
+      {tokenless ? null : <>
       <div className={styles.defaultLine}>
         <span>
           A new {definition.name} starts as {labelOf(defaultTactics)}, {stanceOf(defaultStance)}{from}.
@@ -186,6 +201,7 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
           </label>
         </Row>
       </div>
+      </>}
 
       <span className={styles.subhead}>
         What the AI will use

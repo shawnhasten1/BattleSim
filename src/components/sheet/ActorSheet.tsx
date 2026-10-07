@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { baseDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
 import { creatureScope, libraryStatus, tokensOf } from "@/lib/actor-sheet/scope";
+import { isLockedOnBench, onLockedEdit } from "@/lib/actor-sheet/bench";
+import { previewToken } from "@/lib/actor-sheet/token";
+import { isSrdMonsterId } from "@/data/srd/monsters";
 import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { AUTOMATION_HELP } from "@/lib/sheet-help";
@@ -15,7 +18,7 @@ import { OwnerDocumentContext } from "@/hooks/useOwnerDocument";
 import { readJson, writeJson } from "@/lib/persist";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import { useEncounterStore } from "@/store/encounter-store";
-import { shownDefinitionId, useSheetWindowsStore, type SheetKind, type SheetStyle, type SheetWindow } from "@/store/sheet-windows-store";
+import { openActorSheet, shownDefinitionId, useSheetWindowsStore, type SheetKind, type SheetStyle, type SheetWindow } from "@/store/sheet-windows-store";
 import { CODEX_PALETTE_IDS, CODEX_PALETTES } from "@/lib/actor-sheet/codex";
 import type { ContextMenuItem } from "@/components/ui/ContextMenu";
 import { parseSrdDragPayload, SRD_DRAG_MIME } from "@/data/srd";
@@ -28,6 +31,7 @@ import { StatsTab } from "./sheet-tabs/StatsTab";
 import { ActionsTab } from "./sheet-tabs/ActionsTab";
 import { TokenTab } from "./sheet-tabs/TokenTab";
 import { StyleSwitch } from "./StyleSwitch";
+import { SheetModeContext } from "./sheet-mode";
 import { SHEET_STYLES } from "./styles/registry";
 import abilityStyles from "./abilities/abilities.module.css";
 import styles from "./sheet.module.css";
@@ -57,6 +61,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const encounter = useEncounterStore((s) => s.encounter);
   const definitionsLibrary = useEncounterStore((s) => s.definitionsLibrary);
   const templateDefinitionIds = useEncounterStore((s) => s.templateDefinitionIds);
+  const benchIds = useEncounterStore((s) => s.benchIds);
   const selectCombatant = useEncounterStore((s) => s.selectCombatant);
   const attachSrdWeapon = useEncounterStore((s) => s.attachSrdWeapon);
   const attachSrdSpell = useEncounterStore((s) => s.attachSrdSpell);
@@ -135,15 +140,30 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     if (opened && popup && front) setToast({ message: "Opened in the main window." });
   }, [builderWindow, homebrewOpen, popup, front]);
 
-  // Its token, or (gone a moment before the host moves the window on) another token of its creature.
-  const combatant = encounter.combatants.find((candidate) => candidate.id === sheet.combatantId)
-    ?? encounter.combatants.find((candidate) => shownDefinitionId(candidate) === sheet.definitionId);
+  // An edit refused because this creature can't change (an SRD monster or a template opened with no token) says why here.
+  useEffect(() => onLockedEdit((definitionId) => {
+    if (definitionId !== sheet.definitionId) return;
+    const name = useEncounterStore.getState().encounter.definitions.find((candidate) => candidate.id === definitionId)?.name ?? "It";
+    setToast({ message: `${name} is read-only. Copy it to your library to change it.` });
+  }), [sheet.definitionId]);
+
+  // Its token, or (gone a moment before the host moves the window on) another token of its creature. A window opened
+  // with no token (ACTORS_TAB_PLAN.md, Phase 2) shows its creature from the bench, with a preview token standing in.
+  const token = sheet.combatantId === null ? undefined
+    : encounter.combatants.find((candidate) => candidate.id === sheet.combatantId)
+      ?? encounter.combatants.find((candidate) => shownDefinitionId(candidate) === sheet.definitionId);
+  const benched = sheet.combatantId === null ? encounter.definitions.find((candidate) => candidate.id === sheet.definitionId) : undefined;
+  const preview = useMemo(() => (benched ? previewToken(benched) : undefined), [benched]);
+  const combatant = token ?? preview;
   if (!combatant) return null;
+  const tokenless = !token;
   // The stored creature, which the sheet edits; what its effects make it is read beside the fields (speed, hit points).
-  const definition = baseDefinition(encounter, combatant);
+  const definition = token ? baseDefinition(encounter, token) : benched!;
+  const readOnly = tokenless && isLockedOnBench(definition.id, benchIds, templateDefinitionIds);
+  const mode = { tokenless, readOnly };
   const tokens = tokensOf(encounter, definition.id);
   const status = libraryStatus(definition, definitionsLibrary, templateDefinitionIds);
-  const scope = creatureScope(encounter, definition, status);
+  const scope = creatureScope(encounter, definition, status, { readOnly });
   const kind: SheetKind = definition.character || combatant.faction === "party" ? "pc" : "other";
   const style = SHEET_STYLES[sheet.style];
 
@@ -170,8 +190,20 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   /** A toast in this window, or outside it when the window is about to close (its creature's last token deleted). */
   function showToast(next: SheetToast) {
-    if (tokensOf(useEncounterStore.getState().encounter, definition.id).length) setToast(next);
+    if (tokenless || tokensOf(useEncounterStore.getState().encounter, definition.id).length) setToast(next);
     else useSheetWindowsStore.getState().notify(next);
+  }
+
+  /** An SRD monster or a template, read-only here: an editable copy goes to your library and opens in this one's place. */
+  async function copyToLibrary() {
+    const store = useEncounterStore.getState();
+    const copyId = isSrdMonsterId(definition.id) ? await store.saveSrdMonsterCopy(definition.id) : await store.copyLibraryDefinition(definition.id);
+    if (!copyId) {
+      setToast({ message: `Couldn't copy ${definition.name} to your library.` });
+      return;
+    }
+    closeWindow(sheet.id);
+    await openActorSheet(copyId, { tab, style: sheet.style });
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -196,12 +228,14 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     else if (payload?.kind === "item") attachSrdItem(definition.id, payload.id);
   }
 
-  const title = tokens.length > 1
+  const title = tokenless ? definition.name
+    : tokens.length > 1
     ? <>{definition.name} <span>· {tokens.length} tokens</span></>
     : combatant.displayName === definition.name
       ? definition.name
       : <>{combatant.displayName} <span>· {definition.name}</span></>;
-  const titleText = tokens.length > 1
+  const titleText = tokenless ? definition.name
+    : tokens.length > 1
     ? `${definition.name} · ${tokens.length} tokens`
     : combatant.displayName === definition.name ? definition.name : `${combatant.displayName} · ${definition.name}`;
 
@@ -240,6 +274,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
       <AutomationCount definition={definition} combatant={combatant} onOpen={() => { if (tab !== "abilities") attempt(() => setTab("abilities")); }} />
       <SheetMenu
         combatant={combatant} definition={definition} status={status} guard={attempt} onToast={showToast}
+        tokenless={tokenless} onCopyToLibrary={readOnly ? () => void copyToLibrary() : undefined}
         onOwnCreature={() => { setTab("stats"); setFocusName(true); }}
         onShowToken={switchToken}
         extraItems={paletteItems}
@@ -266,6 +301,16 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     />
   ) : null;
 
+  const readOnlyBanner = readOnly ? (
+    <div className={styles.readOnlyBanner} role="note">
+      <span>
+        {isSrdMonsterId(definition.id) ? "SRD monster" : "Shared template"}: read-only.
+      </span>
+      <button type="button" onClick={() => void copyToLibrary()}>Copy to my library</button>
+      <span className={styles.readOnlyHint}>to edit it</span>
+    </div>
+  ) : null;
+
   const toastView = toast ? (
     // The Abilities tab's undo toast, for messages from the ⋯ menu and drops.
     <div className={abilityStyles.toast} role="status">
@@ -279,9 +324,10 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   const body = holder ? createPortal(
     // Menus and tooltips inside open in the sheet's own document: the popup's while it's popped out.
     <OwnerDocumentContext.Provider value={popup ? popup.document : inheritedDocument}>
+      <SheetModeContext.Provider value={mode}>
       {sheet.style === "codex" ? (
         <>
-          {prompt ? <div className={styles.frameHead}>{prompt}</div> : null}
+          {prompt || readOnlyBanner ? <div className={styles.frameHead}>{readOnlyBanner}{prompt}</div> : null}
           <div className={styles.frameScroll}>
             {/* The Codex opens abilities in the ability editor itself: its unsaved changes are guarded as on Standard. */}
             <SheetGuardContext.Provider value={registry}>
@@ -298,6 +344,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
       ) : (
         <>
           <div className={styles.frameHead}>
+            {readOnlyBanner}
             <VitalsStrip combatant={combatant} definition={definition} tokens={tokens} onShowToken={switchToken} />
             <ScopedTabs
               tab={tab} onSelect={(next) => attempt(() => setTab(next))}
@@ -323,6 +370,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
           </div>
         </>
       )}
+      </SheetModeContext.Provider>
     </OwnerDocumentContext.Provider>,
     holder
   ) : null;

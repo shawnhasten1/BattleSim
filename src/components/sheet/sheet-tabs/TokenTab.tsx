@@ -9,6 +9,7 @@ import { Segmented } from "../ability-editor/controls";
 import { SheetText } from "../SheetInputs";
 import { TacticsSection } from "../token/TacticsSection";
 import { AppearanceSection, FightSection, StatusSection } from "../token/TokenSections";
+import { useSheetMode } from "../sheet-mode";
 import styles from "../sheet.module.css";
 
 /** Which of the Token tab's sections are open, per browser. This fight and Tactics start open (plan §3.4). */
@@ -31,12 +32,29 @@ export function TokenTab({ combatant, definition, onOpenAbility }: {
   onOpenAbility: (ref: AbilityRef) => void;
 }) {
   const updateCombatant = useEncounterStore((s) => s.updateCombatant);
+  const { tokenless } = useSheetMode();
   const [open, setOpen] = useState<string[]>(() => readJson<string[]>(OPEN_KEY, OPEN_FIRST));
   const toggle = (id: string) => () => {
     const next = open.includes(id) ? open.filter((entry) => entry !== id) : [...open, id];
     setOpen(next);
     writeJson(OPEN_KEY, next);
   };
+
+  if (tokenless) {
+    // No token in the scene (ACTORS_TAB_PLAN.md, Phase 2): only what every new token starts with.
+    return (
+      <div className={styles.tab}>
+        <p className={styles.note}>
+          No {definition.name} is in this scene. These are what every new token of it starts with; a token placed can change
+          its own afterwards.
+        </p>
+        <TacticsSection
+          combatant={combatant} definition={definition} open={open.includes("tactics")} onToggle={toggle("tactics")} onOpenAbility={onOpenAbility}
+        />
+        <AppearanceSection combatant={combatant} definition={definition} open={open.includes("appearance")} onToggle={toggle("appearance")} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.tab}>
