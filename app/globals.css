@@ -35,6 +35,9 @@
   --ui-hp-high: var(--ui-hp-green);
   --ui-hp-mid: #b7862f;
   --ui-hp-low: var(--ui-hp-red);
+  /* temporary hit points: the segment after the fill, and its "+N" */
+  --ui-hp-temp: #5f93c4;
+  --ui-hp-temp-text: #a9cdf0;
   --ui-pc: #3d6ea6;
   --ui-hostile: #a1423f;
 
@@ -377,6 +380,8 @@ img {
    no longer lives inside the token. */
 .token-hp {
   position: absolute;
+  /* The hp fill and any temp segment sit side by side. */
+  display: flex;
   height: 12px;
   border: 1px solid #000;
   border-radius: 3px;
@@ -394,6 +399,7 @@ img {
 
 .token-hp > i {
   display: block;
+  flex: none;
   height: 100%;
   /* 0ms outside replay (var set on .battlemap) so edits are instant; during
      watch-mode the bar drains in step with token movement. */
@@ -425,6 +431,17 @@ img {
 
 .token-hp.tone-low > i {
   background: var(--ui-hp-low);
+}
+
+/* Temporary hit points: after the tone rules so they don't take its colour. */
+.token-hp > i.temp {
+  background: var(--ui-hp-temp);
+}
+
+.token-hp > b > em {
+  margin-left: 2px;
+  font-style: normal;
+  color: var(--ui-hp-temp-text);
 }
 
 /* Downed / dead / fled: force the fill empty regardless of stale hp values. */

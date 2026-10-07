@@ -847,6 +847,7 @@ export function SceneCanvas({ viewport, scene, showGrid, showElevation = true, s
                 key={combatant.id}
                 current={combatant.currentHp}
                 max={definition.maxHp}
+                temp={combatant.tempHp ?? 0}
                 out={hpOut}
                 x={x}
                 y={y}

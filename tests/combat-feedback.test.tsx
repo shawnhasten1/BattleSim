@@ -278,4 +278,30 @@ describe("TokenHealthBar", () => {
     const { container } = render(<TokenHealthBar current={5} max={0} {...box} />);
     expect(container.querySelector(".token-hp")).toBeNull();
   });
+
+  it("draws temp hp as a segment after the fill when there's room under the max", () => {
+    const { container } = render(<TokenHealthBar current={5} max={20} temp={5} {...box} />);
+    expect(fill(container).style.width).toBe("25%");
+    expect((container.querySelector("i.temp") as HTMLElement).style.width).toBe("25%");
+    expect(container.querySelector("b")?.textContent).toBe("5/20+5");
+    // The tone still reads hp / max, not the temp.
+    expect(container.querySelector(".token-hp")?.className).toContain("tone-low");
+  });
+
+  it("measures against hp + temp when they run past the max, so full health still shows its temp", () => {
+    const { container } = render(<TokenHealthBar current={30} max={30} temp={10} {...box} />);
+    expect(fill(container).style.width).toBe("75%");
+    expect((container.querySelector("i.temp") as HTMLElement).style.width).toBe("25%");
+    expect(container.querySelector(".token-hp")?.className).toContain("tone-high");
+  });
+
+  it("leaves temp out when there is none, or the token is out", () => {
+    const none = render(<TokenHealthBar current={10} max={10} temp={0} {...box} />);
+    expect(none.container.querySelector("i.temp")).toBeNull();
+    expect(none.container.querySelector("b")?.textContent).toBe("10/10");
+    none.unmount();
+    const out = render(<TokenHealthBar current={0} max={10} temp={4} out {...box} />);
+    expect(out.container.querySelector("i.temp")).toBeNull();
+    expect(out.container.querySelector("b")?.textContent).toBe("0/10");
+  });
 });
