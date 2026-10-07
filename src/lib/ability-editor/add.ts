@@ -15,11 +15,11 @@ import {
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
-import {
-  SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, attachedSource, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon,
-  type SrdEntryKind
-} from "@/data/srd";
+import { SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, attachedSource, findSrdFeature, findSrdWeapon, type SrdEntryKind } from "@/data/srd";
+import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
+import { SRD_2024_SPELL_SCROLLS, findLibraryItem, findLibrarySpell } from "@/data/srd/library";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
+import { editionNameKey, editionOf, preferEdition, type Edition, type EditionChoice } from "@/lib/editions";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
 import type { AbilityInsertTarget, AbilityRecord } from "./refs";
 import { ownSpellScroll, ownSpellScrolls } from "./scrolls";
@@ -170,17 +170,34 @@ export interface LibraryEntry {
   id: string;
   name: string;
   entry: WeaponDefinition | SpellDefinition | FeatureDefinition | ItemDefinition;
+  /** The rules it's written for (EDITIONS_PLAN.md): both editions' spells are in the library, side by side. */
+  edition?: Edition;
+  /** A spell kept for reference only (its SRD text, run by hand): listed only when searched for. */
+  reference?: boolean;
+}
+
+function libraryEntry(kind: SrdEntryKind, entry: LibraryEntry["entry"]): LibraryEntry {
+  const edition = editionOf(entry);
+  const reference = kind === "spell" && (entry as SpellDefinition).automationSupport === "manual-only";
+  return { kind, id: entry.id, name: entry.name, entry, ...(edition ? { edition } : {}), ...(reference ? { reference } : {}) };
 }
 
 const LIBRARY: LibraryEntry[] = [
-  ...SRD_WEAPONS.map((entry): LibraryEntry => ({ kind: "weapon", id: entry.id, name: entry.name, entry })),
-  ...SRD_SPELLS.map((entry): LibraryEntry => ({ kind: "spell", id: entry.id, name: entry.name, entry })),
-  ...SRD_FEATURES.map((entry): LibraryEntry => ({ kind: "feature", id: entry.id, name: entry.name, entry })),
-  ...SRD_ITEMS.map((entry): LibraryEntry => ({ kind: "item", id: entry.id, name: entry.name, entry }))
+  ...SRD_WEAPONS.map((entry) => libraryEntry("weapon", entry)),
+  ...SRD_SPELLS.map((entry) => libraryEntry("spell", entry)),
+  ...SRD_2024_SPELLS.map((entry) => libraryEntry("spell", entry)),
+  ...SRD_FEATURES.map((entry) => libraryEntry("feature", entry)),
+  ...SRD_ITEMS.map((entry) => libraryEntry("item", entry))
 ];
 
-/** A scroll of every library spell: listed only when a search asks for scrolls. */
-const SCROLLS: LibraryEntry[] = SRD_SPELL_SCROLLS.map((entry) => ({ kind: "item", id: entry.id, name: entry.name, entry }));
+/** A scroll of every library spell (SRD 5.2 has them for cantrips and 1st level only): listed only when a search asks for scrolls. */
+const SCROLLS: LibraryEntry[] = [...SRD_SPELL_SCROLLS, ...SRD_2024_SPELL_SCROLLS].map((entry) => libraryEntry("item", entry));
+
+/**
+ * What a sheet's copy of a library entry carries as its source's slug, for the "on the sheet" mark: the library id for a
+ * 2014 record, the SRD 5.2 key for a 2024 one (which a spell the character builder placed carries too).
+ */
+export const librarySlug = (entry: LibraryEntry) => entry.entry.source?.slug ?? entry.id;
 
 /** Whether a search asks for scrolls: one of its words is "scroll" (or "scrolls"). */
 const wantsScrolls = (tokens: string[]) => tokens.some((token) => token === "scroll" || token === "scrolls");
@@ -198,12 +215,12 @@ export function prepareLibrary(kind: SrdEntryKind, id: string, definition: Creat
   }
   if (kind === "item") {
     const own = ownSpellScroll(definition, id);
-    const item = findSrdItem(id) ?? own;
+    const item = findLibraryItem(id) ?? own;
     const source = own ? { provider: "homebrew" as const, documentName: "Spell scroll", slug: id, importedAt: new Date().toISOString() } : item ? attachedSource(item, id) : undefined;
     return item ? { list: "items", record: { ...structuredClone(item), source } } : undefined;
   }
   if (kind === "spell") {
-    const source = findSrdSpell(id);
+    const source = findLibrarySpell(id);
     if (!source) return undefined;
     const spell = castWith(structuredClone(source), spellcastingAbility(definition));
     const action = spell.action && "riders" in spell.action ? { ...spell.action, riders: freshRiders(spell.action.riders) } as ActionDefinition : spell.action;
@@ -300,20 +317,23 @@ const LIBRARY_KINDS: Record<AddFilter, SrdEntryKind[]> = {
 /**
  * What a search finds, by section. Monster abilities need a query (there are hundreds) and `abilities` loaded; traits
  * from them show under "Traits & features" too. Spell scrolls show only when the search asks for a scroll ("scroll
- * fireball"): one of every library spell, and of each of `definition`'s own spells.
+ * fireball"): one of every library spell, and of each of `definition`'s own spells. Reference-only spells show only for a
+ * search: there are hundreds. `edition` picks which version shows where the library has a 2014 and a 2024 one (`preferEdition`).
  */
 export function searchAdd(
   query: string,
   filter: AddFilter,
   abilities: readonly SrdMonsterAbilityEntry[] | undefined,
-  definition?: Pick<CreatureDefinition, "spells">
+  definition?: Pick<CreatureDefinition, "spells">,
+  edition: EditionChoice = "both"
 ): AddResults {
   const tokens = tokensOf(query);
   const recipes = ranked(RECIPES.filter((entry) => RECIPE_GROUPS[filter].includes(entry.group)), tokens, (entry) => entry.label, (entry) => `${entry.hint} ${entry.group}`);
   const scrolls = wantsScrolls(tokens)
     ? [...SCROLLS, ...(definition ? ownSpellScrolls(definition).map((entry): LibraryEntry => ({ kind: "item", id: entry.id, name: entry.name, entry })) : [])]
     : [];
-  const library = ranked([...LIBRARY, ...scrolls].filter((entry) => LIBRARY_KINDS[filter].includes(entry.kind)), tokens, (entry) => entry.name, (entry) => entry.kind);
+  const listed = [...LIBRARY, ...scrolls].filter((entry) => LIBRARY_KINDS[filter].includes(entry.kind) && (!entry.reference || tokens.length > 0));
+  const library = preferEdition(ranked(listed, tokens, (entry) => entry.name, (entry) => entry.kind), edition, (entry) => entry.edition, (entry) => `${entry.kind}:${editionNameKey(entry.name)}`);
   const monsterKinds = filter === "all" || filter === "monster" ? undefined : filter === "features" ? ["trait", "feature"] : [];
   const monsterPool = !tokens.length || !abilities || (monsterKinds && !monsterKinds.length)
     ? []

@@ -9,15 +9,20 @@ import type {
   FeatureDefinition,
   ItemDefinition,
   LegendaryActionRef,
+  SourceMetadata,
   SpellDefinition,
   WeaponDefinition
 } from "@/engine";
 import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
+import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { loadSrdMonsterAbilities, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
+import { EditionBadge, EditionFilter } from "@/components/ui/Edition";
 import type { Compendium } from "@/hooks/useCompendium";
+import { useEditionFilter } from "@/hooks/useEditionFilter";
 import {
   ADD_FILTERS,
+  librarySlug,
   prepareLibrary,
   prepareMonsterAbility,
   searchAdd,
@@ -28,6 +33,8 @@ import {
 } from "@/lib/ability-editor/add";
 import { prepareSaved, savedKindWord, searchSaved, srdCreaturesNeeded, unboundSteps, type SavedAbility } from "@/lib/ability-editor/my-library";
 import { withNewAbilityAt } from "@/lib/ability-editor/refs";
+import { readBuild } from "@/lib/character-builder/summary";
+import { editionNameKey, editionOf } from "@/lib/editions";
 import { loadCreatures, newSummonLoop } from "@/lib/ability-editor/spawns";
 import { actionStatblock, deathEffectStatblock, featureStatblock, itemStatblock, legendaryStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
@@ -114,6 +121,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AddFilter>(initialFilter);
+  // Which version shows where the library has a 2014 and a 2024 one; a built character's opens on its own edition.
+  const [edition, setEdition] = useEditionFilter("add-ability", readBuild(definition)?.edition);
   const [abilities, setAbilities] = useState<readonly SrdMonsterAbilityEntry[] | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
   const [open5e, setOpen5e] = useState(false);
@@ -131,7 +140,24 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     return () => { live = false; };
   }, [abilities, query, filter]);
 
-  const results = useMemo(() => searchAdd(query, filter, abilities, definition), [query, filter, abilities, definition]);
+  const results = useMemo(() => searchAdd(query, filter, abilities, definition, edition), [query, filter, abilities, definition, edition]);
+  // Rows listed with their other edition's version beside them: their "Add" buttons say which is which.
+  const twinned = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const entry of results.library) {
+      const key = `${entry.kind}:${editionNameKey(entry.name)}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, count]) => count > 1).map(([key]) => key));
+  }, [results.library]);
+  // Each row's statblock line, worked out once per creature rather than on every keystroke.
+  const lines = useMemo(() => new Map<string, string>(), [definition]);
+  const lineOf = (entry: LibraryEntry) => {
+    let text = lines.get(entry.id);
+    if (text === undefined) lines.set(entry.id, text = line(entry, definition));
+    return text;
+  };
+  const addLabel = (entry: LibraryEntry) => `Add ${entry.name}${entry.edition && twinned.has(`${entry.kind}:${editionNameKey(entry.name)}`) ? ` (${entry.edition})` : ""}`;
   // My library: what the DM saved from the editor, for any creature.
   const mine = useMyLibraryStore((s) => s.entries);
   const mineStatus = useMyLibraryStore((s) => s.status);
@@ -235,10 +261,13 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
         placeholder="Search weapons, spells, items, monster abilities and recipes" onChange={(event) => { setQuery(event.target.value); setOpen5e(false); }}
         onKeyDown={onSearchKey}
       />
-      <div className={styles.filters} role="group" aria-label="Show">
-        {ADD_FILTERS.map((entry) => (
-          <button key={entry.value} type="button" aria-pressed={filter === entry.value} onClick={() => setFilter(entry.value)}>{entry.label}</button>
-        ))}
+      <div className={styles.filterBar}>
+        <div className={styles.filters} role="group" aria-label="Show">
+          {ADD_FILTERS.map((entry) => (
+            <button key={entry.value} type="button" aria-pressed={filter === entry.value} onClick={() => setFilter(entry.value)}>{entry.label}</button>
+          ))}
+        </div>
+        <EditionFilter value={edition} onChange={setEdition} />
       </div>
       {added ? (
         <div className={styles.added} role="status">
@@ -256,7 +285,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
                 <div key={entry.id} className={styles.item}>
                   <button type="button" className={styles.itemOpen} onClick={() => chooseSaved(entry)} title="Open it to check or change before adding">
                     <span className={styles.itemName}>
-                      {entry.name} <span className={styles.itemMeta}>· {savedKindWord(entry)}{already.has(entry.id) ? " · on the sheet" : ""}</span>
+                      {entry.name} <span className={styles.itemMeta}>· {savedKindWord(entry)}{already.has(entry.id) ? " · on the sheet" : ""}</span>{" "}
+                      <EditionBadge edition={editionOf(entry.record as { source?: SourceMetadata })} />
                     </span>
                     <span className={styles.itemLine}>{savedLine(entry, definition)}</span>
                   </button>
@@ -314,13 +344,14 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
                 >
                   <button type="button" className={styles.itemOpen} onClick={() => chooseLibrary(entry)} title="Open it to check or change before adding">
                     <span className={styles.itemName}>
-                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{already.has(entry.id) ? " · on the sheet" : ""}</span>
+                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{entry.reference ? " · ref" : ""}{already.has(librarySlug(entry)) ? " · on the sheet" : ""}</span>{" "}
+                      <EditionBadge edition={entry.edition} />
                     </span>
-                    <span className={styles.itemLine}>{line(entry, definition)}</span>
+                    <span className={styles.itemLine}>{lineOf(entry)}</span>
                   </button>
                   <button
-                    type="button" className={styles.plus} aria-label={`Add ${entry.name}`}
-                    title={already.has(entry.id) ? "It's on the sheet already: add another copy" : "Add it as it is"} onClick={() => attach(entry)}
+                    type="button" className={styles.plus} aria-label={addLabel(entry)}
+                    title={already.has(librarySlug(entry)) ? "It's on the sheet already: add another copy" : "Add it as it is"} onClick={() => attach(entry)}
                   >
                     <Plus size={13} />
                   </button>
@@ -405,9 +436,9 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       </section>
       <p className={styles.footnote}>
         Click a row to check it before it&apos;s added; a library row&apos;s + adds it as it is, or drag it onto the sheet.{" "}
-        {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells,{" "}
-        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and a scroll of every spell{mine.length ? `, and ${mine.length} of your own in My library` : ""}.{" "}
-        <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 credits · CC-BY-4.0</a>
+        {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} 2014 and {SRD_2024_SPELLS.length} 2024 spells,{" "}
+        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and their scrolls{mine.length ? `, and ${mine.length} of your own in My library` : ""}.{" "}
+        <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 and 5.2 credits · CC-BY-4.0</a>
       </p>
     </div>
   );

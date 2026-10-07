@@ -2,9 +2,11 @@
 
 import { useId, type ReactNode } from "react";
 import type { ActionDefinition, CreatureDefinition, ReactionMeta, SpellDefinition, SpellUpcast } from "@/engine";
+import { EditionBadge } from "@/components/ui/Edition";
 import { spellLimit } from "@/lib/ability-editor/bindings";
 import { higherLevelsText, srdUpcastOffer } from "@/lib/ability-editor/upcasting";
 import type { SectionId } from "@/lib/ability-editor/sections";
+import { editionOf } from "@/lib/editions";
 import {
   canBeReaction,
   concentrates,
@@ -127,6 +129,7 @@ function SpellBasics({ spell, onChange }: { spell: SpellDefinition; onChange: (n
         <Field copy="source">
           <span className={styles.hint}>
             {source ? `${source.documentName ?? source.provider}${source.slug ? ` · ${source.slug}` : ""}` : "Made on this sheet"}
+            {" "}<EditionBadge edition={editionOf(source)} />
           </span>
         </Field>
       </More>

@@ -75,7 +75,8 @@ import {
   type CoverLevel,
   type WallSegment
 } from "@/engine";
-import { attachedSource, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { attachedSource, findSrdFeature, findSrdWeapon } from "@/data/srd";
+import { findLibraryItem, findLibrarySpell } from "@/data/srd/library";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
@@ -3460,7 +3461,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // A library item, or a scroll of one of the creature's own spells (`own-scroll:<spell id>`).
         const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
         const own = definition ? ownSpellScroll(definition, srdId) : undefined;
-        const source = findSrdItem(srdId) ?? own;
+        const source = findLibraryItem(srdId) ?? own;
         if (!source) return undefined;
         const ref = get().insertAbilityRecord(definitionId, "items", {
           ...structuredClone(source),
@@ -3469,7 +3470,7 @@ export const useEncounterStore = create<EncounterStore>()(
         return ref && "id" in ref ? ref.id : undefined;
       },
       swapInSrdItem: (definitionId, itemId, srdId) => {
-        const source = findSrdItem(srdId);
+        const source = findLibraryItem(srdId);
         const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId);
         const current = definition?.items?.find((item) => item.id === itemId);
         if (!source || !current) return;
@@ -3482,7 +3483,7 @@ export const useEncounterStore = create<EncounterStore>()(
         get().replaceAbilityRecord(definitionId, { list: "items", id: itemId }, kept);
       },
       attachSrdSpell: (definitionId, srdId) => {
-        const source = findSrdSpell(srdId);
+        const source = findLibrarySpell(srdId);
         const encounter = get().encounter;
         const definition = encounter.definitions.find((candidate) => candidate.id === definitionId);
         if (!source || !definition) return undefined;

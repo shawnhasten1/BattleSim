@@ -45,15 +45,17 @@ export async function pickEffect(scope: ReturnType<typeof within>, query: string
 }
 
 /** Add → search → a library row: the editor opens on a copy, added on Save. */
-export async function openFromLibrary(name: string, query = name): Promise<void> {
+export async function openFromLibrary(name: string, query = name, edition: "2014" | "2024" = "2014"): Promise<void> {
   await searchAdd(query);
-  await userEvent.click(within(screen.getByRole("region", { name: "Library" })).getByRole("button", { name: new RegExp(`^${escape(name)} ·`) }));
+  // Both editions' versions can be listed (EDITIONS_PLAN.md): the 2014 one unless asked.
+  const rows = within(screen.getByRole("region", { name: "Library" })).getAllByRole("button", { name: new RegExp(`^${escape(name)} ·`) });
+  await userEvent.click(rows.find((row) => row.querySelector(`[data-edition="${edition}"]`)) ?? rows[0]!);
 }
 
 /** Add → search → a library row's "+": added as it is. */
-export async function addFromLibrary(name: string, query = name): Promise<void> {
+export async function addFromLibrary(name: string, query = name, edition: "2014" | "2024" = "2014"): Promise<void> {
   await searchAdd(query);
-  await userEvent.click(screen.getByRole("button", { name: `Add ${name}` }));
+  await userEvent.click(screen.queryByRole("button", { name: `Add ${name} (${edition})` }) ?? screen.getByRole("button", { name: `Add ${name}` }));
 }
 
 /** A row's ⋯ menu → `item` ("Duplicate", "Delete", "Move to bonus actions"). */

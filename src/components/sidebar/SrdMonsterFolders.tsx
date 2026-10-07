@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { Chip, ChipRow } from "@/components/ui/ChipRow";
+import { EditionBadge } from "@/components/ui/Edition";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { GAP_CODES, SRD_MONSTER_INDEX, type MonsterTier, type SrdMonsterIndexEntry } from "@/data/srd/monsters";
 import type { SizeCategory } from "@/engine";
@@ -121,6 +122,8 @@ export function SrdMonsterFolders({ query, quantity, expandedFolderIds, onToggle
         </button>
         <Folder size={14} />
         <span className={styles.folderName}>SRD Monsters</span>
+        {/* Every one is SRD 5.1: the 2014 rules. */}
+        <EditionBadge edition="2014" />
         <span className={styles.folderCount}>{filtering ? `${tree.count} of ${total}` : total}</span>
         <span className={styles.folderLock} title="Permanent, read-only library folder" aria-label="Permanent folder">
           <Lock size={11} />

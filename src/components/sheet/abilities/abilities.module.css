@@ -624,6 +624,14 @@
   border-color: var(--ui-accent);
 }
 
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

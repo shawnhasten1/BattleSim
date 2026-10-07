@@ -55,3 +55,36 @@ export const EDITION_NAMES: Readonly<Record<Edition, string>> = {
   "2014": "SRD 5.1 (2014 rules)",
   "2024": "SRD 5.2 (2024 rules)"
 };
+
+/** What a list shows: one edition's version where there are two, or both (EDITIONS_PLAN.md D2). */
+export type EditionChoice = Edition | "both";
+
+export const EDITION_CHOICES: ReadonlyArray<{ value: EditionChoice; label: string; title: string }> = [
+  { value: "2014", label: "2014", title: "Where there's a 2014 and a 2024 version, show the 2014 one" },
+  { value: "2024", label: "2024", title: "Where there's a 2014 and a 2024 version, show the 2024 one" },
+  { value: "both", label: "Both", title: "Show both versions where there are two" }
+];
+
+export function isEditionChoice(value: unknown): value is EditionChoice {
+  return value === "2014" || value === "2024" || value === "both";
+}
+
+/** A name as two editions' versions of one thing share it: "Melf's Acid Arrow" and "Acid Arrow" are the same spell. */
+export function editionNameKey(name: string): string {
+  return name.toLowerCase().replace(/^[a-z]+'s /, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * The entries a list shows under `choice`: everything under Both; otherwise an entry of the other edition only when the
+ * chosen edition has no version of it (the same kind and name). So 2024 still shows the 2014 weapons and items, which have
+ * no 2024 versions, and nothing without an edition (homebrew) is ever hidden. Hiding, never merging: the two stay two
+ * records, and Both shows them side by side.
+ */
+export function preferEdition<T>(entries: readonly T[], choice: EditionChoice, editionOfEntry: (entry: T) => Edition | undefined, keyOf: (entry: T) => string): T[] {
+  if (choice === "both") return [...entries];
+  const chosen = new Set(entries.filter((entry) => editionOfEntry(entry) === choice).map(keyOf));
+  return entries.filter((entry) => {
+    const edition = editionOfEntry(entry);
+    return !edition || edition === choice || !chosen.has(keyOf(entry));
+  });
+}

@@ -96,7 +96,7 @@ describe("credits in the app", () => {
     const encounter = useEncounterStore.getState().encounter;
     render(<ActionsTab combatant={encounter.combatants.find((c) => c.id === "pc-fighter")!} definition={encounter.definitions.find((d) => d.id === "def-fighter")!} />);
     await openAdd();
-    const link = screen.getByRole("link", { name: /SRD 5.1 credits/ });
+    const link = screen.getByRole("link", { name: /SRD 5.1 and 5.2 credits/ });
     expect(link.getAttribute("href")).toBe(SRD_CREDITS_PATH);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
