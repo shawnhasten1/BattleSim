@@ -2205,8 +2205,12 @@ export interface TransformActionDefinition {
    * Wild Shape: each form names a Beast, and the form is that beast's body with what the shifter keeps of itself
    * (`wildShapeForm`, made when it shifts). It gains `tempHp` temporary hit points on shifting; going back costs nothing;
    * being incapacitated ends the form. With `keepsSpells` it can cast its spells in a form (Beast Spells).
+   *
+   * `hp: "form"` (the 2014 rules): the form has the beast's own hit points, and `tempHp` is ignored. Going back, or
+   * being incapacitated, restores the hit points the druid had; a form dropped to 0 goes back with what's left of the
+   * damage carried into the druid's own. Default `"temp"` (the 2024 rules).
    */
-  wildShape?: { tempHp: number; keepsSpells?: boolean };
+  wildShape?: { tempHp: number; keepsSpells?: boolean; hp?: "temp" | "form" };
   /** What shifting spends (Wild Shape's uses). Going back to its own form spends nothing. */
   resourceCost?: ResourceCost;
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
@@ -2909,7 +2913,8 @@ export interface CombatantState {
     followsSummoner?: boolean;
   };
   /** Currently wearing another of its own definitions (a werewolf in Hybrid Form). Resolved by `getDefinition`. */
-  activeForm?: { definitionId: Id };
+  /** The form it's in. `ownHp`: a 2014 Wild Shape form's druid's own hit points, to go back to. */
+  activeForm?: { definitionId: Id; ownHp?: number };
   conditions?: ConditionInstance[];
   resources?: Record<string, number>;
   tokenVisuals?: TokenVisuals;
@@ -3578,7 +3583,7 @@ export const encounterSnapshotSchema = z.object({
         expiresRound: z.number().int().optional(),
         concentrationSourceId: z.string().optional()
       }).optional(),
-      activeForm: z.object({ definitionId: z.string() }).optional()
+      activeForm: z.object({ definitionId: z.string(), ownHp: z.number().int().min(0).optional() }).optional()
     })
   )
 });

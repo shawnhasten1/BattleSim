@@ -13,9 +13,9 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
 | Barbarian (Path of the Berserker) | 18 | 9 | 3 | 3 | 2 | 1 |
-| Bard (College of Lore) | 15 | not in the 2014 catalog yet | | | | |
+| Bard (College of Lore) | 15 | 4 | 0 | 1 | 5 | 5 |
 | Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
-| Druid (Circle of the Land) | 14 | not in the 2014 catalog yet | | | | |
+| Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
 | Monk (Way of the Open Hand) | 23 | 10 | 4 | 3 | 2 | 4 |
 | Paladin (Oath of Devotion) | 19 | not in the 2014 catalog yet | | | | |
@@ -31,11 +31,12 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Gap | What the engine lacks | Features |
 |---|---|---|
 | `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
+| `activated-aura` | An aura switched on for a while (Holy Nimbus) | 2 |
 | `after-attack-action` | A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting) | 2 |
 | `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
-| `activated-aura` | An aura switched on for a while (Holy Nimbus) | 1 |
 | `activation-timing` | A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type) | 1 |
+| `attack-deterrence` | An attacker's save, or it picks another target (Nature's Sanctuary against beasts and plants) | 1 |
 | `catch-missile` | Catching a missile and throwing it back for a ki point (Deflect Missiles) | 1 |
 | `check-floor` | A check's total raised to the ability score (Indomitable Might, when escaping a grapple) | 1 |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | 1 |
@@ -47,6 +48,8 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
 | `immune-after-save` | A creature that saves being safe from it for a while (Intimidating Presence's 24 hours) | 1 |
+| `immunity-by-type` | Immunity to a condition from creatures of a type (Nature's Ward: charm and fright from elementals and fey) | 1 |
+| `magical-terrain` | Telling magical difficult terrain and plants from natural ones (Land's Stride) | 1 |
 | `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | 1 |
 | `rage-2014` | Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious | 1 |
@@ -54,6 +57,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 1 |
 | `surprise-rage` | Acting while surprised by raging first (Feral Instinct, under the 2014 surprise rule) | 1 |
 | `unsimulated-spell` | A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary) | 1 |
+| `wild-shape-revert` | Going back from Wild Shape with a bonus action, though it shifted with its action (2014) | 1 |
 
 ## Barbarian
 
@@ -85,11 +89,28 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 ## Bard
 
-Not in the 2014 catalog yet: 11 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1, 5, 10, 15 | Bardic Inspiration | full |  |  |
+| 1 | Spellcasting | full |  |  |
+| 2 | Jack of All Trades | info |  |  |
+| 2, 9, 13, 17 | Song of Rest | info |  |  |
+| 3 | Bard College | builder |  |  |
+| 3, 10 | Expertise | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5 | Font of Inspiration | info |  |  |
+| 6 | Countercharm | manual | activated-aura |  |
+| 10, 14, 18 | Magical Secrets | full |  |  |
+| 20 | Superior Inspiration | info |  |  |
 
 ### College of Lore (Bard subclass)
 
-Not in the 2014 catalog yet: 4 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Bonus Proficiencies | builder |  |  |
+| 3 | Cutting Words | full |  |  |
+| 6 | Additional Magical Secrets | builder |  |  |
+| 14 | Peerless Skill | info |  |  |
 
 ## Cleric
 
@@ -116,11 +137,27 @@ Not in the 2014 catalog yet: 4 features.
 
 ## Druid
 
-Not in the 2014 catalog yet: 8 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Druidic | info |  |  |
+| 1 | Spellcasting | full |  |  |
+| 2 | Druid Circle | builder |  |  |
+| 2, 4, 8 | Wild Shape | partial | wild-shape-revert | going back to its own form takes its action here, rather than a bonus action. |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 18 | Beast Spells | full |  |  |
+| 20 | Archdruid | full |  |  |
+| — | Timeless Body | info |  |  |
 
 ### Circle of the Land (Druid subclass)
 
-Not in the 2014 catalog yet: 6 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 2 | Bonus Cantrip | builder |  |  |
+| 2 | Natural Recovery | info |  |  |
+| 3, 5, 7, 9 | Circle Spells | builder |  |  |
+| 6 | Land's Stride | partial | magical-terrain | magical difficult terrain should still cost it extra, and it has advantage on saves against magical plants. |
+| 10 | Nature's Ward | partial | immunity-by-type | elementals and fey can't charm or frighten it. |
+| 14 | Nature's Sanctuary | manual | attack-deterrence |  |
 
 ## Fighter
 

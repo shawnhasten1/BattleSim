@@ -4293,12 +4293,14 @@ function masteryWorth(mastery: WeaponMastery, attack: AttackAction, source: Crea
  * takes control, or it's already concentrating on one. Not when it's in a form already.
  */
 function maybeWildShape(state: EngineState, actor: CombatantState): void {
-  if (actor.activeForm || !canAct(actor, "bonus")) return;
+  if (actor.activeForm) return;
   const snapshot = state.snapshot;
   const definition = getDefinition(snapshot, actor);
   const executables = getExecutableActions(definition);
+  // A bonus action (2024), or the action (2014: the turn's attack given up for the form).
   const shape = executables.find((action): action is Extract<ActionDefinition, { kind: "transform" }> => action.kind === "transform"
-    && Boolean(action.wildShape) && action.actionType === "bonus" && canPayResource(actor, action));
+    && Boolean(action.wildShape) && (action.actionType === "bonus" || action.actionType === "action") && canAct(actor, action.actionType)
+    && canPayResource(actor, action));
   if (!shape) return;
   const hostiles = snapshot.combatants.some((combatant) => combatant.state === "active" && effectiveFaction(snapshot, combatant) !== effectiveFaction(snapshot, actor));
   if (!hostiles) return;
@@ -4310,7 +4312,7 @@ function maybeWildShape(state: EngineState, actor: CombatantState): void {
   const pb = definition.proficiencyBonus ?? 2;
   const forms = shape.forms.flatMap((form) => {
     const beast = snapshot.definitions.find((candidate) => candidate.id === form.definitionId);
-    return beast ? [{ form, value: offense(wildShapeForm(definition, beast, pb, `${definition.id}:wild-shape:${beast.id}`, shape.wildShape?.keepsSpells === true), false) }] : [];
+    return beast ? [{ form, value: offense(wildShapeForm(definition, beast, pb, `${definition.id}:wild-shape:${beast.id}`, shape.wildShape?.keepsSpells === true, shape.wildShape?.hp), false) }] : [];
   }).sort((a, b) => b.value - a.value || a.form.id.localeCompare(b.form.id));
   const best = forms[0];
   if (!best) return;

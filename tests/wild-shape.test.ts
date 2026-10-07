@@ -5,10 +5,12 @@ import {
   createEngineState,
   getDefinition,
   getExecutableActions,
+  resolveAttack,
   resolveTransformAction,
   sampleEncounter,
   takeAutomatedTurn,
-  type CreatureDefinition
+  type CreatureDefinition,
+  type RandomSource
 } from "@/engine";
 import { loadSrdMonster } from "@/data/srd/monsters";
 import { blankCharacter, buildCharacter, quickBuild, rebuildActor } from "@/lib/character-builder";
@@ -91,5 +93,87 @@ describe("Wild Shape", () => {
     takeAutomatedTurn(state, me());
     expect(state.log.some((entry) => entry.type === "AiDecision" && entry.data?.reason === "wild-shape")).toBe(true);
     expect(me().activeForm).toBeDefined();
+  });
+});
+
+/**
+ * EDITIONS_PLAN.md Phase 9b: the 2014 Wild Shape (`wildShape.hp: "form"`). The druid takes the beast's own hit points,
+ * keeping its own to go back to; a form at 0 goes back with what's left of the damage carried into the druid's.
+ */
+describe("the 2014 Wild Shape: the beast's own hit points", () => {
+  const druid2014 = (level: number): CreatureDefinition => rebuildActor(blankCharacter("def-fighter", "PC"), quickBuild(sources, { classId: "srd:class:druid-2014", level }), sources).definition;
+  /** Every d20 rolls `d20`; every other die its highest. */
+  const rolling = (d20: number): RandomSource => {
+    const source: RandomSource = { next: () => 0.99, nextInt: (_min, max) => (max === 20 ? d20 : max), fork: () => source };
+    return source;
+  };
+  const scimitar = (state: Awaited<ReturnType<typeof scene>>["state"]) => getExecutableActions(state.snapshot.definitions.find((entry) => entry.id === "def-goblin")!)
+    .find((action) => action.kind === "attack" && action.attackType === "melee")!;
+
+  it("an action, twice a rest; forms of challenge rating 1/4 with no swimming or flying speed at 2nd level", () => {
+    const shape = getExecutableActions(druid2014(2)).find((action) => action.kind === "transform");
+    expect(shape).toMatchObject({ actionType: "action", wildShape: { hp: "form" }, resourceCost: { resourceId: "wild-shape", amount: 1 } });
+    const slot = buildCharacter(quickBuild(sources, { classId: "srd:class:druid-2014", level: 2 }), sources).choices.find((entry) => entry.path[0] === "wild-shape-forms")!;
+    // A constrictor snake (CR 1/4) swims: not before 4th level.
+    expect(slot.options.find((option) => option.id === "constrictor-snake")).toMatchObject({ taken: true, detail: "from 4th level" });
+    expect(slot.options.find((option) => option.id === "wolf")?.taken).toBeFalsy();
+    expect(druid2014(2).resources).toMatchObject({ "wild-shape": 2 });
+    expect(druid2014(20).resources).toMatchObject({ "wild-shape": 99 });
+  });
+
+  it("takes the beast's hit points and gives back its own when it changes back", async () => {
+    const definition = druid2014(2);
+    const { state, me, shape } = await scene(definition);
+    me().currentHp = definition.maxHp - 3;
+    resolveTransformAction(state, "pc-fighter", shape.id, "wolf");
+    const wolf = state.snapshot.definitions.find((entry) => entry.id === "srd:monster:wolf")!;
+    expect(getDefinition(state.snapshot, me()).maxHp).toBe(wolf.maxHp);
+    expect(me()).toMatchObject({ currentHp: wolf.maxHp, tempHp: 0, activeForm: { ownHp: definition.maxHp - 3 } });
+    me().currentHp = 2;
+    me().actionEconomy = { action: true, bonus: true, reaction: true };
+    resolveTransformAction(state, "pc-fighter", shape.id, BASE_FORM_ID);
+    expect(me().activeForm).toBeUndefined();
+    expect(me().currentHp).toBe(definition.maxHp - 3);
+  });
+
+  it("dropped to 0, goes back with the rest of the damage carried over, and replays", async () => {
+    const definition = druid2014(2);
+    const { state, me, shape } = await scene(definition);
+    const before = structuredClone(state.snapshot);
+    resolveTransformAction(state, "pc-fighter", shape.id, "wolf");
+    me().currentHp = 2;
+    // The goblin's scimitar at its highest: 1d6 + 2 = 8, so 6 past the wolf's 2.
+    state.rng = rolling(19);
+    resolveAttack(state, "enemy-goblin-1", "pc-fighter", scimitar(state).id);
+    expect(me().activeForm).toBeUndefined();
+    expect(me().state).toBe("active");
+    expect(me().currentHp).toBe(definition.maxHp - 6);
+    expect(state.log.some((entry) => entry.type === "Transformed" && entry.data?.carriedOver === 6)).toBe(true);
+    const replayed = replayTo(before, state.log, state.log.length).combatants.find((token) => token.id === "pc-fighter")!;
+    expect(replayed.currentHp).toBe(definition.maxHp - 6);
+    expect(replayed.activeForm).toBeUndefined();
+  });
+
+  it("goes down when the damage left over is more than its own hit points", async () => {
+    const definition = druid2014(2);
+    const { state, me, shape } = await scene(definition);
+    me().currentHp = 3;
+    resolveTransformAction(state, "pc-fighter", shape.id, "wolf");
+    me().currentHp = 1;
+    state.rng = rolling(19);
+    resolveAttack(state, "enemy-goblin-1", "pc-fighter", scimitar(state).id);
+    expect(me().activeForm).toBeUndefined();
+    expect(me().currentHp).toBe(0);
+    expect(me().state).not.toBe("active");
+  });
+
+  it("ends, with its own hit points back, when the druid is incapacitated", async () => {
+    const definition = druid2014(2);
+    const { state, me, shape } = await scene(definition);
+    resolveTransformAction(state, "pc-fighter", shape.id, "wolf");
+    me().currentHp = 4;
+    applyCondition(state, "pc-fighter", { id: "stun", name: "stunned", startedRound: 1 });
+    expect(me().activeForm).toBeUndefined();
+    expect(me().currentHp).toBe(definition.maxHp);
   });
 });

@@ -357,6 +357,49 @@ describe("the 2014 Wizard, Sorcerer and Cleric (Phase 9a)", () => {
   });
 });
 
+describe("the 2014 Bard and Druid (Phase 9b)", () => {
+  const built = (classId: string, level: number) => buildCharacter(withSuggestions(quickBuild(sources, { classId, level }), sources), sources);
+  const feature = (entry: ReturnType<typeof built>, name: string) => entry.features.find((candidate) => candidate.feature.name === name)?.feature;
+  const known = (entry: ReturnType<typeof built>) => entry.choices.filter((candidate) => candidate.spec.kind === "spells" && candidate.spec.what === "prepared" && !(candidate.spec as { alwaysPrepared?: boolean }).alwaysPrepared)
+    .reduce((sum, candidate) => sum + candidate.count, 0);
+
+  it("a 2014 Bard knows its table's spells, two of them Magical Secrets from any class at 10th level", () => {
+    expect(known(built("srd:class:bard-2014", 1))).toBe(4);
+    const tenth = built("srd:class:bard-2014", 10);
+    expect(tenth.warnings).toEqual([]);
+    // 14 known at 10th level: 12 of its own, two secrets.
+    expect(known(tenth)).toBe(12);
+    const secrets = tenth.choices.find((candidate) => candidate.spec.kind === "spells" && candidate.spec.id === "magical-secrets-10")!;
+    expect(secrets.count).toBe(2);
+    expect(secrets.options.some((option) => option.id === "srd:spell:fireball")).toBe(true);
+    expect(secrets.options.every((option) => option.edition === "2014")).toBe(true);
+  });
+
+  it("a 2014 Bard's inspiration: a bonus action, a die growing at 5th, 10th and 15th level, Cutting Words with it", () => {
+    const die = (level: number) => ((feature(built("srd:class:bard-2014", level), "Bardic Inspiration")!.grantedActions![0] as Extract<ActionDefinition, { kind: "buff" }>)
+      .appliedCondition.effects![0] as { dice: string }).dice;
+    expect([1, 5, 10, 15].map(die)).toEqual(["1d6", "1d8", "1d10", "1d12"]);
+    const lore = built("srd:class:bard-2014", 6);
+    expect((feature(lore, "Cutting Words")!.effects![0] as { dice: string }).dice).toBe("1d8");
+    expect(feature(lore, "Countercharm")!.automationSupport).toBe("manual-only");
+    expect(lore.choices.some((candidate) => candidate.spec.kind === "spells" && candidate.spec.id === "additional-magical-secrets")).toBe(true);
+  });
+
+  it("a 2014 Druid: its circle at 2nd level, a land's spells from 3rd, always prepared", () => {
+    let build = withSuggestions(quickBuild(sources, { classId: "srd:class:druid-2014", level: 3 }), sources);
+    build = withChoice(build, { kind: "level", index: 1 }, ["land"], ["arctic"]);
+    const third = buildCharacter(build, sources);
+    expect(third.warnings).toEqual([]);
+    expect(third.choices.find((candidate) => candidate.spec.kind === "pick" && candidate.spec.id === "land")!.options).toHaveLength(7);
+    expect(third.spells.map((entry) => entry.spell.name)).toEqual(expect.arrayContaining(["Hold Person", "Spike Growth"]));
+    expect(third.spells.map((entry) => entry.spell.name)).not.toContain("Sleet Storm");
+    expect(third.choices.some((candidate) => candidate.spec.kind === "spells" && candidate.spec.id === "bonus-cantrip")).toBe(true);
+    const tenth = built("srd:class:druid-2014", 10);
+    expect(feature(tenth, "Land's Stride")!.effects).toEqual([{ kind: "ignore-difficult-terrain" }]);
+    expect(tenth.fields.conditionImmunities).toContain("poisoned");
+  });
+});
+
 describe("the other 2014 races (Phase 7)", () => {
   const BASE = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const raceBuild = (speciesId: string, level = 1, classId = "srd:class:fighter-2014") =>

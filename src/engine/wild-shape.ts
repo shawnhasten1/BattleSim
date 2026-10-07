@@ -8,8 +8,10 @@ const ABILITIES: Ability[] = ["str", "dex", "con", "int", "wis", "cha"];
  * creature type, Hit Points, Intelligence, Wisdom and Charisma, class features and feats (its `features`), and its
  * saving throw proficiencies with its own Proficiency Bonus (the beast's modifier where that's higher). It can't cast
  * spells, and what it carries merges into the form. Species traits, gear and spells stay behind. Pure.
+ *
+ * `hp: "form"` (SRD 5.1): the beast's own hit points instead of the druid's.
  */
-export function wildShapeForm(shifter: CreatureDefinition, beast: CreatureDefinition, proficiencyBonus: number, id: string, keepsSpells = false): CreatureDefinition {
+export function wildShapeForm(shifter: CreatureDefinition, beast: CreatureDefinition, proficiencyBonus: number, id: string, keepsSpells = false, hp: "temp" | "form" = "temp"): CreatureDefinition {
   const abilities = {
     str: beast.abilities.str, dex: beast.abilities.dex, con: beast.abilities.con,
     int: shifter.abilities.int, wis: shifter.abilities.wis, cha: shifter.abilities.cha
@@ -27,7 +29,7 @@ export function wildShapeForm(shifter: CreatureDefinition, beast: CreatureDefini
     name: `${shifter.name} (${beast.name})`,
     ...(shifter.source ? { source: shifter.source } : {}),
     ...(shifter.type ? { type: shifter.type } : {}),
-    maxHp: shifter.maxHp,
+    maxHp: hp === "form" ? beast.maxHp : shifter.maxHp,
     abilities,
     saves,
     proficiencyBonus,

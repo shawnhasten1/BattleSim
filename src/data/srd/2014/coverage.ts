@@ -19,7 +19,7 @@ export const GAPS_2014 = {
   "rage-2014": "Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious",
   "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
   exhaustion: "Exhaustion (Frenzy's cost)",
-  "wild-shape-hp": "Wild Shape into a beast's own hit points, the rest carrying over (2014)",
+  "wild-shape-revert": "Going back from Wild Shape with a bonus action, though it shifted with its action (2014)",
   "manual-roll": "A roll the rules leave to the DM (Divine Intervention's percentile)",
   "equipment-check": "A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield)",
   "reroll-damage": "Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s)",
@@ -32,7 +32,10 @@ export const GAPS_2014 = {
   "end-own-condition": "An action ending a condition on itself (Stillness of Mind)",
   "unsimulated-spell": "A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary)",
   "metamagic-2014": "A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell)",
-  "activation-timing": "A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type)"
+  "activation-timing": "A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type)",
+  "magical-terrain": "Telling magical difficult terrain and plants from natural ones (Land's Stride)",
+  "immunity-by-type": "Immunity to a condition from creatures of a type (Nature's Ward: charm and fright from elementals and fey)",
+  "attack-deterrence": "An attacker's save, or it picks another target (Nature's Sanctuary against beasts and plants)"
 } as const;
 
 export type Gap2014 = GapCode | keyof typeof GAPS_2014;
@@ -68,6 +71,11 @@ export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_draconic-bloodline_draconic-presence": ["activated-aura"],
   "srd_cleric_destroy-undead": ["destroy-undead"],
   "srd_cleric_divine-intervention": ["manual-roll"],
+  "srd_bard_countercharm": ["activated-aura"],
+  "srd_druid_wild-shape": ["wild-shape-revert"],
+  "srd_circle-of-the-land_lands-stride": ["magical-terrain"],
+  "srd_circle-of-the-land_natures-ward": ["immunity-by-type"],
+  "srd_circle-of-the-land_natures-sanctuary": ["attack-deterrence"],
   "srd_grappler": ["grapple-pin"],
   "srd_half-orc:Savage Attacks": ["brutal-critical"],
   "srd_fighter_fighting-style:Dueling": ["equipment-check"],

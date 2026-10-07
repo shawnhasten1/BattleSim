@@ -5624,14 +5624,20 @@ export function resolveTransformAction(state: EngineState, actorId: Id, actionId
     throw new Error(`${actor.displayName} can't return to its true form with ${action.name}`);
   }
   // Wild Shape: the beast's body with what the druid keeps of itself, made now; going back costs nothing.
-  const shifted = target && action.wildShape ? wildShapeDefinition(state, actor, target.definitionId, action.wildShape.keepsSpells === true) : undefined;
+  const formHp = action.wildShape?.hp === "form";
+  const shifted = target && action.wildShape ? wildShapeDefinition(state, actor, target.definitionId, action.wildShape.keepsSpells === true, formHp) : undefined;
   validateAndSpendAction(actor, !target && action.wildShape ? { ...action, resourceCost: undefined } : action);
   declareAction(state, actor, action, {
     message: target ? `${actor.displayName} uses ${action.name} to change shape` : `${actor.displayName} uses ${action.name} to return to its true form`
   });
-  actor.activeForm = target ? { definitionId: shifted?.id ?? target.definitionId } : undefined;
+  // The 2014 Wild Shape: into the beast's hit points, the druid's own kept (from its first form, if it shifts again).
+  const ownHp = formHp ? actor.activeForm?.ownHp ?? actor.currentHp : undefined;
+  if (formHp && shifted) actor.currentHp = shifted.maxHp;
+  else if (formHp && !target && ownHp !== undefined) actor.currentHp = ownHp;
+  actor.activeForm = target ? { definitionId: shifted?.id ?? target.definitionId, ...(formHp && ownHp !== undefined ? { ownHp } : {}) } : undefined;
   state.log.push(event(state, "Transformed", `Success - ${action.name}: ${actor.displayName} ${target ? `becomes ${target.label}` : "returns to its true form"}`, {
     combatantId: actorId, actionId, formId, activeForm: actor.activeForm ?? null, success: true,
+    ...(formHp ? { currentHp: actor.currentHp } : {}),
     // A form made for this shift, which the pre-run snapshot replay starts from doesn't have.
     ...(shifted ? { definition: shifted } : {})
   }));
@@ -5647,13 +5653,13 @@ export function resolveTransformAction(state: EngineState, actorId: Id, actionId
  * Wild Shape: the form a shifter takes as `beastId` (`wildShapeForm`): made from its own definition and the beast's, once
  * per shifter and beast, and kept in the encounter's definitions.
  */
-function wildShapeDefinition(state: EngineState, actor: CombatantState, beastId: Id, keepsSpells: boolean): CreatureDefinition {
+function wildShapeDefinition(state: EngineState, actor: CombatantState, beastId: Id, keepsSpells: boolean, formHp = false): CreatureDefinition {
   const shifter = state.snapshot.definitions.find((definition) => definition.id === actor.definitionId)!;
   const id = `${shifter.id}:wild-shape:${beastId}${keepsSpells ? ":spells" : ""}`;
   const known = state.snapshot.definitions.find((definition) => definition.id === id);
   if (known) return known;
   const beast = state.snapshot.definitions.find((definition) => definition.id === beastId)!;
-  const made = wildShapeForm(shifter, beast, shifter.proficiencyBonus ?? proficiencyFromDefinition(shifter), id, keepsSpells);
+  const made = wildShapeForm(shifter, beast, shifter.proficiencyBonus ?? proficiencyFromDefinition(shifter), id, keepsSpells, formHp ? "form" : "temp");
   state.snapshot.definitions = [...state.snapshot.definitions, made];
   return made;
 }
@@ -5664,9 +5670,12 @@ function endWildShape(state: EngineState, combatant: CombatantState, cause: Cond
   const own = state.snapshot.definitions.find((definition) => definition.id === combatant.definitionId);
   const shape = own ? getExecutableActions(own).find((action) => action.kind === "transform" && action.wildShape) : undefined;
   if (!shape) return;
+  // The 2014 Wild Shape: back to the druid's own hit points.
+  const ownHp = combatant.activeForm.ownHp;
+  if (ownHp !== undefined) combatant.currentHp = ownHp;
   combatant.activeForm = undefined;
   state.log.push(event(state, "Transformed", `${shape.name}: ${combatant.displayName} returns to its true form (${cause})`, {
-    combatantId: combatant.id, actionId: shape.id, formId: BASE_FORM_ID, activeForm: null
+    combatantId: combatant.id, actionId: shape.id, formId: BASE_FORM_ID, activeForm: null, ...(ownHp !== undefined ? { currentHp: ownHp } : {})
   }));
 }
 
@@ -6458,6 +6467,18 @@ export function updateDefeatState(state: EngineState, target: CombatantState, ki
 }
 
 function dropAtZero(state: EngineState, target: CombatantState, killerId?: Id, hit?: HitInfo): void {
+  // The 2014 Wild Shape: a form at 0 goes back to the druid, and what's left of the damage carries over.
+  const form = target.activeForm;
+  if (form?.ownHp !== undefined && target.state === "active") {
+    const overkill = hit?.overkill ?? 0;
+    target.activeForm = undefined;
+    target.currentHp = Math.max(0, form.ownHp - overkill);
+    state.log.push(event(state, "Transformed", `${target.displayName} drops out of its Wild Shape form${overkill > 0 ? `, ${overkill} damage carrying over` : ""}`, {
+      combatantId: target.id, formId: BASE_FORM_ID, activeForm: null, currentHp: target.currentHp, carriedOver: overkill
+    }));
+    if (target.currentHp > 0) return;
+    hit = hit ? { ...hit, overkill: Math.max(0, overkill - form.ownHp) } : hit;
+  }
   const definition = getDefinition(state.snapshot, target);
   // 5e massive damage: what's left after reaching 0 HP, if it's at least the creature's maximum, kills outright.
   if (hit && state.snapshot.rules.massiveDamage && hit.overkill >= definition.maxHp && target.state !== "defeated") {

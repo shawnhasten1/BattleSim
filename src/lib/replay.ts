@@ -252,8 +252,10 @@ function applyEvent(
     case "Transformed": {
       const combatant = byId.get(String(data.combatantId));
       if (combatant) {
-        const form = data.activeForm as { definitionId: string } | null | undefined;
-        combatant.activeForm = form ? { definitionId: form.definitionId } : undefined;
+        const form = data.activeForm as { definitionId: string; ownHp?: number } | null | undefined;
+        combatant.activeForm = form ? { definitionId: form.definitionId, ...(typeof form.ownHp === "number" ? { ownHp: form.ownHp } : {}) } : undefined;
+        // The 2014 Wild Shape: the beast's hit points, or the druid's back.
+        if (typeof data.currentHp === "number") combatant.currentHp = data.currentHp;
         // Wild Shape: the form made for the shift.
         const made = data.definition as CreatureDefinition | undefined;
         if (made && !snapshot.definitions.some((definition) => definition.id === made.id)) snapshot.definitions = [...snapshot.definitions, structuredClone(made)];
