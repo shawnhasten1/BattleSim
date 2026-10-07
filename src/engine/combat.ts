@@ -781,7 +781,8 @@ function metamagicVariants(definition: CreatureDefinition, listed: ActionDefinit
   const effects = all.filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic" }> => effect.kind === "metamagic");
   if (!effects.length) return [];
   const boosts = all.filter((effect): effect is Extract<FeatureEffect, { kind: "metamagic-boost" }> => effect.kind === "metamagic-boost");
-  const spells = listed.filter((action) => "spellLevel" in action && action.spellLevel != null && !action.upcastFrom && !action.item
+  // Not a spell with a second cost of its own already (a 2014 invocation's once-a-day cast).
+  const spells = listed.filter((action) => "spellLevel" in action && action.spellLevel != null && !action.upcastFrom && !action.item && !action.extraCost
     && action.automationSupport === "full" && action.actionType !== "reaction");
   const out: ActionDefinition[] = [];
   for (const effect of effects) {
@@ -839,7 +840,7 @@ function maxDamageVariants(definition: CreatureDefinition, listed: ActionDefinit
   const out: ActionDefinition[] = [];
   for (const spell of listed) {
     if (spell.kind !== "attack" && spell.kind !== "save" && spell.kind !== "area-save") continue;
-    if (spell.item || spell.automationSupport !== "full" || spell.actionType === "reaction" || !spell.damage.some((component) => /d\d/.test(component.dice))) continue;
+    if (spell.item || spell.extraCost || spell.automationSupport !== "full" || spell.actionType === "reaction" || !spell.damage.some((component) => /d\d/.test(component.dice))) continue;
     // Cast with a slot: not a free cast.
     const slot = spellSlotLevel(spell.resourceCost?.resourceId);
     const effect = effects.find((entry) => slot !== undefined && slot >= 1 && slot <= entry.maxSlot && spellScopeCovers(entry, spell));

@@ -305,7 +305,7 @@ interface SpellPick {
   /** Casts without a slot, from a pool of its own. */
   freeCasts?: Template | number | "at-will";
   /** A free cast's shared pool, name, action and level (`FreeCast`). */
-  freeCast?: Pick<FreeCast, "pool" | "label" | "asAction" | "castAt">;
+  freeCast?: Pick<FreeCast, "pool" | "label" | "asAction" | "castAt" | "withSlot">;
   /** The one class list it was chosen from (Magic Initiate's Cleric list): whose spell it counts as, with no class of its own. */
   list?: string;
 }
@@ -1454,7 +1454,8 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     for (const free of grant.freeCasts ?? []) {
       picks.push({
         spell: free.spell, owner, ...(ability ? { ability } : {}), via: "free", freeCasts: free.uses,
-        ...(free.pool || free.label || free.asAction || free.castAt ? { freeCast: { pool: free.pool, label: free.label, asAction: free.asAction, castAt: free.castAt } } : {})
+        ...(free.pool || free.label || free.asAction || free.castAt || free.withSlot
+          ? { freeCast: { pool: free.pool, label: free.label, asAction: free.asAction, castAt: free.castAt, withSlot: free.withSlot } } : {})
       });
     }
   }
@@ -1511,7 +1512,13 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         const { resourceCost: _actionCost, ...actionRest } = action as A & { resourceCost?: unknown };
         return actionRest as A;
       };
-      const free: SpellDefinition = {
+      // Once a day with a slot (Mire the Mind): the spell as it is, slot and higher slots too, its pool spent beside it.
+      const withSlot = pick.freeCast?.withSlot === true && cost !== undefined;
+      const free: SpellDefinition = withSlot ? {
+        ...cast,
+        name,
+        ...(cast.action ? { action: { ...cast.action, name, extraCost: cost } as SpellDefinition["action"] } : {})
+      } : {
         ...rest,
         name,
         ...(cost ? { resourceCost: cost } : {}),
@@ -1525,7 +1532,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
       spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId), from: pick.spell });
       if (cost && !(shared && resources[poolId] !== undefined)) {
         resources[poolId] = uses;
-        poolLabels[poolId] = shared ? (pick.freeCast?.label ?? poolId) : `${cast.name} without a slot`;
+        poolLabels[poolId] = shared ? (pick.freeCast?.label ?? poolId) : withSlot ? `${cast.name} (${pick.freeCast?.label ?? "once a day"})` : `${cast.name} without a slot`;
       }
     }
   }

@@ -143,6 +143,11 @@ export interface FreeCast {
   asAction?: boolean;
   /** Cast as a spell of this level (a 2014 tiefling's Hellish Rebuke, "as a 2nd-level spell"). Default its own level. */
   castAt?: number;
+  /**
+   * Cast with a slot as usual, but only `uses` times (a 2014 warlock's Mire the Mind: Slow once a day, with a warlock
+   * slot). The copy spends both its slot and its own pool.
+   */
+  withSlot?: boolean;
 }
 
 /**
@@ -517,7 +522,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
     pool: z.string().min(1).optional(),
     label: z.string().min(1).optional(),
     asAction: z.boolean().optional(),
-    castAt: z.number().int().min(1).max(9).optional()
+    castAt: z.number().int().min(1).max(9).optional(),
+    withSlot: z.boolean().optional()
   })).optional(),
   spellChanges: z.array(z.object({
     spell: z.string().min(1),

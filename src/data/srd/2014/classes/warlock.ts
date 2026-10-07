@@ -45,12 +45,12 @@ function sectionsOf(key: string): Array<{ id: string; name: string; prerequisite
 
 type Custom = { grants?: (text: FeatureDefinition) => FeatureGrant[]; choices?: ChoiceSpec[] };
 
-/** A spell its pact lets it cast once a day with a warlock slot: here, with its slots, as often as they allow. */
+/** A spell its pact lets it cast once a day, with a warlock slot. */
 const onceWithSlot = (slug: string): Custom => ({
   grants: (text) => [{
     key: text.id,
-    feature: { ...text, automationSupport: "partial", description: `${text.description}\n\nNot simulated: it can be cast with every slot, not once a day.` },
-    spells: [spell(slug)]
+    feature: { ...text, automationSupport: "full" },
+    freeCasts: [{ spell: spell(slug), uses: 1, withSlot: true, label: text.name.replace(/^Eldritch Invocation: /, "") }]
   }]
 });
 

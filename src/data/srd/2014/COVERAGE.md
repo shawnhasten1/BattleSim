@@ -30,7 +30,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Gap | What the engine lacks | Features |
 |---|---|---|
-| `once-a-day-slot` | A spell cast with a slot, but only once a day (Mire the Mind, Sign of Ill Omen) | 7 |
 | `activated-aura` | An aura switched on for a while (Holy Nimbus) | 3 |
 | `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 3 |
