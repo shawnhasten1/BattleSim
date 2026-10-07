@@ -18,11 +18,11 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
 | Monk (Way of the Open Hand) | 23 | 10 | 4 | 3 | 2 | 4 |
-| Paladin (Oath of Devotion) | 19 | not in the 2014 catalog yet | | | | |
-| Ranger (Hunter) | 17 | not in the 2014 catalog yet | | | | |
+| Paladin (Oath of Devotion) | 19 | 8 | 1 | 3 | 4 | 3 |
+| Ranger (Hunter) | 17 | 2 | 3 | 0 | 8 | 4 |
 | Rogue (Thief) | 18 | 6 | 0 | 1 | 3 | 8 |
 | Sorcerer (Draconic Bloodline) | 11 | 4 | 1 | 1 | 3 | 2 |
-| Warlock (The Fiend) | 12 | not in the 2014 catalog yet | | | | |
+| Warlock (The Fiend) | 13 | 5 | 1 | 1 | 5 | 1 |
 | Wizard (School of Evocation) | 11 | 6 | 1 | 0 | 2 | 2 |
 | Race traits | 34 | 9 of 9 races in the catalog | | | | |
 
@@ -30,33 +30,47 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Gap | What the engine lacks | Features |
 |---|---|---|
+| `once-a-day-slot` | A spell cast with a slot, but only once a day (Mire the Mind, Sign of Ill Omen) | 7 |
+| `activated-aura` | An aura switched on for a while (Holy Nimbus) | 3 |
 | `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
-| `activated-aura` | An aura switched on for a while (Holy Nimbus) | 2 |
+| `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 3 |
 | `after-attack-action` | A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting) | 2 |
+| `attack-each` | An attack roll against each creature in an area (Volley, Whirlwind Attack) | 2 |
 | `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
+| `magical-terrain` | Telling magical difficult terrain and plants from natural ones (Land's Stride) | 2 |
+| `unsimulated-spell` | A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary) | 2 |
 | `activation-timing` | A feature bought at any time that the rules tie to another act (Elemental Affinity's resistance, with a spell of its type) | 1 |
+| `after-hit-ac` | +4 AC against a creature's later attacks the turn it hits (Multiattack Defense): here they have disadvantage | 1 |
 | `attack-deterrence` | An attacker's save, or it picks another target (Nature's Sanctuary against beasts and plants) | 1 |
+| `banish-on-hit` | A hit that sends its target away until the end of the next turn (Hurl Through Hell) | 1 |
 | `catch-missile` | Catching a missile and throwing it back for a ki point (Deflect Missiles) | 1 |
 | `check-floor` | A check's total raised to the ability score (Indomitable Might, when escaping a grapple) | 1 |
 | `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | 1 |
 | `destroy-undead` | Turn Undead destroying an undead of a low enough challenge rating outright | 1 |
 | `end-own-condition` | An action ending a condition on itself (Stillness of Mind) | 1 |
+| `end-spell` | Ending a spell on a creature (Cleansing Touch) | 1 |
 | `exhaustion` | Exhaustion (Frenzy's cost) | 1 |
 | `extend-with-action` | Keeping an effect going with an action on later turns (Intimidating Presence) | 1 |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | 1 |
+| `foe-slayer-roll` | Foe Slayer's Wisdom on the attack roll instead of the damage | 1 |
 | `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
 | `immune-after-save` | A creature that saves being safe from it for a while (Intimidating Presence's 24 hours) | 1 |
 | `immunity-by-type` | Immunity to a condition from creatures of a type (Nature's Ward: charm and fright from elementals and fey) | 1 |
-| `magical-terrain` | Telling magical difficult terrain and plants from natural ones (Land's Stride) | 1 |
 | `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | 1 |
+| `pact-weapon-form` | Choosing the pact weapon's form (a longsword here), or bonding a magic weapon (Pact of the Blade) | 1 |
 | `rage-2014` | Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious | 1 |
+| `reaction-by-size` | A reaction to an attacker of a size (Giant Killer: Large or larger) | 1 |
+| `redirect-attack` | A missed attack made again at another creature (Stand Against the Tide) | 1 |
 | `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
-| `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 1 |
+| `restricted-cast` | A spell cast at will only at certain creature types (Chains of Carceri) | 1 |
+| `summon-stat-blocks` | Familiars: a summon that can't attack but helps (Find Familiar) | 1 |
 | `surprise-rage` | Acting while surprised by raging first (Feral Instinct, under the 2014 surprise rule) | 1 |
-| `unsimulated-spell` | A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary) | 1 |
+| `type-ward` | Protection from Evil and Good's ward against creature types (Purity of Spirit) | 1 |
+| `weapon-bypass` | A resistance magical or silvered weapons get through, though spells don't (Fiendish Resilience) | 1 |
+| `weapon-magic` | A weapon made magical for a while (Sacred Weapon) | 1 |
 | `wild-shape-revert` | Going back from Wild Shape with a bonus action, though it shifted with its action (2014) | 1 |
 
 ## Barbarian
@@ -216,19 +230,59 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 ## Paladin
 
-Not in the 2014 catalog yet: 13 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Divine Sense | info |  |  |
+| 1 | Lay on Hands | full |  |  |
+| 2 | Divine Smite | full |  |  |
+| 2 | Fighting Style | builder |  |  |
+| 2 | Spellcasting | full |  |  |
+| 3 | Divine Health | info |  |  |
+| 3 | Sacred Oath | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5 | Extra Attack | full |  |  |
+| 6, 18 | Aura of Protection | full |  |  |
+| 10, 18 | Aura of Courage | full |  |  |
+| 11 | Improved Divine Smite | full |  |  |
+| 14 | Cleansing Touch | manual | end-spell |  |
 
 ### Oath of Devotion (Paladin subclass)
 
-Not in the 2014 catalog yet: 6 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Channel Divinity | partial | weapon-magic | Sacred Weapon making a mundane weapon magical. |
+| 3, 5, 9, 13, 17 | Oath Spells | builder |  |  |
+| 3 | Tenets of Devotion | info |  |  |
+| 7, 18 | Aura of Devotion | full |  |  |
+| 15 | Purity of Spirit | manual | type-ward |  |
+| 20 | Holy Nimbus | manual | activated-aura |  |
 
 ## Ranger
 
-Not in the 2014 catalog yet: 13 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1, 6, 14 | Favored Enemy | builder |  |  |
+| 1, 6, 10 | Natural Explorer | info |  |  |
+| 2 | Fighting Style | builder |  |  |
+| 2 | Spellcasting | full |  |  |
+| 3 | Primeval Awareness | info |  |  |
+| 3 | Ranger Archetype | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5 | Extra Attack | full |  |  |
+| 8 | Land's Stride | partial | magical-terrain | magical difficult terrain should still cost it extra, and it has advantage on saves against magical plants. |
+| 10 | Hide in Plain Sight | info |  |  |
+| 14 | Vanish | partial | stealth | hiding (the simulator has no stealth), and not being tracked. |
+| 18 | Feral Senses | info |  |  |
+| 20 | Foe Slayer | partial | foe-slayer-roll | its Wisdom goes on the damage here; the rules let it go on the attack roll instead. |
 
 ### Hunter (Ranger subclass)
 
-Not in the 2014 catalog yet: 4 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Hunter's Prey | builder |  |  |
+| 7 | Defensive Tactics | builder |  |  |
+| 11 | Multiattack | builder |  |  |
+| 15 | Superior Hunter's Defense | builder |  |  |
 
 ## Rogue
 
@@ -281,11 +335,26 @@ Not in the 2014 catalog yet: 4 features.
 
 ## Warlock
 
-Not in the 2014 catalog yet: 7 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Otherworldly Patron | builder |  |  |
+| 1 | Pact Magic | full |  |  |
+| 2 | Eldritch Invocations | full |  |  |
+| 3 | Pact Boon | builder |  |  |
+| 4, 8, 12, 19 | Ability Score Improvement | builder |  |  |
+| 11, 13, 15, 17 | Mystic Arcanum | builder |  |  |
+| 20 | Eldritch Master | info |  |  |
+| — | Eldritch Invocation List | builder |  |  |
 
 ### The Fiend (Warlock subclass)
 
-Not in the 2014 catalog yet: 5 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Dark One's Blessing | full |  |  |
+| 1 | Expanded Spell List | full |  |  |
+| 6 | Dark One's Own Luck | full |  |  |
+| 10 | Fiendish Resilience | partial | weapon-bypass | magical and silvered weapons' damage should get through it. |
+| 14 | Hurl Through Hell | manual | banish-on-hit |  |
 
 ## Wizard
 

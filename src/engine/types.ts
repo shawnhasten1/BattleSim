@@ -1098,8 +1098,11 @@ export interface OnHitOption {
   oncePerTurn?: boolean;
   /** With `oncePerTurn`: options with the same key share the once (Brutal Strike's blows: one of them a turn). */
   onceKey?: string;
-  /** Cast with a higher slot: this much more on its first damage rider per level above the spell's. A variant per slot. */
-  upcast?: { damageDice: string };
+  /**
+   * Cast with a higher slot: this much more on its first damage rider per level above the spell's. A variant per slot.
+   * `maxAbove`: no more than this many levels' worth (the 2014 Divine Smite's 5d8: three above a 1st-level slot's 2d8).
+   */
+  upcast?: { damageDice: string; maxAbove?: number };
   /**
    * Paid in dice of a damage bonus instead of a resource (Cunning Strike: Sneak Attack's). It's offered only on the
    * attacks that bonus can add to, and comes only with the bonus's damage, which loses the dice.

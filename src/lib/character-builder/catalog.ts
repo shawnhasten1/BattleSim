@@ -169,7 +169,11 @@ export type FeatCategory = "origin" | "general" | "fighting-style" | "epic-boon"
  */
 export type ChoiceSpec = { id: string; ref?: string } & (
   | { kind: "subclass" }
-  | { kind: "feat"; categories: FeatCategory[]; label?: string; extraOptions?: PickOption[] }
+  | {
+    kind: "feat"; categories: FeatCategory[]; label?: string; extraOptions?: PickOption[];
+    /** Only feats of these names, in either edition (a 2014 Paladin's fighting styles: Defense, Dueling, …). */
+    names?: string[];
+  }
   | { kind: "skills"; count: number; from: string[] | "any" }
   | { kind: "expertise"; count: number; from?: string[] }
   | { kind: "weapon-mastery" }
@@ -556,7 +560,10 @@ const pickOptionSchema: z.ZodType<PickOption> = z.lazy(() => z.object({
 
 export const choiceSpecSchema: z.ZodType<ChoiceSpec> = z.lazy(() => z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("subclass"), id: z.string(), ref: z.string().optional() }),
-  z.object({ kind: z.literal("feat"), id: z.string(), ref: z.string().optional(), categories: z.array(featCategorySchema), label: z.string().optional(), extraOptions: z.array(pickOptionSchema).optional() }),
+  z.object({
+    kind: z.literal("feat"), id: z.string(), ref: z.string().optional(), categories: z.array(featCategorySchema), label: z.string().optional(),
+    extraOptions: z.array(pickOptionSchema).optional(), names: z.array(z.string()).optional()
+  }),
   z.object({ kind: z.literal("skills"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.union([z.array(z.string()), z.literal("any")]) }),
   z.object({ kind: z.literal("expertise"), id: z.string(), ref: z.string().optional(), count: z.number().int().min(0), from: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("weapon-mastery"), id: z.string(), ref: z.string().optional() }),

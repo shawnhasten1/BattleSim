@@ -97,7 +97,7 @@ function classOf(raw: Raw, warnings: string[]): ReferenceClass {
   columns.sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
 
   const kept = features
-    .filter((feature) => str(feature.feature_type) === "CLASS_LEVEL_FEATURE")
+    .filter((feature) => ["CLASS_LEVEL_FEATURE", "CLASS_FEATURE_OPTION_LIST"].includes(str(feature.feature_type)))
     .filter((feature) => !(((feature.data_for_class_table as unknown[] | undefined) ?? []).length && str(feature.desc).startsWith("[Column data]")))
     .map((feature) => featureOf(feature, OVERRIDES))
     .sort((a, b) => (a.levels[0] ?? 99) - (b.levels[0] ?? 99) || a.name.localeCompare(b.name));

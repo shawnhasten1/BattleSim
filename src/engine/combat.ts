@@ -667,7 +667,8 @@ function onHitOptionVariants(definition: CreatureDefinition, listed: ActionDefin
       if (option.abilities && !option.abilities.includes(attack.ability)) continue;
       levels.forEach((level, levelIndex) => {
         const cost = level !== undefined ? { resourceId: `slot-${level}`, amount: 1 } : option.resourceCost;
-        const extra = level !== undefined && base !== undefined && option.upcast && level > base ? repeatDice(option.upcast.damageDice, level - base) : "";
+        const extra = level !== undefined && base !== undefined && option.upcast && level > base
+          ? repeatDice(option.upcast.damageDice, Math.min(level - base, option.upcast.maxAbove ?? Number.POSITIVE_INFINITY)) : "";
         let grown = false;
         const riders = option.riders.map((rider, index): ActionRider => {
           if (rider.kind === "note") return rider;

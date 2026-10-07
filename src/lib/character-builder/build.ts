@@ -502,7 +502,10 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
         const prerequisite = option.prerequisite;
         if (prerequisite?.level && classLevel < prerequisite.level) return `from ${ordinal(prerequisite.level)} level`;
         const missing = (prerequisite?.options ?? []).filter((id) => !before.has(id) && !alongside.includes(id));
-        if (missing.length) return `needs ${missing.map((id) => spec.options.find((candidate) => candidate.id === id)?.name ?? id).join(", ")}`;
+        // An option of another pick in the family (a 2014 Pact Boon) by its id in words: "Pact of the Blade".
+        const named = (id: string) => spec.options.find((candidate) => candidate.id === id)?.name
+          ?? id.split("-").map((word, index) => (index > 0 && ["of", "the", "and"].includes(word) ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`)).join(" ");
+        if (missing.length) return `needs ${missing.map(named).join(", ")}`;
         return undefined;
       };
       const chosen: string[] = [];
@@ -804,6 +807,7 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
   const level = context.characterLevel ?? state.build.levels.length;
   const eligible = state.sources.catalog.feats.filter((feat) =>
     spec.categories.includes(feat.category)
+    && (!spec.names || spec.names.includes(feat.name))
     && (feat.repeatable || !state.feats.has(feat.id))
     && meetsPrerequisite(state, feat, level));
   const suggested = context.classDefinition?.suggested;

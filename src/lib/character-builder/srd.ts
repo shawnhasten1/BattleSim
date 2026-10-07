@@ -1,5 +1,5 @@
 import { SRD_WEAPONS, findSrdFeature, findSrdItem, findSrdWeapon } from "@/data/srd";
-import { SRD_2014_CATALOG } from "@/data/srd/2014";
+import { SRD_2014_CATALOG, SRD_2014_EXPANDED_LISTS } from "@/data/srd/2014";
 import { SRD_2014_SPELL_INDEX, findSrd2014Spell, srd2014SpellId } from "@/data/srd/2014/spells";
 import { SRD_2024_CATALOG } from "@/data/srd/2024";
 import { SRD_2024_REFERENCE } from "@/data/srd/2024/reference";
@@ -23,6 +23,9 @@ for (const entry of SRD_2014_SPELL_INDEX.spells) for (const list of entry.classe
 
 /** The SRD's class spell lists by key (`"wizard"`, `"wizard-2014"`), for a homebrew class to cast from. */
 export const SRD_SPELL_LISTS: string[] = [...SPELL_LISTS.keys()].sort();
+
+// A 2014 subclass's expanded list (the Fiend's), which a grant adds to its class's (`adjust.spellLists`). Not a class's.
+for (const [list, ids] of Object.entries(SRD_2014_EXPANDED_LISTS)) SPELL_LISTS.set(list, [...ids]);
 
 /** The library's plain weapons: what a 2014 "any martial weapon" line chooses from. */
 const PLAIN_WEAPONS = SRD_WEAPONS.filter((weapon) => !weapon.magical).map((weapon) => weapon.id);

@@ -400,6 +400,74 @@ describe("the 2014 Bard and Druid (Phase 9b)", () => {
   });
 });
 
+describe("the 2014 Warlock, Paladin and Ranger (Phase 9c)", () => {
+  const build = (classId: string, level: number) => withSuggestions(quickBuild(sources, { classId, level }), sources);
+  const built = (classId: string, level: number) => buildCharacter(build(classId, level), sources);
+  const feature = (entry: ReturnType<typeof built>, name: string) => entry.features.find((candidate) => candidate.feature.name === name)?.feature;
+  const pickAt = (entry: ReturnType<typeof built>, index: number, id: string) => entry.choices.find((candidate) => candidate.scope.kind === "level" && candidate.scope.index === index && candidate.spec.kind === "pick" && candidate.spec.id === id);
+  const actorOf = (built: ReturnType<typeof build>) => rebuildActor(blankCharacter("def-fighter", "Hero"), built, sources).definition;
+
+  it("a 2014 Warlock: its patron at 1st level, two invocations at 2nd, its Pact Boon at 3rd that an invocation can need", () => {
+    const first = built("srd:class:warlock-2014", 1);
+    expect(first.choices.some((candidate) => candidate.spec.kind === "subclass")).toBe(true);
+    expect(built("srd:class:warlock-2014", 2).choices.find((candidate) => candidate.spec.kind === "pick" && candidate.spec.id === "eldritch-invocations")!.count).toBe(2);
+    const third = built("srd:class:warlock-2014", 3);
+    expect(pickAt(third, 2, "eldritch-invocations")!.options.map((option) => option.name)).toEqual(["Pact of the Chain", "Pact of the Blade", "Pact of the Tome"]);
+    // Thirsting Blade (5th level) needs Pact of the Blade: the suggested Tome leaves it out of reach.
+    const tome = buildCharacter(build("srd:class:warlock-2014", 5), sources);
+    expect(pickAt(tome, 4, "eldritch-invocations")!.options.find((option) => option.id === "thirsting-blade")).toMatchObject({ taken: true, detail: "needs Pact of the Blade" });
+    let blade = withChoice(build("srd:class:warlock-2014", 5), { kind: "level", index: 2 }, ["eldritch-invocations"], ["pact-of-the-blade"]);
+    blade = withChoice(blade, { kind: "level", index: 4 }, ["eldritch-invocations"], ["thirsting-blade"]);
+    const bladeBuilt = buildCharacter(blade, sources);
+    expect(bladeBuilt.warnings).toEqual([]);
+    expect(bladeBuilt.weapons.find((entry) => entry.weapon.name === "Pact Weapon (Longsword)")!.weapon).toMatchObject({ ability: "str", magical: true, proficient: true });
+    expect(feature(bladeBuilt, "Eldritch Invocation: Thirsting Blade")!.grantedActions![0]).toMatchObject({ kind: "multiattack", attacks: [{ actionId: "warlock-pact-weapon", count: 2 }] });
+    // 32 invocations, Armor of Shadows among them (its heading restored).
+    expect(pickAt(built("srd:class:warlock-2014", 2), 1, "eldritch-invocations")!.options).toHaveLength(32);
+  });
+
+  it("a 2014 Fiend chooses from its expanded list, gains temporary hit points on a kill, and knows its spells from the table", () => {
+    const fifth = built("srd:class:warlock-2014", 5);
+    const known = fifth.choices.filter((candidate) => candidate.spec.kind === "spells" && candidate.spec.what === "prepared");
+    expect(known.reduce((sum, candidate) => sum + candidate.count, 0)).toBe(6);
+    // Fireball isn't on the 2014 warlock list, but the Fiend adds it.
+    expect(known.some((candidate) => candidate.options.some((option) => option.id === "srd:spell:fireball"))).toBe(true);
+    expect(feature(fifth, "Dark One's Blessing")!.effects![0]).toMatchObject({ kind: "on-kill", tempHp: { ability: "cha", base: 5 } });
+    expect(fifth.choices.find((candidate) => candidate.spec.kind === "pick" && candidate.spec.id === "eldritch-invocations" && candidate.scope.kind === "level" && candidate.scope.index === 1)!.value).toEqual(["agonizing-blast", "repelling-blast"]);
+    const blast = getExecutableActions(actorOf(build("srd:class:warlock-2014", 5))).find((action) => action.name === "Eldritch Blast") as Extract<ActionDefinition, { kind: "attack" }>;
+    expect(blast.damage[0]).toMatchObject({ abilityModifier: "cha" });
+  });
+
+  it("a 2014 Paladin: no slots before 2nd level, four fighting styles, and Divine Smite's 5d8 at most", () => {
+    expect(built("srd:class:paladin-2014", 1).resources["slot-1"]).toBeUndefined();
+    const second = built("srd:class:paladin-2014", 2);
+    const styles = second.choices.find((candidate) => candidate.spec.kind === "feat" && candidate.spec.id === "fighting-style")!;
+    expect([...new Set(styles.options.map((option) => option.name))].sort()).toEqual(["Defense", "Dueling", "Great Weapon Fighting", "Protection"]);
+    const paladin = actorOf(build("srd:class:paladin-2014", 17));
+    const smites = getExecutableActions(paladin).filter((action) => /Divine Smite/.test(action.name) && action.kind === "attack") as Array<Extract<ActionDefinition, { kind: "attack" }>>;
+    const dice = (action: Extract<ActionDefinition, { kind: "attack" }>) => {
+      const rider = action.riders!.find((entry) => entry.kind === "damage" && !entry.restrictToCreatureTypes) as { components: Array<{ dice: string }> };
+      return [...rider.components[0]!.dice.matchAll(/(\d+)d8/g)].reduce((sum, match) => sum + Number(match[1]), 0);
+    };
+    const byLevel = (level: number) => smites.find((action) => (level === 1 ? !/level \d/.test(action.name) : action.name.includes(`level ${level}`)))!;
+    expect([1, 2, 3, 4, 5].map((level) => dice(byLevel(level)))).toEqual([2, 3, 4, 5, 5]);
+    // 1d8 more on a fiend or undead.
+    expect(byLevel(1).riders!.find((entry) => entry.kind === "damage" && entry.restrictToCreatureTypes)).toMatchObject({ restrictToCreatureTypes: ["fiend", "undead"] });
+  });
+
+  it("a 2014 Ranger: three favored enemies, Foe Slayer against them at 20th level, its spells from 2nd", () => {
+    const top = built("srd:class:ranger-2014", 20);
+    expect(top.warnings).toEqual([]);
+    expect(top.choices.filter((candidate) => candidate.spec.kind === "pick" && candidate.spec.id === "favored-enemy")).toHaveLength(3);
+    const slayers = top.features.filter((entry) => entry.feature.name.startsWith("Foe Slayer"));
+    expect(slayers.map((entry) => entry.feature.name).sort()).toEqual(["Foe Slayer (humanoids)", "Foe Slayer (monstrosities)", "Foe Slayer (undead)"]);
+    expect(slayers[0]!.feature.effects![0]).toMatchObject({ kind: "damage-bonus", oncePerTurn: true });
+    expect(built("srd:class:ranger-2014", 19).features.some((entry) => entry.feature.name.startsWith("Foe Slayer"))).toBe(false);
+    expect(built("srd:class:ranger-2014", 1).resources["slot-1"]).toBeUndefined();
+    expect(built("srd:class:ranger-2014", 2).resources["slot-1"]).toBe(2);
+  });
+});
+
 describe("the other 2014 races (Phase 7)", () => {
   const BASE = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const raceBuild = (speciesId: string, level = 1, classId = "srd:class:fighter-2014") =>
