@@ -254,3 +254,32 @@ srd_2024_cache.json                 (local, gitignored: npm run srd:2024:fetch)
 ### Attribution
 
 This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
+## The 2014 rules (`2014/`)
+
+The 2014 catalog (EDITIONS_PLAN.md) sits beside the 2024 one: SRD 5.1's classes, subclasses, races, the Acolyte and
+Grappler, and its whole spell list. Like the 2024 data, it's generated from a local Open5e V2 cache:
+
+```
+srd_2014_cache.json                 (local, gitignored: npm run srd:2014:fetch)
+        │  npm run srd:2014         (scripts/build-srd-2014.ts → scripts/srd-2014/*)
+        ▼
+2014/generated/reference.json       every class and subclass feature's text and levels, the features tables' columns,
+                                    races with their ability increases, the Acolyte, Grappler, weapons, armor
+2014/generated/spells.json          all 319 spells, each with SRD 5.1's own class lists
+2014/COVERAGE.md                    the audit: a verdict for every feature and race trait, read from the 2014 catalog
+```
+
+- `npm run srd:2014:check` regenerates in memory and fails if the committed files differ;
+  `tests/srd-2014-reference.test.ts` does the same when the cache is present.
+- **Open5e's 2014 keys start `srd_`**, not `srd-2014_`.
+- **The class spell lists don't come from Open5e.** Its 2014 spells name no Paladin, and fold in spells that subclasses
+  from outside the SRD add. The fetch takes SRD 5.1's lists from the 5e SRD API (dnd5eapi.co) into the cache
+  (`spellClassLists`), and the generator fails on a list naming a spell the index hasn't got.
+- **The 2014 spells keep the library's ids.** The 85 authored spells in `spells.ts` are the 2014 versions; every other SRD
+  5.1 spell is reference only (`SRD_2014_REFERENCE_SPELLS`), with a scroll each. A library spell from outside SRD 5.1
+  (Toll the Dead) is listed in `OUTSIDE_SRD_51`.
+- **Fixing wrong source data:** `2014/overrides.ts`, with a reason checked against the SRD 5.1 PDF.
+- **The audit's verdicts are read from the catalog**: a feature it runs is full or partial by its `automationSupport`, one
+  kept as text is manual (or info), one a choice covers is the builder's. What doesn't run in full names its gap codes in
+  `2014/coverage.ts`, which rank the engine work. A class or race the catalog hasn't got yet is listed as to do.

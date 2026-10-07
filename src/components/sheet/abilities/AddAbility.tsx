@@ -15,6 +15,7 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
+import { SRD_2014_SPELLS } from "@/data/srd/2014/spells";
 import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
 import { SRD_CREDITS_PATH } from "@/data/srd/attribution";
 import { loadSrdMonsterAbilities, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
@@ -473,7 +474,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       </section>
       <p className={styles.footnote}>
         Click a row to check it before it&apos;s added; a library row&apos;s + adds it as it is, or drag it onto the sheet.{" "}
-        {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} 2014 and {SRD_2024_SPELLS.length} 2024 spells,{" "}
+        {SRD_WEAPONS.length} weapons, {SRD_2014_SPELLS.length} 2014 and {SRD_2024_SPELLS.length} 2024 spells,{" "}
         {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and their scrolls{mine.length ? `, and ${mine.length} of your own in My library` : ""}.{" "}
         <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 and 5.2 credits · CC-BY-4.0</a>
       </p>

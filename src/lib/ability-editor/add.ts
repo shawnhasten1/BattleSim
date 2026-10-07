@@ -18,7 +18,8 @@ import {
 import { SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, attachedSource, findSrdFeature, findSrdWeapon, type SrdEntryKind } from "@/data/srd";
 import { SRD_2024_FEATURES, findSrd2024Feature } from "@/data/srd/2024/feature-library";
 import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
-import { SRD_2024_SPELL_SCROLLS, findLibraryItem, findLibrarySpell } from "@/data/srd/library";
+import { SRD_2014_REFERENCE_SPELLS } from "@/data/srd/2014/spells";
+import { SRD_2014_REFERENCE_SCROLLS, SRD_2024_SPELL_SCROLLS, findLibraryItem, findLibrarySpell } from "@/data/srd/library";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { editionNameKey, editionOf, preferEdition, type Edition, type EditionChoice } from "@/lib/editions";
 import { featureAtLevel, featureFrom, startingLevel } from "./class-features";
@@ -189,6 +190,8 @@ function libraryEntry(kind: SrdEntryKind, entry: LibraryEntry["entry"]): Library
 const LIBRARY: LibraryEntry[] = [
   ...SRD_WEAPONS.map((entry) => libraryEntry("weapon", entry)),
   ...SRD_SPELLS.map((entry) => libraryEntry("spell", entry)),
+  // The rest of SRD 5.1's spells, kept for reference (EDITIONS_PLAN.md Phase 4).
+  ...SRD_2014_REFERENCE_SPELLS.map((entry) => libraryEntry("spell", entry)),
   ...SRD_2024_SPELLS.map((entry) => libraryEntry("spell", entry)),
   ...SRD_FEATURES.map((entry) => libraryEntry("feature", entry)),
   ...SRD_2024_FEATURES.map((entry) => ({ ...libraryEntry("feature", entry.feature), from: featureFrom(entry) })),
@@ -196,7 +199,7 @@ const LIBRARY: LibraryEntry[] = [
 ];
 
 /** A scroll of every library spell (SRD 5.2 has them for cantrips and 1st level only): listed only when a search asks for scrolls. */
-const SCROLLS: LibraryEntry[] = [...SRD_SPELL_SCROLLS, ...SRD_2024_SPELL_SCROLLS].map((entry) => libraryEntry("item", entry));
+const SCROLLS: LibraryEntry[] = [...SRD_SPELL_SCROLLS, ...SRD_2014_REFERENCE_SCROLLS, ...SRD_2024_SPELL_SCROLLS].map((entry) => libraryEntry("item", entry));
 
 /**
  * What a sheet's copy of a library entry carries as its source's slug, for the "on the sheet" mark: the library id for a

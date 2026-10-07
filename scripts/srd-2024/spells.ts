@@ -34,19 +34,29 @@ function componentsOf(raw: Raw): string {
   return parts.filter(Boolean).join(", ");
 }
 
-function spellOf(raw: Raw, document: string): ReferenceSpell {
+/** What one SRD's spells need besides the cache: the prefix its Open5e keys start with, its attribution, its fixes. */
+export interface SpellIndexOptions {
+  /** `srd-2024_` for SRD 5.2, `srd_` for SRD 5.1. */
+  prefix: string;
+  attribution: string;
+  overrides: Record<string, SpellOverride>;
+}
+
+type SpellOverride = (typeof SPELL_OVERRIDES)[string];
+
+function spellOf(raw: Raw, options: SpellIndexOptions): ReferenceSpell {
   const key = str(raw.key);
   const save = ABILITY_NAMES[str(raw.saving_throw_ability).toLowerCase()] ?? null;
   const shape = str(raw.shape_type);
   const trigger = str(raw.reaction_condition);
-  const override = SPELL_OVERRIDES[key];
+  const override = options.overrides[key];
   return {
     key,
-    slug: key.startsWith(`${document}_`) ? key.slice(document.length + 1) : key,
+    slug: key.startsWith(options.prefix) ? key.slice(options.prefix.length) : key,
     name: str(raw.name),
     level: Number(raw.level ?? 0),
     school: (raw.school as { key?: string } | undefined)?.key ?? "",
-    classes: ((raw.classes as Array<{ key: string }> | undefined) ?? []).map((entry) => entry.key.replace(`${document}_`, "")).sort(),
+    classes: ((raw.classes as Array<{ key: string }> | undefined) ?? []).map((entry) => entry.key.replace(options.prefix, "")).sort(),
     castingTime: override?.castingTime ?? castingTimeOf(str(raw.casting_time)),
     ...(trigger ? { reactionTrigger: trigger } : {}),
     range: str(raw.range_text),
@@ -63,10 +73,15 @@ function spellOf(raw: Raw, document: string): ReferenceSpell {
   };
 }
 
-export function buildSrd2024Spells(cache: Srd2024Cache): { index: Srd2024SpellIndex; warnings: string[] } {
+/** An SRD's spell index from its cache: every spell in the cache's document, sorted by key. */
+export function buildSpellIndex(cache: Pick<Srd2024Cache, "document" | "spells">, options: SpellIndexOptions): { index: Srd2024SpellIndex; warnings: string[] } {
   const inDocument = (raw: Raw) => (raw.document as { key?: string } | undefined)?.key === cache.document;
-  const spells = (cache.spells ?? []).filter(inDocument).map((raw) => spellOf(raw, cache.document)).sort((a, b) => a.key.localeCompare(b.key));
+  const spells = (cache.spells ?? []).filter(inDocument).map((raw) => spellOf(raw, options)).sort((a, b) => a.key.localeCompare(b.key));
   const keys = new Set(spells.map((spell) => spell.key));
-  const warnings = Object.keys(SPELL_OVERRIDES).filter((key) => !keys.has(key)).map((key) => `spell override ${key} matches nothing in the source`);
-  return { index: { attribution: SRD_52_ATTRIBUTION, document: cache.document, spells }, warnings };
+  const warnings = Object.keys(options.overrides).filter((key) => !keys.has(key)).map((key) => `spell override ${key} matches nothing in the source`);
+  return { index: { attribution: options.attribution, document: cache.document, spells }, warnings };
+}
+
+export function buildSrd2024Spells(cache: Srd2024Cache): { index: Srd2024SpellIndex; warnings: string[] } {
+  return buildSpellIndex(cache, { prefix: `${cache.document}_`, attribution: SRD_52_ATTRIBUTION, overrides: SPELL_OVERRIDES });
 }

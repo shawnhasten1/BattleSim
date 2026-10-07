@@ -12,7 +12,7 @@
  */
 import type { Ability } from "../../src/engine";
 import { SRD_52_ATTRIBUTION } from "../../src/data/srd/attribution";
-import { COLUMN_OVERRIDES, FEATURE_OVERRIDES } from "../../src/data/srd/2024/overrides";
+import { COLUMN_OVERRIDES, FEATURE_OVERRIDES, type ColumnOverride, type FeatureOverride } from "../../src/data/srd/2024/overrides";
 import type {
   ReferenceArmor,
   ReferenceBackground,
@@ -27,6 +27,14 @@ import type {
 
 type Raw = Record<string, unknown>;
 
+/** An SRD's fixes to its features and table columns, by Open5e key: the 2024 ones here, the 2014 ones in `srd-2014`. */
+export interface ReferenceOverrides {
+  features: Record<string, FeatureOverride>;
+  columns: Record<string, ColumnOverride>;
+}
+
+const OVERRIDES_2024: ReferenceOverrides = { features: FEATURE_OVERRIDES, columns: COLUMN_OVERRIDES };
+
 export interface Srd2024Cache {
   document: string;
   classes: Raw[];
@@ -38,7 +46,7 @@ export interface Srd2024Cache {
   spells?: Raw[];
 }
 
-const ABILITY_NAMES: Record<string, Ability> = {
+export const ABILITY_NAMES: Record<string, Ability> = {
   strength: "str", dexterity: "dex", constitution: "con", intelligence: "int", wisdom: "wis", charisma: "cha"
 };
 
@@ -49,10 +57,10 @@ const SKILL_IDS = [
   "stealth", "survival"
 ];
 
-const str = (value: unknown): string => (typeof value === "string" ? value : "");
-const slug = (text: string) => text.toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+export const str = (value: unknown): string => (typeof value === "string" ? value : "");
+export const slug = (text: string) => text.toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-function abilitiesIn(text: string): Ability[] {
+export function abilitiesIn(text: string): Ability[] {
   const found: Ability[] = [];
   for (const word of text.toLowerCase().match(/[a-z]+/g) ?? []) {
     const ability = ABILITY_NAMES[word];
@@ -67,7 +75,7 @@ function skillId(name: string): string | undefined {
   return SKILL_IDS.find((id) => id.replace(/_/g, "") === squashed);
 }
 
-function skillsIn(text: string): string[] {
+export function skillsIn(text: string): string[] {
   return text.split(/,|\bor\b|\band\b/).map((part) => skillId(part.replace(/^.*:/, ""))).filter((id): id is string => Boolean(id));
 }
 
@@ -91,13 +99,13 @@ export function columnValue(raw: string): string | number {
   return text;
 }
 
-function columnOf(feature: Raw, ownerKey: string, warnings: string[]): ReferenceColumn | undefined {
+export function columnOf(feature: Raw, ownerKey: string, warnings: string[], overrides: ReferenceOverrides = OVERRIDES_2024): ReferenceColumn | undefined {
   const data = (feature.data_for_class_table as Array<{ level: number; column_value: string }> | undefined) ?? [];
   if (!data.length) return undefined;
   const key = str(feature.key);
-  const override = COLUMN_OVERRIDES[key];
+  const override = overrides.columns[key];
   const type = str(feature.feature_type);
-  let label = override?.label ?? FEATURE_OVERRIDES[key]?.name ?? str(feature.name);
+  let label = override?.label ?? overrides.features[key]?.name ?? str(feature.name);
   let id = override?.id;
   if (!id) {
     if (type === "SPELL_SLOTS") {
@@ -119,9 +127,9 @@ function columnOf(feature: Raw, ownerKey: string, warnings: string[]): Reference
   return { key, id, label, values };
 }
 
-function featureOf(feature: Raw): ReferenceFeature {
+export function featureOf(feature: Raw, overrides: ReferenceOverrides = OVERRIDES_2024): ReferenceFeature {
   const key = str(feature.key);
-  const override = FEATURE_OVERRIDES[key];
+  const override = overrides.features[key];
   const type = str(feature.feature_type);
   const name = override?.name ?? str(feature.name);
   const levels = override?.levels
@@ -175,7 +183,7 @@ function classOf(raw: Raw, warnings: string[]): ReferenceClass {
     .filter((feature) => ["CLASS_LEVEL_FEATURE", "CLASS_FEATURE_OPTION_LIST"].includes(str(feature.feature_type)))
     // A feature that's only a table column ("Cantrips Known" for the druid's Wild Shape uses) is kept as the column.
     .filter((feature) => !(((feature.data_for_class_table as unknown[] | undefined) ?? []).length && str(feature.desc).startsWith("[Column data]")))
-    .map(featureOf)
+    .map((feature) => featureOf(feature))
     .sort((a, b) => (a.levels[0] ?? 99) - (b.levels[0] ?? 99) || a.name.localeCompare(b.name));
 
   const hitDie = Number(/(\d+)/.exec(str(raw.hit_dice))?.[1] ?? 0) || undefined;
@@ -232,7 +240,7 @@ function speciesOf(raw: Raw): ReferenceSpecies {
   };
 }
 
-function weaponOf(raw: Raw): ReferenceWeapon {
+export function weaponOf(raw: Raw): ReferenceWeapon {
   const properties = (raw.properties as Array<{ property: { name: string; type: string | null }; detail?: string | null }> | undefined) ?? [];
   const mastery = properties.find((entry) => entry.property.type === "Mastery")?.property.name ?? null;
   return {
@@ -248,7 +256,7 @@ function weaponOf(raw: Raw): ReferenceWeapon {
   };
 }
 
-function armorOf(raw: Raw): ReferenceArmor {
+export function armorOf(raw: Raw): ReferenceArmor {
   return {
     key: str(raw.key),
     name: str(raw.name),
@@ -261,8 +269,8 @@ function armorOf(raw: Raw): ReferenceArmor {
   };
 }
 
-const byKey = <T extends { key: string }>(a: T, b: T) => a.key.localeCompare(b.key);
-const ofDocument = (document: string) => (raw: Raw) => (raw.document as { key?: string } | undefined)?.key === document;
+export const byKey = <T extends { key: string }>(a: T, b: T) => a.key.localeCompare(b.key);
+export const ofDocument = (document: string) => (raw: Raw) => (raw.document as { key?: string } | undefined)?.key === document;
 
 export interface Srd2024ReferenceBuild {
   reference: Srd2024Reference;

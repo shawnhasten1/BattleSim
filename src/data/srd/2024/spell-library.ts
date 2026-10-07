@@ -1,4 +1,4 @@
-import type { ActionDefinition, SpellDefinition } from "@/engine";
+import type { ActionDefinition, SourceMetadata, SpellDefinition } from "@/engine";
 import { spellRuns } from "@/lib/character-builder/spells";
 import { SRD_SPELLS } from "../spells";
 import { srd52Source } from "./reference";
@@ -61,12 +61,15 @@ function componentsOf(text: string): SpellDefinition["components"] {
   };
 }
 
-/** A spell that isn't simulated: the SRD's facts and text, for the DM. */
-function referenceSpell(entry: ReferenceSpell): SpellDefinition {
+/**
+ * A spell that isn't simulated: the SRD's facts and text, for the DM. A 2024 spell by default; the 2014 library builds its
+ * own with its id and source (`2014/spells.ts`).
+ */
+export function referenceSpell(entry: ReferenceSpell, id = srd2024SpellId(entry.slug), source: SourceMetadata = srd52Source(entry.key)): SpellDefinition {
   return {
-    id: srd2024SpellId(entry.slug),
+    id,
     name: entry.name,
-    source: srd52Source(entry.key),
+    source,
     level: entry.level,
     school: entry.school,
     castingTime: castingTimeOf(entry.castingTime),
@@ -139,11 +142,16 @@ export function buildSrd2024SpellLibrary(index: Srd2024SpellIndex): SpellDefinit
   });
 }
 
-/** How many of a class list's spells run, by spell level (0–9). */
-export function runningByLevel(index: Srd2024SpellIndex, library: SpellDefinition[], classSlug: string): Array<{ level: number; total: number; running: number }> {
+/** How many of a class list's spells run, by spell level (0–9). `idOf` is the library's id for a spell (2024 by default). */
+export function runningByLevel(
+  index: Pick<Srd2024SpellIndex, "spells">,
+  library: readonly SpellDefinition[],
+  classSlug: string,
+  idOf: (slug: string) => string = srd2024SpellId
+): Array<{ level: number; total: number; running: number }> {
   const byId = new Map(library.map((spell) => [spell.id, spell]));
   return Array.from({ length: 10 }, (_, level) => {
     const entries = index.spells.filter((entry) => entry.level === level && entry.classes.includes(classSlug));
-    return { level, total: entries.length, running: entries.filter((entry) => spellRuns(byId.get(srd2024SpellId(entry.slug)))).length };
+    return { level, total: entries.length, running: entries.filter((entry) => spellRuns(byId.get(idOf(entry.slug)))).length };
   });
 }

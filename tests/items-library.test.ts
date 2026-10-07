@@ -22,7 +22,7 @@ import {
   type Point
 } from "@/engine";
 import { SRD_ITEMS, SRD_SPELL_SCROLLS, findSrdItem, scrollNumbers } from "@/data/srd";
-import { SRD_2024_SPELL_SCROLLS } from "@/data/srd/library";
+import { SRD_2014_REFERENCE_SCROLLS, SRD_2024_SPELL_SCROLLS } from "@/data/srd/library";
 import { RECIPES, prepareLibrary, searchAdd } from "@/lib/ability-editor/add";
 import { checkRecordJson, recordJson } from "@/lib/ability-editor/json";
 import { abilityWarnings } from "@/lib/ability-editor/validate";
@@ -176,8 +176,9 @@ describe("spell scrolls", () => {
     expect(searchAdd("", "items", undefined).library.some((entry) => entry.name.startsWith("Scroll of"))).toBe(false);
     const found = searchAdd("scroll fire", "items", undefined).library.map((entry) => entry.name);
     expect(found).toEqual(expect.arrayContaining(["Scroll of Fireball", "Scroll of Fire Bolt"]));
-    // A scroll of every 2014 library spell, and of every 2024 cantrip and 1st-level spell (all SRD 5.2 has).
-    expect(searchAdd("scroll", "items", undefined).library.length).toBe(SRD_SPELL_SCROLLS.length + SRD_2024_SPELL_SCROLLS.length);
+    // A scroll of every 2014 spell (authored or kept for reference), and of every 2024 cantrip and 1st-level spell (all
+    // SRD 5.2 has).
+    expect(searchAdd("scroll", "items", undefined).library.length).toBe(SRD_SPELL_SCROLLS.length + SRD_2014_REFERENCE_SCROLLS.length + SRD_2024_SPELL_SCROLLS.length);
     expect(RECIPES.find((recipe) => recipe.label === "Spell scroll")?.search).toBe("scroll ");
   });
 

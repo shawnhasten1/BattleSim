@@ -21,7 +21,10 @@
     "srd:monsters:check": "tsx scripts/build-srd-monsters.ts --check",
     "srd:tokens": "tsx scripts/build-srd-tokens.ts",
     "srd:tokens:check": "tsx scripts/build-srd-tokens.ts --check",
-    "srd:2024:fetch": "tsx scripts/fetch-srd-2024.ts",
+    "srd:2024:fetch": "tsx scripts/fetch-srd.ts --document srd-2024",
+    "srd:2014:fetch": "tsx scripts/fetch-srd.ts --document srd-2014",
+    "srd:2014": "tsx scripts/build-srd-2014.ts",
+    "srd:2014:check": "tsx scripts/build-srd-2014.ts --check",
     "srd:2024": "tsx scripts/build-srd-2024.ts",
     "srd:2024:check": "tsx scripts/build-srd-2024.ts --check"
   },
