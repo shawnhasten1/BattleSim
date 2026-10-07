@@ -3010,13 +3010,18 @@ function selectFreeActivations(snapshot: EncounterSnapshot, actor: CombatantStat
     if (!action.condition || !canPayResource(actor, action) || hasActiveFeatureCondition(actor, action.featureId, action.condition?.id)) continue;
     const effects = action.condition.effects ?? [];
     const offense = effects.filter((effect) => effect.kind === "damage-bonus" || effect.kind === "attack-bonus" || effect.kind === "attack-advantage");
+    // Frenzy: it opens bonus-action attacks for as long as it lasts, worth taking whenever there's something to hit.
+    const opensAttacks = executables.some((other) => other.kind === "attack" && other.actionType === "bonus" && other.whileCondition?.id === action.condition!.id);
     const defense = effects.some((effect) => effect.kind === "damage-adjustment" || effect.kind === "armor-class-bonus"
       || effect.kind === "save-bonus" || effect.kind === "save-advantage") || (action.condition.modifiers?.armorClass ?? 0) > 0;
     const exposes = (action.condition.modifiers?.incomingAttackRoll ?? 0) > 0;
     const resourcePenalty = resourceCostWeight(action) * 3 * resourceStanceMultiplier(actor.resourceStance);
     let score = 0;
     const reasons: string[] = [];
-    if (offense.length) {
+    if (opensAttacks) {
+      score = 25 + Math.min(action.condition.durationRounds ?? 1, 10);
+      reasons.push("opens bonus-action attacks");
+    } else if (offense.length) {
       if (!attacks.some((attack) => offense.some((effect) => scopeCovers(effect, attack, definition)))) continue;
       if (exposes && !healthy) continue;
       score = 25 + Math.min(action.condition.durationRounds ?? 1, 10);

@@ -1050,6 +1050,15 @@ export type FeatureEffect = (
     trigger: Extract<ReactionTrigger, { kind: "hit-by-attack" }>;
     attackTypes?: Array<"melee" | "ranged" | "spell">;
   }
+  | {
+    /**
+     * While it has the condition `whileCondition` (an activation's), each of its plain weapon attacks of these types
+     * (melee by default) can be made as a bonus action: a copy of each (the 2014 Frenzy, while frenzied).
+     */
+    kind: "bonus-weapon-attacks";
+    whileCondition: string;
+    attackTypes?: Array<"melee" | "ranged" | "spell">;
+  }
   | ({
     /**
      * Damage of these types (any, without `damageTypes`) that each hit or effect deals it is reduced by `amount`, before

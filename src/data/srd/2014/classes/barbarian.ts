@@ -162,8 +162,21 @@ export const BERSERKER_2014: SubclassDefinition = {
   edition: "2014",
   classId: "srd:class:barbarian-2014",
   levels: [
-    // A melee weapon attack as a bonus action each turn while raging, and a level of exhaustion when the rage ends.
-    { level: 3, grants: [grant("frenzy", reference("path-of-the-berserker_frenzy"))] },
+    {
+      level: 3,
+      // While raging it can frenzy (no action): a melee weapon attack as a bonus action on each of its turns while the
+      // frenzy lasts, which ends when the rage would (the same upkeep), and a level of exhaustion after.
+      grants: [grant("frenzy", runs("path-of-the-berserker_frenzy", {
+        effects: [{ kind: "bonus-weapon-attacks", whileCondition: "frenzy-active", attackTypes: ["melee"] }],
+        grantedActions: [{
+          kind: "activate-feature", id: "frenzy", name: "Frenzy", actionType: "free", featureId: "",
+          whileCondition: { id: RAGE_ACTIVE, name: "Rage" },
+          condition: { id: "frenzy-active", name: "custom", durationRounds: 10, upkeep: { by: ["attack", "damaged"] }, endsOnUnconscious: true },
+          automationSupport: "full"
+        }],
+        notSimulated: "the level of exhaustion when the rage ends."
+      }))]
+    },
     {
       level: 6,
       grants: [grant("mindless-rage", runs("path-of-the-berserker_mindless-rage", {

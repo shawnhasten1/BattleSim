@@ -318,7 +318,7 @@ function compileExecutableActions(definition: CreatureDefinition): ActionDefinit
     ...withCantrips.map((action) => (replacements.routineOnly.has(action.id) ? { ...action, routineOnly: true } : action)),
     ...replacements.copies
   ];
-  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...masterySwapVariants(definition, listed), ...concentrationFreeVariants(listed), ...markMoves(listed)]
+  const declared = [...listed, ...nickVariants(definition, listed), ...onHitOptionVariants(definition, listed), ...reactionAttackVariants(definition, listed), ...bonusAttackVariants(definition, listed), ...metamagicVariants(definition, listed), ...maxDamageVariants(definition, listed), ...masterySwapVariants(definition, listed), ...concentrationFreeVariants(listed), ...markMoves(listed)]
     // A multiattack's options ("…or it makes two ranged attacks") are each an action of their own.
     .flatMap((action): ActionDefinition[] => (action.kind === "multiattack" ? multiattackVariants(action) : [action]));
 
@@ -987,6 +987,28 @@ function reactionAttackVariants(definition: CreatureDefinition, listed: ActionDe
         });
       }
     });
+  }
+  return out;
+}
+
+/** Frenzy: a bonus-action copy of each plain weapon attack of the effect's types, usable only while its condition lasts. */
+function bonusAttackVariants(definition: CreatureDefinition, listed: ActionDefinition[]): AttackActionDefinition[] {
+  const features = [...(definition.features ?? []), ...(definition.traits ?? [])]
+    .filter((feature) => (!feature.optional || feature.enabled) && feature.automationSupport !== "manual-only");
+  const out: AttackActionDefinition[] = [];
+  for (const feature of features) {
+    for (const effect of feature.effects ?? []) {
+      if (effect.kind !== "bonus-weapon-attacks") continue;
+      const types = effect.attackTypes ?? ["melee"];
+      for (const attack of listed) {
+        if (attack.kind !== "attack" || attack.actionType !== "action" || isAttackVariant(attack) || attack.item || attack.resourceCost || attack.onlyAfter
+          || attack.automationSupport !== "full" || attack.attackType === "spell" || attack.spellLevel != null || !types.includes(attack.attackType)) continue;
+        out.push({
+          ...attack, id: `${attack.id}:bonus-${feature.id}`, name: `${attack.name} (${feature.name})`, actionType: "bonus",
+          whileCondition: { id: effect.whileCondition, name: feature.name }
+        } as AttackActionDefinition);
+      }
+    }
   }
   return out;
 }

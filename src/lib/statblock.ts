@@ -875,6 +875,8 @@ function effectSentenceOnly(effect: FeatureEffect, definition: CreatureDefinitio
       const count = `${effect.base}${effect.plusSpellLevel ? " + the spell's level" : ""}`;
       return `When ${who.subject} casts ${spellScopeText(effect, who, true)} that forces saving throws in an area, ${count} of ${who.possessive} allies in its area succeed on their saves without rolling, and take no damage where a success would halve it.`;
     }
+    case "bonus-weapon-attacks":
+      return `While ${activationNamed(definition, effect.whileCondition)} lasts, ${who.subject} can make one ${joinList(effect.attackTypes ?? ["melee"], "or")} weapon attack as a bonus action on each of ${who.possessive} turns.`;
     case "reaction-attack": {
       const from = effect.trigger.withinFt !== undefined ? ` by a creature within ${effect.trigger.withinFt} feet of ${who.object}` : "";
       const types = joinList(effect.attackTypes ?? ["melee"], "or");
@@ -1033,6 +1035,7 @@ function effectShortOnly(effect: FeatureEffect, definition: CreatureDefinition):
     case "no-critical-hits": return "no critical hits against it";
     case "weapon-mastery": return effect.weapons === "all" ? "masters every weapon" : `masters ${effect.weapons.map((kind) => kind.replace(/-/g, " ")).join(", ")}`;
     case "on-hit-option": return `on a hit: ${effect.option.name}`;
+    case "bonus-weapon-attacks": return `a ${joinList(effect.attackTypes ?? ["melee"], "or")} attack as a bonus action while ${activationNamed(definition, effect.whileCondition)} lasts`;
     case "reaction-attack": return `a reaction ${joinList(effect.attackTypes ?? ["melee"], "or")} attack when hit${effect.trigger.withinFt !== undefined ? ` from within ${effect.trigger.withinFt} ft` : ""}`;
     case "metamagic": return `${METAMAGIC_NAMES[effect.option]} Spell (${costText(effect.resourceCost, definition)})`;
     case "shed-conditions": return `ends ${joinList(effect.conditions, "or")} on itself each turn`;

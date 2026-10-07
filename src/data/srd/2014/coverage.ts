@@ -13,7 +13,6 @@ import { GAPS } from "../2024/coverage";
 export const GAPS_2014 = {
   "smite-feature": "A slot spent on a weapon hit for extra radiant damage, as a class feature (2014 Divine Smite)",
   "cantrip-half-on-save": "A cantrip's half damage on a successful save (Potent Cantrip)",
-  "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
   exhaustion: "Exhaustion (Frenzy's cost)",
   "wild-shape-revert": "Going back from Wild Shape with a bonus action, though it shifted with its action (2014)",
   "manual-roll": "A roll the rules leave to the DM (Divine Intervention's percentile)",
@@ -59,7 +58,7 @@ export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_thief_thiefs-reflexes": ["extra-turn"],
   "srd_barbarian_feral-instinct": ["surprise-rage"],
   "srd_barbarian_indomitable-might": ["check-floor"],
-  "srd_path-of-the-berserker_frenzy": ["frenzy-attack", "exhaustion"],
+  "srd_path-of-the-berserker_frenzy": ["exhaustion"],
   "srd_path-of-the-berserker_intimidating-presence": ["extend-with-action"],
   "srd_monk_deflect-missiles": ["catch-missile"],
   "srd_monk_stillness-of-mind": ["end-own-condition"],

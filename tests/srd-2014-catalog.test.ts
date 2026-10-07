@@ -184,9 +184,10 @@ describe("the 2014 Barbarian and Monk (Phase 8)", () => {
     expect(top.fields.abilities.str).toBeLessThanOrEqual(24);
   });
 
-  it("a 2014 Berserker frightens one creature with an action, and its Frenzy is on the sheet for the DM", () => {
+  it("a 2014 Berserker frightens one creature with an action, and frenzies for bonus-action attacks (its exhaustion left out)", () => {
     const berserker = built("srd:class:barbarian-2014", 14);
-    expect(feature(berserker, "Frenzy")!.automationSupport).toBe("manual-only");
+    expect(feature(berserker, "Frenzy")!.automationSupport).toBe("partial");
+    expect(feature(berserker, "Frenzy")!.effects).toEqual([{ kind: "bonus-weapon-attacks", whileCondition: "frenzy-active", attackTypes: ["melee"] }]);
     expect(feature(berserker, "Intimidating Presence")!.grantedActions![0]).toMatchObject({
       kind: "save", actionType: "action", range: 30, saveAbility: "wis", dcFormula: { ability: "cha", proficiency: true }, immuneAfterSave: true,
       riders: [{ condition: "frightened", duration: { kind: "until-source-turn", timing: "end" } }]

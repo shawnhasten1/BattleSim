@@ -221,3 +221,40 @@ describe("Destroy Undead (10e: destroy-undead)", () => {
 });
 
 const me = (state: ReturnType<typeof onItsTurn>) => state.snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+
+describe("Frenzy: a melee attack as a bonus action while frenzied (10g: frenzy-attack)", () => {
+  const berserker = () => {
+    let build = withSuggestions(quickBuild(sources, { classId: "srd:class:barbarian-2014", level: 3 }), sources);
+    build = withChoice(build, { kind: "level", index: 2 }, ["subclass"], "srd:subclass:path-of-the-berserker-2014");
+    return rebuildActor(blankCharacter("def-fighter", "Berserker"), build, sources).definition;
+  };
+
+  it("each melee weapon attack has a bonus copy, refused until it rages and frenzies", () => {
+    const actor = berserker();
+    const actions = getExecutableActions(actor);
+    const copy = actions.find((action) => action.name === "Greataxe (Frenzy)")!;
+    expect(copy).toMatchObject({ actionType: "bonus", whileCondition: { id: "frenzy-active" } });
+    const frenzy = actions.find((action) => action.name === "Frenzy")!;
+    const state = onItsTurn(actor);
+    expect(actionProblem(state.snapshot, "pc-fighter", frenzy.id)).toBe("Only while Rage lasts");
+    resolveActivateFeatureAction(state, "pc-fighter", actions.find((action) => action.name === "Rage")!.id);
+    // Its bonus action went on the rage this turn: on its next turn, the copy needs the frenzy.
+    me(state).actionEconomy = { action: true, bonus: true, reaction: true };
+    expect(actionProblem(state.snapshot, "pc-fighter", copy.id)).toBe("Only while Frenzy lasts");
+    resolveActivateFeatureAction(state, "pc-fighter", frenzy.id);
+    expect(actionProblem(state.snapshot, "pc-fighter", copy.id)).toBeUndefined();
+  });
+
+  it("the AI rages, frenzies, and makes its bonus-action attacks on later turns", () => {
+    const state = onItsTurn(berserker());
+    const goblin = state.snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!;
+    goblin.currentHp = 300;
+    state.snapshot.definitions = state.snapshot.definitions.map((entry) => (entry.id === goblin.definitionId ? { ...entry, maxHp: 300 } : entry));
+    state.snapshot.combatants.find((token) => token.id === "enemy-goblin-2")!.state = "dead";
+    const result = runAutomatedEncounter({ ...state.snapshot, seed: "frenzy-2014" }, 3);
+    expect(result.outcome.warnings).toEqual([]);
+    const ours = result.log.filter((entry) => entry.data?.combatantId === "pc-fighter" || entry.data?.attackerId === "pc-fighter");
+    expect(ours.some((entry) => /Frenzy/.test(entry.message) && entry.type === "AiDecision")).toBe(true);
+    expect(ours.some((entry) => entry.type === "AttackRolled" && /\(Frenzy\)/.test(entry.message))).toBe(true);
+  });
+});

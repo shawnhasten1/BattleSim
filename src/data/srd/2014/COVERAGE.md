@@ -12,7 +12,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 18 | 11 | 2 | 2 | 2 | 1 |
+| Barbarian (Path of the Berserker) | 18 | 11 | 3 | 1 | 2 | 1 |
 | Bard (College of Lore) | 15 | 4 | 0 | 1 | 5 | 5 |
 | Cleric (Life Domain) | 13 | 8 | 0 | 1 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
@@ -50,7 +50,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `extend-with-action` | Keeping an effect going with an action on later turns (Intimidating Presence) | 1 |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | 1 |
 | `foe-slayer-roll` | Foe Slayer's Wisdom on the attack roll instead of the damage | 1 |
-| `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
 | `immunity-by-type` | Immunity to a condition from creatures of a type (Nature's Ward: charm and fright from elementals and fey) | 1 |
 | `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
@@ -90,7 +89,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Level | Feature | Verdict | Gaps | Note |
 |---|---|---|---|---|
-| 3 | Frenzy | manual | frenzy-attack, exhaustion |  |
+| 3 | Frenzy | partial | exhaustion | the level of exhaustion when the rage ends. |
 | 6 | Mindless Rage | full |  |  |
 | 10 | Intimidating Presence | partial | extend-with-action | keeping it going with an action on later turns. |
 | 14 | Retaliation | full |  |  |
