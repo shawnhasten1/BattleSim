@@ -602,13 +602,47 @@
   background: #a9c6ec;
 }
 
+.hotbarGroups {
+  display: grid;
+  gap: 6px;
+  max-height: 156px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* A group of a tab's buttons: its label on the left, its buttons wrapping beside it. */
+.hotGroup {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.hotGroupLabel {
+  padding-top: 11px;
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
 .hotbarButtons {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 132px;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .hotGroup {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .hotGroupLabel {
+    padding-top: 0;
+  }
 }
 
 .hotItem {

@@ -136,7 +136,7 @@ describe("a wand's spell for more charges", () => {
     const wand = withItemPool(structuredClone(findSrdItem("srd:item:wand-of-fireballs")!) as ItemDefinition, "wand");
     const text = itemStatblock(wand, carrier([wand])).text;
     expect(text).toContain("Each extra charge spent at once casts it a level higher, for 1d6 more damage, up to 7 (9th level).");
-    const button = hotbarFor(scene({ items: [wand] }), "kael").tabs.find((tab) => tab.id === "items")!.buttons[0]!;
+    const button = hotbarFor(scene({ items: [wand] }), "kael").tabs.find((tab) => tab.id === "actions")!.groups.find((group) => group.id === "items")!.buttons[0]!;
     expect(button.name).toBe("Fireball (Wand of Fireballs)");
     expect(button.variants.map((variant) => variant.label)).toEqual([
       "1 charge · 3rd", "2 charges · 4th", "3 charges · 5th", "4 charges · 6th", "5 charges · 7th", "6 charges · 8th", "7 charges · 9th"

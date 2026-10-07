@@ -3,7 +3,7 @@ import { sampleEncounter, type CreatureDefinition, type EncounterSnapshot, type 
 import { findSrdFeature, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { loadSrdMonster } from "@/data/srd/monsters";
 import { FEATURE_TEMPLATES } from "@/lib/ability-editor/templates";
-import { hotbarFor, type HotbarButton, type HotbarModel, type HotbarTab } from "@/lib/play/hotbar";
+import { hotbarFor, type HotbarButton, type HotbarGroup, type HotbarModel, type HotbarTab } from "@/lib/play/hotbar";
 import { targetLine } from "@/lib/play/targeting";
 import { aimAtCreature, backOutOfAiming, finishAiming, planSwingStep, pressHotbar } from "@/hooks/usePlayAim";
 import { swingQuestion } from "@/hooks/usePlayMove";
@@ -68,36 +68,87 @@ function toughGoblins(encounter: EncounterSnapshot) {
 }
 
 const tab = (model: HotbarModel, id: HotbarTab) => model.tabs.find((entry) => entry.id === id)!.buttons;
+const group = (model: HotbarModel, id: HotbarTab, groupId: HotbarGroup) => model.tabs.find((entry) => entry.id === id)!.groups.find((entry) => entry.id === groupId)?.buttons ?? [];
 const names = (buttons: HotbarButton[]) => buttons.map((button) => button.name);
+/** Each tab's groups and the names in them, in order. */
+const layout = (model: HotbarModel) => Object.fromEntries(model.tabs.map((entry) => [entry.id, Object.fromEntries(entry.groups.map((inner) => [inner.id, names(inner.buttons)]))]));
 const button = (model: HotbarModel, name: string) => model.tabs.flatMap((entry) => entry.buttons).find((candidate) => candidate.name === name)!;
 const combatant = (id: string) => store().encounter.combatants.find((candidate) => candidate.id === id)!;
 
 describe("what's on the hotbar", () => {
-  it("puts each of a fighter's abilities on its tab, with its cost and variants", () => {
+  it("puts each of a fighter's abilities on the tab of the slot it takes, grouped by what it is, with its cost and variants", () => {
     const board = load();
     const model = hotbarFor(board, "pc-fighter");
-    // A multiattack heads the attacks, as in a statblock.
-    expect(names(tab(model, "attacks"))).toEqual(["Extra Attack", "Longsword", "Greataxe"]);
-    expect(button(model, "Extra Attack")).toMatchObject({ cost: "2 attacks", automation: "full", slot: "action" });
+    expect(model.tabs.map((entry) => entry.id)).toEqual(["actions", "bonus", "reactions"]);
+    expect(layout(model)).toEqual({
+      // A multiattack heads the attacks, as in a statblock. Action Surge is free: it goes with the actions.
+      actions: {
+        attacks: ["Extra Attack", "Longsword", "Greataxe"],
+        features: ["Action Surge"],
+        common: ["Dash", "Disengage", "Dodge", "Hide", "Help"]
+      },
+      // The greataxe's bonus-action swing, Second Wind and Rage.
+      bonus: { attacks: ["Greataxe"], features: ["Second Wind", "Rage"] },
+      // Reactions aren't buttons: they're asked for when they come up, and the tab sets how.
+      reactions: {}
+    });
+    expect(button(model, "Extra Attack")).toMatchObject({ cost: "2 attacks", automation: "full", slot: "action", tab: "actions", group: "attacks" });
     expect(button(model, "Extra Attack").variants[0]!.aim).toEqual({ kind: "routine", range: 5 });
-    // The greataxe swings plainly or as a power attack; its bonus-action copy is on the Bonus tab.
-    const greataxe = tab(model, "attacks").find((entry) => entry.name === "Greataxe")!;
+    // The greataxe swings plainly or as a power attack.
+    const greataxe = group(model, "actions", "attacks").find((entry) => entry.name === "Greataxe")!;
     expect(greataxe.variants.map((variant) => variant.label)).toEqual(["Normal", "Power Attack"]);
     expect(greataxe.variants[0]!.aim).toEqual({ kind: "creatures", who: "foes", count: 1, repeat: false, range: 5 });
-    expect(names(tab(model, "bonus"))).toEqual(["Greataxe"]);
-    expect(tab(model, "bonus")[0]!.slot).toBe("bonus");
-    // Features: Second Wind, Action Surge, Rage — each with what it spends.
-    expect(tab(model, "features").map((entry) => [entry.name, entry.cost, entry.slot])).toEqual([
-      ["Second Wind", "1 second wind", "bonus"],
+    expect(group(model, "bonus", "attacks")[0]).toMatchObject({ slot: "bonus", tab: "bonus" });
+    // Each feature with what it spends.
+    expect([...group(model, "actions", "features"), ...group(model, "bonus", "features")].map((entry) => [entry.name, entry.cost, entry.slot])).toEqual([
       ["Action Surge", "1 action surge", "free"],
+      ["Second Wind", "1 second wind", "bonus"],
       ["Rage", "1 rage", "bonus"]
     ]);
     // Common: the actions anyone can take. Hide and Help are by hand; Escape only while grappled.
-    expect(tab(model, "common").map((entry) => [entry.name, entry.automation])).toEqual([
+    expect(group(model, "actions", "common").map((entry) => [entry.name, entry.automation])).toEqual([
       ["Dash", "full"], ["Disengage", "full"], ["Dodge", "full"], ["Hide", "by-hand"], ["Help", "by-hand"]
     ]);
-    // Reactions aren't on it: they're asked for when they come up.
+    // The number keys count along a tab's groups in order.
+    expect(names(tab(model, "actions"))).toEqual(["Extra Attack", "Longsword", "Greataxe", "Action Surge", "Dash", "Disengage", "Dodge", "Hide", "Help"]);
     expect(model.tabs.flatMap((entry) => entry.buttons).some((entry) => entry.name.includes("reaction"))).toBe(false);
+  });
+
+  it("puts spells, a quickened spell, Cunning Action and a potion on the tab of the slot each takes (HOTBAR_REDESIGN_PLAN.md §1)", () => {
+    const board = load((encounter) => {
+      const fighterDefinition = encounter.definitions.find((definition) => definition.id === "def-fighter")!;
+      fighterDefinition.spells = ["srd:spell:fire-bolt", "srd:spell:fireball", "srd:spell:healing-word", "srd:spell:misty-step"].map((id) => structuredClone(findSrdSpell(id)!));
+      fighterDefinition.features = [
+        ...(fighterDefinition.features ?? []),
+        { ...structuredClone(findSrdFeature("srd:feature:cunning-action")!), id: "f-cunning" },
+        { id: "f-quick", name: "Metamagic: Quickened Spell", category: "feature", automationSupport: "full", effects: [{ kind: "metamagic", option: "quickened", resourceCost: { resourceId: "sorcery-points", amount: 2 } }] }
+      ];
+      fighterDefinition.items = [{
+        id: "potions", name: "Potion of Healing", type: "potion", supply: { id: "item:potions", size: 2, unit: "count" }, give: { actionType: "action" },
+        grantedActions: [{
+          kind: "healing", id: "drink", name: "Potion of Healing", actionType: "bonus", range: 0, healing: [{ dice: "2d4+2" }],
+          targeting: { target: "self" }, resourceCost: { resourceId: "item:potions", amount: 1 }, automationSupport: "full"
+        }],
+        automationSupport: "full"
+      }];
+      const resources = { "slot-1": 4, "slot-2": 3, "slot-3": 2, "sorcery-points": 5, "item:potions": 2 };
+      fighterDefinition.resources = { ...fighterDefinition.resources, ...resources };
+      const fighterToken = encounter.combatants.find((candidate) => candidate.id === "pc-fighter")!;
+      fighterToken.resources = { ...fighterToken.resources, ...resources };
+    });
+    const model = hotbarFor(board, "pc-fighter");
+    // An action spell under Actions; a bonus-action spell, and Fireball quickened, under Bonus.
+    expect(names(group(model, "actions", "spells"))).toEqual(["Fire Bolt", "Fireball"]);
+    expect(names(group(model, "bonus", "spells"))).toEqual(["Fire Bolt (Quickened)", "Healing Word", "Misty Step", "Fireball (Quickened)"]);
+    expect(group(model, "bonus", "spells").find((entry) => entry.name === "Fireball (Quickened)")!.variants[0]!.actionId).toMatch(/:meta-quickened/);
+    // Cunning Action's Dash, Disengage and Hide: common actions, taken with the bonus action.
+    expect(names(group(model, "bonus", "common"))).toEqual(["Cunning Action: Dash", "Cunning Action: Disengage", "Cunning Action: Hide"]);
+    // A potion drunk with a bonus action and given with an action: a button on each tab, each saying which.
+    expect(group(model, "bonus", "items").map((entry) => [entry.name, entry.cost, entry.slot])).toEqual([["Potion of Healing: Drink", "×2", "bonus"]]);
+    expect(group(model, "actions", "items").map((entry) => [entry.name, entry.cost, entry.slot])).toEqual([["Potion of Healing: Give", "×2", "action"]]);
+    expect(group(model, "actions", "items")[0]!.variants[0]!.aim).toEqual({ kind: "creatures", who: "allies", count: 1, repeat: false, range: 5 });
+    // The order of a tab's groups: Attacks, Spells, Features, Items, Common.
+    expect(model.tabs.find((entry) => entry.id === "bonus")!.groups.map((entry) => entry.id)).toEqual(["attacks", "spells", "features", "items", "common"]);
   });
 
   it("greys out what can't be used now, saying why", () => {
@@ -122,7 +173,7 @@ describe("what's on the hotbar", () => {
       encounter.combatants.push({ ...structuredClone(encounter.combatants[0]!), id: "mage", definitionId: mage.id, displayName: "Mage", position: { x: 4, y: 6 }, initiative: 1, resources: { ...mage.resources, "slot-3": 0 } });
     });
     const model = hotbarFor(board, "mage");
-    const spells = tab(model, "spells");
+    const spells = group(model, "actions", "spells");
     // Cantrips first, then by level; Shield and Counterspell are reactions, asked for when they come up.
     expect(spells.map((entry) => entry.spellLevel)).toEqual([...spells.map((entry) => entry.spellLevel)].sort((a, b) => (a ?? 0) - (b ?? 0)));
     expect(names(spells)).not.toContain("Shield");
@@ -138,7 +189,7 @@ describe("what's on the hotbar", () => {
     expect(fireball.defaultVariant).toBe(1);
     expect(fireball.problem).toBeUndefined();
     expect(fireball.variants[0]!.aim).toEqual({ kind: "area" });
-    expect(button(model, "Misty Step")).toMatchObject({ slot: "bonus" });
+    expect(button(model, "Misty Step")).toMatchObject({ slot: "bonus", tab: "bonus", group: "spells" });
     expect(button(model, "Misty Step").variants[0]!.aim).toEqual({ kind: "place", moves: "self" });
   });
 
@@ -274,7 +325,7 @@ describe("using the hotbar", () => {
     });
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     const taunt = button(hotbarFor(store().encounter, "pc-fighter"), "Taunt");
-    expect(taunt).toMatchObject({ automation: "by-hand", tab: "bonus" });
+    expect(taunt).toMatchObject({ automation: "by-hand", tab: "bonus", group: "features" });
     pressHotbar(taunt);
     expect(store().log.at(-1)).toMatchObject({ type: "ManualActionUsed", message: "Fighter uses Taunt: resolve it by hand" });
     expect(combatant("pc-fighter").resources?.taunts).toBe(0);

@@ -43,10 +43,11 @@ function typingIn(target: EventTarget | null): boolean {
 
 /**
  * The hotbar, at the bottom of the map on a person's creature's turn (PLAY_MODE_PLAN.md §2.2): the creature and what's
- * left of its turn (action, bonus action, reaction, movement, the height it flies at), everything it can use by tab,
- * End turn, "AI: take this turn" and Undo. A button is used at once, or armed to be aimed on the map; a greyed-out one
- * says why. Keys 1–0 press the tab's first ten buttons; Enter uses an ability on the creatures picked so far, or ends
- * the turn when nothing is armed.
+ * left of its turn (action, bonus action, reaction, movement, the height it flies at), everything it can use — a tab
+ * for what it takes, grouped inside by what it is (HOTBAR_REDESIGN_PLAN.md §1) — End turn, "AI: take this turn" and
+ * Undo. A button is used at once, or armed to be aimed on the map; a greyed-out one says why. Keys 1–0 press the tab's
+ * first ten buttons, counted across its groups; Enter uses an ability on the creatures picked so far, or ends the turn
+ * when nothing is armed.
  */
 export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimView | null }) {
   const plan = usePlayMovePlan();
@@ -103,7 +104,10 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
   const altitudeNow = actor.altitude ?? 0;
   const altitudeNext = plan.altitude ?? altitudeNow;
   const current = model.tabs.find((entry) => entry.id === tab) ?? model.tabs[0]!;
-  const armedButton = armed ? model.tabs.flatMap((entry) => entry.buttons).find((button) => button.key === armed.key) : undefined;
+  // By the variant armed: a weapon's action and bonus-action buttons are one family, with one key.
+  const holds = (button: HotbarButton) => Boolean(armed && button.variants.some((variant) => variant.actionId === armed.actionId));
+  const armedButton = armed ? model.tabs.flatMap((entry) => entry.buttons).find(holds) : undefined;
+  const countOf = (entry: HotbarModel["tabs"][number]) => (entry.id === "reactions" ? model.reactions.length : entry.buttons.length);
 
   return (
     <section className={styles.hotbar} aria-label={`${actor.displayName}'s turn`}>
@@ -166,15 +170,15 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
               type="button"
               role="tab"
               aria-selected={entry.id === current.id}
-              disabled={(entry.id === "reactions" ? model.reactions.length : entry.buttons.length) === 0}
+              disabled={countOf(entry) === 0}
               onClick={() => setTab(entry.id)}
             >
               {entry.label}
-              {(entry.id === "reactions" ? model.reactions.length : entry.buttons.length) ? <small>{entry.id === "reactions" ? model.reactions.length : entry.buttons.length}</small> : null}
+              {countOf(entry) ? <small>{countOf(entry)}</small> : null}
             </button>
           ))}
         </div>
-        {current.id === "spells" && model.slots.length ? <SlotPips slots={model.slots} /> : null}
+        {current.groups.some((group) => group.id === "spells") && model.slots.length ? <SlotPips slots={model.slots} /> : null}
       </div>
 
       {current.id === "reactions" ? (
@@ -198,9 +202,21 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
           ) : null}
         </div>
       ) : (
-        <div className={styles.hotbarButtons} role="tabpanel" aria-label={current.label}>
-          {current.buttons.map((button, index) => (
-            <HotbarItem key={`${button.key}-${button.slot}`} button={button} index={index} armedActionId={armed && armed.key === button.key ? armed.actionId : undefined} />
+        <div className={styles.hotbarGroups} role="tabpanel" aria-label={current.label}>
+          {current.groups.map((group) => (
+            <div key={group.id} className={styles.hotGroup} role="group" aria-label={group.label}>
+              <span className={styles.hotGroupLabel} aria-hidden="true">{group.label}</span>
+              <div className={styles.hotbarButtons}>
+                {group.buttons.map((button) => (
+                  <HotbarItem
+                    key={`${button.key}-${button.slot}`}
+                    button={button}
+                    index={current.buttons.indexOf(button)}
+                    armedActionId={holds(button) ? armed!.actionId : undefined}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
           {current.buttons.length === 0 ? <span className={styles.hint}>Nothing here.</span> : null}
         </div>
@@ -240,7 +256,8 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
   const automationNote = button.automation === "partial" ? "Partly simulated: the engine runs some of it"
     : button.automation === "by-hand" ? "By hand: it takes its slot and cost and is logged; you apply what it does"
       : undefined;
-  const cost = [button.cost, button.slot === "bonus" ? "bonus action" : button.slot === "free" ? "free" : undefined].filter(Boolean).join(" · ");
+  // The tab says what it takes; only a free one says so.
+  const cost = [button.cost, button.slot === "free" ? "free" : undefined].filter(Boolean).join(" · ");
   return (
     <div className={styles.hotItem} data-armed={Boolean(armedActionId)}>
       <button

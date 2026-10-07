@@ -60,15 +60,19 @@ function Screen() {
 }
 
 describe("the hotbar", () => {
-  it("shows the turn's abilities by tab; a number key arms one, Esc puts it away, Enter ends the turn", async () => {
+  it("shows the turn's abilities by the slot they take, grouped by what they are; a number key arms one, Esc puts it away, Enter ends the turn", async () => {
     load();
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     render(<Screen />);
     const bar = screen.getByRole("region", { name: "Fighter's turn" });
     const tabs = within(bar).getByRole("tablist", { name: "Abilities" });
-    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Attacks2", "Spells", "Bonus", "Features2", "Common5", "Reactions1"]);
-    const panel = within(bar).getByRole("tabpanel", { name: "Attacks" });
-    expect(within(panel).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Extra Attack2 attacks", "2Longsword"]);
+    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Actions8", "Bonus1", "Reactions1"]);
+    const panel = within(bar).getByRole("tabpanel", { name: "Actions" });
+    // Its groups, labelled, in order; the keys count along them.
+    expect(within(panel).getAllByRole("group").map((entry) => entry.getAttribute("aria-label"))).toEqual(["Attacks", "Features", "Common"]);
+    expect(within(within(panel).getByRole("group", { name: "Attacks" })).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Extra Attack2 attacks", "2Longsword"]);
+    expect(within(within(panel).getByRole("group", { name: "Features" })).getAllByRole("button")[0]!.textContent).toMatch(/^3Action Surge.*free$/);
+    expect(within(within(panel).getByRole("group", { name: "Common" })).getAllByRole("button")[0]!.textContent).toBe("4Dash");
 
     // 2 arms the longsword; the hint says what to do.
     await userEvent.keyboard("2");
@@ -148,7 +152,7 @@ describe("the hotbar", () => {
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     const { container } = render(<Screen />);
     const bar = screen.getByRole("region", { name: "Fighter's turn" });
-    await userEvent.click(within(bar).getByRole("tab", { name: /^Spells/ }));
+    await userEvent.click(within(bar).getByRole("tab", { name: /^Actions/ }));
     await userEvent.click(within(bar).getByRole("button", { name: /Burning Hands/ }));
     act(() => ui().setHover({ x: 6, y: 3 }));
     expect(container.querySelectorAll(".play-area").length).toBeGreaterThan(3);
@@ -168,7 +172,7 @@ describe("the hotbar", () => {
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     render(<Screen />);
     const bar = screen.getByRole("region", { name: "Fighter's turn" });
-    await userEvent.click(within(bar).getByRole("tab", { name: /^Features/ }));
+    await userEvent.click(within(bar).getByRole("tab", { name: /^Actions/ }));
     await userEvent.click(within(bar).getByRole("button", { name: /Call for Help/ }));
     const choice = within(bar).getByRole("group", { name: "Call for Help: which" });
     await userEvent.click(within(choice).getByRole("button", { name: "An archer" }));

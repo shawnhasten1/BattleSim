@@ -77,7 +77,8 @@ function load(items: ItemDefinition[], change?: (encounter: EncounterSnapshot) =
   return encounter;
 }
 
-const itemsTab = (model: HotbarModel) => model.tabs.find((tab) => tab.id === "items")!.buttons;
+/** The item buttons, whichever tab each is on. */
+const itemsTab = (model: HotbarModel) => model.tabs.flatMap((tab) => tab.groups.filter((group) => group.id === "items").flatMap((group) => group.buttons));
 const potionButton = (): HotbarButton => itemsTab(hotbarFor(store().encounter, "pc-fighter"))[0]!;
 const combatant = (id: string): CombatantState => store().encounter.combatants.find((candidate) => candidate.id === id)!;
 
@@ -90,24 +91,24 @@ function downArcher(encounter: EncounterSnapshot) {
   archer.conditions = [{ id: "unconscious", name: "unconscious", startedRound: 1 }];
 }
 
-describe("the hotbar's Items tab", () => {
+describe("the hotbar's items", () => {
   it("has one button per potion, with Drink and Give and how many are left", () => {
     const board = load([potions("action", "action")]);
     const model = hotbarFor(board, "pc-fighter");
-    expect(model.tabs.map((tab) => tab.id)).toContain("items");
     const buttons = itemsTab(model);
-    expect(buttons.map((button) => [button.name, button.cost, button.slot])).toEqual([["Potion of Healing", "×3", "action"]]);
+    expect(buttons.map((button) => [button.name, button.cost, button.slot, button.tab, button.group])).toEqual([["Potion of Healing", "×3", "action", "actions", "items"]]);
     expect(buttons[0]!.variants.map((variant) => [variant.label, variant.aim])).toEqual([
       ["Drink", { kind: "none" }],
       ["Give", { kind: "creatures", who: "allies", count: 1, repeat: false, range: 5 }]
     ]);
   });
 
-  it("says what each takes when drinking and giving take different slots", () => {
-    const button = itemsTab(hotbarFor(load([potions("bonus", "action")]), "pc-fighter"))[0]!;
-    expect(button.variants.map((variant) => [variant.label, variant.slot])).toEqual([["Drink (bonus action)", "bonus"], ["Give (action)", "action"]]);
-    expect(button.slot).toBe("bonus");
-    expect(button.cost).toBe("×3");
+  it("puts drinking and giving on the tabs of their slots when they take different ones, each button saying which", () => {
+    const buttons = itemsTab(hotbarFor(load([potions("bonus", "action")]), "pc-fighter"));
+    expect(buttons.map((button) => [button.name, button.tab, button.slot, button.cost, button.variants.map((variant) => variant.label)])).toEqual([
+      ["Potion of Healing: Give", "actions", "action", "×3", ["Give"]],
+      ["Potion of Healing: Drink", "bonus", "bonus", "×3", ["Drink"]]
+    ]);
   });
 
   it("is greyed out with none left", () => {

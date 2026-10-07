@@ -89,7 +89,7 @@ export const usePlayUiStore = create<PlayUiState>()((set, get) => ({
   altitude: null,
   hover: null,
   dragAnchor: null,
-  tab: "attacks",
+  tab: "actions",
   armed: null,
   swing: null,
   note: null,

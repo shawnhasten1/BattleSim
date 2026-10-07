@@ -125,12 +125,15 @@ describe("full healing for an action", () => {
     expect(declared.data?.item).toMatchObject({ name: "Potion of Healing", use: "drink", full: true });
   });
 
-  it("is a variant on the hotbar's potion: the rolled bonus action first, then the full amount for an action", () => {
-    const button = hotbarFor(scene({ rule: "bonus", full: true, hp: 5, foes: [] }), "kael").tabs.find((tab) => tab.id === "items")!.buttons[0]!;
-    expect(button.variants.map((variant) => [variant.label, variant.slot])).toEqual([
-      ["Drink (bonus action)", "bonus"], ["Give (bonus action)", "bonus"], ["Drink · full 10 (action)", "action"], ["Give · full 10 (action)", "action"]
+  it("is the hotbar potion's button on Actions: the rolled amount on Bonus, the full amount for an action", () => {
+    const model = hotbarFor(scene({ rule: "bonus", full: true, hp: 5, foes: [] }), "kael");
+    const items = (tab: "actions" | "bonus") => model.tabs.find((entry) => entry.id === tab)!.groups.find((group) => group.id === "items")!.buttons;
+    expect(items("bonus").map((button) => [button.name, button.slot, button.variants.map((variant) => variant.label)])).toEqual([
+      ["Potion of Healing", "bonus", ["Drink", "Give"]]
     ]);
-    expect(button.slot).toBe("bonus");
+    expect(items("actions").map((button) => [button.name, button.slot, button.variants.map((variant) => variant.label)])).toEqual([
+      ["Potion of Healing", "action", ["Drink · full 10", "Give · full 10"]]
+    ]);
   });
 });
 

@@ -173,7 +173,7 @@ describe("zones", () => {
     expect(zone?.origin).toEqual({ x: 4, y: 1 });
     // Its own button, on the Bonus tab.
     const move = button(hotbar(), "Move Moonbeam");
-    expect(move).toMatchObject({ tab: "bonus", cost: "up to 60 ft" });
+    expect(move).toMatchObject({ tab: "bonus", group: "spells", cost: "up to 60 ft" });
     expect(move.variants[0]!.aim).toEqual({ kind: "zone", zoneId: zone!.id, maxFeet: 60 });
     pressHotbar(move);
     aimAtSquare({ x: 20, y: 1 });

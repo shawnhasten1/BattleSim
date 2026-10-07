@@ -87,7 +87,7 @@ describe("the dock on your creature's turn", () => {
     render(<MoveScreen />);
     const dock = screen.getByRole("region", { name: "Fighter's turn" });
     expect(within(dock).getByText("30 of 30 ft")).toBeTruthy();
-    await userEvent.click(within(dock).getByRole("tab", { name: /^Common/ }));
+    await userEvent.click(within(dock).getByRole("tab", { name: /^Actions/ }));
     for (const name of ["Dash", "Disengage", "Dodge"]) expect(within(dock).getByRole("button", { name })).toBeTruthy();
     expect(within(dock).queryByRole("button", { name: /Escape/ })).toBeNull();
 
