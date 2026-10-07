@@ -62,6 +62,7 @@ import type {
   ResourceCost,
   RiderDuration,
   RiderGate,
+  RuleProfile,
   SaveActionDefinition,
   TerrainZone,
   MultiattackStep,
@@ -1290,12 +1291,19 @@ export function compareInitiative(snapshot: EncounterSnapshot, a: CombatantState
 /** A creature's initiative roll: d20 + Dexterity, and what its features add (Alert's bonus, Feral Instinct's advantage). */
 /**
  * What a creature adds to its initiative roll: its DEX modifier and any feature's initiative effect (Alert), whether it
- * rolls with advantage, and the features that changed it. The sheet shows it; the roll uses it.
+ * rolls with advantage or disadvantage, and what changed it. The sheet shows it; the roll uses it. Under the 2024 surprise
+ * rule (`rules.surprise`), a surprised creature rolls at disadvantage.
  */
-export function initiativeOf(definition: CreatureDefinition, combatant?: CombatantState): { bonus: number; advantage: boolean; features: string[] } {
+export function initiativeOf(
+  definition: CreatureDefinition,
+  combatant?: CombatantState,
+  rules?: Pick<RuleProfile, "surprise">
+): { bonus: number; advantage: boolean; disadvantage: boolean; features: string[] } {
   let bonus = abilityModifier(definition.abilities.dex);
   let advantage = false;
   const features: string[] = [];
+  const disadvantage = rules?.surprise === "initiative" && (combatant?.conditions ?? []).some((condition) => condition.name === "surprised");
+  if (disadvantage) features.push("Surprised");
   for (const feature of featureSources(definition, combatant)) {
     for (const effect of feature.effects ?? []) {
       if (effect.kind !== "initiative") continue;
@@ -1304,12 +1312,12 @@ export function initiativeOf(definition: CreatureDefinition, combatant?: Combata
       features.push(feature.name);
     }
   }
-  return { bonus, advantage, features };
+  return { bonus, advantage, disadvantage, features };
 }
 
 function rollInitiativeOf(state: EngineState, combatant: CombatantState): { roll: DiceRollResult; features: string[] } {
-  const { bonus, advantage, features } = initiativeOf(getDefinition(state.snapshot, combatant), combatant);
-  return { roll: rollD20WithBonus(state.rng, bonus, { advantage }), features };
+  const { bonus, advantage, disadvantage, features } = initiativeOf(getDefinition(state.snapshot, combatant), combatant, state.snapshot.rules);
+  return { roll: rollD20WithBonus(state.rng, bonus, { advantage, disadvantage }), features };
 }
 
 export function rollInitiative(state: EngineState): void {
@@ -1318,6 +1326,13 @@ export function rollInitiative(state: EngineState): void {
     combatant.initiative = roll.total;
     return { combatant, roll, features };
   });
+  // The 2024 surprise rule: surprise is spent on the initiative roll, and the condition does nothing else. One put on
+  // before the table's rule changed still carries the 2014 rule's lost turn, so it's cleared here.
+  if (state.snapshot.rules.surprise === "initiative") {
+    for (const combatant of state.snapshot.combatants) {
+      for (const condition of combatant.conditions ?? []) if (condition.name === "surprised") delete condition.modifiers;
+    }
+  }
 
   state.snapshot.combatants.sort((a, b) => compareInitiative(state.snapshot, a, b));
 
@@ -1501,7 +1516,7 @@ function applyEmanation(state: EngineState, bearer: CombatantState, feature: Fea
     applyCondition(state, target.id, {
       id: `${target.id}:${bearer.id}:${feature.id}`,
       name: emanation.condition,
-      modifiers: defaultConditionModifiers(emanation.condition),
+      modifiers: defaultConditionModifiers(emanation.condition, state.snapshot.rules),
       sourceId: feature.id,
       sourceName: feature.name,
       sourceCombatantId: bearer.id,
@@ -1805,7 +1820,7 @@ export function conditionByDm(state: EngineState, combatantId: Id, change: { add
       name: change.add,
       sourceName: "the DM",
       startedRound: state.snapshot.round,
-      modifiers: defaultConditionModifiers(change.add)
+      modifiers: defaultConditionModifiers(change.add, state.snapshot.rules)
     }, { force: true });
     if (!applied) throw new Error(`${target.displayName} can't be ${change.add}`);
     const logged = state.log.at(-1);
@@ -2768,7 +2783,10 @@ export function attackRollInputs(
   // Escape the Horde, Multiattack Defense.
   const defendedBy = attackDefenseAgainst(state, attacker, target, targetDefinition, action);
   if (defendedBy) featureAdvantage.sources.push(defendedBy);
-  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage || defendedBy
+  // Grappled, by the 2024 rule: disadvantage against anyone but the grappler.
+  const grappled = grappledAgainst(state.snapshot.rules, attacker, target);
+  if (grappled) featureAdvantage.sources.push(grappled);
+  const disadvantage = Boolean(options.disadvantage || longRange || options.forcedDisadvantage || featureAdvantage.disadvantage || defendedBy || grappled
     || nextAttack.some(({ condition }) => condition.nextAttack?.mode === "disadvantage"));
   const rollMode = attackRollMode({ advantage, disadvantage });
   const attackBonus = resolveAttackBonus(action, attackerDefinition);
@@ -2780,6 +2798,17 @@ export function attackRollInputs(
   const targetAc = effectiveArmorClass(state, targetDefinition, target) + cover.acBonus;
   const criticalRange = featureCriticalRange(state, attacker, target, action, attackerDefinition);
   return { advantage, disadvantage, rollMode, featureAdvantage, longRange, attackBonus, featureAttackBonus, totalBonus, targetAc, cover, criticalRange };
+}
+
+/**
+ * Grappled under the 2024 rule (`RuleProfile.grappled`, EDITIONS_PLAN.md D4): an attack roll against anyone but the
+ * grappler has disadvantage. What says so ("Grappled"), or undefined. A grapple with no known grappler (one the DM put on
+ * by hand) can't tell its grappler from anyone else, so it does nothing here.
+ */
+export function grappledAgainst(rules: Pick<RuleProfile, "grappled">, attacker: CombatantState, target: CombatantState): string | undefined {
+  if (rules.grappled !== "speed-and-attacks") return undefined;
+  const held = (attacker.conditions ?? []).find((condition) => condition.name === "grappled" && condition.sourceCombatantId && condition.sourceCombatantId !== target.id);
+  return held ? "Grappled" : undefined;
 }
 
 /**
@@ -5130,7 +5159,7 @@ function applySwallow(
   for (const name of ["blinded", "restrained"] as const) {
     applyCondition(state, target.id, {
       id: `${target.id}:${actionId}:swallowed-${name}`, name, sourceId: SWALLOW_SOURCE, sourceCombatantId: holder.id,
-      startedRound: state.snapshot.round, modifiers: defaultConditionModifiers(name)
+      startedRound: state.snapshot.round, modifiers: defaultConditionModifiers(name, state.snapshot.rules)
     }, { force: true });
   }
   state.log.push(event(state, "Swallowed", `${holder.displayName} swallows ${target.displayName}`, { holderId: holder.id, targetId: target.id, actionId }));
@@ -7910,7 +7939,7 @@ function applyOnHitFeatureConditions(
             timing: "end"
           }
           : undefined,
-        modifiers: effect.appliedCondition.modifiers ?? (effect.appliedCondition.name ? defaultConditionModifiers(effect.appliedCondition.name) : undefined),
+        modifiers: effect.appliedCondition.modifiers ?? (effect.appliedCondition.name ? defaultConditionModifiers(effect.appliedCondition.name, state.snapshot.rules) : undefined),
         effects: effect.appliedCondition.effects,
         ...(effect.appliedCondition.nextAttack
           ? { nextAttack: { ...effect.appliedCondition.nextAttack, ...(effect.appliedCondition.nextAttack.role === "against" ? { by: attacker.id } : {}) } }
@@ -8073,7 +8102,11 @@ function resolveRiderSaveDc(
  * Crude, engine-consistent mechanical effect of a bare condition name: what a fall, a hold or the sheet's + Condition
  * (the store's `applyConditionToCombatant`) gives a creature.
  */
-export function defaultConditionModifiers(name: ConditionName): ConditionInstance["modifiers"] | undefined {
+export function defaultConditionModifiers(name: ConditionName, rules?: Pick<RuleProfile, "stunned" | "surprise">): ConditionInstance["modifiers"] | undefined {
+  // The table's rules (EDITIONS_PLAN.md D4): a stunned creature that can still move (2024), and surprise that only costs
+  // initiative (2024: `rollInitiative` reads it, and the condition does nothing else).
+  if (name === "stunned" && rules?.stunned === "can-move") return { deniesActions: true, deniesBonusActions: true, deniesReactions: true, incomingAttackRoll: 5 };
+  if (name === "surprised" && rules?.surprise === "initiative") return undefined;
   switch (name) {
     case "poisoned":
     case "frightened":
@@ -8252,7 +8285,7 @@ function applyConditionRider(
     sourceCombatantId: source.id,
     startedRound: state.snapshot.round,
     expiresAt: expiry.expiresAt,
-    modifiers: rider.modifiers ?? defaultConditionModifiers(conditionName),
+    modifiers: rider.modifiers ?? defaultConditionModifiers(conditionName, state.snapshot.rules),
     effects: rider.effects,
     ...(rider.conditionKey ? { sourceName: rider.conditionKey } : {}),
     ...(rider.nextAttack ? { nextAttack: nextAttackOf(rider.nextAttack, source.id) } : {}),

@@ -580,7 +580,8 @@ function surprisedCondition(encounter: EncounterSnapshot): ConditionInstance {
     name: "surprised",
     startedRound: encounter.round,
     expiresAt: { round: Math.max(2, encounter.round + 1), turnIndex: 0, timing: "start" },
-    modifiers: defaultConditionModifiers("surprised")
+    // The table's surprise rule: under the 2024 rule it costs only initiative, and does nothing as a condition.
+    modifiers: defaultConditionModifiers("surprised", encounter.rules)
   };
 }
 
@@ -2944,7 +2945,7 @@ export const useEncounterStore = create<EncounterStore>()(
           id: `${condition}-${crypto.randomUUID()}`,
           name: condition,
           startedRound: engine.snapshot.round,
-          modifiers: defaultConditionModifiers(condition)
+          modifiers: defaultConditionModifiers(condition, engine.snapshot.rules)
         }, { force: true }); // the DM's word beats a creature's immunity
         commitEncounter(engine.snapshot, { log: engine.log });
       },

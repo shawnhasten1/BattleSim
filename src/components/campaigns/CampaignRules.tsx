@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { PotionUse } from "@/engine";
 import { CAMPAIGN_RULES, campaignChoice, campaignRule, type CampaignRules as Rules } from "@/lib/campaign-rules";
 import { useEncounterStore } from "@/store/encounter-store";
 import styles from "./campaigns.module.css";
@@ -40,7 +39,7 @@ export function CampaignRules({ campaignId, rules, onChange }: { campaignId: str
             <div key={rule.key} className={styles.rule}>
               <span>
                 <strong>{rule.label}</strong>
-                <select aria-label={rule.label} value={campaignChoice(rules, rule.key)} disabled={saving} onChange={(event) => void save({ [rule.key]: event.target.value as PotionUse })}>
+                <select aria-label={rule.label} value={campaignChoice(rules, rule.key)} disabled={saving} onChange={(event) => void save({ [rule.key]: event.target.value } as Rules)}>
                   {rule.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
                 <span className={styles.ruleHint}>{rule.hint}</span>

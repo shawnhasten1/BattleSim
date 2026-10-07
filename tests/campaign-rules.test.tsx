@@ -47,7 +47,10 @@ describe("the rules themselves", () => {
     const encounter = structuredClone(sampleEncounter);
     const off = withCampaignRules(encounter, { counterspellReadsSpell: false });
     // Every campaign rule is written in, at its default where the campaign doesn't set it.
-    expect(off.rules).toEqual({ ...encounter.rules, counterspellReadsSpell: false, potionUse: "action", potionActionHealsFull: false });
+    expect(off.rules).toEqual({
+      ...encounter.rules, counterspellReadsSpell: false, potionUse: "action", potionActionHealsFull: false,
+      grappled: "speed", stunned: "cant-move", surprise: "lose-turn"
+    });
     expect(withCampaignRules(off, { counterspellReadsSpell: false })).toBe(off);
     expect(withCampaignRules(encounter, {}).rules.counterspellReadsSpell).toBe(true);
     expect(ruleInForce(off, "counterspellReadsSpell")).toBe("Counterspellers only see a spell being cast");

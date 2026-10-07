@@ -16,7 +16,7 @@ import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { prepBuffLabel, prepBuffs } from "@/lib/actor-sheet/token";
 import { useSheetWindowsStore } from "@/store/sheet-windows-store";
 import styles from "./CombatPanel.module.css";
-import { hasCounterspellers, hasPotions, potionRulesInForce, ruleInForce } from "@/lib/campaign-rules";
+import { hasCounterspellers, hasGrapplers, hasPotions, hasStunners, hasSurprised, potionRulesInForce, ruleInForce } from "@/lib/campaign-rules";
 
 const TACTICS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "basic-melee", label: "Basic melee" },
@@ -65,12 +65,19 @@ export function CombatPanel() {
   const encounter = useEncounterStore((state) => state.encounter);
   const currentProjectId = useEncounterStore((state) => state.currentProjectId);
   // The campaign's rules, each said where it matters: on counters when something here can counter a spell, on potions
-  // when someone here carries one.
+  // when someone here carries one, on grapples and stuns when something here can grapple or stun, on surprise when
+  // someone here is surprised.
   const counterspellers = hasCounterspellers(encounter);
   const potions = hasPotions(encounter);
+  const grapplers = hasGrapplers(encounter);
+  const stunners = hasStunners(encounter);
+  const surprised = hasSurprised(encounter);
   const rulesInForce = (rules: Pick<EncounterSnapshot, "rules">) => [
     ...(counterspellers ? [ruleInForce(rules, "counterspellReadsSpell")] : []),
-    ...(potions ? [potionRulesInForce(rules)] : [])
+    ...(potions ? [potionRulesInForce(rules)] : []),
+    ...(grapplers ? [ruleInForce(rules, "grappled")] : []),
+    ...(stunners ? [ruleInForce(rules, "stunned")] : []),
+    ...(surprised ? [ruleInForce(rules, "surprise")] : [])
   ];
   const campaignRules = rulesInForce(encounter);
   const displayEncounter = useDisplayEncounter();

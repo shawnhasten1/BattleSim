@@ -146,6 +146,16 @@ describe("Add ability, on a sheet", () => {
     expect(editionGroup().getByRole("button", { name: "Both" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("shows at most 80 library rows, and says how many more a word would find", async () => {
+    renderFighter();
+    await openAdd();
+    const library = within(screen.getByRole("region", { name: "Library" }));
+    const total = searchAdd("", "all", undefined).library.length;
+    expect(total).toBeGreaterThan(80);
+    expect(library.getAllByRole("button", { name: /^Add / })).toHaveLength(80);
+    expect(library.getByText(`${total - 80} more: add a word to narrow it down, or pick a filter.`)).toBeTruthy();
+  });
+
   it("marks only the edition on the sheet as on the sheet", async () => {
     const placed: SpellDefinition = { ...findSrd2024Spell("srd:spell:fireball-2024")!, id: "fireball", source: srd52Source("srd-2024_fireball") };
     store().insertAbilityRecord("def-fighter", "spells", placed);

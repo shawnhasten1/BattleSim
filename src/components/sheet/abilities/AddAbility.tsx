@@ -63,6 +63,12 @@ const BLANKS: Array<{ kind: BlankKind; label: string; title: string }> = [
 ];
 
 
+/**
+ * The most library rows the panel shows at once: with both editions' spells and the 2024 features there are hundreds
+ * before a search, and the rest are a word away ("N more: add a word to narrow it down").
+ */
+const LIBRARY_ROWS = 80;
+
 /** What a recipe makes, beside its name. */
 const RECIPE_GROUP_WORDS: Record<Recipe["group"], string> = { weapon: "weapon", action: "monster action", spell: "spell", feature: "feature", item: "item", death: "on death" };
 
@@ -362,7 +368,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
               </label>
             ) : null}
             <div className={styles.items}>
-              {results.library.map((entry) => (
+              {results.library.slice(0, LIBRARY_ROWS).map((entry) => (
                 <div
                   key={entry.id} className={styles.item} draggable
                   onDragStart={(event) => {
@@ -386,6 +392,9 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
                 </div>
               ))}
             </div>
+            {results.library.length > LIBRARY_ROWS ? (
+              <p className={styles.more}>{results.library.length - LIBRARY_ROWS} more: add a word to narrow it down, or pick a filter.</p>
+            ) : null}
           </section>
         ) : null}
 

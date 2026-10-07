@@ -2954,10 +2954,31 @@ export interface RuleProfile {
   potionUse?: PotionUse;
   /** Where a potion can be drunk or given with a bonus action, an action instead heals its full amount. Off when absent. */
   potionActionHealsFull?: boolean;
+  /**
+   * What being grappled does (EDITIONS_PLAN.md D4): `"speed"`, speed 0 (2014 rules, the default), or
+   * `"speed-and-attacks"`, speed 0 and disadvantage on attack rolls against anyone but the grappler (2024 rules).
+   */
+  grappled?: GrappledRule;
+  /** What being stunned does to movement: `"cant-move"` (2014 rules, the default) or `"can-move"` (2024 rules). */
+  stunned?: StunnedRule;
+  /**
+   * What being surprised does: `"lose-turn"`, no actions, reactions or movement on its first turn (2014 rules, the
+   * default), or `"initiative"`, initiative rolled at disadvantage and nothing else (2024 rules).
+   */
+  surprise?: SurpriseRule;
 }
 
 /** What drinking or giving a potion takes, as a table rule (`RuleProfile.potionUse`). */
 export type PotionUse = "action" | "bonus" | "drink-bonus";
+
+/** What being grappled does, as a table rule (`RuleProfile.grappled`). */
+export type GrappledRule = "speed" | "speed-and-attacks";
+
+/** Whether a stunned creature can move, as a table rule (`RuleProfile.stunned`). */
+export type StunnedRule = "cant-move" | "can-move";
+
+/** What being surprised does, as a table rule (`RuleProfile.surprise`). */
+export type SurpriseRule = "lose-turn" | "initiative";
 
 export interface EncounterSnapshot {
   schemaVersion: typeof ENCOUNTER_SCHEMA_VERSION;
@@ -3460,7 +3481,10 @@ export const encounterSnapshotSchema = z.object({
     massiveDamage: z.boolean().optional(),
     counterspellReadsSpell: z.boolean().optional(),
     potionUse: z.enum(["action", "bonus", "drink-bonus"]).optional(),
-    potionActionHealsFull: z.boolean().optional()
+    potionActionHealsFull: z.boolean().optional(),
+    grappled: z.enum(["speed", "speed-and-attacks"]).optional(),
+    stunned: z.enum(["cant-move", "can-move"]).optional(),
+    surprise: z.enum(["lose-turn", "initiative"]).optional()
   }),
   definitions: z.array(z.any()),
   activeZones: z.array(z.any()).optional(),
