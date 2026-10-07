@@ -3,7 +3,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEncounterStore } from "@/store/encounter-store";
-import { useCompendium } from "@/hooks/useCompendium";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
 
 const pristine = useEncounterStore.getState();
@@ -15,7 +14,7 @@ afterEach(() => {
 });
 
 function Harness() {
-  return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+  return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
 }
 
 /** Renders the panel with the SRD Monsters root already expanded. */

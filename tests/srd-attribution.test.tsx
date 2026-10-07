@@ -7,7 +7,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SRD_52_ATTRIBUTION, SRD_ATTRIBUTION, SRD_CREDITS_PATH, SRD_MODIFICATION_NOTICE } from "@/data/srd/attribution";
 import { DocsPage } from "@/components/docs/DocsPage";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
-import { useCompendium } from "@/hooks/useCompendium";
 
 /**
  * The statement below is copied VERBATIM from the "Legal Information" page of Wizards' SRD_CC_v5.1.pdf
@@ -105,7 +104,7 @@ describe("credits in the app", () => {
 
   it("the SRD Monsters folder links to it in a new tab", async () => {
     function Harness() {
-      return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+      return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
     }
     render(<Harness />);
     const rootNode = screen.getByTestId("srd-monsters-root");

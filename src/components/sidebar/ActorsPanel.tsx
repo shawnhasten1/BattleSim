@@ -5,8 +5,6 @@ import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 import { actualMaxHp, armorClassOf, type CreatureDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
-import type { Compendium } from "@/hooks/useCompendium";
-import type { CompendiumDragPayload } from "@/lib/compendium";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { defaultFactionForDefinition } from "@/lib/ui-helpers";
@@ -18,14 +16,13 @@ import { ActorFolderNode, RenameInput, type FolderEditState } from "./ActorFolde
 import styles from "./ActorsPanel.module.css";
 
 interface ActorsPanelProps {
-  compendium: Compendium;
   /** folderId, when opened from a folder's "create actor" icon, so the new actor is filed there automatically. */
   onOpenCreate: (folderId?: string) => void;
   /** Opens that token's sheet window. */
   onOpenSheet: (combatantId: string) => void;
 }
 
-export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPanelProps) {
+export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const encounter = useEncounterStore((state) => state.encounter);
   const definitionsLibrary = useEncounterStore((state) => state.definitionsLibrary);
   const templateDefinitionIds = useEncounterStore((state) => state.templateDefinitionIds);
@@ -51,7 +48,6 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
   const removeCombatant = useEncounterStore((state) => state.removeCombatant);
   const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
-  const [dropActive, setDropActive] = useState(false);
   const [rootDropActive, setRootDropActive] = useState(false);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<FolderEditState | null>(null);
@@ -211,26 +207,6 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
     exportCombatant(selectedCombatant, selectedDefinition);
   }
 
-  function onSheetDragOver(event: DragEvent<HTMLElement>) {
-    if (event.dataTransfer.types.includes("application/x-battle-sim-compendium")) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setDropActive(true);
-    }
-  }
-
-  function onSheetDrop(event: DragEvent<HTMLElement>) {
-    const raw = event.dataTransfer.getData("application/x-battle-sim-compendium");
-    setDropActive(false);
-    if (!raw) return;
-    event.preventDefault();
-    try {
-      void compendium.attach(JSON.parse(raw) as CompendiumDragPayload);
-    } catch {
-      compendium.setStatus("Compendium drop failed");
-    }
-  }
-
   return (
     <div className={styles.panel}>
       <div className={styles.top}>
@@ -242,12 +218,7 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
 
       {selectedCombatant && selectedDefinition ? (
         <div className={styles.selection}>
-          <div
-            className={`${styles.summary} ${dropActive ? styles.dropActive : ""}`}
-            onDragOver={onSheetDragOver}
-            onDragLeave={() => setDropActive(false)}
-            onDrop={onSheetDrop}
-          >
+          <div className={styles.summary}>
             <ActorThumbnail definition={selectedDefinition} combatant={selectedCombatant} />
             <div>
               <strong>{selectedCombatant.displayName}</strong>
@@ -299,8 +270,8 @@ export function ActorsPanel({ compendium, onOpenCreate, onOpenSheet }: ActorsPan
           </button>
         </div>
       </div>
-      {compendium.status || definitionStatus || folderStatus ? (
-        <p className={styles.status}>{definitionStatus || folderStatus || compendium.status}</p>
+      {definitionStatus || folderStatus ? (
+        <p className={styles.status}>{definitionStatus || folderStatus}</p>
       ) : null}
 
       <ul className={styles.list}>

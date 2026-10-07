@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import type { CompendiumDragPayload } from "@/lib/compendium";
 import { defaultFactionForDefinition } from "@/lib/ui-helpers";
 import { isSrdMonsterId } from "@/data/srd/monsters";
 import { readJson, writeJson } from "@/lib/persist";
@@ -15,7 +14,6 @@ import { clamp, getCellPoint } from "@/components/scene/coords";
 import { deriveSceneMetrics } from "@/components/scene/metrics";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
 import { CombatPanel } from "@/components/sidebar/CombatPanel";
-import { CompendiumPanel } from "@/components/sidebar/CompendiumPanel";
 import { ScenePanel } from "@/components/sidebar/ScenePanel";
 import { SheetWindowsHost } from "@/components/sheet/SheetWindowsHost";
 import { BattleReport } from "@/components/combat/BattleReport";
@@ -38,10 +36,9 @@ function openSheet(combatantId?: string) {
   if (id) useSheetWindowsStore.getState().open(id);
 }
 
-type SidebarTab = "actors" | "compendium" | "combat" | "scene";
+type SidebarTab = "actors" | "combat" | "scene";
 const SIDEBAR_TABS: ReadonlyArray<{ id: SidebarTab; label: string }> = [
   { id: "actors", label: "Actors" },
-  { id: "compendium", label: "Compendium" },
   { id: "combat", label: "Combat" },
   { id: "scene", label: "Scene" }
 ];
@@ -139,10 +136,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   }, [loadActorFolders, loadDefinitionsLibrary, loadProjects]);
 
   function onCanvasDragOver(event: DragEvent<HTMLDivElement>) {
-    if (
-      event.dataTransfer.types.includes("application/x-battle-sim-actor") ||
-      event.dataTransfer.types.includes("application/x-battle-sim-compendium")
-    ) {
+    if (event.dataTransfer.types.includes("application/x-battle-sim-actor")) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     }
@@ -150,8 +144,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
 
   function onCanvasDrop(event: DragEvent<HTMLDivElement>) {
     const actorRaw = event.dataTransfer.getData("application/x-battle-sim-actor");
-    const compendiumRaw = event.dataTransfer.getData("application/x-battle-sim-compendium");
-    if (!actorRaw && !compendiumRaw) return;
+    if (!actorRaw) return;
     event.preventDefault();
     const point = getCellPoint(event.currentTarget, event.clientX, event.clientY, cellSize);
     const cell = {
@@ -159,38 +152,24 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
       y: clamp(point.y, 0, encounter.map.grid.height - 1)
     };
 
-    if (actorRaw) {
-      try {
-        const payload = JSON.parse(actorRaw) as { definitionId?: string; faction?: "party" | "enemy"; count?: number };
-        if (!payload.definitionId) return;
-        if (isSrdMonsterId(payload.definitionId)) {
-          // Bundled library monster: loaded on demand, and the scene's copy is reused if it's already there.
-          void addSrdMonster(payload.definitionId, payload.faction ?? "enemy", cell, payload.count ?? 1);
-          return;
-        }
-        const definition = directory.find((candidate) => candidate.id === payload.definitionId);
-        if (!definition) return;
-        const faction = payload.faction ?? defaultFactionForDefinition(definition);
-        if (savedDefinitionIds.has(payload.definitionId)) {
-          addLibraryDefinitionToEncounter(payload.definitionId, faction, cell);
-        } else {
-          addCreatureDefinition(definition, faction, cell);
-        }
-      } catch {
-        compendium.setStatus("Actor drop failed");
-      }
-      return;
-    }
-
     try {
-      const payload = JSON.parse(compendiumRaw) as CompendiumDragPayload;
-      if (payload.resource !== "creature") {
-        compendium.setStatus(`${payload.name} belongs on a token sheet`);
+      const payload = JSON.parse(actorRaw) as { definitionId?: string; faction?: "party" | "enemy"; count?: number };
+      if (!payload.definitionId) return;
+      if (isSrdMonsterId(payload.definitionId)) {
+        // Bundled library monster: loaded on demand, and the scene's copy is reused if it's already there.
+        void addSrdMonster(payload.definitionId, payload.faction ?? "enemy", cell, payload.count ?? 1);
         return;
       }
-      void compendium.importCreature(payload.slug || payload.objectKey, cell);
+      const definition = directory.find((candidate) => candidate.id === payload.definitionId);
+      if (!definition) return;
+      const faction = payload.faction ?? defaultFactionForDefinition(definition);
+      if (savedDefinitionIds.has(payload.definitionId)) {
+        addLibraryDefinitionToEncounter(payload.definitionId, faction, cell);
+      } else {
+        addCreatureDefinition(definition, faction, cell);
+      }
     } catch {
-      compendium.setStatus("Compendium drop failed");
+      // ignore malformed payload
     }
   }
 
@@ -234,7 +213,6 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
           <Sidebar tabs={SIDEBAR_TABS} activeId={rightTab} onSelect={(id) => setRightTab(id as SidebarTab)}>
             {rightTab === "actors" ? (
               <ActorsPanel
-                compendium={compendium}
                 onOpenCreate={(folderId) => {
                   setCreateFolderId(folderId ?? null);
                   setModal("create");
@@ -242,7 +220,6 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
                 onOpenSheet={openSheet}
               />
             ) : null}
-            {rightTab === "compendium" ? <CompendiumPanel compendium={compendium} /> : null}
             {rightTab === "combat" ? <CombatPanel /> : null}
             {rightTab === "scene" ? <ScenePanel scene={scene} onOpenConfig={() => setModal("scene")} /> : null}
           </Sidebar>

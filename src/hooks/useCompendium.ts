@@ -1,12 +1,10 @@
-import { useState, type DragEvent } from "react";
+import { useState } from "react";
 import type { CreatureDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { useEncounterStore } from "@/store/encounter-store";
-import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import {
-  conditionFromCompendiumName,
   featureFromCompendiumPayload,
   type CompendiumCategory,
-  type CompendiumDragPayload,
+  type CompendiumPayload,
   type CompendiumSearchResult
 } from "@/lib/compendium";
 
@@ -16,10 +14,8 @@ interface UseCompendiumOptions {
 }
 
 /**
- * The SRD / Open5e compendium subsystem: search state plus the import actions
- * that turn a dragged or clicked result into structured content on the
- * selected actor (or a token on the map). Shared by the Compendium panel, the
- * actor-sheet drop zone, and the canvas drop target.
+ * Open5e search and import: creatures for the Create Token modal, and spells and items for a sheet's Add ability. Its
+ * status messages show as a toast on the sheet in front.
  */
 export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {}) {
   const addCreatureDefinition = useEncounterStore((state) => state.addCreatureDefinition);
@@ -28,22 +24,15 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
   const attachWeaponDefinition = useEncounterStore((state) => state.attachWeaponDefinition);
   const attachFeatureDefinition = useEncounterStore((state) => state.attachFeatureDefinition);
   const insertAbilityRecord = useEncounterStore((state) => state.insertAbilityRecord);
-  const applyConditionToCombatant = useEncounterStore((state) => state.applyConditionToCombatant);
-  const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
-  const [tab, setTab] = useState<CompendiumCategory>("creatures");
-  const [query, setQuery] = useState("goblin");
-  const [documentKey, setDocumentKey] = useState("");
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<CompendiumSearchResult[]>([]);
   const [status, setStatus] = useState("");
 
   /** Search a category; `text` searches for that instead of the query box (set in the same click, before it re-renders). */
-  async function search(category = tab, text = query) {
+  async function search(category: CompendiumCategory, text = query) {
     setStatus("Searching compendium");
     const params = new URLSearchParams({ query: text, category, limit: "18" });
-    if (documentKey.trim()) {
-      params.set("documentKey", documentKey.trim());
-    }
     const response = await fetch(`/api/open5e/compendium?${params.toString()}`);
     if (!response.ok) {
       setStatus("Compendium search failed");
@@ -72,11 +61,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
     onCreatureImported?.();
   }
 
-  async function importSpell(slug: string, definitionId = selectedDefinition?.id) {
-    if (!definitionId) {
-      setStatus("Select a token sheet first");
-      return;
-    }
+  async function importSpell(slug: string, definitionId: string) {
     setStatus("Importing spell");
     const response = await fetch(`/api/open5e/spells/${encodeURIComponent(slug)}`);
     if (!response.ok) {
@@ -93,7 +78,7 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
   }
 
   async function importCompendiumContent(
-    payload: CompendiumDragPayload
+    payload: CompendiumPayload
   ): Promise<{ weapon?: WeaponDefinition; item?: ItemDefinition; feature?: FeatureDefinition } | null> {
     if (!payload.route || !payload.objectKey) {
       return { feature: featureFromCompendiumPayload(payload) };
@@ -107,96 +92,37 @@ export function useCompendium({ onCreatureImported }: UseCompendiumOptions = {})
     return (await response.json()) as { weapon?: WeaponDefinition; item?: ItemDefinition; feature?: FeatureDefinition };
   }
 
-  async function attach(
-    payload: CompendiumDragPayload,
-    definitionId = selectedDefinition?.id,
-    combatantId = selectedCombatant?.id
-  ) {
-    if (!definitionId && payload.resource !== "condition") {
-      setStatus("Select a token sheet first");
+  /** An Open5e item or weapon onto a creature: a structured attack when it's a weapon, otherwise carried for reference. */
+  async function attach(payload: CompendiumPayload, definitionId: string) {
+    const imported = await importCompendiumContent(payload);
+    if (imported?.weapon) {
+      attachWeaponDefinition(definitionId, imported.weapon);
+      setStatus("Weapon attached as structured attack");
       return;
     }
-    if (payload.resource === "creature") {
-      await importCreature(payload.slug || payload.objectKey);
+    if (imported?.item) {
+      insertAbilityRecord(definitionId, "items", imported.item);
+      setStatus(`${imported.item.name} carried for reference: the DM applies it`);
       return;
     }
-    if (payload.resource === "spell") {
-      await importSpell(payload.slug || payload.objectKey, definitionId);
+    if (imported?.feature) {
+      attachFeatureDefinition(definitionId, imported.feature);
+      setStatus("Item attached as manual-only reference");
       return;
     }
-    if (payload.resource === "condition") {
-      if (!combatantId) {
-        setStatus("Select a token before applying a condition");
-        return;
-      }
-      const condition = conditionFromCompendiumName(payload.name);
-      if (!condition) {
-        setStatus(`${payload.name} is manual-only`);
-        return;
-      }
-      applyConditionToCombatant(combatantId, condition);
-      setStatus(`${payload.name} applied`);
-      return;
-    }
-    if (!definitionId) {
-      return;
-    }
-    if (payload.resource === "item" || payload.resource === "weapon") {
-      const imported = await importCompendiumContent(payload);
-      if (imported?.weapon) {
-        attachWeaponDefinition(definitionId, imported.weapon);
-        setStatus("Weapon attached as structured attack");
-        return;
-      }
-      if (imported?.item) {
-        insertAbilityRecord(definitionId, "items", imported.item);
-        setStatus(`${imported.item.name} carried for reference: the DM applies it`);
-        return;
-      }
-      if (imported?.feature) {
-        attachFeatureDefinition(definitionId, imported.feature);
-        setStatus("Item attached as manual-only reference");
-        return;
-      }
-      setStatus("Item import returned no supported content");
-      return;
-    }
-    attachFeatureDefinition(definitionId, featureFromCompendiumPayload(payload));
-    setStatus("Feature attached as manual-only reference");
-  }
-
-  function onDragStart(event: DragEvent<HTMLElement>, result: CompendiumSearchResult) {
-    const payload: CompendiumDragPayload = {
-      objectKey: result.objectKey,
-      slug: result.slug,
-      name: result.name,
-      resource: result.resource,
-      model: result.model,
-      route: result.route,
-      level: result.level,
-      documentKey: result.documentKey,
-      documentTitle: result.documentTitle,
-      text: result.text
-    };
-    event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("application/x-battle-sim-compendium", JSON.stringify(payload));
+    setStatus("Item import returned no supported content");
   }
 
   return {
-    tab,
-    setTab,
     query,
     setQuery,
-    documentKey,
-    setDocumentKey,
     results,
     status,
     setStatus,
     search,
     attach,
     importCreature,
-    importSpell,
-    onDragStart
+    importSpell
   };
 }
 

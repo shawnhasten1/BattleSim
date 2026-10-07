@@ -4,11 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEncounterStore } from "../src/store/encounter-store";
-import { useCompendium } from "../src/hooks/useCompendium";
 import { useSceneInteraction } from "../src/hooks/useSceneInteraction";
 import { CombatPanel } from "../src/components/sidebar/CombatPanel";
 import { ActorsPanel } from "../src/components/sidebar/ActorsPanel";
-import { CompendiumPanel } from "../src/components/sidebar/CompendiumPanel";
 import { ScenePanel } from "../src/components/sidebar/ScenePanel";
 
 // The store is a module singleton seeded from the sample encounter; snap it
@@ -22,12 +20,7 @@ afterEach(() => {
 });
 
 function ActorsHarness(props: { onOpenCreate: () => void; onOpenSheet: () => void }) {
-  const compendium = useCompendium();
-  return <ActorsPanel compendium={compendium} {...props} />;
-}
-
-function CompendiumHarness() {
-  return <CompendiumPanel compendium={useCompendium()} />;
+  return <ActorsPanel {...props} />;
 }
 
 function SceneHarness({ onOpenConfig }: { onOpenConfig: () => void }) {
@@ -65,15 +58,6 @@ describe("ActorsPanel", () => {
     render(<ActorsHarness onOpenCreate={vi.fn()} onOpenSheet={onOpenSheet} />);
     await userEvent.click(screen.getByRole("button", { name: /Sheet/ }));
     expect(onOpenSheet).toHaveBeenCalled();
-  });
-});
-
-describe("CompendiumPanel", () => {
-  it("renders the category chips and search box", () => {
-    render(<CompendiumHarness />);
-    expect(screen.getByRole("button", { name: "Creatures" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Spells" })).toBeTruthy();
-    expect(screen.getByPlaceholderText(/Search Open5e/)).toBeTruthy();
   });
 });
 

@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { footprintCells, sizeFootprint, type CombatantState, type EncounterSnapshot } from "@/engine";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
-import { useCompendium } from "@/hooks/useCompendium";
 import { MAX_TOKEN_BATCH, useEncounterStore } from "@/store/encounter-store";
 
 const pristine = useEncounterStore.getState();
@@ -150,7 +149,7 @@ describe("adding several tokens at once", () => {
 // 5 s default, so they get more headroom.
 describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () => {
   function Harness() {
-    return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+    return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
   }
   async function open() {
     render(<Harness />);

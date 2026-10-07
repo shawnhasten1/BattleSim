@@ -6,7 +6,6 @@ import { SRD_MONSTER_INDEX, findSrdMonsterEntry, isSrdMonsterId, loadSrdMonster 
 import { CREATURE_TYPES } from "@/lib/creature-types";
 import { buildSrdMonsterTree, formatChallengeRating, srdTypeFolderId } from "@/lib/srd-monster-tree";
 import { useEncounterStore } from "@/store/encounter-store";
-import { useCompendium } from "@/hooks/useCompendium";
 import { ActorsPanel } from "@/components/sidebar/ActorsPanel";
 
 const pristine = useEncounterStore.getState();
@@ -175,7 +174,7 @@ describe("customizing a library monster", () => {
 
 describe("SRD Monsters directory in the Actors panel", () => {
   function Harness() {
-    return <ActorsPanel compendium={useCompendium()} onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+    return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
   }
 
   it("shows a permanent SRD Monsters root, collapsed, with its monster count", () => {

@@ -4,7 +4,6 @@ import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, us
 import { createPortal } from "react-dom";
 import { baseDefinition } from "@/engine";
 import type { Compendium } from "@/hooks/useCompendium";
-import type { CompendiumDragPayload } from "@/lib/compendium";
 import { creatureScope, libraryStatus, tokensOf } from "@/lib/actor-sheet/scope";
 import type { AbilityRef } from "@/lib/ability-editor/refs";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -106,7 +105,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
   // A window with unsaved changes is never closed to make room for another (D3).
   useEffect(() => setDirty(sheet.id, editorDirty), [setDirty, sheet.id, editorDirty]);
 
-  // A compendium message (a drop attached something, an import failed) shows as a toast in the window in front, if it
+  // An Open5e message (Add ability attached something, an import failed) shows as a toast in the window in front, if it
   // arrives while it's open.
   const shownStatus = useRef(compendium.status);
   useEffect(() => {
@@ -177,7 +176,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
     const types = event.dataTransfer.types;
-    if (types.includes("application/x-battle-sim-compendium") || types.includes(SRD_DRAG_MIME)) {
+    if (types.includes(SRD_DRAG_MIME)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       setDropActive(true);
@@ -186,26 +185,15 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
     setDropActive(false);
-    // In front, so the compendium's message about this drop shows here.
     focusWindow(sheet.id);
     const srdRaw = event.dataTransfer.getData(SRD_DRAG_MIME);
-    if (srdRaw) {
-      event.preventDefault();
-      const payload = parseSrdDragPayload(srdRaw);
-      if (payload?.kind === "weapon") attachSrdWeapon(definition.id, payload.id);
-      else if (payload?.kind === "spell") attachSrdSpell(definition.id, payload.id);
-      else if (payload?.kind === "feature") attachSrdFeature(definition.id, payload.id);
-      else if (payload?.kind === "item") attachSrdItem(definition.id, payload.id);
-      return;
-    }
-    const raw = event.dataTransfer.getData("application/x-battle-sim-compendium");
-    if (!raw) return;
+    if (!srdRaw) return;
     event.preventDefault();
-    try {
-      void compendium.attach(JSON.parse(raw) as CompendiumDragPayload, definition.id, combatant!.id);
-    } catch {
-      compendium.setStatus("Compendium drop failed");
-    }
+    const payload = parseSrdDragPayload(srdRaw);
+    if (payload?.kind === "weapon") attachSrdWeapon(definition.id, payload.id);
+    else if (payload?.kind === "spell") attachSrdSpell(definition.id, payload.id);
+    else if (payload?.kind === "feature") attachSrdFeature(definition.id, payload.id);
+    else if (payload?.kind === "item") attachSrdItem(definition.id, payload.id);
   }
 
   const title = tokens.length > 1
