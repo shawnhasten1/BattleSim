@@ -428,10 +428,18 @@ const SECTIONS: Section[] = [
         <h3>Adding one</h3>
         <p>
           <strong>Add ability</strong> on the Abilities tab opens one search over everything you can add, with filters for
-          weapons, spells, monster abilities, traits and features, and recipes. Enter takes the first thing found; Esc clears
-          the search, then closes it.
+          your own library, weapons, spells, items, monster abilities, traits and features, and recipes. Enter takes the
+          first thing found; Esc clears the search, then closes it.
         </p>
         <ul>
+          <li>
+            <strong>My library</strong> — items, weapons, spells and features you&apos;ve saved, for any creature in any
+            encounter. In the ability editor, <strong>Save to my library</strong> keeps a copy under the name you give it
+            (an SRD item changed to suit your table, a Tough feat you built): the sheet itself only changes with the
+            editor&apos;s own button. A copy that came from your library can update that entry or be saved as a new one.
+            Its row works like a library row (click to check it, <strong>+</strong> to add it), and <strong>×</strong>{" "}
+            removes it from your library; copies already on creatures stay as they are. It&apos;s kept with your account.
+          </li>
           <li>
             <strong>Recipes</strong> — patterns to start from: a damage cantrip, a save-or-condition spell, an area blast,
             healing, a buff, a teleport and a reaction spell; a breath weapon, frightful presence, a poison bite, a grappling

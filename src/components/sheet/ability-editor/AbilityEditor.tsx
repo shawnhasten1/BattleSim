@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronLeft } from "lucide-react";
+import { AlertTriangle, BookmarkPlus, ChevronLeft } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   spellcastingAbility,
@@ -19,6 +19,7 @@ import { convertAction, type ConvertibleKind, type ParkedRecords } from "@/lib/a
 import { withGrantedAt, type Activation } from "@/lib/ability-editor/features";
 import { checkRecordJson } from "@/lib/ability-editor/json";
 import { withLegendaryPool, type ParkedLegendary } from "@/lib/ability-editor/legendary";
+import { linkedEntry, newSavedId, savedFrom, savedKindOf, type SavedRecord } from "@/lib/ability-editor/my-library";
 import { featurePoolsToSeed } from "@/lib/ability-editor/records";
 import {
   DEFAULT_LEGENDARY_POOL,
@@ -37,6 +38,7 @@ import { abilityWarnings } from "@/lib/ability-editor/validate";
 import { deepEqual } from "@/lib/deep-equal";
 import { statblockFor, type StatblockEntry } from "@/lib/statblock";
 import { useEncounterStore } from "@/store/encounter-store";
+import { useMyLibraryStore } from "@/store/my-library-store";
 import { useEditorGuard } from "../SheetGuard";
 import { UnsavedPrompt } from "../UnsavedPrompt";
 import { ActionNotes, useParkedReaction, weaponSection } from "./AbilitySections";
@@ -46,6 +48,7 @@ import { EditorSection } from "./EditorSection";
 import { featureSection } from "./FeatureSections";
 import { itemSection } from "./ItemSections";
 import { JsonView } from "./JsonView";
+import { SaveToLibrary } from "./SaveToLibrary";
 import { DeathNotes, LegendaryDoes, LegendaryNotes, LegendaryUse } from "./LegendarySections";
 import type { NewPools } from "./LimitPicker";
 import { spellSection } from "./SpellSections";
@@ -296,6 +299,14 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
   const poolChanged = type === "legendary" && legendaryPool !== currentPool;
   const dirty = !deepEqual(working, opened) || nestedChanged || poolChanged;
 
+  // My library: an item, weapon, spell or feature can be kept there to add to any creature (the sheet isn't changed).
+  const savedKind = !nestedTarget && !commit ? savedKindOf(type) : undefined;
+  const libraryEntries = useMyLibraryStore((s) => s.entries);
+  const saveLibraryEntry = useMyLibraryStore((s) => s.save);
+  const [libraryPrompt, setLibraryPrompt] = useState(false);
+  const [libraryNote, setLibraryNote] = useState<string | null>(null);
+  const linked = savedKind ? linkedEntry(merged as { source?: SavedRecord["source"] }, libraryEntries) : undefined;
+
   // New pools count as the creature's while editing, so the preview and warnings see them.
   const withPools = useMemo(
     () => (Object.keys(pools).length ? { ...definition, resources: { ...(definition.resources ?? {}), ...pools } } : definition),
@@ -442,6 +453,29 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
     }
     close({ savedRef });
     return true;
+  }
+
+  /** "Save to my library": only a record the sheet could save, so the library never holds a broken one. */
+  function openLibraryPrompt() {
+    const problem = blockingProblem(merged, type);
+    if (problem) {
+      setError(problem.message);
+      if (problem.section) setOpen((current) => new Set([...current, problem.section!]));
+      return;
+    }
+    setLibraryNote(null);
+    setLibraryPrompt(true);
+  }
+
+  async function saveToLibrary(entryName: string, mode: "new" | "update"): Promise<string | undefined> {
+    if (!savedKind) return "This kind of ability can't be kept in My library.";
+    const id = mode === "update" && linked ? linked.id : newSavedId();
+    const entry = savedFrom(savedKind, merged as SavedRecord, definition, { id, name: entryName, newPools: pools });
+    const result = await saveLibraryEntry(entry);
+    if (!result.entry) return `It wasn't saved: ${result.problem}`;
+    setLibraryPrompt(false);
+    setLibraryNote(`Saved “${result.entry.name}” to My library: Add ability lists it for any creature.`);
+    return undefined;
   }
 
   function requestClose() {
@@ -600,6 +634,14 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
             <span>{nestedTarget ? "›" : "/"}</span>{name || (isNew ? `New ${kindLabel}` : "Unnamed")}
           </span>
           {dirty ? <span className={styles.unsaved}>{nestedTarget ? "Changed" : "Unsaved"}</span> : null}
+          {savedKind ? (
+            <button
+              type="button" className={styles.btn} aria-expanded={libraryPrompt} onClick={openLibraryPrompt}
+              title="Keep a copy to add to any creature from Add ability › My library"
+            >
+              <BookmarkPlus size={13} aria-hidden /> Save to my library
+            </button>
+          ) : null}
           <button type="button" className={styles.btn} onClick={() => close()}>Cancel</button>
           {nestedTarget ? (
             <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={save} title={`Back to ${nestedTarget.parentName}, keeping this (saved with it). Ctrl+Enter`}>
@@ -625,6 +667,10 @@ export function AbilityEditor({ definition, target, onClose, pools: sharedPools,
         {entry?.notSimulated.length ? <p className={styles.notSimulated}>Not simulated: {entry.notSimulated.join(" ")}</p> : null}
       </div>
 
+      {libraryPrompt ? (
+        <SaveToLibrary defaultName={linked?.name ?? name} linked={linked} onSave={saveToLibrary} onCancel={() => setLibraryPrompt(false)} />
+      ) : null}
+      {libraryNote ? <p className={styles.libraryNote} role="status">{libraryNote}</p> : null}
       {leaving ? (
         <UnsavedPrompt
           message={leaving.message}

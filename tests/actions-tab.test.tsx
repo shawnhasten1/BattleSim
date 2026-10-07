@@ -43,7 +43,7 @@ describe("ActionsTab", () => {
     await openAdd();
     expect(screen.getByRole("searchbox", { name: "Search abilities" })).toBeTruthy();
     const filters = within(screen.getByRole("group", { name: "Show" })).getAllByRole("button").map((button) => button.textContent);
-    expect(filters).toEqual(["All", "Weapons", "Spells", "Items", "Monster abilities", "Traits & features", "Recipes"]);
+    expect(filters).toEqual(["All", "My library", "Weapons", "Spells", "Items", "Monster abilities", "Traits & features", "Recipes"]);
     const blanks = within(screen.getByRole("region", { name: "Start from scratch" })).getAllByRole("button").map((button) => button.textContent);
     expect(blanks).toEqual(["Weapon", "Attack", "Special action", "Multiattack", "Spell", "Trait or feature", "Item", "Reaction", "Legendary action", "Lair action", "On death", "Summon", "Shapechange"]);
   });

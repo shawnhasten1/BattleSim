@@ -28,10 +28,11 @@ import { ACTION_TEMPLATES, FEATURE_TEMPLATES, ITEM_TEMPLATES, SPELL_TEMPLATES, W
 
 type AttackAction = Extract<ActionDefinition, { kind: "attack" }>;
 
-export type AddFilter = "all" | "weapons" | "spells" | "items" | "monster" | "features" | "recipes";
+export type AddFilter = "all" | "mine" | "weapons" | "spells" | "items" | "monster" | "features" | "recipes";
 
 export const ADD_FILTERS: Array<{ value: AddFilter; label: string }> = [
   { value: "all", label: "All" },
+  { value: "mine", label: "My library" },
   { value: "weapons", label: "Weapons" },
   { value: "spells", label: "Spells" },
   { value: "items", label: "Items" },
@@ -287,11 +288,11 @@ function ranked<T>(items: readonly T[], tokens: string[], nameOf: (item: T) => s
 }
 
 const RECIPE_GROUPS: Record<AddFilter, RecipeGroup[]> = {
-  all: ["weapon", "action", "spell", "feature", "item", "death"], recipes: ["weapon", "action", "spell", "feature", "item", "death"],
+  all: ["weapon", "action", "spell", "feature", "item", "death"], recipes: ["weapon", "action", "spell", "feature", "item", "death"], mine: [],
   weapons: ["weapon"], spells: ["spell"], items: ["item"], features: ["feature"], monster: ["action", "death"]
 };
 const LIBRARY_KINDS: Record<AddFilter, SrdEntryKind[]> = {
-  all: ["weapon", "spell", "feature", "item"], weapons: ["weapon"], spells: ["spell"], items: ["item"], features: ["feature"], monster: [], recipes: []
+  all: ["weapon", "spell", "feature", "item"], mine: [], weapons: ["weapon"], spells: ["spell"], items: ["item"], features: ["feature"], monster: [], recipes: []
 };
 
 /**

@@ -28,6 +28,7 @@ import { useCompendium } from "@/hooks/useCompendium";
 import { useSyncEncounterRoute, type EncounterRouteParams } from "@/hooks/useSyncEncounterRoute";
 import type { CreatureDefinition } from "@/engine";
 import { useCatalogStore } from "@/store/catalog-store";
+import { useMyLibraryStore } from "@/store/my-library-store";
 import { useSheetWindowsStore } from "@/store/sheet-windows-store";
 
 /** Open the sheet of a token: the one given, or the selected one (a token just created, imported or built is selected). */
@@ -133,6 +134,8 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
     void loadActorFolders();
     // The account's homebrew classes, subclasses, feats, backgrounds and species, for the character builder.
     void useCatalogStore.getState().load();
+    // The abilities saved to My library, for Add ability on any creature.
+    void useMyLibraryStore.getState().load();
   }, [loadActorFolders, loadDefinitionsLibrary, loadProjects]);
 
   function onCanvasDragOver(event: DragEvent<HTMLDivElement>) {

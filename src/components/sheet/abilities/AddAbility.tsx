@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CreatureDefinition, FeatureDefinition, ItemDefinition, SpellDefinition, WeaponDefinition } from "@/engine";
 import { SRD_DRAG_MIME, SRD_FEATURES, SRD_ITEMS, SRD_SPELLS, SRD_WEAPONS, serializeSrdDragPayload, type SrdEntryKind } from "@/data/srd";
@@ -17,7 +17,10 @@ import {
   type Prepared,
   type Recipe
 } from "@/lib/ability-editor/add";
+import { prepareSaved, searchSaved, type SavedAbility } from "@/lib/ability-editor/my-library";
 import { featureStatblock, itemStatblock, spellStatblock, weaponStatblock } from "@/lib/statblock";
+import { useEncounterStore } from "@/store/encounter-store";
+import { useMyLibraryStore } from "@/store/my-library-store";
 import styles from "./abilities.module.css";
 
 /** What "Start from scratch" can start. */
@@ -97,6 +100,12 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   }, [abilities, query, filter]);
 
   const results = useMemo(() => searchAdd(query, filter, abilities, definition), [query, filter, abilities, definition]);
+  // My library: what the DM saved from the editor, for any creature.
+  const mine = useMyLibraryStore((s) => s.entries);
+  const mineStatus = useMyLibraryStore((s) => s.status);
+  const forgetSaved = useMyLibraryStore((s) => s.remove);
+  const insertAbilityRecord = useEncounterStore((s) => s.insertAbilityRecord);
+  const saved = useMemo(() => searchSaved(mine, query, filter), [mine, query, filter]);
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   function chooseRecipe(recipe: Recipe) {
@@ -116,6 +125,21 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     // Ready for the next one: the search keeps its words, selected, so typing replaces them.
     searchRef.current?.focus();
     searchRef.current?.select();
+  }
+  function chooseSaved(entry: SavedAbility) {
+    onPrepared(prepareSaved(entry, definition));
+  }
+  function attachSaved(entry: SavedAbility) {
+    const prepared = prepareSaved(entry, definition);
+    insertAbilityRecord(definition.id, prepared.list, prepared.record, prepared.pools ? { pools: prepared.pools } : undefined);
+    setAdded(entry.name);
+    searchRef.current?.focus();
+    searchRef.current?.select();
+  }
+  async function forget(entry: SavedAbility) {
+    const view = searchRef.current?.ownerDocument.defaultView ?? window;
+    if (!view.confirm(`Remove “${entry.name}” from My library? Copies already on creatures stay as they are.`)) return;
+    await forgetSaved(entry.id);
   }
   function chooseLibrary(entry: LibraryEntry) {
     const prepared = prepareLibrary(entry.kind, entry.id, definition);
@@ -141,7 +165,8 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
     if (event.key !== "Enter") return;
     // Enter takes the first thing found.
     event.preventDefault();
-    if (results.recipes[0]) chooseRecipe(results.recipes[0]);
+    if (saved[0]) chooseSaved(saved[0]);
+    else if (results.recipes[0]) chooseRecipe(results.recipes[0]);
     else if (results.library[0]) chooseLibrary(results.library[0]);
     else if (results.monster[0]) void chooseMonster(results.monster[0]);
   }
@@ -149,7 +174,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
   const showRecipes = results.recipes.length > 0;
   // Under Items, Open5e is searched for items (carried for reference); otherwise for spells.
   const open5eItems = filter === "items";
-  const nothing = !showRecipes && !results.library.length && !results.monster.length;
+  const nothing = !showRecipes && !results.library.length && !results.monster.length && !saved.length;
   return (
     <div className={`${styles.add} ${bare ? styles.addBare : ""}`} role="region" aria-label="Add ability">
       <input
@@ -170,6 +195,41 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       ) : null}
 
       <div className={styles.results}>
+        {saved.length ? (
+          <section className={styles.section} aria-label="My library">
+            <h5>My library</h5>
+            <div className={styles.items}>
+              {saved.map((entry) => (
+                <div key={entry.id} className={styles.item}>
+                  <button type="button" className={styles.itemOpen} onClick={() => chooseSaved(entry)} title="Open it to check or change before adding">
+                    <span className={styles.itemName}>
+                      {entry.name} <span className={styles.itemMeta}>· {entry.kind}{already.has(entry.id) ? " · on the sheet" : ""}</span>
+                    </span>
+                    <span className={styles.itemLine}>{line({ kind: entry.kind, id: entry.id, name: entry.name, entry: entry.record }, definition)}</span>
+                  </button>
+                  <button
+                    type="button" className={styles.plus} aria-label={`Add ${entry.name}`}
+                    title={already.has(entry.id) ? "It's on the sheet already: add another copy" : "Add it as it is"} onClick={() => attachSaved(entry)}
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    type="button" className={styles.plus} aria-label={`Remove ${entry.name} from my library`}
+                    title="Remove it from My library (copies on creatures stay)" onClick={() => void forget(entry)}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : filter === "mine" ? (
+          <p className={styles.more}>
+            {mineStatus === "failed" ? "My library couldn't be loaded: try again later."
+              : mine.length ? `Nothing in My library matches “${query.trim()}”.`
+                : "Nothing in My library yet. Open an ability (a library item to start from, or one on a sheet), change it, and use Save to my library."}
+          </p>
+        ) : null}
         {showRecipes ? (
           <section className={styles.section} aria-label="Recipes">
             <h5>Recipes</h5>
@@ -246,7 +306,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
           </section>
         ) : null}
 
-        {nothing && tokens.length ? <p className={styles.more}>Nothing matches “{query.trim()}”. Start from scratch below, or search Open5e.</p> : null}
+        {nothing && tokens.length && filter !== "mine" ? <p className={styles.more}>Nothing matches “{query.trim()}”. Start from scratch below, or search Open5e.</p> : null}
 
         {tokens.length && compendium ? (
           <section className={styles.section} aria-label="Open5e">
@@ -293,7 +353,7 @@ export function AddAbility({ definition, compendium, onPrepared, onAttach, onBla
       <p className={styles.footnote}>
         Click a row to check it before it&apos;s added; a library row&apos;s + adds it as it is, or drag it onto the sheet.{" "}
         {SRD_WEAPONS.length} weapons, {SRD_SPELLS.length} spells,{" "}
-        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and a scroll of every spell.{" "}
+        {SRD_FEATURES.length} features, {SRD_ITEMS.length} items and a scroll of every spell{mine.length ? `, and ${mine.length} of your own in My library` : ""}.{" "}
         <a href={SRD_CREDITS_PATH} target="_blank" rel="noopener noreferrer">SRD 5.1 credits · CC-BY-4.0</a>
       </p>
     </div>

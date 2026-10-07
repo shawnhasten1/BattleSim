@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseCatalogEntry, type CatalogEntry } from "@/lib/character-builder/homebrew";
+import { CATALOG_KINDS, parseCatalogEntry, type CatalogEntry } from "@/lib/character-builder/homebrew";
 import { prisma } from "@/server/prisma";
 import { requireUserId } from "@/server/require-user";
 
@@ -8,7 +8,8 @@ export async function GET() {
   const userId = await requireUserId();
   if (userId instanceof NextResponse) return userId;
 
-  const records = await prisma.catalogEntry.findMany({ where: { ownerId: userId }, orderBy: { name: "asc" } });
+  // Only the builder's kinds: My library's saved abilities share the table (`/api/my-library`).
+  const records = await prisma.catalogEntry.findMany({ where: { ownerId: userId, kind: { in: CATALOG_KINDS } }, orderBy: { name: "asc" } });
   const entries: CatalogEntry[] = [];
   const problems: string[] = [];
   for (const record of records) {

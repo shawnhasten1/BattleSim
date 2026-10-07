@@ -86,6 +86,12 @@ If nothing matches what you typed, the picker says so:
 
 The simulator doesn't run everything (vision and skill checks outside a fight, for example). Write the rule in the ability's **Notes & AI**. If the ability can't work without it, set **The simulator** to **Reference only** there, and resolve it by hand when it comes up.
 
+## 7. Keep it for next time: My library
+
+The boots you made live on this fighter only. To use them on other creatures and in other encounters, click **Save to my library** at the top of the editor while it's open (before or after **Add to sheet**). Give it a name and click **Save to my library**.
+
+From then on, **Add ability** lists it under **My library** (there's a filter for it too) for any creature: click the row to check it first, or **+** to add it as it is. A copy you open again from a sheet can update its entry in your library, or be saved as a new one beside it. **×** on the row removes it from your library; creatures that already have a copy keep it.
+
 ---
 
 **Recipes to try** in Add ability: *Faster without heavy armor*, *Faster without armor or a shield*, *Proficiency in a save* (a feat like Resilient) and *A bonus while wearing armor* (the Defense fighting style).
