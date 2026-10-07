@@ -53,7 +53,7 @@ function stubLibrary(initial: CreatureDefinition[], templateIds: string[] = []) 
 function Harness() {
   return (
     <>
-      <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />
+      <ActorsPanel onOpenCreate={vi.fn()} />
       <SheetWindowsHost compendium={compendium} />
     </>
   );
@@ -186,7 +186,7 @@ describe("delete", () => {
     await waitFor(() => expect(server.has("def-goblin")).toBe(false));
     expect(tokensOf("def-goblin")).toHaveLength(2);
     expect(inScene("def-goblin")).toBe(true);
-    expect(within(row("Imported Goblin Stand-in")).getByText("this scene only")).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "This scene only" })).getByText("Imported Goblin Stand-in")).toBeTruthy();
   });
 
   it("…or deletes its tokens too, and Undo brings back both", async () => {

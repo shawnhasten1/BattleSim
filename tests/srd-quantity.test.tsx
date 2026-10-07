@@ -149,7 +149,7 @@ describe("adding several tokens at once", () => {
 // 5 s default, so they get more headroom.
 describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () => {
   function Harness() {
-    return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+    return <ActorsPanel onOpenCreate={vi.fn()} />;
   }
   async function open() {
     render(<Harness />);
@@ -158,21 +158,22 @@ describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () =
     await userEvent.click(within(root).getByText("Beast"));
     return root;
   }
-  const input = (root: HTMLElement) => within(root).getByLabelText("Quantity to add") as HTMLInputElement;
+  // The Actors tab's "Add ×", over every group (ACTORS_TAB_PLAN.md Phase 4).
+  const input = (_root?: HTMLElement) => screen.getByLabelText("Quantity to add") as HTMLInputElement;
 
   it("starts at 1, steps up and down, and stops at 1 and at the cap", async () => {
     const root = await open();
     expect(input(root).value).toBe("1");
-    expect((within(root).getByLabelText("Decrease quantity") as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.click(within(root).getByLabelText("Increase quantity"));
-    await userEvent.click(within(root).getByLabelText("Increase quantity"));
+    expect((screen.getByLabelText("Decrease quantity") as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByLabelText("Increase quantity"));
+    await userEvent.click(screen.getByLabelText("Increase quantity"));
     expect(input(root).value).toBe("3");
-    await userEvent.click(within(root).getByLabelText("Decrease quantity"));
+    await userEvent.click(screen.getByLabelText("Decrease quantity"));
     expect(input(root).value).toBe("2");
 
     await userEvent.clear(input(root));
     await userEvent.type(input(root), String(MAX_TOKEN_BATCH));
-    expect((within(root).getByLabelText("Increase quantity") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Increase quantity") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("adds that many with a monster's +, and the button says so", async () => {
@@ -204,8 +205,8 @@ describe("quantity stepper in the SRD Monsters folder", { timeout: 20000 }, () =
 
   it("puts the quantity in the drag payload so a drop onto the map adds that many", async () => {
     const root = await open();
-    await userEvent.click(within(root).getByLabelText("Increase quantity"));
-    await userEvent.click(within(root).getByLabelText("Increase quantity"));
+    await userEvent.click(screen.getByLabelText("Increase quantity"));
+    await userEvent.click(screen.getByLabelText("Increase quantity"));
     const row = within(root).getByText("Wolf", { exact: true }).closest("li")!;
     const data: Record<string, string> = {};
     fireEvent.dragStart(row, { dataTransfer: { effectAllowed: "", setData: (type: string, value: string) => { data[type] = value; } } });

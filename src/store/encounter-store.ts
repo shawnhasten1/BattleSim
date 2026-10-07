@@ -347,7 +347,7 @@ interface EncounterStore extends PlayActions {
   /** Saves a private, editable copy of a library monster to the user's own library ("Customize"). */
   saveSrdMonsterCopy: (monsterId: string, folderId?: string | null) => Promise<string | undefined>;
   /** Adds a token of a saved actor. When the scene already has that actor, the token shares the scene's copy and its edits. */
-  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point) => Promise<void>;
+  addLibraryDefinitionToEncounter: (definitionId: string, faction?: "party" | "enemy", position?: Point, quantity?: number) => Promise<void>;
   deleteLibraryDefinition: (definitionId: string) => Promise<void>;
   /** Clones a template (or your own actor) into your own library under a new id. The only way to customize a shared template. */
   copyLibraryDefinition: (definitionId: string) => Promise<string | undefined>;
@@ -2279,7 +2279,7 @@ export const useEncounterStore = create<EncounterStore>()(
         set((state) => ({
           definitionsLibrary: library,
           templateDefinitionIds: templateIds,
-          definitionStatus: `${data.definitions.length} saved definitions`,
+          definitionStatus: "",
           encounter: sync(state.encounter),
           undoStack: state.undoStack.map(sync),
           redoStack: state.redoStack.map(sync)
@@ -2306,7 +2306,7 @@ export const useEncounterStore = create<EncounterStore>()(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ definition: definitionToSave })
         });
-        set({ definitionStatus: response.ok ? "Definition saved" : "Definition save failed" });
+        set({ definitionStatus: response.ok ? "" : "Definition save failed" });
         if (response.ok) {
           await get().loadDefinitionsLibrary();
         }
@@ -2328,7 +2328,7 @@ export const useEncounterStore = create<EncounterStore>()(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ definition })
         });
-        set({ definitionStatus: response.ok ? "Definition saved" : "Definition save failed" });
+        set({ definitionStatus: response.ok ? "" : "Definition save failed" });
         if (response.ok) {
           await get().loadDefinitionsLibrary();
         }
@@ -2400,12 +2400,12 @@ export const useEncounterStore = create<EncounterStore>()(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ definition: copy })
         });
-        set({ definitionStatus: response.ok ? `${definition.name} copied to your library` : "Copy failed" });
+        set({ definitionStatus: response.ok ? "" : "Copy failed" });
         if (!response.ok) return undefined;
         await get().loadDefinitionsLibrary();
         return copy.id;
       },
-      addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position) => {
+      addLibraryDefinitionToEncounter: async (definitionId, faction = "enemy", position, quantity = 1) => {
         // Already in the scene: another token of the scene's copy. It's the library's (they're linked), or newer while a
         // save is on its way, which the library's copy would silently undo for every token of it.
         const definition = get().encounter.definitions.find((candidate) => candidate.id === definitionId)
@@ -2413,17 +2413,18 @@ export const useEncounterStore = create<EncounterStore>()(
         if (definition) {
           const embedded = await loadDependencies(definition, get().encounter.definitions);
           if (embedded.length > 0) get().embedDefinitions(embedded);
-          get().addCreatureDefinition(definition, faction, position);
+          if (quantity > 1) get().addCreatureTokens(definition, faction, quantity, position);
+          else get().addCreatureDefinition(definition, faction, position);
         }
       },
       deleteLibraryDefinition: async (definitionId) => {
         const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}`, { method: "DELETE" });
-        set({ definitionStatus: response.ok ? "Definition deleted" : "Definition delete failed" });
+        set({ definitionStatus: response.ok ? "" : "Definition delete failed" });
         await get().loadDefinitionsLibrary();
       },
       copyLibraryDefinition: async (definitionId) => {
         const response = await fetch(`/api/definitions/${encodeURIComponent(definitionId)}/copy`, { method: "POST" });
-        set({ definitionStatus: response.ok ? "Copied to your library" : "Copy failed" });
+        set({ definitionStatus: response.ok ? "" : "Copy failed" });
         if (!response.ok) return undefined;
         const data = await response.json().catch(() => ({})) as { definition?: CreatureDefinition };
         await get().loadDefinitionsLibrary();
@@ -2609,7 +2610,7 @@ export const useEncounterStore = create<EncounterStore>()(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ definition: updated })
         });
-        set({ definitionStatus: response.ok ? "Actor moved" : "Move failed" });
+        set({ definitionStatus: response.ok ? "" : "Move failed" });
         if (response.ok) {
           await get().loadDefinitionsLibrary();
         }

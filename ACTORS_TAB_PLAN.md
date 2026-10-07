@@ -1,6 +1,6 @@
 # Actors Tab Plan: open, edit and delete actors from the directory
 
-**Status:** planned 2026-10-06; the decisions are settled. Not built yet.
+**Status:** built 2026-10-06 on branch `actors-tab`, one commit per phase (Phases 0–4). See "Built so far" at the end.
 
 The Actors tab should be where a DM manages their creatures. Today it mostly adds tokens to the map. The user named
 three problems:
@@ -284,4 +284,28 @@ search across groups, the *This scene only* group, and quantity on your own acto
 
 ## Built so far
 
-Nothing yet. Each phase will be one commit on a branch `actors-tab`.
+All five phases, one commit each on `actors-tab`:
+
+- **Phase 0** (9905343): the Compendium tab and its drag type are gone; `useCompendium` keeps Open5e search and imports
+  for Create Token and Add ability.
+- **Phase 1** (f4f18fa): linked library actors. `queueLibrarySaves` in `commitEncounter`, `undo` and `redo` hands
+  changed actors you own to `library-sync-store` (debounced `PUT`, Saving… / Saved / Not saved · Retry in the title
+  bar, a `beforeunload` warning). `withLibraryActors` syncs a scene as it loads, and the scene and its undo history when
+  the library loads, skipping actors whose save is still on its way.
+- **Phase 2** (47612e6): sheets with no token. The bench (`benchIds`, `benchCreature`, `unbenchCreature`,
+  `withBenchKept`, `withoutBench` in `boardToSave` and `partialize`), `openActorSheet` / `openCreature`, a preview
+  token, and `SheetModeContext` (`tokenless`, `readOnly`) read by the vitals, tabs, Token tab, resources, the Codex and
+  the shared inputs. `commitEncounter` refuses edits to a locked bench creature and `onLockedEdit` says why.
+- **Phase 3** (c6a036a): `ActorRow` (click selects, double-click or Enter opens, + adds, ⋯ or a right-click opens the
+  menu), `deleteActor` / `restoreLibraryDefinition` / `duplicateLibraryDefinition`, `ConfirmDialog`, and `namedBy`
+  (self-naming only counts for Make it its own creature).
+- **Phase 4**: the selected-token card is gone. The panel has one search (`matchesActorQuery`, folders pruned and
+  opened while searching), "Add ×" for every row and drag, the My actors / This scene only / SRD Monsters groups,
+  `directoryLine` subtitles, and an errors-only status line. The guide and Docs page say how sheets open now.
+
+Two choices were made while building:
+
+- **SRD monsters on the map aren't listed under This scene only.** Their sheets open from the SRD folder (or the
+  token), and SRD monsters never offer a delete.
+- **A tokenless sheet's Add ability explains itself when read-only.** Instead of hiding, it says the monster is
+  read-only and to copy it to your library.

@@ -67,6 +67,7 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
   const addCreatureDefinition = useEncounterStore((s) => s.addCreatureDefinition);
   const addSrdMonster = useEncounterStore((s) => s.addSrdMonster);
   const addLibraryDefinitionToEncounter = useEncounterStore((s) => s.addLibraryDefinitionToEncounter);
+  const addCreatureTokens = useEncounterStore((s) => s.addCreatureTokens);
 
   useSyncEncounterRoute(routeParams);
 
@@ -175,8 +176,12 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
       const definition = directory.find((candidate) => candidate.id === payload.definitionId);
       if (!definition) return;
       const faction = payload.faction ?? defaultFactionForDefinition(definition);
+      // As many as the Actors tab's "Add ×" said when the drag began.
+      const count = payload.count ?? 1;
       if (savedDefinitionIds.has(payload.definitionId)) {
-        addLibraryDefinitionToEncounter(payload.definitionId, faction, cell);
+        void addLibraryDefinitionToEncounter(payload.definitionId, faction, cell, count);
+      } else if (count > 1) {
+        addCreatureTokens(definition, faction, count, cell);
       } else {
         addCreatureDefinition(definition, faction, cell);
       }
@@ -229,7 +234,6 @@ export function EncounterEditor({ routeParams = null }: EncounterEditorProps) {
                   setCreateFolderId(folderId ?? null);
                   setModal("create");
                 }}
-                onOpenSheet={openSheet}
               />
             ) : null}
             {rightTab === "combat" ? <CombatPanel /> : null}

@@ -174,7 +174,7 @@ describe("customizing a library monster", () => {
 
 describe("SRD Monsters directory in the Actors panel", () => {
   function Harness() {
-    return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+    return <ActorsPanel onOpenCreate={vi.fn()} />;
   }
 
   it("shows a permanent SRD Monsters root, collapsed, with its monster count", () => {
@@ -245,6 +245,6 @@ describe("SRD Monsters directory in the Actors panel", () => {
   it("keeps the user's own folder tools alongside it", () => {
     render(<Harness />);
     expect(screen.getByTitle("New folder")).toBeTruthy();
-    expect(screen.getByText("Actor directory")).toBeTruthy();
+    expect(screen.getByText("My actors")).toBeTruthy();
   });
 });

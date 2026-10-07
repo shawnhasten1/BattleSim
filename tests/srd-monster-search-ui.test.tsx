@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function Harness() {
-  return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+  return <ActorsPanel onOpenCreate={vi.fn()} />;
 }
 
 /** Renders the panel with the SRD Monsters root already expanded. */
@@ -25,17 +25,20 @@ async function openSrd() {
   return root;
 }
 
-const search = (root: HTMLElement) => within(root).getByLabelText("Search SRD monsters") as HTMLInputElement;
+/** The Actors tab's search, over every group (ACTORS_TAB_PLAN.md Phase 4): it narrows the SRD folder too. */
+const search = (_root?: HTMLElement) => screen.getByRole("searchbox", { name: "Search actors" }) as HTMLInputElement;
 
 async function openFilters(root: HTMLElement) {
   await userEvent.click(within(root).getByRole("button", { name: "Filters" }));
 }
 
 describe("SRD monster search", { timeout: 20000 }, () => {
-  it("shows no search UI until the SRD folder is opened", () => {
+  it("is the Actors tab's search: it opens the SRD folder by itself when it finds monsters", async () => {
     render(<Harness />);
     const root = screen.getByTestId("srd-monsters-root");
-    expect(within(root).queryByLabelText("Search SRD monsters")).toBeNull();
+    expect(within(root).queryByText("Wolf", { exact: true })).toBeNull();
+    await userEvent.type(search(), "wolf");
+    expect(within(root).getByText("Wolf", { exact: true })).toBeTruthy();
   });
 
   it("narrows the tree as you type, opening the folders that still have matches", async () => {
@@ -72,13 +75,14 @@ describe("SRD monster search", { timeout: 20000 }, () => {
     expect(within(root).getByText("Dire Wolf", { exact: true })).toBeTruthy();
   });
 
-  it("says so when nothing matches and offers a way out", async () => {
+  it("says so when nothing matches, and the search clears with ×", async () => {
     const root = await openSrd();
     await userEvent.type(search(root), "zzzzqq");
-    expect(within(root).getByText(/No monsters match these filters/)).toBeTruthy();
-    await userEvent.click(within(root).getByRole("button", { name: "Clear filters" }));
+    expect(within(root).getByText("0 of 325")).toBeTruthy();
+    expect(screen.getByText(/None of your actors match/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Clear the search" }));
     expect(search(root).value).toBe("");
-    expect(within(root).queryByText(/No monsters match/)).toBeNull();
+    expect(within(root).getByText("325")).toBeTruthy();
     expect(within(root).queryByRole("status")).toBeNull();
   });
 
@@ -142,18 +146,19 @@ describe("SRD monster filters", { timeout: 20000 }, () => {
     expect(within(root).queryByText("Tarrasque", { exact: true })).toBeNull(); // gargantuan and legendary, but doesn't fly
   });
 
-  it("shows how many filters are on and clears them all at once", async () => {
+  it("shows how many filters are on and clears them all at once, leaving the tab's search", async () => {
     const root = await openSrd();
     await openFilters(root);
     await userEvent.type(search(root), "dragon");
     await userEvent.selectOptions(within(root).getByLabelText("Minimum challenge rating"), "10");
     await userEvent.click(within(root).getByRole("button", { name: "Legendary" }));
-    expect(within(root).getByRole("button", { name: "Filters" }).textContent).toBe("3");
+    expect(within(root).getByRole("button", { name: "Filters" }).textContent).toMatch(/Filters\s*2$/);
 
     await userEvent.click(within(root).getByRole("button", { name: "Clear all filters" }));
-    expect(search(root).value).toBe("");
+    expect(search(root).value).toBe("dragon");
     expect((within(root).getByLabelText("Minimum challenge rating") as HTMLSelectElement).value).toBe("");
-    expect(within(root).getByRole("button", { name: "Filters" }).textContent).toBe("");
+    expect(within(root).getByRole("button", { name: "Filters" }).textContent).toMatch(/Filters\s*$/);
+    await userEvent.clear(search(root));
     expect(within(root).queryByRole("status")).toBeNull();
   });
 

@@ -1,4 +1,4 @@
-import { abilityModifier, effectiveDefinition, hitPointParts, movementProfileOf, scoreParts, speedParts, type Ability, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
+import { abilityModifier, actualMaxHp, armorClassOf, effectiveDefinition, hitPointParts, movementProfileOf, scoreParts, speedParts, type Ability, type CombatantState, type CreatureDefinition, type DamageAdjustment } from "@/engine";
 import { RESOURCE_STANCES } from "@/lib/resource-stances";
 import { formatChallengeRating } from "@/lib/srd-monster-tree";
 import { TACTICS_PROFILES } from "@/lib/tactics-profiles";
@@ -195,4 +195,34 @@ const STATES: Record<Exclude<CombatantState["state"], "reserve">, string> = {
 export function statusLine(combatant: Pick<CombatantState, "state" | "arrivesRound" | "position">): string {
   const state = combatant.state === "reserve" ? `Arrives round ${combatant.arrivesRound ?? "?"}` : STATES[combatant.state];
   return `${state} · square ${combatant.position.x}, ${combatant.position.y}`;
+}
+
+/**
+ * An actor's line in the Actors tab (ACTORS_TAB_PLAN.md, Phase 4): "Level 5 Fighter · HP 44 · AC 18" for a character,
+ * "CR 1 · HP 21 · AC 17" for a monster, and "×2 on map" when it has tokens here.
+ */
+export function directoryLine(definition: CreatureDefinition, tokensHere = 0): string {
+  const classes = (definition.character?.classes ?? []).filter((entry) => entry.name.trim());
+  const what = classes.length
+    ? `Level ${definition.character?.level ?? classes.reduce((sum, entry) => sum + entry.level, 0)} ${classes.map((entry) => entry.name).join(" / ")}`
+    : definition.character ? `Level ${characterLevel(definition)}`
+      : definition.challengeRating !== undefined ? `CR ${formatChallengeRating(definition.challengeRating)}` : "";
+  return [what, `HP ${actualMaxHp(definition)}`, `AC ${armorClassOf(definition).total}`, tokensHere ? `×${tokensHere} on map` : ""]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Whether a search in the Actors tab finds this actor: by its name, type, classes or source. */
+export function matchesActorQuery(definition: CreatureDefinition, query: string): boolean {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = [
+    definition.name,
+    definition.type,
+    definition.size,
+    ...(definition.character?.classes ?? []).map((entry) => entry.name),
+    definition.source?.documentName,
+    definition.source?.provider
+  ].filter(Boolean).join(" ").toLowerCase();
+  return words.every((word) => haystack.includes(word));
 }

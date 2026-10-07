@@ -62,6 +62,19 @@ export function buildFolderTree(folders: ActorFolder[], definitions: CreatureDef
   return { roots, unfiled };
 }
 
+/** The folders that still hold an actor, at any depth: a search's results, without the folders it emptied. */
+export function withoutEmptyFolders(nodes: ActorFolderNode[]): ActorFolderNode[] {
+  return nodes.flatMap((node) => {
+    const children = withoutEmptyFolders(node.children);
+    return children.length || node.definitions.length ? [{ ...node, children }] : [];
+  });
+}
+
+/** Every folder's id, at any depth. */
+export function folderIdsOf(nodes: ActorFolderNode[]): string[] {
+  return nodes.flatMap((node) => [node.folder.id, ...folderIdsOf(node.children)]);
+}
+
 /** True if setting `folderId`'s parent to `candidateParentId` would create a cycle (moving a folder into itself or one of its own descendants). */
 export function wouldCreateCycle(folders: ActorFolder[], folderId: Id, candidateParentId: Id | null): boolean {
   if (candidateParentId === null) return false;

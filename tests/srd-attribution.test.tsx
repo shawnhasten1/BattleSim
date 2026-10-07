@@ -104,7 +104,7 @@ describe("credits in the app", () => {
 
   it("the SRD Monsters folder links to it in a new tab", async () => {
     function Harness() {
-      return <ActorsPanel onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />;
+      return <ActorsPanel onOpenCreate={vi.fn()} />;
     }
     render(<Harness />);
     const rootNode = screen.getByTestId("srd-monsters-root");

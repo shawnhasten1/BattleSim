@@ -589,3 +589,105 @@
   border-color: var(--ui-hp-red) !important;
   background: var(--ui-hp-red) !important;
 }
+
+/* ── the top bar: one search over every group, and how many tokens an add makes (Phase 4) ── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  color: var(--ui-text-dim);
+}
+
+.searchBox > svg {
+  position: absolute;
+  left: 8px;
+  pointer-events: none;
+}
+
+.searchBox input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 26px 5px 26px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.searchBox input:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+}
+
+/* The browser's own clear button: ours is the × beside it. */
+.searchBox input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.searchBox button {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.searchBox button:hover {
+  color: var(--ui-text);
+}
+
+.quantity {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.groupCount {
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.srdGroup {
+  border-top: 1px solid var(--ui-border);
+}
+
+.srdFilterToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.srdFilterToggle:hover {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}

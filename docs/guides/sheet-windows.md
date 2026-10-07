@@ -8,13 +8,27 @@ Each creature on the map can have its own sheet window, and you can keep several
 
 ## 1. Open sheets
 
-**Double-click a token** to open its sheet. You can also use **Edit sheet** on its right-click menu, **Sheet** in the Actors panel, or an initiative row in the Combat panel (double-click it, or right-click › **Open sheet**).
+**Double-click a token** to open its sheet. You can also use **Edit sheet** on its right-click menu, an initiative row in the Combat panel (double-click it, or right-click › **Open sheet**), or **double-click the actor in the Actors tab**.
 
 ![Two sheets open at once](img/sheet-windows/01-two-windows.png)
 
 - **A sheet belongs to its creature.** Selecting another token doesn't change it. Opening the sheet of a creature whose sheet is already open brings that window to the front.
 - **Several at once:** up to eight. A new one opens a little below and right of the one in front. Clicking a window brings it to the front. If you open a ninth, the one you used least recently closes. A sheet with unsaved changes is never the one that closes.
 - **Resize** a sheet from its bottom-right corner. Each style remembers its size.
+
+### A sheet with no token on the map
+
+Double-click an actor in the **Actors** tab (or pick **Open sheet** from its ⋯ menu) and its sheet opens even when none of it is on the map. Nothing is added to the board.
+
+- **Stats and Abilities** work as usual. The **Token** tab sets what every new token of it starts with: its tactics, spending and image.
+- **Hit points taken, conditions and spent slots aren't shown**, because no token has any yet. Drag the actor onto the map (or use its **+**) and the window becomes that token's sheet.
+- **An SRD monster or a shared template opens read-only.** Use **Copy to my library** at the top of the sheet to get a copy you can change. It opens in the same place.
+
+### Your library actors are linked
+
+An actor in your library is one creature wherever you use it. A change on its sheet, from a token or with no token, is saved to your library a moment later, and the title bar says **Saving…**, then **Saved**. The same change reaches every token of it on this map, and your other scenes pick it up when you open them.
+
+To make a one-off variant for one fight, use ⋯ › **Make it its own creature** on a token's sheet. The copy belongs to this scene only, and your library actor stays as it was.
 
 ## 2. A creature with several tokens
 

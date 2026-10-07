@@ -406,8 +406,10 @@ const SECTIONS: Section[] = [
           proficiency: the editor reads it out and says so.
         </p>
         <p>
-          You can build an actor by hand on the Abilities tab, or drop in a
-          ready-made creature from the SRD/Open5e compendium and adjust it from there. Actors also carry a{" "}
+          You can build an actor by hand on the Abilities tab, or start from an SRD monster (copy it to your library from
+          its menu in the Actors tab) or an Open5e creature (Create Token) and adjust it from there. Double-click an actor in
+          the Actors tab to open its sheet, with or without a token on the map; a library actor is linked, so a change to it
+          anywhere is saved to your library. Actors also carry a{" "}
           <strong>creature type</strong> (beast, undead, fiend, etc.), which some spells and features key off
           of — see <a href="#spells">restrictions by creature type</a> below.
         </p>

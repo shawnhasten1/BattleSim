@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +19,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function ActorsHarness(props: { onOpenCreate: () => void; onOpenSheet: () => void }) {
+function ActorsHarness(props: { onOpenCreate: () => void }) {
   return <ActorsPanel {...props} />;
 }
 
@@ -47,17 +47,20 @@ describe("CombatPanel", () => {
 });
 
 describe("ActorsPanel", () => {
-  it("renders the create button and the actor directory", () => {
-    render(<ActorsHarness onOpenCreate={vi.fn()} onOpenSheet={vi.fn()} />);
+  it("renders the create button, the search and the directory's groups", () => {
+    render(<ActorsHarness onOpenCreate={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Create Token/ })).toBeTruthy();
-    expect(screen.getByText(/tokens/)).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: "Search actors" })).toBeTruthy();
+    expect(screen.getByText(/tokens on the map/)).toBeTruthy();
+    expect(screen.getByRole("list", { name: "My actors" })).toBeTruthy();
+    // The sample's creatures aren't in a library: they're this scene's own.
+    expect(within(screen.getByRole("list", { name: "This scene only" })).getByText("Test Fighter")).toBeTruthy();
   });
 
-  it("invokes onOpenSheet from the selection actions", async () => {
-    const onOpenSheet = vi.fn();
-    render(<ActorsHarness onOpenCreate={vi.fn()} onOpenSheet={onOpenSheet} />);
-    await userEvent.click(screen.getByRole("button", { name: /Sheet/ }));
-    expect(onOpenSheet).toHaveBeenCalled();
+  it("has no selected-token card: the token's own menus do that", () => {
+    render(<ActorsHarness onOpenCreate={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /^Sheet$/ })).toBeNull();
+    expect(screen.queryByText("Select a token on the map, or create one.")).toBeNull();
   });
 });
 

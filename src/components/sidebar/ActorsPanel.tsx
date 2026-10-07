@@ -1,18 +1,18 @@
 "use client";
 
-import { Copy, Download, FolderOpen, FolderPlus, Save, Swords, Trash2, UserPlus } from "lucide-react";
+import { FolderPlus, Minus, Plus, RotateCw, Search, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from "react";
-import { actualMaxHp, armorClassOf, type CreatureDefinition } from "@/engine";
-import { useEncounterStore } from "@/store/encounter-store";
+import type { CreatureDefinition } from "@/engine";
+import { MAX_TOKEN_BATCH, useEncounterStore } from "@/store/encounter-store";
 import { openActorSheet } from "@/store/sheet-windows-store";
-import { useSelectedCombatant } from "@/hooks/useSelectedCombatant";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { defaultFactionForDefinition } from "@/lib/ui-helpers";
 import { exportCombatant } from "@/lib/actor-sheet/export";
 import { namedBy, tokensOf } from "@/lib/actor-sheet/scope";
+import { directoryLine, matchesActorQuery } from "@/lib/actor-sheet/summaries";
 import { previewToken } from "@/lib/actor-sheet/token";
-import { buildFolderTree, type ActorFolderNode as FolderNodeData } from "@/lib/actor-folders";
+import { buildFolderTree, folderIdsOf, withoutEmptyFolders, type ActorFolderNode as FolderNodeData } from "@/lib/actor-folders";
 import { isSrdMonsterId, loadSrdMonster, type SrdMonsterIndexEntry } from "@/data/srd/monsters";
 import { SrdMonsterFolders } from "./SrdMonsterFolders";
 import { ActorFolderNode, RenameInput, type FolderEditState } from "./ActorFolderNode";
@@ -23,8 +23,6 @@ import styles from "./ActorsPanel.module.css";
 interface ActorsPanelProps {
   /** folderId, when opened from a folder's "create actor" icon, so the new actor is filed there automatically. */
   onOpenCreate: (folderId?: string) => void;
-  /** Opens that token's sheet window. */
-  onOpenSheet: (combatantId: string) => void;
 }
 
 /** Where an actor in the directory stands: yours, a shared template, only in this scene, or an SRD monster. */
@@ -53,7 +51,19 @@ function findFolder(nodes: FolderNodeData[], folderId: string): FolderNodeData |
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
-export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
+/** Whole number from 1 to MAX_TOKEN_BATCH; anything unreadable counts as 1. */
+function clampQuantity(text: string | number): number {
+  const value = Math.floor(Number(text));
+  return Number.isFinite(value) ? Math.max(1, Math.min(MAX_TOKEN_BATCH, value)) : 1;
+}
+
+/**
+ * The Actors tab (ACTORS_TAB_PLAN.md): your actors in their folders, the creatures only in this scene, and the SRD
+ * monsters, under one search. A row opens its sheet on a double-click (with no token, when none is on the map); + or a
+ * drag puts tokens on the map, as many as "Add ×" says; its ⋯ or a right-click has the rest, Delete included for your
+ * own actors and the scene's.
+ */
+export function ActorsPanel({ onOpenCreate }: ActorsPanelProps) {
   const encounter = useEncounterStore((state) => state.encounter);
   const definitionsLibrary = useEncounterStore((state) => state.definitionsLibrary);
   const templateDefinitionIds = useEncounterStore((state) => state.templateDefinitionIds);
@@ -62,6 +72,7 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const actorFolders = useEncounterStore((state) => state.actorFolders);
   const folderStatus = useEncounterStore((state) => state.folderStatus);
   const addCreatureDefinition = useEncounterStore((state) => state.addCreatureDefinition);
+  const addCreatureTokens = useEncounterStore((state) => state.addCreatureTokens);
   const addSrdMonster = useEncounterStore((state) => state.addSrdMonster);
   const saveSrdMonsterCopy = useEncounterStore((state) => state.saveSrdMonsterCopy);
   const addLibraryDefinitionToEncounter = useEncounterStore((state) => state.addLibraryDefinitionToEncounter);
@@ -70,7 +81,6 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const deleteActor = useEncounterStore((state) => state.deleteActor);
   const restoreLibraryDefinition = useEncounterStore((state) => state.restoreLibraryDefinition);
   const saveDefinition = useEncounterStore((state) => state.saveDefinition);
-  const saveSelectedDefinition = useEncounterStore((state) => state.saveSelectedDefinition);
   const loadDefinitionsLibrary = useEncounterStore((state) => state.loadDefinitionsLibrary);
   const loadActorFolders = useEncounterStore((state) => state.loadActorFolders);
   const createActorFolder = useEncounterStore((state) => state.createActorFolder);
@@ -78,10 +88,7 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const moveActorFolder = useEncounterStore((state) => state.moveActorFolder);
   const deleteActorFolder = useEncounterStore((state) => state.deleteActorFolder);
   const moveDefinitionToFolder = useEncounterStore((state) => state.moveDefinitionToFolder);
-  const duplicateSelected = useEncounterStore((state) => state.duplicateSelected);
-  const removeCombatant = useEncounterStore((state) => state.removeCombatant);
   const undo = useEncounterStore((state) => state.undo);
-  const { selectedCombatant, selectedDefinition } = useSelectedCombatant();
 
   const [rootDropActive, setRootDropActive] = useState(false);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
@@ -92,29 +99,49 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [toast, setToast] = useState<PanelToast | null>(null);
+  const [query, setQuery] = useState("");
+  // While searching, folders with matches are open; this remembers the ones closed anyway.
+  const [collapsedWhileSearching, setCollapsedWhileSearching] = useState<Set<string>>(new Set());
+  // How many tokens each + or drag adds. The box keeps what's being typed; `quantity` is always valid.
+  const [quantityDraft, setQuantityDraft] = useState("1");
+  const quantity = clampQuantity(quantityDraft);
+  const searching = query.trim() !== "";
 
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 8000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+  useEffect(() => setCollapsedWhileSearching(new Set()), [query]);
 
   const savedDefinitionIds = useMemo(
     () => new Set(definitionsLibrary.map((definition) => definition.id)),
     [definitionsLibrary]
   );
   const templateIdSet = useMemo(() => new Set(templateDefinitionIds), [templateDefinitionIds]);
-  const directory = useMemo(() => {
-    const byId = new Map<string, CreatureDefinition>();
-    for (const definition of definitionsLibrary) byId.set(definition.id, definition);
-    // The scene's creatures, less those only there for an open sheet (the bench) and SRD monsters (in their own folder).
-    for (const definition of encounter.definitions) {
-      if (isSrdMonsterId(definition.id) || (benchIds.includes(definition.id) && !byId.has(definition.id))) continue;
-      byId.set(definition.id, definition);
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [definitionsLibrary, encounter.definitions, benchIds]);
-  const folderTree = useMemo(() => buildFolderTree(actorFolders, directory), [actorFolders, directory]);
+  // Your library, as this scene has it (the scene's copy is the library's, or newer while a save is on its way).
+  const library = useMemo(() => {
+    const inScene = new Map(encounter.definitions.map((definition) => [definition.id, definition]));
+    return definitionsLibrary.map((definition) => inScene.get(definition.id) ?? definition);
+  }, [definitionsLibrary, encounter.definitions]);
+  // The scene's creatures that aren't in your library: not SRD monsters (in their own folder), nor any only there for
+  // an open sheet (the bench).
+  const sceneOnly = useMemo(
+    () => encounter.definitions
+      .filter((definition) => !savedDefinitionIds.has(definition.id) && !isSrdMonsterId(definition.id) && !benchIds.includes(definition.id))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [encounter.definitions, savedDefinitionIds, benchIds]
+  );
+  const shownLibrary = useMemo(() => library.filter((definition) => matchesActorQuery(definition, query)), [library, query]);
+  const shownSceneOnly = useMemo(() => sceneOnly.filter((definition) => matchesActorQuery(definition, query)), [sceneOnly, query]);
+  const folderTree = useMemo(() => {
+    const tree = buildFolderTree(actorFolders, shownLibrary);
+    return searching ? { roots: withoutEmptyFolders(tree.roots), unfiled: tree.unfiled } : tree;
+  }, [actorFolders, shownLibrary, searching]);
+  const openFolderIds = useMemo(
+    () => (searching ? new Set(folderIdsOf(folderTree.roots).filter((id) => !collapsedWhileSearching.has(id))) : expandedFolderIds),
+    [searching, folderTree, collapsedWhileSearching, expandedFolderIds]
+  );
 
   function kindOf(definitionId: string): ActorKind {
     if (isSrdMonsterId(definitionId)) return "srd";
@@ -122,17 +149,17 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
     return savedDefinitionIds.has(definitionId) ? "mine" : "scene";
   }
 
-  function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry, quantity: number) {
+  function onSrdMonsterDragStart(event: DragEvent<HTMLElement>, monster: SrdMonsterIndexEntry, count: number) {
     event.dataTransfer.effectAllowed = "copy";
     // Same payload as any other actor; the SRD id is resolved (and loaded on demand) by the drop target.
-    event.dataTransfer.setData("application/x-battle-sim-actor", JSON.stringify({ definitionId: monster.id, faction: "enemy", count: quantity }));
+    event.dataTransfer.setData("application/x-battle-sim-actor", JSON.stringify({ definitionId: monster.id, faction: "enemy", count }));
   }
 
   function onActorDragStart(event: DragEvent<HTMLElement>, definition: CreatureDefinition) {
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(
       "application/x-battle-sim-actor",
-      JSON.stringify({ definitionId: definition.id, faction: defaultFactionForDefinition(definition) })
+      JSON.stringify({ definitionId: definition.id, faction: defaultFactionForDefinition(definition), count: quantity })
     );
   }
 
@@ -142,12 +169,14 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   }
 
   function toggleExpanded(folderId: string) {
-    setExpandedFolderIds((prev) => {
+    const flip = (prev: Set<string>) => {
       const next = new Set(prev);
       if (next.has(folderId)) next.delete(folderId);
       else next.add(folderId);
       return next;
-    });
+    };
+    if (searching) setCollapsedWhileSearching(flip);
+    else setExpandedFolderIds(flip);
   }
 
   function onFolderContextMenu(event: MouseEvent, folderId: string) {
@@ -192,11 +221,13 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
     }
   }
 
-  /** A token of it on the map, on the side it fights on by default (party for a character). */
+  /** Tokens of it on the map, as many as "Add ×" says, on the side it fights on by default (party for a character). */
   function addToEncounter(definition: CreatureDefinition) {
     const faction = defaultFactionForDefinition(definition);
     if (savedDefinitionIds.has(definition.id)) {
-      void addLibraryDefinitionToEncounter(definition.id, faction);
+      void addLibraryDefinitionToEncounter(definition.id, faction, undefined, quantity);
+    } else if (quantity > 1) {
+      addCreatureTokens(definition, faction, quantity);
     } else {
       addCreatureDefinition(definition, faction);
     }
@@ -307,18 +338,23 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
     ];
   }
 
+  function addTitle(definition: CreatureDefinition) {
+    const side = defaultFactionForDefinition(definition) === "party" ? "party" : "an enemy";
+    return `${quantity > 1 ? `Add ${quantity}` : "Add"} to the map as ${side}`;
+  }
+
   function renderActorRow(definition: CreatureDefinition) {
     const kind = kindOf(definition.id);
-    const source = kind === "scene" ? "this scene only"
-      : definition.source?.documentName ?? definition.source?.provider ?? "homebrew";
+    const source = definition.source?.documentName ?? (definition.source?.provider === "open5e" ? "Open5e" : undefined);
     return (
       <ActorRow
         key={definition.id}
         name={definition.name}
-        subtitle={`${source}${kind === "template" ? " · Template" : ""}`}
+        subtitle={`${directoryLine(definition, tokensOf(encounter, definition.id).length)}${kind === "template" ? " · Template" : ""}`}
         thumbnail={<ActorThumbnail definition={definition} />}
+        title={source ? `From ${source}` : undefined}
         selected={selectedRowId === definition.id}
-        addTitle={`Add to the map as ${defaultFactionForDefinition(definition) === "party" ? "party" : "an enemy"}`}
+        addTitle={addTitle(definition)}
         onSelect={() => setSelectedRowId(definition.id)}
         onOpen={() => void openSheet(definition.id)}
         onAdd={() => addToEncounter(definition)}
@@ -329,7 +365,7 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
   }
 
   function requestFolderDelete(folderId: string) {
-    const node = findFolder(folderTree.roots, folderId);
+    const node = findFolder(buildFolderTree(actorFolders, library).roots, folderId);
     if (!node) return;
     const actors = node.definitions.length;
     const folders = node.children.length;
@@ -367,10 +403,9 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
       ]
     : null;
 
-  function exportSelected() {
-    if (!selectedCombatant || !selectedDefinition) return;
-    exportCombatant(selectedCombatant, selectedDefinition);
-  }
+  const noLibraryMatches = folderTree.roots.length === 0 && folderTree.unfiled.length === 0;
+  // The status line is for what went wrong: what worked says so in a toast.
+  const problem = definitionStatus || folderStatus;
 
   return (
     <div className={styles.panel}>
@@ -378,49 +413,55 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
         <button type="button" className={styles.create} onClick={() => onOpenCreate()}>
           <UserPlus size={16} /> Create Token
         </button>
-        <span className={styles.count}>{directory.length} actors · {encounter.combatants.length} tokens</span>
-      </div>
-
-      {selectedCombatant && selectedDefinition ? (
-        <div className={styles.selection}>
-          <div className={styles.summary}>
-            <ActorThumbnail definition={selectedDefinition} combatant={selectedCombatant} />
-            <div>
-              <strong>{selectedCombatant.displayName}</strong>
-              <span>{selectedDefinition.name} · {selectedCombatant.faction}</span>
-              <span>AC {armorClassOf(selectedDefinition, selectedCombatant).total} · HP {selectedCombatant.currentHp}/{actualMaxHp(selectedDefinition, selectedCombatant)} · {selectedCombatant.state}</span>
+        <div className={styles.toolbar}>
+          <label className={styles.searchBox}>
+            <Search size={13} aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Search actors and SRD monsters…"
+              aria-label="Search actors"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
+            />
+            {searching ? (
+              <button type="button" aria-label="Clear the search" title="Clear the search" onClick={() => setQuery("")}><X size={13} /></button>
+            ) : null}
+          </label>
+          <div className={styles.quantity} title="How many tokens + or a drag onto the map adds">
+            <span>Add ×</span>
+            <div className={styles.srdStepper}>
+              <button type="button" aria-label="Decrease quantity" disabled={quantity <= 1} onClick={() => setQuantityDraft(String(quantity - 1))}><Minus size={12} /></button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_TOKEN_BATCH}
+                aria-label="Quantity to add"
+                value={quantityDraft}
+                onChange={(event) => setQuantityDraft(event.target.value)}
+                onBlur={() => setQuantityDraft(String(quantity))}
+              />
+              <button type="button" aria-label="Increase quantity" disabled={quantity >= MAX_TOKEN_BATCH} onClick={() => setQuantityDraft(String(quantity + 1))}><Plus size={12} /></button>
             </div>
           </div>
-          <div className={styles.actions}>
-            <button type="button" onClick={() => onOpenSheet(selectedCombatant.id)}><Swords size={14} /> Sheet</button>
-            <button type="button" onClick={duplicateSelected}><Copy size={14} /> Duplicate</button>
-            <button type="button" onClick={exportSelected}><Download size={14} /> Export</button>
-            {templateIdSet.has(selectedDefinition.id) ? (
-              <button type="button" onClick={() => void copyLibraryDefinition(selectedDefinition.id)} title="Templates are read-only — this saves an editable copy to your library">
-                <Copy size={14} /> Copy to My Library
-              </button>
-            ) : (
-              <button type="button" onClick={() => void saveSelectedDefinition()}><Save size={14} /> Save</button>
-            )}
-            <button type="button" className={styles.danger} onClick={() => removeCombatant(selectedCombatant.id)}>
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
         </div>
-      ) : (
-        <p className={styles.empty}>Select a token on the map, or create one.</p>
-      )}
+        <span className={styles.count}>
+          {plural(library.length, "actor")} in your library · {plural(encounter.combatants.length, "token")} on the map
+        </span>
+      </div>
+      {problem ? <p className={styles.status} role="alert">{problem}</p> : null}
 
       <div
         className={`${styles.dirHead} ${rootDropActive ? styles.dropActive : ""}`}
         onDragOver={onRootDragOver}
         onDragLeave={() => setRootDropActive(false)}
         onDrop={onRootDrop}
-        title="Drop here to move to root"
+        title="Drop an actor or folder here to move it to the top level"
       >
-        <span>Actor directory</span>
+        <span>My actors</span>
         <div className={styles.dirHeadActions}>
-          <button type="button" onClick={() => setEditing({ mode: "create", parentId: null })} title="New folder">
+          <button type="button" onClick={() => setEditing({ mode: "create", parentId: null })} title="New folder" aria-label="New folder">
             <FolderPlus size={14} />
           </button>
           <button
@@ -429,17 +470,14 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
               void loadDefinitionsLibrary();
               void loadActorFolders();
             }}
-            title="Refresh library"
+            title="Refresh your library"
+            aria-label="Refresh your library"
           >
-            <FolderOpen size={14} />
+            <RotateCw size={13} />
           </button>
         </div>
       </div>
-      {definitionStatus || folderStatus ? (
-        <p className={styles.status}>{definitionStatus || folderStatus}</p>
-      ) : null}
-
-      <ul className={styles.list}>
+      <ul className={styles.list} aria-label="My actors">
         {editing?.mode === "create" && editing.parentId === null ? (
           <li className={styles.folderItem}>
             <div className={styles.folderRow} style={{ paddingLeft: 10 }}>
@@ -457,25 +495,17 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
             </div>
           </li>
         ) : null}
-        <SrdMonsterFolders
-          expandedFolderIds={expandedFolderIds}
-          onToggleExpanded={toggleExpanded}
-          selectedId={selectedRowId}
-          onSelect={setSelectedRowId}
-          onOpen={(monster) => void openSheet(monster.id)}
-          onAdd={(monster, faction, quantity) => void addSrdMonster(monster.id, faction, undefined, quantity)}
-          onMenu={(monster, at) => setRowMenu({ ...at, items: srdMenu(monster) })}
-          onDragStartMonster={onSrdMonsterDragStart}
-        />
-        {folderTree.roots.length === 0 && folderTree.unfiled.length === 0 && editing?.mode !== "create" ? (
-          <li className={styles.empty}>No saved actors yet.</li>
+        {noLibraryMatches && editing?.mode !== "create" ? (
+          <li className={styles.empty}>
+            {searching ? `None of your actors match “${query.trim()}”.` : "Nothing in your library yet: create an actor, or copy an SRD monster from its menu."}
+          </li>
         ) : null}
         {folderTree.roots.map((node) => (
           <ActorFolderNode
             key={node.folder.id}
             node={node}
             depth={0}
-            expandedFolderIds={expandedFolderIds}
+            expandedFolderIds={openFolderIds}
             onToggleExpanded={toggleExpanded}
             editing={editing}
             onCommitRename={(folderId, name) => {
@@ -496,6 +526,33 @@ export function ActorsPanel({ onOpenCreate, onOpenSheet }: ActorsPanelProps) {
           />
         ))}
         {folderTree.unfiled.map((definition) => renderActorRow(definition))}
+      </ul>
+
+      {shownSceneOnly.length ? (
+        <>
+          <div className={styles.dirHead} title="In this scene, but not in your library: save one from its menu to keep it">
+            <span>This scene only</span>
+            <span className={styles.groupCount}>{shownSceneOnly.length}</span>
+          </div>
+          <ul className={styles.list} aria-label="This scene only">
+            {shownSceneOnly.map((definition) => renderActorRow(definition))}
+          </ul>
+        </>
+      ) : null}
+
+      <ul className={`${styles.list} ${styles.srdGroup}`} aria-label="SRD monsters">
+        <SrdMonsterFolders
+          query={query}
+          quantity={quantity}
+          expandedFolderIds={expandedFolderIds}
+          onToggleExpanded={toggleExpanded}
+          selectedId={selectedRowId}
+          onSelect={setSelectedRowId}
+          onOpen={(monster) => void openSheet(monster.id)}
+          onAdd={(monster, faction, count) => void addSrdMonster(monster.id, faction, undefined, count)}
+          onMenu={(monster, at) => setRowMenu({ ...at, items: srdMenu(monster) })}
+          onDragStartMonster={onSrdMonsterDragStart}
+        />
       </ul>
 
       {toast ? (

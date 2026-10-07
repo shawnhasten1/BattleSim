@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Folder, Image as ImageIcon, Lock, Minus, Plus, Search, SlidersHorizontal, X } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { ChevronDown, ChevronRight, Folder, Image as ImageIcon, Lock, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { ActorThumbnail } from "@/components/ActorThumbnail";
 import { Chip, ChipRow } from "@/components/ui/ChipRow";
@@ -13,12 +13,15 @@ import {
   activeSrdFilterCount, filterSrdMonsters, withCrRange, type SrdMonsterFilters
 } from "@/lib/srd-monster-filter";
 import { SRD_ROOT_FOLDER_ID, buildSrdMonsterTree, formatChallengeRating } from "@/lib/srd-monster-tree";
-import { MAX_TOKEN_BATCH } from "@/store/encounter-store";
 import { TokenArtModal } from "./TokenArtModal";
 import { ActorRow } from "./ActorRow";
 import styles from "./ActorsPanel.module.css";
 
 interface SrdMonsterFoldersProps {
+  /** The Actors tab's search, which narrows this folder with its own filters. */
+  query: string;
+  /** How many tokens each + or drag adds (the Actors tab's "Add ×"). */
+  quantity: number;
   expandedFolderIds: Set<string>;
   onToggleExpanded: (folderId: string) => void;
   /** The row picked in the directory (one at a time, across every folder). */
@@ -38,12 +41,6 @@ const TIER_LABELS: Array<{ tier: MonsterTier; label: string; hint: string }> = [
   { tier: "manual", label: "Manual", hint: "Actions aren't automated" }
 ];
 
-/** Whole number from 1 to MAX_TOKEN_BATCH; anything unreadable counts as 1. */
-function clampQuantity(text: string | number): number {
-  const value = Math.floor(Number(text));
-  return Number.isFinite(value) ? Math.max(1, Math.min(MAX_TOKEN_BATCH, value)) : 1;
-}
-
 /** "Add to the map" / "Add 3 to the map". */
 function addLabel(quantity: number): string {
   return quantity > 1 ? `Add ${quantity} to the map` : "Add to the map";
@@ -56,28 +53,47 @@ function toggle<T>(list: T[], value: T): T[] {
 /**
  * The permanent "SRD Monsters → Monster Type → monster" directory. It looks and behaves like the
  * user's own folders (same rows, same expand/collapse, same drag-to-map) but is read-only: no
- * rename, move, delete, or "create actor here", and its sheets open read-only. A search box and
- * filters narrow it; while any filter is on, the folders that still have matches open by themselves.
+ * rename, move, delete, or "create actor here", and its sheets open read-only. The Actors tab's
+ * search and this folder's filters narrow it; while either is on, the folders that still have
+ * matches open by themselves (this one too, while a search finds any).
  */
-export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, selectedId, onSelect, onOpen, onAdd, onMenu, onDragStartMonster }: SrdMonsterFoldersProps) {
+export function SrdMonsterFolders({ query, quantity, expandedFolderIds, onToggleExpanded, selectedId, onSelect, onOpen, onAdd, onMenu, onDragStartMonster }: SrdMonsterFoldersProps) {
   const [filters, setFilters] = useState<SrdMonsterFilters>(EMPTY_SRD_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   // While filtering, folders default to open; this remembers the ones the user closed anyway.
   const [collapsedWhileFiltering, setCollapsedWhileFiltering] = useState<Set<string>>(new Set());
-  // How many tokens each add / drag creates. The text box keeps what's being typed; `quantity` is always valid.
-  const [quantityDraft, setQuantityDraft] = useState("1");
-  const quantity = clampQuantity(quantityDraft);
   const [tokenArtOpen, setTokenArtOpen] = useState(false);
 
+  // A new search opens every folder with a match again.
+  useEffect(() => setCollapsedWhileFiltering(new Set()), [query]);
+
+  const searched = useMemo(() => ({ ...filters, query }), [filters, query]);
+  // The badge counts this folder's own filters; the search is the Actors tab's.
   const activeCount = activeSrdFilterCount(filters);
-  const filtering = activeCount > 0;
+  const searching = query.trim() !== "";
+  const filtering = activeSrdFilterCount(searched) > 0;
   const total = SRD_MONSTER_INDEX.length;
-  const tree = useMemo(() => buildSrdMonsterTree(filterSrdMonsters(SRD_MONSTER_INDEX, filters)), [filters]);
-  const rootExpanded = expandedFolderIds.has(SRD_ROOT_FOLDER_ID);
+  const tree = useMemo(() => buildSrdMonsterTree(filterSrdMonsters(SRD_MONSTER_INDEX, searched)), [searched]);
+  const rootExpanded = searching
+    ? tree.count > 0 && !collapsedWhileFiltering.has(SRD_ROOT_FOLDER_ID)
+    : expandedFolderIds.has(SRD_ROOT_FOLDER_ID);
 
   function update(next: SrdMonsterFilters) {
-    setFilters(next);
+    setFilters({ ...next, query: "" });
     setCollapsedWhileFiltering(new Set());
+  }
+
+  function toggleRoot() {
+    if (!searching) {
+      onToggleExpanded(SRD_ROOT_FOLDER_ID);
+      return;
+    }
+    setCollapsedWhileFiltering((prev) => {
+      const next = new Set(prev);
+      if (next.has(SRD_ROOT_FOLDER_ID)) next.delete(SRD_ROOT_FOLDER_ID);
+      else next.add(SRD_ROOT_FOLDER_ID);
+      return next;
+    });
   }
 
   function isTypeOpen(folderId: string): boolean {
@@ -99,7 +115,7 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, selecte
 
   return (
     <li className={styles.folderItem} data-testid="srd-monsters-root">
-      <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 10 }} onClick={() => onToggleExpanded(SRD_ROOT_FOLDER_ID)}>
+      <div className={`${styles.folderRow} ${styles.folderRowStatic}`} style={{ paddingLeft: 10 }} onClick={toggleRoot}>
         <button type="button" className={styles.folderToggle} aria-label={rootExpanded ? "Collapse SRD Monsters" : "Expand SRD Monsters"} aria-expanded={rootExpanded}>
           {rootExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -115,49 +131,22 @@ export function SrdMonsterFolders({ expandedFolderIds, onToggleExpanded, selecte
         <>
           <div className={styles.srdFilterBar}>
             <div className={styles.srdSearchRow}>
-              <Search size={13} className={styles.srdSearchIcon} />
-              <input
-                type="search"
-                className={styles.srdSearchInput}
-                placeholder="Search name, family or type…"
-                aria-label="Search SRD monsters"
-                value={filters.query}
-                onChange={(event) => update({ ...filters, query: event.target.value })}
-              />
               <button
                 type="button"
-                className={`${styles.srdIconButton} ${showFilters ? styles.srdIconButtonActive : ""}`}
-                title="Filters"
+                className={`${styles.srdFilterToggle} ${showFilters ? styles.srdIconButtonActive : ""}`}
+                title="Filter by challenge rating, size, environment, automation and traits"
                 aria-label="Filters"
                 aria-expanded={showFilters}
                 onClick={() => setShowFilters((open) => !open)}
               >
-                <SlidersHorizontal size={14} />
+                <SlidersHorizontal size={14} /> Filters
                 {activeCount > 0 ? <span className={styles.srdBadge}>{activeCount}</span> : null}
               </button>
-              {filtering ? (
+              {activeCount > 0 ? (
                 <button type="button" className={styles.srdIconButton} title="Clear all filters" aria-label="Clear all filters" onClick={() => update(EMPTY_SRD_FILTERS)}>
                   <X size={14} />
                 </button>
               ) : null}
-            </div>
-
-            <div className={styles.srdQuantityRow}>
-              <span className={styles.srdFilterCaption}>Quantity per add</span>
-              <div className={styles.srdStepper}>
-                <button type="button" aria-label="Decrease quantity" disabled={quantity <= 1} onClick={() => setQuantityDraft(String(quantity - 1))}><Minus size={12} /></button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={MAX_TOKEN_BATCH}
-                  aria-label="Quantity to add"
-                  value={quantityDraft}
-                  onChange={(event) => setQuantityDraft(event.target.value)}
-                  onBlur={() => setQuantityDraft(String(quantity))}
-                />
-                <button type="button" aria-label="Increase quantity" disabled={quantity >= MAX_TOKEN_BATCH} onClick={() => setQuantityDraft(String(quantity + 1))}><Plus size={12} /></button>
-              </div>
             </div>
 
             {showFilters ? (
