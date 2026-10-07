@@ -1363,6 +1363,12 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         target.feature = { ...target.feature, grantedActions: target.feature.grantedActions!.map((candidate, at) => (at === index ? changed : candidate)) };
       }
     }
+    if (grant.weaponPatch) {
+      const { grant: earlier, patch } = grant.weaponPatch;
+      const target = weapons.find((entry) => entry.key.endsWith(`:${earlier}`));
+      if (!target) state.warnings.push(`${label}: no weapon from ${earlier} to change`);
+      else target.weapon = { ...target.weapon, ...patch };
+    }
     // Wild Shape's known forms: added to the transform an earlier grant gave (once each).
     if (grant.formsOf) {
       const { grant: earlier, action: index, forms } = grant.formsOf;

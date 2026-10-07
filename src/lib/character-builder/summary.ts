@@ -88,7 +88,7 @@ export function builtFrom(definition: Pick<CreatureDefinition, "character">, fea
   if (kind === "feat") return "feat";
   if (kind === "background") return "background";
   if (kind === "species") return "species";
-  // class:srd:class:rogue:<grant> or subclass:srd:subclass:thief:<grant>
+  // class:srd:class:rogue:<grant> or subclass:srd:subclass:thief:<grant>; a 2014 one's id ends `-2014`.
   const id = rest.slice(0, -1).join(":");
-  return titleCase(id.slice(id.lastIndexOf(":") + 1));
+  return titleCase(id.slice(id.lastIndexOf(":") + 1).replace(/-(2014|2024)$/, ""));
 }

@@ -12,12 +12,12 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 18 | not in the 2014 catalog yet | | | | |
+| Barbarian (Path of the Berserker) | 18 | 9 | 3 | 3 | 2 | 1 |
 | Bard (College of Lore) | 15 | not in the 2014 catalog yet | | | | |
 | Cleric (Life Domain) | 13 | not in the 2014 catalog yet | | | | |
 | Druid (Circle of the Land) | 14 | not in the 2014 catalog yet | | | | |
 | Fighter (Champion) | 12 | 8 | 0 | 0 | 4 | 0 |
-| Monk (Way of the Open Hand) | 23 | not in the 2014 catalog yet | | | | |
+| Monk (Way of the Open Hand) | 23 | 10 | 4 | 3 | 2 | 4 |
 | Paladin (Oath of Devotion) | 19 | not in the 2014 catalog yet | | | | |
 | Ranger (Hunter) | 17 | not in the 2014 catalog yet | | | | |
 | Rogue (Thief) | 18 | 6 | 0 | 1 | 3 | 8 |
@@ -30,19 +30,52 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | Gap | What the engine lacks | Features |
 |---|---|---|
+| `after-attack-action` | A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting) | 2 |
+| `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
-| `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 1 |
+| `catch-missile` | Catching a missile and throwing it back for a ki point (Deflect Missiles) | 1 |
+| `check-floor` | A check's total raised to the ability score (Indomitable Might, when escaping a grapple) | 1 |
+| `delayed-damage` | Damage set up now and triggered later (Quivering Palm) | 1 |
+| `end-own-condition` | An action ending a condition on itself (Stillness of Mind) | 1 |
+| `exhaustion` | Exhaustion (Frenzy's cost) | 1 |
+| `extend-with-action` | Keeping an effect going with an action on later turns (Intimidating Presence) | 1 |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | 1 |
+| `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
+| `immune-after-save` | A creature that saves being safe from it for a while (Intimidating Presence's 24 hours) | 1 |
+| `rage-2014` | Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious | 1 |
 | `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
+| `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 1 |
+| `surprise-rage` | Acting while surprised by raging first (Feral Instinct, under the 2014 surprise rule) | 1 |
+| `unsimulated-spell` | A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary) | 1 |
 
 ## Barbarian
 
-Not in the 2014 catalog yet: 14 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Rage | partial | rage-2014 | taking damage keeping the rage going (only an attack does), and only falling unconscious ending it early (being incapacitated does). |
+| 1 | Unarmored Defense | full |  |  |
+| 2 | Danger Sense | full |  |  |
+| 2 | Reckless Attack | full |  |  |
+| 3 | Primal Path | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 5 | Extra Attack | full |  |  |
+| 5 | Fast Movement | full |  |  |
+| 7 | Feral Instinct | partial | surprise-rage | acting while surprised by raging first. |
+| 9, 13, 17 | Brutal Critical | manual | brutal-critical |  |
+| 11 | Relentless Rage | full |  |  |
+| 15 | Persistent Rage | full |  |  |
+| 18 | Indomitable Might | manual | check-floor |  |
+| 20 | Primal Champion | info |  |  |
 
 ### Path of the Berserker (Barbarian subclass)
 
-Not in the 2014 catalog yet: 4 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Frenzy | manual | frenzy-attack, exhaustion |  |
+| 6 | Mindless Rage | full |  |  |
+| 10 | Intimidating Presence | partial | extend-with-action, immune-after-save | keeping it going with an action on later turns, and a creature that saves being safe from it for 24 hours. |
+| 14 | Retaliation | full |  |  |
 
 ## Bard
 
@@ -92,11 +125,36 @@ Not in the 2014 catalog yet: 6 features.
 
 ## Monk
 
-Not in the 2014 catalog yet: 19 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 1 | Martial Arts | partial | after-attack-action | the bonus unarmed strike only after the Attack action. |
+| 1 | Unarmored Defense | full |  |  |
+| 2 | Ki | partial | after-attack-action | Flurry of Blows only after the Attack action; Step of the Wind's doubled jump. |
+| 2 | Unarmored Movement | full |  |  |
+| 3 | Deflect Missiles | partial | catch-missile | catching the missile and throwing it back for a ki point. |
+| 3 | Monastic Tradition | builder |  |  |
+| 4, 8, 12, 16, 19 | Ability Score Improvement | builder |  |  |
+| 4 | Slow Fall | info |  |  |
+| 5 | Extra Attack | full |  |  |
+| 5 | Stunning Strike | full |  |  |
+| 6 | Ki-Empowered Strikes | full |  |  |
+| 7 | Evasion | full |  |  |
+| 7 | Stillness of Mind | manual | end-own-condition |  |
+| 10 | Purity of Body | full |  |  |
+| 13 | Tongue of the Sun and Moon | info |  |  |
+| 14 | Diamond Soul | full |  |  |
+| 15 | Timeless Body | info |  |  |
+| 18 | Empty Body | partial | stealth | being unseen beyond the attack rolls, and Astral Projection for 8 ki. |
+| 20 | Perfect Self | info |  |  |
 
 ### Way of the Open Hand (Monk subclass)
 
-Not in the 2014 catalog yet: 4 features.
+| Level | Feature | Verdict | Gaps | Note |
+|---|---|---|---|---|
+| 3 | Open Hand Technique | full |  |  |
+| 6 | Wholeness of Body | full |  |  |
+| 11 | Tranquility | manual | unsimulated-spell |  |
+| 17 | Quivering Palm | manual | delayed-damage |  |
 
 ## Paladin
 

@@ -105,6 +105,8 @@ export interface FeatureGrant {
    * Heightened Focus's temporary hit points on Patient Defense. A string with a template in it is evaluated.
    */
   actionPatch?: { grant: string; action: number; patch: Record<string, unknown> };
+  /** Fields this grant sets on an earlier grant's weapon (by its key): Ki-Empowered Strikes' magical unarmed strikes. */
+  weaponPatch?: { grant: string; patch: Partial<WeaponDefinition> };
   /** Forms this grant adds to an earlier grant's transform action (by key and index): a Wild Shape known form. */
   formsOf?: { grant: string; action: number; forms: TransformForm[] };
   /** Only from this class level on: a grant inside a choice made at an earlier level (a land's 5th-level spells). */
@@ -494,6 +496,7 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
   weapon: z.object({ id: z.string(), name: z.string().min(1) }).passthrough().optional(),
   onHitOf: z.object({ grant: z.string().min(1), action: z.number().int().min(0).optional(), riders: z.array(z.object({ kind: z.string() }).passthrough()) }).optional(),
   actionPatch: z.object({ grant: z.string().min(1), action: z.number().int().min(0), patch: z.record(z.string(), z.unknown()) }).optional(),
+  weaponPatch: z.object({ grant: z.string().min(1), patch: z.record(z.string(), z.unknown()) }).optional(),
   formsOf: z.object({
     grant: z.string().min(1),
     action: z.number().int().min(0),

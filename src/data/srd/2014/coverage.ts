@@ -16,14 +16,21 @@ export const GAPS_2014 = {
   "destroy-undead": "Turn Undead destroying an undead of a low enough challenge rating outright",
   "cantrip-half-on-save": "A cantrip's half damage on a successful save (Potent Cantrip)",
   "after-attack-action": "A bonus action allowed only after the Attack action (Martial Arts, two-weapon fighting)",
-  "rage-2014": "Rage ending when a turn passes without an attack on a hostile creature or damage taken",
+  "rage-2014": "Rage kept going by taking damage as well as by attacking, and ended early only by falling unconscious",
   "frenzy-attack": "A bonus-action melee attack each turn while raging (Frenzy)",
   exhaustion: "Exhaustion (Frenzy's cost)",
   "wild-shape-hp": "Wild Shape into a beast's own hit points, the rest carrying over (2014)",
   "manual-roll": "A roll the rules leave to the DM (Divine Intervention's percentile)",
   "equipment-check": "A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield)",
   "reroll-damage": "Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s)",
-  "grapple-pin": "Pinning a creature it's grappling, both restrained (2014 Grappler)"
+  "grapple-pin": "Pinning a creature it's grappling, both restrained (2014 Grappler)",
+  "surprise-rage": "Acting while surprised by raging first (Feral Instinct, under the 2014 surprise rule)",
+  "check-floor": "A check's total raised to the ability score (Indomitable Might, when escaping a grapple)",
+  "extend-with-action": "Keeping an effect going with an action on later turns (Intimidating Presence)",
+  "immune-after-save": "A creature that saves being safe from it for a while (Intimidating Presence's 24 hours)",
+  "catch-missile": "Catching a missile and throwing it back for a ki point (Deflect Missiles)",
+  "end-own-condition": "An action ending a condition on itself (Stillness of Mind)",
+  "unsimulated-spell": "A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary)"
 } as const;
 
 export type Gap2014 = GapCode | keyof typeof GAPS_2014;
@@ -38,6 +45,19 @@ export const ALL_GAPS: Readonly<Record<Gap2014, string>> = { ...GAPS, ...GAPS_20
  */
 export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_thief_thiefs-reflexes": ["extra-turn"],
+  "srd_barbarian_rage": ["rage-2014"],
+  "srd_barbarian_feral-instinct": ["surprise-rage"],
+  "srd_barbarian_brutal-critical": ["brutal-critical"],
+  "srd_barbarian_indomitable-might": ["check-floor"],
+  "srd_path-of-the-berserker_frenzy": ["frenzy-attack", "exhaustion"],
+  "srd_path-of-the-berserker_intimidating-presence": ["extend-with-action", "immune-after-save"],
+  "srd_monk_martial-arts": ["after-attack-action"],
+  "srd_monk_ki": ["after-attack-action"],
+  "srd_monk_deflect-missiles": ["catch-missile"],
+  "srd_monk_stillness-of-mind": ["end-own-condition"],
+  "srd_monk_empty-body": ["stealth"],
+  "srd_way-of-the-open-hand_tranquility": ["unsimulated-spell"],
+  "srd_way-of-the-open-hand_quivering-palm": ["delayed-damage"],
   "srd_grappler": ["grapple-pin"],
   "srd_half-orc:Savage Attacks": ["brutal-critical"],
   "srd_fighter_fighting-style:Dueling": ["equipment-check"],

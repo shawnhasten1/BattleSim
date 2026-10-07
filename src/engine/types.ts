@@ -907,6 +907,11 @@ export type FeatureEffect = (
      */
     kind: "martial-arts-weapons";
     weaponId: Id;
+    /**
+     * Which weapons are Monk weapons: the 2024 rule's (simple melee, and martial melee with the Light property), or the
+     * 2014 rule's (shortswords, and simple melee weapons without the Two-Handed or Heavy property).
+     */
+    monkWeapons?: "2014" | "2024";
   }
   | {
     /**
@@ -1409,6 +1414,8 @@ export type ReactionTrigger =
    */
   | {
     kind: "would-take-damage"; attackOnly?: boolean; damageTypes?: DamageType[];
+    /** Only a ranged weapon attack's hit (Deflect Missiles). */
+    rangedOnly?: boolean;
     /**
      * Its own side's damage too, from a creature within `withinFt` of the reactor: the reactor or any ally about to take
      * it (Cutting Words: a foe's damage roll within 60 ft, the bard's die off it).
@@ -3257,7 +3264,7 @@ export const reactionTriggerSchema: z.ZodType<ReactionTrigger> = z.discriminated
   z.object({ kind: z.literal("enemy-leaves-reach") }),
   z.object({ kind: z.literal("targeted-by-attack"), meleeOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("would-be-hit"), meleeOnly: z.boolean().optional() }),
-  z.object({ kind: z.literal("would-take-damage"), attackOnly: z.boolean().optional(), damageTypes: z.array(z.string().min(1)).optional() }),
+  z.object({ kind: z.literal("would-take-damage"), attackOnly: z.boolean().optional(), damageTypes: z.array(z.string().min(1)).optional(), rangedOnly: z.boolean().optional() }),
   z.object({ kind: z.literal("hit-by-attack"), meleeOnly: z.boolean().optional(), withinFt: z.number().min(0).optional(), damaged: z.boolean().optional() }),
   z.object({ kind: z.literal("ally-targeted-by-attack"), withinFt: z.number().min(0) }),
   z.object({

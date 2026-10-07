@@ -1106,7 +1106,8 @@ function normalizeReactionTrigger(input: unknown): ReactionTrigger | undefined {
       return {
         kind: "would-take-damage",
         attackOnly: input.attackOnly === true ? true : undefined,
-        damageTypes: Array.isArray(input.damageTypes) ? (input.damageTypes.filter((type) => typeof type === "string") as DamageType[]) : undefined
+        damageTypes: Array.isArray(input.damageTypes) ? (input.damageTypes.filter((type) => typeof type === "string") as DamageType[]) : undefined,
+        ...(input.rangedOnly === true ? { rangedOnly: true } : {})
       };
     case "ally-targeted-by-attack":
       return { kind: "ally-targeted-by-attack", withinFt: numberField(input, "withinFt") ?? 5 };

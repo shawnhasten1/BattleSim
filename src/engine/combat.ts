@@ -409,8 +409,13 @@ function martialArtsWeapons(definition: CreatureDefinition): NonNullable<Creatur
   if ((definition.items ?? []).some((item) => isArmorItem(item) && isWorn(item))) return weapons;
   const die = unarmed.damage[0]?.dice;
   const options = (unarmed.onHit ?? []).filter(isOptionalRider);
+  type Weapon = NonNullable<CreatureDefinition["weapons"]>[number];
+  const has = (weapon: Weapon, property: string) => (weapon.properties ?? []).some((entry) => entry.toLowerCase() === property);
+  const isMonkWeapon = (weapon: Weapon) => (effect!.monkWeapons === "2014"
+    ? weapon.baseWeapon === "shortsword" || (weapon.category === "simple" && !has(weapon, "two-handed") && !has(weapon, "heavy"))
+    : weapon.category === "simple" || (weapon.category === "martial" && isLightWeapon(weapon)));
   return weapons.map((weapon) => {
-    if (weapon === unarmed || weapon.attackType !== "melee" || !(weapon.category === "simple" || (weapon.category === "martial" && isLightWeapon(weapon)))) return weapon;
+    if (weapon === unarmed || weapon.attackType !== "melee" || !isMonkWeapon(weapon)) return weapon;
     const own = weapon.damage[0];
     if (!own) return weapon;
     const dice = die && averageOfDice(die) > averageOfDice(own.dice) ? die : own.dice;
@@ -9774,6 +9779,7 @@ function reactionTriggerPasses(
           || (reactor.resources?.[action.damageCut!.redirect!.resourceCost.resourceId] ?? 0) >= action.damageCut!.redirect!.resourceCost.amount)
         && (event.damageTaken ?? 0) > 0
         && (!trigger.attackOnly || event.byAttack === true)
+        && (!trigger.rangedOnly || (event.byAttack === true && event.attackType === "ranged"))
         && (!trigger.damageTypes?.length || (event.damageTypes ?? []).some((type) => trigger.damageTypes!.includes(type)));
     }
     case "would-be-hit": {

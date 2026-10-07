@@ -370,6 +370,12 @@ const LIBRARY_WEAPONS: readonly WeaponDefinition[] = [
     damage: [{ dice: "1d4", damageType: "slashing", abilityModifier: "str" }]
   },
   {
+    // A 2014 Barbarian's starting four.
+    id: "srd:weapon:javelin", name: "Javelin", category: "simple", attackType: "melee", ability: "str",
+    range: 5, reach: 5, longRange: 120, properties: ["thrown"],
+    damage: [{ dice: "1d6", damageType: "piercing", abilityModifier: "str" }]
+  },
+  {
     id: "srd:weapon:dart", name: "Dart", category: "simple", attackType: "ranged", ability: "dex",
     range: 20, longRange: 60, properties: ["finesse", "thrown"],
     damage: [{ dice: "1d4", damageType: "piercing", abilityModifier: "dex" }]
@@ -451,6 +457,7 @@ const MASTERY: Record<string, { baseWeapon: string; mastery: WeaponMastery }> = 
   greatclub: { baseWeapon: "greatclub", mastery: "push" },
   "light-hammer": { baseWeapon: "light-hammer", mastery: "nick" },
   sickle: { baseWeapon: "sickle", mastery: "nick" },
+  javelin: { baseWeapon: "javelin", mastery: "slow" },
   dart: { baseWeapon: "dart", mastery: "vex" },
   morningstar: { baseWeapon: "morningstar", mastery: "sap" },
   flail: { baseWeapon: "flail", mastery: "sap" },

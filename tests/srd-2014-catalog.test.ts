@@ -4,6 +4,7 @@ import {
   createEngineState,
   creatureDefinitionSchema,
   getExecutableActions,
+  resolveAttack,
   resolveSaveAction,
   sampleEncounter,
   spellcastingAbility,
@@ -28,7 +29,8 @@ import {
   withLevelUp,
   withSuggestions
 } from "@/lib/character-builder";
-import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { SRD_BUILD_SOURCES, SRD_BUILDER_LIBRARY } from "@/lib/character-builder/srd";
+import { builtFrom } from "@/lib/character-builder/summary";
 import { editionOf } from "@/lib/editions";
 
 /** EDITIONS_PLAN.md Phases 6 to 9: the 2014 catalog, built and fought with. */
@@ -155,6 +157,119 @@ describe("the first 2014 characters (Phase 6)", () => {
     const actor = rebuildActor(blankCharacter("pc", "Guard"), build, sources).definition;
     const protection = getExecutableActions(actor).find((action) => action.name === "Protection")!;
     expect(protection).toMatchObject({ actionType: "reaction", reaction: { trigger: { kind: "ally-targeted-by-attack", withinFt: 5 } } });
+  });
+});
+
+describe("the 2014 Barbarian and Monk (Phase 8)", () => {
+  const built = (classId: string, level: number) => buildCharacter(quickBuild(sources, { classId, level }), sources);
+  const feature = (entry: ReturnType<typeof built>, name: string) => entry.features.find((candidate) => candidate.feature.name === name)?.feature;
+  const actorOf = (classId: string, level: number) => rebuildActor(blankCharacter("def-fighter", "Hero"), withSuggestions(quickBuild(sources, { classId, level }), sources), sources).definition;
+
+  it("a 2014 Barbarian rages for melee attacks only, as often as its table says, and has none of the 2024 barbarian's", () => {
+    const first = built("srd:class:barbarian-2014", 1);
+    expect(first.resources).toMatchObject({ rage: 2 });
+    const rage = feature(first, "Rage")!.grantedActions![0] as Extract<ActionDefinition, { kind: "activate-feature" }>;
+    expect(rage.condition!.effects![0]).toMatchObject({ kind: "damage-bonus", abilities: ["str"], attackTypes: ["melee"], damage: [{ dice: "2" }] });
+    expect(rage.condition!.upkeep).toEqual({ by: ["attack"] });
+    expect(first.equipment.map((entry) => `${entry.ref}×${entry.count ?? 1}`).sort()).toEqual(["srd:weapon:greataxe×1", "srd:weapon:handaxe×2", "srd:weapon:javelin×4"]);
+
+    const top = built("srd:class:barbarian-2014", 20);
+    expect(top.resources).toMatchObject({ rage: 99 });
+    const names = top.features.map((entry) => entry.feature.name);
+    for (const name of ["Weapon Mastery", "Primal Knowledge", "Instinctive Pounce", "Brutal Strike"]) expect(names).not.toContain(name);
+    expect(feature(top, "Reckless Attack")!.grantedActions![0]).toMatchObject({ condition: { effects: [{ kind: "attack-advantage", abilities: ["str"], attackTypes: ["melee"] }] } });
+    expect(feature(top, "Brutal Critical")!.automationSupport).toBe("manual-only");
+    // Relentless Rage leaves it at 1 hit point; Primal Champion's cap is 24.
+    expect((feature(top, "Relentless Rage")!.effects![0] as { hpTo?: number }).hpTo).toBeUndefined();
+    expect(top.fields.abilities.str).toBeLessThanOrEqual(24);
+  });
+
+  it("a 2014 Berserker frightens one creature with an action, and its Frenzy is on the sheet for the DM", () => {
+    const berserker = built("srd:class:barbarian-2014", 14);
+    expect(feature(berserker, "Frenzy")!.automationSupport).toBe("manual-only");
+    expect(feature(berserker, "Intimidating Presence")!.grantedActions![0]).toMatchObject({
+      kind: "save", actionType: "action", range: 30, saveAbility: "wis", dcFormula: { ability: "cha", proficiency: true },
+      riders: [{ condition: "frightened", duration: { kind: "until-source-turn", timing: "end" } }]
+    });
+    expect(feature(berserker, "Retaliation")).toBeDefined();
+  });
+
+  it("a 2014 Monk spends ki: a Flurry, a Dodge, a Dash or a Disengage, and any number of Stunning Strikes", () => {
+    const monk = built("srd:class:monk-2014", 5);
+    expect(monk.resources).toMatchObject({ ki: 5 });
+    const ki = feature(monk, "Ki")!.grantedActions!;
+    expect(ki.map((action) => [action.name, "resourceCost" in action ? action.resourceCost?.resourceId : undefined])).toEqual([
+      ["Flurry of Blows", "ki"], ["Patient Defense", "ki"], ["Step of the Wind: Dash", "ki"], ["Step of the Wind: Disengage", "ki"]
+    ]);
+    expect(ki[1]).toMatchObject({ mode: "dodge" });
+    const unarmed = monk.weapons.find((entry) => entry.weapon.name === "Unarmed Strike")!.weapon;
+    expect(unarmed.damage[0]!.dice).toBe("1d6");
+    const stun = unarmed.onHit!.find((rider) => rider.kind === "condition" && rider.condition === "stunned")!;
+    expect(stun).toMatchObject({ duration: { kind: "until-source-turn", timing: "end" }, save: { ability: "con", onSuccess: "negates" }, resourceCost: { resourceId: "ki" } });
+    expect((stun as { oncePerTurn?: boolean }).oncePerTurn).toBeUndefined();
+    expect((stun as { save: { instead?: unknown } }).save.instead).toBeUndefined();
+    expect(unarmed.magical).toBeUndefined();
+    // Ki-Empowered Strikes: magical from 6th level, still bludgeoning.
+    const sixth = built("srd:class:monk-2014", 6).weapons.find((entry) => entry.weapon.name === "Unarmed Strike")!.weapon;
+    expect(sixth).toMatchObject({ magical: true, damage: [{ damageType: "bludgeoning" }] });
+    // The sheet says what gave a feature by its plain name.
+    const actor = actorOf("srd:class:monk-2014", 3);
+    expect(builtFrom(actor, actor.features!.find((entry) => entry.name === "Open Hand Technique")!.id)).toBe("Way Of The Open Hand");
+  });
+
+  it("a 2014 Monk's monk weapons are shortswords and simple melee weapons that aren't two-handed or heavy", () => {
+    // 11th level: a d8 Martial Arts die, more than a spear's or a scimitar's d6.
+    const monk = actorOf("srd:class:monk-2014", 11);
+    const weapon = (id: string) => SRD_BUILDER_LIBRARY.weapon(id)!;
+    const armed = { ...monk, weapons: [...(monk.weapons ?? []), weapon("srd:weapon:greatclub"), weapon("srd:weapon:spear"), weapon("srd:weapon:scimitar")], items: [] };
+    const attack = (name: string) => getExecutableActions(armed).find((action) => action.name === name) as Extract<ActionDefinition, { kind: "attack" }>;
+    // A spear: Dexterity (the better) and the Martial Arts die.
+    expect(attack("Spear")).toMatchObject({ ability: "dex", damage: [{ dice: "1d8" }] });
+    // A greatclub is two-handed: Strength and its own die.
+    expect(attack("Greatclub")).toMatchObject({ ability: "str", damage: [{ dice: "1d8" }] });
+    // A scimitar is a 2024 Monk weapon (martial, light), not a 2014 one: its own d6.
+    expect(attack("Scimitar").damage[0]!.dice).toBe("1d6");
+  });
+
+  it("a 2014 Monk's Deflect Missiles takes a ranged weapon attack's damage down, never a melee one's", () => {
+    const monk = actorOf("srd:class:monk-2014", 3);
+    const snapshot = structuredClone(sampleEncounter);
+    snapshot.map.walls = [];
+    snapshot.map.terrain = [];
+    snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), monk];
+    const token = snapshot.combatants.find((entry) => entry.id === "pc-fighter")!;
+    token.currentHp = 200; token.resources = { ...(monk.resources ?? {}) }; token.position = { x: 3, y: 3 };
+    const goblin = snapshot.combatants.find((entry) => entry.id === "enemy-goblin-1")!;
+    snapshot.turnIndex = snapshot.combatants.indexOf(goblin);
+    const goblinActions = getExecutableActions(snapshot.definitions.find((entry) => entry.id === goblin.definitionId)!);
+    const melee = goblinActions.find((action) => action.kind === "attack" && action.attackType === "melee")!;
+    const ranged = goblinActions.find((action) => action.kind === "attack" && action.attackType === "ranged")!;
+    const cutBy = (action: ActionDefinition, position: { x: number; y: number }) => {
+      const state = createEngineState(structuredClone(snapshot));
+      state.snapshot.combatants.find((entry) => entry.id === "enemy-goblin-1")!.position = position;
+      const rng: RandomSource = { next: () => 0.5, nextInt: (_min, max) => max, fork: () => rng };
+      state.rng = rng;
+      resolveAttack(state, "enemy-goblin-1", "pc-fighter", action.id);
+      return state.log.find((entry) => entry.type === "DamageApplied" && entry.data?.targetId === "pc-fighter")?.data?.cutBy;
+    };
+    expect(cutBy(melee, { x: 4, y: 3 })).toBeUndefined();
+    expect(cutBy(ranged, { x: 7, y: 3 })).toBe("Deflect Missiles");
+  });
+
+  it("2014 Barbarians and Monks fight to the end with no illegal actions", { timeout: 60000 }, () => {
+    const problems: string[] = [];
+    for (const classId of ["srd:class:barbarian-2014", "srd:class:monk-2014"]) {
+      for (const level of [3, 11, 20]) {
+        const actor = actorOf(classId, level);
+        const snapshot = structuredClone(sampleEncounter);
+        snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), actor];
+        for (const token of snapshot.combatants) {
+          if (token.id === "pc-fighter") { token.currentHp = actor.maxHp; token.resources = { ...(actor.resources ?? {}) }; }
+        }
+        problems.push(...runAutomatedEncounter({ ...snapshot, seed: `${classId}-${level}-fight` }, 8).outcome.warnings.map((warning) => `${classId} ${level}: ${warning}`));
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });
 
