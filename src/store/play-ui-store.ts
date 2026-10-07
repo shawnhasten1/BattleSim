@@ -20,6 +20,8 @@ export interface ArmedAbility {
   aim: Aim;
   /** Creatures picked so far, in order (one may repeat for rays and beams). */
   picked: Id[];
+  /** A swing of a routine (HOTBAR_REDESIGN_PLAN.md §3): used as the `swing` command; `routineId` opens a costed one. */
+  swing?: { routineId?: Id };
 }
 
 export interface SwingAim {

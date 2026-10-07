@@ -449,3 +449,39 @@ Differences from the plan:
   Auto Run's logs can't change.
 - **A swing aimed at a creature the routine's rule forbids** (a tyrannosaurus's tail at the bite's target, a grick's
   beak at anyone but the tentacles' target) is refused with the reason, not moved to someone else.
+
+### Phase 4 — Weapons take the routine (2026-10-07)
+
+- `hotbar.ts`:
+  - Free multiattacks have no button. Every attack or step ability that is a swing of one of the creature's routines
+    is pressed as a swing (`variant.swing`), with a `routine` badge.
+  - A costed routine (Flurry of Blows) keeps a button. Its variants are its first swing's strikes, plain or with Open
+    Hand's options, each opening it by name (`swing.routineId`).
+  - `HotbarModel.routines` lists the routines open.
+- `usePlayAim.ts`: an armed swing sends the `swing` command. The routine's target rule greys out a creature and
+  refuses a click on it, with the reason.
+- `Hotbar.tsx`:
+  - the badge ("⚔ 2 attacks", then "⚔ 1 left").
+  - the Action or Bonus pill reads "Attack · 1 left" while a routine is open.
+  - hints: "It takes your action: Attack, 2 attacks", "(attack 2 of 2)", "Attack: 1 attack left.", and what the
+    routine says that isn't simulated.
+  - End turn's tooltip names the swings left.
+- Tests: `play-hotbar` (a level-5 fighter, an owlbear, a monk's Flurry), `play-hotbar-ui` (badge, pill and hints; a
+  tyrannosaurus's narrowed rings), `attack-replacement` (the breath's own button). Full suite: 272 files, 3,067 tests.
+- Browser (the Sandbox):
+  - The library's Level 6 Barbarian, the turn from the user's screenshot, shows "+1 Greataxe ⚔ 2 attacks" and no
+    Attack button. A swing sets the pill to "Attack · 1 left" and greys the other actions; a step; then
+    "(attack 2 of 2)".
+  - An SRD owlbear played by hand: after Claws, Claws is greyed ("No Claws attack left in Multiattack") and Beak
+    shows "⚔ 1 left".
+
+Differences from the plan:
+
+- **The badge reads "⚔ 2 attacks", not "×2"**: an item's stack already shows "×3".
+- **D8's wording covers everything that takes the action:** while a routine holds it, Dash says "Fighter's action went
+  to Extra Attack", not just a weapon outside the routine.
+- **A feature's ability pressed as a swing goes in Attacks** (a dragonborn's Breath Weapon is a species trait).
+- **An on-hit option's chip is named for it** ("Open Hand: Addle", a smite), where every one used to say "Spend a
+  charge".
+- **No "Skip this swing" on the hotbar:** a swing left unused is skipped when the turn ends. The swing card stays for
+  legendary and lair actions that are routines (D11).

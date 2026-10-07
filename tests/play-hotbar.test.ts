@@ -5,8 +5,9 @@ import { loadSrdMonster } from "@/data/srd/monsters";
 import { FEATURE_TEMPLATES } from "@/lib/ability-editor/templates";
 import { hotbarFor, type HotbarButton, type HotbarGroup, type HotbarModel, type HotbarTab } from "@/lib/play/hotbar";
 import { targetLine } from "@/lib/play/targeting";
-import { aimAtCreature, backOutOfAiming, finishAiming, planSwingStep, pressHotbar } from "@/hooks/usePlayAim";
-import { swingQuestion } from "@/hooks/usePlayMove";
+import { aimAtCreature, backOutOfAiming, finishAiming, pressHotbar } from "@/hooks/usePlayAim";
+import { blankCharacter, quickBuild, rebuildActor, withSuggestions } from "@/lib/character-builder";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
 import { useEncounterStore } from "@/store/encounter-store";
 import { usePlayUiStore } from "@/store/play-ui-store";
 
@@ -81,9 +82,9 @@ describe("what's on the hotbar", () => {
     const model = hotbarFor(board, "pc-fighter");
     expect(model.tabs.map((entry) => entry.id)).toEqual(["actions", "bonus", "reactions"]);
     expect(layout(model)).toEqual({
-      // A multiattack heads the attacks, as in a statblock. Action Surge is free: it goes with the actions.
+      // No Extra Attack button: its swings ride the weapons. Action Surge is free: it goes with the actions.
       actions: {
-        attacks: ["Extra Attack", "Longsword", "Greataxe"],
+        attacks: ["Longsword", "Greataxe"],
         features: ["Action Surge"],
         common: ["Dash", "Disengage", "Dodge", "Hide", "Help"]
       },
@@ -92,13 +93,16 @@ describe("what's on the hotbar", () => {
       // Reactions aren't buttons: they're asked for when they come up, and the tab sets how.
       reactions: {}
     });
-    expect(button(model, "Extra Attack")).toMatchObject({ cost: "2 attacks", automation: "full", slot: "action", tab: "actions", group: "attacks" });
-    expect(button(model, "Extra Attack").variants[0]!.aim).toEqual({ kind: "routine", range: 5 });
+    // A weapon is pressed as a swing of the Attack action: two attacks, the first taking the action.
+    expect(button(model, "Longsword")).toMatchObject({ automation: "full", slot: "action", tab: "actions", group: "attacks", routine: { name: "Extra Attack", left: 2, total: 2, open: false } });
     // The greataxe swings plainly or as a power attack.
     const greataxe = group(model, "actions", "attacks").find((entry) => entry.name === "Greataxe")!;
-    expect(greataxe.variants.map((variant) => variant.label)).toEqual(["Normal", "Power Attack"]);
+    expect(greataxe.variants.map((variant) => [variant.label, variant.swing])).toEqual([["Normal", {}], ["Power Attack", {}]]);
     expect(greataxe.variants[0]!.aim).toEqual({ kind: "creatures", who: "foes", count: 1, repeat: false, range: 5 });
+    // Its bonus-action swing isn't one of the Attack action's: a plain use.
     expect(group(model, "bonus", "attacks")[0]).toMatchObject({ slot: "bonus", tab: "bonus" });
+    expect(group(model, "bonus", "attacks")[0]!.routine).toBeUndefined();
+    expect(model.routines).toEqual([]);
     // Each feature with what it spends.
     expect([...group(model, "actions", "features"), ...group(model, "bonus", "features")].map((entry) => [entry.name, entry.cost, entry.slot])).toEqual([
       ["Action Surge", "1 action surge", "free"],
@@ -110,7 +114,7 @@ describe("what's on the hotbar", () => {
       ["Dash", "full"], ["Disengage", "full"], ["Dodge", "full"], ["Hide", "by-hand"], ["Help", "by-hand"]
     ]);
     // The number keys count along a tab's groups in order.
-    expect(names(tab(model, "actions"))).toEqual(["Extra Attack", "Longsword", "Greataxe", "Action Surge", "Dash", "Disengage", "Dodge", "Hide", "Help"]);
+    expect(names(tab(model, "actions"))).toEqual(["Longsword", "Greataxe", "Action Surge", "Dash", "Disengage", "Dodge", "Hide", "Help"]);
     expect(model.tabs.flatMap((entry) => entry.buttons).some((entry) => entry.name.includes("reaction"))).toBe(false);
   });
 
@@ -286,30 +290,96 @@ describe("using the hotbar", () => {
     expect(store().log).toHaveLength(from);
   });
 
-  it("a level-5 fighter's Attack makes two swings, stepping between them", () => {
+  it("a level-5 fighter's weapon takes the Attack action; the swing left stays on its weapons, a step and Second Wind between (HOTBAR_REDESIGN_PLAN.md §3)", () => {
     load((encounter) => {
+      toughGoblins(encounter);
       place(encounter, "pc-fighter", { x: 2, y: 1 });
       place(encounter, "enemy-goblin-1", { x: 3, y: 1 });
       place(encounter, "enemy-goblin-2", { x: 3, y: 4 });
     });
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     const from = store().log.length;
-    pressHotbar(button(hotbarFor(store().encounter, "pc-fighter"), "Extra Attack"));
+    pressHotbar(button(hotbarFor(store().encounter, "pc-fighter"), "Longsword"));
+    expect(ui().armed).toMatchObject({ actionId: "longsword", swing: {} });
     aimAtCreature("enemy-goblin-1");
-    // The first swing is made; the second waits for a person.
-    const swing = swingQuestion(store());
-    expect(swing?.request).toMatchObject({ kind: "multiattack-swing", swing: 2, of: 2, attackerId: "pc-fighter" });
-    // Step next to the other goblin, then swing at it.
-    expect(planSwingStep({ x: 2, y: 3 }, true)).toBe(true);
+    // One swing made: both weapons have the one left; the rest of the action is gone, the bonus action isn't.
+    let model = hotbarFor(store().encounter, "pc-fighter");
+    expect(model.routines).toEqual([{ slot: "action", name: "Extra Attack", left: 1, total: 2, open: true }]);
+    expect(button(model, "Longsword").routine).toEqual({ name: "Extra Attack", left: 1, total: 2, open: true });
+    expect(group(model, "actions", "attacks").find((entry) => entry.name === "Greataxe")!.problem).toBeUndefined();
+    // Anything else that takes an action: the action went to the routine (D8).
+    expect(button(model, "Dash").problem).toBe("Fighter's action went to Extra Attack");
+    expect(button(model, "Second Wind").problem).toBeUndefined();
+    // Step next to the other goblin, catch a breath, then swing at it with the greataxe.
+    store().playCommand({ kind: "move", actorId: "pc-fighter", waypoints: [{ x: 2, y: 3 }] });
+    pressHotbar(button(hotbarFor(store().encounter, "pc-fighter"), "Second Wind"));
+    pressHotbar(group(hotbarFor(store().encounter, "pc-fighter"), "actions", "attacks").find((entry) => entry.name === "Greataxe")!);
     aimAtCreature("enemy-goblin-2");
-    expect(swingQuestion(store())).toBeNull();
+    model = hotbarFor(store().encounter, "pc-fighter");
+    expect(model.routines).toEqual([]);
+    expect(button(model, "Longsword").problem).toBe("Fighter has already used its action");
     const log = store().log.slice(from);
     const swings = log.filter((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter");
-    expect(swings.map((entry) => entry.data?.targetId)).toEqual(["enemy-goblin-1", "enemy-goblin-2"]);
+    expect(swings.map((entry) => [entry.data?.targetId, entry.data?.actionId])).toEqual([["enemy-goblin-1", "longsword"], ["enemy-goblin-2", "weapon-action-w-axe"]]);
     const step = log.findIndex((entry) => entry.type === "CombatantMoved" && entry.data?.combatantId === "pc-fighter");
     expect(step).toBeGreaterThan(log.indexOf(swings[0]!));
     expect(step).toBeLessThan(log.indexOf(swings[1]!));
-    expect(combatant("pc-fighter").position).toEqual({ x: 2, y: 3 });
+    expect(log.filter((entry) => entry.type === "MultiattackResolved").map((entry) => entry.data?.attacks)).toEqual([2]);
+  });
+
+  it("an owlbear's Multiattack: its beak and claws each a swing, and the claws greyed once used", async () => {
+    const owlbear = (await loadSrdMonster("srd:monster:owlbear"))!;
+    load((encounter) => {
+      toughGoblins(encounter);
+      encounter.definitions = encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...owlbear, id: "def-fighter" } : definition));
+      place(encounter, "pc-fighter", { x: 2, y: 2 });
+      place(encounter, "enemy-goblin-1", { x: 1, y: 1 });
+      place(encounter, "enemy-goblin-2", { x: 2, y: 1 });
+      place(encounter, "pc-archer", { x: 0, y: 7 });
+    });
+    store().startPlay({ control: PARTY, playbackSpeed: 0 });
+    let model = hotbarFor(store().encounter, "pc-fighter");
+    expect(names(group(model, "actions", "attacks"))).toEqual(["Beak", "Claws"]);
+    expect(button(model, "Claws").routine).toEqual({ name: "Multiattack", left: 2, total: 2, open: false });
+    pressHotbar(button(model, "Claws"));
+    aimAtCreature("enemy-goblin-1");
+    model = hotbarFor(store().encounter, "pc-fighter");
+    expect(button(model, "Claws").problem).toBe("No Claws attack left in Multiattack");
+    expect(button(model, "Beak")).toMatchObject({ problem: undefined, routine: { left: 1, open: true } });
+  });
+
+  it("a monk's Flurry of Blows: a button of its own that opens it; its second strike rides Unarmed Strike", () => {
+    const sources = SRD_BUILD_SOURCES;
+    const monk = rebuildActor(blankCharacter("def-fighter", "PC"), withSuggestions(quickBuild(sources, { classId: "srd:class:monk", level: 5 }), sources), sources).definition;
+    load((encounter) => {
+      toughGoblins(encounter);
+      encounter.definitions = encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...monk, id: "def-fighter" } : definition));
+      const token = encounter.combatants.find((combatant) => combatant.id === "pc-fighter")!;
+      token.resources = { ...(monk.resources ?? {}) };
+      token.currentHp = monk.maxHp;
+      place(encounter, "pc-fighter", { x: 2, y: 1 });
+      place(encounter, "enemy-goblin-1", { x: 3, y: 1 });
+    });
+    store().startPlay({ control: PARTY, playbackSpeed: 0 });
+    let model = hotbarFor(store().encounter, "pc-fighter");
+    const flurry = button(model, "Flurry of Blows");
+    expect(flurry).toMatchObject({ tab: "bonus", group: "attacks", cost: "1 focus point", routine: { name: "Flurry of Blows", total: 2, open: false } });
+    const strike = flurry.variants[0]!.actionId;
+    expect(flurry.variants[0]!.swing).toEqual({ routineId: flurry.key });
+    // Martial Arts' bonus-action strike: a plain use, while no Flurry is open.
+    const plain = group(model, "bonus", "attacks").find((entry) => entry !== flurry && entry.variants.some((variant) => variant.actionId === strike))!;
+    expect(plain.routine).toBeUndefined();
+    pressHotbar(flurry);
+    expect(ui().armed).toMatchObject({ actionId: strike, swing: { routineId: flurry.key } });
+    aimAtCreature("enemy-goblin-1");
+    model = hotbarFor(store().encounter, "pc-fighter");
+    expect(model.routines).toEqual([{ slot: "bonus", name: "Flurry of Blows", left: 1, total: 2, open: true }]);
+    const second = group(model, "bonus", "attacks").find((entry) => entry.name === plain.name && entry !== button(model, "Flurry of Blows"))!;
+    expect(second).toMatchObject({ problem: undefined, routine: { name: "Flurry of Blows", left: 1, open: true } });
+    pressHotbar(second);
+    aimAtCreature("enemy-goblin-1");
+    expect(hotbarFor(store().encounter, "pc-fighter").routines).toEqual([]);
+    expect(store().log.filter((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter")).toHaveLength(2);
   });
 
   it("uses an ability the engine doesn't run by hand: its slot and cost are spent, and it's logged", () => {

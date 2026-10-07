@@ -1,23 +1,34 @@
 /**
  * The hotbar on a person's creature's turn in Play (PLAY_MODE_PLAN.md §2.2, §3.7; HOTBAR_REDESIGN_PLAN.md §1):
  * everything it can use, by what it costs (a tab per slot) and what it is (a group in the tab), one button per ability
- * with its variants folded in (the slot to cast at, Power Attack, spend a charge, a multiattack's other routines), what
- * each costs, whether the engine runs it, how it's aimed, and — greyed out — why it can't be used now, in the words the
- * engine refuses with. Pure: the Hotbar shows it, tests read it.
+ * with its variants folded in (the slot to cast at, Power Attack, spend a charge), what each costs, whether the engine
+ * runs it, how it's aimed, and — greyed out — why it can't be used now, in the words the engine refuses with. A weapon
+ * is pressed as a swing of the creature's Attack action or Multiattack, whose swings ride its weapons (§3: there's no
+ * button for the routine itself). Pure: the Hotbar shows it, tests read it.
  */
 import {
   actionProblem,
   BASE_FORM_ID,
   OPPORTUNITY_ATTACKS,
   casterLevelOf,
+  defaultSwingAttack,
+  freeRoutines,
   getDefinition,
   getExecutableActions,
   isLairVariant,
   isLegendaryVariant,
   isUpcastVariant,
   multiattackBaseId,
+  planSwing,
   repeatDice,
+  routineBaseId,
+  routinesOf,
   spellSlotLevel,
+  stepAbility,
+  swingCandidates,
+  swingProblem,
+  swingsFilledBy,
+  swingsLeftOf,
   upcastAddsSomething,
   swingsOf,
   targetCapacity,
@@ -27,7 +38,9 @@ import {
   type CreatureDefinition,
   type DamageTypeReference,
   type EncounterSnapshot,
-  type Id
+  type Id,
+  type MultiattackActionDefinition,
+  type OpenRoutine
 } from "@/engine";
 import { actionStatblock, costText, usageLabel } from "@/lib/statblock";
 
@@ -92,6 +105,22 @@ export interface HotbarVariant {
   aim: Aim;
   /** The spell slot level it spends. */
   slotLevel?: number;
+  /**
+   * Pressed, it's a swing of a routine (the `swing` command): the next of the one open in its slot, or the first of one
+   * it opens. `routineId`: the costed routine it opens by name (Flurry of Blows).
+   */
+  swing?: { routineId?: Id };
+}
+
+/**
+ * A swing's routine, for its badge: its name, the swings left of it (or, not open yet, how many it makes), out of how
+ * many, and whether it's open.
+ */
+export interface HotbarRoutine {
+  name: string;
+  left: number;
+  total: number;
+  open: boolean;
 }
 
 export type Automation = "full" | "partial" | "by-hand";
@@ -122,6 +151,8 @@ export interface HotbarButton {
   concentration?: boolean;
   /** An item's: how many are left ("×2"), or its charges ("5 charges"). */
   count?: string;
+  /** Pressed as a swing: the routine it's a swing of ("×2" before the first swing, "⚔ 1 left" after). */
+  routine?: HotbarRoutine;
 }
 
 /** One of the creature's reactions, as the Reactions tab lists it: its setting is `reactionPolicyKey(actorId, key)`. */
@@ -146,6 +177,8 @@ export interface HotbarModel {
   slots: Array<{ level: number; left: number; full: number }>;
   /** What the creature is concentrating on, if anything. */
   concentration?: string;
+  /** Its routines open, by slot ("Attack · 1 left" on the slot's pill), with what they say that isn't simulated. */
+  routines: Array<HotbarRoutine & { slot: OpenRoutine["slot"]; unsimulated?: string[] }>;
 }
 
 /**
@@ -290,8 +323,9 @@ export function aimForAction(board: EncounterSnapshot, actorId: Id, actionId: Id
 }
 
 /** What using it costs, as a short chip: its slot, its pool, its recharge or uses, or how many attacks a routine makes. */
-function costOf(action: ActionDefinition, definition?: CreatureDefinition): string | undefined {
-  if (action.kind === "multiattack") {
+function costOf(action: ActionDefinition, definition?: CreatureDefinition, spentOnly = false): string | undefined {
+  // A routine pressed by name says what it spends; its badge says how many attacks it makes.
+  if (action.kind === "multiattack" && !spentOnly) {
     const swings = swingsOf(action.attacks).length;
     return `${swings} ${swings === 1 ? "attack" : "attacks"}`;
   }
@@ -339,7 +373,9 @@ function variantLabel(action: ActionDefinition, base: ActionDefinition, slotFami
   if (meta) return meta.slice(3);
   const parts: string[] = [];
   if (/:power(?::|$)/.test(action.id)) parts.push("Power Attack");
-  if (/:charged(?:-\d+)?$/.test(action.id)) parts.push("Spend a charge");
+  // An on-hit option (Open Hand: Addle, Divine Smite) by its name; a weapon's charge spent.
+  const option = action.name.startsWith(`${base.name} (`) && action.name.endsWith(")") ? action.name.slice(base.name.length + 2, -1) : undefined;
+  if (/:charged(?:-\d+)?$/.test(action.id)) parts.push(option ?? "Spend a charge");
   // Shillelagh: the weapon while the spell is on. Tactical Master: the mastery used instead.
   if (action.whileCondition) parts.push(action.whileCondition.name);
   if (action.swappedMastery) parts.push(`${action.swappedMastery.to.charAt(0).toUpperCase()}${action.swappedMastery.to.slice(1)}`);
@@ -425,10 +461,10 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
   // Families in the order the creature has them: the plain ability first, then its variants.
   const families = new Map<Id, ActionDefinition[]>();
   const grappled = (actor.conditions ?? []).some((condition) => condition.hold);
+  // The Attack action, a Multiattack: no button of their own. Their swings ride the weapons (D1).
+  const free = new Set(freeRoutines(executables).map((routine) => routine.id));
   for (const action of executables) {
-    if (action.actionType === "reaction" || isLegendaryVariant(action) || isLairVariant(action)) continue;
-    // Breath Weapon in place of an attack: a variant of the Attack button, not a button of its own.
-    if (action.routineOnly && action.kind !== "attack") continue;
+    if (action.actionType === "reaction" || isLegendaryVariant(action) || isLairVariant(action) || free.has(action.id)) continue;
     // Escaping a grapple is offered only while it's grappled.
     if (action.kind === "utility" && action.mode === "escape" && !grappled) continue;
     // One button per slot: a potion drunk as a bonus action is on Bonus, giving it (an action) on Actions.
@@ -442,22 +478,35 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     if (item) itemSlots.set(item.id, new Set([...(itemSlots.get(item.id) ?? []), members[0]!.actionType]));
   }
 
+  const swings = swingsOfRoutines(board, actor, executables);
+
   const buttons: HotbarButton[] = [...families.values()].map((members) => {
     // The plain ability; for an item's use given as an action, its first copy (the Give of a potion drunk as a bonus action).
     const base = members.find((member) => member.id === familyKey(member.id)) ?? members[0]!;
     const ordered = [base, ...members.filter((member) => member !== base)];
     const automation = automationOf(base);
     const slotFamily = members.some((member) => member.upcastFrom != null);
-    const variants: HotbarVariant[] = ordered.map((action) => ({
-      actionId: action.id,
-      label: variantLabel(action, base, slotFamily),
-      cost: costOf(action, definition),
-      problem: actionProblem(board, actorId, action.id, { byHand: automation === "by-hand" }),
-      aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables, actor),
-      ...(spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) !== undefined
-        ? { slotLevel: spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) }
-        : {})
-    }));
+    const swing = automation === "by-hand" ? undefined : swings.of(base);
+    const variants: HotbarVariant[] = base.kind === "multiattack" && swing
+      ? swings.byName(members as MultiattackActionDefinition[], (action, of) => variantLabel(action, of), (action) => aimOf(action, definition, executables, actor))
+      : ordered.map((action) => ({
+        actionId: action.id,
+        label: variantLabel(action, base, slotFamily),
+        cost: costOf(action, definition),
+        problem: swing ? swingProblem(board, actorId, action.id) : actionProblem(board, actorId, action.id, { byHand: automation === "by-hand" }),
+        aim: automation === "by-hand" ? { kind: "none" } : aimOf(action, definition, executables, actor),
+        ...(swing ? { swing: {} } : {}),
+        ...(spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) !== undefined
+          ? { slotLevel: spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) }
+          : {})
+      }));
+    // A weapon its routine has no swing left for, with the routine's action gone: the action went to the routine (D8).
+    const heldBy = swings.holding(base);
+    if (!swing && heldBy) {
+      for (const variant of variants) {
+        if (variant.problem === `${actor.displayName} has already used its ${heldBy.slot === "bonus" ? "bonus action" : "action"}`) variant.problem = `${actor.displayName}'s ${heldBy.slot === "bonus" ? "bonus action" : "action"} went to ${heldBy.name}`;
+      }
+    }
     const usable = variants.findIndex((variant) => !variant.problem);
     const entry = actionStatblock(base, definition);
     const item = base.item;
@@ -466,7 +515,9 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     // A potion given with an action and drunk with a bonus action: the button with only one of them says which.
     const oneUse = item && (itemSlots.get(item.id)?.size ?? 0) > 1 && variants.length === 1 ? variants[0]!.label : undefined;
     const spell = spellOf.get(familyKey(base.id));
-    const group = groupOf(base, granted, spell);
+    // A feature's ability pressed as a swing of the Attack action (a dragonborn's Breath Weapon) goes with the attacks.
+    const grouped = groupOf(base, granted, spell);
+    const group = swing && grouped === "features" ? "attacks" : grouped;
     const spellLevel = "spellLevel" in base && base.spellLevel != null ? base.spellLevel : spell?.level;
     return {
       key: familyKey(base.id),
@@ -487,7 +538,8 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
       title: entry.title,
       text: entry.text,
       ...(spellLevel != null ? { spellLevel } : {}),
-      ...("concentration" in base && base.concentration ? { concentration: true } : {})
+      ...("concentration" in base && base.concentration ? { concentration: true } : {}),
+      ...(swing?.routine ? { routine: swing.routine } : {})
     };
   });
 
@@ -538,5 +590,88 @@ export function hotbarFor(board: EncounterSnapshot, actorId: Id): HotbarModel {
     .sort((a, b) => a.level - b.level)
     .map(({ resourceId, level }) => ({ level, left: actor.resources?.[resourceId] ?? 0, full: definition.resources?.[resourceId] ?? 0 }));
 
-  return { actorId, tabs, slots, reactions: reactionsOf(executables), concentration: concentrationOf(board, actor) };
+  return { actorId, tabs, slots, reactions: reactionsOf(executables), concentration: concentrationOf(board, actor), routines: swings.open };
+}
+
+/** A routine as the creature has it: "Attack", not its copy "Attack with Breath Weapon (cone)"; "Multiattack", not an option. */
+function routineName(routines: MultiattackActionDefinition[], executables: ActionDefinition[]): string {
+  const first = routines[0];
+  if (!first) return "Attack";
+  return executables.find((action) => action.id === routineBaseId(first.id))?.name ?? first.name;
+}
+
+/**
+ * How the hotbar presses the creature's routines' swings (HOTBAR_REDESIGN_PLAN.md §3): which of its abilities are swings
+ * (a weapon its Attack action or Multiattack swings, Frightful Presence, Breath Weapon in place of an attack), each
+ * one's routine for its badge, the variants of a routine pressed by name (Flurry of Blows), and the routines open.
+ */
+function swingsOfRoutines(board: EncounterSnapshot, actor: CombatantState, executables: ActionDefinition[]) {
+  const actorId = actor.id;
+  const all = executables.filter((action): action is MultiattackActionDefinition => action.kind === "multiattack" && !isLegendaryVariant(action) && !isLairVariant(action));
+  // Everything a swing of one of its routines can be made with.
+  const swingable = new Set(all.flatMap((routine) => swingsOf(routine.attacks).flatMap((swing) => {
+    const ability = stepAbility(swing.step, executables);
+    return ability ? [ability.id] : swingCandidates(swing.step, executables).map((candidate) => candidate.id);
+  })));
+  const opens = actor.turnFlags?.routines ?? [];
+  const badge = (routines: MultiattackActionDefinition[], made: OpenRoutine["made"], open: boolean): HotbarRoutine => {
+    const left = swingsLeftOf(routines, made, executables);
+    return { name: routineName(routines, executables), left, total: left + made.length, open };
+  };
+  /** The routine open that `action` is one of the swings of, whether or not it has one left for it. */
+  const openFor = (action: ActionDefinition) => opens.find((open) => routinesOf(executables, open).some((routine) => swingsFilledBy(routine, action.id, executables).length > 0));
+
+  return {
+    /** Pressed as a swing: of a routine it opens or goes on with, and its badge. Undefined: a plain use. */
+    of(base: ActionDefinition): { routine?: HotbarRoutine } | undefined {
+      if (base.kind === "multiattack") {
+        // A routine pressed by name (D4: Flurry of Blows): its first swing opens it.
+        const swingCount = swingsOf(base.attacks).filter((swing) => !stepAbility(swing.step, executables)).length;
+        return { routine: { name: base.name, left: swingCount, total: swingCount, open: false } };
+      }
+      if (!swingable.has(base.id) || (base.kind !== "attack" && base.kind !== "save" && base.kind !== "area-save")) return undefined;
+      const plan = planSwing(board, actorId, base.id);
+      if (!("problem" in plan)) {
+        return { routine: plan.open ? badge(routinesOf(executables, plan.open), plan.open.made, true) : badge(plan.routines, [], false) };
+      }
+      // One of the open routine's own swings that it has none left for, or not now (after a miss): greyed, saying why.
+      const open = openFor(base);
+      if (open) return { routine: badge(routinesOf(executables, open), open.made, true) };
+      // Breath Weapon in place of an attack is only ever a swing.
+      return base.routineOnly ? {} : undefined;
+    },
+    /** A weapon not pressed as a swing whose slot a routine open holds: the routine (D8). */
+    holding(base: ActionDefinition): { slot: OpenRoutine["slot"]; name: string } | undefined {
+      const open = opens.find((entry) => entry.slot === base.actionType);
+      return open ? { slot: open.slot, name: routineName(routinesOf(executables, open), executables) } : undefined;
+    },
+    /**
+     * A routine pressed by name's variants: with one routine, an attack its first swing can be made with each (Flurry's
+     * strike plainly, or with Open Hand's Addle); with options, one each, its first swing with its plainest attack.
+     */
+    byName(members: MultiattackActionDefinition[], label: (action: ActionDefinition, of: ActionDefinition) => string, aim: (action: ActionDefinition) => Aim): HotbarVariant[] {
+      const first = (routine: MultiattackActionDefinition) => swingsOf(routine.attacks).find((swing) => !stepAbility(swing.step, executables));
+      const cost = (routine: MultiattackActionDefinition) => costOf(routine, getDefinition(board, actor), true);
+      const variant = (routine: MultiattackActionDefinition, attack: ActionDefinition, name: string): HotbarVariant => ({
+        actionId: attack.id, label: name, cost: cost(routine), problem: swingProblem(board, actorId, attack.id, {}, routine.id), aim: aim(attack), swing: { routineId: routine.id }
+      });
+      if (members.length === 1) {
+        const routine = members[0]!;
+        const swing = first(routine);
+        const strikes = swing ? swingCandidates(swing.step, executables) : [];
+        return strikes.map((attack) => variant(routine, attack, label(attack, strikes[0]!)));
+      }
+      return members.flatMap((routine) => {
+        const swing = first(routine);
+        const attack = swing ? defaultSwingAttack(swing.step, swingCandidates(swing.step, executables)) : undefined;
+        return attack ? [variant(routine, attack, label(routine, members[0]!))] : [];
+      });
+    },
+    /** The routines open, by slot. */
+    open: opens.map((open) => {
+      const routines = routinesOf(executables, open);
+      const unsimulated = [...new Set(routines.flatMap((routine) => routine.unsimulated ?? []))];
+      return { slot: open.slot, ...badge(routines, open.made, true), ...(unsimulated.length ? { unsimulated } : {}) };
+    })
+  };
 }

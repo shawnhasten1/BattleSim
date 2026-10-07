@@ -30,6 +30,36 @@ export function moveWarnings(board: EncounterSnapshot, preview: MovePreview): st
   ];
 }
 
+/** "1 attack", "2 attacks". */
+function attacks(count: number): string {
+  return `${count} ${count === 1 ? "attack" : "attacks"}`;
+}
+
+/** What a swing armed adds to its line: which of its routine's attacks it is, or what starting the routine takes. */
+function swingOf(routine: HotbarButton["routine"], button: HotbarButton | undefined): string {
+  if (!routine || !button) return "";
+  if (routine.open) return ` (attack ${routine.total - routine.left + 1} of ${routine.total})`;
+  const slot = button.slot === "bonus" ? "bonus action" : "action";
+  return routine.name === button.name ? `. It takes your ${slot}: ${attacks(routine.total)}` : `. It takes your ${slot}: ${routine.name}, ${attacks(routine.total)}`;
+}
+
+/** The action or bonus action, spent or not, and the routine taking it with how many attacks it has left. */
+function EconomyPill({ slot, label, spent, routine }: { slot: "action" | "bonus"; label: string; spent: boolean; routine?: HotbarModel["routines"][number] }) {
+  const word = slot === "bonus" ? "Bonus action" : "Action";
+  // Spent on a routine with attacks left: not crossed out.
+  const open = Boolean(routine && routine.left > 0);
+  return (
+    <span
+      role="listitem"
+      data-slot={slot}
+      data-spent={spent && !open}
+      title={open ? `${word}: ${routine!.name}, ${attacks(routine!.left)} left` : spent ? `${word} used` : word}
+    >
+      {open ? `${routine!.name} · ${routine!.left} left` : label}
+    </span>
+  );
+}
+
 function listOf(items: string[]): string {
   return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
@@ -106,8 +136,11 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
   const altitudeNow = actor.altitude ?? 0;
   const altitudeNext = plan.altitude ?? altitudeNow;
   const current = model.tabs.find((entry) => entry.id === tab) ?? model.tabs[0]!;
-  // By the variant armed: a weapon's action and bonus-action buttons are one family, with one key.
-  const holds = (button: HotbarButton) => Boolean(armed && button.variants.some((variant) => variant.actionId === armed.actionId));
+  // By the variant armed: a weapon's action and bonus-action buttons are one family, with one key; Flurry of Blows' first
+  // strike and the Unarmed Strike button are one attack, told apart by the routine.
+  const holds = (button: HotbarButton) => Boolean(armed && button.variants.some((variant) => variant.actionId === armed.actionId && variant.swing?.routineId === armed.swing?.routineId));
+  const routineIn = (slot: "action" | "bonus") => model.routines.find((routine) => routine.slot === slot);
+  const swingsLeft = model.routines.map((routine) => `${routine.name}: ${attacks(routine.left)} left`).join("; ");
   const armedButton = armed ? model.tabs.flatMap((entry) => entry.buttons).find(holds) : undefined;
   const countOf = (entry: HotbarModel["tabs"][number]) => (entry.id === "reactions" ? model.reactions.length : entry.buttons.length);
 
@@ -120,8 +153,8 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
           {model.concentration ? <span className={styles.concentrating}>{`Concentrating: ${model.concentration}`}</span> : null}
         </div>
         <div className={styles.dockEconomy} role="list" aria-label="What's left of the turn">
-          <span role="listitem" data-slot="action" data-spent={economy.action === false} title={economy.action === false ? "Action used" : "Action"}>Action</span>
-          <span role="listitem" data-slot="bonus" data-spent={economy.bonus === false} title={economy.bonus === false ? "Bonus action used" : "Bonus action"}>Bonus</span>
+          <EconomyPill slot="action" label="Action" spent={economy.action === false} routine={routineIn("action")} />
+          <EconomyPill slot="bonus" label="Bonus" spent={economy.bonus === false} routine={routineIn("bonus")} />
           <span role="listitem" data-slot="reaction" data-spent={economy.reaction === false} title={economy.reaction === false ? "Reaction used" : "Reaction"}>Reaction</span>
         </div>
         <div className={styles.dockMove}>
@@ -158,7 +191,7 @@ export function Hotbar({ move, aim }: { move?: PlayMoveView | null; aim?: AimVie
           <button type="button" className={styles.button} onClick={() => playCommand({ kind: "ai-turn", actorId: actor.id })} title="The AI plays the rest of this turn, then ends it">
             <Bot size={13} /> AI: take this turn
           </button>
-          <button type="button" className={styles.primary} onClick={() => playCommand({ kind: "end-turn", actorId: actor.id })} title="End the turn (Enter)">
+          <button type="button" className={styles.primary} onClick={() => playCommand({ kind: "end-turn", actorId: actor.id })} title={`End the turn (Enter)${swingsLeft ? `. ${swingsLeft}` : ""}`}>
             <Flag size={13} /> End turn
           </button>
         </div>
@@ -261,6 +294,12 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
       : undefined;
   // The tab says what it takes; only a free one says so.
   const cost = [button.cost, button.slot === "free" ? "free" : undefined].filter(Boolean).join(" · ");
+  // A swing: the attacks its routine makes, or has left once it's begun.
+  const routine = button.routine;
+  const badge = routine ? `⚔ ${routine.open ? `${routine.left} left` : attacks(routine.total)}` : undefined;
+  const badgeTitle = routine
+    ? routine.open ? `${routine.name}: ${attacks(routine.left)} left` : `Takes your ${button.slot === "bonus" ? "bonus action" : "action"}: ${routine.name}, ${attacks(routine.total)}`
+    : undefined;
   return (
     <div className={styles.hotItem} data-armed={Boolean(armedActionId)} data-tone={button.tone}>
       <button
@@ -275,8 +314,9 @@ function HotbarItem({ button, index, armedActionId }: { button: HotbarButton; in
       >
         {index < 10 ? <span className={styles.hotKey} aria-hidden="true">{(index + 1) % 10}</span> : null}
         <span className={styles.hotName}>{button.name}</span>
-        {cost || automationNote ? (
+        {cost || automationNote || badge ? (
           <span className={styles.hotCost}>
+            {badge ? <span className={styles.hotRoutine} data-open={routine!.open} title={badgeTitle}>{badge}</span> : null}
             {cost}
             {automationNote ? <span className={styles.hotDot} data-automation={button.automation} title={automationNote}>{button.automation === "partial" ? "partly" : "by hand"}</span> : null}
           </span>
@@ -364,11 +404,12 @@ function HotbarHint({ model, armedButton, armed, aim, note, preview, board, wayp
     const name = armedButton?.name ?? "it";
     const variant = armedButton?.variants.find((candidate) => candidate.actionId === armed.actionId);
     const many = armed.aim.kind === "creatures" && armed.aim.count > 1;
+    const routine = armedButton?.routine;
     const lead = armed.aim.kind === "routine"
       ? `Pick the first target for ${name}: you pick each swing after it.`
       : many
         ? `Pick up to ${armed.aim.kind === "creatures" ? armed.aim.count : 1} ${armed.aim.kind === "creatures" && armed.aim.repeat ? "targets (one can be picked again)" : "creatures"} for ${name}${armed.picked.length ? `: ${armed.picked.length} picked, Enter to use it on them` : ""}.`
-        : `Pick a target for ${name}${variant && variant.label !== "Normal" && armedButton && armedButton.variants.length > 1 ? ` (${variant.label})` : ""}.`;
+        : `Pick a target for ${name}${variant && variant.label !== "Normal" && armedButton && armedButton.variants.length > 1 ? ` (${variant.label})` : ""}${swingOf(routine, armedButton)}.`;
     const concentration = armedButton?.concentration && model.concentration ? ` It ends your concentration on ${model.concentration}.` : "";
     return (
       <p className={styles.dockHint} data-warning={Boolean(concentration)}>
@@ -381,7 +422,12 @@ function HotbarHint({ model, armedButton, armed, aim, note, preview, board, wayp
     ? `${waypoints} ${waypoints === 1 ? "stop" : "stops"} planned. Esc or right-click takes back the last.`
     : "Click a square to move there. Shift-click to stop on the way.";
   const warnings = preview && !preview.problem ? moveWarnings(board, preview) : [];
-  const hint = preview?.problem ?? [...warnings, ...(warnings.length && waypoints === 0 ? [] : [stops])].join(" ");
+  // A routine with swings left: how many, and what it says that the engine doesn't run.
+  const routines = model.routines.flatMap((routine) => [
+    `${routine.name}: ${attacks(routine.left)} left.`,
+    ...(routine.unsimulated?.length ? [`Not simulated: ${routine.unsimulated.join(" ")}`] : [])
+  ]);
+  const hint = preview?.problem ?? [...warnings, ...(warnings.length && waypoints === 0 ? [] : [...routines, stops])].join(" ");
   return (
     <p className={styles.dockHint} data-problem={Boolean(preview?.problem)} data-warning={warnings.length > 0}>
       <span>{hint}</span>

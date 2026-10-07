@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sampleEncounter, type EncounterSnapshot, type PlayControl, type Point } from "@/engine";
 import { findSrdFeature, findSrdSpell } from "@/data/srd";
+import { loadSrdMonster } from "@/data/srd/monsters";
 import { PlayAimLayer, PlayAimMarks, PlayAimTooltip } from "@/components/play/PlayAimLayer";
 import { PlayOverlay } from "@/components/play/PlayOverlay";
 import { aimAtCreature, usePlayAimView } from "@/hooks/usePlayAim";
@@ -11,7 +12,7 @@ import { usePlayMoveView } from "@/hooks/usePlayMove";
 import { useEncounterStore } from "@/store/encounter-store";
 import { usePlayUiStore } from "@/store/play-ui-store";
 
-/** The hotbar on screen (PLAY_MODE_PLAN.md Phase 5): tabs, keys, aiming, and a multiattack's swing card. */
+/** The hotbar on screen (PLAY_MODE_PLAN.md Phase 5, HOTBAR_REDESIGN_PLAN.md): tabs, keys, aiming, and a routine's swings. */
 const pristine = useEncounterStore.getState();
 const pristineUi = usePlayUiStore.getState();
 const store = () => useEncounterStore.getState();
@@ -66,28 +67,29 @@ describe("the hotbar", () => {
     render(<Screen />);
     const bar = screen.getByRole("region", { name: "Fighter's turn" });
     const tabs = within(bar).getByRole("tablist", { name: "Abilities" });
-    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Actions8", "Bonus1", "Reactions1"]);
+    expect(within(tabs).getAllByRole("tab").map((entry) => entry.textContent)).toEqual(["Actions7", "Bonus1", "Reactions1"]);
     const panel = within(bar).getByRole("tabpanel", { name: "Actions" });
     // Its groups, labelled, in order; the keys count along them.
     expect(within(panel).getAllByRole("group").map((entry) => entry.getAttribute("aria-label"))).toEqual(["Attacks", "Features", "Common"]);
-    expect(within(within(panel).getByRole("group", { name: "Attacks" })).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Extra Attack2 attacks", "2Longsword"]);
-    expect(within(within(panel).getByRole("group", { name: "Features" })).getAllByRole("button")[0]!.textContent).toMatch(/^3Action Surge.*free$/);
-    expect(within(within(panel).getByRole("group", { name: "Common" })).getAllByRole("button")[0]!.textContent).toBe("4Dash");
+    // No Extra Attack button: the longsword is a swing of it, two attacks.
+    expect(within(within(panel).getByRole("group", { name: "Attacks" })).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["1Longsword⚔ 2 attacks"]);
+    expect(within(within(panel).getByRole("group", { name: "Features" })).getAllByRole("button")[0]!.textContent).toMatch(/^2Action Surge.*free$/);
+    expect(within(within(panel).getByRole("group", { name: "Common" })).getAllByRole("button")[0]!.textContent).toBe("3Dash");
     // Each button is coloured by what it is and marked with what it takes; so is each tab (HOTBAR_REDESIGN_PLAN.md §2).
-    const longsword = within(panel).getByRole("button", { name: "Longsword" });
+    const longsword = within(panel).getByRole("button", { name: /^Longsword/ });
     expect([longsword.closest("[data-tone]")?.getAttribute("data-tone"), longsword.getAttribute("data-slot")]).toEqual(["attacks", "action"]);
     const surge = within(panel).getByRole("button", { name: /Action Surge/ });
     expect([surge.closest("[data-tone]")?.getAttribute("data-tone"), surge.getAttribute("data-slot")]).toEqual(["features", "free"]);
     expect(within(tabs).getAllByRole("tab").map((entry) => entry.getAttribute("data-slot"))).toEqual(["action", "bonus", "reaction"]);
 
-    // 2 arms the longsword; the hint says what to do.
-    await userEvent.keyboard("2");
-    expect(ui().armed).toMatchObject({ actionId: "longsword" });
-    expect(within(bar).getByRole("button", { name: "Longsword" }).getAttribute("aria-pressed")).toBe("true");
-    expect(within(bar).getByText(/^Pick a target for Longsword\. Esc puts it away\.$/)).toBeTruthy();
+    // 1 arms the longsword; the hint says what to do, and what it takes.
+    await userEvent.keyboard("1");
+    expect(ui().armed).toMatchObject({ actionId: "longsword", swing: {} });
+    expect(within(bar).getByRole("button", { name: /^Longsword/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(bar).getByText(/^Pick a target for Longsword\. It takes your action: Extra Attack, 2 attacks\. Esc puts it away\.$/)).toBeTruthy();
     await userEvent.keyboard("{Escape}");
     // (The scene's own Esc handler isn't mounted here: the button can put it away too.)
-    await userEvent.click(within(bar).getByRole("button", { name: "Longsword" }));
+    await userEvent.click(within(bar).getByRole("button", { name: /^Longsword/ }));
     expect(ui().armed).toBeNull();
 
     // Enter with nothing armed ends the turn.
@@ -99,7 +101,7 @@ describe("the hotbar", () => {
     load((encounter) => place(encounter, "enemy-goblin-1", { x: 2, y: 1 }));
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     const { container } = render(<Screen />);
-    await userEvent.keyboard("2");
+    await userEvent.keyboard("1");
     // The goblin beside the fighter can be hit; the far one is out of reach and gets no ring.
     expect(container.querySelectorAll(".play-target:not(.blocked)")).toHaveLength(1);
     act(() => ui().setHover({ x: 2, y: 1 }));
@@ -109,39 +111,57 @@ describe("the hotbar", () => {
     expect(screen.getByRole("tooltip").getAttribute("data-ok")).toBe("false");
   });
 
-  it("a multiattack's next swing: its card, the attack to swing with, and a creature clicked", async () => {
+  it("a weapon's swings: the first takes the action, the badge and the Action pill say what's left, the second closes it", async () => {
     load((encounter) => {
+      for (const goblin of encounter.combatants.filter((combatant) => combatant.faction === "enemy")) goblin.currentHp = 80;
+      encounter.definitions.find((definition) => definition.id === "def-goblin")!.maxHp = 80;
       place(encounter, "pc-fighter", { x: 2, y: 1 });
       place(encounter, "enemy-goblin-1", { x: 3, y: 1 });
       place(encounter, "enemy-goblin-2", { x: 3, y: 2 });
     });
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
     render(<Screen />);
+    const bar = screen.getByRole("region", { name: "Fighter's turn" });
     await userEvent.keyboard("1");
     act(() => { aimAtCreature("enemy-goblin-1"); });
-    const card = screen.getByRole("dialog", { name: "Extra Attack: swing 2 of 2" });
-    expect(within(card).getByText(/^Swing 2 of 2/)).toBeTruthy();
-    expect(within(card).getByText("Click a creature to swing at it, or a square to step to first.")).toBeTruthy();
-    // The hotbar makes way for it.
-    expect(screen.queryByRole("region", { name: "Fighter's turn" })).toBeNull();
-    act(() => { aimAtCreature("enemy-goblin-2"); });
+    // No swing card: the hotbar stays, the longsword says one attack is left, and so does the Action pill.
     expect(screen.queryByRole("dialog", { name: /swing/ })).toBeNull();
+    expect(within(bar).getByRole("button", { name: /^Longsword/ }).textContent).toBe("1Longsword⚔ 1 left");
+    const pill = bar.querySelector("[role='listitem'][data-slot='action']")!;
+    expect([pill.textContent, pill.getAttribute("data-spent")]).toEqual(["Extra Attack · 1 left", "false"]);
+    expect(within(bar).getByText(/Extra Attack: 1 attack left\./)).toBeTruthy();
+    expect(within(bar).getByRole("button", { name: /End turn/ }).getAttribute("title")).toBe("End the turn (Enter). Extra Attack: 1 attack left");
+    // The second swing: armed, its hint says which attack it is; at the other goblin it closes the routine.
+    await userEvent.keyboard("1");
+    expect(within(bar).getByText(/^Pick a target for Longsword \(attack 2 of 2\)\. Esc puts it away\.$/)).toBeTruthy();
+    act(() => { aimAtCreature("enemy-goblin-2"); });
+    expect([pill.textContent, pill.getAttribute("data-spent")]).toEqual(["Action", "true"]);
     const swings = store().log.filter((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter");
     expect(swings.map((entry) => entry.data?.targetId)).toEqual(["enemy-goblin-1", "enemy-goblin-2"]);
   });
 
-  it("Skip this swing passes on it", async () => {
+  it("a tyrannosaurus's tail: no ring on the creature its bite went at, and a click on it says why", async () => {
+    const rex = (await loadSrdMonster("srd:monster:tyrannosaurus-rex"))!;
     load((encounter) => {
-      place(encounter, "pc-fighter", { x: 2, y: 1 });
-      place(encounter, "enemy-goblin-1", { x: 3, y: 1 });
+      for (const goblin of encounter.combatants.filter((combatant) => combatant.faction === "enemy")) goblin.currentHp = 80;
+      encounter.definitions = encounter.definitions.map((definition) => (definition.id === "def-fighter" ? { ...rex, id: "def-fighter" }
+        : definition.id === "def-goblin" ? { ...definition, maxHp: 80 } : definition));
+      place(encounter, "pc-fighter", { x: 1, y: 2 });
+      place(encounter, "enemy-goblin-1", { x: 0, y: 1 });
+      place(encounter, "enemy-goblin-2", { x: 2, y: 1 });
+      place(encounter, "pc-archer", { x: 0, y: 7 });
     });
     store().startPlay({ control: PARTY, playbackSpeed: 0 });
-    render(<Screen />);
-    await userEvent.keyboard("1");
+    const { container } = render(<Screen />);
+    const bar = screen.getByRole("region", { name: "Fighter's turn" });
+    await userEvent.click(within(bar).getByRole("button", { name: /^Bite/ }));
     act(() => { aimAtCreature("enemy-goblin-1"); });
-    await userEvent.click(screen.getByRole("button", { name: "Skip this swing" }));
-    expect(store().log.some((entry) => entry.type === "MultiattackSwingSkipped" && entry.data?.reason === "its controller passed")).toBe(true);
-    expect(screen.getByRole("region", { name: "Fighter's turn" })).toBeTruthy();
+    await userEvent.click(within(bar).getByRole("button", { name: /^Tail/ }));
+    // Both goblins are in reach; only the other one is ringed.
+    expect(container.querySelectorAll(".play-target:not(.blocked)")).toHaveLength(1);
+    act(() => { aimAtCreature("enemy-goblin-1"); });
+    expect(ui().note).toBe("Multiattack can't attack Goblin 1 twice");
+    expect(store().log.filter((entry) => entry.type === "AttackRolled" && entry.data?.attackerId === "pc-fighter")).toHaveLength(1);
   });
 
   it("an area follows the cursor: its squares, the foes it catches with their chances, and a warning for a friend", async () => {

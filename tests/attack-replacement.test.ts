@@ -64,11 +64,15 @@ describe("Breath Weapon in place of an attack", () => {
     const { state } = scene(definition);
     expect(actionProblem(state.snapshot, "pc-fighter", cone.id)).toBe("Breath Weapon (cone) takes the place of one of the Attack action's attacks");
     expect(actionProblem(state.snapshot, "pc-fighter", withCone.id)).toBeUndefined();
-    // On the hotbar: variants of the Attack button, and no button of its own.
+    // On the hotbar (HOTBAR_REDESIGN_PLAN.md §3): no Attack button; each breath a button of its own, pressed as one of the
+    // Attack action's swings.
     const buttons = hotbarFor(state.snapshot, "pc-fighter").tabs.flatMap((tab) => tab.buttons);
-    expect(buttons.some((button) => button.name.startsWith("Breath Weapon"))).toBe(false);
-    expect(buttons.find((button) => button.key === attack.id)!.variants.map((variant) => variant.label))
-      .toEqual(["Attack", "With Breath Weapon (cone)", "With Breath Weapon (line)"]);
+    expect(buttons.some((button) => button.key === attack.id)).toBe(false);
+    const breath = buttons.find((button) => button.name === "Breath Weapon (cone)")!;
+    expect(breath).toMatchObject({ tab: "actions", group: "attacks", routine: { name: "Attack", total: 2, open: false } });
+    expect(breath.variants[0]).toMatchObject({ actionId: cone.id, swing: {}, aim: { kind: "area" } });
+    expect(breath.problem).toBeUndefined();
+    expect(buttons.some((button) => button.name === "Breath Weapon (line)")).toBe(true);
   });
 
   it("breathes, then makes the one attack left", () => {

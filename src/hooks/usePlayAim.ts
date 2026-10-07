@@ -13,6 +13,7 @@ import {
   sizeFootprint,
   spatialDistance,
   spatialDistanceToPoint,
+  swingProblem,
   targetProblem,
   zoneMoveProblem,
   type AttackActionDefinition,
@@ -263,11 +264,15 @@ export function usePlayAimView(): AimView | null {
     const actor = base.board.combatants.find((combatant) => combatant.id === base.actorId);
     if (!actor) return out;
     if (base.kind === "creatures" || base.kind === "routine" || base.kind === "swing") {
+      const swing = base.armed?.swing;
       for (const combatant of base.board.combatants) {
         if (combatant.state !== "active" && combatant.state !== "downed") continue;
         // A foe's ability isn't aimed at itself; a friend's can be (a heal, Bless).
         if (combatant.id === base.actorId && base.who === "foes") continue;
-        out.set(combatant.id, targetLine(base.board, base.actorId, base.actionId, combatant.id));
+        const line = targetLine(base.board, base.actorId, base.actionId, combatant.id);
+        // A swing of a routine: its rule too (a tyrannosaurus's tail not at the bite's target).
+        const ruled = line.ok && swing ? swingProblem(base.board, base.actorId, base.actionId, { targetIds: [combatant.id] }, swing.routineId) : undefined;
+        out.set(combatant.id, ruled ? { ok: false, text: ruled } : line);
       }
     } else if (base.kind === "place" && base.armed?.aim.kind === "place" && base.armed.aim.moves === "other" && base.picked.length === 0) {
       // A teleport that moves someone else: first, who (within its range).
@@ -329,14 +334,17 @@ export function usePlayAimView(): AimView | null {
   return { ...view, rangeCells, lines, meantFor, hovered, ...shapes };
 }
 
-/** Use an ability now, aimed as `target` says; whatever was armed is put away. */
-function commitUse(actorId: Id, actionId: Id, byHand: boolean, target: UseTarget = {}): void {
+/** Use an ability now, aimed as `target` says (a swing of a routine as one); whatever was armed is put away. */
+function commitUse(actorId: Id, actionId: Id, byHand: boolean, target: UseTarget = {}, swing?: { routineId?: Id }): void {
   const store = useEncounterStore.getState();
   usePlayUiStore.getState().disarm();
   const targetIds = target.targetIds ?? [];
+  const aimed = Object.keys(target).length ? { target } : {};
   store.playCommand(byHand
     ? { kind: "use-by-hand", actorId, actionId, ...(targetIds.length ? { targetIds } : {}) }
-    : { kind: "use", actorId, actionId, ...(Object.keys(target).length ? { target } : {}) });
+    : swing
+      ? { kind: "swing", actorId, actionId, ...aimed, ...(swing.routineId ? { routineId: swing.routineId } : {}) }
+      : { kind: "use", actorId, actionId, ...aimed });
 }
 
 /**
@@ -362,7 +370,7 @@ function armedNow(): { actorId: Id; armed: ArmedAbility; board: EncounterSnapsho
   }
   const actorId = yourTurnActorId(state);
   const armed = actorId ? armedFor(ui, planKeyOf(actorId, state.log.length)) : null;
-  return actorId && armed ? { actorId, armed, board: state.encounter, commit: (target) => commitUse(actorId, armed.actionId, false, target) } : null;
+  return actorId && armed ? { actorId, armed, board: state.encounter, commit: (target) => commitUse(actorId, armed.actionId, false, target, armed.swing) } : null;
 }
 
 /**
@@ -392,15 +400,16 @@ export function pressHotbar(button: HotbarButton, variant: HotbarVariant = butto
   const ui = usePlayUiStore.getState();
   const planKey = planKeyOf(actorId, state.log.length);
   const armed = armedFor(ui, planKey);
-  if (armed?.actionId === variant.actionId) {
+  // The same press again (Flurry's first strike and Unarmed Strike are one attack: told apart by the routine).
+  if (armed?.actionId === variant.actionId && armed.swing?.routineId === variant.swing?.routineId) {
     ui.disarm();
     return;
   }
   if (button.automation === "by-hand" || variant.aim.kind === "none") {
-    commitUse(actorId, variant.actionId, button.automation === "by-hand");
+    commitUse(actorId, variant.actionId, button.automation === "by-hand", {}, variant.swing);
     return;
   }
-  ui.arm({ planKey, key: button.key, actionId: variant.actionId, aim: variant.aim });
+  ui.arm({ planKey, key: button.key, actionId: variant.actionId, aim: variant.aim, ...(variant.swing ? { swing: variant.swing } : {}) });
 }
 
 /** One of the choices of the armed ability (a creature to summon, a form to take): use it with that. */
@@ -524,8 +533,10 @@ export function aimAtCreature(combatantId: Id): boolean {
   }
   if (armed.aim.kind !== "creatures" && armed.aim.kind !== "routine") return true;
   const line = targetLine(board, actorId, armed.actionId, combatantId);
-  if (!line.ok) {
-    ui.setNote(line.text);
+  // A swing of a routine: its rule too (not at the bite's target; the beak at the tentacles').
+  const ruled = line.ok && armed.swing ? swingProblem(board, actorId, armed.actionId, { targetIds: [combatantId] }, armed.swing.routineId) : undefined;
+  if (!line.ok || ruled) {
+    ui.setNote(ruled ?? line.text);
     return true;
   }
   if (armed.aim.kind === "routine") {

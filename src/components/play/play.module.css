@@ -800,6 +800,17 @@
   white-space: nowrap;
 }
 
+/* A swing's routine: the attacks it makes, or has left (brighter, once it's begun). */
+.hotRoutine {
+  margin-right: 5px;
+  color: color-mix(in srgb, var(--tone) 70%, var(--ui-text-dim));
+  font-weight: 700;
+}
+
+.hotRoutine[data-open="true"] {
+  color: var(--tone);
+}
+
 .hotDot {
   margin-left: 4px;
   padding: 0 4px;
