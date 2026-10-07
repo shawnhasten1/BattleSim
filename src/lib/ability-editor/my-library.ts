@@ -12,6 +12,7 @@ import {
   type ActionDefinition,
   type CreatureDefinition,
   type DeathEffectDefinition,
+  type Edition,
   type FeatureDefinition,
   type ItemDefinition,
   type LegendaryActionRef,
@@ -21,6 +22,7 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import { isSrdMonsterId } from "@/data/srd/monsters";
+import { editionOf } from "@/lib/editions";
 import type { AddFilter, Prepared } from "./add";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
 import { castWith } from "./spells";
@@ -56,11 +58,14 @@ export interface SavedAbility {
   savedAt: string;
 }
 
-/** The source a copy from the library carries: its document is "My library" and its slug the entry's id. */
+/**
+ * The source a copy from the library carries: its document is "My library" and its slug the entry's id. It keeps the
+ * edition of what it was saved from (a 2024 Rage saved with a change is still a 2024 Rage).
+ */
 export const MY_LIBRARY = "My library";
 
-export function savedSource(entryId: string): SourceMetadata {
-  return { provider: "homebrew", documentName: MY_LIBRARY, slug: entryId, importedAt: new Date().toISOString() };
+export function savedSource(entryId: string, edition?: Edition): SourceMetadata {
+  return { provider: "homebrew", documentName: MY_LIBRARY, slug: entryId, importedAt: new Date().toISOString(), ...(edition ? { edition } : {}) };
 }
 
 /** A new entry's id. */
@@ -243,7 +248,7 @@ export function savedFrom(
     const named = step.actionId ? executables.find((action) => action.id === step.actionId) : undefined;
     return named ? [[named.id, named.name]] : [];
   }));
-  copy = { ...copy, name: options.name, source: savedSource(options.id) } as SavedRecord;
+  copy = { ...copy, name: options.name, source: savedSource(options.id, editionOf(copy as { source?: SourceMetadata })) } as SavedRecord;
   const list = kind === "action" && (ACTION_LISTS as readonly string[]).includes(options.list ?? "") ? options.list as ActionList : undefined;
   return {
     id: options.id,
@@ -286,7 +291,7 @@ export function prepareSaved(entry: SavedAbility, definition: CreatureDefinition
   if (entry.steps) record = withStepsBound(record, entry.steps, definition);
   return {
     list: listOf(entry),
-    record: { ...record, source: savedSource(entry.id) } as Prepared["record"],
+    record: { ...record, source: savedSource(entry.id, editionOf(entry.record as { source?: SourceMetadata })) } as Prepared["record"],
     ...(entry.pools && Object.keys(entry.pools).length ? { pools: { ...entry.pools } } : {}),
     ...(entry.creatures?.length ? { creatures: structuredClone(entry.creatures) } : {})
   };

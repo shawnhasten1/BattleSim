@@ -75,7 +75,7 @@ import {
   type CoverLevel,
   type WallSegment
 } from "@/engine";
-import { findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon } from "@/data/srd";
+import { attachedSource, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon } from "@/data/srd";
 import { isSrdMonsterId, loadSrdMonster } from "@/data/srd/monsters";
 import { clampReplayIndex } from "@/lib/replay";
 import { withoutDefinitionItem, type DefinitionItemType } from "@/lib/definition-edits";
@@ -3436,7 +3436,7 @@ export const useEncounterStore = create<EncounterStore>()(
         const normalized = normalizeWeaponDefinition(structuredClone(source), definition.abilities);
         normalized.id = weaponId;
         normalized.actionId = `weapon-action-${weaponId}`;
-        normalized.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
+        normalized.source = attachedSource(source, srdId);
         const { weapon, seeded } = prepareWeaponForAttach(normalized, weaponId);
 
         commitEncounter({
@@ -3464,7 +3464,7 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!source) return undefined;
         const ref = get().insertAbilityRecord(definitionId, "items", {
           ...structuredClone(source),
-          source: { provider: "homebrew", documentName: own ? "Spell scroll" : "SRD", slug: srdId, importedAt: new Date().toISOString() }
+          source: own ? { provider: "homebrew", documentName: "Spell scroll", slug: srdId, importedAt: new Date().toISOString() } : attachedSource(source, srdId)
         });
         return ref && "id" in ref ? ref.id : undefined;
       },
@@ -3475,7 +3475,7 @@ export const useEncounterStore = create<EncounterStore>()(
         if (!source || !current) return;
         const { item } = prepareItemForAttach({
           ...structuredClone(source),
-          source: { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() }
+          source: attachedSource(source, srdId)
         } as ItemDefinition, itemId);
         // As many as it carried, when it was counted.
         const kept = current.supply && item.supply?.unit === current.supply.unit ? { ...item, supply: { ...item.supply, size: current.supply.size } } : item;
@@ -3492,7 +3492,7 @@ export const useEncounterStore = create<EncounterStore>()(
         // damage that adds a spellcasting modifier adds this creature's.
         const spell = normalizeSpellDefinition(castWith(structuredClone(source), spellcastingAbility(definition)));
         spell.id = spellId;
-        spell.source = { provider: "homebrew", documentName: "SRD", slug: srdId, importedAt: new Date().toISOString() };
+        spell.source = attachedSource(source, srdId);
         if (spell.action) {
           const action = { ...spell.action, id: `spell-action-${spellId}` };
           if ("riders" in action) {
@@ -3890,9 +3890,7 @@ function normalizeFeatureRecord(input: FeatureDefinition, id: string, srdSlug?: 
     id,
     category,
     grantedActions: grantedActions.length ? grantedActions : undefined,
-    source: srdSlug
-      ? { provider: "homebrew", documentName: "SRD", slug: srdSlug, importedAt: new Date().toISOString() }
-      : input.source,
+    source: srdSlug ? attachedSource(input, srdSlug) : input.source,
     automationSupport: input.automationSupport ?? "manual-only"
   };
 }

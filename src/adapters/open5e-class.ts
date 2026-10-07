@@ -9,6 +9,7 @@ import type {
   SubclassDefinition
 } from "@/lib/character-builder/catalog";
 import type { CatalogEntry } from "@/lib/character-builder/homebrew";
+import { open5eEdition } from "@/lib/editions";
 import type { Open5eImportedPayload } from "./open5e-client";
 
 /**
@@ -157,9 +158,10 @@ export function normalizeOpen5eClass(imported: Open5eImportedPayload): CatalogEn
     ...(text(document.display_name) ?? text(document.name) ? { documentName: text(document.display_name) ?? text(document.name) } : {}),
     slug: key,
     importedAt: imported.importedAt,
-    url: `https://api.open5e.com/v2/classes/${key}/`
+    url: `https://api.open5e.com/v2/classes/${key}/`,
+    ...open5eEdition(raw, documentKey)
   };
-  const edition = documentKey?.includes("2024") ? "2024" : "2014";
+  const edition = source.edition ?? (documentKey?.includes("2024") ? "2024" : "2014");
   const features = Array.isArray(raw.features) ? raw.features as Open5eFeature[] : [];
   const columns: ClassTableColumn[] = features
     .filter((feature) => (feature.feature_type === "CLASS_TABLE_DATA" || feature.feature_type === "CLASS_LEVEL_FEATURE") && feature.data_for_class_table?.length && feature.name)

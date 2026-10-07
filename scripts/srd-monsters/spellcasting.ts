@@ -92,6 +92,8 @@ export function parseSpellcasting(entry: RawEntry, slug: string, usageFromName?:
     result.modelled.push(name);
 
     const spell = structuredClone(library);
+    // The monster carries its own source; its copy of a library spell doesn't repeat one.
+    delete spell.source;
     spell.id = `${slug}:spell:${spellSlug}`;
     const action = spell.action as ActionDefinition & Record<string, unknown>;
     action.id = `${spell.id}:action`;

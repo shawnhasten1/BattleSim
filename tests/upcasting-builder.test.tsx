@@ -49,14 +49,14 @@ describe("the SRD's upcasting, offered", () => {
   it("for a homebrew spell of the same name and level that has none", () => {
     expect(srdUpcastOffer(homebrewBlight())).toMatchObject({
       spellId: "blight", upcast: { perSlotAboveBase: { damageDice: "1d8" } },
-      text: "The SRD's Blight adds 1d8 damage per level above 4th."
+      text: "The SRD's 2014 Blight adds 1d8 damage per level above 4th."
     });
   });
 
   it("matching the name the way the library files it ('Acid Arrow' is Melf's)", () => {
     const arrow: SpellDefinition = { ...structuredClone(findSrdSpell("srd:spell:acid-arrow")!), id: "arrow", name: "acid arrow", upcast: undefined };
     if (arrow.action) delete (arrow.action as { upcast?: unknown }).upcast;
-    expect(srdUpcastOffer(arrow)?.text).toMatch(/^The SRD's Melf's Acid Arrow adds/);
+    expect(srdUpcastOffer(arrow)?.text).toMatch(/^The SRD's 2014 Melf's Acid Arrow adds/);
   });
 
   it("not for a spell that upcasts its own way, one of another level, or one from another source", () => {
@@ -127,7 +127,7 @@ describe("in the spell editor", () => {
     await openUse();
     expect(screen.getByText("Casting with a higher slot")).toBeTruthy();
     expect(screen.getByText("A higher slot casts it the same.")).toBeTruthy();
-    expect(screen.getByText(/The SRD's Blight adds 1d8 damage per level above 4th\./)).toBeTruthy();
+    expect(screen.getByText(/The SRD's 2014 Blight adds 1d8 damage per level above 4th\./)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Use it" }));
     expect(screen.queryByText("A higher slot casts it the same.")).toBeNull();
     expect((screen.getByLabelText("More damage per slot level") as HTMLInputElement).value).toBe("1d8");
@@ -202,7 +202,7 @@ describe("the Actions tab's offer", () => {
     expect(screen.getByText(/2 spells could get stronger with a higher slot/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     const list = screen.getByRole("list", { name: "SRD upcasting offered" });
-    expect(within(list).getByText(/The SRD's Blight adds 1d8 damage/)).toBeTruthy();
+    expect(within(list).getByText(/The SRD's 2014 Blight adds 1d8 damage/)).toBeTruthy();
     await userEvent.click(within(list).getByRole("button", { name: "Use the SRD's upcasting for Blight" }));
     expect(fighter().spells![0]!.upcast).toEqual({ perSlotAboveBase: { damageDice: "1d8" } });
     expect(screen.getByText(/1 spell could get stronger with a higher slot/)).toBeTruthy();

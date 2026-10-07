@@ -24,7 +24,8 @@ export function srd52Source(slug?: string): SourceMetadata {
     provider: "srd",
     documentKey: "srd-2024",
     documentName: "System Reference Document 5.2",
-    ...(slug ? { slug } : {})
+    ...(slug ? { slug } : {}),
+    edition: "2024"
   };
 }
 

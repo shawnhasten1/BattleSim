@@ -1,5 +1,6 @@
 import type { ActionDefinition, ArmorStats, DamageType, ItemDefinition, SpellDefinition } from "@/engine";
 import { itemSpellUse } from "./item-spells";
+import { withSrd51Source } from "./source";
 import { SRD_SPELLS } from "./spells";
 
 /**
@@ -157,7 +158,7 @@ function reference(slug: string, name: string, type: ItemDefinition["type"], des
 
 const NECKLACE_FIREBALL = itemSpellUse(spell("fireball"), { dc: 15 }, { id: "bead", upcast: { ...spell("fireball").upcast, byCharges: true } })!;
 
-export const SRD_ITEMS: readonly ItemDefinition[] = [
+const LIBRARY_ITEMS: readonly ItemDefinition[] = [
   // ── Potions of Healing ──────────────────────────────────────────────────────
   potionOfHealing("potion-of-healing", "Potion of Healing", "2d4+2", "common"),
   potionOfHealing("potion-of-greater-healing", "Potion of Greater Healing", "4d4+4", "uncommon"),
@@ -416,3 +417,6 @@ export const SRD_ITEMS: readonly ItemDefinition[] = [
     "A rare potion. When you drink it, it cures any disease afflicting you, and it removes the blinded, deafened, paralyzed and poisoned conditions. Not simulated yet: remove them by hand.",
     { magical: true, supply: supply(1) })
 ];
+
+/** The library, each item carrying its SRD 5.1 source (EDITIONS_PLAN.md). */
+export const SRD_ITEMS: readonly ItemDefinition[] = LIBRARY_ITEMS.map(withSrd51Source);

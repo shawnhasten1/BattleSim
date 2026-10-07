@@ -1,4 +1,5 @@
 import type { SpellDefinition } from "@/engine";
+import { withSrd51Source } from "./source";
 
 /**
  * Bundled spell library — SRD 5.1 staples chosen to exercise every schema path:
@@ -18,7 +19,7 @@ import type { SpellDefinition } from "@/engine";
  *   for riders / beams / aimed areas lands in the next phase; until then those
  *   fields round-trip but are not yet resolved.
  */
-export const SRD_SPELLS: readonly SpellDefinition[] = [
+const LIBRARY_SPELLS: readonly SpellDefinition[] = [
   // ── Cantrips ──────────────────────────────────────────────────────────────
   {
     id: "srd:spell:fire-bolt",
@@ -1523,3 +1524,6 @@ export const SRD_SPELLS: readonly SpellDefinition[] = [
     }
   }
 ];
+
+/** The library, each spell carrying its SRD 5.1 source (EDITIONS_PLAN.md). */
+export const SRD_SPELLS: readonly SpellDefinition[] = LIBRARY_SPELLS.map(withSrd51Source);

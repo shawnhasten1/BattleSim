@@ -22,6 +22,7 @@ export { SRD_SPELLS } from "./spells";
 export { SRD_FEATURES } from "./features";
 export { SRD_ITEMS } from "./items";
 export { SCROLL_NUMBERS, SRD_SPELL_SCROLLS, scrollNumbers, spellScroll } from "./scrolls";
+export { attachedSource, rules2014Source, srd51Source } from "./source";
 
 export type SrdEntryKind = "weapon" | "spell" | "feature" | "item";
 

@@ -2576,6 +2576,12 @@ export interface ItemDefinition {
   automationSupport: "full" | "partial" | "manual-only" | "unsupported";
 }
 
+/**
+ * Which rules a record is written for: the 2014 rules (SRD 5.1) or the 2024 rules (SRD 5.2). Carried, never read by the
+ * simulator: a record runs as it's written, whichever edition it comes from (EDITIONS_PLAN.md).
+ */
+export type Edition = "2014" | "2024";
+
 export interface SourceMetadata {
   provider: "homebrew" | "open5e" | "srd";
   documentKey?: string;
@@ -2583,6 +2589,8 @@ export interface SourceMetadata {
   slug?: string;
   importedAt?: string;
   url?: string;
+  /** The rules it's written for, when it says (`editionOf` in `lib/editions.ts`). */
+  edition?: Edition;
 }
 
 export interface CreatureDefinition {

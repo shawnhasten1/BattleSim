@@ -1,4 +1,5 @@
 import type { WeaponDefinition, WeaponMastery } from "@/engine";
+import { withSrd51Source } from "./source";
 
 /**
  * Bundled weapon library. Mostly SRD 5.1 base weapons plus a few magic-item
@@ -461,7 +462,8 @@ const MASTERY: Record<string, { baseWeapon: string; mastery: WeaponMastery }> = 
   blowgun: { baseWeapon: "blowgun", mastery: "vex" }
 };
 
+/** The library, each weapon with its 2024 mastery (above) and its SRD 5.1 source (EDITIONS_PLAN.md). */
 export const SRD_WEAPONS: readonly WeaponDefinition[] = LIBRARY_WEAPONS.map((weapon) => {
   const mastery = MASTERY[weapon.id.slice("srd:weapon:".length)];
-  return mastery ? { ...weapon, ...mastery } : weapon;
+  return withSrd51Source(mastery ? { ...weapon, ...mastery } : weapon);
 });

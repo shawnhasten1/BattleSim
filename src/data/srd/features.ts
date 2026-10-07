@@ -1,4 +1,5 @@
 import type { FeatureDefinition } from "@/engine";
+import { rules2014Source, withSrd51Source } from "./source";
 
 /**
  * Bundled feature / feat library — the third SRD library type alongside weapons
@@ -15,7 +16,7 @@ import type { FeatureDefinition } from "@/engine";
  *   `actionType`. Passive features carry only `effects`.
  * - Skip pure flavour (no damage / utility / economy impact).
  */
-export const SRD_FEATURES: readonly FeatureDefinition[] = [
+const LIBRARY_FEATURES: readonly FeatureDefinition[] = [
   /* ── Activated (bonus / free) ─────────────────────────────────────────────── */
   {
     id: "srd:feature:rage",
@@ -313,3 +314,13 @@ export const SRD_FEATURES: readonly FeatureDefinition[] = [
     description: 'Before a ranged-weapon attack you may take -5 to hit for +10 damage. To model it, edit the weapon: Roll › More options › "Offer a power attack".'
   }
 ];
+
+/**
+ * Features here written for the 2014 rules that aren't in SRD 5.1: the Totem Warrior's and the Zealot's rages and three
+ * feats. They're 2014 rules, never labelled SRD content.
+ */
+const NOT_IN_SRD_51 = new Set(["srd:feature:rage-bear-totem", "srd:feature:rage-zealot", "srd:feature:mobile", "srd:feature:great-weapon-master", "srd:feature:sharpshooter"]);
+
+/** The library, each feature carrying its source and its edition (EDITIONS_PLAN.md). */
+export const SRD_FEATURES: readonly FeatureDefinition[] = LIBRARY_FEATURES.map((feature) =>
+  NOT_IN_SRD_51.has(feature.id) ? { ...feature, source: rules2014Source(feature.id) } : withSrd51Source(feature));

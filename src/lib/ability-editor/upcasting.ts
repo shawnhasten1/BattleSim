@@ -5,6 +5,8 @@
  */
 import { upcastAddsSomething, type ActionDefinition, type CreatureDefinition, type SpellDefinition, type SpellUpcast } from "@/engine";
 import { SRD_SPELLS } from "@/data/srd";
+import { SRD_2024_SPELLS } from "@/data/srd/2024/spells";
+import { editionOf, type Edition } from "@/lib/editions";
 import { upcastOf, withUpcast } from "./spells";
 
 export function ordinal(n: number): string {
@@ -31,22 +33,25 @@ function nameKey(name: string): string {
   return name.toLowerCase().replace(/^[a-z]+'s /, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+const LIBRARIES: Readonly<Record<Edition, readonly SpellDefinition[]>> = { "2014": SRD_SPELLS, "2024": SRD_2024_SPELLS };
+
 /**
- * The library spell a creature's spell is: the same name and level, and not a spell from another source (an Open5e
- * entry from a different document is its own spell, even with the same name).
+ * The library spell a creature's spell is: the same name and level, in its own edition (a 2024 spell is never the 2014
+ * spell of its name), and not a spell from another source (an Open5e entry from a different document is its own spell,
+ * even with the same name). A homebrew spell, which has no edition, is matched against the 2014 library.
  */
 export function srdTwin(spell: SpellDefinition): SpellDefinition | undefined {
   const provider = spell.source?.provider;
   if (provider && provider !== "homebrew" && provider !== "srd") return undefined;
   const key = nameKey(spell.name);
-  return SRD_SPELLS.find((candidate) => candidate.level === spell.level && nameKey(candidate.name) === key);
+  return LIBRARIES[editionOf(spell) ?? "2014"].find((candidate) => candidate.level === spell.level && nameKey(candidate.name) === key);
 }
 
 export interface UpcastOffer {
   spellId: string;
   name: string;
   upcast: SpellUpcast;
-  /** "The SRD's Blight adds 1d8 damage per level above 4th." */
+  /** "The SRD's 2014 Blight adds 1d8 damage per level above 4th." */
   text: string;
 }
 
@@ -61,7 +66,9 @@ export function srdUpcastOffer(spell: SpellDefinition): UpcastOffer | undefined 
   if (!twin || !theirs?.perSlotAboveBase || !spell.action) return undefined;
   if (!upcastAddsSomething({ ...spell.action, upcast: theirs } as ActionDefinition)) return undefined;
   const words = describeUpcast(theirs, twin.level, spell.action.kind === "healing");
-  return words ? { spellId: spell.id, name: spell.name, upcast: theirs, text: `The SRD's ${twin.name} ${words}.` } : undefined;
+  // Which edition's spell it is, so a 2014 spell and a 2024 one of the same name are never taken for each other.
+  const edition = editionOf(twin);
+  return words ? { spellId: spell.id, name: spell.name, upcast: theirs, text: `The SRD's ${edition ? `${edition} ` : ""}${twin.name} ${words}.` } : undefined;
 }
 
 /** Every spell on the creature the SRD's upcasting is offered for. */

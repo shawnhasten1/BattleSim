@@ -60,7 +60,7 @@ describe("ActionsTab", () => {
     expect(spells().map((spell) => spell.name)).toEqual(["Fireball"]);
     await userEvent.click(screen.getByRole("button", { name: "Add to sheet" }));
     expect(spells().map((spell) => spell.name)).toEqual(["Fireball", "Magic Missile"]);
-    expect(spells()[1]!.source).toMatchObject({ documentName: "SRD", slug: "srd:spell:magic-missile" });
+    expect(spells()[1]!.source).toMatchObject({ documentName: "System Reference Document 5.1", slug: "srd:spell:magic-missile", edition: "2014" });
   });
 
   it("the Weapons / Spells filters narrow the library", async () => {

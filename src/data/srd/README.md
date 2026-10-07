@@ -16,6 +16,10 @@ independent and freely editable afterwards.
    `src/data/srd/index.ts` throws at load time if this is violated.
 3. **Do not** set `id` on riders or `actionId` on a weapon — both are minted on
    attach. `action.id` on a spell is a placeholder; also re-minted.
+   **Do not** set `source` either: each list is stamped with the SRD 5.1 source
+   (`srd51Source` in `source.ts`, edition 2014) as it's exported, and attaching
+   keeps it (EDITIONS_PLAN.md). A 2014-rules feature that isn't in SRD 5.1 goes
+   in `NOT_IN_SRD_51` (`features.ts`) and is never called SRD content.
 4. Author damage with the canonical `dice` string (`"2d6"`, `"1d4+1"`). The
    `diceCount` / `diceSize` / `flatBonus` sugar is filled in on attach by
    `normalizeWeaponDefinition` / `normalizeSpellDefinition`.

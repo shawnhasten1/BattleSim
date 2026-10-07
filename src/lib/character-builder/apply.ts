@@ -9,6 +9,7 @@ import {
   type SpellDefinition,
   type WeaponDefinition
 } from "@/engine";
+import { srd51Source } from "@/data/srd/source";
 import { skillName } from "@/lib/actor-sheet/edits";
 import type { CharacterBuild } from "./build-record";
 import type { BuilderLibrary, BuiltCharacter, BuiltFeature, BuiltFields } from "./build";
@@ -353,19 +354,18 @@ export function applyBuild(definition: CreatureDefinition, build: CharacterBuild
       return id;
     };
     for (const { ref } of built.equipment) {
-      const source = { provider: "homebrew" as const, documentName: "SRD", slug: ref };
       if (ref.startsWith("srd:weapon:")) {
         const weapon = options.library.weapon(ref);
         if (!weapon) { warnings.push(`No library weapon ${ref}`); continue; }
         const id = freshId(ref);
         const normalized = normalizeWeaponDefinition(structuredClone(weapon), next.abilities);
-        weapons.push({ ...normalized, id, actionId: `weapon-action-${id}`, source });
+        weapons.push({ ...normalized, id, actionId: `weapon-action-${id}`, source: weapon.source ?? srd51Source(ref) });
         changes.push({ kind: "gained", key: `equipment:${ref}`, name: weapon.name });
       } else {
         const item = options.library.item(ref);
         if (!item) { warnings.push(`No library item ${ref}`); continue; }
         const id = freshId(ref);
-        items.push(withItemPool({ ...normalizeItemDefinition(structuredClone(item)), id, source }, id));
+        items.push(withItemPool({ ...normalizeItemDefinition(structuredClone(item)), id, source: item.source ?? srd51Source(ref) }, id));
         changes.push({ kind: "gained", key: `equipment:${ref}`, name: item.name });
       }
     }

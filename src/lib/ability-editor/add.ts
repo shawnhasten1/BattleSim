@@ -16,7 +16,8 @@ import {
   type WeaponDefinition
 } from "@/engine";
 import {
-  SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon, type SrdEntryKind
+  SRD_FEATURES, SRD_ITEMS, SRD_SPELL_SCROLLS, SRD_SPELLS, SRD_WEAPONS, attachedSource, findSrdFeature, findSrdItem, findSrdSpell, findSrdWeapon,
+  type SrdEntryKind
 } from "@/data/srd";
 import { loadSrdMonster, type SrdMonsterAbilityEntry } from "@/data/srd/monsters";
 import { legendaryUsed, ownAbilityFrom } from "./legendary";
@@ -184,7 +185,6 @@ const SCROLLS: LibraryEntry[] = SRD_SPELL_SCROLLS.map((entry) => ({ kind: "item"
 /** Whether a search asks for scrolls: one of its words is "scroll" (or "scrolls"). */
 const wantsScrolls = (tokens: string[]) => tokens.some((token) => token === "scroll" || token === "scrolls");
 
-const SRD_SOURCE = (slugId: string) => ({ provider: "homebrew" as const, documentName: "SRD", slug: slugId, importedAt: new Date().toISOString() });
 const freshRiders = (riders: ActionRider[] | undefined) => riders?.map((rider) => ({ ...rider, id: `rider-${crypto.randomUUID()}` }));
 
 /**
@@ -194,12 +194,12 @@ const freshRiders = (riders: ActionRider[] | undefined) => riders?.map((rider) =
 export function prepareLibrary(kind: SrdEntryKind, id: string, definition: CreatureDefinition): Prepared | undefined {
   if (kind === "weapon") {
     const weapon = findSrdWeapon(id);
-    return weapon ? { list: "weapons", record: { ...structuredClone(weapon), source: SRD_SOURCE(id) } } : undefined;
+    return weapon ? { list: "weapons", record: { ...structuredClone(weapon), source: attachedSource(weapon, id) } } : undefined;
   }
   if (kind === "item") {
     const own = ownSpellScroll(definition, id);
     const item = findSrdItem(id) ?? own;
-    const source = own ? { provider: "homebrew" as const, documentName: "Spell scroll", slug: id, importedAt: new Date().toISOString() } : SRD_SOURCE(id);
+    const source = own ? { provider: "homebrew" as const, documentName: "Spell scroll", slug: id, importedAt: new Date().toISOString() } : item ? attachedSource(item, id) : undefined;
     return item ? { list: "items", record: { ...structuredClone(item), source } } : undefined;
   }
   if (kind === "spell") {
@@ -207,10 +207,10 @@ export function prepareLibrary(kind: SrdEntryKind, id: string, definition: Creat
     if (!source) return undefined;
     const spell = castWith(structuredClone(source), spellcastingAbility(definition));
     const action = spell.action && "riders" in spell.action ? { ...spell.action, riders: freshRiders(spell.action.riders) } as ActionDefinition : spell.action;
-    return { list: "spells", record: { ...spell, ...(action ? { action } : {}), source: SRD_SOURCE(id) } };
+    return { list: "spells", record: { ...spell, ...(action ? { action } : {}), source: attachedSource(source, id) } };
   }
   const feature = findSrdFeature(id);
-  return feature ? { list: feature.category === "trait" ? "traits" : "features", record: { ...structuredClone(feature), source: SRD_SOURCE(id) } } : undefined;
+  return feature ? { list: feature.category === "trait" ? "traits" : "features", record: { ...structuredClone(feature), source: attachedSource(feature, id) } } : undefined;
 }
 
 /* ─── monster abilities ──────────────────────────────────────────────────── */

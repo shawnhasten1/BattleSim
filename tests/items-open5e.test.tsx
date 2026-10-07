@@ -90,7 +90,7 @@ describe("the SRD's item, offered", () => {
     const [offer] = srdItemOffers(fighter());
     store().swapInSrdItem("def-fighter", id, offer!.srdId);
     const item = fighter().items!.find((candidate) => candidate.id === id)!;
-    expect(item).toMatchObject({ name: "Potion of Healing", automationSupport: "full", supply: { id: `item:${id}`, size: 3 }, source: { documentName: "SRD", slug: "srd:item:potion-of-healing" } });
+    expect(item).toMatchObject({ name: "Potion of Healing", automationSupport: "full", supply: { id: `item:${id}`, size: 3 }, source: { documentName: "System Reference Document 5.1", slug: "srd:item:potion-of-healing", edition: "2014" } });
     expect(getExecutableActions(fighter()).filter((action) => action.item?.id === id).map((action) => action.item?.use)).toEqual(["drink", "give"]);
     expect(token().resources?.[`item:${id}`]).toBe(3);
     expect(srdItemOffers(fighter())).toEqual([]);

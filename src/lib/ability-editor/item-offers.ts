@@ -5,6 +5,7 @@
  */
 import type { CreatureDefinition, ItemDefinition } from "@/engine";
 import { SRD_ITEMS, SRD_SPELL_SCROLLS } from "@/data/srd";
+import { editionOf } from "@/lib/editions";
 
 export interface ItemOffer {
   itemId: string;
@@ -12,7 +13,7 @@ export interface ItemOffer {
   /** Where the item came from: its source document, for telling same-named items apart. */
   from?: string;
   srdId: string;
-  /** "The SRD's Potion of Healing is simulated." */
+  /** "The SRD's Potion of Healing is simulated.", naming its edition when it isn't the item's ("The SRD's 2014 …"). */
   text: string;
 }
 
@@ -32,12 +33,14 @@ export function srdItemOffer(item: ItemDefinition): ItemOffer | undefined {
   const key = itemNameKey(item.name);
   const twin = SIMULATED.find((candidate) => itemNameKey(candidate.name) === key);
   if (!twin) return undefined;
+  // The library's items are the 2014 ones: a 2024 item is offered its 2014 namesake, and the offer says so.
+  const edition = editionOf(twin);
   return {
     itemId: item.id,
     name: item.name,
     ...(item.source.documentName || item.source.documentKey ? { from: item.source.documentName ?? item.source.documentKey } : {}),
     srdId: twin.id,
-    text: `The SRD's ${twin.name} is simulated.`
+    text: `The SRD's ${edition && edition !== editionOf(item) ? `${edition} ` : ""}${twin.name} is simulated.`
   };
 }
 

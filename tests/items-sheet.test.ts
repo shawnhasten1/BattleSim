@@ -267,7 +267,7 @@ describe("Add and the library", () => {
   it("opens a library item in the editor with where it came from", () => {
     const prepared = prepareLibrary("item", "srd:item:potion-of-healing", FIGHTER)!;
     expect(prepared.list).toBe("items");
-    expect(prepared.record).toMatchObject({ name: "Potion of Healing", type: "potion", source: { documentName: "SRD", slug: "srd:item:potion-of-healing" } });
+    expect(prepared.record).toMatchObject({ name: "Potion of Healing", type: "potion", source: { documentName: "System Reference Document 5.1", slug: "srd:item:potion-of-healing", edition: "2014" } });
   });
 
   it("attaches a library potion with its own pool, seeded on the creature and its tokens", () => {

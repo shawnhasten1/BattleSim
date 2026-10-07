@@ -1,4 +1,5 @@
 import type { ArmorStats, ConditionName, CreatureDefinition, DamageType, FeatureDefinition, ItemDefinition, ItemType, SizeCategory, SpellDefinition, WeaponDefinition } from "@/engine";
+import { open5eEdition } from "@/lib/editions";
 import type { Open5eCompendiumSummary, Open5eImportedPayload } from "./open5e-client";
 
 export function normalizeOpen5eCreature(imported: Open5eImportedPayload): CreatureDefinition {
@@ -26,7 +27,8 @@ export function normalizeOpen5eCreature(imported: Open5eImportedPayload): Creatu
       documentKey,
       documentName: readNestedString(raw, ["document", "name"]) ?? readNestedString(raw, ["document", "title"]),
       slug: sourceKey,
-      importedAt: imported.importedAt
+      importedAt: imported.importedAt,
+      ...open5eEdition(raw, documentKey)
     },
     size: normalizeSize(stringField(raw, "size") ?? readNestedString(raw, ["size", "name"])),
     armorClass: numberField(raw, "armor_class") ?? numberField(raw, "ac") ?? 10,
@@ -195,7 +197,8 @@ export function normalizeOpen5eFeatureReference(input: Open5eImportedPayload | O
       documentKey: documentKey ?? readNestedString(raw, ["document", "key"]),
       documentName: "documentTitle" in input ? input.documentTitle : readNestedString(raw, ["document", "name"]) ?? readNestedString(raw, ["document", "display_name"]),
       slug: sourceKey,
-      importedAt: "importedAt" in input ? input.importedAt : new Date().toISOString()
+      importedAt: "importedAt" in input ? input.importedAt : new Date().toISOString(),
+      ...open5eEdition(raw, documentKey ?? readNestedString(raw, ["document", "key"]))
     }
   };
 }
@@ -298,12 +301,14 @@ function normalizeProperties(properties: unknown): string[] | undefined {
 }
 
 function sourceMetadata(imported: Open5eImportedPayload, raw: Record<string, unknown>) {
+  const documentKey = imported.documentKey ?? readNestedString(raw, ["document", "key"]);
   return {
     provider: "open5e" as const,
-    documentKey: imported.documentKey ?? readNestedString(raw, ["document", "key"]),
+    documentKey,
     documentName: readNestedString(raw, ["document", "name"]) ?? readNestedString(raw, ["document", "display_name"]),
     slug: imported.key ?? imported.slug,
-    importedAt: imported.importedAt
+    importedAt: imported.importedAt,
+    ...open5eEdition(raw, documentKey)
   };
 }
 

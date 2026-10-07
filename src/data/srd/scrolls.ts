@@ -1,5 +1,6 @@
 import type { ItemDefinition, SpellDefinition } from "@/engine";
 import { itemSpellUse } from "./item-spells";
+import { srd51Source } from "./source";
 import { SRD_SPELLS } from "./spells";
 
 /**
@@ -41,4 +42,7 @@ export function spellScroll(spell: SpellDefinition, id: string): ItemDefinition 
 }
 
 /** A scroll of every spell in the library, `srd:item:scroll-of-<spell slug>`: found by name ("scroll fireball"), never listed by default. */
-export const SRD_SPELL_SCROLLS: readonly ItemDefinition[] = SRD_SPELLS.map((spell) => spellScroll(spell, `srd:item:scroll-of-${spell.id.replace(/^srd:spell:/, "")}`));
+export const SRD_SPELL_SCROLLS: readonly ItemDefinition[] = SRD_SPELLS.map((spell) => {
+  const id = `srd:item:scroll-of-${spell.id.replace(/^srd:spell:/, "")}`;
+  return { ...spellScroll(spell, id), source: srd51Source(id) };
+});

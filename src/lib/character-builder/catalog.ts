@@ -5,6 +5,7 @@ import type {
   ConditionImmunity,
   CreatureSenses,
   CreatureType,
+  Edition,
   FeatureDefinition,
   ResourceStance,
   WeaponDefinition,
@@ -23,7 +24,7 @@ import type {
  * from with templates (`Template`), so SRD data and homebrew classes (stored as JSON) scale the same way.
  */
 
-export type Edition = "2014" | "2024";
+export type { Edition } from "@/engine";
 
 /**
  * A number or text worked out for one character at one level. Text with `{…}` slots; each slot is a term with optional
@@ -404,7 +405,8 @@ const sourceSchema = z.object({
   documentName: z.string().optional(),
   slug: z.string().optional(),
   importedAt: z.string().optional(),
-  url: z.string().optional()
+  url: z.string().optional(),
+  edition: editionSchema.optional()
 }).passthrough();
 
 /** Features are engine data, checked by the engine where they're used; here only their shape is. */
