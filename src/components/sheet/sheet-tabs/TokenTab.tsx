@@ -44,10 +44,12 @@ export function TokenTab({ combatant, definition, onOpenAbility }: {
     // No token in the scene (ACTORS_TAB_PLAN.md, Phase 2): only what every new token starts with.
     return (
       <div className={styles.tab}>
-        <p className={styles.note}>
-          No {definition.name} is in this scene. These are what every new token of it starts with; a token placed can change
-          its own afterwards.
-        </p>
+        <div className={styles.core}>
+          <p className={styles.note}>
+            No {definition.name} is in this scene. These are what every new token of it starts with; a token placed can change
+            its own afterwards.
+          </p>
+        </div>
         <TacticsSection
           combatant={combatant} definition={definition} open={open.includes("tactics")} onToggle={toggle("tactics")} onOpenAbility={onOpenAbility}
         />

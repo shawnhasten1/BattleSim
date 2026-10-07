@@ -104,7 +104,7 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
   const combatants = useEncounterStore((s) => s.encounter.combatants);
   const srd = useSrdDefaults(definition.id);
   // No token: the profile and spending shown are the creature's defaults, and they're what changes.
-  const { tokenless } = useSheetMode();
+  const { tokenless, readOnly } = useSheetMode();
 
   const tags = combatant.tags ?? [];
   const first = tags.includes("high-priority");
@@ -156,7 +156,7 @@ export function TacticsSection({ combatant, definition, open, onToggle, onOpenAb
       <div className={styles.rows}>
         <Row label="Profile" htmlFor={`${id}-profile`} help={TACTICS_PROFILE_HELP}>
           <select
-            id={`${id}-profile`} aria-label="Tactics profile" className={styles.profileSelect} value={profile}
+            id={`${id}-profile`} aria-label="Tactics profile" className={styles.profileSelect} value={profile} disabled={readOnly}
             onChange={(e) => setProfile(e.target.value as TacticsProfile)}
           >
             {TACTICS_PROFILES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

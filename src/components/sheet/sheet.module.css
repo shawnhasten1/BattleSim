@@ -267,6 +267,14 @@
   color: var(--ui-text-dim);
 }
 
+.readOnlyRoot select,
+.readOnlyRoot input[type="checkbox"],
+.readOnlyRoot input[type="color"],
+.readOnlyRoot input[type="file"] {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
 .librarySave {
   display: inline-flex;
   align-items: center;

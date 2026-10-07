@@ -325,6 +325,8 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
     // Menus and tooltips inside open in the sheet's own document: the popup's while it's popped out.
     <OwnerDocumentContext.Provider value={popup ? popup.document : inheritedDocument}>
       <SheetModeContext.Provider value={mode}>
+      {/* Read-only: native pickers look it (the boxes are read-only, and the store refuses any change that gets through). */}
+      <div className={readOnly ? styles.readOnlyRoot : undefined} style={{ display: "contents" }}>
       {sheet.style === "codex" ? (
         <>
           {prompt || readOnlyBanner ? <div className={styles.frameHead}>{readOnlyBanner}{prompt}</div> : null}
@@ -370,6 +372,7 @@ export function ActorSheet({ sheet, rank, front, compendium }: {
           </div>
         </>
       )}
+      </div>
       </SheetModeContext.Provider>
     </OwnerDocumentContext.Provider>,
     holder
