@@ -580,10 +580,13 @@ export type FeatureEffect = (
     /**
      * Its weapon's damage dice (on a hit, as scoped): none lower than `minimumDie` (Great Weapon Fighting: a 1 or 2 counts
      * as 3), or rolled twice and the higher kept (`rollTwice`: Savage Attacker, once a turn with `oncePerTurn`).
+     * `criticalDice`: on a critical hit, this many more of the weapon's damage dice, rolled once (Brutal Critical:
+     * 1, 2 from 13th level, 3 from 17th; Savage Attacks: 1).
      */
     kind: "damage-dice";
     minimumDie?: number;
     rollTwice?: boolean;
+    criticalDice?: number;
     oncePerTurn?: boolean;
   } & FeatureEffectScope & FeatureEffectConditions)
   | {

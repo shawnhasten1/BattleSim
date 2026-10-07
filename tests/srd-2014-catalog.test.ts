@@ -178,7 +178,7 @@ describe("the 2014 Barbarian and Monk (Phase 8)", () => {
     const names = top.features.map((entry) => entry.feature.name);
     for (const name of ["Weapon Mastery", "Primal Knowledge", "Instinctive Pounce", "Brutal Strike"]) expect(names).not.toContain(name);
     expect(feature(top, "Reckless Attack")!.grantedActions![0]).toMatchObject({ condition: { effects: [{ kind: "attack-advantage", abilities: ["str"], attackTypes: ["melee"] }] } });
-    expect(feature(top, "Brutal Critical")!.automationSupport).toBe("manual-only");
+    expect(feature(top, "Brutal Critical")!.effects).toEqual([{ kind: "damage-dice", criticalDice: 3, attackTypes: ["melee"] }]);
     // Relentless Rage leaves it at 1 hit point; Primal Champion's cap is 24.
     expect((feature(top, "Relentless Rage")!.effects![0] as { hpTo?: number }).hpTo).toBeUndefined();
     expect(top.fields.abilities.str).toBeLessThanOrEqual(24);
@@ -550,7 +550,7 @@ describe("the other 2014 races (Phase 7)", () => {
     expect(halfOrc.fields.abilities).toMatchObject({ str: 12, con: 11 });
     expect(Object.keys(halfOrc.fields.skills)).toContain("intimidation");
     expect(halfOrc.resources).toMatchObject({ "relentless-endurance": 1 });
-    expect(halfOrc.features.find((entry) => entry.feature.name === "Savage Attacks")!.feature.automationSupport).toBe("manual-only");
+    expect(halfOrc.features.find((entry) => entry.feature.name === "Savage Attacks")!.feature.effects).toEqual([{ kind: "damage-dice", criticalDice: 1, attackTypes: ["melee"] }]);
   });
 
   it("a Lightfoot Halfling: small, slow, lucky", () => {

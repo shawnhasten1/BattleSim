@@ -1,7 +1,7 @@
 import type { ActionDefinition, Ability, DamageType } from "@/engine";
 import type { PickOption, SpeciesDefinition } from "@/lib/character-builder/catalog";
 import { srd51Source } from "../source";
-import { builderGrant, choice, informational, reference, runs, spell } from "./authoring";
+import { builderGrant, choice, informational, runs, spell } from "./authoring";
 import { srd14Race } from "./reference";
 
 /**
@@ -196,8 +196,8 @@ const HALF_ORC: SpeciesDefinition = {
         feature: runs(trait("half-orc", "Relentless Endurance"), { effects: [{ kind: "survive-lethal", resourceId: "relentless-endurance" }] }),
         pool: { id: "relentless-endurance", size: 1 }
       },
-      // An extra weapon die on a melee critical hit: the engine has no extra critical dice yet (Phase 10).
-      { key: "savage-attacks", feature: reference(trait("half-orc", "Savage Attacks")) }
+      // One more weapon die on a melee critical hit.
+      { key: "savage-attacks", feature: runs(trait("half-orc", "Savage Attacks"), { effects: [{ kind: "damage-dice", criticalDice: 1, attackTypes: ["melee"] }] }) }
     ]
   }],
   description: "Strong and relentless: it drops to 1 hit point instead of 0 once a day."

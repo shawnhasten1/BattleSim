@@ -7,7 +7,8 @@ import {
   resolveAttack,
   sampleEncounter,
   type CombatantState,
-  type CreatureDefinition
+  type CreatureDefinition,
+  type RandomSource
 } from "@/engine";
 import { blankCharacter, quickBuild, rebuildActor, withChoice, withSuggestions } from "@/lib/character-builder";
 import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
@@ -88,5 +89,36 @@ describe("a bonus action only after the Attack action (10b: after-attack-action)
     expect(result.outcome.warnings).toEqual([]);
     const ours = result.log.filter((entry) => entry.type === "AiDecision" && entry.data?.combatantId === "pc-fighter");
     expect(ours.some((entry) => /bonus action/.test(entry.message))).toBe(true);
+  });
+});
+
+describe("more weapon dice on a critical hit (10c: brutal-critical)", () => {
+  /** Every d20 rolls `d20`, every other die 1: a die's count is the rolls the damage shows. */
+  const rolling = (d20: number): RandomSource => {
+    const source: RandomSource = { next: () => 0, nextInt: (min, max) => (max === 20 ? d20 : min), fork: () => source };
+    return source;
+  };
+  const greataxeHit = (actor: CreatureDefinition, d20: number) => {
+    const state = onItsTurn(actor);
+    state.rng = rolling(d20);
+    const axe = getExecutableActions(actor).find((action) => action.name === "Greataxe")!;
+    resolveAttack(state, "pc-fighter", "enemy-goblin-1", axe.id);
+    const damage = state.log.find((entry) => entry.type === "DamageApplied")!;
+    return (damage.data!.components as Array<{ roll: { rolls: unknown[] } }>)[0]!.roll.rolls.length;
+  };
+  const barbarian = (level: number) => rebuildActor(blankCharacter("def-fighter", "Barbarian"), withSuggestions(quickBuild(sources, { classId: "srd:class:barbarian-2014", level }), sources), sources).definition;
+
+  it("a 2014 barbarian's Brutal Critical: one more of the greataxe's d12 at 9th level, two at 13th, three at 17th; none on a plain hit", () => {
+    expect(greataxeHit(barbarian(8), 20)).toBe(2);
+    expect(greataxeHit(barbarian(9), 20)).toBe(3);
+    expect(greataxeHit(barbarian(13), 20)).toBe(4);
+    expect(greataxeHit(barbarian(17), 20)).toBe(5);
+    expect(greataxeHit(barbarian(17), 19)).toBe(1);
+  });
+
+  it("a Half-Orc's Savage Attacks: one more, and the most of it and Brutal Critical, not both", () => {
+    const halfOrc = (level: number) => rebuildActor(blankCharacter("def-fighter", "Barbarian"), withSuggestions(quickBuild(sources, { classId: "srd:class:barbarian-2014", level, speciesId: "srd:species:half-orc-2014" }), sources), sources).definition;
+    expect(greataxeHit(halfOrc(5), 20)).toBe(3);
+    expect(greataxeHit(halfOrc(13), 20)).toBe(4);
   });
 });

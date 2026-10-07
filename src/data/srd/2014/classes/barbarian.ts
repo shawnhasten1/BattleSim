@@ -1,6 +1,6 @@
 import type { ClassDefinition, SubclassDefinition } from "@/lib/character-builder/catalog";
 import { srd51Source } from "../../source";
-import { choice, grant, informational, reference, runs } from "../authoring";
+import { choice, fromLevels, grant, informational, reference, runs } from "../authoring";
 import { srd14Class, srd14Columns } from "../reference";
 
 /**
@@ -63,7 +63,10 @@ export const BARBARIAN_2014: ClassDefinition = {
   subclassLabel: "Primal Path",
   featLevels: [4, 8, 12, 16, 19],
   // Unlimited rages at 20th level: more than a fight can use.
-  table: srd14Columns("barbarian").map((column) => (column.id === "rages" ? { ...column, values: column.values.map((value) => (typeof value === "number" ? value : 99)) } : column)),
+  table: [
+    ...srd14Columns("barbarian").map((column) => (column.id === "rages" ? { ...column, values: column.values.map((value) => (typeof value === "number" ? value : 99)) } : column)),
+    { id: "brutal-critical", label: "Brutal Critical dice", values: fromLevels([[9, 1], [13, 2], [17, 3]]) }
+  ],
   levels: [
     {
       level: 1,
@@ -100,8 +103,13 @@ export const BARBARIAN_2014: ClassDefinition = {
         notSimulated: "acting while surprised by raging first."
       }))]
     },
-    // One more weapon die on a melee critical hit (two at 13th, three at 17th): the engine has no extra critical dice yet.
-    { level: 9, grants: [grant("brutal-critical", reference("barbarian_brutal-critical"))] },
+    // One more weapon die on a melee critical hit, two from 13th level, three from 17th.
+    {
+      level: 9,
+      grants: [grant("brutal-critical", runs("barbarian_brutal-critical", { effects: [{ kind: "damage-dice", criticalDice: 1, attackTypes: ["melee"] }] }), {
+        scale: [{ path: "effects.0.criticalDice", value: "{col:brutal-critical}" }]
+      })]
+    },
     {
       level: 11,
       grants: [grant("relentless-rage", runs("barbarian_relentless-rage", {

@@ -674,7 +674,8 @@ function effectSentenceOnly(effect: FeatureEffect, definition: CreatureDefinitio
     case "damage-dice":
       return `When ${who.subject} hits with ${article(attackScope(effect, definition) || "weapon ")}${attackScope(effect, definition) || "weapon "}attack${gateText(effect)}, ${[
         effect.minimumDie ? `any damage die below ${effect.minimumDie} counts as ${effect.minimumDie}` : "",
-        effect.rollTwice ? `${who.subject} can roll the weapon's damage dice twice and use either roll${effect.oncePerTurn ? " (once per turn)" : ""}` : ""
+        effect.rollTwice ? `${who.subject} can roll the weapon's damage dice twice and use either roll${effect.oncePerTurn ? " (once per turn)" : ""}` : "",
+        effect.criticalDice ? `a critical hit rolls ${effect.criticalDice} more of the weapon's damage dice` : ""
       ].filter(Boolean).join(", and ") || "its damage dice roll as usual"}.`;
     case "healing-bonus":
       return [
@@ -972,7 +973,7 @@ function effectShortOnly(effect: FeatureEffect, definition: CreatureDefinition):
     case "spell-damage-ability": return `+${effect.ability.toUpperCase()} on ${spellScopeText(effect, IT).replace(/^its /, "")} damage`;
     case "spell-half-on-miss": return `half damage on ${effect.savesOnly ? "a save" : "a miss or a save"}: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
     case "spell-range": return `+${effect.bonus} ft range: ${spellScopeText(effect, IT).replace(/^its /, "")}`;
-    case "damage-dice": return [effect.minimumDie ? `${scope}damage dice min ${effect.minimumDie}` : "", effect.rollTwice ? `${scope}damage rolled twice${effect.oncePerTurn ? " once a turn" : ""}` : ""].filter(Boolean).join(", ") || "damage dice";
+    case "damage-dice": return [effect.minimumDie ? `${scope}damage dice min ${effect.minimumDie}` : "", effect.rollTwice ? `${scope}damage rolled twice${effect.oncePerTurn ? " once a turn" : ""}` : "", effect.criticalDice ? `+${effect.criticalDice} weapon ${effect.criticalDice === 1 ? "die" : "dice"} on a critical hit` : ""].filter(Boolean).join(", ") || "damage dice";
     case "healing-bonus": return [effect.slotBonus ? "+2 + slot level healing" : "", effect.selfOnOthers ? "heals itself when it heals others" : "", effect.maximize ? "healing dice maximized" : ""].filter(Boolean).join(", ") || "healing";
     case "free-move": return `${effect.feet ? `${effect.feet} ft` : "half speed"} move ${effect.on === "critical-hit" ? "after a critical hit" : `with ${poolName(effect.on.spends, 1, definition)}`}${effect.noOpportunityAttacks ? ", no opportunity attacks" : ""}`;
     case "d20-change": {

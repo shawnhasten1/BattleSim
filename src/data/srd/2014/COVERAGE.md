@@ -12,7 +12,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 
 | | Features | Full | Partial | Manual | Builder | Info |
 |---|---|---|---|---|---|---|
-| Barbarian (Path of the Berserker) | 18 | 9 | 3 | 3 | 2 | 1 |
+| Barbarian (Path of the Berserker) | 18 | 10 | 3 | 2 | 2 | 1 |
 | Bard (College of Lore) | 15 | 4 | 0 | 1 | 5 | 5 |
 | Cleric (Life Domain) | 13 | 7 | 0 | 2 | 3 | 1 |
 | Druid (Circle of the Land) | 14 | 3 | 3 | 1 | 4 | 3 |
@@ -34,7 +34,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `metamagic-2014` | A Metamagic option's 2014 rules where they differ from 2024's (Careful, Extended and Twinned Spell) | 3 |
 | `stealth` | Hiding and invisibility you give yourself (there's no stealth in the simulator) | 3 |
 | `attack-each` | An attack roll against each creature in an area (Volley, Whirlwind Attack) | 2 |
-| `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 2 |
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
 | `magical-terrain` | Telling magical difficult terrain and plants from natural ones (Land's Stride) | 2 |
 | `unsimulated-spell` | A spell the simulator doesn't cast, given by a feature (Tranquility's Sanctuary) | 2 |
@@ -84,7 +83,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | 5 | Extra Attack | full |  |  |
 | 5 | Fast Movement | full |  |  |
 | 7 | Feral Instinct | partial | surprise-rage | acting while surprised by raging first. |
-| 9, 13, 17 | Brutal Critical | manual | brutal-critical |  |
+| 9, 13, 17 | Brutal Critical | full |  |  |
 | 11 | Relentless Rage | full |  |  |
 | 15 | Persistent Rage | full |  |  |
 | 18 | Indomitable Might | manual | check-floor |  |
@@ -432,7 +431,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Darkvision | info |  |  |
 | Menacing | builder |  |  |
 | Relentless Endurance | full |  |  |
-| Savage Attacks | manual | brutal-critical |  |
+| Savage Attacks | full |  |  |
 
 ### Halfling
 

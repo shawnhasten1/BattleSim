@@ -202,6 +202,8 @@ interface DamageApplicationEntry {
   minimumDie?: number;
   /** Savage Attacker: rolled twice, the higher kept. */
   rollTwice?: boolean;
+  /** Brutal Critical: on a critical hit, this many more of its first die, rolled once (not doubled). */
+  criticalDice?: number;
   /** Empowered Spell: up to this many dice below average rolled again. */
   rerollLowDice?: number;
   /** Overchannel: every die gives its highest. */
@@ -3172,6 +3174,8 @@ function resolveAttackCore(
         extraDice: index === 0 ? scaling.upcastDamageDice || undefined : undefined,
         ...(index === 0 && (action as ActionDefinition).rerollDamageDice ? { rerollLowDice: (action as ActionDefinition).rerollDamageDice } : {}),
         ...diceRules,
+        // Brutal Critical's dice are the weapon's: on its first damage part only.
+        ...(index > 0 ? { criticalDice: undefined } : {}),
         ...((action as ActionDefinition).maximizeDamage ? { maximize: true } : {})
       })),
       ...featureDamage.entries,
@@ -6067,7 +6071,10 @@ function applyDamageEntries(
     const component = entry.component;
     const scaledBase = resolveScaledDamage(component.dice, component.scaling, { casterLevel: entry.casterLevel });
     const withExtra = entry.extraDice ? `${scaledBase}+${entry.extraDice}` : scaledBase;
-    const dice = entry.critical ? doubleDice(withExtra) : withExtra;
+    const doubled = entry.critical ? doubleDice(withExtra) : withExtra;
+    // Brutal Critical: more of the weapon's own die, added after the doubling.
+    const weaponDie = entry.critical && entry.criticalDice ? /\d*d(\d+)/.exec(scaledBase)?.[1] : undefined;
+    const dice = weaponDie ? `${doubled}+${entry.criticalDice}d${weaponDie}` : doubled;
     const damageSource = entry.sourceDefinition ?? source;
     const abilityBonus = component.abilityModifier ? abilityModifier(damageSource.abilities[component.abilityModifier]) : 0;
     // `component.dice` is canonical and already carries any flat "+K" (mirrored by `flatBonus`), so it is not added again here.
@@ -6163,13 +6170,15 @@ function weaponDiceRules(
   action: AttackActionDefinition,
   definition: CreatureDefinition,
   context: AttackFeatureContext
-): { minimumDie?: number; rollTwice?: boolean } {
-  const rules: { minimumDie?: number; rollTwice?: boolean } = {};
+): { minimumDie?: number; rollTwice?: boolean; criticalDice?: number } {
+  const rules: { minimumDie?: number; rollTwice?: boolean; criticalDice?: number } = {};
   if (!action.weaponProperties) return rules;
   for (const feature of featureSources(definition, attacker)) {
     for (const [effectIndex, effect] of (feature.effects ?? []).entries()) {
       if (effect.kind !== "damage-dice" || !featureAppliesToAction(effect, action) || !featureConditionsMet(state, attacker, target, effect, context)) continue;
       if (effect.minimumDie) rules.minimumDie = Math.max(rules.minimumDie ?? 0, effect.minimumDie);
+      // Brutal Critical and Savage Attacks: the most of them, not their sum.
+      if (effect.criticalDice && context.critical) rules.criticalDice = Math.max(rules.criticalDice ?? 0, effect.criticalDice);
       if (effect.rollTwice && !rules.rollTwice) {
         if (effect.oncePerTurn && wasOncePerTurnEffectUsed(state, attacker.id, feature, effectIndex)) continue;
         if (effect.oncePerTurn) markFeatureEffectApplied(state, attacker, target, action, feature, effect, effectIndex);
