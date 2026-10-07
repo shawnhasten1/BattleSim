@@ -139,6 +139,8 @@ export interface FreeCast {
   label?: string;
   /** Cast with an action whatever the spell's own casting time (Divine Intervention is a Magic action). */
   asAction?: boolean;
+  /** Cast as a spell of this level (a 2014 tiefling's Hellish Rebuke, "as a 2nd-level spell"). Default its own level. */
+  castAt?: number;
 }
 
 /**
@@ -432,6 +434,10 @@ export interface SpeciesDefinition {
   levels: ClassLevel[];
   /** The id of its choice whose value is the spellcasting ability for its spells (an elf's lineage spells). */
   spellcastingAbilityChoice?: string;
+  /** The spellcasting ability for its spells when there's no choice of one (a 2014 tiefling's Charisma). */
+  spellcastingAbility?: Ability;
+  /** Skill proficiencies it gives (a 2014 elf's Perception), as a background's do. */
+  skills?: string[];
   /**
    * A 2014 race's ability increases (a Dwarf's +2 Constitution), and those of the player's choice (a Half-Elf's +1 to two
    * abilities other than Charisma), when the character's increases come from its species. A 2024 species has none.
@@ -503,7 +509,8 @@ export const featureGrantSchema: z.ZodType<FeatureGrant> = z.object({
     uses: z.union([templateOrNumber, z.literal("at-will")]),
     pool: z.string().min(1).optional(),
     label: z.string().min(1).optional(),
-    asAction: z.boolean().optional()
+    asAction: z.boolean().optional(),
+    castAt: z.number().int().min(1).max(9).optional()
   })).optional(),
   spellChanges: z.array(z.object({
     spell: z.string().min(1),
@@ -714,6 +721,8 @@ export const speciesDefinitionSchema: z.ZodType<SpeciesDefinition> = z.object({
   senses: sensesSchema.optional(),
   levels: z.array(classLevelSchema),
   spellcastingAbilityChoice: z.string().optional(),
+  spellcastingAbility: abilitySchema.optional(),
+  skills: z.array(z.string()).optional(),
   abilities: z.record(abilitySchema, z.number().int()).optional(),
   abilityChoice: z.object({ count: z.number().int().min(1), amount: z.number().int().min(1), exclude: z.array(abilitySchema).optional() }).optional(),
   description: z.string().optional()

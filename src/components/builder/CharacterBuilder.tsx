@@ -363,7 +363,9 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
             ))}
           </div>
           {scores ? <p className={styles.problem}>{scores}</p> : (
-            <p className={styles.dim}>Base scores; the background&apos;s increases and feats are added on top (shown under each).</p>
+            <p className={styles.dim}>
+              Base scores; the {increasesFrom === "species" ? speciesLabel.toLowerCase() : "background"}&apos;s increases and feats are added on top (shown under each).
+            </p>
           )}
         </section>
 

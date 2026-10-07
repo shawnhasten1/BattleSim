@@ -2213,6 +2213,8 @@ export interface CompiledActionMeta {
    * can be cast with a higher slot, whether or not that makes it stronger.
    */
   upcastFrom?: number;
+  /** On a spell cast at a fixed level without a slot (`SpellDefinition.castAt`): that level. */
+  castAt?: number;
   /** On an item's use: the item it comes from. The AI, the hotbar, the log and the report read it. */
   item?: ItemUseMeta;
   /** On a spell cast with Metamagic (`<id>:meta-<option>`): the option, and what it's called ("Quickened Spell"). */
@@ -2422,6 +2424,11 @@ export interface SpellDefinition {
   components?: { v?: boolean; s?: boolean; m?: string };
   resourceCost?: ResourceCost;
   upcast?: SpellUpcast;
+  /**
+   * Cast as a spell of this level without spending a slot: a free cast at a fixed level (a 2014 tiefling's Hellish
+   * Rebuke, "as a 2nd-level spell"). Its upcast applies as if cast with that slot, and a counter sees that level.
+   */
+  castAt?: number;
   /** Authoring convenience for an `area-save` action's `zone` — stamped onto the compiled action by `stampSpellContext`, same as `concentration`. */
   zone?: ZonePersistence;
   action?: ActionDefinition;

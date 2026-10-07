@@ -304,8 +304,8 @@ interface SpellPick {
   via: "cantrip" | "prepared" | "always" | "free";
   /** Casts without a slot, from a pool of its own. */
   freeCasts?: Template | number | "at-will";
-  /** A free cast's shared pool, name and action (`FreeCast`). */
-  freeCast?: Pick<FreeCast, "pool" | "label" | "asAction">;
+  /** A free cast's shared pool, name, action and level (`FreeCast`). */
+  freeCast?: Pick<FreeCast, "pool" | "label" | "asAction" | "castAt">;
   /** The one class list it was chosen from (Magic Initiate's Cleric list): whose spell it counts as, with no class of its own. */
   list?: string;
 }
@@ -957,7 +957,8 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
   if (species) {
     const characterLevel = build.levels.length;
     const abilityChoice = species.spellcastingAbilityChoice ? storedChoice(build, { kind: "species" }, [species.spellcastingAbilityChoice]) : undefined;
-    const castingAbility = (Array.isArray(abilityChoice) ? abilityChoice[0] : abilityChoice) as Ability | undefined;
+    const castingAbility = ((Array.isArray(abilityChoice) ? abilityChoice[0] : abilityChoice) ?? species.spellcastingAbility) as Ability | undefined;
+    for (const skill of species.skills ?? []) state.skills.add(skill);
     const owner: Owner = {
       key: `species:${species.id}`, idPrefix: slugOf(species.id), name: species.name, level: characterLevel, columns: [],
       ...(castingAbility && (ABILITIES as string[]).includes(castingAbility) ? { castingAbility } : {})
@@ -1443,7 +1444,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     for (const free of grant.freeCasts ?? []) {
       picks.push({
         spell: free.spell, owner, ...(ability ? { ability } : {}), via: "free", freeCasts: free.uses,
-        ...(free.pool || free.label || free.asAction ? { freeCast: { pool: free.pool, label: free.label, asAction: free.asAction } } : {})
+        ...(free.pool || free.label || free.asAction || free.castAt ? { freeCast: { pool: free.pool, label: free.label, asAction: free.asAction, castAt: free.castAt } } : {})
       });
     }
   }
@@ -1507,7 +1508,9 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
         ...(cast.action ? {
           action: { ...strip(cast.action), name, ...(cost ? { resourceCost: cost } : {}), ...(pick.freeCast?.asAction ? { actionType: "action" } : {}) } as SpellDefinition["action"]
         } : {}),
-        ...(pick.freeCast?.asAction ? { castingTime: "action" as const } : {})
+        ...(pick.freeCast?.asAction ? { castingTime: "action" as const } : {}),
+        // At a higher level than its own: what that slot would add (it spends no slot, so no slot copies are made).
+        ...(pick.freeCast?.castAt && pick.freeCast.castAt > source.level ? { castAt: pick.freeCast.castAt, ...(cast.upcast ? { upcast: cast.upcast } : {}) } : {})
       };
       spells.push({ key: `${pick.owner.key}:spell:${slug}:${atWill ? "at-will" : "free"}`, spell: placedSpell(free, freeId), from: pick.spell });
       if (cost && !(shared && resources[poolId] !== undefined)) {

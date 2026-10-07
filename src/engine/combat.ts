@@ -1988,7 +1988,7 @@ function resolveBeamAttack(
   if (action.concentration) {
     breakConcentration(state, attacker.id);
   }
-  const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const beamCount = resolveBeamCount(action, casterLevelOf(attackerDefinition), options.slotLevel ?? castSlotLevel(action));
   declareAction(state, attacker, action, { target: findCombatant(state.snapshot, targetIds[0] as Id) });
   // Beam i goes at targetIds[i], the last named taking any left over.
   const beamTargets = Array.from({ length: beamCount }, (_, index) => targetIds[Math.min(index, targetIds.length - 1)] as Id);
@@ -3151,7 +3151,7 @@ function resolveAttackCore(
   const targetHitDamage = hit
     ? targetIncomingHitDamageEntries(state, attacker, target, action, { rollMode, critical })
     : { entries: [], sources: [] };
-  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? castSlotLevel(action));
   const targetWasUp = target.state === "active";
   const diceRules = hit ? weaponDiceRules(state, attacker, target, action, attackerDefinition, { rollMode, critical }) : {};
   const damageApplied = hit
@@ -3299,7 +3299,7 @@ export function resolveSaveAction(
     return { success: true, saveRoll: { expression: "countered", rolls: [], modifier: 0, total: 0 }, total: 0, dc: 0, damageApplied: 0 };
   }
 
-  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? castSlotLevel(action));
   const dc = resolveSaveDc(action, attackerDefinition, attacker);
   // Heightened Spell: the spell's own target saves at disadvantage.
   const result = resolveSaveAgainstTarget(state, attacker, attackerDefinition, action, target, scaling, dc, actionId, usesMetamagic(action, "heightened"));
@@ -3425,7 +3425,7 @@ export function resolveAreaSaveAction(
     return { targets: [] };
   }
 
-  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId));
+  const scaling = damageScalingContext(attackerDefinition, action, options.slotLevel ?? castSlotLevel(action));
   const onSuccess = resolveOnSuccess(action);
   const caught = areaSaveTargets(state.snapshot, attacker, action, placement);
   const affected = caught.map(({ target }) => target);
@@ -3727,7 +3727,7 @@ export function resolveHealingAction(
     return { healingApplied: 0 };
   }
 
-  const slotLevel = options.slotLevel ?? spellSlotLevel(action.resourceCost?.resourceId);
+  const slotLevel = options.slotLevel ?? castSlotLevel(action);
   const slotsAboveBase = slotLevel != null && action.spellLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
   const perSlotDice = action.upcast?.perSlotAboveBase?.damageDice;
   const upcastDice = slotsAboveBase > 0 && perSlotDice ? repeatDice(perSlotDice, slotsAboveBase) : "";
@@ -7271,6 +7271,7 @@ function stampSpellContext(
     ...withSpellcastingAttackAbility(action, definition),
     spellLevel: action.spellLevel ?? spell.level,
     upcast: action.upcast ?? spell.upcast,
+    ...(spell.castAt ? { castAt: spell.castAt } : {}),
     ...(spell.school ? { spellSchool: spell.school.toLowerCase() } : {}),
     ...(spell.spellClass ? { spellClass: spell.spellClass } : {}),
     ...(action.kind === "area-save" && spell.zone && !action.zone ? { zone: spell.zone } : {})
@@ -7402,6 +7403,15 @@ export function casterLevelOf(definition: CreatureDefinition): number {
 export function spellSlotLevel(resourceId: string | undefined): number | undefined {
   const match = resourceId ? /^slot-(\d+)$/.exec(resourceId) : null;
   return match ? Number.parseInt(match[1] as string, 10) : undefined;
+}
+
+/**
+ * The slot level a spell's action is cast with: the slot it spends, or the level a free cast is cast at (`castAt`, a
+ * 2014 tiefling's Hellish Rebuke at 2nd). Undefined for a cast at its own level without a slot.
+ */
+export function castSlotLevel(action: ActionDefinition): number | undefined {
+  const cost = "resourceCost" in action ? action.resourceCost : undefined;
+  return spellSlotLevel(cost?.resourceId) ?? action.castAt;
 }
 
 interface DamageScalingContext {
@@ -10395,7 +10405,7 @@ function counterspellWindow(state: EngineState, caster: CombatantState, action: 
  */
 export function castLevelOf(action: ActionDefinition): number | undefined {
   if (!("spellLevel" in action) || action.spellLevel == null) return undefined;
-  return spellSlotLevel("resourceCost" in action ? action.resourceCost?.resourceId : undefined) ?? action.spellLevel;
+  return castSlotLevel(action) ?? action.spellLevel;
 }
 
 function occupiedCells(snapshot: EncounterSnapshot, movingCombatantId: Id): Point[] {

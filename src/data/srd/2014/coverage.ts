@@ -11,7 +11,7 @@ import { GAPS } from "../2024/coverage";
 
 /** What the engine lacks for the 2014 features, beyond the 2024 audit's families (`GAPS`). */
 export const GAPS_2014 = {
-  "brutal-critical": "Extra weapon damage dice on a critical hit (Brutal Critical)",
+  "brutal-critical": "Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks)",
   "smite-feature": "A slot spent on a weapon hit for extra radiant damage, as a class feature (2014 Divine Smite)",
   "destroy-undead": "Turn Undead destroying an undead of a low enough challenge rating outright",
   "cantrip-half-on-save": "A cantrip's half damage on a successful save (Potent Cantrip)",
@@ -39,6 +39,7 @@ export const ALL_GAPS: Readonly<Record<Gap2014, string>> = { ...GAPS, ...GAPS_20
 export const FEATURE_GAPS_2014: Record<string, Gap2014[]> = {
   "srd_thief_thiefs-reflexes": ["extra-turn"],
   "srd_grappler": ["grapple-pin"],
+  "srd_half-orc:Savage Attacks": ["brutal-critical"],
   "srd_fighter_fighting-style:Dueling": ["equipment-check"],
   "srd_fighter_fighting-style:Great Weapon Fighting": ["reroll-damage"],
   "srd_fighter_fighting-style:Protection": ["equipment-check"]

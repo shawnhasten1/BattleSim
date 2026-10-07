@@ -78,6 +78,7 @@ import {
   refillLegendaryPoints,
   resolveUse,
   spellSlotLevel,
+  castSlotLevel,
   isDominatedUpcast,
   chosenTargetCount,
   upcastBaseId,
@@ -2678,7 +2679,7 @@ function expectedMarkDamagePerRound(snapshot: EncounterSnapshot, source: Creatur
   const rolls = Math.max(1, ...executables.map((candidate) => {
     if (candidate.automationSupport !== "full" || candidate.actionType !== "action") return 0;
     if (candidate.kind === "multiattack") return swingsOf(candidate.attacks).filter((swing) => !stepAbility(swing.step, executables)).length;
-    if (candidate.kind === "attack" && candidate.attackDelivery === "beams") return resolveBeamCount(candidate, casterLevel, spellSlotLevel(candidate.resourceCost?.resourceId));
+    if (candidate.kind === "attack" && candidate.attackDelivery === "beams") return resolveBeamCount(candidate, casterLevel, castSlotLevel(candidate));
     return 0;
   }));
   const bestBonus = Math.max(...attacks.map((attack) => resolveAttackBonus(attack, source)));
@@ -3340,7 +3341,7 @@ function beamTargets(
   range: number
 ): string[] {
   const definition = getDefinition(snapshot, actor);
-  const beams = resolveBeamCount(action, definition.character?.level ?? 1, spellSlotLevel(action.resourceCost?.resourceId));
+  const beams = resolveBeamCount(action, definition.character?.level ?? 1, castSlotLevel(action));
   if (beams <= 1) {
     return [primary.id];
   }
@@ -4041,7 +4042,7 @@ function expectedDamageAgainst(
   if (action.kind === "attack") {
     const perHit = averageDamage(action, source, adjustments) + averageAttackFeatureDamage(action, source, sourceCombatant, target, new Set())
       + averageMarkDamage(source, sourceCombatant, targetCombatant, adjustments) + empoweredGain(action);
-    const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, spellSlotLevel(action.resourceCost?.resourceId)) : 1;
+    const beams = action.attackDelivery === "beams" ? resolveBeamCount(action, casterLevel, castSlotLevel(action)) : 1;
     const hitChance = action.autoHit ? 1 : chanceToHit(resolveAttackBonus(action, source), armorClassOf(target).total);
     // Potent Cantrip: half the damage on a miss.
     const onMiss = action.halfDamageOnMiss ? averageDamage(action, source, adjustments) * 0.5 * (1 - hitChance) * beams : 0;
@@ -4510,7 +4511,7 @@ export function upcastExtraTargetCapacity(action: Extract<ActionDefinition, { ki
   if (!perSlotTargets || action.spellLevel == null) {
     return 0;
   }
-  const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
+  const slotLevel = castSlotLevel(action);
   const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
   // Twinned Spell: an effective level higher.
   const twinned = usesMetamagic(action, "twinned") ? 1 : 0;
@@ -4523,7 +4524,7 @@ function averageUpcastDiceBonus(action: Extract<ActionDefinition, { kind: "attac
   if (!perSlotDice || action.spellLevel == null) {
     return 0;
   }
-  const slotLevel = spellSlotLevel(action.resourceCost?.resourceId);
+  const slotLevel = castSlotLevel(action);
   const slotsAboveBase = slotLevel != null ? Math.max(0, slotLevel - action.spellLevel) : 0;
   if (slotsAboveBase === 0) {
     return 0;

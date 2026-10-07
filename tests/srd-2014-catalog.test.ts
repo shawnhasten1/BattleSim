@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { creatureDefinitionSchema, getExecutableActions, sampleEncounter, type ActionDefinition } from "@/engine";
+import {
+  castLevelOf,
+  createEngineState,
+  creatureDefinitionSchema,
+  getExecutableActions,
+  resolveSaveAction,
+  sampleEncounter,
+  spellcastingAbility,
+  type ActionDefinition,
+  type CreatureDefinition,
+  type RandomSource
+} from "@/engine";
 import { runAutomatedEncounter } from "@/engine/turns";
 import { SRD_2014_CATALOG } from "@/data/srd/2014";
 import {
@@ -144,5 +155,125 @@ describe("the first 2014 characters (Phase 6)", () => {
     const actor = rebuildActor(blankCharacter("pc", "Guard"), build, sources).definition;
     const protection = getExecutableActions(actor).find((action) => action.name === "Protection")!;
     expect(protection).toMatchObject({ actionType: "reaction", reaction: { trigger: { kind: "ally-targeted-by-attack", withinFt: 5 } } });
+  });
+});
+
+describe("the other 2014 races (Phase 7)", () => {
+  const BASE = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const raceBuild = (speciesId: string, level = 1, classId = "srd:class:fighter-2014") =>
+    quickBuild(sources, { classId, level, backgroundId: "srd:background:acolyte-2014", speciesId, abilities: { method: "manual", base: BASE } });
+  const actorOf = (build: ReturnType<typeof quickBuild>) => rebuildActor(blankCharacter("def-fighter", "Hero"), build, sources).definition;
+  const fight = (actor: CreatureDefinition, seed: string) => {
+    const snapshot = structuredClone(sampleEncounter);
+    snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), actor];
+    for (const token of snapshot.combatants) {
+      if (token.id === "pc-fighter") { token.currentHp = actor.maxHp; token.resources = { ...(actor.resources ?? {}) }; }
+    }
+    return runAutomatedEncounter({ ...snapshot, seed }, 6).outcome.warnings;
+  };
+
+  it("every 2014 race and subrace builds at 1st and 5th level, its increases its own, and fights with legal actions", { timeout: 60000 }, () => {
+    const problems: string[] = [];
+    for (const species of SRD_2014_CATALOG.species) {
+      for (const level of [1, 5]) {
+        let build = withSuggestions(raceBuild(species.id, level), sources);
+        const built = buildCharacter(build, sources);
+        problems.push(...built.warnings.map((warning) => `${species.id} ${level}: ${warning}`));
+        // Its own increases, and its subrace's: all from the race, none from the (2014) background.
+        const raised = Object.entries(built.fields.abilities).filter(([ability, score]) => score > BASE[ability as keyof typeof BASE]);
+        expect(raised.length, species.id).toBeGreaterThan(0);
+        build = withSuggestions(build, sources);
+        problems.push(...fight(actorOf(build), `${species.id}-${level}`).map((warning) => `${species.id} ${level}: ${warning}`));
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it("a Dragonborn breathes with an action of its own, by its ancestry's shape and save, 2d6 rising with its level", () => {
+    expect(buildCharacter(raceBuild("srd:species:dragonborn-2014"), sources).fields.abilities).toMatchObject({ str: 12, cha: 11 });
+    let build = raceBuild("srd:species:dragonborn-2014", 11);
+    build = withChoice(build, { kind: "species" }, ["draconic-ancestry"], ["green"]);
+    const built = buildCharacter(build, sources);
+    const actor = actorOf(build);
+    const breath = getExecutableActions(actor).find((action) => action.name === "Breath Weapon") as Extract<ActionDefinition, { kind: "area-save" }>;
+    expect(breath).toMatchObject({ actionType: "action", saveAbility: "con", area: { type: "cone", size: 15 }, resourceCost: { resourceId: "breath-weapon", amount: 1 } });
+    expect(breath.replacesAttack).toBeUndefined();
+    expect(breath.damage[0]).toMatchObject({ dice: "2d6", damageType: "poison", scaling: { mode: "cantrip-by-level", steps: [{ atLevel: 6, dice: "3d6" }, { atLevel: 11, dice: "4d6" }, { atLevel: 16, dice: "5d6" }] } });
+    expect(built.resources).toMatchObject({ "breath-weapon": 1 });
+    expect(built.features.find((entry) => entry.feature.name === "Damage Resistance")!.feature.effects).toEqual([{ kind: "damage-adjustment", adjustment: { type: "resistance", damageType: "poison" } }]);
+  });
+
+  it("a High Elf knows a 2014 Wizard cantrip, cast with Intelligence; an Elf has Perception", () => {
+    let build = raceBuild("srd:species:elf-2014");
+    build = withChoice(build, { kind: "species" }, ["subrace"], ["high-elf"]);
+    const slot = buildCharacter(build, sources).choices.find((entry) => entry.scope.kind === "species" && entry.spec.kind === "spells")!;
+    expect(slot.options.length).toBeGreaterThan(5);
+    expect(slot.options.every((option) => option.edition === "2014" && option.level === 0)).toBe(true);
+    build = withChoice(build, slot.scope, slot.path, ["srd:spell:fire-bolt"], slot.spec);
+    const built = buildCharacter(build, sources);
+    expect(built.warnings).toEqual([]);
+    expect(built.fields.abilities).toMatchObject({ dex: 12, int: 11 });
+    expect(Object.keys(built.fields.skills)).toContain("perception");
+    const fireBolt = getExecutableActions(actorOf(build)).find((action) => action.name === "Fire Bolt") as Extract<ActionDefinition, { kind: "attack" }>;
+    expect(fireBolt.ability).toBe("int");
+  });
+
+  it("a Gnome's cunning is against magic only; a Rock Gnome adds Constitution", () => {
+    let build = raceBuild("srd:species:gnome-2014");
+    build = withChoice(build, { kind: "species" }, ["subrace"], ["rock-gnome"]);
+    const built = buildCharacter(build, sources);
+    expect(built.fields.abilities).toMatchObject({ int: 12, con: 11 });
+    expect(built.fields.speed).toBe(25);
+    expect(built.features.find((entry) => entry.feature.name === "Gnome Cunning")!.feature.effects).toEqual([
+      { kind: "save-advantage", abilities: ["int", "wis", "cha"], against: { source: "magical" } }
+    ]);
+  });
+
+  it("a Half-Elf chooses two skills and two increases besides Charisma; a Half-Orc is menacing and relentless", () => {
+    const halfElf = buildCharacter(raceBuild("srd:species:half-elf-2014"), sources);
+    expect(halfElf.fields.abilities.cha).toBe(12);
+    const increases = halfElf.choices.find((slot) => slot.scope.kind === "species" && slot.spec.kind === "abilities")!;
+    expect(increases.spec).toMatchObject({ points: 2, maxPerAbility: 1, from: ["str", "dex", "con", "int", "wis"] });
+    expect(halfElf.choices.find((slot) => slot.spec.kind === "skills" && slot.spec.id === "skill-versatility")!.spec).toMatchObject({ count: 2, from: "any" });
+
+    const halfOrc = buildCharacter(raceBuild("srd:species:half-orc-2014"), sources);
+    expect(halfOrc.fields.abilities).toMatchObject({ str: 12, con: 11 });
+    expect(Object.keys(halfOrc.fields.skills)).toContain("intimidation");
+    expect(halfOrc.resources).toMatchObject({ "relentless-endurance": 1 });
+    expect(halfOrc.features.find((entry) => entry.feature.name === "Savage Attacks")!.feature.automationSupport).toBe("manual-only");
+  });
+
+  it("a Lightfoot Halfling: small, slow, lucky", () => {
+    let build = raceBuild("srd:species:halfling-2014");
+    build = withChoice(build, { kind: "species" }, ["subrace"], ["lightfoot"]);
+    const built = buildCharacter(build, sources);
+    expect(built.fields).toMatchObject({ size: "small", speed: 25 });
+    expect(built.fields.abilities).toMatchObject({ dex: 12, cha: 11 });
+    expect(built.features.map((entry) => entry.feature.name)).toEqual(expect.arrayContaining(["Lucky", "Brave", "Halfling Nimbleness", "Naturally Stealthy"]));
+  });
+
+  it("a Tiefling casts Hellish Rebuke once a day as a 2nd-level spell, never with a slot, and Darkness from 5th", () => {
+    const third = buildCharacter(raceBuild("srd:species:tiefling-2014", 3), sources);
+    expect(third.spells.map((entry) => entry.spell.name).sort()).toEqual(["Hellish Rebuke (Infernal Legacy)", "Thaumaturgy"]);
+    const actor = actorOf(raceBuild("srd:species:tiefling-2014", 5));
+    expect(actor.spells!.map((entry) => entry.name).sort()).toEqual(["Darkness (Infernal Legacy)", "Hellish Rebuke (Infernal Legacy)", "Thaumaturgy"]);
+    const rebuke = getExecutableActions(actor).find((action) => action.name === "Hellish Rebuke (Infernal Legacy)") as Extract<ActionDefinition, { kind: "save" }>;
+    expect(rebuke.resourceCost?.resourceId).not.toMatch(/^slot-/);
+    expect(castLevelOf(rebuke)).toBe(2);
+    expect(spellcastingAbility(actor)).toBe("cha");
+
+    // Cast: 2d10 and the 2nd level's 1d10.
+    const snapshot = structuredClone(sampleEncounter);
+    snapshot.map.walls = [];
+    snapshot.definitions = [...snapshot.definitions.filter((entry) => entry.id !== "def-fighter"), actor];
+    const caster = snapshot.combatants.find((token) => token.id === "pc-fighter")!;
+    caster.resources = { ...(actor.resources ?? {}) };
+    snapshot.combatants.find((token) => token.id === "enemy-goblin-1")!.position = { x: caster.position.x + 1, y: caster.position.y };
+    const state = createEngineState(snapshot);
+    const rng: RandomSource = { next: () => 0, nextInt: (min) => min, fork: () => rng };
+    state.rng = rng;
+    resolveSaveAction(state, "pc-fighter", "enemy-goblin-1", rebuke.id);
+    const damage = state.log.find((entry) => entry.type === "DamageApplied");
+    expect((damage?.data?.components as Array<{ roll: { rolls: unknown[] } }>)[0]?.roll.rolls).toHaveLength(3);
   });
 });

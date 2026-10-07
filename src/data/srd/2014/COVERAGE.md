@@ -24,13 +24,14 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | Sorcerer (Draconic Bloodline) | 11 | not in the 2014 catalog yet | | | | |
 | Warlock (The Fiend) | 12 | not in the 2014 catalog yet | | | | |
 | Wizard (School of Evocation) | 11 | not in the 2014 catalog yet | | | | |
-| Race traits | 34 | 2 of 9 races in the catalog | | | | |
+| Race traits | 34 | 9 of 9 races in the catalog | | | | |
 
 ## Gaps, most widespread first
 
 | Gap | What the engine lacks | Features |
 |---|---|---|
 | `equipment-check` | A requirement on what the creature wields isn't checked (Dueling's one weapon, Protection's shield) | 2 |
+| `brutal-critical` | Extra weapon damage dice on a critical hit (Brutal Critical, Savage Attacks) | 1 |
 | `extra-turn` | Two turns in the first round (Thief's Reflexes) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
 | `reroll-damage` | Rerolling low damage dice (2014 Great Weapon Fighting's 1s and 2s) | 1 |
@@ -167,7 +168,15 @@ Not in the 2014 catalog yet: 5 features.
 
 ## Races
 
-- Dragonborn: not in the 2014 catalog yet.
+### Dragonborn
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Draconic Ancestry table | builder |  |  |
+| Draconic Ancestry | builder |  |  |
+| Breath Weapon | full |  |  |
+| Damage Resistance | full |  |  |
+
 ### Dwarf
 
 | Trait | Verdict | Gaps | Note |
@@ -179,16 +188,64 @@ Not in the 2014 catalog yet: 5 features.
 | Stonecunning | info |  |  |
 | Hill Dwarf: Dwarven Toughness | full |  |  |
 
-- Elf: not in the 2014 catalog yet.
-- Gnome: not in the 2014 catalog yet.
-- Half-Elf: not in the 2014 catalog yet.
-- Half-Orc: not in the 2014 catalog yet.
-- Halfling: not in the 2014 catalog yet.
+### Elf
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Keen Senses | builder |  |  |
+| Fey Ancestry | full |  |  |
+| Trance | info |  |  |
+| High Elf: Elf Weapon Training | info |  |  |
+| High Elf: Cantrip | builder |  |  |
+
+### Gnome
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Gnome Cunning | full |  |  |
+| Rock Gnome: Artificer's Lore | info |  |  |
+| Rock Gnome: Tinker | info |  |  |
+
+### Half-Elf
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Fey Ancestry | full |  |  |
+| Skill Versatility | builder |  |  |
+
+### Half-Orc
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Menacing | builder |  |  |
+| Relentless Endurance | full |  |  |
+| Savage Attacks | manual | brutal-critical |  |
+
+### Halfling
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Lucky | full |  |  |
+| Brave | full |  |  |
+| Halfling Nimbleness | full |  |  |
+| Lightfoot: Naturally Stealthy | info |  |  |
+
 ### Human
 
 No traits beyond its ability increases.
 
-- Tiefling: not in the 2014 catalog yet.
+### Tiefling
+
+| Trait | Verdict | Gaps | Note |
+|---|---|---|---|
+| Darkvision | info |  |  |
+| Hellish Resistance | full |  |  |
+| Infernal Legacy | full |  |  |
+
 
 ## Feats and backgrounds
 
