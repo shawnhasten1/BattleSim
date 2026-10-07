@@ -178,10 +178,12 @@ export const BERSERKER_2014: SubclassDefinition = {
           kind: "save", id: "intimidating-presence", name: "Intimidating Presence", actionType: "action", range: 30,
           saveAbility: "wis", dcFormula: { base: 8, ability: "cha", proficiency: true },
           damage: [], halfDamageOnSuccess: false, onSuccess: "none",
+          // A creature that saves is safe from it for 24 hours: the rest of the fight.
+          immuneAfterSave: true,
           riders: [{ kind: "condition", when: "on-save-fail", condition: "frightened", duration: { kind: "until-source-turn", timing: "end" } }],
           automationSupport: "full"
         }],
-        notSimulated: "keeping it going with an action on later turns, and a creature that saves being safe from it for 24 hours."
+        notSimulated: "keeping it going with an action on later turns."
       }))]
     },
     {

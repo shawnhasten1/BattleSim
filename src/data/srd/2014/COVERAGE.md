@@ -52,7 +52,6 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 | `foe-slayer-roll` | Foe Slayer's Wisdom on the attack roll instead of the damage | 1 |
 | `frenzy-attack` | A bonus-action melee attack each turn while raging (Frenzy) | 1 |
 | `grapple-pin` | Pinning a creature it's grappling, both restrained (2014 Grappler) | 1 |
-| `immune-after-save` | A creature that saves being safe from it for a while (Intimidating Presence's 24 hours) | 1 |
 | `immunity-by-type` | Immunity to a condition from creatures of a type (Nature's Ward: charm and fright from elementals and fey) | 1 |
 | `manual-roll` | A roll the rules leave to the DM (Divine Intervention's percentile) | 1 |
 | `max-damage` | Overchannel again before a Long Rest, with its necrotic damage to the wizard | 1 |
@@ -93,7 +92,7 @@ Each partial or manual feature names its gaps (`src/data/srd/2014/coverage.ts`),
 |---|---|---|---|---|
 | 3 | Frenzy | manual | frenzy-attack, exhaustion |  |
 | 6 | Mindless Rage | full |  |  |
-| 10 | Intimidating Presence | partial | extend-with-action, immune-after-save | keeping it going with an action on later turns, and a creature that saves being safe from it for 24 hours. |
+| 10 | Intimidating Presence | partial | extend-with-action | keeping it going with an action on later turns. |
 | 14 | Retaliation | full |  |  |
 
 ## Bard
