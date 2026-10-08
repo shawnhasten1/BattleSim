@@ -3,8 +3,10 @@
 import { useState, type ReactNode } from "react";
 import type { Ability } from "@/engine";
 import { EditionBadge } from "@/components/ui/Edition";
-import { suggestedValue, type ChoiceOption, type ChoiceSlot, type ChoiceValue, type FeatChoice } from "@/lib/character-builder";
-import { editionNameKey, preferEdition, type EditionChoice } from "@/lib/editions";
+import { RulesInfo, SupportDot, useRulesCard } from "@/components/rules-card";
+import { describeOption, suggestedValue, type ChoiceOption, type ChoiceSlot, type ChoiceValue, type FeatChoice } from "@/lib/character-builder";
+import type { BuildSources } from "@/lib/character-builder/build";
+import { editionNameKey, preferEdition, type Edition, type EditionChoice } from "@/lib/editions";
 import styles from "./builder.module.css";
 
 /**
@@ -49,7 +51,8 @@ const SPELL_LEVELS = ["Cantrips", "1st level", "2nd level", "3rd level", "4th le
  * Spells to choose, grouped by level, with a filter once there are many. A spell the simulator doesn't cast has a dashed
  * outline: it goes on the actor as its text.
  */
-function SpellPicker({ slot, title, onChange, edition }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void; edition?: EditionChoice }) {
+function SpellPicker({ slot, title, onChange, edition, sources }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void; edition?: EditionChoice; sources?: BuildSources }) {
+  const cards = useRulesCard();
   const [filter, setFilter] = useState("");
   const chosen = asList(slot.value);
   const full = chosen.length >= slot.count;
@@ -72,18 +75,17 @@ function SpellPicker({ slot, title, onChange, edition }: { slot: ChoiceSlot; tit
             {shown.filter((option) => (option.level ?? 0) === level).map((option) => {
               const checked = chosen.includes(option.id);
               const disabled = !checked && (option.taken || full);
-              const why = option.taken ? option.detail : option.reference ? "Reference only: the simulator doesn't cast it" : undefined;
               return (
                 <label
                   key={option.id}
                   className={`${styles.chip} ${checked ? styles.chipOn : ""} ${option.taken && !checked ? styles.chipTaken : ""} ${option.reference ? styles.chipReference : ""}`}
-                  title={why}
+                  {...cards.bind(sources ? () => describeOption(slot, option, sources) : undefined)}
                 >
                   <input
                     type="checkbox" checked={checked} disabled={disabled}
                     onChange={() => onChange(checked ? chosen.filter((id) => id !== option.id) : [...chosen, option.id])}
                   />
-                  {option.name}{option.reference ? <small> ref</small> : null}{mark ? <> <EditionBadge edition={option.edition} /></> : null}
+                  {option.name}{option.reference ? <> <SupportDot support="manual" /></> : null}{mark ? <> <EditionBadge edition={option.edition} /></> : null}
                 </label>
               );
             })}
@@ -100,7 +102,17 @@ const asList = (value: ChoiceValue | undefined): string[] => (Array.isArray(valu
  * One choice the build asks for, as a control: a list to pick from, a subclass or a feat, points for ability increases.
  * Changes go to `onChange` as the slot's whole new value. A pending choice offers its suggestion.
  */
-export function ChoiceControl({ slot, onChange, edition }: { slot: ChoiceSlot; onChange: (value: ChoiceValue | undefined) => void; edition?: EditionChoice }) {
+export function ChoiceControl({ slot, onChange, edition, sources, characterEdition }: {
+  slot: ChoiceSlot;
+  onChange: (value: ChoiceValue | undefined) => void;
+  edition?: EditionChoice;
+  /** What the options' rules cards are worked out from. Without it, no cards. */
+  sources?: BuildSources;
+  /** The character's own edition: a skill's card is worded in it. */
+  characterEdition?: Edition;
+}) {
+  const cards = useRulesCard();
+  const card = (option: ChoiceOption) => (sources ? () => describeOption(slot, option, sources, characterEdition) : undefined);
   const spec = slot.spec;
   const title = choiceTitle(slot);
   const { options: editionShown, mark } = editionOptions(slot, edition);
@@ -110,20 +122,28 @@ export function ChoiceControl({ slot, onChange, edition }: { slot: ChoiceSlot; o
 
   let body: ReactNode;
   if (spec.kind === "subclass") {
+    const chosen = slot.options.find((option) => option.id === slot.value);
     body = (
-      <select aria-label={title} value={typeof slot.value === "string" ? slot.value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
-        <option value="">Choose…</option>
-        {editionShown.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
-      </select>
+      <div className={styles.row}>
+        <select aria-label={title} value={typeof slot.value === "string" ? slot.value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
+          <option value="">Choose…</option>
+          {editionShown.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
+        </select>
+        {chosen ? <RulesInfo entry={card(chosen)} label={`About ${chosen.name}`} /> : null}
+      </div>
     );
   } else if (spec.kind === "feat") {
     const current = slot.value && typeof slot.value === "object" && !Array.isArray(slot.value) && "feat" in slot.value ? (slot.value as FeatChoice).feat : "";
     const options: ChoiceOption[] = current && !slot.options.some((option) => option.id === current) ? [{ id: current, name: current }, ...editionShown] : editionShown;
+    const chosen = slot.options.find((option) => option.id === current);
     body = (
-      <select aria-label={title} value={current} onChange={(event) => onChange(event.target.value ? { feat: event.target.value } : undefined)}>
-        <option value="">Choose a feat…</option>
-        {options.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
-      </select>
+      <div className={styles.row}>
+        <select aria-label={title} value={current} onChange={(event) => onChange(event.target.value ? { feat: event.target.value } : undefined)}>
+          <option value="">Choose a feat…</option>
+          {options.map((option) => <option key={option.id} value={option.id}>{optionText(option, mark)}</option>)}
+        </select>
+        {chosen ? <RulesInfo entry={card(chosen)} label={`About ${chosen.name}`} /> : null}
+      </div>
     );
   } else if (spec.kind === "abilities") {
     const points = (slot.value && typeof slot.value === "object" && !Array.isArray(slot.value) ? slot.value : {}) as Partial<Record<Ability, number>>;
@@ -147,7 +167,7 @@ export function ChoiceControl({ slot, onChange, edition }: { slot: ChoiceSlot; o
       </div>
     );
   } else if (spec.kind === "spells") {
-    body = <SpellPicker slot={slot} title={title} onChange={onChange} edition={edition} />;
+    body = <SpellPicker slot={slot} title={title} onChange={onChange} edition={edition} sources={sources} />;
   } else {
     const chosen = asList(slot.value);
     const full = chosen.length >= slot.count;
@@ -157,7 +177,10 @@ export function ChoiceControl({ slot, onChange, edition }: { slot: ChoiceSlot; o
           const checked = chosen.includes(option.id);
           const disabled = !checked && (option.taken || full);
           return (
-            <label key={option.id} className={`${styles.chip} ${checked ? styles.chipOn : ""} ${option.taken && !checked ? styles.chipTaken : ""}`} title={option.taken ? "Already have it" : option.detail}>
+            <label
+              key={option.id} className={`${styles.chip} ${checked ? styles.chipOn : ""} ${option.taken && !checked ? styles.chipTaken : ""}`}
+              {...cards.bind(card(option))}
+            >
               <input
                 type="checkbox" checked={checked} disabled={disabled}
                 onChange={() => onChange(checked ? chosen.filter((id) => id !== option.id) : [...chosen, option.id])}

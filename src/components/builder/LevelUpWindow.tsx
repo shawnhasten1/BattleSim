@@ -18,6 +18,7 @@ import {
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
+import { RulesCardProvider } from "@/components/rules-card";
 import { useEncounterStore } from "@/store/encounter-store";
 import { ChoiceControl } from "./ChoiceControl";
 import { BESIDE_SHEET, ChangeList } from "./CharacterBuilder";
@@ -76,6 +77,7 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
 
   return (
     <FloatingWindow title={`Level up · ${definition.name}`} ariaLabel="Level up" onClose={onClose} width={520} storageKey="level-up" initialPosition={BESIDE_SHEET}>
+      <RulesCardProvider>
       <div className={styles.builder}>
         <p className={styles.lede}>
           {buildLabel(saved, sources)} → <strong>{className} {classLevel}</strong>
@@ -130,7 +132,7 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
           {slots.map((slot) => (
             <ChoiceControl
               key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-              slot={slot} edition={saved.edition}
+              slot={slot} edition={saved.edition} sources={sources} characterEdition={saved.edition}
               onChange={(value) => setDraft(withChoice(draft, slot.scope, slot.path, value, slot.spec))}
             />
           ))}
@@ -154,6 +156,7 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
           </button>
         </div>
       </div>
+      </RulesCardProvider>
     </FloatingWindow>
   );
 }

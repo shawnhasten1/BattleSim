@@ -143,8 +143,9 @@ describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
     const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
     const box = (name: RegExp) => within(cantrips).getByRole("checkbox", { name }) as HTMLInputElement;
     expect(box(/^Sacred Flame$/).checked).toBe(true);
-    // A cantrip the simulator doesn't cast is marked.
-    expect(within(cantrips).getByText(/^Guidance/).closest("label")!.textContent).toBe("Guidance ref");
+    // A cantrip the simulator doesn't cast is marked, in words.
+    const guidance = within(cantrips).getByText(/^Guidance/).closest("label")!;
+    expect(within(guidance as HTMLElement).getByRole("img", { name: "Not simulated: the DM runs it" })).toBeTruthy();
     await userEvent.click(box(/^Guidance/));
     expect(within(builder).getByText("1 still to choose")).toBeTruthy();
     await userEvent.click(box(/^Spare the Dying/));

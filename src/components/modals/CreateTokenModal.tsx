@@ -12,7 +12,8 @@ import { EditionFilter } from "@/components/ui/Edition";
 import { CatalogOptions, speciesWord } from "@/components/builder/CatalogSelect";
 import { useEditionFilter } from "@/hooks/useEditionFilter";
 import { editionTwin, type EditionChoice } from "@/lib/editions";
-import { QUICK_PARTY_CLASSES, quickBuild, quickParty } from "@/lib/character-builder";
+import { QUICK_PARTY_CLASSES, describeBackground, describeClass, describeSpecies, quickBuild, quickParty } from "@/lib/character-builder";
+import { FieldInfo, RulesCardProvider } from "@/components/rules-card";
 import { useBuildSources } from "@/store/catalog-store";
 import { useBuilderUiStore } from "@/store/builder-ui-store";
 import styles from "./modals.module.css";
@@ -76,6 +77,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const [tab, setTab] = useState<TabId>("custom");
   const chosenClass = buildSources.catalog.classes.find((entry) => entry.id === character.classId);
   const chosenSpecies = buildSources.catalog.species.find((entry) => entry.id === character.speciesId);
+  const chosenBackground = buildSources.catalog.backgrounds.find((entry) => entry.id === character.backgroundId);
 
   const targetFolderName = targetFolderId
     ? actorFolders.find((folder) => folder.id === targetFolderId)?.name
@@ -133,6 +135,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
 
   return (
     <FloatingWindow title="Create Token" ariaLabel="Create token" width={360} storageKey="create-token" onClose={onClose}>
+      <RulesCardProvider>
       <div className={styles.form}>
         {targetFolderId ? (
           <p className={styles.status}>Adding to folder: <strong>{targetFolderName ?? "Unknown folder"}</strong></p>
@@ -240,38 +243,44 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
             </div>
             <label className={styles.field}>Name<input value={character.name} onChange={(e) => setCharacter({ ...character, name: e.target.value })} /></label>
             <div className={styles.grid3}>
-              <label className={styles.field}>
-                Class
-                <select
-                  value={character.classId}
-                  onChange={(e) => {
-                    const chosen = buildSources.catalog.classes.find((entry) => entry.id === e.target.value);
-                    setCharacter({ ...character, classId: e.target.value, backgroundId: chosen?.suggested.background ?? character.backgroundId });
-                  }}
-                >
-                  <CatalogOptions entries={buildSources.catalog.classes} choice={edition} keep={character.classId} />
-                </select>
-              </label>
+              <FieldInfo entry={chosenClass ? () => describeClass(chosenClass) : undefined} about={chosenClass?.name}>
+                <label className={styles.field}>
+                  Class
+                  <select
+                    value={character.classId}
+                    onChange={(e) => {
+                      const chosen = buildSources.catalog.classes.find((entry) => entry.id === e.target.value);
+                      setCharacter({ ...character, classId: e.target.value, backgroundId: chosen?.suggested.background ?? character.backgroundId });
+                    }}
+                  >
+                    <CatalogOptions entries={buildSources.catalog.classes} choice={edition} keep={character.classId} />
+                  </select>
+                </label>
+              </FieldInfo>
               <label className={styles.field}>
                 Level
                 <select value={character.level} onChange={(e) => setCharacter({ ...character, level: Number(e.target.value) })}>
                   {Array.from({ length: 20 }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
                 </select>
               </label>
+              <FieldInfo entry={chosenBackground ? () => describeBackground(chosenBackground, buildSources) : undefined} about={chosenBackground?.name}>
+                <label className={styles.field}>
+                  Background
+                  <select value={character.backgroundId} onChange={(e) => setCharacter({ ...character, backgroundId: e.target.value })}>
+                    <CatalogOptions entries={buildSources.catalog.backgrounds} choice={edition} keep={character.backgroundId} />
+                  </select>
+                </label>
+              </FieldInfo>
+            </div>
+            <FieldInfo entry={chosenSpecies ? () => describeSpecies(chosenSpecies, buildSources) : undefined} about={chosenSpecies?.name}>
               <label className={styles.field}>
-                Background
-                <select value={character.backgroundId} onChange={(e) => setCharacter({ ...character, backgroundId: e.target.value })}>
-                  <CatalogOptions entries={buildSources.catalog.backgrounds} choice={edition} keep={character.backgroundId} />
+                {speciesWord(chosenSpecies?.edition ?? chosenClass?.edition)}
+                <select aria-label={speciesWord(chosenSpecies?.edition ?? chosenClass?.edition)} value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
+                  <option value="">None (set size, speed and senses by hand)</option>
+                  <CatalogOptions entries={buildSources.catalog.species} choice={edition} keep={character.speciesId || undefined} />
                 </select>
               </label>
-            </div>
-            <label className={styles.field}>
-              {speciesWord(chosenSpecies?.edition ?? chosenClass?.edition)}
-              <select aria-label="Species" value={character.speciesId} onChange={(e) => setCharacter({ ...character, speciesId: e.target.value })}>
-                <option value="">None (set size, speed and senses by hand)</option>
-                <CatalogOptions entries={buildSources.catalog.species} choice={edition} keep={character.speciesId || undefined} />
-              </select>
-            </label>
+            </FieldInfo>
             <button
               type="button"
               className={styles.primary}
@@ -412,6 +421,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
           </label>
         ) : null}
       </div>
+      </RulesCardProvider>
     </FloatingWindow>
   );
 }

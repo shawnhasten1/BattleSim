@@ -26,6 +26,9 @@ import {
   equipmentWeaponOptions,
   increasesSource,
   sameNamedAbilities,
+  describeBackground,
+  describeClass,
+  describeSpecies,
   type BuildChange,
   type CharacterBuild,
   type ClassDefinition,
@@ -34,6 +37,7 @@ import {
 import type { BuildSources } from "@/lib/character-builder/build";
 import { formatBonus } from "@/lib/ui-helpers";
 import { EditionFilter } from "@/components/ui/Edition";
+import { FieldInfo, RulesCardProvider } from "@/components/rules-card";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEditionFilter } from "@/hooks/useEditionFilter";
 import type { EditionChoice } from "@/lib/editions";
@@ -226,6 +230,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
       width={600}
       storageKey="character-builder" initialPosition={BESIDE_SHEET}
     >
+      <RulesCardProvider>
       <div className={styles.builder}>
         <p className={styles.lede}>
           {buildLabel(draft, sources)}{" "}
@@ -261,12 +266,14 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
                 <input value={name} onChange={(event) => setName(event.target.value)} />
               </label>
             ) : null}
-            <label className={styles.field}>
-              Class
-              <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
-                <CatalogOptions entries={sources.catalog.classes} choice={edition} keep={classId} />
-              </select>
-            </label>
+            <FieldInfo entry={firstClass ? () => describeClass(firstClass) : undefined} about={firstClass?.name}>
+              <label className={styles.field}>
+                Class
+                <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
+                  <CatalogOptions entries={sources.catalog.classes} choice={edition} keep={classId} />
+                </select>
+              </label>
+            </FieldInfo>
             <label className={styles.field}>
               Level
               <select
@@ -276,21 +283,25 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
                 {Array.from({ length: 20 }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
               </select>
             </label>
-            <label className={styles.field}>
-              Background
-              <select value={draft.background.id ?? ""} onChange={(event) => changeBackground(event.target.value)} aria-label="Background">
-                <CatalogOptions entries={sources.catalog.backgrounds} choice={edition} keep={draft.background.id} />
-              </select>
-            </label>
+            <FieldInfo entry={background ? () => describeBackground(background, sources) : undefined} about={background?.name}>
+              <label className={styles.field}>
+                Background
+                <select value={draft.background.id ?? ""} onChange={(event) => changeBackground(event.target.value)} aria-label="Background">
+                  <CatalogOptions entries={sources.catalog.backgrounds} choice={edition} keep={draft.background.id} />
+                </select>
+              </label>
+            </FieldInfo>
           </div>
           <div className={styles.row}>
-            <label className={styles.field}>
-              {speciesLabel}
-              <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
-                <option value="">None (size, speed and senses by hand)</option>
-                <CatalogOptions entries={sources.catalog.species} choice={edition} keep={draft.species?.id} />
-              </select>
-            </label>
+            <FieldInfo entry={species ? () => describeSpecies(species, sources) : undefined} about={species?.name}>
+              <label className={styles.field}>
+                {speciesLabel}
+                <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
+                  <option value="">None (size, speed and senses by hand)</option>
+                  <CatalogOptions entries={sources.catalog.species} choice={edition} keep={draft.species?.id} />
+                </select>
+              </label>
+            </FieldInfo>
             <label className={styles.field}>
               Ability increases from
               <select
@@ -392,7 +403,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
               {group.slots.map((slot) => (
                 <ChoiceControl
                   key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-                  slot={slot} edition={edition}
+                  slot={slot} edition={edition} sources={sources} characterEdition={draft.edition}
                   onChange={(value) => set(withChoice(draft, slot.scope, slot.path, value, slot.spec))}
                 />
               ))}
@@ -468,6 +479,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         </div>
         {pending.length ? <p className={styles.dim}>Choices still open are left out until they&apos;re made.</p> : null}
       </div>
+      </RulesCardProvider>
     </FloatingWindow>
   );
 }
