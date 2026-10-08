@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { abilityModifier, type Ability } from "@/engine";
 import {
   ABILITY_ABBREVIATIONS,
@@ -90,6 +90,8 @@ export function InlineChoice({ slot, title = choiceTitle(slot), onChange }: {
     );
   } else if (spec.kind === "weapon-mastery") {
     body = <MasteryTable slot={slot} title={title} options={options} suggested={suggested} onChange={onChange} />;
+  } else if (spec.kind === "abilities" && spec.points === 3 && spec.maxPerAbility >= 2 && spec.from.length >= 3) {
+    body = <SplitPicker slot={slot} title={title} onChange={onChange} />;
   } else if (spec.kind === "abilities") {
     body = <Points slot={slot} title={title} onChange={onChange} />;
   } else {
@@ -206,6 +208,91 @@ function Points({ slot, title, onChange }: { slot: ChoiceSlot; title: string; on
         </label>
       ))}
       <span className={styles.count}>{used} of {spec.points}</span>
+    </div>
+  );
+}
+
+type Increases = Partial<Record<Ability, number>>;
+
+/**
+ * A background's three points (the 2024 rule, §3.3): "+2 and +1" (a +2 radio row and a +1 radio row), or "+1 to three"
+ * (the three it names, or any three when it names none).
+ */
+function SplitPicker({ slot, title, onChange }: { slot: ChoiceSlot; title: string; onChange: (value: ChoiceValue | undefined) => void }) {
+  const spec = slot.spec;
+  const value = (slot.value && typeof slot.value === "object" && !Array.isArray(slot.value) ? slot.value : {}) as Increases;
+  const twos = Object.entries(value).filter(([, amount]) => amount === 2).map(([ability]) => ability as Ability);
+  const ones = Object.entries(value).filter(([, amount]) => amount === 1).map(([ability]) => ability as Ability);
+  const [chosenMode, setMode] = useState<"two-one" | "three">("two-one");
+  // What's chosen says the split; an empty choice keeps the one last picked.
+  const mode = twos.length ? "two-one" : ones.length >= 3 ? "three" : chosenMode;
+  if (spec.kind !== "abilities") return null;
+  const from = spec.from;
+  const plus2 = twos[0];
+  const plus1 = ones[0];
+  const pick = (two: Ability | undefined, one: Ability | undefined) =>
+    onChange({ ...(two ? { [two]: 2 } : {}), ...(one && one !== two ? { [one]: 1 } : {}) });
+
+  function chooseMode(next: "two-one" | "three") {
+    setMode(next);
+    if (next === "three") onChange(from.length === 3 ? Object.fromEntries(from.map((ability) => [ability, 1])) : Object.fromEntries([...twos, ...ones].slice(0, 3).map((ability) => [ability, 1])));
+    else pick(ones[0] ?? from[0], ones[1] ?? from.find((ability) => ability !== (ones[0] ?? from[0])));
+  }
+
+  return (
+    <div className={styles.split}>
+      <span role="group" aria-label={`${title}: split`} className={styles.segmented}>
+        <button type="button" aria-pressed={mode === "two-one"} onClick={() => chooseMode("two-one")}>+2 and +1</button>
+        <button type="button" aria-pressed={mode === "three"} onClick={() => chooseMode("three")}>+1 to three</button>
+      </span>
+      {mode === "two-one" ? (
+        <>
+          <AbilityRow label="+2" name={`${title}: plus 2`} from={from} on={plus2} onPick={(ability) => pick(ability, ability === plus1 ? plus2 : plus1)} />
+          <AbilityRow label="+1" name={`${title}: plus 1`} from={from} on={plus1} off={plus2} onPick={(ability) => pick(plus2, ability)} />
+        </>
+      ) : from.length === 3 ? (
+        <p className={styles.splitThree}>{from.map((ability) => `+1 ${ABILITY_ABBREVIATIONS[ability]}`).join(", ")}</p>
+      ) : (
+        <div role="group" aria-label={`${title}: plus 1 to three`} className={styles.chips}>
+          {from.map((ability) => {
+            const checked = ones.includes(ability);
+            return (
+              <label key={ability} className={`${styles.chip} ${checked ? styles.chipOn : ""}`}>
+                <input
+                  type="checkbox" checked={checked} disabled={!checked && ones.length >= 3}
+                  onChange={() => onChange(Object.fromEntries((checked ? ones.filter((entry) => entry !== ability) : [...ones, ability]).map((entry) => [entry, 1])))}
+                />
+                +1 {ABILITY_ABBREVIATIONS[ability]}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One row of ability radios: "+2 [CON] [INT] [WIS]". */
+function AbilityRow({ label, name, from, on, off, onPick }: {
+  label: string;
+  name: string;
+  from: Ability[];
+  on: Ability | undefined;
+  off?: Ability;
+  onPick: (ability: Ability) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={name} className={styles.abilityRow}>
+      <strong>{label}</strong>
+      {from.map((ability) => (
+        <button
+          key={ability} type="button" role="radio" aria-checked={on === ability} aria-disabled={off === ability || undefined}
+          className={`${styles.chip} ${on === ability ? styles.chipOn : ""} ${off === ability ? styles.chipTaken : ""}`}
+          onClick={() => { if (off !== ability) onPick(ability); }}
+        >
+          {ABILITY_ABBREVIATIONS[ability]}
+        </button>
+      ))}
     </div>
   );
 }

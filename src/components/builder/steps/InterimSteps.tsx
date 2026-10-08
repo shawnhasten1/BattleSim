@@ -1,41 +1,30 @@
 "use client";
 
-import { abilityModifier, type Ability } from "@/engine";
 import {
   ABILITIES,
-  adoptionBuild,
-  describeClass,
   equipmentLineOption,
   equipmentLineWeapons,
   equipmentWeaponOptions,
-  increasesSource,
   pointBuyCost,
   POINT_BUY_BUDGET,
   STANDARD_ARRAY,
-  standardArrayFor,
-  startBuild,
   stepOf,
   withChoice,
-  withSuggestions,
   type CharacterBuild,
   type ChoiceSlot,
   type ClassDefinition
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
-import { formatBonus } from "@/lib/ui-helpers";
-import { FieldInfo } from "@/components/rules-card";
 import { useBuilder } from "../builder-context";
-import { CatalogOptions, speciesWord } from "../CatalogSelect";
+import { speciesWord } from "../CatalogSelect";
 import { ChoiceControl } from "../ChoiceControl";
 import { Panel, StepHeading } from "../parts";
 import styles from "../builder.module.css";
 
 /*
- * The Abilities, Spells and Equipment steps as Phase 3 has them: today's controls, moved into steps and restyled.
- * Phases 5 to 7 replace each (CHARACTER_BUILDER_UX_PLAN.md §6).
+ * The Spells and Equipment steps as Phase 3 has them: today's controls, moved into steps and restyled. Phases 6 and 7
+ * replace each (CHARACTER_BUILDER_UX_PLAN.md §6).
  */
-
-const ABILITY_LABELS: Record<Ability, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
 
 /** What's wrong with a set of base scores under its method, if anything. */
 export function scoresProblem(abilities: CharacterBuild["abilities"]): string | undefined {
@@ -85,74 +74,6 @@ function StepChoices({ step, empty }: { step: ReturnType<typeof stepOf>; empty: 
         </div>
       ))}
     </>
-  );
-}
-
-export function AbilitiesStepInterim() {
-  const { build, built, sources, set } = useBuilder();
-  const firstClass = sources.catalog.classes.find((entry) => entry.id === build.levels[0]?.classId);
-  const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
-  const background = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
-  const speciesLabel = speciesWord(species?.edition ?? build.edition);
-  const from = increasesSource(build, sources);
-  const problem = scoresProblem(build.abilities);
-  const finalScores = built.fields.abilities;
-  const setScore = (ability: Ability, value: number) => set({ ...build, abilities: { ...build.abilities, base: { ...build.abilities.base, [ability]: value } } });
-  return (
-    <div className={styles.stepBody}>
-      <Panel label="Ability scores">
-        <StepHeading icon="star">Ability scores</StepHeading>
-        <div className={styles.row}>
-          <label className={styles.field}>
-            Method
-            <select
-              aria-label="Ability score method" value={build.abilities.method}
-              onChange={(event) => set({ ...build, abilities: { ...build.abilities, method: event.target.value as CharacterBuild["abilities"]["method"] } })}
-            >
-              <option value="standard-array">Standard array</option>
-              <option value="point-buy">Point buy (27)</option>
-              <option value="manual">Typed by hand</option>
-            </select>
-          </label>
-          {firstClass ? (
-            <button
-              type="button" className={styles.linkButton}
-              onClick={() => set(withSuggestions({ ...build, abilities: { method: "standard-array", base: standardArrayFor(firstClass.suggested.abilities) } }, sources))}
-            >
-              Suggested for a {firstClass.name.toLowerCase()}
-            </button>
-          ) : null}
-        </div>
-        <div className={styles.scores}>
-          {ABILITIES.map((ability) => (
-            <label key={ability} className={styles.score}>
-              <span>{ABILITY_LABELS[ability]}</span>
-              <input
-                type="number" min={1} max={30} aria-label={`Base ${ABILITY_LABELS[ability]}`}
-                value={build.abilities.base[ability]}
-                onChange={(event) => setScore(ability, Math.round(Number(event.target.value) || 0))}
-              />
-              <small>{finalScores[ability]} ({formatBonus(abilityModifier(finalScores[ability]))})</small>
-            </label>
-          ))}
-        </div>
-        {problem ? <p className={styles.problem}>{problem}</p> : null}
-      </Panel>
-      <Panel label="Ability increases">
-        <StepHeading icon="star">Ability increases</StepHeading>
-        <label className={styles.field}>
-          Ability increases from
-          <select
-            aria-label="Ability increases from" value={from}
-            onChange={(event) => set(withSuggestions({ ...build, increasesFrom: event.target.value as "background" | "species" }, sources))}
-          >
-            <option value="background">The background{background && !background.abilities?.length ? " (any three)" : ""}</option>
-            <option value="species">The {speciesLabel.toLowerCase()}</option>
-          </select>
-        </label>
-        <StepChoices step="abilities" empty="No increases to place: they come with the species." />
-      </Panel>
-    </div>
   );
 }
 

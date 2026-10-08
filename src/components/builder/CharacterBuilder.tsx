@@ -37,7 +37,8 @@ import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import { OriginStep } from "./steps/OriginStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { ClassStep } from "./steps/ClassStep";
-import { AbilitiesStepInterim, EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
+import { AbilitiesStep } from "./steps/AbilitiesStep";
+import { EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
 import { useDraftHistory, type Draft } from "./useDraftHistory";
 import styles from "./builder.module.css";
 
@@ -276,7 +277,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         <main ref={stepRef} className={styles.stepArea} aria-label={`${steps[index]?.label ?? "This"} step`}>
           {step === "class" ? <ClassStep /> : null}
           {step === "origin" ? <OriginStep /> : null}
-          {step === "abilities" ? <AbilitiesStepInterim /> : null}
+          {step === "abilities" ? <AbilitiesStep /> : null}
           {step === "spells" ? <SpellsStepInterim /> : null}
           {step === "equipment" ? <EquipmentStepInterim /> : null}
           {step === "review" ? (

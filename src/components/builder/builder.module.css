@@ -1587,6 +1587,7 @@ select.dialSelect.dialSelect option {
 
 .segmented {
   display: inline-flex;
+  align-self: flex-start;
   overflow: hidden;
   border: 1px solid var(--ui-border);
   border-radius: 999px;
@@ -1883,5 +1884,270 @@ select.dialSelect.dialSelect option {
   .classHeadActions {
     flex-direction: row;
     align-items: center;
+  }
+}
+
+
+/* ── Phase 5: the Abilities step (§3.3, D9) ── */
+
+.placeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.placeRow .previewCap {
+  margin: 0 4px 0 0;
+}
+
+.placeValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 11px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: grab;
+}
+
+.placeValue[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+}
+
+.placeValue:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.placeValue:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+.meter {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel-2);
+}
+
+.meterFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ui-accent);
+  transition: width 160ms ease;
+}
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scoreCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scoreButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--b-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+
+.scoreButton[data-placing] {
+  cursor: pointer;
+}
+
+.scoreButton:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+.scoreButton[data-placing] .scoreBox,
+.scoreButton[data-placing] .stepDial > :nth-child(2) {
+  box-shadow: 0 0 0 3px var(--ui-accent);
+}
+
+.stepDial > :nth-child(2) {
+  border-radius: 50%;
+}
+
+.scoreName {
+  color: var(--ui-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.primaryStar {
+  color: var(--ui-accent);
+}
+
+.scoreBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 76px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-panel-2);
+}
+
+.scoreBox strong {
+  font-size: 25px;
+  line-height: 1.1;
+}
+
+.scoreMod {
+  color: var(--ui-accent);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.steppers {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.steppers button {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shell[data-look="codex"] .steppers button {
+  border-radius: 999px;
+}
+
+.steppers button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.scoreInput {
+  width: 60px;
+  text-align: center;
+}
+
+.scoreRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.scoreRows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--ui-text-dim);
+}
+
+.scoreRows dt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoreRows dd {
+  margin: 0;
+  color: var(--ui-text);
+  font-weight: 700;
+}
+
+.increaseLine,
+.increaseFixed {
+  margin: 0;
+  font-size: 13px;
+}
+
+.increaseFixed {
+  font-weight: 600;
+}
+
+.laterLine {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-text-dim);
+  font-size: 12.5px;
+}
+
+.laterLine > span {
+  flex: 1;
+}
+
+.split {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.splitThree {
+  margin: 0;
+  font-weight: 600;
+}
+
+.abilityRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.abilityRow > strong {
+  width: 30px;
+}
+
+.abilityRow .chip {
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.abilityRow .chip[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+@container builder (max-width: 720px) {
+  .scoreRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
