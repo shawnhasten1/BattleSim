@@ -44,7 +44,9 @@ export function SpellsStep() {
   }, [spellFocus]);
   useEffect(() => {
     if (!scrollTo) return;
-    refs.current.get(scrollTo)?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    // Smoothly, unless motion is reduced.
+    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    refs.current.get(scrollTo)?.scrollIntoView?.({ block: "start", behavior: still ? "auto" : "smooth" });
     setScrollTo(undefined);
   }, [scrollTo]);
 

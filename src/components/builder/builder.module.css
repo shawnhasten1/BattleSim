@@ -932,10 +932,9 @@ select.dialSelect.dialSelect option {
 }
 
 .optionIcon {
-  flex: none;
   width: 24px;
   height: 24px;
-  fill: var(--ui-accent);
+  color: var(--ui-accent);
 }
 
 .optionText {
@@ -2306,7 +2305,7 @@ select.dialSelect.dialSelect option {
   min-width: 0;
   padding: 6px 9px 6px 11px;
   border: 1px solid var(--ui-border);
-  border-left: 3px solid var(--tone, var(--ui-border));
+  border-left: 3px solid var(--tone-edge, var(--tone, var(--ui-border)));
   border-radius: var(--b-radius-sm);
   background: var(--ui-panel-2);
   color: var(--ui-text);
@@ -2318,7 +2317,7 @@ select.dialSelect.dialSelect option {
 
 .spellTile[data-chosen] {
   border-color: var(--ui-accent);
-  border-left-color: var(--tone, var(--ui-accent));
+  border-left-color: var(--tone-edge, var(--tone, var(--ui-accent)));
   background: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-panel-2));
 }
 
@@ -2467,7 +2466,13 @@ select.dialSelect.dialSelect option {
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--ui-text-dim);
+  background: var(--tone-edge, var(--tone, var(--ui-text-dim)));
+}
+
+/* On the Codex's Light palette a spell's colour is shaded to 55%, so it still reads on the pale tiles (3:1, §7). */
+[data-dark="false"] .spellTile,
+[data-dark="false"] .yourTone {
+  --tone-edge: color-mix(in srgb, var(--tone) 55%, #000);
 }
 
 .yourTag {
@@ -2651,4 +2656,58 @@ select.dialSelect.dialSelect option {
   .levelUpNew {
     animation: none;
   }
+
+  .meterFill {
+    transition: none;
+  }
+}
+
+/* ── Phase 9: icons (D14) ── */
+
+.builderIcon {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.classTileIcon {
+  width: 34px;
+  height: 34px;
+}
+
+.tileSchool {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+}
+
+/* The shortcuts' "?" bubble (it's portalled, so its own type sizes). */
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.shortcuts > div {
+  display: grid;
+  grid-template-columns: 9.5em 1fr;
+  gap: 8px;
+}
+
+.shortcuts dt {
+  font-weight: 700;
+}
+
+.shortcuts dd {
+  margin: 0;
 }

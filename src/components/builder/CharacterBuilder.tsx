@@ -36,6 +36,7 @@ import { BuilderContext, type BuilderModel } from "./builder-context";
 import { BuilderHeader } from "./BuilderHeader";
 import { BuildPreview } from "./BuildPreview";
 import { LookSwitch } from "./LookSwitch";
+import { Shortcuts } from "./Shortcuts";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import { OriginStep } from "./steps/OriginStep";
 import { ReviewStep } from "./steps/ReviewStep";
@@ -342,6 +343,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
         <LookSwitch look={look} onLook={chooseLook} palette={palette} onPalette={setPalette}>
           <button type="button" className={styles.titleButton} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={14} /></button>
           <button type="button" className={styles.titleButton} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={14} /></button>
+          <Shortcuts undo />
         </LookSwitch>
       )}
     >

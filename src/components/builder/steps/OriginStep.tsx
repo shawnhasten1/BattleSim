@@ -13,6 +13,7 @@ import {
   type BackgroundDefinition,
   type SpeciesDefinition
 } from "@/lib/character-builder";
+import { builderIconUrl } from "@/data/srd/tokens";
 import { useBuilder } from "../builder-context";
 import { catalogGroups, speciesWord } from "../CatalogSelect";
 import { ChoiceControl } from "../ChoiceControl";
@@ -33,6 +34,7 @@ function speciesOption(species: SpeciesDefinition, label: string, sources: Retur
   const senses = species.senses?.darkvision ? ` · Darkvision ${species.senses.darkvision}` : "";
   return {
     id: species.id, title: label.replace(/ \((2014|2024|Homebrew|Open5e|Imported)\)$/, ""), badge: badgeOf(species),
+    icon: builderIconUrl("species", species.id),
     lines: [`${capitalize(species.sizes.join(" or "))} · ${species.speed} ft${senses}`],
     accent: increases.join(", ") || undefined,
     card: () => describeSpecies(species, sources)

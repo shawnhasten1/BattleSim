@@ -25,6 +25,7 @@ import {
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
 import { formatBonus } from "@/lib/ui-helpers";
+import { builderIconUrl } from "@/data/srd/tokens";
 import { CodexBanner, CodexRoot, LEVEL_VALUE_CLASS, LevelDial } from "@/components/codex-ui";
 import { RulesCardProvider } from "@/components/rules-card";
 import { EditionFilter } from "@/components/ui/Edition";
@@ -38,6 +39,7 @@ import { choiceTitle } from "./ChoiceControl";
 import { BESIDE_SHEET } from "./CharacterBuilder";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import { LookSwitch } from "./LookSwitch";
+import { Shortcuts } from "./Shortcuts";
 import { FeatureRow, Panel, StepHeading } from "./parts";
 import { CardGrid, type CardOption } from "./pickers/CardGrid";
 import { InlineChoice } from "./pickers/InlineChoice";
@@ -151,7 +153,7 @@ function LevelUpBody({ definitionId, onClose, sources }: { definitionId: string;
       title={`Level up · ${definition.name}`} ariaLabel="Level up" onClose={onClose}
       width={WIDTH} initialHeight={place.height} resizable={{ minWidth: 520, minHeight: 420, maxWidth: 1200 }} scrollBody={false}
       storageKey="level-up-window" initialPosition={{ x: place.x, y: place.y }}
-      headerExtra={<LookSwitch look={look} onLook={chooseLook} palette={palette} onPalette={setPalette} />}
+      headerExtra={<LookSwitch look={look} onLook={chooseLook} palette={palette} onPalette={setPalette}><Shortcuts /></LookSwitch>}
     >
       <BuilderContext.Provider value={model}>
         <RulesCardProvider palette={look === "codex" ? palette : null}>
@@ -196,25 +198,26 @@ function ClassToLevel({ saved, classId, onChoose }: { saved: CharacterBuild; cla
     const entry = sources.catalog.classes.find((candidate) => candidate.id === id);
     const levels = saved.levels.filter((level) => level.classId === id).length;
     return {
-      id, title: entry?.name ?? id, badge: entry ? (entry.source.provider === "srd" ? entry.edition : "Homebrew") : undefined,
+      id, title: entry?.name ?? id, badge: entry ? (entry.source.provider === "srd" ? entry.edition : "Homebrew") : undefined, icon: builderIconUrl("class", id),
       lines: [`Level ${levels} → ${levels + 1}`], ...(entry ? { card: () => describeClass(entry) } : {})
     };
   });
-  const others = more ? catalogGroups(sources.catalog.classes.filter((entry) => !owned.includes(entry.id)), filter, classId).map((group) => ({
+  // The edition filter reads the whole list, so a class it has hides its other edition's twin too; then its own go.
+  const others = more ? catalogGroups(sources.catalog.classes, filter, classId).map((group) => ({
     label: `${group.label}: a new class (multiclass)`,
-    options: group.entries.map(({ entry, label }): CardOption => {
+    options: group.entries.filter(({ entry }) => !owned.includes(entry.id)).map(({ entry, label }): CardOption => {
       const twin = otherEditionTwin(saved, entry.id, sources);
       // A twin says why it can't be taken (once); another class, what multiclassing into it needs.
       const problems = twin ? [] : multiclassProblems(saved, entry.id, sources);
       return {
         id: entry.id, title: label.replace(/ \((2014|2024|Homebrew|Open5e|Imported)\)$/, ""),
-        badge: entry.source.provider === "srd" ? entry.edition : "Homebrew",
+        badge: entry.source.provider === "srd" ? entry.edition : "Homebrew", icon: builderIconUrl("class", entry.id),
         lines: twin ? [] : [problems.length ? problems.join("; ") : `d${entry.hitDie} · ${entry.primaryAbilities.map((ability) => ABBR[ability]).join(entry.primaryAbilityAny ? " or " : ", ")}`],
         ...(twin ? { blocked: twin } : {}),
         card: () => describeClass(entry)
       };
     })
-  })) : [];
+  })).filter((group) => group.options.length) : [];
   return (
     <Panel label="The class">
       <StepHeading

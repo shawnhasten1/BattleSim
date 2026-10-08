@@ -276,3 +276,9 @@
     transform: translateY(2px);
   }
 }
+
+/* On the Codex's Light palette a spell's colour is shaded to 55%, so its edge still reads on the pale card (3:1). */
+.card[data-dark="false"],
+[data-dark="false"] .card {
+  border-top-color: color-mix(in srgb, var(--tone, var(--ui-accent)) 55%, #000);
+}

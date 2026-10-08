@@ -1,7 +1,9 @@
 /**
- * Builds the placeholder token for every bundled SRD monster.
+ * Builds the placeholder token for every bundled SRD monster, and the character builder's class, species and spell
+ * school icons.
  *
- *   npm run srd:tokens          write public/tokens/srd/<slug>.svg and generated/token-icons.json
+ *   npm run srd:tokens          write public/tokens/srd/<slug>.svg, public/icons/builder/<group>-<name>.svg and
+ *                               generated/token-icons.json
  *   npm run srd:tokens:check    build in memory and fail if the committed files differ
  *
  * Each token is a game-icons.net glyph (CC BY 3.0) on a disc coloured by creature type (true
@@ -13,11 +15,13 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SrdMonsterIndexEntry } from "../src/data/srd/monsters/types";
+import { BUILDER_ICONS, renderBuilderIconSvg } from "./srd-tokens/builder-icons";
 import { DRAGON_AGE_ICONS, DRAGON_COLORS, MONSTER_ICONS, parseDragonSlug } from "./srd-tokens/icon-map";
 import { TYPE_COLORS, renderTokenSvg } from "./srd-tokens/render";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tokenDir = join(root, "public/tokens/srd");
+const builderIconDir = join(root, "public/icons/builder");
 const manifestPath = join(root, "src/data/srd/monsters/generated/token-icons.json");
 const check = process.argv.includes("--check");
 
@@ -70,6 +74,23 @@ for (const monster of index.monsters) {
   files.set(`${monster.slug}.svg`, renderTokenSvg(body, color, monster.name));
 }
 
+// The builder's icons (CHARACTER_BUILDER_UX_PLAN.md D14): the glyph alone, drawn as a mask in the builder's colours.
+const builderFiles = new Map<string, string>();
+for (const [key, choice] of Object.entries(BUILDER_ICONS)) {
+  const [author, icon] = choice.split("/") as [string, string];
+  const body = iconSet.icons[icon]?.body;
+  if (!body) {
+    errors.push(`builder ${key}: "${icon}" is not in @iconify-json/game-icons`);
+    continue;
+  }
+  if (!AUTHORS[author]) {
+    errors.push(`builder ${key}: no credit for author "${author}" (add it to AUTHORS)`);
+    continue;
+  }
+  authorsUsed.add(author);
+  builderFiles.set(`${key.replace("/", "-")}.svg`, renderBuilderIconSvg(body));
+}
+
 for (const slug of Object.keys(MONSTER_ICONS)) {
   if (!index.monsters.some((monster) => monster.slug === slug)) errors.push(`icon-map has "${slug}", which isn't in the monster index`);
 }
@@ -83,7 +104,8 @@ const manifest = {
   source: "https://game-icons.net",
   license: { title: "CC BY 3.0", url: "https://creativecommons.org/licenses/by/3.0/" },
   authors: [...authorsUsed].sort().map((folder) => ({ folder, ...AUTHORS[folder] })),
-  monsters
+  monsters,
+  builder: BUILDER_ICONS
 };
 const manifestText = `${JSON.stringify(manifest, null, 1)}\n`;
 
@@ -97,8 +119,18 @@ if (check) {
       stale += 1;
     }
   }
-  const extra = existsSync(tokenDir) ? readdirSync(tokenDir).filter((name) => !files.has(name)) : [];
-  for (const name of extra) console.error(`  extra: public/tokens/srd/${name}`);
+  for (const [name, content] of builderFiles) {
+    const target = join(builderIconDir, name);
+    if (!existsSync(target) || normalize(readFileSync(target, "utf8")) !== content) {
+      console.error(`  stale: public/icons/builder/${name}`);
+      stale += 1;
+    }
+  }
+  const extra = [
+    ...(existsSync(tokenDir) ? readdirSync(tokenDir).filter((name) => !files.has(name)).map((name) => `public/tokens/srd/${name}`) : []),
+    ...(existsSync(builderIconDir) ? readdirSync(builderIconDir).filter((name) => !builderFiles.has(name)).map((name) => `public/icons/builder/${name}`) : [])
+  ];
+  for (const name of extra) console.error(`  extra: ${name}`);
   if (!existsSync(manifestPath) || normalize(readFileSync(manifestPath, "utf8")) !== manifestText) {
     console.error("  stale: src/data/srd/monsters/generated/token-icons.json");
     stale += 1;
@@ -107,11 +139,14 @@ if (check) {
     console.error("Run `npm run srd:tokens` and commit the result.");
     process.exit(1);
   }
-  console.log(`${files.size} SRD tokens up to date.`);
+  console.log(`${files.size} SRD tokens and ${builderFiles.size} builder icons up to date.`);
 } else {
   rmSync(tokenDir, { recursive: true, force: true });
   mkdirSync(tokenDir, { recursive: true });
   for (const [name, content] of files) writeFileSync(join(tokenDir, name), content);
+  rmSync(builderIconDir, { recursive: true, force: true });
+  mkdirSync(builderIconDir, { recursive: true });
+  for (const [name, content] of builderFiles) writeFileSync(join(builderIconDir, name), content);
   writeFileSync(manifestPath, manifestText);
-  console.log(`Wrote ${files.size} SRD tokens (${authorsUsed.size} icon authors).`);
+  console.log(`Wrote ${files.size} SRD tokens and ${builderFiles.size} builder icons (${authorsUsed.size} icon authors).`);
 }

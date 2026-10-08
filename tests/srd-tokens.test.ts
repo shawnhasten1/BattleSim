@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import manifest from "@/data/srd/monsters/generated/token-icons.json";
 import { SRD_MONSTER_INDEX_WITH_FORMS } from "@/data/srd/monsters";
-import { SRD_TOKEN_ICON_CREDITS, placeholderTokenUrl } from "@/data/srd/tokens";
+import { SRD_TOKEN_ICON_CREDITS, builderIconUrl, placeholderTokenUrl } from "@/data/srd/tokens";
+import { SRD_BUILD_SOURCES } from "@/lib/character-builder/srd";
+import { BUILDER_ICONS } from "../scripts/srd-tokens/builder-icons";
 import { DRAGON_AGE_ICONS, MONSTER_ICONS, parseDragonSlug } from "../scripts/srd-tokens/icon-map";
 import { iconColorFor, luminance } from "../scripts/srd-tokens/render";
 
@@ -54,5 +56,33 @@ describe("SRD placeholder tokens", () => {
     expect(iconColorFor("#2a2a2e")).toBe("#f3eee4"); // black dragon
     expect(luminance("#ffffff")).toBeCloseTo(1);
     expect(luminance("#000000")).toBeCloseTo(0);
+  });
+});
+
+describe("the character builder's icons (CHARACTER_BUILDER_UX_PLAN.md D14)", () => {
+  const iconDir = join(__dirname, "../public/icons/builder");
+  const fileOf = (url: string | undefined) => url && join(iconDir, url.replace("/icons/builder/", ""));
+
+  it("give every SRD class and species, in both editions, and every spell school an icon that's shipped", () => {
+    for (const entry of [...SRD_BUILD_SOURCES.catalog.classes, ...SRD_BUILD_SOURCES.catalog.species].filter((candidate) => candidate.source.provider === "srd")) {
+      const group = entry.id.startsWith("srd:class:") ? "class" : "species";
+      const url = builderIconUrl(group, entry.id);
+      expect(url, entry.id).toBeDefined();
+      expect(existsSync(fileOf(url)!), entry.id).toBe(true);
+    }
+    for (const school of ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"]) {
+      expect(existsSync(fileOf(builderIconUrl("school", school))!), school).toBe(true);
+    }
+    expect(builderIconUrl("class", "srd:class:wizard-2014")).toBe(builderIconUrl("class", "srd:class:wizard"));
+  });
+
+  it("give homebrew nothing, and ship only what the map names, each credited", () => {
+    expect(builderIconUrl("class", "homebrew:class:wizard")).toBeUndefined();
+    expect(builderIconUrl("species", undefined)).toBeUndefined();
+    const named = Object.keys(manifest.builder).map((key) => `${key.replace("/", "-")}.svg`);
+    expect(readdirSync(iconDir).sort()).toEqual(named.sort());
+    const credited = new Set(SRD_TOKEN_ICON_CREDITS.authors.map((author) => author.folder));
+    for (const choice of Object.values(manifest.builder)) expect(credited.has(choice.split("/")[0]!), choice).toBe(true);
+    expect(manifest.builder).toEqual(BUILDER_ICONS);
   });
 });

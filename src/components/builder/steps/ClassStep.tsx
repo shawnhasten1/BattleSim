@@ -24,7 +24,8 @@ import { catalogGroups, speciesWord } from "../CatalogSelect";
 import { choiceTitle } from "../ChoiceControl";
 import { CardGrid, type CardOption } from "../pickers/CardGrid";
 import { InlineChoice } from "../pickers/InlineChoice";
-import { FeatureRow, Panel, StepHeading } from "../parts";
+import { BuilderIcon, FeatureRow, Panel, StepHeading } from "../parts";
+import { builderIconUrl } from "@/data/srd/tokens";
 import { badgeOf } from "./OriginStep";
 import styles from "../builder.module.css";
 
@@ -100,6 +101,7 @@ function ClassHeader() {
     label: group.label,
     options: group.entries.map(({ entry, label }): CardOption => ({
       id: entry.id, title: label.replace(/ \((2014|2024|Homebrew|Open5e|Imported)\)$/, ""), badge: badgeOf(entry),
+      icon: builderIconUrl("class", entry.id),
       lines: [`d${entry.hitDie} · ${entry.primaryAbilities.map((ability) => ABBR[ability]).join(entry.primaryAbilityAny ? " or " : ", ")}${entry.spellcasting ? ` · ${CASTER[entry.spellcasting.kind].toLowerCase()}` : ""}`],
       card: () => describeClass(entry)
     }))
@@ -126,7 +128,9 @@ function ClassHeader() {
     <Panel label="Your class">
       <div className={styles.classHead}>
         <button type="button" className={styles.classTile} aria-label={`About the ${first.name}`} {...cards.bind(about)}>
-          <span aria-hidden="true">{first.name.charAt(0)}</span>
+          {builderIconUrl("class", first.id)
+            ? <BuilderIcon src={builderIconUrl("class", first.id)} className={styles.classTileIcon} />
+            : <span aria-hidden="true">{first.name.charAt(0)}</span>}
         </button>
         <div className={styles.classHeadText}>
           <div className={styles.optionTitle}>

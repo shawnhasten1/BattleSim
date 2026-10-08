@@ -2,6 +2,7 @@
 
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useRulesCard, type EntrySource } from "@/components/rules-card";
+import { BuilderIcon } from "../parts";
 import styles from "../builder.module.css";
 
 export interface CardOption {
@@ -13,7 +14,7 @@ export interface CardOption {
   lines?: string[];
   /** A line in the accent colour: a 2014 race's "+2 CON". */
   accent?: string;
-  /** A glyph (an SVG path on a 512 box): a class's or a species' icon. */
+  /** Its icon's URL (`builderIconUrl`): a class's or a species'. */
   icon?: string;
   /** Why it can't be chosen; it's shown, dimmed, and its card says why. */
   blocked?: string;
@@ -79,9 +80,7 @@ export function CardGrid({ label, groups, value, onChange, columns = 3, extra }:
                   onKeyDown={(event) => { bound.onKeyDown(event); onKeyDown(event, option); }}
                   onClick={() => { if (!option.blocked && !on) onChange(option.id); }}
                 >
-                  {option.icon ? (
-                    <svg className={styles.optionIcon} viewBox="0 0 512 512" aria-hidden="true"><path d={option.icon} /></svg>
-                  ) : null}
+                  <BuilderIcon src={option.icon} className={styles.optionIcon} />
                   <span className={styles.optionText}>
                     <span className={styles.optionTitle}>
                       <strong>{option.title}</strong>

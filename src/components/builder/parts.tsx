@@ -7,6 +7,20 @@ import { firstParagraph, type Support } from "@/lib/character-builder";
 import { useBuilder } from "./builder-context";
 import styles from "./builder.module.css";
 
+/**
+ * A class's, species' or spell school's icon (D14): a game-icons glyph drawn as a mask, so it takes the colour around
+ * it (the accent on a card) in either look. Nothing without a `src` (homebrew).
+ */
+export function BuilderIcon({ src, className }: { src: string | undefined; className?: string }) {
+  if (!src) return null;
+  return (
+    <span
+      aria-hidden="true" className={className ? `${styles.builderIcon} ${className}` : styles.builderIcon}
+      style={{ WebkitMaskImage: `url(${src})`, maskImage: `url(${src})` }}
+    />
+  );
+}
+
 /** A step's section heading: the Codex's, with its copper glyph and rule, or Standard's small capitals. */
 export function StepHeading({ icon = "diamond", children, aside }: { icon?: CodexIcon; children: ReactNode; aside?: ReactNode }) {
   const { look } = useBuilder();

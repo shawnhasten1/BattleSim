@@ -16,7 +16,9 @@ import type { BuildSources } from "@/lib/character-builder/build";
 import type { EditionChoice } from "@/lib/editions";
 import { EditionBadge } from "@/components/ui/Edition";
 import { SupportDot, toneColor, useRulesCard } from "@/components/rules-card";
+import { builderIconUrl } from "@/data/srd/tokens";
 import { choiceTitle, editionOptions } from "../ChoiceControl";
+import { BuilderIcon } from "../parts";
 import styles from "../builder.module.css";
 
 export const LEVEL_NAMES = ["Cantrips", "1st level", "2nd level", "3rd level", "4th level", "5th level", "6th level", "7th level", "8th level", "9th level"];
@@ -78,6 +80,7 @@ export function SpellTile({ tile, chosen, blocked, onToggle, sources, mark }: {
         {mark ? <EditionBadge edition={tile.edition} /> : null}
       </span>
       <span className={styles.tileMeta}>
+        <BuilderIcon src={builderIconUrl("school", facts?.school)} className={styles.tileSchool} />
         <span>{tile.level ? (facts?.school ?? "") : "cantrip"}</span>
         {cost ? <span className={styles.tileCost} data-cost={facts!.cost} title={cost.words}>{cost.mark}</span> : null}
         <SupportDot support={tile.reference ? "manual" : facts?.support ?? "full"} />
@@ -266,7 +269,7 @@ export function YourSpellsList({ levels, sources, onOpen }: {
                   {...cards.bind(() => describeSpell(spell.id, sources))}
                   onClick={() => { if (spell.slots[0]) onOpen(spell.slots[0]); }}
                 >
-                  <span className={styles.yourTone} style={tone ? { background: tone } : undefined} aria-hidden="true" />
+                  <span className={styles.yourTone} style={tone ? ({ "--tone": tone } as CSSProperties) : undefined} aria-hidden="true" />
                   {spell.name}
                   {tag ? <span className={styles.yourTag} aria-label={spell.always ? `always prepared (${spell.always})` : "prepared"}>{tag}</span> : null}
                   {spell.free ? <span className={styles.yourTag}>free</span> : null}

@@ -133,6 +133,15 @@ describe("the builder window", { timeout: 30000 }, () => {
     expect(within(builder).queryByRole("status")).toBeNull();
   });
 
+  it("lists its keyboard shortcuts in the title bar's ?", async () => {
+    const builder = openBuilder();
+    await userEvent.hover(within(builder).getByRole("button", { name: "Keyboard shortcuts" }));
+    const tip = screen.getByRole("tooltip");
+    expect(tip.textContent).toMatch(/Ctrl\+Z\s*Undo/);
+    expect(tip.textContent).toMatch(/Arrow keys/);
+    expect(tip.textContent).toMatch(/Pin a rules card/);
+  });
+
   it("switches look, and the PC sheets open in the look it was left in", async () => {
     let builder = openBuilder();
     const look = () => builder.querySelector("[data-look]")!.getAttribute("data-look");
