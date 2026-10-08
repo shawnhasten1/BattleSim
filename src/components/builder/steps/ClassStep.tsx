@@ -10,6 +10,7 @@ import {
   timeline,
   withChoice,
   withClass,
+  withHitDieRoll,
   withSuggestions,
   type ChoiceSlot,
   type ClassDefinition,
@@ -244,12 +245,7 @@ function LevelPanel({ level }: { level: TimelineLevel }) {
   const index = level.level - 1;
   const rolled = build.hp.method === "rolled" && level.hitPoints && !level.hitPoints.first;
   const die = level.hitPoints?.die ?? 8;
-  const setRoll = (value: number | undefined) => {
-    const rolls = [...(build.hp.rolls ?? [])];
-    if (value === undefined) delete rolls[index - 1];
-    else rolls[index - 1] = Math.min(die, Math.max(1, Math.round(value)));
-    set({ ...build, hp: { ...build.hp, rolls } });
-  };
+  const setRoll = (value: number | undefined) => set(withHitDieRoll(build, index, value, sources));
   const row = (entry: TimelineFeature) => (
     <FeatureRow
       key={entry.key} name={entry.feature.name} support={entry.support} text={entry.feature.description}
@@ -270,7 +266,7 @@ function LevelPanel({ level }: { level: TimelineLevel }) {
             Hit die roll (d{die})
             <input
               type="number" min={1} max={die} aria-label={`Level ${level.level} hit die roll`}
-              value={build.hp.rolls?.[index - 1] ?? ""} placeholder={String(die / 2 + 1)}
+              value={build.hp.rolls?.[index - 1] || ""} placeholder={String(die / 2 + 1)}
               onChange={(event) => setRoll(event.target.value === "" ? undefined : Number(event.target.value) || die / 2 + 1)}
             />
           </label>

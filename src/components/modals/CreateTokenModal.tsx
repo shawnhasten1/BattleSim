@@ -68,6 +68,15 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const chooseEdition = (next: EditionChoice) => {
     setEdition(next);
     setPartyClasses((ids) => inEdition(ids, next));
+    // The character's class, background and species follow too: the 2014 filter means the 2014 Fighter.
+    if (next !== "both") {
+      setCharacter((current) => ({
+        ...current,
+        classId: editionTwin(buildSources.catalog.classes, current.classId, next),
+        backgroundId: current.backgroundId ? editionTwin(buildSources.catalog.backgrounds, current.backgroundId, next) : "",
+        speciesId: current.speciesId ? editionTwin(buildSources.catalog.species, current.speciesId, next) : ""
+      }));
+    }
   };
   const [character, setCharacter] = useState(() => {
     const first = buildSources.catalog.classes[0]!;
@@ -100,8 +109,9 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
   const [query, setQuery] = useState("goblin");
   const [results, setResults] = useState<CreatureSearchResult[]>([]);
 
-  function finish(newId?: string) {
-    if (newId && targetFolderId) void moveDefinitionToFolder(newId, targetFolderId);
+  /** Made: each new actor is filed into the target folder (every member of a party, not just the last). */
+  function finish(...newIds: Array<string | undefined>) {
+    if (targetFolderId) for (const id of newIds) if (id) void moveDefinitionToFolder(id, targetFolderId);
     onCreated?.();
     onClose();
   }
@@ -299,17 +309,19 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               type="button"
               className={styles.secondary}
               onClick={() => {
+                // The builder starts where this left off: the same edition filter, and the folder it was adding to.
                 openBuilder({
                   kind: "create",
                   seed: {
                     name: character.name.trim() || "New Character", classId: character.classId, level: character.level,
-                    backgroundId: character.backgroundId || undefined, speciesId: character.speciesId || undefined
+                    backgroundId: character.backgroundId || undefined, speciesId: character.speciesId || undefined,
+                    edition, ...(targetFolderId ? { folderId: targetFolderId } : {})
                   }
                 });
                 onClose();
               }}
             >
-              <ListChecks size={14} /> Step through the choices…
+              <ListChecks size={14} /> Open the builder…
             </button>
             <fieldset className={styles.partyBox} aria-label="Quick party">
               <legend>Quick party</legend>
@@ -329,8 +341,7 @@ export function CreateTokenModal({ compendium, onClose, onCreated, targetFolderI
               <button
                 type="button" className={styles.secondary}
                 onClick={() => {
-                  const ids = createParty(quickParty(buildSources, partyClasses, character.level));
-                  finish(ids[ids.length - 1]);
+                  finish(...createParty(quickParty(buildSources, partyClasses, character.level)));
                 }}
               >
                 <Users size={14} /> Quick party: {partyClasses.length} at level {character.level}

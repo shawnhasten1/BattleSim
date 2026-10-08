@@ -114,12 +114,12 @@ describe("Create Token › Character", { timeout: 20000 }, () => {
     expect(built.features?.some((feature) => feature.name === "Second Wind")).toBe(true);
   });
 
-  it("Step through opens the builder with every choice suggested, and creates the character from it", async () => {
+  it("Open the builder opens it with every choice suggested, and creates the character from it", async () => {
     const onCreated = vi.fn();
     render(<CreateTokenModal compendium={compendium} onClose={() => undefined} />);
     await userEvent.click(screen.getByRole("tab", { name: "Character" }));
     await userEvent.selectOptions(screen.getByLabelText("Class"), "srd:class:rogue");
-    await userEvent.click(screen.getByRole("button", { name: /step through/i }));
+    await userEvent.click(screen.getByRole("button", { name: /open the builder/i }));
     expect(useBuilderUiStore.getState().window).toMatchObject({ kind: "create", seed: { classId: "srd:class:rogue", level: 1 } });
 
     cleanup();
@@ -212,8 +212,11 @@ describe("leveling up", { timeout: 20000 }, () => {
     const dialog = screen.getByRole("dialog", { name: "Level up" });
     expect(dialog.textContent).toMatch(/Rogue 3 \(Thief\) · Criminal → Rogue 4/);
     // 4th level asks for a feat, already filled in.
-    const feat = within(dialog).getByLabelText("Ability Score Improvement or another feat") as HTMLSelectElement;
-    expect(feat.value).toBe("srd:feat:ability-score-improvement");
+    const feat = within(dialog).getByRole("radiogroup", { name: "Ability Score Improvement or another feat" });
+    expect(within(feat).getAllByRole("radio").filter((radio) => radio.getAttribute("aria-checked") === "true").map((radio) => radio.getAttribute("aria-label"))).toEqual(["Ability Score Improvement"]);
+    // What changes is folded until opened.
+    expect(within(dialog).queryByRole("list", { name: "Changes" })).toBeNull();
+    await userEvent.click(within(dialog).getByRole("button", { name: /^What changes/ }));
     expect(within(dialog).getByRole("list", { name: "Changes" }).textContent).toContain("Gains Ability Score Improvement (4th level)");
 
     const depth = store().undoStack.length;
@@ -245,14 +248,18 @@ describe("leveling up", { timeout: 20000 }, () => {
     useBuilderUiStore.getState().open({ kind: "level-up", definitionId: rogue.id });
     render(<BuilderHost onCreated={() => undefined} />);
     const dialog = screen.getByRole("dialog", { name: "Level up" });
-    const pick = within(dialog).getByLabelText("Class to level") as HTMLSelectElement;
-    expect(pick.value).toBe("srd:class:rogue");
-    expect(within(pick).getByRole("option", { name: "Rogue (3 → 4)" })).toBeTruthy();
+    const pick = within(dialog).getByRole("radiogroup", { name: "Class to level" });
+    const rogueCard = within(pick).getByRole("radio", { name: "Rogue (2024)" });
+    expect(rogueCard.getAttribute("aria-checked")).toBe("true");
+    expect(rogueCard.textContent).toMatch(/Level 3 → 4/);
 
-    // A Wizard needs Intelligence 13, which a quick-built rogue hasn't got: said, not stopped.
-    await userEvent.selectOptions(pick, "srd:class:wizard");
+    // A new class is a multiclass: a Wizard needs Intelligence 13, which a quick-built rogue hasn't got. Said, not stopped.
+    expect(within(pick).queryByRole("radio", { name: "Wizard (2024)" })).toBeNull();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Multiclass…" }));
+    expect(within(pick).getByRole("radio", { name: "Wizard (2024)" }).textContent).toMatch(/Wizard needs Intelligence 13/);
+    await userEvent.click(within(pick).getByRole("radio", { name: "Wizard (2024)" }));
     expect(within(dialog).getByRole("note").textContent).toMatch(/Wizard needs Intelligence 13/);
-    await userEvent.selectOptions(pick, "srd:class:fighter");
+    await userEvent.click(within(pick).getByRole("radio", { name: "Fighter (2024)" }));
     expect(within(dialog).queryByRole("note")).toBeNull();
     expect(dialog.textContent).toMatch(/→ Fighter 1/);
     await userEvent.click(within(dialog).getByRole("button", { name: "Level up to 4" }));

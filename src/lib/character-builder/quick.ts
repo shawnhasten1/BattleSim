@@ -106,6 +106,20 @@ export function withClass(build: CharacterBuild, classId: string, sources: Build
   };
 }
 
+/**
+ * A level's hit die roll typed (or cleared: the level takes the average), `levelIndex` counting from 0 (the first level's
+ * die is always its maximum, so 1 is the first that rolls). The rolls stay a full list: a level without one has 0.
+ */
+export function withHitDieRoll(build: CharacterBuild, levelIndex: number, roll: number | undefined, sources: BuildSources): CharacterBuild {
+  if (levelIndex < 1 || levelIndex >= build.levels.length) return build;
+  const die = sources.catalog.classes.find((entry) => entry.id === build.levels[levelIndex]!.classId)?.hitDie ?? 8;
+  const rolls = Array.from({ length: Math.max(build.hp.rolls?.length ?? 0, levelIndex) }, (_, at) => build.hp.rolls?.[at] ?? 0);
+  rolls[levelIndex - 1] = roll === undefined ? 0 : Math.min(die, Math.max(1, Math.round(roll)));
+  while (rolls.length && rolls[rolls.length - 1] === 0) rolls.pop();
+  const { rolls: _rolls, ...hp } = build.hp;
+  return { ...build, hp: rolls.length ? { ...hp, rolls } : hp };
+}
+
 /** The build one level higher, in `classId` (default the class of its last level), with no choices made yet. */
 export function withLevelUp(build: CharacterBuild, classId?: string): CharacterBuild {
   if (build.levels.length >= 20) return build;

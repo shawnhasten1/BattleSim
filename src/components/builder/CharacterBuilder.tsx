@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Redo2, Undo2 } from "lucide-react";
 import {
   adoptionBuild,
@@ -35,6 +35,7 @@ import { rememberStyle, storedStyle, useSheetWindowsStore, type SheetStyle } fro
 import { BuilderContext, type BuilderModel } from "./builder-context";
 import { BuilderHeader } from "./BuilderHeader";
 import { BuildPreview } from "./BuildPreview";
+import { LookSwitch } from "./LookSwitch";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import { OriginStep } from "./steps/OriginStep";
 import { ReviewStep } from "./steps/ReviewStep";
@@ -106,6 +107,7 @@ function firstSize() {
 function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, sources }: BuilderProps & { sources: BuildSources }) {
   const definition = useEncounterStore((s) => (definitionId ? s.encounter.definitions.find((entry) => entry.id === definitionId) : undefined));
   const createCharacter = useEncounterStore((s) => s.createCharacter);
+  const moveDefinitionToFolder = useEncounterStore((s) => s.moveDefinitionToFolder);
   const rebuildCharacter = useEncounterStore((s) => s.rebuildCharacter);
   const adoptCharacter = useEncounterStore((s) => s.adoptCharacter);
   const saved = readBuild(definition);
@@ -115,6 +117,12 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   // Which edition's version the lists show where there are two: a built character's opens on its own (D2). Rebuilding,
   // its classes are matched in that edition, and again when it changes.
   const [filter, setFilter] = useEditionFilter("builder", saved?.edition);
+  // Create Token's edition filter carries over (D13).
+  useEffect(() => {
+    if (seed?.edition && seed.edition !== filter) setFilter(seed.edition);
+    // Once, when the builder opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const adoptIn = (choice: EditionChoice) => {
     if (!adopting || !definition) return undefined;
     const preferred = choice === "both" ? undefined : choice;
@@ -197,6 +205,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
     history.clear();
     if (creating) {
       const id = createCharacter({ name: name.trim() || "New Character", build: build! });
+      if (seed?.folderId) void moveDefinitionToFolder(id, seed.folderId);
       onCreated?.(id);
     } else if (adopting) {
       adoptCharacter(definitionId!, build!, removeTwins);
@@ -330,22 +339,10 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
       storageKey="builder"
       initialPosition={{ x: size.x, y: size.y }}
       headerExtra={(
-        <span className={styles.titleControls}>
-          <span role="group" aria-label="Builder look" className={styles.lookSwitch}>
-            {(["standard", "codex"] as const).map((id) => (
-              <button key={id} type="button" aria-pressed={look === id} onClick={() => chooseLook(id)}>{id === "standard" ? "Standard" : "Codex"}</button>
-            ))}
-          </span>
-          {look === "codex" ? (
-            <span role="group" aria-label="Codex colours" className={styles.lookSwitch}>
-              {(["dark", "light"] as const).map((id) => (
-                <button key={id} type="button" aria-pressed={palette === id} onClick={() => setPalette(id)}>{id === "dark" ? "Dark" : "Light"}</button>
-              ))}
-            </span>
-          ) : null}
+        <LookSwitch look={look} onLook={chooseLook} palette={palette} onPalette={setPalette}>
           <button type="button" className={styles.titleButton} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={14} /></button>
           <button type="button" className={styles.titleButton} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={14} /></button>
-        </span>
+        </LookSwitch>
       )}
     >
       <BuilderContext.Provider value={model}>

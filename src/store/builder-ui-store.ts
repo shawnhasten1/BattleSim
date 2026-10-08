@@ -1,14 +1,19 @@
 "use client";
 
 import { create } from "zustand";
+import type { EditionChoice } from "@/lib/editions";
 
-/** What a new character starts from, when it's built step by step (Create Token › Character › Step through). */
+/** What a new character starts from, when it's built step by step (Create Token › Character › Open the builder). */
 export interface BuilderSeed {
   name: string;
   classId: string;
   level: number;
   backgroundId?: string;
   speciesId?: string;
+  /** Create Token's edition filter, carried over (CHARACTER_BUILDER_UX_PLAN.md D13). */
+  edition?: EditionChoice;
+  /** The folder Create Token was adding to: the character is filed there when it's made. */
+  folderId?: string;
 }
 
 /** The character builder's open window: a new character, a built one's whole recipe, or its next level. */

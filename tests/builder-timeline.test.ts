@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildCharacter,
   classTable,
+  parseCharacterBuild,
   quickBuild,
   startBuild,
   timeline,
   withClass,
+  withHitDieRoll,
   withLevelUp,
   withSuggestions,
   type CharacterBuild
@@ -126,5 +128,24 @@ describe("changing a new character's class (D11)", () => {
   it("leaves an unknown class alone", () => {
     const build = startBuild(S, { classId: "srd:class:wizard" });
     expect(withClass(build, "srd:class:nobody", S)).toBe(build);
+  });
+});
+
+describe("hit die rolls", () => {
+  const wizard = quickBuild(S, { classId: "srd:class:wizard", level: 5 });
+
+  it("are typed into a full list, 0 for a level without one, and a cleared roll takes the average", () => {
+    const rolled = withHitDieRoll({ ...wizard, hp: { method: "rolled" } }, 3, 5, S);
+    expect(rolled.hp.rolls).toEqual([0, 0, 5]);
+    expect(buildCharacter(rolled, S).breakdown.hitPoints.levels.map((level) => level.rolled)).toEqual([false, false, false, true, false]);
+    expect(withHitDieRoll(rolled, 3, 9, S).hp.rolls).toEqual([0, 0, 6]);
+    expect(withHitDieRoll(rolled, 3, undefined, S).hp).toEqual({ method: "rolled" });
+    expect(withHitDieRoll(rolled, 0, 4, S)).toBe(rolled);
+  });
+
+  it("read an older build's gaps as levels without a roll", () => {
+    const saved = JSON.parse(JSON.stringify({ ...wizard, hp: { method: "rolled", rolls: [undefined, 3] } }));
+    expect(saved.hp.rolls).toEqual([null, 3]);
+    expect(parseCharacterBuild(saved).build?.hp.rolls).toEqual([0, 3]);
   });
 });

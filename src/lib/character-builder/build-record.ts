@@ -40,7 +40,10 @@ export interface CharacterBuild {
   };
   /** Absent: no species (size, speed and senses are set by hand). */
   species?: { id: string; size?: SizeCategory; choices?: Record<string, ChoiceValue> };
-  /** Hit points: the average per level (plan D8), or rolls entered by hand for levels 2 and up; `adjust` is a typed change. */
+  /**
+   * Hit points: the average per level (plan D8), or rolls entered by hand for levels 2 and up (0: none typed, so the
+   * average); `adjust` is a typed change.
+   */
   hp: { method: "average" | "rolled"; rolls?: number[]; adjust?: number };
   /** One entry per character level, in order: the class that level went to and what was chosen at it. */
   levels: Array<{ classId: string; choices: Record<string, ChoiceValue> }>;
@@ -101,7 +104,8 @@ export const characterBuildSchema: z.ZodType<CharacterBuild> = z.object({
   }).optional(),
   hp: z.object({
     method: z.enum(["average", "rolled"]),
-    rolls: z.array(z.number().int().min(1)).optional(),
+    // 0 is a level with no roll typed; a gap an older builder left (saved as null) reads as one.
+    rolls: z.array(z.preprocess((value) => value ?? 0, z.number().int().min(0))).optional(),
     adjust: z.number().int().optional()
   }),
   levels: z.array(z.object({ classId: z.string().min(1), choices: choicesSchema })).min(1).max(20),
