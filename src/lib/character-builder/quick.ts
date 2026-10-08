@@ -87,6 +87,25 @@ export function quickParty(sources: BuildSources, classIds: string[], level: num
   });
 }
 
+/**
+ * A new character's class changed (CHARACTER_BUILDER_UX_PLAN.md D11): every level goes to the new class with nothing
+ * chosen, and its starting package is the new class's suggestion; its scores, background, species, origin choices and
+ * hit point method stay. Typed hit die rolls go, since the die may change. `withSuggestions` fills the rest.
+ */
+export function withClass(build: CharacterBuild, classId: string, sources: BuildSources): CharacterBuild {
+  const definition = sources.catalog.classes.find((entry) => entry.id === classId);
+  if (!definition) return build;
+  const classOption = definition.suggested.equipment ?? definition.startingEquipment?.[0]?.id;
+  const { classOption: _option, lines: _lines, weapons: _weapons, ...kept } = build.equipment ?? { applied: false };
+  return {
+    ...build,
+    edition: definition.edition,
+    hp: { method: build.hp.method, ...(build.hp.adjust ? { adjust: build.hp.adjust } : {}) },
+    levels: build.levels.map(() => ({ classId, choices: {} })),
+    equipment: { ...kept, ...(classOption ? { classOption } : {}), applied: false }
+  };
+}
+
 /** The build one level higher, in `classId` (default the class of its last level), with no choices made yet. */
 export function withLevelUp(build: CharacterBuild, classId?: string): CharacterBuild {
   if (build.levels.length >= 20) return build;

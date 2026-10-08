@@ -36,7 +36,8 @@ import { BuildPreview } from "./BuildPreview";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
 import { OriginStep } from "./steps/OriginStep";
 import { ReviewStep } from "./steps/ReviewStep";
-import { AbilitiesStepInterim, ClassStepInterim, EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
+import { ClassStep } from "./steps/ClassStep";
+import { AbilitiesStepInterim, EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
 import { useDraftHistory, type Draft } from "./useDraftHistory";
 import styles from "./builder.module.css";
 
@@ -273,7 +274,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
           <p className={styles.railHint}>Nothing is locked: go to any step. Hover anything to read its rules.</p>
         </nav>
         <main ref={stepRef} className={styles.stepArea} aria-label={`${steps[index]?.label ?? "This"} step`}>
-          {step === "class" ? <ClassStepInterim /> : null}
+          {step === "class" ? <ClassStep /> : null}
           {step === "origin" ? <OriginStep /> : null}
           {step === "abilities" ? <AbilitiesStepInterim /> : null}
           {step === "spells" ? <SpellsStepInterim /> : null}

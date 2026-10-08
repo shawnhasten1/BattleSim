@@ -19,6 +19,8 @@ export interface CardOption {
   blocked?: string;
   /** Its rules card. */
   card?: EntrySource;
+  /** The builder's suggestion: marked ✦ (a sensible default to start from). */
+  suggested?: boolean;
 }
 
 /**
@@ -59,7 +61,7 @@ export function CardGrid({ label, groups, value, onChange, columns = 3, extra }:
       {groups.map((group, index) => (
         <div key={group.label ?? index} className={styles.cardGroup}>
           {group.label && groups.length > 1 ? <p className={styles.cardGroupLabel}>{group.label}</p> : null}
-          <div className={styles.cardGrid} style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+          <div className={styles.cardGrid} data-columns={columns}>
             {group.options.map((option) => {
               const on = option.id === value;
               const bound = cards.bind(option.card);
@@ -82,6 +84,7 @@ export function CardGrid({ label, groups, value, onChange, columns = 3, extra }:
                     <span className={styles.optionTitle}>
                       <strong>{option.title}</strong>
                       {option.badge ? <span className={styles.optionBadge}>{option.badge}</span> : null}
+                      {option.suggested ? <span className={styles.suggestMark} aria-hidden="true" title="The builder's suggestion">✦</span> : null}
                     </span>
                     {(option.lines ?? []).map((line) => <span key={line} className={styles.optionLine}>{line}</span>)}
                     {option.accent ? <span className={styles.optionAccent}>{option.accent}</span> : null}

@@ -312,7 +312,9 @@ describe("rebuilding a hand-built PC with the builder (plan D10)", { timeout: 20
     await userEvent.click(within(twins).getByRole("checkbox", { name: "Remove my versions when rebuilding" }));
     expect((within(builder).getByLabelText("Level") as HTMLSelectElement).value).toBe("6");
     await step(builder, "Class");
-    expect((within(builder).getByLabelText("Class") as HTMLSelectElement).value).toBe("srd:class:barbarian");
+    await userEvent.click(within(builder).getByRole("button", { name: "Change class" }));
+    const classes = within(builder).getByRole("radiogroup", { name: "Class" });
+    expect(within(classes).getByRole("radio", { name: "Barbarian (2024)" }).getAttribute("aria-checked")).toBe("true");
     const depth = store().undoStack.length;
     await userEvent.click(within(builder).getByRole("button", { name: "Rebuild" }));
 

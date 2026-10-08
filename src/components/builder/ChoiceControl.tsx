@@ -13,7 +13,7 @@ import styles from "./builder.module.css";
  * A slot's options as the builder's edition filter shows them (EDITIONS_PLAN.md D2): the other edition's version of one
  * both editions have is hidden, unless it's chosen. Whether to mark each with its edition: only when both are listed.
  */
-function editionOptions(slot: ChoiceSlot, choice: EditionChoice | undefined): { options: ChoiceOption[]; mark: boolean } {
+export function editionOptions(slot: ChoiceSlot, choice: EditionChoice | undefined): { options: ChoiceOption[]; mark: boolean } {
   const chosen = new Set(Array.isArray(slot.value) ? slot.value as string[] : typeof slot.value === "string" ? [slot.value]
     : slot.value && typeof slot.value === "object" && "feat" in slot.value ? [(slot.value as FeatChoice).feat] : []);
   // A chosen option still hides its twin, and is itself never hidden.

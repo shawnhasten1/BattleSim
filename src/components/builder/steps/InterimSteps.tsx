@@ -31,8 +31,8 @@ import { Panel, StepHeading } from "../parts";
 import styles from "../builder.module.css";
 
 /*
- * The Class, Abilities, Spells and Equipment steps as Phase 3 has them: today's controls, moved into steps and restyled.
- * Phases 4 to 7 replace each (CHARACTER_BUILDER_UX_PLAN.md §6).
+ * The Abilities, Spells and Equipment steps as Phase 3 has them: today's controls, moved into steps and restyled.
+ * Phases 5 to 7 replace each (CHARACTER_BUILDER_UX_PLAN.md §6).
  */
 
 const ABILITY_LABELS: Record<Ability, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
@@ -85,86 +85,6 @@ function StepChoices({ step, empty }: { step: ReturnType<typeof stepOf>; empty: 
         </div>
       ))}
     </>
-  );
-}
-
-export function ClassStepInterim() {
-  const { build, sources, filter, set, creating, adopting, definition } = useBuilder();
-  const classId = build.levels[0]!.classId;
-  const firstClass = sources.catalog.classes.find((entry) => entry.id === classId);
-
-  function changeClass(nextClass: string) {
-    const chosen = sources.catalog.classes.find((entry) => entry.id === nextClass);
-    if (adopting && definition && chosen) {
-      const asClass = { ...definition, character: { ...definition.character, classes: [{ name: chosen.name, level: build.levels.length }] } };
-      const next = adoptionBuild(asClass, sources);
-      if (next) return set(next.build);
-    }
-    set(withSuggestions(startBuild(sources, { classId: nextClass, level: build.levels.length, backgroundId: build.background.id, speciesId: build.species?.id }), sources));
-  }
-
-  return (
-    <div className={styles.stepBody}>
-      <Panel label="Your class">
-        <StepHeading icon="star">Class</StepHeading>
-        <FieldInfo entry={firstClass ? () => describeClass(firstClass) : undefined} about={firstClass?.name}>
-          <label className={styles.field}>
-            Class
-            <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
-              <CatalogOptions entries={sources.catalog.classes} choice={filter} keep={classId} />
-            </select>
-          </label>
-        </FieldInfo>
-      </Panel>
-      <HitPointsPanel />
-      <Panel label="Choices by level">
-        <StepHeading icon="star">Choices by level</StepHeading>
-        <StepChoices step="class" empty="Nothing to choose at these levels." />
-      </Panel>
-    </div>
-  );
-}
-
-export function HitPointsPanel() {
-  const { build, built, sources, set } = useBuilder();
-  return (
-    <Panel label="Hit points">
-      <StepHeading icon="shield">Hit points</StepHeading>
-      <div className={styles.row}>
-        <label className={styles.field}>
-          Per level
-          <select
-            aria-label="Hit points per level" value={build.hp.method}
-            onChange={(event) => set({ ...build, hp: { ...build.hp, method: event.target.value as "average" | "rolled" } })}
-          >
-            <option value="average">Average</option>
-            <option value="rolled">Rolled (typed by hand)</option>
-          </select>
-        </label>
-        <span className={styles.stat}>Max HP <strong>{built.fields.maxHp}</strong></span>
-      </div>
-      {build.hp.method === "rolled" && build.levels.length > 1 ? (
-        <div className={styles.rolls}>
-          {build.levels.slice(1).map((entry, index) => {
-            const die = sources.catalog.classes.find((candidate) => candidate.id === entry.classId)?.hitDie ?? 8;
-            return (
-              <label key={index} className={styles.roll}>
-                <span>L{index + 2}</span>
-                <input
-                  type="number" min={1} max={die} aria-label={`Level ${index + 2} hit die roll`}
-                  value={build.hp.rolls?.[index] ?? ""} placeholder={String(die / 2 + 1)}
-                  onChange={(event) => {
-                    const rolls = [...(build.hp.rolls ?? [])];
-                    rolls[index] = Math.min(die, Math.max(1, Math.round(Number(event.target.value) || die / 2 + 1)));
-                    set({ ...build, hp: { ...build.hp, rolls } });
-                  }}
-                />
-              </label>
-            );
-          })}
-        </div>
-      ) : null}
-    </Panel>
   );
 }
 

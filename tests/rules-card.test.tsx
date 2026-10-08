@@ -106,7 +106,7 @@ describe("rules cards in the builder (Phase 2)", { timeout: 20000 }, () => {
     act(() => { sacredFlame.focus(); });
     expect(within(card()!).getByText("Evocation cantrip")).toBeTruthy();
     step(builder, "Class");
-    act(() => { within(builder).getByRole("button", { name: "About Fighter" }).focus(); });
+    act(() => { within(builder).getByRole("button", { name: "About the Fighter" }).focus(); });
     expect(within(card()!).getByText("d10")).toBeTruthy();
   });
 });
