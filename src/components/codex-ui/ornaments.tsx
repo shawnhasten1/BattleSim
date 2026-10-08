@@ -3,7 +3,7 @@
 import type { CombatantState, CreatureDefinition } from "@/engine";
 import { tokenVisualsFor } from "@/lib/ui-helpers";
 import { useDeviceTokenImages } from "@/store/token-pack-store";
-import styles from "./codex.module.css";
+import ui from "./codex-ui.module.css";
 
 const COPPER = "#F2B488";
 const BONE = "#ECE5D6";
@@ -26,7 +26,7 @@ const polygon = (offset: number) => [0, 90, 180, 270].map((angle) => at(158, ang
  */
 export function Astrolabe() {
   return (
-    <svg className={styles.astrolabe} viewBox="0 0 440 440" aria-hidden="true">
+    <svg className={ui.astrolabe} viewBox="0 0 440 440" aria-hidden="true">
       {RINGS.map(([r, opacity, width]) => (
         <circle key={r} cx={C} cy={C} r={r} fill="none" stroke={COPPER} strokeOpacity={opacity} strokeWidth={width} />
       ))}
@@ -49,14 +49,23 @@ export function Astrolabe() {
   );
 }
 
-/** The token's art in the sidebar's octagonal copper frame, or its initials. */
-export function Portrait({ definition, combatant }: { definition: CreatureDefinition; combatant: CombatantState }) {
+/**
+ * The token's art in the octagonal copper frame, or the first letters of its name: the sheet's sidebar, and the
+ * builder's live preview (which has a creature but no token yet).
+ */
+export function Portrait({ definition, combatant, name, className }: {
+  definition: CreatureDefinition;
+  combatant?: CombatantState;
+  /** The name the initials come from, where it isn't the token's or the creature's (a character not made yet). */
+  name?: string;
+  className?: string;
+}) {
   const deviceImages = useDeviceTokenImages();
   const visuals = tokenVisualsFor(definition, combatant, deviceImages);
-  const initials = (combatant.displayName || definition.name).slice(0, 2);
+  const initials = (name ?? (combatant?.displayName || definition.name)).slice(0, 2);
   return (
-    <div className={styles.pframe} aria-hidden="true">
-      <div className={styles.portrait}>
+    <div className={className ? `${ui.pframe} ${className}` : ui.pframe} aria-hidden="true">
+      <div className={ui.portrait}>
         {visuals.imageUrl ? <img src={visuals.imageUrl} alt="" draggable={false} /> : <span>{initials}</span>}
       </div>
     </div>

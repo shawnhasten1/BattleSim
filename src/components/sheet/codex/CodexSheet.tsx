@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   abilityModifier,
   actualMaxHp,
@@ -49,7 +49,7 @@ import {
   withSkill,
   type MovementMode
 } from "@/lib/actor-sheet/edits";
-import { CODEX_PALETTES, hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
+import { hitDiceOf, identityOf, type CodexPaletteId } from "@/lib/actor-sheet/codex";
 import { hitPointsReadout, scoresReadout, speedReadout } from "@/lib/actor-sheet/summaries";
 import { readBuild } from "@/lib/character-builder/summary";
 import { CREATURE_TYPES } from "@/lib/creature-types";
@@ -77,8 +77,18 @@ import { TokenTab } from "../sheet-tabs/TokenTab";
 import { SheetNumber, SheetText } from "../SheetInputs";
 import { useSheetMode } from "../sheet-mode";
 import { notifyLockedEdit } from "@/lib/actor-sheet/bench";
-import { Astrolabe, Portrait } from "./ornaments";
-import { codexBody, codexDisplay } from "./fonts";
+import {
+  ABILITY_SCORE_CLASS,
+  AbilityDial,
+  CODEX_ICONS,
+  CodexBanner,
+  CodexHeading as Heading,
+  CodexRoot,
+  CodexTabs,
+  LEVEL_VALUE_CLASS,
+  LevelDial,
+  Portrait
+} from "@/components/codex-ui";
 import styles from "./codex.module.css";
 
 const ABILITIES: Array<[Ability, string]> = [
@@ -144,7 +154,6 @@ function scrollParent(node: HTMLElement | null): HTMLElement | null {
  * reach every token of the creature, and token values the token the switcher shows.
  */
 export function CodexSheet({ combatant, definition, tokens, onShowToken, palette, compendium }: CodexSheetProps) {
-  const theme = CODEX_PALETTES[palette];
   // The Abilities list's own groups and rows, so the Codex says what Standard says about each.
   const groups = abilityList(definition, combatant);
   const spellcasting = groups.find((group) => group.id === "spellcasting");
@@ -250,13 +259,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
   }, [editing, adding]);
 
   return (
-    <div
-      ref={rootRef}
-      className={`${styles.codex} ${codexDisplay.variable} ${codexBody.variable}`}
-      data-palette={palette}
-      data-dark={theme.dark}
-      style={theme.tokens as CSSProperties}
-    >
+    <CodexRoot ref={rootRef} palette={palette}>
       <Banner combatant={combatant} definition={definition} tokens={tokens} onShowToken={onShowToken} />
       <div className={styles.sheet}>
         <div className={styles.grid}>
@@ -276,7 +279,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
             // Add ability, exactly as on Standard's Abilities tab: a row opens in the editor, a library row's + adds it.
             <div ref={workRef} className={styles.panel}>
               <div className={styles.workHead}>
-                <Heading id="codex-add" icon="star">Add ability</Heading>
+                <Heading id="codex-add" icon="star" className={styles.workHeading}>Add ability</Heading>
                 <button type="button" className={styles.edit} aria-label="Close Add ability" onClick={() => setAdding(null)}>Close</button>
               </div>
               <AddAbility
@@ -297,13 +300,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
                 <output className={styles.cap} aria-label="Scores with its effects">With its effects: {scoresReadout(definition, combatant)}</output>
               ) : null}
               <div>
-                <div className={styles.tabs} role="tablist" aria-label="Codex sections">
-                  {available.map((id) => (
-                    <button key={id} type="button" role="tab" className={styles.tab} aria-selected={id === tab} onClick={() => choose(id)}>
-                      {TAB_LABELS[id]}
-                    </button>
-                  ))}
-                </div>
+                <CodexTabs tabs={available.map((id) => ({ id, label: TAB_LABELS[id] }))} value={tab} onChange={choose} label="Codex sections" />
                 <RowKitContext.Provider value={kit}>
                   {tab === "details" ? <Details combatant={combatant} definition={definition} /> : null}
                   {tab === "items" ? <Items definition={definition} groups={groups} onAdd={() => openAdd("items")} /> : null}
@@ -325,26 +322,7 @@ export function CodexSheet({ combatant, definition, tokens, onShowToken, palette
       </div>
       {/* "Deleted Bite. Undo", at the foot of the view. */}
       {editing || adding !== null ? null : removal.toast}
-    </div>
-  );
-}
-
-const ICONS = {
-  bag: "M9 3h6a1 1 0 0 1 1 1v3h3.5A1.5 1.5 0 0 1 21 8.5V12h-7v-1h-4v1H3V8.5A1.5 1.5 0 0 1 4.5 7H8V4a1 1 0 0 1 1-1zm1 2v2h4V5h-4zM3 13.5h7V15h4v-1.5h7v6A1.5 1.5 0 0 1 19.5 21h-15A1.5 1.5 0 0 1 3 19.5v-6z",
-  shield: "M12 2l8 3v6.2c0 5-3.4 9.1-8 10.8-4.6-1.7-8-5.8-8-10.8V5l8-3z",
-  compass: "M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm3.5 4.5L13.4 13.4 8.5 15.5l2.1-4.9z",
-  chest: "M9 3h6a1 1 0 0 1 1 1v3h3.5A1.5 1.5 0 0 1 21 8.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-11A1.5 1.5 0 0 1 4.5 7H8V4a1 1 0 0 1 1-1zm1 2v2h4V5h-4z",
-  star: "M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z",
-  sword: "M19.5 2H22v2.5L11.4 15.1l1.6 1.6-1.4 1.4-1.6-1.6L7 19.5l1 1-1.4 1.4-4.5-4.5L3.5 16l1 1 2.9-3-1.6-1.6 1.4-1.4 1.6 1.6z"
-} as const;
-
-/** A panel's heading, with Character Codex's small copper glyph. */
-function Heading({ id, icon, children }: { id: string; icon: keyof typeof ICONS; children: ReactNode }) {
-  return (
-    <h2 className={styles.ph} id={id}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[icon]} /></svg>
-      {children}
-    </h2>
+    </CodexRoot>
   );
 }
 
@@ -359,62 +337,58 @@ function Banner({ combatant, definition, tokens, onShowToken }: Omit<CodexSheetP
   const character = identity.level !== undefined;
 
   return (
-    <div className={styles.band}>
-      <Astrolabe />
-      <section className={styles.bandInner} aria-label="Name and level">
-        <div className={styles.title}>
-          <SheetText className={styles.name} label="Name" value={definition.name} onCommit={(name) => update(definition.id, { name })} />
-          <div className={styles.subtitle}>
-            <span className={styles.pill} title="What it is">{identity.what}</span>
-            {identity.species ? <span className={styles.pill} title="Species">{identity.species}</span> : null}
-            {identity.background ? <span className={styles.pill} title="Background">{identity.background}</span> : null}
-            <SheetText
-              className={styles.pillInput} label="Alignment" placeholder="Alignment"
-              value={definition.alignment ?? ""} onCommit={(value) => update(definition.id, { alignment: value || undefined })}
+    <CodexBanner label="Name and level">
+      <div className={styles.title}>
+        <SheetText className={styles.name} label="Name" value={definition.name} onCommit={(name) => update(definition.id, { name })} />
+        <div className={styles.subtitle}>
+          <span className={styles.pill} title="What it is">{identity.what}</span>
+          {identity.species ? <span className={styles.pill} title="Species">{identity.species}</span> : null}
+          {identity.background ? <span className={styles.pill} title="Background">{identity.background}</span> : null}
+          <SheetText
+            className={styles.pillInput} label="Alignment" placeholder="Alignment"
+            value={definition.alignment ?? ""} onCommit={(value) => update(definition.id, { alignment: value || undefined })}
+          />
+          {tokens.length > 1 ? (
+            <select className={styles.pillSelect} aria-label="Token shown" value={combatant.id} onChange={(event) => onShowToken(event.target.value)}>
+              {tokens.map((token) => (
+                <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{actualMaxHp(definition, token)} HP</option>
+              ))}
+            </select>
+          ) : combatant.displayName !== definition.name ? <span className={styles.pill}>Token: {combatant.displayName}</span> : null}
+        </div>
+      </div>
+      <div className={styles.lvl}>
+        {build ? (
+          <div className={styles.lvlButtons}>
+            <button type="button" disabled={build.levels.length >= 20} onClick={() => openBuilder({ kind: "level-up", definitionId: definition.id })}>
+              Level up…
+            </button>
+            <button type="button" onClick={() => openBuilder({ kind: "edit", definitionId: definition.id })}>Open in the builder…</button>
+          </div>
+        ) : null}
+        <LevelDial label={character ? "Level" : "CR"} title={character ? "Level" : "Challenge rating"}>
+          {character && !build ? (
+            // A hand-made character's level, typed (as on Stats); a built one's comes from its build (D9).
+            <SheetNumber
+              className={`${styles.bare} ${LEVEL_VALUE_CLASS}`} label="Level" value={characterLevel(definition)} min={1} max={20}
+              onCommit={(level) => update(definition.id, { character: withLevel(definition.character, level) })}
             />
-            {tokens.length > 1 ? (
-              <select className={styles.pillSelect} aria-label="Token shown" value={combatant.id} onChange={(event) => onShowToken(event.target.value)}>
-                {tokens.map((token) => (
-                  <option key={token.id} value={token.id}>{token.displayName} · {token.currentHp}/{actualMaxHp(definition, token)} HP</option>
-                ))}
-              </select>
-            ) : combatant.displayName !== definition.name ? <span className={styles.pill}>Token: {combatant.displayName}</span> : null}
-          </div>
-        </div>
-        <div className={styles.lvl}>
-          {build ? (
-            <div className={styles.lvlButtons}>
-              <button type="button" disabled={build.levels.length >= 20} onClick={() => openBuilder({ kind: "level-up", definitionId: definition.id })}>
-                Level up…
-              </button>
-              <button type="button" onClick={() => openBuilder({ kind: "edit", definitionId: definition.id })}>Open in the builder…</button>
-            </div>
-          ) : null}
-          <div className={styles.lv} title={character ? "Level" : "Challenge rating"}>
-            {character && !build ? (
-              // A hand-made character's level, typed (as on Stats); a built one's comes from its build (D9).
-              <SheetNumber
-                className={`${styles.bare} ${styles.lvValue}`} label="Level" value={characterLevel(definition)} min={1} max={20}
-                onCommit={(level) => update(definition.id, { character: withLevel(definition.character, level) })}
-              />
-            ) : character ? (
-              <output className={styles.lvValue} aria-label="Level">{identity.level}</output>
-            ) : (
-              // A monster's challenge rating, picked as on Stats (it sets the proficiency bonus it gives).
-              <select
-                className={`${styles.lvValue} ${styles.lvSelect}`} aria-label="Challenge rating"
-                value={definition.challengeRating === undefined ? "" : String(definition.challengeRating)}
-                onChange={(event) => update(definition.id, withChallengeRating(definition, event.target.value === "" ? undefined : Number(event.target.value)))}
-              >
-                <option value="">—</option>
-                {CHALLENGE_RATINGS.map((cr) => <option key={cr} value={String(cr)}>{formatChallengeRating(cr)}</option>)}
-              </select>
-            )}
-            <span className={styles.lvLabel} aria-hidden="true">{character ? "Level" : "CR"}</span>
-          </div>
-        </div>
-      </section>
-    </div>
+          ) : character ? (
+            <output className={LEVEL_VALUE_CLASS} aria-label="Level">{identity.level}</output>
+          ) : (
+            // A monster's challenge rating, picked as on Stats (it sets the proficiency bonus it gives).
+            <select
+              className={`${LEVEL_VALUE_CLASS} ${styles.lvSelect}`} aria-label="Challenge rating"
+              value={definition.challengeRating === undefined ? "" : String(definition.challengeRating)}
+              onChange={(event) => update(definition.id, withChallengeRating(definition, event.target.value === "" ? undefined : Number(event.target.value)))}
+            >
+              <option value="">—</option>
+              {CHALLENGE_RATINGS.map((cr) => <option key={cr} value={String(cr)}>{formatChallengeRating(cr)}</option>)}
+            </select>
+          )}
+        </LevelDial>
+      </div>
+    </CodexBanner>
   );
 }
 
@@ -446,7 +420,7 @@ function Side({ combatant, definition }: { combatant: CombatantState; definition
 
   return (
     <aside className={styles.side} aria-label="Portrait and vitals">
-      <Portrait definition={definition} combatant={combatant} />
+      <Portrait definition={definition} combatant={combatant} className={styles.sidePortrait} />
       <div>
         <div className={styles.tiles}>
           <div className={`${styles.tile} ${styles.tileAc}`}>
@@ -615,16 +589,15 @@ function AbilityDials({ definition }: { definition: CreatureDefinition }) {
   return (
     <section className={styles.abilities} aria-label="Ability scores">
       {ABILITIES.map(([ability, name]) => (
-        <div key={ability} className={styles.ab}>
-          <span className={styles.abName}>{name}</span>
-          <div className={styles.dial}>
+        <AbilityDial
+          key={ability} name={name} modLabel={`${name} modifier`} mod={formatBonus(abilityModifier(definition.abilities[ability]))}
+          score={(
             <SheetNumber
-              className={`${styles.bare} ${styles.abScore}`} label={`${name} score`} value={definition.abilities[ability]} min={1} max={30}
+              className={`${styles.bare} ${ABILITY_SCORE_CLASS}`} label={`${name} score`} value={definition.abilities[ability]} min={1} max={30}
               onCommit={(score) => updateAbility(definition.id, ability, score)}
             />
-          </div>
-          <output className={styles.abMod} aria-label={`${name} modifier`}>{formatBonus(abilityModifier(definition.abilities[ability]))}</output>
-        </div>
+          )}
+        />
       ))}
     </section>
   );
@@ -812,7 +785,7 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
         const conditions = group.type === "immunity" ? conditionImmunities : [];
         return (
           <div key={group.type} className={styles.def} role="group" aria-label={group.title}>
-            <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>{group.title}</h3>
+            <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={CODEX_ICONS.shield} /></svg>{group.title}</h3>
             <div className={styles.tags}>
               {own.map((adjustment) => (
                 <button
@@ -849,7 +822,7 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
       })}
       {absorbs.length ? (
         <div className={styles.def}>
-          <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>Absorbs (heals instead)</h3>
+          <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={CODEX_ICONS.shield} /></svg>Absorbs (heals instead)</h3>
           <div className={styles.tags}>
             {absorbs.map((adjustment) => <span key={label(adjustment)} className={`${styles.tag} ${styles.tagImmune}`}>{label(adjustment)}</span>)}
           </div>
@@ -864,7 +837,7 @@ function Defenses({ combatant, definition }: { combatant: CombatantState; defini
       )}
       {tokenless ? null : (
         <div className={styles.def} role="group" aria-label="Conditions">
-          <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.shield} /></svg>Conditions · {combatant.displayName}</h3>
+          <h3 className={styles.defHead}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={CODEX_ICONS.shield} /></svg>Conditions · {combatant.displayName}</h3>
           <ConditionsRow combatant={combatant} definition={definition} className={styles.conditions} />
         </div>
       )}
@@ -1097,7 +1070,7 @@ function Abilities({ combatant, definition, groups, onAdd }: {
       ) : null}
       <section className={styles.panel} aria-labelledby="codex-abilities">
         <div className={styles.workHead}>
-          <Heading id="codex-abilities" icon="star">Abilities</Heading>
+          <Heading id="codex-abilities" icon="star" className={styles.workHeading}>Abilities</Heading>
           <InfoTooltip label="About automation levels" content={AUTOMATION_HELP} />
         </div>
         {shown.length ? shown.map((group) => (
