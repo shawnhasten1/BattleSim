@@ -285,11 +285,7 @@
 
 .featureList {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin: 0;
-  width: 100%;
-  font-size: 11.5px;
+  flex-direction: column;
 }
 
 .manual {
@@ -396,4 +392,1028 @@
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: var(--ui-text-dim);
+}
+
+/* ══ The builder's window (CHARACTER_BUILDER_UX_PLAN.md §1) ════════════════════════════════════════════════════════
+ * One component tree in two looks (D1): every colour is an `--ui-*` token, which the Codex's root points at its
+ * palette. `data-look="codex"` adds only what the Codex looks like beyond its colours: its faces, panels and tiles. */
+
+.frame {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell {
+  container: builder / inline-size;
+  --b-radius: var(--ui-radius-lg, 8px);
+  --b-radius-sm: var(--ui-radius, 4px);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.shell[data-look="standard"] {
+  background: var(--ui-bg);
+}
+
+.shell[data-look="codex"] {
+  --b-radius: 10px;
+  --b-radius-sm: 8px;
+}
+
+/* Fields: low specificity (`:where`), so the banner's name and the dial's select style themselves. */
+.shell :where(input:not([type="checkbox"]):not([type="radio"]), select) {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.shell[data-look="codex"] :where(input:not([type="checkbox"]):not([type="radio"]), select) {
+  border-color: var(--field-edge);
+  border-radius: 6px;
+  background: var(--field);
+}
+
+.shell :where(select option) {
+  background: var(--ui-panel);
+  color: var(--ui-text);
+}
+
+.shell :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--ui-accent);
+}
+
+.shell[data-look="codex"] .primary,
+.shell[data-look="codex"] .secondary {
+  padding: 6px 15px;
+  border-radius: 999px;
+}
+
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── the title bar: look, colours, undo ── */
+
+.titleControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+.lookSwitch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+}
+
+.lookSwitch button {
+  padding: 2px 8px;
+  border: 0;
+  background: none;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.lookSwitch button[aria-pressed="true"] {
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-weight: 700;
+}
+
+.titleButton {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+}
+
+.titleButton:hover:not(:disabled) {
+  color: var(--ui-text);
+}
+
+.titleButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ── a kept draft, offered ── */
+
+.offer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-panel));
+  font-size: 12.5px;
+}
+
+.offer > span {
+  flex: 1;
+}
+
+/* ── the header: the Codex's banner, or Standard's ── */
+
+.banner {
+  flex: none;
+  --ui-text: #EFE7D8;
+  --ui-text-dim: #B9CDC9;
+  --ui-border: rgba(242, 180, 136, 0.4);
+  --ui-panel-2: rgba(0, 0, 0, 0.22);
+  --ui-accent: #DD8E57;
+  --ui-on-accent: #1B120B;
+}
+
+.standardHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.headerTitle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.headerName {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--display, var(--ui-font));
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.banner .headerName {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #F5EEE0;
+  font-size: clamp(1.8rem, 4cqi, 2.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.banner .headerName:focus {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: #F2B488;
+  text-underline-offset: 6px;
+}
+
+.standardHeader .headerName {
+  font-size: 20px;
+}
+
+.standardHeader input.headerName {
+  max-width: 340px;
+  padding: 3px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-panel-2);
+}
+
+.headerPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.headerPill {
+  padding: 3px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.headerPill:hover {
+  border-color: var(--ui-accent);
+}
+
+.standardHeader .headerPill {
+  border-radius: var(--ui-radius);
+  font-size: 12px;
+}
+
+.headerSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.headerOpen {
+  padding: 3px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.headerOpen[data-open] {
+  border-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+}
+
+/* The level, picked in the dial: outranks the dial's value class (`.lv .lvValue`), whichever loads first. */
+select.dialSelect.dialSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 76%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #F6EFE0;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+}
+
+select.dialSelect.dialSelect:focus {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: #F2B488;
+}
+
+select.dialSelect.dialSelect option {
+  background: #10292E;
+  color: #EFE7D8;
+  font-size: 14px;
+}
+
+/* ── the body: the step rail, the step, the preview ── */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr) 300px;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  padding: 14px 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.railStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--b-radius-sm);
+  background: none;
+  color: var(--ui-text-dim);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.railStep:hover {
+  color: var(--ui-text);
+  background: var(--ui-hover, rgba(255, 255, 255, 0.04));
+}
+
+.railStep[aria-current="step"] {
+  color: var(--ui-text);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--ui-accent) 16%, transparent);
+}
+
+.railNumber {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ui-border);
+  border-radius: 50%;
+  background: var(--ui-panel-2);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.railStep[aria-current="step"] .railNumber {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.railLabel {
+  flex: 1;
+}
+
+.railCount {
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--ui-good, #86c286);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.railCount[data-open] {
+  background: color-mix(in srgb, var(--ui-accent) 16%, transparent);
+  color: var(--ui-accent);
+}
+
+.railGap {
+  flex: 1;
+}
+
+.railHint {
+  margin: 6px 4px 0;
+  color: var(--ui-text-dim);
+  font-size: 11.5px;
+}
+
+.stepArea {
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 22px 40px;
+  overflow-y: auto;
+}
+
+.previewColumn {
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 14px 24px;
+  overflow-y: auto;
+  border-left: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.footerNote {
+  flex: 1;
+  color: var(--ui-text-dim);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ── a step's panels ── */
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--b-radius);
+  background: var(--ui-panel);
+}
+
+.shell[data-look="codex"] .panel {
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 var(--panel-hi), 0 14px 28px -18px var(--shadow);
+}
+
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepHead .codexHeading {
+  flex: 1;
+  margin: 0;
+}
+
+.standardHeading {
+  flex: 1;
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.note {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-accent);
+  border-radius: var(--b-radius-sm);
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+  font-size: 12.5px;
+}
+
+/* ── cards to choose from (D6) ── */
+
+.cardGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cardGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardGroupLabel {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.cardGrid {
+  display: grid;
+  gap: 7px;
+}
+
+.optionCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--b-radius);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.optionCard:hover {
+  border-color: color-mix(in srgb, var(--ui-accent) 60%, var(--ui-border));
+}
+
+.optionCard[aria-checked="true"] {
+  border-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-panel-2));
+  box-shadow: 0 0 0 1px var(--ui-accent);
+}
+
+.optionCard[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.optionCard:focus-visible,
+.railStep:focus-visible,
+.featureRow:focus-visible,
+.previewTile:focus-visible,
+.previewScore:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+.optionIcon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  fill: var(--ui-accent);
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.optionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.optionBadge {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-accent) 16%, transparent);
+  color: var(--ui-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.optionLine {
+  color: var(--ui-text-dim);
+  font-size: 11.5px;
+}
+
+.optionAccent {
+  color: var(--ui-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* ── what's chosen, and what it gives ── */
+
+.chosen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--b-radius-sm);
+  background: var(--ui-panel-2);
+}
+
+.chosenHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chosenTitle {
+  font-family: var(--display, var(--ui-font));
+  font-size: 17px;
+}
+
+.accentLine {
+  margin: 0;
+  color: var(--ui-accent);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.featureRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: help;
+}
+
+.featureRow:last-child {
+  border-bottom: 0;
+}
+
+.featureRow > strong {
+  flex: none;
+  font-weight: 600;
+}
+
+.featureLine {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui-text-dim);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dotSpace {
+  flex: none;
+  width: 8px;
+}
+
+.gives {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.givesRow {
+  display: contents;
+}
+
+.gives dt {
+  color: var(--ui-text-dim);
+}
+
+.gives dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.featureChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+}
+
+.featureChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: help;
+}
+
+/* Review's checklist: open, done, a problem, or something to know. */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.checklist li {
+  position: relative;
+  padding-left: 22px;
+}
+
+.checklist li > button {
+  margin-left: 10px;
+}
+
+.checklist li::before {
+  position: absolute;
+  left: 2px;
+  top: 0;
+  color: var(--ui-text-dim);
+}
+
+.checklist li[data-state="open"]::before {
+  content: "\25CB";
+  color: var(--ui-accent);
+}
+
+.checklist li[data-state="done"]::before {
+  content: "\2713";
+  color: var(--ui-good, #86c286);
+}
+
+.checklist li[data-state="problem"]::before {
+  content: "!";
+  color: var(--ui-warn, #d9b44a);
+  font-weight: 800;
+}
+
+.checklist li[data-state="info"]::before {
+  content: "\25C7";
+}
+
+/* ── the live preview ── */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.previewIdentityCodex {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.previewIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.previewPortrait {
+  width: 128px;
+}
+
+.previewInitials {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-panel-2);
+  color: var(--ui-text-dim);
+  font-weight: 700;
+}
+
+.previewName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.previewName strong {
+  font-family: var(--display, var(--ui-font));
+  font-size: 18px;
+}
+
+.previewTiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.previewTile,
+.previewHp {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--b-radius-sm);
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: help;
+}
+
+.shell[data-look="codex"] .previewTile {
+  background: linear-gradient(var(--cu), var(--cu)) 10px 0 / 18px 3px no-repeat, var(--panel-2);
+}
+
+.previewHp {
+  gap: 4px;
+  width: 100%;
+}
+
+.previewTileValue {
+  font-family: var(--display, var(--ui-font));
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.previewTileLabel {
+  color: var(--ui-text-dim);
+  font-size: 11.5px;
+}
+
+.previewHpBar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ui-good, #86c286);
+}
+
+.previewDials,
+.previewBoxes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 4px;
+}
+
+.previewScore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--b-radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+
+.previewBoxes .previewScore {
+  padding: 6px 0;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-panel-2);
+}
+
+.previewBoxScore {
+  font-size: 18px;
+}
+
+.previewBoxMod {
+  color: var(--ui-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.previewDial {
+  transform: scale(0.8);
+  margin: -8px 0;
+}
+
+.previewSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.previewCap {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.previewSaves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+}
+
+.previewLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.previewLine strong {
+  margin-left: auto;
+}
+
+.pip {
+  flex: none;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ui-text-dim);
+  border-radius: 2px;
+}
+
+.pip[data-on] {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+}
+
+.pip[data-double] {
+  background: var(--ui-panel);
+  box-shadow: inset 0 0 0 1.5px var(--ui-accent);
+}
+
+/* A value a choice just changed. */
+.flash {
+  animation: changed 1.6s ease-out;
+}
+
+@keyframes changed {
+  from {
+    background-color: color-mix(in srgb, var(--ui-accent) 32%, transparent);
+    box-shadow: 0 0 0 1px var(--ui-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    animation: none;
+    outline: 1px solid var(--ui-accent);
+  }
+}
+
+/* The narrow window's preview: a strip of vitals under the header. */
+.previewStrip {
+  display: none;
+}
+
+@container builder (max-width: 1000px) {
+  .body {
+    grid-template-columns: 170px minmax(0, 1fr);
+  }
+
+  .previewColumn {
+    display: none;
+  }
+
+  .previewStrip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--ui-border);
+    background: var(--ui-panel);
+  }
+
+  .previewStrip .previewTiles {
+    grid-template-columns: repeat(4, auto);
+  }
+
+  .previewStrip .previewHp {
+    width: auto;
+  }
+
+  .previewStrip .previewDials,
+  .previewStrip .previewBoxes {
+    grid-template-columns: repeat(6, auto);
+  }
+}
+
+@container builder (max-width: 720px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .rail {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-border);
+  }
+
+  .railStep {
+    width: auto;
+    flex: none;
+  }
+
+  .railGap,
+  .railHint {
+    display: none;
+  }
+
+  .standardHeader {
+    flex-wrap: wrap;
+  }
 }

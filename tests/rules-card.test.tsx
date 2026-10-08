@@ -25,6 +25,10 @@ function Anchor({ entry, onClick }: { entry: RulesEntry; onClick?: () => void })
 
 const card = () => screen.queryByRole("complementary", { name: /: rules$/ });
 
+/** Goes to a step of the builder window by its rail button. */
+const step = (builder: HTMLElement, name: string) =>
+  fireEvent.click(within(within(builder).getByRole("navigation", { name: "Builder steps" })).getByRole("button", { name: new RegExp(`^\\d+\\s*${name}`) }));
+
 describe("a rules card", () => {
   it("shows on hover after a pause, and closes when the pointer leaves", () => {
     vi.useFakeTimers();
@@ -96,10 +100,12 @@ describe("rules cards in the builder (Phase 2)", { timeout: 20000 }, () => {
     useBuilderUiStore.getState().open({ kind: "create", seed: { name: "New Character", classId: "srd:class:fighter", level: 1, backgroundId: "srd:background:acolyte" } });
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
+    step(builder, "Spells");
     const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
     const sacredFlame = within(cantrips).getByRole("checkbox", { name: /^Sacred Flame$/ });
     act(() => { sacredFlame.focus(); });
     expect(within(card()!).getByText("Evocation cantrip")).toBeTruthy();
+    step(builder, "Class");
     act(() => { within(builder).getByRole("button", { name: "About Fighter" }).focus(); });
     expect(within(card()!).getByText("d10")).toBeTruthy();
   });

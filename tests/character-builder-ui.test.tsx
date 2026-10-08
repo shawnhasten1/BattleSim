@@ -30,6 +30,11 @@ const compendium = { status: "", setStatus: vi.fn(), importCreature: vi.fn() } a
 const definitionNamed = (name: string) => store().encounter.definitions.find((definition) => definition.name === name)!;
 const tokenOf = (definition: CreatureDefinition) => store().encounter.combatants.find((combatant) => combatant.definitionId === definition.id)!;
 
+/** Goes to a step of the builder window (CHARACTER_BUILDER_UX_PLAN.md D2) by its rail button. */
+async function step(builder: HTMLElement, name: string) {
+  await userEvent.click(within(within(builder).getByRole("navigation", { name: "Builder steps" })).getByRole("button", { name: new RegExp(`^\\d+\\s*${name}`) }));
+}
+
 function createRogue(level: number, name = "Vex") {
   const id = store().createCharacter({ name, build: quickBuild(SRD_BUILD_SOURCES, { classId: "srd:class:rogue", level }) });
   return store().encounter.definitions.find((definition) => definition.id === id)!;
@@ -140,6 +145,7 @@ describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
     useBuilderUiStore.getState().open({ kind: "create", seed: { name: "New Character", classId: "srd:class:fighter", level: 1, backgroundId: "srd:background:acolyte" } });
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
+    await step(builder, "Spells");
     const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
     const box = (name: RegExp) => within(cantrips).getByRole("checkbox", { name }) as HTMLInputElement;
     expect(box(/^Sacred Flame$/).checked).toBe(true);
@@ -181,8 +187,9 @@ describe("species in the builder (Phase 6)", { timeout: 20000 }, () => {
     useBuilderUiStore.getState().open({ kind: "create", seed: { name: "Ana", classId: "srd:class:rogue", level: 1 } });
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
+    await step(builder, "Origin");
     expect(within(builder).queryByLabelText("Size")).toBeNull();
-    await userEvent.selectOptions(within(builder).getByLabelText("Species"), "srd:species:human");
+    await userEvent.click(within(builder).getByRole("radio", { name: "Human (2024)" }));
     // A human's skill and origin feat are asked for, already suggested.
     expect(within(builder).getByText("All made")).toBeTruthy();
     await userEvent.selectOptions(within(builder).getByLabelText("Size"), "small");
@@ -300,11 +307,12 @@ describe("rebuilding a hand-built PC with the builder (plan D10)", { timeout: 20
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
     expect(within(builder).getByRole("note").textContent).toMatch(/becomes a built character/);
-    expect((within(builder).getByLabelText("Class") as HTMLSelectElement).value).toBe("srd:class:barbarian");
-    expect((within(builder).getByLabelText("Level") as HTMLSelectElement).value).toBe("6");
     const twins = within(builder).getByRole("region", { name: "Named twice" });
     expect(twins.textContent).toMatch(/Rage/);
     await userEvent.click(within(twins).getByRole("checkbox", { name: "Remove my versions when rebuilding" }));
+    expect((within(builder).getByLabelText("Level") as HTMLSelectElement).value).toBe("6");
+    await step(builder, "Class");
+    expect((within(builder).getByLabelText("Class") as HTMLSelectElement).value).toBe("srd:class:barbarian");
     const depth = store().undoStack.length;
     await userEvent.click(within(builder).getByRole("button", { name: "Rebuild" }));
 

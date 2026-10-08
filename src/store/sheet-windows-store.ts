@@ -79,7 +79,8 @@ export function storedStyle(kind: SheetKind): SheetStyle {
   const stored = readJson<Partial<Record<SheetKind, SheetStyle>>>(STYLE_KEY, {});
   return stored[kind] === "codex" ? "codex" : "standard";
 }
-function rememberStyle(kind: SheetKind, style: SheetStyle) {
+/** Remembers the style new windows of this kind open in (the builder shares the PC sheets'). */
+export function rememberStyle(kind: SheetKind, style: SheetStyle) {
   const stored = readJson<Partial<Record<SheetKind, SheetStyle>>>(STYLE_KEY, {});
   writeJson(STYLE_KEY, { ...stored, [kind]: style });
 }

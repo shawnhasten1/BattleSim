@@ -4,8 +4,8 @@ import type { SourceMetadata } from "@/engine";
 import { entryLabel } from "@/lib/character-builder/homebrew";
 import { editionNameKey, preferEdition, type Edition, type EditionChoice } from "@/lib/editions";
 
-/** A catalog entry as a select lists it: a class, a subclass, a background, a species, a feat. */
-interface Listed {
+/** A catalog entry as a list shows it: a class, a subclass, a background, a species, a feat. */
+export interface Listed {
   id: string;
   name: string;
   edition: Edition;
@@ -19,25 +19,29 @@ const GROUPS: Array<{ label: string; test: (entry: Listed) => boolean }> = [
 ];
 
 /**
- * A catalog's entries as a select's options, grouped by edition (EDITIONS_PLAN.md D2): the SRD's 2024 ones, its 2014
+ * A catalog's entries in groups, as the edition filter shows them (EDITIONS_PLAN.md D2): the SRD's 2024 ones, its 2014
  * ones, then homebrew and imported ones. `choice` hides the other edition's version of an entry both have (the 2014
- * Fighter under 2024), never homebrew, and never the entry `keep` (the one chosen).
+ * Fighter under 2024), never homebrew, and never the entry `keep` (the one chosen). Each entry's `label` names its edition
+ * when both editions' namesakes are listed, so "Fighter (2014)" can be told from "Fighter (2024)".
  */
-export function CatalogOptions<T extends Listed>({ entries, choice, keep }: { entries: readonly T[]; choice: EditionChoice; keep?: string }) {
+export function catalogGroups<T extends Listed>(entries: readonly T[], choice: EditionChoice, keep?: string): Array<{ label: string; entries: Array<{ entry: T; label: string }> }> {
   const shown = preferEdition(entries, choice, (entry) => (entry.source.provider === "srd" ? entry.edition : undefined), (entry) => editionNameKey(entry.name));
   // The chosen entry stays, in its place.
   const listed = entries.filter((entry) => shown.includes(entry) || entry.id === keep);
-  const groups = GROUPS.map((group) => ({ label: group.label, entries: listed.filter(group.test) })).filter((group) => group.entries.length);
-  // A name both editions have says which it is, so a closed select tells the 2014 Fighter from the 2024 one.
   const srdNames = listed.filter((entry) => entry.source.provider === "srd").map((entry) => editionNameKey(entry.name));
   const label = (entry: T) => (entry.source.provider === "srd" && srdNames.filter((name) => name === editionNameKey(entry.name)).length > 1 ? `${entry.name} (${entry.edition})` : entryLabel(entry));
-  // One group needs no heading.
-  if (groups.length === 1) return <>{groups[0]!.entries.map((entry) => <option key={entry.id} value={entry.id}>{label(entry)}</option>)}</>;
+  return GROUPS.map((group) => ({ label: group.label, entries: listed.filter(group.test).map((entry) => ({ entry, label: label(entry) })) })).filter((group) => group.entries.length);
+}
+
+/** A catalog's entries as a select's options, grouped by edition (`catalogGroups`); one group needs no heading. */
+export function CatalogOptions<T extends Listed>({ entries, choice, keep }: { entries: readonly T[]; choice: EditionChoice; keep?: string }) {
+  const groups = catalogGroups(entries, choice, keep);
+  if (groups.length === 1) return <>{groups[0]!.entries.map(({ entry, label }) => <option key={entry.id} value={entry.id}>{label}</option>)}</>;
   return (
     <>
       {groups.map((group) => (
         <optgroup key={group.label} label={group.label}>
-          {group.entries.map((entry) => <option key={entry.id} value={entry.id}>{label(entry)}</option>)}
+          {group.entries.map(({ entry, label }) => <option key={entry.id} value={entry.id}>{label}</option>)}
         </optgroup>
       ))}
     </>

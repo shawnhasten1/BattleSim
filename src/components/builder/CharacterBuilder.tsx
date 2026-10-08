@@ -1,70 +1,50 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { abilityModifier, armorClassOf, effectiveDefinition, type Ability, type CreatureDefinition, type SizeCategory } from "@/engine";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Redo2, Undo2 } from "lucide-react";
 import {
-  ABILITIES,
+  adoptionBuild,
+  BUILDER_STEPS,
   blankCharacter,
   buildCharacter,
-  buildLabel,
-  changeSentence,
-  orderedChanges,
-  pointBuyCost,
-  POINT_BUY_BUDGET,
+  firstOpenStep,
+  missingFromCatalog,
+  openChoices,
   readBuild,
   rebuildActor,
-  STANDARD_ARRAY,
-  standardArrayFor,
+  sameNamedAbilities,
   startBuild,
-  withChoice,
   withLevelDown,
   withLevelUp,
   withSuggestions,
-  adoptionBuild,
-  equipmentLineOption,
-  equipmentLineWeapons,
-  equipmentWeaponOptions,
-  increasesSource,
-  sameNamedAbilities,
-  describeBackground,
-  describeClass,
-  describeSpecies,
-  type BuildChange,
+  type BuilderStep,
   type CharacterBuild,
-  type ClassDefinition,
-  type ChoiceSlot
+  type RulesEntry
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
-import { formatBonus } from "@/lib/ui-helpers";
-import { EditionFilter } from "@/components/ui/Edition";
-import { FieldInfo, RulesCardProvider } from "@/components/rules-card";
+import { CodexRoot } from "@/components/codex-ui";
+import { RulesCard, RulesCardProvider } from "@/components/rules-card";
 import { FloatingWindow } from "@/components/ui/FloatingWindow";
 import { useEditionFilter } from "@/hooks/useEditionFilter";
 import type { EditionChoice } from "@/lib/editions";
 import { useEncounterStore } from "@/store/encounter-store";
 import { useBuilderUiStore, type BuilderSeed } from "@/store/builder-ui-store";
-import { CatalogOptions, speciesWord } from "./CatalogSelect";
-import { ChoiceControl } from "./ChoiceControl";
+import { rememberStyle, storedStyle, useSheetWindowsStore, type SheetStyle } from "@/store/sheet-windows-store";
+import { BuilderContext, type BuilderModel } from "./builder-context";
+import { BuilderHeader } from "./BuilderHeader";
+import { BuildPreview } from "./BuildPreview";
 import { MissingCatalogNotice, useBuilderSources } from "./CatalogGate";
+import { OriginStep } from "./steps/OriginStep";
+import { ReviewStep } from "./steps/ReviewStep";
+import { AbilitiesStepInterim, ClassStepInterim, EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
+import { useDraftHistory, type Draft } from "./useDraftHistory";
 import styles from "./builder.module.css";
-/** The builder's windows open beside the actor sheet (680 px wide at x 72), not on top of it. */
-export const BESIDE_SHEET = { x: 770, y: 60 };
-const ABILITY_LABELS: Record<Ability, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
 
-/** What's wrong with a set of base scores under its method, if anything. */
-export function scoresProblem(abilities: CharacterBuild["abilities"]): string | undefined {
-  const values = ABILITIES.map((ability) => abilities.base[ability]);
-  if (abilities.method === "standard-array") {
-    const sorted = [...values].sort((a, b) => a - b).join(",");
-    return sorted === [...STANDARD_ARRAY].sort((a, b) => a - b).join(",") ? undefined : "The standard array is one each of 15, 14, 13, 12, 10 and 8.";
-  }
-  if (abilities.method === "point-buy") {
-    const cost = pointBuyCost(abilities.base);
-    if (cost === undefined) return "Point buy scores are 8 to 15.";
-    return cost > POINT_BUY_BUDGET ? `That's ${cost} points: point buy has ${POINT_BUY_BUDGET}.` : undefined;
-  }
-  return values.some((value) => value < 1 || value > 30) ? "Scores are 1 to 30." : undefined;
-}
+export { scoresProblem } from "./steps/InterimSteps";
+export { ChangeList, Summary } from "./steps/ReviewStep";
+
+/** The Level up window opens beside the actor sheet (680 px wide at x 72), not on top of it. */
+export const BESIDE_SHEET = { x: 770, y: 60 };
 
 /** A build's level count changed to `level`, keeping what was chosen at the levels it still has. */
 function withLevel(build: CharacterBuild, level: number): CharacterBuild {
@@ -74,22 +54,11 @@ function withLevel(build: CharacterBuild, level: number): CharacterBuild {
   return next;
 }
 
-/** The choices, grouped by what asks for them (the background, the species or race, each level), in order. */
-function groups(slots: ChoiceSlot[], species: "Species" | "Race" = "Species"): Array<{ label: string; slots: ChoiceSlot[] }> {
-  const out: Array<{ label: string; slots: ChoiceSlot[] }> = [];
-  for (const slot of slots) {
-    const label = slot.scope.kind === "level" ? `Level ${slot.scope.index + 1}` : slot.scope.kind === "background" ? "Background" : species;
-    const last = out[out.length - 1];
-    if (last?.label === label) last.slots.push(slot);
-    else out.push({ label, slots: [slot] });
-  }
-  return out;
-}
-
 /**
- * The character builder (PC_BUILDER_PLAN.md): a character's whole recipe in one window. For a new character it starts
- * from the class and level picked in Create Token, every choice already suggested; for a built one it edits its build,
- * and shows what applying it would change before it does.
+ * The character builder (PC_BUILDER_PLAN.md, CHARACTER_BUILDER_UX_PLAN.md): a character's whole recipe in one window, in
+ * steps beside a live preview of the sheet it makes. For a new character it starts from the class and level picked in
+ * Create Token, every choice already suggested; for a built one it edits its build, and shows what applying it would
+ * change before it does.
  */
 type BuilderProps = {
   seed?: BuilderSeed;
@@ -120,6 +89,14 @@ function startBuildShape(seed: BuilderSeed): CharacterBuild {
   };
 }
 
+/** The window's first size: as big as the builder wants, within the screen. */
+function firstSize() {
+  if (typeof window === "undefined") return { width: 1180, height: 820, x: 40, y: 50 };
+  const width = Math.min(1180, window.innerWidth - 32);
+  const height = Math.min(820, window.innerHeight - 80);
+  return { width, height, x: Math.max(16, Math.round((window.innerWidth - width) / 2)), y: 50 };
+}
+
 function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, sources }: BuilderProps & { sources: BuildSources }) {
   const definition = useEncounterStore((s) => (definitionId ? s.encounter.definitions.find((entry) => entry.id === definitionId) : undefined));
   const createCharacter = useEncounterStore((s) => s.createCharacter);
@@ -131,38 +108,61 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
   const adopting = Boolean(adopt && definition && !saved);
   // Which edition's version the lists show where there are two: a built character's opens on its own (D2). Rebuilding,
   // its classes are matched in that edition, and again when it changes.
-  const [edition, setEdition] = useEditionFilter("builder", saved?.edition);
+  const [filter, setFilter] = useEditionFilter("builder", saved?.edition);
   const adoptIn = (choice: EditionChoice) => {
     if (!adopting || !definition) return undefined;
     const preferred = choice === "both" ? undefined : choice;
     const first = sources.catalog.classes.find((entry) => !preferred || entry.edition === preferred) ?? sources.catalog.classes[0];
     return adoptionBuild(definition, sources, undefined, preferred) ?? adoptionBuild(definition, sources, first?.id, preferred);
   };
-  const [adoption, setAdoption] = useState(() => adoptIn(edition));
+  const [adoption, setAdoption] = useState(() => adoptIn(filter));
 
-  const [name, setName] = useState(seed?.name ?? "New Character");
-  const [draft, setDraft] = useState<CharacterBuild | undefined>(() => {
-    if (saved) return saved;
-    if (adoption) return adoption.build;
-    if (!seed) return undefined;
-    return withSuggestions(startBuild(sources, { classId: seed.classId, level: seed.level, backgroundId: seed.backgroundId, speciesId: seed.speciesId }), sources);
-  });
-  const [update, setUpdate] = useState<string[]>([]);
-  const [removeTwins, setRemoveTwins] = useState(false);
-  const chooseEdition = (next: EditionChoice) => {
-    setEdition(next);
-    const again = adoptIn(next);
-    if (again) { setAdoption(again); setDraft(again.build); }
+  // The look (D1): the PC sheets' Standard or Codex, switched here or there.
+  const [look, setLook] = useState<SheetStyle>(() => storedStyle("pc"));
+  const palette = useSheetWindowsStore((s) => s.palette);
+  const setPalette = useSheetWindowsStore((s) => s.setPalette);
+  const chooseLook = (next: SheetStyle) => {
+    setLook(next);
+    rememberStyle("pc", next);
   };
 
-  const built = useMemo(() => (draft ? buildCharacter(draft, sources) : undefined), [draft, sources]);
-  // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
-  const preview = useMemo(() => {
-    if (!draft) return undefined;
-    return rebuildActor(definition ?? blankCharacter("preview", name), draft, sources);
-  }, [draft, definition, name, sources]);
+  // The draft, with undo, kept in this browser until it's applied or cancelled (D11).
+  const history = useDraftHistory(
+    creating ? "create" : `${adopting ? "adopt" : "edit"}:${definitionId}`,
+    (): Draft | undefined => {
+      const name = seed?.name ?? definition?.name ?? "New Character";
+      if (saved) return { build: saved, name };
+      if (adoption) return { build: adoption.build, name };
+      if (!seed) return undefined;
+      return { build: withSuggestions(startBuild(sources, { classId: seed.classId, level: seed.level, backgroundId: seed.backgroundId, speciesId: seed.speciesId }), sources), name };
+    },
+    (kept) => missingFromCatalog(kept.build, sources.catalog).length === 0
+  );
+  const build = history.present?.build;
+  const name = history.present?.name ?? "New Character";
+  const set = (next: CharacterBuild) => history.set({ build: next, name });
 
-  if (!draft || !built || !preview) {
+  const [step, setStep] = useState<BuilderStep>(creating ? "class" : "review");
+  const [pinned, setPinned] = useState<RulesEntry | null>(null);
+  const [update, setUpdate] = useState<string[]>([]);
+  const [removeTwins, setRemoveTwins] = useState(false);
+  const [size] = useState(firstSize);
+  const stepRef = useRef<HTMLElement>(null);
+
+  const chooseFilter = (next: EditionChoice) => {
+    setFilter(next);
+    const again = adoptIn(next);
+    if (again) {
+      setAdoption(again);
+      set(again.build);
+    }
+  };
+
+  const built = useMemo(() => (build ? buildCharacter(build, sources) : undefined), [build, sources]);
+  // Worked out without the "use the build's instead" ticks, so the changes they apply to stay listed.
+  const preview = useMemo(() => (build ? rebuildActor(definition ?? blankCharacter("preview", name), build, sources) : undefined), [build, definition, name, sources]);
+
+  if (!build || !built || !preview) {
     return (
       <FloatingWindow title="Character Builder" onClose={onClose} width={420} storageKey="character-builder" initialPosition={BESIDE_SHEET}>
         <p className={styles.dim}>This actor wasn&apos;t made with the character builder.</p>
@@ -170,70 +170,98 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
     );
   }
 
-  const classId = draft.levels[0]!.classId;
-  const firstClass = sources.catalog.classes.find((entry) => entry.id === classId);
-  const species = draft.species ? sources.catalog.species.find((entry) => entry.id === draft.species!.id) : undefined;
-  const background = draft.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === draft.background.id) : undefined;
-  // "Race" for a 2014 race, "Species" for a 2024 one (the character's edition while there's none).
-  const speciesLabel = speciesWord(species?.edition ?? draft.edition);
-  const increasesFrom = increasesSource(draft, sources);
-  const pending = built.choices.filter((slot) => slot.pending);
-  const scores = scoresProblem(draft.abilities);
-  const changes: BuildChange[] = creating ? [] : orderedChanges(preview.changes).filter((change) => !(change.kind === "field" && change.key === "field:classes"));
-  const kept = changes.filter((change) => change.kind === "kept");
-  const set = (next: CharacterBuild) => setDraft(next);
-
-  function changeClass(nextClass: string) {
-    // Rebuilding: the chosen class at the PC's level, its scores and HP still kept.
-    const chosen = sources.catalog.classes.find((entry) => entry.id === nextClass);
-    if (adopting && definition && chosen) {
-      const asClass = { ...definition, character: { ...definition.character, classes: [{ name: chosen.name, level: draft!.levels.length }] } };
-      const next = adoptionBuild(asClass, sources);
-      if (next) return set(next.build);
-    }
-    set(withSuggestions(startBuild(sources, { classId: nextClass, level: draft!.levels.length, backgroundId: draft!.background.id, speciesId: draft!.species?.id }), sources));
-  }
-
-  function changeSpecies(id: string) {
-    const { species: _species, ...rest } = draft!;
-    set(withSuggestions(id ? { ...rest, species: { id } } : rest, sources));
-  }
-
-  function changeBackground(id: string) {
-    set(withSuggestions({ ...draft!, background: { ...(id ? { id } : {}), increases: {} } }, sources));
-  }
-
-  function setScore(ability: Ability, value: number) {
-    set({ ...draft!, abilities: { ...draft!.abilities, base: { ...draft!.abilities.base, [ability]: value } } });
-  }
+  const go = (next: BuilderStep) => {
+    setStep(next);
+    setPinned(null);
+    if (stepRef.current) stepRef.current.scrollTop = 0;
+  };
+  const counts = openChoices(built.choices);
+  const pending = built.choices.filter((slot) => slot.pending).length;
+  const scores = scoresProblem(build.abilities);
+  const hasSpells = built.choices.some((slot) => slot.spec.kind === "spells") || Boolean(built.fields.spellcasting);
+  const steps = BUILDER_STEPS.filter((entry) => entry.id !== "spells" || hasSpells);
+  const index = steps.findIndex((entry) => entry.id === step);
+  const nextStep = steps[index + 1];
+  const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
+  const background = build.background.id ? sources.catalog.backgrounds.find((entry) => entry.id === build.background.id) : undefined;
+  const twins = adopting ? sameNamedAbilities(preview.definition) : [];
 
   function apply() {
+    history.clear();
     if (creating) {
-      const id = createCharacter({ name: name.trim() || "New Character", build: draft! });
+      const id = createCharacter({ name: name.trim() || "New Character", build: build! });
       onCreated?.(id);
     } else if (adopting) {
-      adoptCharacter(definitionId!, draft!, removeTwins);
+      adoptCharacter(definitionId!, build!, removeTwins);
     } else {
-      rebuildCharacter(definitionId!, draft!, update);
+      rebuildCharacter(definitionId!, build!, update);
     }
     onClose();
   }
 
-  const finalScores = built.fields.abilities;
-  // Rebuilding: the PC's own abilities named like something the builder adds.
-  const twins = adopting ? sameNamedAbilities(preview.definition) : [];
-  return (
-    <FloatingWindow
-      title={creating ? "New character" : adopting ? `Rebuild with the builder · ${definition?.name ?? ""}` : `Character Builder · ${definition?.name ?? ""}`}
-      ariaLabel="Character builder"
-      onClose={onClose}
-      width={600}
-      storageKey="character-builder" initialPosition={BESIDE_SHEET}
-    >
-      <RulesCardProvider>
-      <div className={styles.builder}>
-        <p className={styles.lede}>
-          {buildLabel(draft, sources)}{" "}
+  function cancel() {
+    history.clear();
+    onClose();
+  }
+
+  function onKeys(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    const typing = target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && !["checkbox", "radio", "button"].includes((target as HTMLInputElement).type));
+    if (typing || !(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" && !event.shiftKey) history.undo();
+    else if ((key === "z" && event.shiftKey) || key === "y") history.redo();
+    else return;
+    event.preventDefault();
+  }
+
+  const model: BuilderModel = {
+    build, set, built, preview, sources, filter, edition: build.edition, creating, adopting, definition, look, go
+  };
+  const classes = built.fields.classes.map((entry) => `${entry.name} ${entry.level}${entry.subclass ? ` · ${entry.subclass.name}` : ""}`).join(" / ");
+
+  const shell = (
+    <div className={styles.shell} data-look={look} onKeyDown={onKeys}>
+      {history.offer ? (
+        <div role="status" className={styles.offer}>
+          <span>You have a draft of this character from {new Date(history.offer.savedAt).toLocaleString()}.</span>
+          <button type="button" className={styles.primary} onClick={history.restore}>Continue where you left off</button>
+          <button type="button" className={styles.secondary} onClick={history.dismiss}>Start over</button>
+        </div>
+      ) : null}
+      <BuilderHeader
+        look={look} name={name}
+        onName={creating ? (next) => history.replace({ build, name: next }) : undefined}
+        pills={[
+          { label: classes || "No class", title: "Class: go to the Class step", go: () => go("class") },
+          { label: background?.name ?? "No background", title: "Background: go to the Origin step", go: () => go("origin") },
+          { label: species?.name ?? (build.edition === "2014" ? "No race" : "No species"), title: "Species or race: go to the Origin step", go: () => go("origin") }
+        ]}
+        filter={filter} onFilter={chooseFilter}
+        open={pending} onOpen={() => go(firstOpenStep(built.choices) ?? "review")}
+        level={build.levels.length}
+        onLevel={(level) => set(withSuggestions(withLevel(build, level), sources))}
+      />
+      <BuildPreview definition={preview.definition} built={built} build={build} name={name} look={look} compact />
+      <div className={styles.body}>
+        <nav className={styles.rail} aria-label="Builder steps">
+          {steps.map((entry, at) => {
+            const open = entry.id === "abilities" ? counts.abilities + (scores ? 1 : 0) : counts[entry.id];
+            return (
+              <button
+                key={entry.id} type="button" className={styles.railStep} aria-current={entry.id === step ? "step" : undefined}
+                onClick={() => go(entry.id)}
+              >
+                <span className={styles.railNumber}>{at + 1}</span>
+                <span className={styles.railLabel}>{entry.label}</span>
+                {entry.id === "review" ? null : (
+                  <span className={styles.railCount} data-open={open > 0 || undefined} aria-label={open ? `${open} open` : "done"}>{open || "✓"}</span>
+                )}
+              </button>
+            );
+          })}
+          <span className={styles.railGap} />
+          {pending ? <button type="button" className={styles.secondary} onClick={() => set(withSuggestions(build, sources))}><span aria-hidden="true">✦ </span>Suggest the rest</button> : null}
           {creating ? (
             <button
               type="button" className={styles.linkButton} onClick={() => useBuilderUiStore.getState().openHomebrew()}
@@ -242,336 +270,76 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
               Homebrew content…
             </button>
           ) : null}
-        </p>
-        {adopting ? (
-          <div className={styles.warning} role="note">
-            <p className={styles.dim}>
-              {definition?.name} becomes a built character: its class features become the {firstClass?.edition ?? "2024"} rules&apos;
-              versions, its ability scores and hit point maximum stay as they are, and nothing is added to its equipment. Its own
-              abilities stay too.
-            </p>
-            {adoption?.notes.length ? <ul className={styles.dim}>{adoption.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
-          </div>
-        ) : null}
-
-        <section className={styles.section} aria-label="Basics">
-          <div className={styles.sectionHead}>
-            <h4>Basics</h4>
-            <EditionFilter value={edition} onChange={chooseEdition} />
-          </div>
-          <div className={styles.row}>
-            {creating ? (
-              <label className={styles.field}>
-                Name
-                <input value={name} onChange={(event) => setName(event.target.value)} />
-              </label>
-            ) : null}
-            <FieldInfo entry={firstClass ? () => describeClass(firstClass) : undefined} about={firstClass?.name}>
-              <label className={styles.field}>
-                Class
-                <select value={classId} disabled={!creating && !adopting} onChange={(event) => changeClass(event.target.value)} aria-label="Class">
-                  <CatalogOptions entries={sources.catalog.classes} choice={edition} keep={classId} />
-                </select>
-              </label>
-            </FieldInfo>
-            <label className={styles.field}>
-              Level
-              <select
-                value={draft.levels.length} aria-label="Level"
-                onChange={(event) => set(withSuggestions(withLevel(draft, Number(event.target.value)), sources))}
-              >
-                {Array.from({ length: 20 }, (_, index) => <option key={index} value={index + 1}>{index + 1}</option>)}
-              </select>
-            </label>
-            <FieldInfo entry={background ? () => describeBackground(background, sources) : undefined} about={background?.name}>
-              <label className={styles.field}>
-                Background
-                <select value={draft.background.id ?? ""} onChange={(event) => changeBackground(event.target.value)} aria-label="Background">
-                  <CatalogOptions entries={sources.catalog.backgrounds} choice={edition} keep={draft.background.id} />
-                </select>
-              </label>
-            </FieldInfo>
-          </div>
-          <div className={styles.row}>
-            <FieldInfo entry={species ? () => describeSpecies(species, sources) : undefined} about={species?.name}>
-              <label className={styles.field}>
-                {speciesLabel}
-                <select value={draft.species?.id ?? ""} onChange={(event) => changeSpecies(event.target.value)} aria-label="Species">
-                  <option value="">None (size, speed and senses by hand)</option>
-                  <CatalogOptions entries={sources.catalog.species} choice={edition} keep={draft.species?.id} />
-                </select>
-              </label>
-            </FieldInfo>
-            <label className={styles.field}>
-              Ability increases from
-              <select
-                aria-label="Ability increases from" value={increasesFrom}
-                onChange={(event) => set(withSuggestions({ ...draft, increasesFrom: event.target.value as "background" | "species" }, sources))}
-              >
-                <option value="background">The background{background && !background.abilities?.length ? " (any three)" : ""}</option>
-                <option value="species">The {speciesLabel.toLowerCase()}</option>
-              </select>
-            </label>
-            {species && species.sizes.length > 1 ? (
-              <label className={styles.field}>
-                Size
-                <select
-                  aria-label="Size" value={draft.species?.size ?? species.sizes[0]}
-                  onChange={(event) => set({ ...draft, species: { ...draft.species!, size: event.target.value as SizeCategory } })}
-                >
-                  {species.sizes.map((size) => <option key={size} value={size}>{size.charAt(0).toUpperCase()}{size.slice(1)}</option>)}
-                </select>
-              </label>
-            ) : null}
-          </div>
-          <p className={styles.dim}>
-            {increasesFrom === "background"
-              ? background?.abilities?.length
-                ? `Three points on the background's abilities (2024 rules); the ${speciesLabel.toLowerCase()}'s increases, if it has any, don't apply.`
-                : `Three points on any abilities, +2 and +1 or +1 to three (the 2024 rule for a background without its own); the ${speciesLabel.toLowerCase()}'s increases don't apply.`
-              : `The ${speciesLabel.toLowerCase()}'s own increases (2014 rules); the background gives none.`}
-          </p>
-          {creating && firstClass?.equipmentLines?.length ? (
-            <EquipmentLines draft={draft} classDefinition={firstClass} sources={sources} onChange={set} />
+          <p className={styles.railHint}>Nothing is locked: go to any step. Hover anything to read its rules.</p>
+        </nav>
+        <main ref={stepRef} className={styles.stepArea} aria-label={`${steps[index]?.label ?? "This"} step`}>
+          {step === "class" ? <ClassStepInterim /> : null}
+          {step === "origin" ? <OriginStep /> : null}
+          {step === "abilities" ? <AbilitiesStepInterim /> : null}
+          {step === "spells" ? <SpellsStepInterim /> : null}
+          {step === "equipment" ? <EquipmentStepInterim /> : null}
+          {step === "review" ? (
+            <ReviewStep
+              update={update} onUpdate={setUpdate} adoptNotes={adoption?.notes}
+              twins={twins} removeTwins={removeTwins} onRemoveTwins={setRemoveTwins}
+            />
           ) : null}
-          {creating && firstClass?.startingEquipment?.length ? (
-            <label className={styles.field}>
-              Starting equipment
-              <select
-                aria-label="Starting equipment" value={draft.equipment?.classOption ?? ""}
-                onChange={(event) => set({ ...draft, equipment: { ...draft.equipment, applied: false, classOption: event.target.value || undefined } })}
-              >
-                <option value="">None</option>
-                {firstClass.startingEquipment.map((entry) => <option key={entry.id} value={entry.id}>{entry.id}: {entry.label}</option>)}
-              </select>
-            </label>
-          ) : null}
-        </section>
-
-        <section className={styles.section} aria-label="Ability scores">
-          <h4>Ability scores</h4>
-          <div className={styles.row}>
-            <label className={styles.field}>
-              Method
-              <select
-                aria-label="Ability score method" value={draft.abilities.method}
-                onChange={(event) => set({ ...draft, abilities: { ...draft.abilities, method: event.target.value as CharacterBuild["abilities"]["method"] } })}
-              >
-                <option value="standard-array">Standard array</option>
-                <option value="point-buy">Point buy (27)</option>
-                <option value="manual">Typed by hand</option>
-              </select>
-            </label>
-            {firstClass ? (
-              <button
-                type="button" className={styles.linkButton}
-                onClick={() => set(withSuggestions({ ...draft, abilities: { method: "standard-array", base: standardArrayFor(firstClass.suggested.abilities) } }, sources))}
-              >
-                Suggested for a {firstClass.name.toLowerCase()}
-              </button>
-            ) : null}
-          </div>
-          <div className={styles.scores}>
-            {ABILITIES.map((ability) => (
-              <label key={ability} className={styles.score}>
-                <span>{ABILITY_LABELS[ability]}</span>
-                <input
-                  type="number" min={1} max={30} aria-label={`Base ${ABILITY_LABELS[ability]}`}
-                  value={draft.abilities.base[ability]}
-                  onChange={(event) => setScore(ability, Math.round(Number(event.target.value) || 0))}
-                />
-                <small>{finalScores[ability]} ({formatBonus(abilityModifier(finalScores[ability]))})</small>
-              </label>
-            ))}
-          </div>
-          {scores ? <p className={styles.problem}>{scores}</p> : (
-            <p className={styles.dim}>
-              Base scores; the {increasesFrom === "species" ? speciesLabel.toLowerCase() : "background"}&apos;s increases and feats are added on top (shown under each).
-            </p>
-          )}
-        </section>
-
-        <section className={styles.section} aria-label="Choices">
-          <div className={styles.sectionHead}>
-            <h4>Choices</h4>
-            <span className={styles.dim}>{pending.length ? `${pending.length} still to choose` : "All made"}</span>
-            {pending.length ? <button type="button" className={styles.linkButton} onClick={() => set(withSuggestions(draft, sources))}>Suggest the rest</button> : null}
-          </div>
-          {groups(built.choices, speciesLabel).map((group) => (
-            <div key={group.label} className={styles.group}>
-              <h5>{group.label}</h5>
-              {group.slots.map((slot) => (
-                <ChoiceControl
-                  key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-                  slot={slot} edition={edition} sources={sources} characterEdition={draft.edition}
-                  onChange={(value) => set(withChoice(draft, slot.scope, slot.path, value, slot.spec))}
-                />
-              ))}
-            </div>
-          ))}
-        </section>
-
-        <section className={styles.section} aria-label="Hit points">
-          <h4>Hit points</h4>
-          <div className={styles.row}>
-            <label className={styles.field}>
-              Per level
-              <select
-                aria-label="Hit points per level" value={draft.hp.method}
-                onChange={(event) => set({ ...draft, hp: { ...draft.hp, method: event.target.value as "average" | "rolled" } })}
-              >
-                <option value="average">Average</option>
-                <option value="rolled">Rolled (typed by hand)</option>
-              </select>
-            </label>
-            <span className={styles.stat}>Max HP <strong>{built.fields.maxHp}</strong></span>
-          </div>
-          {draft.hp.method === "rolled" && draft.levels.length > 1 ? (
-            <div className={styles.rolls}>
-              {draft.levels.slice(1).map((entry, index) => {
-                const die = sources.catalog.classes.find((candidate) => candidate.id === entry.classId)?.hitDie ?? 8;
-                return (
-                  <label key={index} className={styles.roll}>
-                    <span>L{index + 2}</span>
-                    <input
-                      type="number" min={1} max={die} aria-label={`Level ${index + 2} hit die roll`}
-                      value={draft.hp.rolls?.[index] ?? ""}
-                      placeholder={String(die / 2 + 1)}
-                      onChange={(event) => {
-                        const rolls = [...(draft.hp.rolls ?? [])];
-                        rolls[index] = Math.min(die, Math.max(1, Math.round(Number(event.target.value) || die / 2 + 1)));
-                        set({ ...draft, hp: { ...draft.hp, rolls } });
-                      }}
-                    />
-                  </label>
-                );
-              })}
-            </div>
-          ) : null}
-        </section>
-
-        {twins.length ? (
-          <section className={styles.section} aria-label="Named twice">
-            <h4>Named like what the builder adds</h4>
-            <p className={styles.dim}>
-              These are its own, made by hand, and the builder adds one of the same name: {twins.map((twin) => twin.name).join(", ")}.
-              Keep them to compare, or take them off.
-            </p>
-            <label className={styles.checkRow}>
-              <input type="checkbox" checked={removeTwins} onChange={(event) => setRemoveTwins(event.target.checked)} />
-              Remove my versions when rebuilding
-            </label>
-          </section>
-        ) : null}
-
-        <section className={styles.section} aria-label={creating ? "Summary" : "What changes"}>
-          <h4>{creating ? "Summary" : "What applying changes"}</h4>
-          <Summary definition={preview.definition} />
-          {creating ? null : <ChangeList changes={changes} update={update} onUpdate={setUpdate} />}
-          {kept.length === 0 && !creating && changes.length === 0 ? <p className={styles.dim}>Nothing: the actor already matches this build.</p> : null}
-        </section>
-
-        <div className={styles.actions}>
-          <button type="button" className={styles.secondary} onClick={onClose}>Cancel</button>
-          <button type="button" className={styles.primary} disabled={Boolean(scores)} onClick={apply}>
-            {creating ? "Create character" : adopting ? "Rebuild" : "Apply"}
-          </button>
-        </div>
-        {pending.length ? <p className={styles.dim}>Choices still open are left out until they&apos;re made.</p> : null}
+        </main>
+        <aside className={styles.previewColumn} aria-label={pinned ? "Pinned rules" : "Live preview"}>
+          {pinned
+            ? <RulesCard entry={pinned} variant="full" inline onClose={() => setPinned(null)} />
+            : <BuildPreview definition={preview.definition} built={built} build={build} name={name} look={look} />}
+        </aside>
       </div>
-      </RulesCardProvider>
-    </FloatingWindow>
-  );
-}
-
-/**
- * A 2014 class's starting equipment, a choice on each line (EDITIONS_PLAN.md): the line's options, and a weapon to choose
- * for each "any martial weapon" the option asks for. Only weapons and armor reach the sheet.
- */
-function EquipmentLines({ draft, classDefinition, sources, onChange }: {
-  draft: CharacterBuild;
-  classDefinition: ClassDefinition;
-  sources: BuildSources;
-  onChange: (next: CharacterBuild) => void;
-}) {
-  const equipment = draft.equipment ?? { applied: false };
-  return (
-    <fieldset className={styles.equipment} aria-label="Starting equipment">
-      <legend>Starting equipment</legend>
-      {(classDefinition.equipmentLines ?? []).map((line, index) => {
-        const option = equipmentLineOption(draft, classDefinition, line);
-        const weapons = option.anyWeapon ? equipmentLineWeapons(draft, classDefinition, line.id, option.anyWeapon, sources) : [];
-        const choices = option.anyWeapon ? equipmentWeaponOptions(option.anyWeapon, sources) : [];
-        return (
-          <div key={line.id} className={styles.row}>
-            {line.options.length > 1 ? (
-              <select
-                aria-label={`Equipment line ${index + 1}`} value={option.id}
-                onChange={(event) => onChange({ ...draft, equipment: { ...equipment, applied: false, lines: { ...equipment.lines, [line.id]: event.target.value } } })}
-              >
-                {line.options.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-              </select>
-            ) : <span className={styles.dim}>{option.label}</span>}
-            {weapons.map((ref, at) => (
-              <select
-                key={at} aria-label={`Equipment line ${index + 1}: weapon ${at + 1}`} value={ref}
-                onChange={(event) => {
-                  const next = [...weapons];
-                  next[at] = event.target.value;
-                  onChange({ ...draft, equipment: { ...equipment, applied: false, weapons: { ...equipment.weapons, [line.id]: next } } });
-                }}
-              >
-                {choices.map((choice) => <option key={choice} value={choice}>{sources.library.weapon(choice)?.name ?? choice}</option>)}
-              </select>
-            ))}
-          </div>
-        );
-      })}
-    </fieldset>
-  );
-}
-
-/** HP, AC, speed and the features, as the actor would have them. */
-export function Summary({ definition }: { definition: CreatureDefinition }) {
-  const features = [...(definition.features ?? []), ...(definition.traits ?? [])];
-  // As it would fight: Fast Movement, Unarmored Movement and Tough are effects on the stored creature.
-  const actual = effectiveDefinition(definition);
-  return (
-    <div className={styles.summary}>
-      <span className={styles.stat}>HP <strong>{actual.maxHp}</strong></span>
-      <span className={styles.stat}>AC <strong>{armorClassOf(definition).total}</strong></span>
-      <span className={styles.stat}>Speed <strong>{actual.speed} ft</strong></span>
-      <span className={styles.stat}>Proficiency <strong>{formatBonus(definition.proficiencyBonus ?? 2)}</strong></span>
-      <p className={styles.featureList}>
-        {features.map((feature) => (
-          <span key={feature.id} className={feature.automationSupport === "manual-only" && !feature.informational ? styles.manual : undefined} title={feature.automationSupport === "manual-only" && !feature.informational ? "Not simulated: for the DM to run" : undefined}>
-            {feature.name}
-          </span>
-        ))}
-      </p>
+      <footer className={styles.footer}>
+        <button type="button" className={styles.secondary} disabled={index <= 0} onClick={() => go(steps[index - 1]!.id)}>‹ Back</button>
+        <span className={styles.footerNote}>{pending ? `${pending} still to choose` : "All made"}</span>
+        {nextStep ? <button type="button" className={styles.secondary} onClick={() => go(nextStep.id)}>Next: {nextStep.label} ›</button> : null}
+        <button type="button" className={styles.secondary} onClick={cancel}>Cancel</button>
+        <button type="button" className={styles.primary} disabled={Boolean(scores)} onClick={apply}>
+          {creating ? "Create character" : adopting ? "Rebuild" : "Apply"}
+        </button>
+      </footer>
     </div>
   );
-}
 
-/** The changes applying would make, with "use the build's" for each the DM changed. */
-export function ChangeList({ changes, update, onUpdate }: { changes: BuildChange[]; update: string[]; onUpdate: (keys: string[]) => void }) {
-  if (!changes.length) return null;
   return (
-    <ul className={styles.changes} aria-label="Changes">
-      {changes.map((change) => (
-        <li key={change.key} className={styles[`change_${change.kind}`]}>
-          {changeSentence(change)}
-          {change.kind === "kept" ? (
-            <label className={styles.update}>
-              <input
-                type="checkbox" checked={update.includes(change.key)}
-                onChange={(event) => onUpdate(event.target.checked ? [...update, change.key] : update.filter((key) => key !== change.key))}
-              />
-              Use the build&apos;s instead
-            </label>
+    <FloatingWindow
+      title={creating ? "New character" : adopting ? `Rebuild with the builder · ${definition?.name ?? ""}` : `Character Builder · ${definition?.name ?? ""}`}
+      ariaLabel="Character builder"
+      onClose={onClose}
+      width={size.width}
+      initialHeight={size.height}
+      resizable={{ minWidth: 640, minHeight: 440, maxWidth: 1600 }}
+      scrollBody={false}
+      storageKey="builder"
+      initialPosition={{ x: size.x, y: size.y }}
+      headerExtra={(
+        <span className={styles.titleControls}>
+          <span role="group" aria-label="Builder look" className={styles.lookSwitch}>
+            {(["standard", "codex"] as const).map((id) => (
+              <button key={id} type="button" aria-pressed={look === id} onClick={() => chooseLook(id)}>{id === "standard" ? "Standard" : "Codex"}</button>
+            ))}
+          </span>
+          {look === "codex" ? (
+            <span role="group" aria-label="Codex colours" className={styles.lookSwitch}>
+              {(["dark", "light"] as const).map((id) => (
+                <button key={id} type="button" aria-pressed={palette === id} onClick={() => setPalette(id)}>{id === "dark" ? "Dark" : "Light"}</button>
+              ))}
+            </span>
           ) : null}
-        </li>
-      ))}
-    </ul>
+          <button type="button" className={styles.titleButton} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={14} /></button>
+          <button type="button" className={styles.titleButton} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={14} /></button>
+        </span>
+      )}
+    >
+      <BuilderContext.Provider value={model}>
+        <RulesCardProvider palette={look === "codex" ? palette : null} onPin={setPinned}>
+          {look === "codex"
+            ? <CodexRoot palette={palette} className={styles.frame}>{shell}</CodexRoot>
+            : <div className={styles.frame}>{shell}</div>}
+        </RulesCardProvider>
+      </BuilderContext.Provider>
+    </FloatingWindow>
   );
 }
