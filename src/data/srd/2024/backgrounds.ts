@@ -1,7 +1,9 @@
 import type { BackgroundDefinition } from "@/lib/character-builder/catalog";
-import { srd52Source } from "./reference";
+import { SRD_2024_REFERENCE, srd52Source } from "./reference";
 
 const coin = (gold: number) => ({ id: "B", label: `${gold} GP`, items: [], gold });
+/** The tool proficiency the SRD gives the background ("Calligrapher's Supplies"). */
+const toolOf = (key: string) => SRD_2024_REFERENCE.backgrounds.find((entry) => entry.key === key)?.tool || undefined;
 
 /** The SRD 5.2's four backgrounds: three abilities for +2 and +1 (or +1 each), two skills and an origin feat. */
 export const SRD_2024_BACKGROUNDS: BackgroundDefinition[] = [
@@ -9,6 +11,7 @@ export const SRD_2024_BACKGROUNDS: BackgroundDefinition[] = [
     id: "srd:background:acolyte",
     name: "Acolyte",
     source: srd52Source("srd-2024_acolyte"),
+    tool: toolOf("srd-2024_acolyte"),
     edition: "2024",
     abilities: ["int", "wis", "cha"],
     skills: ["insight", "religion"],
@@ -23,6 +26,7 @@ export const SRD_2024_BACKGROUNDS: BackgroundDefinition[] = [
     id: "srd:background:criminal",
     name: "Criminal",
     source: srd52Source("srd-2024_criminal"),
+    tool: toolOf("srd-2024_criminal"),
     edition: "2024",
     abilities: ["dex", "con", "int"],
     skills: ["sleight_of_hand", "stealth"],
@@ -36,6 +40,7 @@ export const SRD_2024_BACKGROUNDS: BackgroundDefinition[] = [
     id: "srd:background:sage",
     name: "Sage",
     source: srd52Source("srd-2024_sage"),
+    tool: toolOf("srd-2024_sage"),
     edition: "2024",
     abilities: ["con", "int", "wis"],
     skills: ["arcana", "history"],
@@ -50,6 +55,7 @@ export const SRD_2024_BACKGROUNDS: BackgroundDefinition[] = [
     id: "srd:background:soldier",
     name: "Soldier",
     source: srd52Source("srd-2024_soldier"),
+    tool: toolOf("srd-2024_soldier"),
     edition: "2024",
     abilities: ["str", "dex", "con"],
     skills: ["athletics", "intimidation"],

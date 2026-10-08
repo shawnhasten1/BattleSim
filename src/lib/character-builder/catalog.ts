@@ -428,6 +428,8 @@ export interface BackgroundDefinition {
   /** A 2014 background's own feature (the Acolyte's Shelter of the Faithful). */
   grants?: FeatureGrant[];
   equipment?: EquipmentPackage[];
+  /** The tool proficiency it gives (2024), as the SRD words it: shown on its card, not modeled. */
+  tool?: string;
   description?: string;
 }
 
@@ -723,6 +725,7 @@ export const backgroundDefinitionSchema: z.ZodType<BackgroundDefinition> = z.obj
   featChoices: z.record(z.string(), z.unknown()).optional(),
   grants: z.array(featureGrantSchema).optional(),
   equipment: z.array(equipmentSchema).optional(),
+  tool: z.string().optional(),
   description: z.string().optional()
 }) as z.ZodType<BackgroundDefinition>;
 

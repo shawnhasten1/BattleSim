@@ -140,6 +140,23 @@ export interface BuiltFeature {
   bucket: "features" | "traits";
   /** The paths its numbers were written to, for the level-up diff ("Sneak Attack: 2d6 → 3d6"). */
   scaled: string[];
+  /** The character level it came at (a background's has none: it's there from the start). */
+  gainedAt?: number;
+  /** What gave it: "Wizard", "Evoker", "Dwarf", "Magic Initiate". */
+  ownerName: string;
+}
+
+/** Where a character's scores and hit points come from, part by part (the builder's breakdowns). */
+export interface BuiltBreakdown {
+  /** Each increase on top of the base scores, as it applied (after any cap). */
+  abilities: Array<{ source: string; ability: Ability; amount: number }>;
+  hitPoints: {
+    levels: Array<{ level: number; className: string; die: number; roll: number; rolled: boolean; conMod: number; gained: number }>;
+    /** Features that add to the maximum: Dwarven Toughness's +1 a level, Draconic Resilience. */
+    bonuses: Array<{ name: string; amount: number }>;
+    /** The DM's own change to the maximum (`hp.adjust`). */
+    adjust: number;
+  };
 }
 
 export interface BuiltFields {
@@ -180,6 +197,7 @@ export interface BuiltCharacter {
   masteries: string[];
   choices: ChoiceSlot[];
   warnings: string[];
+  breakdown: BuiltBreakdown;
 }
 
 export const pbForLevel = (level: number) => 2 + Math.floor((Math.max(level, 1) - 1) / 4);
@@ -258,6 +276,8 @@ interface CollectedGrant {
   /** Appended to the feature's text ("Mastered: …", "Taken at 4th level: +2 Dexterity"). */
   note?: string;
   nameSuffix?: string;
+  /** The character level it came at; none for a background's. */
+  gainedAt?: number;
 }
 
 interface WalkState {
@@ -293,6 +313,8 @@ interface WalkState {
   speciesIncreases: boolean;
   /** Each class's spells prepared so far, by class id: a 2014 caster's number follows its modifier (`preparedFormula`). */
   preparedSoFar: Map<string, number>;
+  /** Each ability increase as it applied, and what gave it: the builder's score breakdown. */
+  abilityParts: Array<{ source: string; ability: Ability; amount: number }>;
 }
 
 /** A spell the character has, and how. */
@@ -313,10 +335,13 @@ interface SpellPick {
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
 const ABILITY_NAMES: Record<Ability, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
 
-function addAbilities(state: WalkState, increases: Partial<Record<Ability, number>>, cap: number) {
+function addAbilities(state: WalkState, increases: Partial<Record<Ability, number>>, cap: number, source: string) {
   for (const ability of ABILITIES) {
     const amount = increases[ability] ?? 0;
-    if (amount > 0) state.abilities[ability] = Math.min(cap, state.abilities[ability] + amount);
+    if (amount <= 0) continue;
+    const before = state.abilities[ability];
+    state.abilities[ability] = Math.min(cap, before + amount);
+    if (state.abilities[ability] > before) state.abilityParts.push({ source, ability, amount: state.abilities[ability] - before });
   }
 }
 
@@ -488,7 +513,7 @@ function visitChoice(state: WalkState, spec: ChoiceSpec, context: ChoiceContext,
       if (problem) slot.problem = problem;
       if (stored !== undefined) slot.value = increases;
       slot.pending = !complete;
-      addAbilities(state, increases, spec.cap);
+      addAbilities(state, increases, spec.cap, context.characterLevel ? `${context.ownerName} (level ${context.characterLevel})` : context.ownerName);
       break;
     }
     case "pick": {
@@ -796,8 +821,8 @@ function visitOption(state: WalkState, option: PickOption, pick: Extract<ChoiceS
   }
   const owner: Owner = { ...context.owner, key: `${context.owner.key}:${pick.id}=${option.id}` };
   // A 2014 subrace's increases, when the character's come from its species.
-  if (option.abilities && state.speciesIncreases && context.scope.kind === "species") addAbilities(state, option.abilities, 20);
-  for (const grant of option.grants) state.grants.push({ grant, owner });
+  if (option.abilities && state.speciesIncreases && context.scope.kind === "species") addAbilities(state, option.abilities, 20, option.name);
+  for (const grant of option.grants) state.grants.push({ grant, owner, gainedAt: context.characterLevel });
   for (const nested of option.choices ?? []) {
     visitChoice(state, { ...nested, id: `${pick.id}.${option.id}.${nested.id}` } as ChoiceSpec, { ...context, owner }, parentPath);
   }
@@ -836,7 +861,7 @@ function visitFeatChoice(state: WalkState, spec: Extract<ChoiceSpec, { kind: "fe
     slot.value = { feat: extra.id };
     slot.pending = false;
     const owner: Owner = { ...context.owner, key: `${context.owner.key}:${spec.id}=${extra.id}` };
-    for (const grant of extra.grants) state.grants.push({ grant, owner });
+    for (const grant of extra.grants) state.grants.push({ grant, owner, gainedAt: context.characterLevel });
     // Its own choices are kept in the feat choice's `choices`, as a feat's are.
     for (const nested of extra.choices ?? []) visitChoice(state, nested, { ...context, owner, ownerName: extra.name }, path);
     return;
@@ -886,7 +911,7 @@ function takeFeat(state: WalkState, feat: FeatDefinition, choice: FeatChoice | u
   const takenAt = context.characterLevel ? `Taken at ${ordinal(context.characterLevel)} level` : `From ${context.ownerName}`;
   const note = Object.keys(gained).length ? `${takenAt}: ${increasesText(gained)}.` : undefined;
   for (const grant of feat.grants) {
-    state.grants.push({ grant, owner, note, nameSuffix: feat.repeatable && context.characterLevel ? ` (${ordinal(context.characterLevel)} level)` : undefined });
+    state.grants.push({ grant, owner, note, nameSuffix: feat.repeatable && context.characterLevel ? ` (${ordinal(context.characterLevel)} level)` : undefined, gainedAt: context.characterLevel });
   }
 }
 
@@ -912,7 +937,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
     skills: new Set(), expertise: new Set(), masteries: [], carriedKinds: carriedKindsOf(build, sources), feats: new Map(),
     grants: [], choices: [], warnings: [], saves: new Set(),
     classLevels: new Map(), subclassOf: new Map(), spellPicks: [], spellbooks: new Map(), reserved, picked: new Map(), suggest,
-    speciesIncreases: fromSpecies, preparedSoFar: new Map()
+    speciesIncreases: fromSpecies, preparedSoFar: new Map(), abilityParts: []
   };
 
   // The background: its ability increases (unless they come from the species), its skills, its origin feat (2024) or
@@ -948,7 +973,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
   const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
   if (species && fromSpecies) {
     // A 2014 race's increases: its own, then those of the player's choice (a Half-Elf's). A subrace's come with it.
-    addAbilities(state, species.abilities ?? {}, 20);
+    addAbilities(state, species.abilities ?? {}, 20, species.name);
     const choice = species.abilityChoice;
     if (choice) {
       const owner: Owner = { key: `species:${species.id}`, idPrefix: slugOf(species.id), name: species.name, level: build.levels.length, columns: [] };
@@ -970,7 +995,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
     // No character level: a feat it gives (Versatile) is "from Human", not "taken at 5th level".
     const context: ChoiceContext = { scope: { kind: "species" }, owner, ownerName: species.name, where: "species" };
     for (const level of species.levels.filter((entry) => entry.level <= characterLevel).sort((a, b) => a.level - b.level)) {
-      for (const grant of level.grants) state.grants.push({ grant, owner });
+      for (const grant of level.grants) state.grants.push({ grant, owner, gainedAt: level.level });
       for (const choice of level.choices ?? []) visitChoice(state, choice, context);
     }
   }
@@ -1004,7 +1029,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
       visitChoice(state, { kind: "skills", id: "multiclass-skills", count: definition.multiclass.skills, from: definition.skills.from }, context);
     }
     const level = definition.levels.find((candidate) => candidate.level === classLevel);
-    for (const grant of level?.grants ?? []) state.grants.push({ grant, owner });
+    for (const grant of level?.grants ?? []) state.grants.push({ grant, owner, gainedAt: characterLevel });
     for (const choice of level?.choices ?? []) visitChoice(state, choice, context);
     // Weapon Mastery grows with the table: a choice wherever the count goes up (the level 1 choice is the catalog's).
     if (classLevel > 1 && definition.weaponMastery && (definition.weaponMastery[classLevel - 1] ?? 0) > (definition.weaponMastery[classLevel - 2] ?? 0)) {
@@ -1029,7 +1054,7 @@ function walk(build: CharacterBuild, sources: BuildSources, reserved: Map<string
         classId: definition.id, columns: [...definition.table, ...(chosenSubclass.table ?? [])]
       };
       const subLevel = chosenSubclass.levels.find((candidate) => candidate.level === classLevel);
-      for (const grant of subLevel?.grants ?? []) state.grants.push({ grant, owner: subOwner });
+      for (const grant of subLevel?.grants ?? []) state.grants.push({ grant, owner: subOwner, gainedAt: characterLevel });
       for (const choice of subLevel?.choices ?? []) visitChoice(state, choice, { ...context, owner: subOwner, ownerName: `${chosenSubclass.name} ${classLevel}` });
     }
     // Spells: as many cantrips, spellbook spells and prepared spells as the class's numbers went up at this level.
@@ -1271,13 +1296,18 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
 
   // Scores: base, the background, feats (already in `state.abilities`), then features that raise them past 20.
   const abilities = { ...state.abilities };
-  for (const { grant } of live) {
+  const abilityParts = [...state.abilityParts];
+  for (const { grant, owner } of live) {
     const raise = grant.adjust?.abilities;
     if (!raise) continue;
     const cap = grant.adjust?.abilityMax ?? 20;
     for (const ability of ABILITIES) {
       const amount = raise[ability] ?? 0;
-      if (amount > 0) abilities[ability] = Math.min(cap, abilities[ability] + amount);
+      if (amount <= 0) continue;
+      const before = abilities[ability];
+      abilities[ability] = Math.min(cap, before + amount);
+      const name = typeof grant.feature === "object" ? grant.feature.name : owner.name;
+      if (abilities[ability] > before) abilityParts.push({ source: name, ability, amount: abilities[ability] - before });
     }
   }
 
@@ -1303,6 +1333,7 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   const resources: Record<string, number> = {};
   let speedBonus = 0;
   let hpBonus = 0;
+  const hpBonuses: Array<{ name: string; amount: number }> = [];
   const senses: CreatureSenses = {};
   const movementModes = new Set<"climb" | "swim">();
   const conditionImmunities = new Set<ConditionImmunity>();
@@ -1332,7 +1363,9 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
           key: `${owner.key}:${grant.key}`,
           feature: placedFeature(feature, id),
           bucket: feature.category === "trait" ? "traits" : "features",
-          scaled
+          scaled,
+          ...(collected.gainedAt !== undefined ? { gainedAt: collected.gainedAt } : {}),
+          ownerName: owner.name
         });
       }
     }
@@ -1423,7 +1456,11 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     const adjust = grant.adjust;
     if (adjust) {
       if (adjust.speed !== undefined) speedBonus += evaluate(`${label} speed`, () => evaluateNumber(adjust.speed!, scope)) ?? 0;
-      if (adjust.hpBonus !== undefined) hpBonus += evaluate(`${label} hit points`, () => evaluateNumber(adjust.hpBonus!, scope)) ?? 0;
+      if (adjust.hpBonus !== undefined) {
+        const amount = evaluate(`${label} hit points`, () => evaluateNumber(adjust.hpBonus!, scope)) ?? 0;
+        hpBonus += amount;
+        if (amount) hpBonuses.push({ name: typeof grant.feature === "object" ? grant.feature.name : owner.name, amount });
+      }
       for (const [sense, range] of Object.entries(adjust.senses ?? {}) as Array<[keyof CreatureSenses, number]>) {
         senses[sense] = Math.max(senses[sense] ?? 0, range);
       }
@@ -1575,10 +1612,15 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
   // Hit points: the first class's die in full at 1st level, then the average (or the roll) of each level's class die.
   const conMod = abilityModifier(abilities.con);
   let maxHp = 0;
+  const hpLevels: BuiltBreakdown["hitPoints"]["levels"] = [];
   build.levels.forEach((entry, index) => {
-    const die = classOf(sources, entry.classId)?.hitDie ?? 8;
-    const roll = index === 0 ? die : build.hp.method === "rolled" && build.hp.rolls?.[index - 1] ? Math.min(die, build.hp.rolls[index - 1]!) : die / 2 + 1;
-    maxHp += Math.max(1, roll + conMod);
+    const definition = classOf(sources, entry.classId);
+    const die = definition?.hitDie ?? 8;
+    const rolled = index > 0 && build.hp.method === "rolled" && Boolean(build.hp.rolls?.[index - 1]);
+    const roll = index === 0 ? die : rolled ? Math.min(die, build.hp.rolls![index - 1]!) : die / 2 + 1;
+    const gained = Math.max(1, roll + conMod);
+    maxHp += gained;
+    hpLevels.push({ level: index + 1, className: definition?.name ?? entry.classId, die, roll, rolled, conMod, gained });
   });
   maxHp = Math.max(1, maxHp + hpBonus + (build.hp.adjust ?? 0));
 
@@ -1649,7 +1691,8 @@ export function buildCharacter(build: CharacterBuild, sources: BuildSources): Bu
     equipment,
     masteries: state.masteries,
     choices: state.choices,
-    warnings: state.warnings
+    warnings: state.warnings,
+    breakdown: { abilities: abilityParts, hitPoints: { levels: hpLevels, bonuses: hpBonuses, adjust: build.hp.adjust ?? 0 } }
   };
 }
 

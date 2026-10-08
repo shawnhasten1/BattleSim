@@ -68,7 +68,7 @@ function spellOf(raw: Raw, options: SpellIndexOptions): ReferenceSpell {
     damage: str(raw.damage_roll) || null,
     damageTypes: ((raw.damage_types as string[] | undefined) ?? []).slice(),
     area: shape ? { shape, size: Number(raw.shape_size ?? 0) } : null,
-    text: str(raw.desc),
+    text: override?.text ?? str(raw.desc),
     higherLevel: override?.higherLevel ?? str(raw.higher_level)
   };
 }

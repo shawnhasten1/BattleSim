@@ -89,6 +89,8 @@ export interface SpellOverride {
   reason: string;
   castingTime?: string;
   higherLevel?: string;
+  /** The spell's text, where the source's is empty. */
+  text?: string;
 }
 
 const longCast = (time: string): SpellOverride => ({
@@ -116,6 +118,10 @@ export const SPELL_OVERRIDES: Record<string, SpellOverride> = {
   "srd-2024_plant-growth": {
     reason: "\"1hour\" in the source; the SRD 5.2 PDF has \"Action (Overgrowth) or 8 hours (Enrichment)\".",
     castingTime: "action"
+  },
+  "srd-2024_greater-invisibility": {
+    reason: "No text in the source; the SRD 5.2 PDF (page 137) has it.",
+    text: "A creature you touch has the Invisible condition until the spell ends."
   },
   "srd-2024_chain-lightning": {
     reason: "No higher-level text in the source; the SRD 5.2 PDF has it.",
