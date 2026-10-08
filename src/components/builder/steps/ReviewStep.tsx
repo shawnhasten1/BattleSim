@@ -15,7 +15,7 @@ import { SupportDot } from "@/components/rules-card";
 import { useBuilder } from "../builder-context";
 import { mixedRulesNote } from "../mixed";
 import { Panel, StepHeading } from "../parts";
-import { scoresProblem } from "./InterimSteps";
+import { scoresProblem } from "../scores";
 import styles from "../builder.module.css";
 
 /** HP, AC, speed and the features, as the actor would have them. */

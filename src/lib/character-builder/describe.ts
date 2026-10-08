@@ -1,4 +1,4 @@
-import type { Ability, Edition, FeatureDefinition, SourceMetadata, SpellDefinition } from "@/engine";
+import type { Ability, Edition, FeatureDefinition, SourceMetadata, SpellDefinition, WeaponDefinition } from "@/engine";
 import { SKILLS } from "@/lib/actor-sheet/edits";
 import { SRD_2024_REFERENCE } from "@/data/srd/2024/reference";
 import { srd2024SpellEntry } from "@/data/srd/2024/spells";
@@ -14,7 +14,7 @@ import type { BackgroundDefinition, ClassDefinition, FeatDefinition, PickOption,
  * renders an entry, it doesn't work one out.
  */
 
-export type RulesKind = "class" | "subclass" | "species" | "background" | "feat" | "pick" | "skill" | "mastery" | "spell" | "feature" | "ability";
+export type RulesKind = "class" | "subclass" | "species" | "background" | "feat" | "pick" | "skill" | "mastery" | "spell" | "feature" | "ability" | "item";
 
 /** Whether the simulator runs it: in full, in part, not at all (the DM runs it), or it plays no part in a fight. */
 export type Support = "full" | "partial" | "manual" | "info";
@@ -303,6 +303,51 @@ export function describeMastery(kind: string, sources?: BuildSources): RulesEntr
     gives: mastery ? [{ label: "Mastery", value: mastery }] : [],
     text: mastery ? `**${mastery}.** ${MASTERY_TEXT[mastery.toLowerCase()] ?? ""}`.trim() : "",
     summary: mastery ? `${mastery}: ${MASTERY_TEXT[mastery.toLowerCase()] ?? ""}`.trim() : ""
+  });
+}
+
+/** A weapon's damage in words: "1d8 slashing", "2d6 slashing (versatile 2d8)". */
+function damageWords(weapon: WeaponDefinition): string {
+  const first = weapon.damage[0];
+  if (!first) return "";
+  return `${first.dice} ${first.damageType === "same-as-attack" ? "" : first.damageType}`.trim();
+}
+
+const ARMOR_WORDS = { light: "Light armor", medium: "Medium armor", heavy: "Heavy armor", shield: "Shield" } as const;
+
+/**
+ * The card for a starting package's weapon or armor (CHARACTER_BUILDER_UX_PLAN.md §3.5): a weapon's damage, properties
+ * and mastery; armor's AC, the Dexterity it adds, the Strength it needs and its Stealth. Undefined for anything else (a
+ * package's other gear doesn't reach the sheet).
+ */
+export function describeEquipment(ref: string, sources: BuildSources): RulesEntry | undefined {
+  const weapon = sources.library.weapon(ref);
+  if (weapon) {
+    const mastery = weapon.mastery ? capitalize(weapon.mastery) : undefined;
+    return entry("item", ref, weapon.name, {
+      subtitle: weapon.category ? `${capitalize(weapon.category)} weapon` : "Weapon",
+      facts: [damageWords(weapon), ...(weapon.properties ?? [])].filter(Boolean),
+      gives: [
+        ...(weapon.attackType === "ranged" || weapon.range > 5 ? [{ label: weapon.attackType === "ranged" ? "Range" : "Reach", value: `${weapon.range} ft` }] : []),
+        ...(mastery ? [{ label: "Mastery", value: mastery }] : [])
+      ],
+      text: mastery ? `**${mastery}.** ${MASTERY_TEXT[mastery.toLowerCase()] ?? ""}`.trim() : "",
+      summary: [damageWords(weapon), ...(weapon.properties ?? [])].filter(Boolean).join(" · ")
+    });
+  }
+  const item = sources.library.item(ref);
+  if (!item?.armor) return undefined;
+  const armor = item.armor;
+  const dex = armor.category === "shield" ? undefined
+    : armor.category === "heavy" ? "no Dexterity"
+      : armor.maxDex !== undefined || armor.category === "medium" ? `+ Dexterity (at most +${armor.maxDex ?? 2})` : "+ Dexterity";
+  const ac = armor.category === "shield" ? `+${armor.ac + (armor.magicBonus ?? 0)}` : `${armor.ac + (armor.magicBonus ?? 0)}${dex ? ` ${dex}` : ""}`;
+  return entry("item", ref, item.name, {
+    subtitle: ARMOR_WORDS[armor.category as keyof typeof ARMOR_WORDS] ?? "Armor",
+    facts: [...(armor.strength ? [`Strength ${armor.strength}`] : []), ...(armor.stealthDisadvantage ? ["Stealth disadvantage"] : [])],
+    gives: [{ label: "Armor class", value: ac }],
+    text: item.description ?? "",
+    summary: `AC ${ac}`
   });
 }
 

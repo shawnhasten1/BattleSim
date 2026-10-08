@@ -29,7 +29,7 @@ import { CardGrid } from "../pickers/CardGrid";
 import { InlineChoice } from "../pickers/InlineChoice";
 import { mixedRulesNote } from "../mixed";
 import { Panel, StepHeading } from "../parts";
-import { scoresProblem } from "./InterimSteps";
+import { scoresProblem } from "../scores";
 import styles from "../builder.module.css";
 
 const NAMES: Record<Ability, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };

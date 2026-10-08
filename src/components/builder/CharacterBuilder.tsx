@@ -41,11 +41,12 @@ import { ReviewStep } from "./steps/ReviewStep";
 import { ClassStep } from "./steps/ClassStep";
 import { AbilitiesStep } from "./steps/AbilitiesStep";
 import { SpellsStep } from "./steps/SpellsStep";
-import { EquipmentStepInterim, scoresProblem } from "./steps/InterimSteps";
+import { EquipmentStep } from "./steps/EquipmentStep";
+import { scoresProblem } from "./scores";
 import { useDraftHistory, type Draft } from "./useDraftHistory";
 import styles from "./builder.module.css";
 
-export { scoresProblem } from "./steps/InterimSteps";
+export { scoresProblem } from "./scores";
 export { ChangeList, Summary } from "./steps/ReviewStep";
 
 /** The Level up window opens beside the actor sheet (680 px wide at x 72), not on top of it. */
@@ -291,7 +292,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
           {step === "origin" ? <OriginStep /> : null}
           {step === "abilities" ? <AbilitiesStep /> : null}
           {step === "spells" ? <SpellsStep /> : null}
-          {step === "equipment" ? <EquipmentStepInterim /> : null}
+          {step === "equipment" ? <EquipmentStep /> : null}
           {step === "review" ? (
             <ReviewStep
               update={update} onUpdate={setUpdate} adoptNotes={adoption?.notes}

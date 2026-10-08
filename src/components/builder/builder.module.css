@@ -2487,3 +2487,37 @@ select.dialSelect.dialSelect option {
     padding-top: 0;
   }
 }
+
+
+/* ── Phase 7: the Equipment step (§3.5) ── */
+
+.equipmentLines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.equipmentLine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.equipmentFixed {
+  margin: 0;
+  font-size: 13px;
+}
+
+.equipmentFixed .previewCap {
+  margin-right: 6px;
+}
+
+.weaponPick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weaponPick .previewCap {
+  margin: 0;
+}

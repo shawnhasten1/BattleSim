@@ -21,6 +21,8 @@ export interface CardOption {
   card?: EntrySource;
   /** The builder's suggestion: marked ✦ (a sensible default to start from). */
   suggested?: boolean;
+  /** Its accessible name, when the title alone says too little (a package's letter). Default: the title and badge. */
+  ariaLabel?: string;
 }
 
 /**
@@ -70,7 +72,7 @@ export function CardGrid({ label, groups, value, onChange, columns = 3, extra }:
                   key={option.id}
                   ref={(node) => { if (node) refs.current.set(option.id, node); else refs.current.delete(option.id); }}
                   type="button" role="radio" aria-checked={on} aria-disabled={option.blocked ? true : undefined}
-                  aria-label={option.badge ? `${option.title} (${option.badge})` : option.title}
+                  aria-label={option.ariaLabel ?? (option.badge ? `${option.title} (${option.badge})` : option.title)}
                   tabIndex={option === focusable ? 0 : -1}
                   className={styles.optionCard}
                   {...bound}
