@@ -146,23 +146,27 @@ describe("spells in the builder (Phase 5a)", { timeout: 20000 }, () => {
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
     await step(builder, "Spells");
-    const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
-    const box = (name: RegExp) => within(cantrips).getByRole("checkbox", { name }) as HTMLInputElement;
-    expect(box(/^Sacred Flame$/).checked).toBe(true);
+    // Every grid is done, so each is folded to a line: open the cantrips' (CHARACTER_BUILDER_UX_PLAN.md §3.4).
+    await userEvent.click(within(builder).getByRole("button", { name: /^Two cantrips/, expanded: false }));
+    const cantrips = within(builder).getByRole("group", { name: "Two cantrips" });
+    const tile = (name: RegExp) => within(cantrips).getByRole("checkbox", { name });
+    const picked = (name: RegExp) => tile(name).getAttribute("aria-checked") === "true";
+    expect(picked(/^Sacred Flame$/)).toBe(true);
     // A cantrip the simulator doesn't cast is marked, in words.
-    const guidance = within(cantrips).getByText(/^Guidance/).closest("label")!;
-    expect(within(guidance as HTMLElement).getByRole("img", { name: "Not simulated: the DM runs it" })).toBeTruthy();
-    await userEvent.click(box(/^Guidance/));
+    expect(within(tile(/^Guidance$/)).getByRole("img", { name: "Not simulated: the DM runs it" })).toBeTruthy();
+    await userEvent.click(tile(/^Guidance$/));
     expect(within(builder).getByText("1 still to choose")).toBeTruthy();
-    await userEvent.click(box(/^Spare the Dying/));
+    // Picks come first; the rest by level.
+    expect(within(within(cantrips).getByRole("group", { name: "Two cantrips: chosen" })).getAllByRole("checkbox").map((entry) => entry.getAttribute("aria-label"))).toEqual(["Sacred Flame"]);
+    await userEvent.click(within(within(cantrips).getByRole("group", { name: "Two cantrips: Cantrips" })).getByRole("checkbox", { name: /^Spare the Dying$/ }));
     expect(within(builder).getByText("All made")).toBeTruthy();
-    // The 1st-level spell: only 1st-level cleric spells.
-    const spell = within(builder).getByRole("group", { name: "A 1st-level spell, always prepared: 1st level" });
+    // The 1st-level spell: only 1st-level cleric spells; a grid of one swaps its pick.
+    await userEvent.click(within(builder).getByRole("button", { name: /^A 1st-level spell, always prepared/, expanded: false }));
+    const spell = within(builder).getByRole("group", { name: "A 1st-level spell, always prepared" });
+    expect(within(spell).queryByRole("group", { name: /: 2nd level$/ })).toBeNull();
     await userEvent.click(within(spell).getByRole("checkbox", { name: /^Bless$/ }));
-    const chosen = within(spell).getAllByRole("checkbox").filter((input) => (input as HTMLInputElement).checked);
-    expect(chosen).toHaveLength(1);
-    await userEvent.click(chosen[0]!);
-    await userEvent.click(within(spell).getByRole("checkbox", { name: /^Bless$/ }));
+    const chosen = within(spell).getAllByRole("checkbox").filter((entry) => entry.getAttribute("aria-checked") === "true");
+    expect(chosen.map((entry) => entry.getAttribute("aria-label"))).toEqual(["Bless"]);
     await userEvent.click(within(builder).getByRole("button", { name: "Create character" }));
     const fighter = definitionNamed("New Character");
     expect(fighter.spells?.map((entry) => entry.name).sort()).toEqual(["Bless (free)", "Sacred Flame", "Spare the Dying"]);

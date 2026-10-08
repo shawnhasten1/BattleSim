@@ -6,6 +6,7 @@ import {
   classTable,
   describeClass,
   describeFeature,
+  spellSlotKey,
   timeline,
   withChoice,
   withClass,
@@ -232,7 +233,7 @@ function hitPointWords(level: TimelineLevel): string {
 }
 
 function LevelPanel({ level }: { level: TimelineLevel }) {
-  const { build, sources, set, go, edition } = useBuilder();
+  const { build, sources, set, openSpells, edition } = useBuilder();
   const { classLevel, className } = level;
   const definition = sources.catalog.classes.find((entry) => entry.id === level.classId);
   const subclassLabel = definition?.subclassLabel || "Subclass";
@@ -284,7 +285,7 @@ function LevelPanel({ level }: { level: TimelineLevel }) {
         />
       ))}
       {theirs.map(row)}
-      {spells.length ? <SpellLink slots={spells} onGo={() => go("spells")} /> : null}
+      {spells.length ? <SpellLink slots={spells} onGo={() => openSpells(spellSlotKey(spells.find((slot) => slot.pending) ?? spells[0]!))} /> : null}
     </Panel>
   );
 }

@@ -8,22 +8,17 @@ import {
   pointBuyCost,
   POINT_BUY_BUDGET,
   STANDARD_ARRAY,
-  stepOf,
-  withChoice,
   type CharacterBuild,
-  type ChoiceSlot,
   type ClassDefinition
 } from "@/lib/character-builder";
 import type { BuildSources } from "@/lib/character-builder/build";
 import { useBuilder } from "../builder-context";
-import { speciesWord } from "../CatalogSelect";
-import { ChoiceControl } from "../ChoiceControl";
 import { Panel, StepHeading } from "../parts";
 import styles from "../builder.module.css";
 
 /*
- * The Spells and Equipment steps as Phase 3 has them: today's controls, moved into steps and restyled. Phases 6 and 7
- * replace each (CHARACTER_BUILDER_UX_PLAN.md §6).
+ * The Equipment step as Phase 3 has it: today's controls, moved into a step and restyled. Phase 7 replaces it
+ * (CHARACTER_BUILDER_UX_PLAN.md §6).
  */
 
 /** What's wrong with a set of base scores under its method, if anything. */
@@ -39,53 +34,6 @@ export function scoresProblem(abilities: CharacterBuild["abilities"]): string | 
     return cost > POINT_BUY_BUDGET ? `That's ${cost} points: point buy has ${POINT_BUY_BUDGET}.` : undefined;
   }
   return values.some((value) => value < 1 || value > 30) ? "Scores are 1 to 30." : undefined;
-}
-
-/** The choices, grouped by what asks for them (the background, the species or race, each level), in order. */
-export function choiceGroups(slots: ChoiceSlot[], species: "Species" | "Race" = "Species"): Array<{ label: string; slots: ChoiceSlot[] }> {
-  const out: Array<{ label: string; slots: ChoiceSlot[] }> = [];
-  for (const slot of slots) {
-    const label = slot.scope.kind === "level" ? `Level ${slot.scope.index + 1}` : slot.scope.kind === "background" ? "Background" : species;
-    const last = out[out.length - 1];
-    if (last?.label === label) last.slots.push(slot);
-    else out.push({ label, slots: [slot] });
-  }
-  return out;
-}
-
-/** The choices one step makes, grouped as `choiceGroups`. */
-function StepChoices({ step, empty }: { step: ReturnType<typeof stepOf>; empty: string }) {
-  const { build, built, sources, filter, set } = useBuilder();
-  const species = build.species ? sources.catalog.species.find((entry) => entry.id === build.species!.id) : undefined;
-  const slots = built.choices.filter((slot) => stepOf(slot) === step);
-  if (!slots.length) return <p className={styles.dim}>{empty}</p>;
-  return (
-    <>
-      {choiceGroups(slots, speciesWord(species?.edition ?? build.edition)).map((group) => (
-        <div key={group.label} className={styles.group}>
-          <h5>{group.label}</h5>
-          {group.slots.map((slot) => (
-            <ChoiceControl
-              key={`${JSON.stringify(slot.scope)}|${slot.path.join("/")}`}
-              slot={slot} edition={filter} sources={sources} characterEdition={build.edition}
-              onChange={(value) => set(withChoice(build, slot.scope, slot.path, value, slot.spec))}
-            />
-          ))}
-        </div>
-      ))}
-    </>
-  );
-}
-
-export function SpellsStepInterim() {
-  return (
-    <div className={styles.stepBody}>
-      <Panel label="Spells">
-        <StepHeading icon="star">Spells</StepHeading>
-        <StepChoices step="spells" empty="No spells to choose." />
-      </Panel>
-    </div>
-  );
 }
 
 export function EquipmentStepInterim() {

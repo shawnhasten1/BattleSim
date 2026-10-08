@@ -45,8 +45,9 @@ describe("the builder window", { timeout: 30000 }, () => {
 
     // A cantrip taken back: Spells has one open, and the header's button goes there.
     await userEvent.click(railStep(builder, "Spells"));
-    const cantrips = within(builder).getAllByRole("group", { name: "Cantrips: Cantrips" })[0]!;
-    const chosen = within(cantrips).getAllByRole("checkbox").filter((box) => (box as HTMLInputElement).checked);
+    await userEvent.click(within(builder).getAllByRole("button", { name: /^Cantrips/, expanded: false })[0]!);
+    const cantrips = within(builder).getByRole("group", { name: "Cantrips" });
+    const chosen = within(cantrips).getAllByRole("checkbox").filter((box) => box.getAttribute("aria-checked") === "true");
     await userEvent.click(chosen[0]!);
     expect(within(railStep(builder, "Spells")).getByLabelText("1 open")).toBeTruthy();
     expect(within(railStep(builder, "Class")).getByLabelText("done")).toBeTruthy();

@@ -9,10 +9,12 @@ import {
   buildCharacter,
   firstOpenStep,
   missingFromCatalog,
+  nextOpenSpellSlot,
   openChoices,
   readBuild,
   rebuildActor,
   sameNamedAbilities,
+  spellSlotKey,
   startBuild,
   withLevelDown,
   withLevelUp,
@@ -38,7 +40,8 @@ import { OriginStep } from "./steps/OriginStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { ClassStep } from "./steps/ClassStep";
 import { AbilitiesStep } from "./steps/AbilitiesStep";
-import { EquipmentStepInterim, scoresProblem, SpellsStepInterim } from "./steps/InterimSteps";
+import { SpellsStep } from "./steps/SpellsStep";
+import { EquipmentStepInterim, scoresProblem } from "./steps/InterimSteps";
 import { useDraftHistory, type Draft } from "./useDraftHistory";
 import styles from "./builder.module.css";
 
@@ -146,6 +149,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
 
   const [step, setStep] = useState<BuilderStep>(creating ? "class" : "review");
   const [pinned, setPinned] = useState<RulesEntry | null>(null);
+  const [spellFocus, setSpellFocus] = useState<{ key: string; nonce: number } | null>(null);
   const [update, setUpdate] = useState<string[]>([]);
   const [removeTwins, setRemoveTwins] = useState(false);
   const [size] = useState(firstSize);
@@ -217,8 +221,16 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
     event.preventDefault();
   }
 
+  const openSpells = (slotKey?: string) => {
+    const key = slotKey ?? (() => {
+      const next = nextOpenSpellSlot(built.choices);
+      return next ? spellSlotKey(next) : undefined;
+    })();
+    if (key) setSpellFocus({ key, nonce: Date.now() });
+    go("spells");
+  };
   const model: BuilderModel = {
-    build, set, built, preview, sources, filter, edition: build.edition, creating, adopting, definition, look, go
+    build, set, built, preview, sources, filter, edition: build.edition, creating, adopting, definition, look, go, openSpells, spellFocus
   };
   const classes = built.fields.classes.map((entry) => `${entry.name} ${entry.level}${entry.subclass ? ` · ${entry.subclass.name}` : ""}`).join(" / ");
 
@@ -278,7 +290,7 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
           {step === "class" ? <ClassStep /> : null}
           {step === "origin" ? <OriginStep /> : null}
           {step === "abilities" ? <AbilitiesStep /> : null}
-          {step === "spells" ? <SpellsStepInterim /> : null}
+          {step === "spells" ? <SpellsStep /> : null}
           {step === "equipment" ? <EquipmentStepInterim /> : null}
           {step === "review" ? (
             <ReviewStep
@@ -337,9 +349,8 @@ function CharacterBuilderBody({ seed, definitionId, adopt, onClose, onCreated, s
     >
       <BuilderContext.Provider value={model}>
         <RulesCardProvider palette={look === "codex" ? palette : null} onPin={setPinned}>
-          {look === "codex"
-            ? <CodexRoot palette={palette} className={styles.frame}>{shell}</CodexRoot>
-            : <div className={styles.frame}>{shell}</div>}
+          {/* One element in both looks, so switching keeps the step's state (an open spell grid). */}
+          <CodexRoot palette={palette} plain={look !== "codex"} className={styles.frame}>{shell}</CodexRoot>
         </RulesCardProvider>
       </BuilderContext.Provider>
     </FloatingWindow>

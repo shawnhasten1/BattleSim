@@ -101,7 +101,8 @@ describe("rules cards in the builder (Phase 2)", { timeout: 20000 }, () => {
     render(<BuilderHost onCreated={() => undefined} />);
     const builder = screen.getByRole("dialog", { name: "Character builder" });
     step(builder, "Spells");
-    const cantrips = within(builder).getByRole("group", { name: "Two cantrips: Cantrips" });
+    fireEvent.click(within(builder).getByRole("button", { name: /^Two cantrips/, expanded: false }));
+    const cantrips = within(builder).getByRole("group", { name: "Two cantrips" });
     const sacredFlame = within(cantrips).getByRole("checkbox", { name: /^Sacred Flame$/ });
     act(() => { sacredFlame.focus(); });
     expect(within(card()!).getByText("Evocation cantrip")).toBeTruthy();

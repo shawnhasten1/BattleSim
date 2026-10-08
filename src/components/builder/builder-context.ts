@@ -26,6 +26,10 @@ export interface BuilderModel {
   definition?: CreatureDefinition;
   look: SheetStyle;
   go: (step: BuilderStep) => void;
+  /** Goes to Spells with one grid open and in view (by `spellSlotKey`), or the next open one. */
+  openSpells: (slotKey?: string) => void;
+  /** The grid Spells was last asked to open; `nonce` tells two asks for the same grid apart. */
+  spellFocus: { key: string; nonce: number } | null;
 }
 
 export const BuilderContext = createContext<BuilderModel | null>(null);
